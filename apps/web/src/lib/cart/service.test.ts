@@ -305,3 +305,15 @@ describe('mutateCart', () => {
     });
   });
 });
+it('treats an empty operation grant as deny-all rather than unrestricted', async () => {
+  const rpc = vi.fn();
+  const result = await mutateCart(
+    {
+      principal: { ...sessionPrincipal(), allowedOperations: [] },
+      client: { rpc } as unknown as Parameters<typeof mutateCart>[0]['client'],
+    },
+    { operationId: 'read-only', expectedVersion: 1, command: { type: 'clear' } }
+  );
+  expect(result).toEqual({ ok: false, code: 'unauthorized' });
+  expect(rpc).not.toHaveBeenCalled();
+});

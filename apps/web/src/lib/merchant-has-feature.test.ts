@@ -63,3 +63,21 @@ describe('merchantHasFeature', () => {
     ).toBe(false);
   });
 });
+
+it.each([
+  'shared_cart',
+  'shared_cart_realtime',
+] as const)('requires explicit pilot enrollment for %s even with all_features', (feature) => {
+  expect(
+    merchantHasFeature(
+      { plan_tier: 'enterprise', premium_features: ['all_features'] },
+      feature
+    )
+  ).toBe(false);
+  expect(
+    merchantHasFeature(
+      { plan_tier: 'free', premium_features: [feature] },
+      feature
+    )
+  ).toBe(true);
+});

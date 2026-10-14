@@ -22,8 +22,14 @@ import {
   coerceJsonRecord,
   coerceNullableJsonRecord,
   coerceUcpCartItems,
+  migratedCartRefreshOutcome,
+  ucpCartCallerMismatch,
 } from '@/lib/agentic/ucp-cart-storage';
 import { adaptUcpShippingAddressToAgentic } from '@/lib/agentic/ucp-request-adapters';
+import {
+  planUcpCartReplacement,
+  ucpCartVersionPrecondition,
+} from '@/lib/cart/ucp-adapter';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { ucpCartUpdateRequestSchema } from '@/schemas/ucp-cart-request';
@@ -67,6 +73,9 @@ export async function GET(request: NextRequest, props: RouteProps) {
   if (!cartResult.cart) {
     return NextResponse.json({ error: 'Cart not found' }, { status: 404 });
   }
+  if (ucpCartCallerMismatch(cartResult.cart, query.agentId)) {
+    return NextResponse.json({ error: 'Cart not found' }, { status: 404 });
+  }
 
   return buildUcpCartStateResponse({
     cart: cartResult.cart,
@@ -104,6 +113,7 @@ export async function POST(request: NextRequest, props: RouteProps) {
   if (!context.ok) return context.response;
 
   const idempotency = await reserveAgenticIdempotencyKey({
+    agentId: mutation.agentId,
     apiVersion: mutation.apiVersion,
     body: mutation.rawBody,
     key: mutation.idempotencyKey,
@@ -131,6 +141,7 @@ export async function POST(request: NextRequest, props: RouteProps) {
 
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId: mutation.agentId,
       idempotencyKey: mutation.idempotencyKey,
       merchantId: context.merchant.id,
       requestId: mutation.requestId,
@@ -164,6 +175,13 @@ export async function POST(request: NextRequest, props: RouteProps) {
   });
   if (cartResult.error) return respond({ error: 'Database error' }, 500);
   if (!cartResult.cart) return respond({ error: 'Cart not found' }, 404);
+  if (ucpCartCallerMismatch(cartResult.cart, mutation.agentId)) {
+    return respond({ error: 'Cart not found' }, 404);
+  }
+  const migratedOutcome = migratedCartRefreshOutcome(cartResult.cart);
+  if (migratedOutcome) {
+    return respond(migratedOutcome.body, migratedOutcome.status);
+  }
   if (cartResult.cart.status !== 'active') {
     return respond({ error: 'Cart cannot be updated' }, 409);
   }
@@ -174,6 +192,21 @@ export async function POST(request: NextRequest, props: RouteProps) {
       id: lineItem.item.id,
       quantity: lineItem.quantity,
     })) ?? existingItems;
+  // Replacement intent is planned through the canonical cart contract;
+  // the loaded row's committed timestamp is the concurrency precondition.
+  const replacement = planUcpCartReplacement({
+    lines: items.map((item) => ({
+      item: { productId: item.id },
+      quantity: item.quantity,
+    })),
+    updatedAt: ucpCartVersionPrecondition(cartResult.cart),
+  });
+  if (!replacement.ok) {
+    return respond(
+      { code: replacement.code, error: 'Invalid cart items' },
+      400
+    );
+  }
   const currency = parsed.data.currency ?? cartResult.cart.currency;
   const shippingAddress =
     parsed.data.shipping_address !== undefined
@@ -196,17 +229,35 @@ export async function POST(request: NextRequest, props: RouteProps) {
     items,
     shippingAddress,
   });
-  const { data: updatedCart, error: updateError } = await context.supabase
+  let updateQuery = context.supabase
     .from('agentic_cart_sessions')
     .update({ ...updatePayload, currency: currency.toUpperCase() })
     .eq('cart_id', parsedParams.data.id)
     .eq('merchant_id', context.merchant.id)
-    .eq('status', 'active')
+    .eq('status', 'active');
+  // Optimistic concurrency: a replacement committed after our load wins;
+  // this stale replacement must not overwrite it.
+  if (replacement.precondition) {
+    updateQuery = updateQuery.eq('updated_at', replacement.precondition);
+  }
+  const { data: updatedCart, error: updateError } = await updateQuery
     .select('cart_id')
     .maybeSingle();
   if (updateError) return respond({ error: 'Database error' }, 500);
   if (!updatedCart) {
-    return respond({ error: 'Cart cannot be updated' }, 409);
+    logger.warn({
+      cartId: parsedParams.data.id,
+      merchantId: context.merchant.id,
+      message: 'UCP cart replacement lost a version race',
+      route: UPDATE_CART_ROUTE,
+    });
+    return respond(
+      {
+        code: 'version_conflict',
+        error: 'Cart changed; refresh to continue',
+      },
+      409
+    );
   }
 
   return respond(

@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, type ReactNode, use, useEffect, useState } from 'react';
+import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-account-client';
 import { clearCartStorage } from '@/hooks/use-cart';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
 
@@ -144,17 +145,18 @@ async function performCustomerLogout(
   setCustomer: (customer: Customer | null) => void,
   setOtpState: (otp: OtpState | null) => void
 ): Promise<void> {
-  try {
-    await fetch('/api/storefront/auth/logout', { method: 'POST' });
-  } catch (error) {
-    console.error('Logout error:', error);
-  } finally {
-    setUser(null);
-    setCustomer(null);
-    setOtpState(null);
-    // Clear cart on logout to prevent cart data leakage between users
-    clearCartStorage(merchantSlug);
-  }
+  // Do not clear Auth or report success until this device's cart authority is retired.
+  const revoked = await revokeCartDeviceSession(merchantSlug);
+  if (!revoked.ok)
+    throw new Error('Could not safely sign out. Please retry when connected.');
+  const response = await fetch('/api/storefront/auth/logout', {
+    method: 'POST',
+  });
+  if (!response.ok) throw new Error('Could not sign out. Please retry.');
+  setUser(null);
+  setCustomer(null);
+  setOtpState(null);
+  clearCartStorage(merchantSlug);
 }
 
 export function CustomerAuthProvider({

@@ -1,3 +1,4 @@
+import { CART_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-cart-pending-sources';
 // Raw frozen replay-source data; update migration hashes in lockstep.
 
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
@@ -223,6 +224,7 @@ da62c84ff85648b528894dbcbb75fd344f1acfcd450e356e7018f114c6815490 20260823010000_
 38617623446eccea3a8a426ca53e2935dfbc28091ce66a7c17543cd18936ffef 20260927060000_plan_tier_authoritative_snapshot_entitlement.sql
 `; // biome-ignore format: keep the manifest at the 300-line modularity limit
 const PENDING_SOURCES = [
+  CART_PENDING_REPLAY_SOURCE_ROWS,
   CONNECTOR_PENDING_REPLAY_SOURCE_ROWS,
   '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
   '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245 20260922120000_normalize_product_key_specs_gpu.sql',

@@ -1,9 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hashIdempotencyRequest } from '@/lib/agentic/idempotency-hash';
 import { logger } from '@/lib/logger';
+import {
+  IDEMPOTENCY_IN_PROGRESS_TTL_MS,
+  isStaleInProgressReservation,
+} from './idempotency-expiry';
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
-const IDEMPOTENCY_IN_PROGRESS_TTL_MS = 2 * 60 * 1000;
 const POSTGRES_UNIQUE_VIOLATION = '23505';
 export const IDEMPOTENCY_PARAMETER_MISMATCH_ERROR =
   'Idempotency key reused with different request parameters';
@@ -14,12 +17,12 @@ export const IDEMPOTENCY_RESERVATION_FAILED_ERROR =
 export const IDEMPOTENCY_TRANSIENT_LOOKUP_ERROR =
   'Idempotency transient lookup error';
 
-type IdempotencyRecord = Partial<
-  Record<
-    'request_hash' | 'response_body' | 'status_code' | 'updated_at',
-    unknown
-  >
->;
+interface IdempotencyRecord {
+  request_hash?: unknown;
+  response_body?: unknown;
+  status_code?: unknown;
+  updated_at?: unknown;
+}
 
 type ExistingIdempotencyRecordResult =
   | { ok: true; record: IdempotencyRecord | null }
@@ -44,6 +47,7 @@ export type IdempotencyReservationResult =
   | { error: typeof IDEMPOTENCY_RESERVATION_FAILED_ERROR; ok: false };
 
 export async function reserveAgenticIdempotencyKey({
+  agentId,
   apiVersion,
   body,
   key,
@@ -54,6 +58,7 @@ export async function reserveAgenticIdempotencyKey({
   route,
   supabase,
 }: {
+  agentId?: string | null;
   apiVersion: string;
   body: string;
   key: string;
@@ -64,6 +69,9 @@ export async function reserveAgenticIdempotencyKey({
   route: string;
   supabase: SupabaseClient;
 }): Promise<IdempotencyReservationResult> {
+  // Tenant/route/key receipts are also scoped by verified caller.
+  // Unidentified callers retain the legacy empty scope.
+  const callerScope = agentId ?? '';
   const requestHash = hashIdempotencyRequest({
     apiVersion,
     body,
@@ -89,6 +97,7 @@ export async function reserveAgenticIdempotencyKey({
   const { error } = await supabase
     .from('agentic_idempotency_records')
     .insert({
+      agent_id: callerScope,
       expires_at: expiresAt,
       idempotency_key: key,
       merchant_id: merchantId,
@@ -106,6 +115,7 @@ export async function reserveAgenticIdempotencyKey({
   }
 
   const existing = await getExistingIdempotencyRecord({
+    agentId: callerScope,
     key,
     merchantId,
     route,
@@ -129,6 +139,7 @@ export async function reserveAgenticIdempotencyKey({
   }
   if (typeof existing.record.status_code !== 'number') {
     const reclaimed = await reclaimStaleIdempotencyReservation({
+      agentId: callerScope,
       expiresAt,
       key,
       merchantId,
@@ -158,6 +169,7 @@ export async function reserveAgenticIdempotencyKey({
 }
 
 async function reclaimStaleIdempotencyReservation({
+  agentId,
   expiresAt,
   key,
   merchantId,
@@ -167,6 +179,7 @@ async function reclaimStaleIdempotencyReservation({
   route,
   supabase,
 }: {
+  agentId: string;
   expiresAt: string;
   key: string;
   merchantId: string;
@@ -195,6 +208,7 @@ async function reclaimStaleIdempotencyReservation({
     .eq('route', route)
     .eq('idempotency_key', key)
     .eq('merchant_id', merchantId)
+    .eq('agent_id', agentId)
     .eq('request_hash', requestHash)
     .is('status_code', null)
     .lt('updated_at', staleBefore)
@@ -214,23 +228,8 @@ async function reclaimStaleIdempotencyReservation({
   return { ok: !!data };
 }
 
-function isStaleInProgressReservation(
-  record: IdempotencyRecord,
-  now: Date
-): boolean {
-  if (typeof record.updated_at !== 'string') {
-    return false;
-  }
-
-  const updatedAt = new Date(record.updated_at);
-  if (!Number.isFinite(updatedAt.getTime())) {
-    return false;
-  }
-
-  return now.getTime() - updatedAt.getTime() >= IDEMPOTENCY_IN_PROGRESS_TTL_MS;
-}
-
 export async function storeAgenticIdempotencyResponse({
+  agentId,
   key,
   merchantId,
   response,
@@ -238,6 +237,7 @@ export async function storeAgenticIdempotencyResponse({
   status,
   supabase,
 }: {
+  agentId?: string | null;
   key: string;
   merchantId: string;
   response: unknown;
@@ -255,6 +255,7 @@ export async function storeAgenticIdempotencyResponse({
     .eq('route', route)
     .eq('idempotency_key', key)
     .eq('merchant_id', merchantId)
+    .eq('agent_id', agentId ?? '')
     .select('id')
     .maybeSingle();
 
@@ -272,11 +273,13 @@ export async function storeAgenticIdempotencyResponse({
 }
 
 async function getExistingIdempotencyRecord({
+  agentId,
   key,
   merchantId,
   route,
   supabase,
 }: {
+  agentId: string;
   key: string;
   merchantId: string;
   route: string;
@@ -288,6 +291,7 @@ async function getExistingIdempotencyRecord({
     .eq('route', route)
     .eq('idempotency_key', key)
     .eq('merchant_id', merchantId)
+    .eq('agent_id', agentId)
     .maybeSingle();
   if (error) {
     return { error, ok: false };

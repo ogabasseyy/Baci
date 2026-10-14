@@ -16,6 +16,7 @@ import {
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
+  subscribeCartSessionGeneration,
 } from './cart-storage';
 import type {
   AddToCartOptions,
@@ -45,6 +46,7 @@ interface StorefrontCartProviderProps {
    */
   merchantId?: string | null;
   sharedCartEnabled?: boolean;
+  sharedCartRealtimeEnabled?: boolean;
 }
 
 interface GatedAdd {
@@ -130,6 +132,7 @@ export function StorefrontCartProvider({
   validationActivationTimeoutMs = DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
   merchantId = null,
   sharedCartEnabled = false,
+  sharedCartRealtimeEnabled = false,
 }: StorefrontCartProviderProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   // True while a cart-wide (group) negotiation is applied. Removing a line
@@ -161,6 +164,13 @@ export function StorefrontCartProvider({
   // Fences the shared-cart session: bumped on every merchant/slug change so
   // late responses from the previous merchant never touch the new cart.
   const [sessionGeneration, setSessionGeneration] = useState(1);
+  useEffect(
+    () =>
+      subscribeCartSessionGeneration(() => {
+        setSessionGeneration((generation) => generation + 1);
+      }),
+    []
+  );
 
   // Delegation is per-merchant: enrollment binds merchantId to the slug the
   // frame served, so switching away falls back to that slug's legacy cart
@@ -172,6 +182,7 @@ export function StorefrontCartProvider({
     merchantSlug === initialMerchantSlug;
   const shared = useSharedCart({
     enabled: delegated,
+    realtimeEnabled: delegated && sharedCartRealtimeEnabled,
     merchantId: merchantId ?? '',
     merchantSlug,
     sessionGeneration,
@@ -964,6 +975,8 @@ export function StorefrontCartProvider({
           syncStatus: shared.syncStatus,
           syncError: shared.syncError,
           retryPendingSync: shared.retryPendingSync,
+          importConflicts: shared.importConflicts,
+          resolveImportConflicts: shared.resolveImportConflicts,
           sharedCartRef:
             shared.cartId && shared.version !== null
               ? { cartId: shared.cartId, version: shared.version }

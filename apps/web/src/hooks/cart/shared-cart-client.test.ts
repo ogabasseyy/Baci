@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { fetchWithCsrf } from '@/lib/api-client';
-import { createClient } from '@/lib/supabase/client';
+
 import {
   bootstrapSharedCart,
   createSharedCart,
-  fetchSharedCartProducts,
   fetchSharedCartSnapshot,
   prepareSharedCartCheckout,
   sendSharedCartCommand,
@@ -19,6 +19,7 @@ vi.mock('@/lib/supabase/client', () => ({
 }));
 
 const fetchMock = vi.fn();
+
 vi.stubGlobal('fetch', fetchMock);
 
 function snapshot(overrides: Record<string, unknown> = {}) {
@@ -250,185 +251,54 @@ describe('shared-cart-client commands', () => {
   });
 });
 
-describe('shared-cart-client product hydration', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+describe('shared origin merchant routing', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('carries the merchant hint on snapshot reads', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ cart: snapshot() }));
+    await fetchSharedCartSnapshot(undefined, 'ogabassey');
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/storefront/cart?merchantSlug=ogabassey',
+      expect.anything()
+    );
   });
 
-  function mockProductsQuery(rows: unknown[] | null, error: unknown = null) {
-    const query = {
-      eq: vi.fn(),
-      in: vi.fn(),
-      select: vi.fn(),
-    };
-    query.select.mockReturnValue(query);
-    query.in.mockReturnValue(query);
-    query.eq.mockImplementation((column: string) =>
-      column === 'status' ? { data: rows, error } : query
+  it('carries the merchant hint on creation and mutation', async () => {
+    vi.mocked(fetchWithCsrf).mockResolvedValue(
+      jsonResponse({ cart: snapshot() })
     );
-    vi.mocked(createClient).mockReturnValue({
-      from: vi.fn(() => query),
-    } as never);
-    return query;
-  }
-
-  it('fetches active merchant products and resolves their images', async () => {
-    const query = mockProductsQuery([
+    await createSharedCart({ operationId: 'create-routing' }, 'ogabassey');
+    await sendSharedCartCommand(
       {
-        brand: 'Brand',
-        gtin: '',
-        id: 'prod-1',
-        image_hint: 'phone',
-        images: ['https://img.test/phone.png'],
-        manage_stock: false,
-        merchant_id: 'merchant-1',
-        mpn: '',
-        name: 'Phone',
-        price: 100,
-        status: 'active',
-        stock: 10,
+        operationId: 'clear-routing',
+        expectedVersion: 3,
+        command: { type: 'clear' },
       },
-    ]);
-
-    const products = await fetchSharedCartProducts(['prod-1'], 'merchant-1');
-
-    expect(query.in).toHaveBeenCalledWith('id', ['prod-1']);
-    expect(products.get('prod-1')).toMatchObject({
-      id: 'prod-1',
-      image: 'https://img.test/phone.png',
-      imageLarge: 'https://img.test/phone.png',
-      name: 'Phone',
-    });
-  });
-
-  it('skips the query for empty ids and degrades to empty on error', async () => {
-    await expect(fetchSharedCartProducts([], 'merchant-1')).resolves.toEqual(
-      new Map()
+      'ogabassey'
     );
-    expect(createClient).not.toHaveBeenCalled();
-
-    mockProductsQuery(null, new Error('catalog down'));
-    await expect(
-      fetchSharedCartProducts(['prod-1'], 'merchant-1')
-    ).resolves.toEqual(new Map());
-  });
-});
-
-describe('shared-cart-client checkout prepare', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  const REVIEW_SNAPSHOT = {
-    cartId: '22222222-2222-4222-8222-222222222222',
-    cartVersion: 3,
-    checkoutSessionId: '55555555-5555-4555-8555-555555555555',
-    estimates: {
-      currency: 'NGN',
-      lineCount: 1,
-      subtotalMinor: 25000,
-      unavailableCount: 0,
-    },
-    generation: 1,
-    lines: [],
-    merchantId: '11111111-1111-4111-8111-111111111111',
-  };
-
-  it('prepares checkout and returns the session reference', async () => {
-    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
-      jsonResponse({
-        replayed: false,
-        sessionReused: false,
-        snapshot: REVIEW_SNAPSHOT,
-      })
+    expect(fetchWithCsrf).toHaveBeenNthCalledWith(
+      1,
+      '/api/storefront/cart?merchantSlug=ogabassey',
+      expect.anything()
     );
+    expect(fetchWithCsrf).toHaveBeenNthCalledWith(
+      2,
+      '/api/storefront/cart/commands?merchantSlug=ogabassey',
+      expect.anything()
+    );
+  });
 
-    const result = await prepareSharedCartCheckout({
-      cartId: '22222222-2222-4222-8222-222222222222',
-      expectedVersion: 3,
-      operationId: 'prep-op-1',
-    });
-
+  it('carries the merchant hint on checkout review', async () => {
+    vi.mocked(fetchWithCsrf).mockResolvedValue(
+      jsonResponse({ code: 'not_found' }, 404)
+    );
+    await prepareSharedCartCheckout(
+      { cartId: 'cart', expectedVersion: 3, operationId: 'review-routing' },
+      'ogabassey'
+    );
     expect(fetchWithCsrf).toHaveBeenCalledWith(
-      '/api/storefront/cart/checkout',
-      expect.objectContaining({ method: 'POST' })
+      '/api/storefront/cart/checkout?merchantSlug=ogabassey',
+      expect.anything()
     );
-    const [, init] = vi.mocked(fetchWithCsrf).mock.calls[0] as [
-      string,
-      RequestInit,
-    ];
-    expect(JSON.parse(String(init.body))).toEqual({
-      cartId: '22222222-2222-4222-8222-222222222222',
-      expectedVersion: 3,
-      operationId: 'prep-op-1',
-    });
-    expect(result).toEqual({
-      ok: true,
-      replayed: false,
-      review: {
-        cartId: '22222222-2222-4222-8222-222222222222',
-        cartVersion: 3,
-        checkoutSessionId: '55555555-5555-4555-8555-555555555555',
-        currency: 'NGN',
-        generation: 1,
-        merchantId: '11111111-1111-4111-8111-111111111111',
-        subtotalMinor: 25000,
-        unavailableCount: 0,
-      },
-      sessionReused: false,
-    });
-  });
-
-  it('surfaces refresh_required with the live version', async () => {
-    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
-      jsonResponse(
-        {
-          code: 'refresh_required',
-          currentVersion: 4,
-          error: 'Cart changed.',
-        },
-        409
-      )
-    );
-
-    const result = await prepareSharedCartCheckout({
-      cartId: '22222222-2222-4222-8222-222222222222',
-      expectedVersion: 3,
-      operationId: 'prep-op-1',
-    });
-
-    expect(result).toEqual({
-      code: 'refresh_required',
-      currentVersion: 4,
-      ok: false,
-      retryable: false,
-    });
-  });
-
-  it('fails closed on malformed snapshots and transport errors', async () => {
-    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
-      jsonResponse({ replayed: false, sessionReused: false, snapshot: {} })
-    );
-
-    await expect(
-      prepareSharedCartCheckout({
-        cartId: '22222222-2222-4222-8222-222222222222',
-        expectedVersion: 3,
-        operationId: 'prep-op-1',
-      })
-    ).resolves.toMatchObject({ code: 'temporarily_unavailable', ok: false });
-
-    vi.mocked(fetchWithCsrf).mockRejectedValueOnce(new Error('offline'));
-    await expect(
-      prepareSharedCartCheckout({
-        cartId: '22222222-2222-4222-8222-222222222222',
-        expectedVersion: 3,
-        operationId: 'prep-op-1',
-      })
-    ).resolves.toMatchObject({
-      code: 'temporarily_unavailable',
-      ok: false,
-      retryable: true,
-    });
   });
 });

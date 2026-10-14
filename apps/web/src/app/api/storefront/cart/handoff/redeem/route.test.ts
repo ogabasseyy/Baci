@@ -344,6 +344,12 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     const conflicted = await postRedeem({
       body: {
         attemptId: 'attempt-merge-2',
+        lines: [
+          {
+            item: { productId: '44444444-4444-4444-8444-444444444444' },
+            quantity: 1,
+          },
+        ],
         choice: 'merge',
         destCartId: DEST_CART_ID,
         expectedDestVersion: 4,

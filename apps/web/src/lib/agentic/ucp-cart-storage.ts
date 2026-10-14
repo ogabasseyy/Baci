@@ -52,6 +52,42 @@ export function assertUcpCartNotMigrated(record: {
 }
 
 /**
+ * Shared-ownership gate for platform writes: once a cart migrates, its
+ * canonical owner is the shared cart, so platform replacement/cancel
+ * receives the version-appropriate refresh outcome instead of writing.
+ */
+export function migratedCartRefreshOutcome(record: {
+  migratedToCartId?: string | null;
+}): {
+  body: { cart_id: string | null; code: string; error: string };
+  status: 409;
+} | null {
+  if (!record.migratedToCartId) return null;
+  const migrated = new UcpCartMigratedError(record.migratedToCartId);
+  return {
+    body: {
+      cart_id: migrated.cartId,
+      code: migrated.code,
+      error: migrated.message,
+    },
+    status: 409,
+  };
+}
+
+/**
+ * A platform cart stays scoped to its creating caller until explicit
+ * handoff/linking. Legacy rows without a recorded caller stay readable
+ * by any authenticated merchant agent (compatibility), but a recorded
+ * owner mismatch is hidden as not-found.
+ */
+export function ucpCartCallerMismatch(
+  record: { agent_id?: string | null },
+  agentId?: string | null
+): boolean {
+  return Boolean(record.agent_id && record.agent_id !== agentId);
+}
+
+/**
  * Maps a database fence violation to the migrated error so late writers
  * get refresh_required; every other error passes through untouched.
  */

@@ -111,6 +111,40 @@ function createSupabaseMock({
 }
 
 describe('agentic idempotency', () => {
+  it('scopes receipt reservations to the platform caller', async () => {
+    const mock = createSupabaseMock();
+    let inserted: Record<string, unknown> | null = null;
+    const supabase = {
+      from: (table: string) => {
+        const chain = (
+          mock.supabase.from as (
+            name: string
+          ) => ReturnType<typeof mock.supabase.from>
+        )(table);
+        return {
+          ...chain,
+          insert: (payload: Record<string, unknown>) => {
+            inserted = payload;
+            return (
+              chain.insert as (value: Record<string, unknown>) => unknown
+            )(payload);
+          },
+        };
+      },
+    };
+    const result = await reserveAgenticIdempotencyKey({
+      ...defaultFingerprint,
+      agentId: 'agent-a',
+      body: '{"items":[]}',
+      key: 'idem-1',
+      merchantId: 'merchant-1',
+      route: 'carts.create',
+      supabase: supabase as never,
+    });
+    expect(result).toEqual({ ok: true, state: 'reserved' });
+    expect(inserted).toMatchObject({ agent_id: 'agent-a' });
+  });
+
   it('reserves a new idempotency key before mutation', async () => {
     const mock = createSupabaseMock();
     const body = '{"items":[]}';

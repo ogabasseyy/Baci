@@ -108,4 +108,10 @@ export interface CartContextType {
   syncError?: CartErrorCode | null;
   /** Re-sends the head of the pending queue with its original retry key. */
   retryPendingSync?: () => void;
+  /** Legacy-import lines blocked on an explicit offer choice. */
+  importConflicts?: import('@baci/shared/cart').CartMergeConflict[];
+  /** Applies the shopper's per-line choices and retries the import. */
+  resolveImportConflicts?: (
+    resolutions: import('@baci/shared/cart').CartMergeResolution[]
+  ) => void;
 }

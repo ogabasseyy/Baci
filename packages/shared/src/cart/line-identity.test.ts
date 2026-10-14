@@ -84,3 +84,56 @@ describe('cartLineIdentity', () => {
     expect(cartLineIdentity(withExtra)).toContain('injected');
   });
 });
+
+describe('cart identity compatibility', () => {
+  const productId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const variantId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+  it('matches product UUIDs regardless of letter case', () => {
+    expect(cartLineIdentity({ productId })).toBe(
+      cartLineIdentity({ productId: productId.toUpperCase() })
+    );
+  });
+
+  it('matches variant UUIDs regardless of letter case', () => {
+    expect(cartLineIdentity({ productId, variantId })).toBe(
+      cartLineIdentity({ productId, variantId: variantId.toUpperCase() })
+    );
+  });
+
+  it('preserves an explicitly empty option as distinct from an absent option', () => {
+    expect(
+      cartLineIdentity({ productId, options: { engraving: '' } })
+    ).not.toBe(cartLineIdentity({ productId }));
+  });
+
+  it('preserves option value case even when UUIDs are normalized', () => {
+    expect(
+      cartLineIdentity({ productId, options: { engraving: 'AbC' } })
+    ).not.toBe(cartLineIdentity({ productId, options: { engraving: 'abc' } }));
+  });
+
+  it('does not collide when option values contain separator characters', () => {
+    expect(
+      cartLineIdentity({ productId, options: { color: 'red::storage=128GB' } })
+    ).not.toBe(
+      cartLineIdentity({
+        productId,
+        options: { color: 'red', storage: '128GB' },
+      })
+    );
+  });
+
+  it('normalizes without modifying caller selections', () => {
+    const options = Object.freeze({ storage: '256GB', engraving: '' });
+    const item = Object.freeze({
+      productId: productId.toUpperCase(),
+      variantId: variantId.toUpperCase(),
+      options,
+    });
+    cartLineIdentity(item);
+    expect(item.productId).toBe(productId.toUpperCase());
+    expect(item.variantId).toBe(variantId.toUpperCase());
+    expect(item.options).toEqual({ storage: '256GB', engraving: '' });
+  });
+});

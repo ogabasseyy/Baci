@@ -16,6 +16,8 @@ import {
 import {
   buildUcpCartStatusUpdate,
   coerceUcpCartItems,
+  migratedCartRefreshOutcome,
+  ucpCartCallerMismatch,
 } from '@/lib/agentic/ucp-cart-storage';
 import { ucpCartRouteParamsSchema } from '@/schemas/ucp-cart-route-params';
 
@@ -42,6 +44,7 @@ export async function POST(request: NextRequest, props: RouteProps) {
   if (!context.ok) return context.response;
 
   const idempotency = await reserveAgenticIdempotencyKey({
+    agentId: mutation.agentId,
     apiVersion: mutation.apiVersion,
     body: mutation.rawBody,
     key: mutation.idempotencyKey,
@@ -69,6 +72,7 @@ export async function POST(request: NextRequest, props: RouteProps) {
 
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId: mutation.agentId,
       idempotencyKey: mutation.idempotencyKey,
       merchantId: context.merchant.id,
       requestId: mutation.requestId,
@@ -102,6 +106,13 @@ export async function POST(request: NextRequest, props: RouteProps) {
   });
   if (cartResult.error) return respond({ error: 'Database error' }, 500);
   if (!cartResult.cart) return respond({ error: 'Cart not found' }, 404);
+  if (ucpCartCallerMismatch(cartResult.cart, mutation.agentId)) {
+    return respond({ error: 'Cart not found' }, 404);
+  }
+  const migratedOutcome = migratedCartRefreshOutcome(cartResult.cart);
+  if (migratedOutcome) {
+    return respond(migratedOutcome.body, migratedOutcome.status);
+  }
   if (cartResult.cart.status === 'converted') {
     return respond({ error: 'Converted cart cannot be canceled' }, 409);
   }

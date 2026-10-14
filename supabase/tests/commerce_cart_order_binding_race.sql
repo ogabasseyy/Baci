@@ -115,6 +115,7 @@ $$;
 \ir ../migrations/20261012050100_commerce_cart_roles.sql
 \ir ../migrations/20261012050200_commerce_cart_commands.sql
 \ir ../migrations/20261012050600_commerce_cart_order_binding.sql
+\ir ../migrations/20261013195818_commerce_cart_review_binding_guards.sql
 CREATE TABLE IF NOT EXISTS public.binding_race_results (
   session text PRIMARY KEY,
   ok boolean NOT NULL,
@@ -145,10 +146,10 @@ INSERT INTO public.commerce_carts (id, merchant_id, currency, version, state, ex
 ON CONFLICT (id) DO NOTHING;
 DELETE FROM public.commerce_cart_lines
 WHERE cart_id IN ('cccccccc-d000-4000-8000-000000000000', 'cccccccc-e000-4000-8000-000000000000', 'cccccccc-f000-4000-8000-000000000000');
-INSERT INTO public.commerce_cart_lines (merchant_id, cart_id, product_id, quantity, last_unit_price_minor) VALUES
-  ('11111111-1111-4111-8111-111111111111', 'cccccccc-d000-4000-8000-000000000000', '44444444-4444-4444-8444-444444444444', 1, 1500),
-  ('11111111-1111-4111-8111-111111111111', 'cccccccc-e000-4000-8000-000000000000', '44444444-4444-4444-8444-444444444444', 1, 1500),
-  ('11111111-1111-4111-8111-111111111111', 'cccccccc-f000-4000-8000-000000000000', '44444444-4444-4444-8444-444444444444', 1, 1500);
+INSERT INTO public.commerce_cart_lines (id, merchant_id, cart_id, product_id, quantity, last_unit_price_minor) VALUES
+  ('dddddddd-d000-4000-8000-000000000000', '11111111-1111-4111-8111-111111111111', 'cccccccc-d000-4000-8000-000000000000', '44444444-4444-4444-8444-444444444444', 1, 1500),
+  ('dddddddd-e000-4000-8000-000000000000', '11111111-1111-4111-8111-111111111111', 'cccccccc-e000-4000-8000-000000000000', '44444444-4444-4444-8444-444444444444', 1, 1500),
+  ('dddddddd-f000-4000-8000-000000000000', '11111111-1111-4111-8111-111111111111', 'cccccccc-f000-4000-8000-000000000000', '44444444-4444-4444-8444-444444444444', 1, 1500);
 INSERT INTO public.commerce_cart_grants (id, merchant_id, cart_id, principal_id, expires_at, revoked_at) VALUES
   ('99999999-9999-4999-8999-999999999970', '11111111-1111-4111-8111-111111111111', 'cccccccc-d000-4000-8000-000000000000', 'race-sub', now() + interval '7 days', NULL),
   ('99999999-9999-4999-8999-999999999971', '11111111-1111-4111-8111-111111111111', 'cccccccc-e000-4000-8000-000000000000', 'race-pa', now() + interval '7 days', NULL),
@@ -192,6 +193,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-d000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00
@@ -227,6 +229,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-d000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00

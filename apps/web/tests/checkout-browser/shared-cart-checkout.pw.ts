@@ -92,7 +92,7 @@ const productRow = {
 };
 
 async function mockSharedSession(page: Parameters<typeof seedCheckout>[0]) {
-  await page.route('**/api/storefront/cart', (route) => {
+  await page.route(/\/api\/storefront\/cart(?:\?.*)?$/, (route) => {
     if (route.request().method() !== 'GET')
       return route.abort('blockedbyclient');
     return route.fulfill({ json: { cart: snapshot, warnings: [] } });
@@ -121,7 +121,7 @@ test('shared cart checkout submits the prepared binding', async ({ page }) => {
   const prepares: unknown[] = [];
   const submissions: unknown[] = [];
 
-  await page.route('**/api/storefront/cart/checkout', (route) => {
+  await page.route(/\/api\/storefront\/cart\/checkout(?:\?.*)?$/, (route) => {
     prepares.push(route.request().postDataJSON());
     return route.fulfill({
       json: {
@@ -131,7 +131,7 @@ test('shared cart checkout submits the prepared binding', async ({ page }) => {
       },
     });
   });
-  await page.route('**/api/orders', (route) => {
+  await page.route(/\/api\/orders(?:\?.*)?$/, (route) => {
     submissions.push(route.request().postDataJSON());
     return route.fulfill({ json: { order, amountDueToGateway: order.total } });
   });
@@ -187,7 +187,7 @@ test.describe('stale shared review', () => {
     let prepares = 0;
     let submissions = 0;
 
-    await page.route('**/api/storefront/cart/checkout', (route) => {
+    await page.route(/\/api\/storefront\/cart\/checkout(?:\?.*)?$/, (route) => {
       prepares++;
       return route.fulfill({
         json: {
@@ -198,7 +198,7 @@ test.describe('stale shared review', () => {
         status: 409,
       });
     });
-    await page.route('**/api/orders', (route) => {
+    await page.route(/\/api\/orders(?:\?.*)?$/, (route) => {
       submissions++;
       return route.fulfill({
         json: { order, amountDueToGateway: order.total },

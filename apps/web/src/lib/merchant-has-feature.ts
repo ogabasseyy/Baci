@@ -24,7 +24,10 @@ export function merchantHasFeature(
           .filter(Boolean)
       : []
   );
-  if (features.has('all_features') || features.has(feature)) return true;
+  if (features.has(feature)) return true;
+  if (feature === 'shared_cart' || feature === 'shared_cart_realtime')
+    return false;
+  if (features.has('all_features')) return true;
 
   const allowedTiers: Record<MerchantFeatureGate, ReadonlySet<string>> = {
     custom_domain: new Set(['starter', 'pro', 'business', 'enterprise']),

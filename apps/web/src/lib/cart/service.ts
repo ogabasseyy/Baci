@@ -129,10 +129,7 @@ export async function mutateCart(
   ) {
     return { code: 'invalid_item', ok: false };
   }
-  if (
-    !deps.principal.allowedOperations.includes(input.command.type) &&
-    deps.principal.allowedOperations.length > 0
-  ) {
+  if (!deps.principal.allowedOperations.includes(input.command.type)) {
     return { code: 'unauthorized', ok: false };
   }
   if (validateCartCommand(input.command)) {

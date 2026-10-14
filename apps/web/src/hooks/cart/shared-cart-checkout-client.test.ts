@@ -1,0 +1,152 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { fetchWithCsrf } from '@/lib/api-client';
+
+import { prepareSharedCartCheckout } from './shared-cart-client';
+
+vi.mock('@/lib/api-client', () => ({
+  fetchWithCsrf: vi.fn(),
+}));
+
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: vi.fn(),
+}));
+
+function _snapshot(overrides: Record<string, unknown> = {}) {
+  return {
+    cartId: '22222222-2222-4222-8222-222222222222',
+    currency: 'NGN',
+    estimatedTotals: false,
+    expiresAt: '2026-10-19T04:00:00.000Z',
+    lines: [],
+    merchantId: '11111111-1111-4111-8111-111111111111',
+    state: 'active',
+    subtotalMinor: 0,
+    totalMinor: 0,
+    version: 3,
+    ...overrides,
+  };
+}
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), { status });
+}
+
+describe('shared-cart-client checkout prepare', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const REVIEW_SNAPSHOT = {
+    cartId: '22222222-2222-4222-8222-222222222222',
+    cartVersion: 3,
+    checkoutSessionId: '55555555-5555-4555-8555-555555555555',
+    estimates: {
+      currency: 'NGN',
+      lineCount: 1,
+      subtotalMinor: 25000,
+      unavailableCount: 0,
+    },
+    generation: 1,
+    lines: [],
+    merchantId: '11111111-1111-4111-8111-111111111111',
+  };
+
+  it('prepares checkout and returns the session reference', async () => {
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse({
+        replayed: false,
+        sessionReused: false,
+        snapshot: REVIEW_SNAPSHOT,
+      })
+    );
+
+    const result = await prepareSharedCartCheckout({
+      cartId: '22222222-2222-4222-8222-222222222222',
+      expectedVersion: 3,
+      operationId: 'prep-op-1',
+    });
+
+    expect(fetchWithCsrf).toHaveBeenCalledWith(
+      '/api/storefront/cart/checkout',
+      expect.objectContaining({ method: 'POST' })
+    );
+    const [, init] = vi.mocked(fetchWithCsrf).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    expect(JSON.parse(String(init.body))).toEqual({
+      cartId: '22222222-2222-4222-8222-222222222222',
+      expectedVersion: 3,
+      operationId: 'prep-op-1',
+    });
+    expect(result).toEqual({
+      ok: true,
+      replayed: false,
+      review: {
+        cartId: '22222222-2222-4222-8222-222222222222',
+        cartVersion: 3,
+        checkoutSessionId: '55555555-5555-4555-8555-555555555555',
+        currency: 'NGN',
+        generation: 1,
+        merchantId: '11111111-1111-4111-8111-111111111111',
+        subtotalMinor: 25000,
+        unavailableCount: 0,
+      },
+      sessionReused: false,
+    });
+  });
+
+  it('surfaces refresh_required with the live version', async () => {
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          code: 'refresh_required',
+          currentVersion: 4,
+          error: 'Cart changed.',
+        },
+        409
+      )
+    );
+
+    const result = await prepareSharedCartCheckout({
+      cartId: '22222222-2222-4222-8222-222222222222',
+      expectedVersion: 3,
+      operationId: 'prep-op-1',
+    });
+
+    expect(result).toEqual({
+      code: 'refresh_required',
+      currentVersion: 4,
+      ok: false,
+      retryable: false,
+    });
+  });
+
+  it('fails closed on malformed snapshots and transport errors', async () => {
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse({ replayed: false, sessionReused: false, snapshot: {} })
+    );
+
+    await expect(
+      prepareSharedCartCheckout({
+        cartId: '22222222-2222-4222-8222-222222222222',
+        expectedVersion: 3,
+        operationId: 'prep-op-1',
+      })
+    ).resolves.toMatchObject({ code: 'temporarily_unavailable', ok: false });
+
+    vi.mocked(fetchWithCsrf).mockRejectedValueOnce(new Error('offline'));
+    await expect(
+      prepareSharedCartCheckout({
+        cartId: '22222222-2222-4222-8222-222222222222',
+        expectedVersion: 3,
+        operationId: 'prep-op-1',
+      })
+    ).resolves.toMatchObject({
+      code: 'temporarily_unavailable',
+      ok: false,
+      retryable: true,
+    });
+  });
+});

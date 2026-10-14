@@ -174,9 +174,17 @@ describe('createCartRequestSchema', () => {
 
   it('rejects over-limit lines and non-ISO currencies', () => {
     const lines = Array.from({ length: 21 }, (_, index) => ({
-      item: { productId: `product-${index}` },
+      item: {
+        productId: `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
+      },
       quantity: 1,
     }));
+    expect(
+      createCartRequestSchema.safeParse({
+        lines: lines.slice(0, 20),
+        operationId: 'within-cap',
+      }).success
+    ).toBe(true);
     expect(
       createCartRequestSchema.safeParse({ lines, operationId: 'create-1' })
         .success
@@ -315,4 +323,61 @@ describe('cartBootstrapRequestSchema', () => {
       }).success
     ).toBe(false);
   });
+});
+
+it('keeps the existing version and operation-id boundaries for shared mutations', () => {
+  const valid = {
+    operationId: 'x'.repeat(128),
+    expectedVersion: 1,
+    command: { type: 'clear' },
+  };
+  expect(sharedCartMutationRequestSchema.safeParse(valid).success).toBe(true);
+  expect(
+    sharedCartMutationRequestSchema.safeParse({ ...valid, expectedVersion: 0 })
+      .success
+  ).toBe(false);
+  expect(
+    sharedCartMutationRequestSchema.safeParse({
+      ...valid,
+      operationId: 'x'.repeat(129),
+    }).success
+  ).toBe(false);
+});
+it('requires a complete merge plan and both reviewed versions before redemption', () => {
+  const merge = {
+    attemptId: 'attempt',
+    choice: 'merge',
+    handoffId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    token: 'ch1.payload.signature',
+    destCartId: '22222222-2222-4222-8222-222222222222',
+    expectedIncomingVersion: 1,
+    expectedDestVersion: 1,
+    lines: [],
+  };
+  for (const key of [
+    'lines',
+    'destCartId',
+    'expectedIncomingVersion',
+    'expectedDestVersion',
+  ]) {
+    const candidate: Record<string, unknown> = { ...merge };
+    delete candidate[key];
+    expect(cartHandoffRedeemRequestSchema.safeParse(candidate).success).toBe(
+      false
+    );
+  }
+});
+it('accepts the existing 400-character voucher contract in canonical cart commands', () => {
+  expect(
+    sharedCartMutationRequestSchema.safeParse({
+      operationId: 'voucher-add',
+      expectedVersion: 1,
+      command: {
+        type: 'add',
+        item: { productId: '11111111-1111-4111-8111-111111111111' },
+        quantity: 1,
+        voucherToken: `qv1.${'a'.repeat(395)}`,
+      },
+    }).success
+  ).toBe(true);
 });

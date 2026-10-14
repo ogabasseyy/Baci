@@ -25,6 +25,7 @@ import {
 } from './orders.schemas';
 import { recordOrderCreatedAnalytics } from './orders-analytics';
 import { resolveCheckoutAuth } from './orders-auth';
+import { cartBindingMatchesCurrentDevice } from './orders-cart-binding';
 import { buildSnapshottedOrderPayload } from './orders-credit-freeze';
 import { releaseCreditAfterDefinitiveRejection } from './orders-credit-release';
 import { getCheckoutStoredSession } from './orders-session';
@@ -82,6 +83,18 @@ export async function createOrder(
     );
   }
   const validatedRequest = validationResult.data;
+  if (
+    !cartBindingMatchesCurrentDevice(
+      validatedRequest.shared_cart,
+      useCartStore.getState().sharedCartRef,
+      MERCHANT_ID
+    )
+  ) {
+    throw new OrderError(
+      'Review your shared cart before checkout.',
+      'CART_REVIEW_REQUIRED'
+    );
+  }
 
   const isOnline = await checkNetwork();
   if (!isOnline) {

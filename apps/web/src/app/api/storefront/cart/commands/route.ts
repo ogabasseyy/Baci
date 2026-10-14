@@ -5,10 +5,18 @@ import {
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
-import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
+import {
+  cartErrorResponse,
+  cartJsonResponse,
+  setCartSessionCookie,
+} from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import { mutateCart } from '@/lib/cart/service';
-import { verifyCartSessionProof } from '@/lib/cart/session-proof';
+import {
+  CART_SESSION_PROOF_TTL_SECONDS,
+  issueCartSessionProof,
+  verifyCartSessionProof,
+} from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
@@ -79,12 +87,30 @@ export async function POST(request: NextRequest) {
         result.cart ? { cart: result.cart } : undefined
       );
     }
-    return cartJsonResponse({
+    const proof = issueCartSessionProof(
+      {
+        cartId: context.principal.cartId,
+        grantId: context.principal.grantId,
+        grantExpiresAt: result.cart.expiresAt,
+        merchantId: context.merchant.id,
+        principalId: context.principal.principalId,
+        scope: 'session',
+      },
+      { environment: getCartProofEnvironment() }
+    );
+    const response = cartJsonResponse({
+      proof,
       cart: result.cart,
       operationId: result.operationId,
       replayed: result.replayed,
       warnings: result.warnings,
     });
+    const maxAge = Math.min(
+      CART_SESSION_PROOF_TTL_SECONDS,
+      Math.floor((Date.parse(result.cart.expiresAt) - Date.now()) / 1000)
+    );
+    setCartSessionCookie(response, context.merchant.slug, proof, maxAge);
+    return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart/commands:', {
       message: error instanceof Error ? error.message : 'unknown',

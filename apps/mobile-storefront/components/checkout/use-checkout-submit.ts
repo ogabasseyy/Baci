@@ -1,10 +1,14 @@
+import { Alert } from 'react-native';
 import { useIsMountedRef } from '@/components/bnpl-checkout/use-is-mounted-ref';
 import { useMerchant } from '@/hooks/use-merchant';
+import { reviewedCheckoutItems } from '@/lib/cart/reviewed-checkout-items';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { getFullyPaidStoreCreditPaymentMethod } from '@/lib/wallet-payment-helpers';
+import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
 import { trackCheckoutStep } from '@/services/analytics';
 import { createOrder } from '@/services/orders';
 import { useCartStore } from '@/stores/cart-store';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { abortIfCartPricesStale } from './abort-if-cart-prices-stale';
 import { acquireCheckoutSubmitFence } from './acquire-checkout-submit-fence';
 import { submitBnplCheckout } from './checkout-bnpl-submit';
@@ -134,18 +138,69 @@ export function useCheckoutSubmit({
       checkoutGenerationSnapshot
     );
     try {
-      if (await abortIfCartPricesStale(itemsSnapshot, merchantId)) {
+      if (
+        !useNativeSharedCartStore.getState().enabled &&
+        (await abortIfCartPricesStale(itemsSnapshot, merchantId))
+      ) {
         return;
       }
+      // Canonical carts submit only the reviewed lines under the final
+      // server binding; a stale review returns to the review step and a
+      // canonical cart never downgrades to legacy checkout after an error.
+      const sharedState = useNativeSharedCartStore.getState();
+      let sharedCartBinding: CartCheckoutBinding | undefined;
+      let boundItemsSnapshot = itemsSnapshot;
+      if (sharedState.enabled) {
+        const review = sharedState.checkoutReview;
+        const live = sharedState.snapshot;
+        if (
+          !review ||
+          !live ||
+          review.merchantId !== live.merchantId ||
+          review.cartId !== live.cartId ||
+          review.cartVersion !== live.version
+        ) {
+          Alert.alert(
+            'Cart is syncing',
+            'We need to review your cart before placing your order. Retry the cart review if checking fails.'
+          );
+          setStep('review');
+          return;
+        }
+        sharedCartBinding = {
+          cart_id: review.cartId,
+          checkout_session_id: review.checkoutSessionId,
+          checkout_generation: review.generation,
+          cart_version: review.cartVersion,
+        };
+        if (review.lines.some((line) => !line.available)) {
+          Alert.alert(
+            'Update your cart',
+            'Some items are unavailable. Return to your cart and remove or update them before checkout.'
+          );
+          setStep('review');
+          return;
+        }
+        try {
+          boundItemsSnapshot = reviewedCheckoutItems(itemsSnapshot, review);
+        } catch {
+          setStep('review');
+          return;
+        }
+        if (!boundItemsSnapshot.length) {
+          setStep('review');
+          return;
+        }
+      }
       const snapshot = createCheckoutSnapshot(
-        itemsSnapshot,
+        boundItemsSnapshot,
         deliveryFee,
         orderTotals?.taxAmount ?? 0
       );
       const { liveSavingsSelection, liveWalletSelection } =
         resolveCheckoutStoreCreditSelections({
           getLiveSavingsSelection,
-          itemsSnapshot,
+          itemsSnapshot: boundItemsSnapshot,
           paymentTab,
           selectedPayment,
           snapshotTotal: snapshot.total,
@@ -170,7 +225,8 @@ export function useCheckoutSubmit({
           deliveryMethod,
           getShippingProvider,
           isOrderInFlight,
-          itemsSnapshot,
+          itemsSnapshot: boundItemsSnapshot,
+          sharedCartBinding,
           liveSavingsSelection,
           liveWalletSelection,
           checkoutGeneration: checkoutGenerationSnapshot,
@@ -192,13 +248,14 @@ export function useCheckoutSubmit({
         customerName,
         customerPhone,
         deliveryMethod,
-        itemsSnapshot,
+        itemsSnapshot: boundItemsSnapshot,
         liveSavingsSelection,
         liveWalletSelection,
         paymentMethodForOrder,
         selectedQuote,
         shippingProvider: getShippingProvider(),
         snapshot,
+        sharedCartBinding,
       });
       const orderResponse = await createOrder(orderRequest, {
         checkoutGeneration: checkoutGenerationSnapshot,

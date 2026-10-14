@@ -45,6 +45,7 @@ function validateIdempotencyStatus(status: number): number {
  * in the agentic_idempotency_records table.
  */
 export async function persistAgenticIdempotencyResponse({
+  agentId,
   idempotencyKey,
   merchantId,
   requestId,
@@ -53,6 +54,7 @@ export async function persistAgenticIdempotencyResponse({
   status,
   supabase,
 }: {
+  agentId?: string | null;
   idempotencyKey: string;
   merchantId: string;
   requestId: string;
@@ -65,6 +67,7 @@ export async function persistAgenticIdempotencyResponse({
   let stored: { error: unknown; ok: boolean };
   try {
     stored = await storeAgenticIdempotencyResponse({
+      agentId,
       key: idempotencyKey,
       merchantId,
       response,
@@ -98,6 +101,7 @@ export async function persistAgenticIdempotencyResponse({
  * through NextResponse.json and stored for future idempotency replays.
  */
 export async function buildStoredAgenticIdempotencyResponse({
+  agentId,
   idempotencyKey,
   merchantId,
   requestId,
@@ -107,6 +111,7 @@ export async function buildStoredAgenticIdempotencyResponse({
   storageFailureResponse,
   supabase,
 }: {
+  agentId?: string | null;
   idempotencyKey: string;
   merchantId: string;
   requestId: string;
@@ -123,6 +128,7 @@ export async function buildStoredAgenticIdempotencyResponse({
   const logContext = { idempotencyKey, merchantId, requestId, route };
   const validatedStatus = validateIdempotencyStatus(status);
   const stored = await persistAgenticIdempotencyResponse({
+    agentId,
     idempotencyKey,
     merchantId,
     requestId,

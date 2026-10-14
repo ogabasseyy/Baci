@@ -135,6 +135,52 @@ describe('POST /api/agentic/carts', () => {
     expect(createAgenticScopedSupabaseClient).not.toHaveBeenCalled();
   });
 
+  it('creates a transfer cart even when native checkout is disabled', async () => {
+    mockResolveAgenticMerchantContext.mockResolvedValueOnce({
+      agent_user_agent_allowlist: [],
+      agent_user_agent_denylist: [],
+      agentic_checkout_enabled: false,
+      business_name: 'Ogabassey',
+      custom_domain: undefined,
+      id: 'merchant-1',
+      pay_on_delivery_enabled: false,
+      paystack_subaccount_code: null,
+      slug: 'ogabassey',
+    });
+    const insertSpy = vi.fn().mockReturnValue({ error: null });
+    const supabase = {
+      from: vi.fn((table: string) => {
+        if (table !== 'agentic_cart_sessions') {
+          throw new Error(`Unexpected table ${table}`);
+        }
+        return { insert: insertSpy };
+      }),
+    };
+    vi.mocked(createAgenticScopedSupabaseClient).mockReturnValue(
+      supabase as never
+    );
+    mockCalculation();
+    mockMutation({
+      currency: 'ngn',
+      line_items: [{ item: { id: 'product-1' }, quantity: 1 }],
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts', {
+        body: JSON.stringify({
+          currency: 'ngn',
+          line_items: [{ item: { id: 'product-1' }, quantity: 1 }],
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(insertSpy).toHaveBeenCalled();
+  });
+
   it('creates a signed UCP cart session', async () => {
     const insertSpy = vi.fn().mockReturnValue({ error: null });
     const supabase = {

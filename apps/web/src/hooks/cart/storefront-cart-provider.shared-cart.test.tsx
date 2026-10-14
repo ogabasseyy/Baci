@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '@/lib/products';
 import { useCart } from './cart-context';
+import { clearCartStorage } from './cart-persistence';
 import {
   bootstrapSharedCart,
   createSharedCart,
@@ -210,6 +211,26 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
     expect(result.current.cart[0]?.name).toBe('Phone');
     expect(result.current.cartCount).toBe(1);
     expect(result.current.cartTotal).toBe(100);
+  });
+
+  it('restarts delegated adoption after an external session clear', async () => {
+    mockAdopted();
+    const { result } = renderHook(() => useCart(), {
+      wrapper: delegatedWrapper(),
+    });
+    await waitFor(() => expect(result.current.sharedCartRef).not.toBeNull());
+    const reads = vi.mocked(fetchSharedCartSnapshot).mock.calls.length;
+    vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+      ok: false,
+      code: 'not_found',
+      retryable: false,
+      snapshot: null,
+    });
+    act(() => clearCartStorage(SLUG));
+    await waitFor(() =>
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(reads + 1)
+    );
+    await waitFor(() => expect(result.current.sharedCartRef).toBeNull());
   });
 
   it('exposes the shared cart ref and refresh for checkout binding', async () => {

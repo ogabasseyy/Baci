@@ -22,6 +22,11 @@ ChatGPT, web and mobile. No merge, deploy or live orders from this work.
   (see evidence below)
 - [ ] Tasks 8–14 per dependency order
   (11A → 8 → 9 → 10 → 11B → 12 → 13 → 14)
+  Continuation status: 9, 10 and 11B complete locally; 8 local with
+  device/provider qualification pending; 12 ownership gates complete
+  with delegation/readiness split open; 13–14 documents prepared with
+  live qualification and release steps unexecuted. See the
+  2026-10-14 continuation section at the end of this document.
 
 ## Task 1 evidence
 
@@ -403,3 +408,399 @@ reducer + 12 hook):
   foreground refresh, and reconcile; ids filter against the latest
   snapshot seen (the reducer's confirmed copy is null pre-adopt and
   stale in the dispatch lag window).
+
+## 2026-10-14 coordinator continuation
+
+Owner authorized fixing integration failures and resuming the remaining plan,
+with no deployment or live orders. The prior review/UUID fixes remain staged.
+The attempted local commit did not occur: its lint hook observed the pending
+registry edits before formatting; HEAD remains `33a9a265c4`.
+
+Integration work:
+- Registered all eight canonical-cart migrations as pending replay sources,
+  with independently pinned test hashes; no deployment receipt was invented.
+  Four targeted registry/materialization suites passed (33 tests).
+- Recorded exact cart scoped-signing authority paths, preserving rejection of
+  sibling routes and all service/admin factories (focused RED then 3/3 GREEN).
+  Refreshed the reviewed orders route content receipt for transaction binding.
+- Split oversized cart lifecycle, queue, display, import, transport, handoff,
+  merchant resolution, quota and envelope parsing into focused modules.
+  Existing behavioral tests were relocated with those responsibilities; public
+  entrypoints remain compatible. New authority/recovery tests are colocated.
+- Targeted regression run: 65 files / 468 tests passed. Full monorepo lint:
+  4/4 tasks passed. Web TypeScript passed. Live event boundary passed; the
+  analytics validator is being repeated against the newly staged source view.
+- Frozen committed-source inventory and clean-tooling tests still require a
+  reviewed local commit plus a regenerated repository snapshot. Their
+  fail-closed semantics remain intact.
+- CodeRabbit failed to start twice and also failed with `--fresh`. Its required
+  review gate is unavailable, so new work remains local/uncommitted. No review
+  success is claimed for this integration patch.
+
+Task 8 started with version/event validation RED tests. Production realtime
+remains disabled; no remote configuration or cart/order data has been changed.
+
+Continuation verification:
+- The repeated staged-source analytics authority suite passed all 13 tests.
+  Working-tree runtime size/colocation analysis returned no findings.
+- Task 8 foundation: notification validation and version/identity reconciliation
+  demonstrated 3 failing tests before implementation; all 49 shared-cart tests
+  passed afterward. This is not the full realtime transport implementation.
+- A receive JWT outlived a proof with only 30 seconds left (RED: 300 vs 30).
+  Scoped JWT expiry now uses the earlier of proof expiry and five minutes;
+  invalid/expired proof input fails closed. The original 5 scoped-client tests
+  passed after the fix; additional invalid-expiry cases were added.
+- CodeRabbit usage showed included reviews available. A narrower hooks-only
+  review also failed to start, so this is not an exhausted review allowance or
+  an accepted clean review. Required review/commit remains blocked; remaining
+  full transport, mobile/account/UCP integration and release qualification tasks
+  are unfinished. No merge, deployment, remote migration, live cart mutation,
+  or order was performed.
+
+### Task 8 local implementation and Task 9 recovery foundation
+
+Task 8 now has a local receive-only route, isolated browser subscription,
+explicit merchant enrollment gates, and a transactional SQL outbox publisher.
+The new pending migration is `20261014070000_commerce_cart_broadcast.sql`;
+nine cart migrations are registered as pending, not deployed. The publisher
+wrapper and disabled systemd configuration are prepared only. No remote unit,
+environment, migration, or feature flag was changed.
+
+Local SQL regression tests passed for exact tenant/cart topic access, revoked
+or expired grants, permissive legacy PUBLIC policies, receiver write denial,
+authenticator role membership, four-field event projection, swallowed-send
+backoff, rollback, duplicate replay, and exhausted-retry dead letters. Tests
+used a disposable local PostgreSQL fixture with a stub realtime schema; they
+are not proof of actual Supabase private-channel/custom-role compatibility.
+Real transport qualification with two linked clients remains open, and
+realtime must stay disabled until that gate passes.
+
+Task 8 focused web/cart regressions passed (69 files / 465 tests), and web
+TypeScript passed. A further lifecycle regression demonstrated that version
+changes incorrectly reconnected while generation changes did not; the effect
+now reconnects by generation and keeps its channel across version changes.
+Renewal also accounts for time spent opening the connection.
+
+Task 9 is in progress, not complete. Added tenant-keyed serialized SecureStore
+proof storage, a dedicated Expo fetch transport with bounded bootstrap and
+mutation requests, strict snapshot/merchant validation, and generation fences.
+It preserves customer Auth credentials and does not bootstrap on read failure.
+A single pending request uses bounded ASCII SecureStore chunks and a committed
+manifest before transmission. The coordinator serializes edits, replays the
+same saved operation/body after response loss, holds later edits behind an
+unresolved request, and refuses recovery under a different principal. No
+native cart UI, legacy-writer replacement, app-link pairing, AppState adapter,
+account continuity, or native checkout binding has been activated yet.
+
+Native receipt/coordinator/bootstrap regressions were observed RED before
+implementation and GREEN afterward. The focused native cart run passed
+52 tests across 8 suites; native TypeScript passed. Bootstrap's native CSRF
+cookie/header handshake still requires actual iOS/Android qualification.
+No live cart, order, payment, or shipment operation was performed.
+
+The required CodeRabbit review remains unavailable after four failed starts
+(including fresh and narrowed runs), despite included review allowance.
+No commit or clean-review claim has been made for this continuation. The
+committed-source inventory and clean-tooling integration gates still need a
+reviewed commit and regenerated snapshot; their assertions were not weakened.
+Remaining plan work: finish Task 9, then Tasks 10, 11B, 12, 13 and 14 locally,
+respecting deployment and production activation holds.
+
+Latest continuation checks:
+- Web/cart focused regression: 68 files, 463 tests passed.
+- Native cart regression: 8 suites, 52 tests passed.
+- Monorepo lint: 4/4 tasks passed, existing 7 native warnings.
+- Monorepo TypeScript: 6/6 tasks passed.
+- Native platform drift: passed, no new forbidden patterns.
+- Publisher shell syntax and disposable PostgreSQL realtime suite passed.
+- Final CodeRabbit attempt again returned non-recoverable “Failed to start
+  review”; no review results were produced. The required review gate remains
+  blocked. The owned disposable PostgreSQL server was stopped afterward.
+- Full monorepo test success is not claimed: frozen committed-source inventory
+  and dirty-tooling checks are still unresolved pending the reviewed commit.
+- The live boundary scan found the receive-authority helper itself needed an
+  exact scoped-signing ledger path. A frozen-source graph regression reproduced
+  the failure, then passed with that one path recorded (8 total cart paths).
+  Sibling-route and service-factory rejection tests still pass. The live scan
+  is being repeated; no broader credential permission was added.
+- Final live event-pipeline boundary verification passed (154 seed paths)
+  after the exact helper-path fix. Final monorepo lint again passed 4/4 tasks.
+
+### Owner-authorized continuation while CodeRabbit is unavailable
+
+The owner explicitly authorized continuing implementation and retrying the
+required review later. No commit/release gate was waived, and no deployment
+or live orders are authorized.
+
+Task 9 now has local controller/store integration (still explicitly disabled
+unless both `shared_cart` and `shared_cart_native` are enrolled for the exact
+configured merchant). Added a single writer owner covering direct Zustand
+mutations and the optimistic hook; stale legacy rollback/rehydration cannot
+replace confirmed canonical state. Confirmed cache metadata is merchant-bound.
+The controller performs lazy provisioning only on intent, serializes commands
+against the latest confirmed version, preserves options/voucher/negotiation
+attachments, hydrates through the merchant-filtered public product projection,
+and blocks checkout readiness while metadata or sync is incomplete. Assurance
+remains a display-local overlay, matching the web adapter until checkout review.
+
+Added explicit legacy cart selection, foreground recovery and foreground-only
+HTTP polling. SecureStore records now atomically retain proof-promotion receipts
+for creation and handoff. This closes the crash window between saving the new
+proof and clearing the durable request. Historical receipt recovery refetches
+current state; definitively rejected command keys are released, while uncertain
+outcomes retain the same request/key. All native cart actions remain separate
+from order/payment submission.
+
+Trusted HTTPS `/cart#handoff=...&hid=...` links are intercepted by Expo Router's
+native-intent boundary. Tenant mismatch, untrusted hosts/ports, malformed or
+duplicate secrets and query-string secrets are rejected/stripped before routing.
+Pairing secrets remain ephemeral or in the single secure pending request, never
+route/query cache state. The pairing modal previews by public handoff id before
+explicit connect/merge/keep-current choice. Web-bound grants offer a trusted
+browser fallback and are never redeemed as native grants. No automatic browser
+opening or native redemption occurs from a link preview.
+
+Verification: native focused regression passed 42 suites / 201 tests; native
+TypeScript and platform drift passed. Subsequent historical-replay/conflict
+regressions were observed RED then GREEN. Actual iOS/Android app-link delivery,
+native CSRF handshake and private Realtime transport remain qualification gates;
+no remote feature was enabled. CodeRabbit remains pending.
+
+Task 10 started: added a new pending account-continuity migration with a
+self-revocation RPC. Disposable PostgreSQL tests prove device/merchant isolation,
+idempotent revocation and unchanged shared cart contents. The new private POST
+session-revoke boundary validates CSRF, empty input and the resolved proof;
+its focused service/route tests pass. Optional account linking, local teardown,
+and authenticated cross-device selection are still being implemented. The
+owned disposable PostgreSQL cluster currently runs on Unix socket
+`/tmp/cart-realtime-review-sock`, port 55439, with no TCP listener; stop it before
+ending the session. The tenth migration must be added to pending replay hashes
+once this new migration is finalized.
+
+### Further continuation: account transactions, device retirement and native provenance
+
+Task 10 remains **in progress**, not complete. Five additive account/device/
+permission/merge migrations are now registered as **pending** (14 cart migration
+sources total); registration is not deployment evidence. A normal customer Auth
+request and its independently verified cart proof are required for the account
+API (`/api/storefront/cart/account`). Native requests retain the shopper JWT in
+Authorization and provide the cart proof separately; malformed explicit proofs
+cannot fall back to a cookie. Customer lookup uses merchant + Auth user ID under
+RLS, never email. Account operations remain gated by explicit `shared_cart_accounts`
+enrollment; no feature was remotely enabled.
+
+The account SQL transaction creates fresh device grants and a fresh principal,
+performs the reviewed two-cart merge and updates the account pointer atomically.
+Failed merges roll back the grants, handoff and pointer. Finished operations replay
+against the original request even if promotion revoked its original grant. Device
+roots survive principal rotation: logout using the old proof revokes only that
+root's grants, including grants minted by an in-flight promotion. Retirement is
+serialized with account linking, guest creation, mutations and handoff redemption;
+a retired bootstrap proof cannot recreate authority. Expired signed proofs may
+mint only the narrow revocation role, never shopper/account/realtime authority.
+
+Stored mutation permissions are now enforced in the database. Empty permissions
+mean deny-all. New standard grants include `replace`; existing restricted grants
+are not upgraded. Merge input requires both reviewed versions and the complete
+union. Same-identity duplicate voucher lines are rejected for explicit source
+editing instead of silently dropping a line. The pure merge planner is shared
+between web and native. Native legacy imports now use it instead of concatenating
+overlapping identities.
+
+Native logout/account switching invalidates pending callbacks synchronously,
+clears private local projection and checkout generation, and retires the device
+without sending a server `clear` command. SecureStore retains an atomic retirement
+marker while revocation is offline; active reads cannot restore that proof, and
+late writes cannot overwrite the marker. A fresh bootstrap first reconciles the
+retirement. Pending operation cleanup occurs only after confirmed retirement.
+Actual account-link client/UI integration still needs owner-subject metadata and
+promotion recovery; do not treat this partial lifecycle as qualified for rollout.
+
+Task 11B has started at the payload boundary: native request validation, outbound
+payloads, credit-snapshot delegation and queued replay retain `shared_cart` and
+canonical `cart_line_id`. A bound request with missing/duplicate canonical line
+IDs fails validation. Checkout preparation/review hooks and final screen wiring
+remain pending; this is not end-to-end native checkout verification.
+
+Latest checks: 301 web tests (47 files), 175 native tests (26 suites), and 59 shared
+cart tests (4 files) passed. The live event boundary verifier passed (154 seed
+paths). Disposable SQL account linking/merge/retirement and restricted-permission
+fixtures passed with transactional rollback. Full monorepo lint/typecheck is being
+rerun after correcting a CSRF mock shape; record its final result below. Whole
+monorepo tests, platform/device qualification, CodeRabbit, Tasks 11B completion,
+12/13/14 and optional native Realtime qualification remain open. No commit,
+deployment, remote migration, customer cart mutation or order was performed.
+
+Follow-up validation: monorepo lint/typecheck passed all 10 tasks (existing lint
+warnings remain). Native platform drift passed. The native order service now
+rejects a missing or wrong-cart binding when a device has canonical ownership,
+before network/Auth/order side effects; ordinary unlinked guest checkout remains
+unchanged. This deliberately blocks canonical native submission until Task 11B's
+review wiring is implemented, rather than permitting a legacy fallback. Two
+focused fence tests pass; the existing order-service regressions are being run.
+
+Final checkpoint: existing mobile order-service regressions passed 25 suites /
+118 tests, and the final monorepo lint/typecheck rerun passed 10/10 tasks. The
+account SQL regression passed again, including retired-bootstrap rejection.
+The owned disposable PostgreSQL cluster was stopped successfully. CodeRabbit
+has not been retried or marked passed. Implementation remains incomplete at the
+Task 10 account client/UI promotion-recovery work and Task 11B checkout review
+wiring; later tasks and device qualification remain as listed above.
+
+### Continuation 2026-10-14 (second agent, coordinator-review handoff)
+
+All work below is local and uncommitted on `codex/shared-server-cart`
+(HEAD unchanged at `33a9a265c4`). No deployment, remote migration,
+customer-cart mutation, order, payment, or feature enablement occurred.
+CodeRabbit was not run in this session; its review remains **pending**.
+
+Task 9 edges completed:
+- Durable command recovery now releases definitively rejected keys per
+  request kind (command/create/handoff/account) while uncertain outcomes
+  keep the exact operation/body for replay. Observed RED (2 tests) then
+  GREEN in `command-coordinator.test.ts`.
+- Explicit new cart after a completed/expired/canceled generation:
+  native controller clears the display, never offers the finished cart
+  for checkout, and on the next write intent restarts the session
+  (retirement flushed first) and creates a fresh cart. Native realtime
+  stays HTTP-recovery only (foreground refresh + 30 s poll); the unused
+  `/realtime` route type was removed and unqualified transports remain
+  disabled.
+- Legacy import/conflict UI: native legacy merge accepts per-line offer
+  resolutions (`SharedCartStatusPanel` choice flow); web exposes
+  `importConflicts`/`resolveImportConflicts` through the cart context
+  with a `CartImportConflicts` panel on the cart page.
+
+Task 10 completed (client/UI layer):
+- Web: `shared-cart-account-client` (saved-cart read, explicit link,
+  device revoke), `use-cart-account-link` (one stable operation id
+  until the link settles), and a `CartAccountLink` panel with
+  keep/use-saved/merge choices. Native: `NativeCartAccountPanel` with
+  the same choices; shopper JWT and cart proof travel in separate
+  headers and are never substituted.
+- Native proof records now store atomic owner-subject promotion
+  metadata (`kind: 'account'`, `ownerSubject`); committed-link recovery
+  only proceeds for the same owner subject, cart, and operation, and
+  account links replay through the durable pending request with the
+  same operation/body (no credential is persisted in that request).
+- Web sign-out now revokes the device's cart grants before clearing
+  local state, so back navigation cannot restore the previous
+  customer's context. Sign-out never clears the shared cart itself.
+- Regression pinned: the save-details checkbox only toggles local form
+  state and fires no account/auth request.
+
+Task 11B completed:
+- Native `prepareCheckout` transport + strict checkout-snapshot schema,
+  `use-cart-checkout-snapshot` preparation/review hook (preparation
+  never submits an order or starts payment), and checkout-screen
+  integration. Cart edits invalidate the review; stale reviews return
+  to the review step.
+- Only remaining, available reviewed lines enter a bound order.
+  `shared_cart` + per-item `cart_line_id` are now produced by the
+  submit builders (including BNPL) and preserved through validation,
+  credit freezing, and queued replay; canonical carts never downgrade
+  to legacy checkout after an error. Assurance stays the established
+  display-local overlay (the server ignores it on replace), while
+  order items continue to carry `has_assurance`.
+
+Tasks 12–14 (local scope):
+- UCP: platform replacement, cancel, and reads are now gated — a
+  migrated (shared) cart returns `409 refresh_required` with the
+  canonical cart id, and a recorded caller mismatch is hidden as 404.
+  Pinned `2026-04-08` fixtures and `lib/cart/ucp-adapter.ts` record the
+  contract. Still open: full canonical-service delegation for
+  unmigrated platform carts, the transfer-vs-checkout readiness split,
+  and official re-verification of the pinned profile before any
+  external enrollment claim.
+
+Task 12 continuation (same day, second continuation):
+- Unmigrated UCP writes now go through the adapter: replacements are
+  planned with the canonical `validateCartCommand` contract and applied
+  under an optimistic `updated_at` version precondition; a stale
+  replacement loses with `409 {code:'version_conflict'}` (logged,
+  nonsecret) instead of overwriting a newer cart. Observed RED (6
+  tests across adapter/idempotency/profile/routes) then GREEN.
+- Receipt scoping: new append-only migration
+  `20261014130000_agentic_idempotency_caller_scope.sql` (pending,
+  independently hashed, registered in both pending-source registries)
+  scopes idempotency records by verified platform caller; cart routes
+  pass `mutation.agentId` through reserve/lookup/reclaim/store.
+  Validated on a disposable PostgreSQL cluster owned by this agent
+  (started, proven — cross-caller insert allowed, same-caller
+  conflict — and stopped).
+- Readiness split: cart creation no longer requires native checkout
+  enablement; the discovery profile advertises
+  `dev.ucp.shopping.cart` on signed agent auth alone, and universal
+  readiness reports separate `cartTransferReady`/`checkoutReady`.
+- Tasks 13–14 local additions: a two-context browser concurrency spec
+  (`tests/checkout-browser/shared-cart-concurrency.pw.ts`, authored and
+  listing-verified; execution against the fixture stack pending), a
+  version-race log signal, and updated acceptance/rollout docs. A
+  platform-principal delegation into the canonical RPC service remains
+  future work (needs its own scoped role and SQL proof) and is recorded
+  as such rather than simulated with a privileged client.
+- Acceptance and rollout documents added
+  (`docs/qa/shared-cart-acceptance.md`, `docs/deploy/shared-cart-rollout.md`).
+  Cleanup already spares active checkouts/unexpired receipts; no new
+  migration was needed or added in this continuation. Production
+  metrics/dashboards remain a release-time gap, recorded honestly in
+  the rollout doc.
+
+Full-suite record (2026-10-14, second continuation):
+- Native full run: 1,458 of 1,462 suites passed; all 8,636 tests that
+  ran passed. Four suites failed to load
+  (`stores/auth-store-date-of-birth.test.ts` plus three suites in the
+  same import chain): the first agent's `clear-device-cart.ts` imports
+  the native `expo-crypto` module, whose nested `expo-constants` copy
+  crashes in Jest for suites without a factory mock. This predates the
+  continuation (none of its files are in those import chains). Fixed at
+  the shared layer with a Node-backed `__mocks__/expo-crypto.js`
+  mapped in `jest.config.js`; suites with explicit factory mocks keep
+  them. RED→GREEN observed on the affected suites and on crypto
+  consumers (quiz, checkout attempt keys, ad tracking, cart).
+- Web full run: see the terminal counts recorded below.
+
+Verification (this continuation, after final edits):
+- Monorepo lint 4/4 and typecheck 6/6 (10/10 turbo tasks), existing
+  warnings only.
+- Web: 80 files / 506 tests across hooks+lib cart, cart API routes and
+  agentic cart routes.
+- Native: 65 suites / 315 tests across cart, checkout builders/submit,
+  and order services; platform drift passed.
+- Shared package cart: 59 tests. Event boundary verifier suites passed.
+- No disposable PostgreSQL cluster was started by this agent; the
+  pre-existing unrelated probe listener on port 55439 was left
+  untouched. Full monorepo tests, device qualification, two-client
+  realtime convergence, and CodeRabbit remain pending.
+
+
+## Coordinator review — 2026-10-14
+
+The continuation was reviewed and corrected without committing or deploying.
+See [the detailed review](2026-10-14-shared-cart-agent-review.md) for validated
+findings, regression evidence, external-review disposition and remaining gates.
+
+The previous account/checkout claims require the owner-bound recovery, exact
+retry-body, reviewed-price and late-response fixes recorded there. Unavailable
+reviewed lines now block checkout; they are never silently omitted. The native
+checkout display-local assurance overlay remains unchanged.
+
+A further append-only pending migration,
+`20261014140000_agentic_cart_revision_guard.sql`, makes UCP's timestamp CAS
+strictly advance for every writer; both pending registries contain its hash
+(17 pending sources, including the checkout-lifetime correction below). Disposable local SQL demonstrated the failure without
+the trigger and success with it. No remote migration was applied.
+
+Current verified checks: shared full 1,612 tests; final focused web 540 tests;
+final focused native 150 tests; Chromium and WebKit stale-removal checkout;
+seven local SQL checks; and all 10 monorepo lint/typecheck tasks. The broad
+native run passed 8,665 tests but one worker crashed; its affected suite then
+passed alone. Broad web authority checks require the eventual clean committed
+candidate and are not bypassed. No real order, payment or deployment occurred.
+
+SQL review also identified a near-expiry checkout whose new session could
+outlive its cart. `20261014141000_commerce_cart_checkout_lifetime.sql` preserves
+the existing prepare authentication/replay contract and extends cart expiry
+through the accepted session. Its local regression failed before the correction
+and passed afterward. The large-total assertion now rejects missing results.
+The final disposable cluster was stopped; all seven SQL groups passed again.

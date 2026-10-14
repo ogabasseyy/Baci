@@ -144,7 +144,7 @@ export function issueCartSessionProof(
  * Verifies signature, environment, audience and expiry. A valid proof
  * still requires current database-grant validation before any mutation.
  */
-export function verifyCartSessionProof(
+function verifyCartProof(
   proof: string,
   options: {
     secret?: string;
@@ -152,7 +152,8 @@ export function verifyCartSessionProof(
     environment: string;
     audience?: string;
     previousSecrets?: string[];
-  }
+  },
+  allowExpired = false
 ): CartSessionVerification {
   const secret = requireSecret(options.secret);
   const parts = proof.split('.');
@@ -181,14 +182,14 @@ export function verifyCartSessionProof(
     return { error: 'wrong_audience', ok: false };
   }
   const now = Math.floor((options.now ?? new Date()).getTime() / 1000);
-  if (payload.exp <= now) {
+  if (!allowExpired && payload.exp <= now) {
     return { error: 'expired_proof', ok: false };
   }
 
   const session: VerifiedCartSession = {
     allowedOperations:
       payload.scope === 'session'
-        ? ['add', 'set_quantity', 'remove', 'clear']
+        ? ['add', 'set_quantity', 'remove', 'clear', 'replace']
         : [],
     cartId: payload.cartId,
     expiresAt: new Date(payload.exp * 1000).toISOString(),
@@ -197,4 +198,19 @@ export function verifyCartSessionProof(
     principalId: payload.principalId,
   };
   return { ok: true, session };
+}
+
+/** Normal cart authority always rejects expired proofs. */
+export function verifyCartSessionProof(
+  proof: string,
+  options: Parameters<typeof verifyCartProof>[1]
+): CartSessionVerification {
+  return verifyCartProof(proof, options);
+}
+/** Expired signed proofs identify access to retire, never authority to read or mutate a cart. */
+export function verifyCartSessionProofForRevocation(
+  proof: string,
+  options: Parameters<typeof verifyCartProof>[1]
+): CartSessionVerification {
+  return verifyCartProof(proof, options, true);
 }

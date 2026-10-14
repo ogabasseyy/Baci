@@ -222,3 +222,13 @@ describe('planCartMerge', () => {
     }
   });
 });
+it('never silently drops duplicate voucher identities already present in one cart', () => {
+  const result = planCartMerge(
+    snapshot([
+      line(TECNO, 1, { voucherAwardId: 'award-a' }),
+      line(TECNO, 1, { voucherAwardId: 'award-b' }),
+    ]),
+    snapshot([])
+  );
+  expect(result.ok).toBe(false);
+});

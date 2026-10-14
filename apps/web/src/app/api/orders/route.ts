@@ -1571,13 +1571,15 @@ export async function POST(request: NextRequest) {
         use_savings_credit ||
         use_wallet_credit ||
         hasVoucherItem ||
+        shared_cart ||
         (negotiationDiscount?.totalDiscount ?? 0) > 0
       ) {
         return NextResponse.json(
           {
             code: 'REDVAULT_COMBINATION_UNSUPPORTED',
-            error:
-              'REDVAULT cannot be combined with another discount or redemption',
+            error: shared_cart
+              ? 'Choose a different payment method for this shared cart.'
+              : 'REDVAULT cannot be combined with another discount or redemption',
           },
           { status: 400 }
         );

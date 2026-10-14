@@ -289,6 +289,7 @@ $$;
 \ir ../migrations/20261012050100_commerce_cart_roles.sql
 \ir ../migrations/20261012050200_commerce_cart_commands.sql
 \ir ../migrations/20261012050600_commerce_cart_order_binding.sql
+\ir ../migrations/20261013195818_commerce_cart_review_binding_guards.sql
 
 INSERT INTO public.merchants (id, slug) VALUES
   ('11111111-1111-4111-8111-111111111111', 'ogabassey'),
@@ -796,6 +797,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-4000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00
@@ -853,6 +855,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-5000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00
@@ -915,6 +918,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-6000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00
@@ -1054,6 +1058,9 @@ END
 $$;
 RESET ROLE;
 
+-- The shopper adds a remaining item before refreshing; empty carts cannot order.
+INSERT INTO public.commerce_cart_lines (id, merchant_id, cart_id, product_id, quantity, last_unit_price_minor)
+VALUES ('dddddddd-7001-4000-8000-000000000000','11111111-1111-4111-8111-111111111111','cccccccc-7000-4000-8000-000000000000','44444444-4444-4444-8444-444444444444',1,1500);
 -- 16. Refresh after a cart edit mints generation 2; the new session
 -- submits cleanly while the older generation goes stale.
 SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a7","cart_scope":"session","cart_id":"cccccccc-7000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999963"}';
@@ -1095,7 +1102,7 @@ BEGIN
       'p_merchant_id', '11111111-1111-4111-8111-111111111111',
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
-      'p_items', '[]'::jsonb,
+      'p_items', jsonb_build_array(jsonb_build_object('cart_line_id','dddddddd-7001-4000-8000-000000000000','product_id','44444444-4444-4444-8444-444444444444','quantity',1,'price',15)),
       'p_expected_total', 0,
       'p_checkout_idempotency_key', 'order-key-a7-gen2',
       'p_checkout_request_hash', 'hash-a7-gen2'
@@ -1169,6 +1176,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-a000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00
@@ -1255,6 +1263,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-b000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00
@@ -1315,7 +1324,7 @@ BEGIN
         'p_merchant_id', '11111111-1111-4111-8111-111111111111',
         'p_customer_email', 'buyer@example.com',
         'p_customer_name', 'Buyer',
-        'p_items', '[]'::jsonb,
+        'p_items', jsonb_build_array(jsonb_build_object('cart_line_id','dddddddd-c000-4000-8000-000000000000','product_id','44444444-4444-4444-8444-444444444444','quantity',1)),
         'p_expected_total', 0,
         'p_checkout_idempotency_key', 'order-key-a12',
         'p_checkout_request_hash', 'hash-a12'
@@ -1387,6 +1396,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-d000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00
@@ -1502,6 +1512,7 @@ BEGIN
       'p_customer_email', 'buyer@example.com',
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object(
+        'cart_line_id', 'dddddddd-f000-4000-8000-000000000000',
         'product_id', '44444444-4444-4444-8444-444444444444',
         'quantity', 1,
         'price', 15.00

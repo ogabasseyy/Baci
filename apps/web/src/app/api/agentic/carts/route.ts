@@ -6,11 +6,7 @@ import { calculateCheckoutSession } from '@/lib/agentic/checkout';
 import { reserveAgenticIdempotencyKey } from '@/lib/agentic/idempotency';
 import { getAgenticIdempotencyErrorStatus } from '@/lib/agentic/idempotency-response';
 import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency-response-storage';
-import {
-  AGENTIC_CHECKOUT_DISABLED_ERROR,
-  isAgenticMerchantCheckoutEnabled,
-  resolveAgenticMerchantContext,
-} from '@/lib/agentic/merchant-context';
+import { resolveAgenticMerchantContext } from '@/lib/agentic/merchant-context';
 import { readAgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
@@ -68,6 +64,7 @@ export async function POST(request: NextRequest) {
     merchantSlug: merchant.slug,
   });
   const idempotency = await reserveAgenticIdempotencyKey({
+    agentId: mutation.agentId,
     apiVersion: mutation.apiVersion,
     body: mutation.rawBody,
     key: mutation.idempotencyKey,
@@ -95,6 +92,7 @@ export async function POST(request: NextRequest) {
 
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId: mutation.agentId,
       idempotencyKey: mutation.idempotencyKey,
       merchantId: merchant.id,
       requestId: mutation.requestId,
@@ -105,9 +103,9 @@ export async function POST(request: NextRequest) {
       supabase,
     });
 
-  if (!isAgenticMerchantCheckoutEnabled(merchant)) {
-    return respond({ error: AGENTIC_CHECKOUT_DISABLED_ERROR }, 403);
-  }
+  // Cart transfer is independent of native checkout readiness: creating
+  // a transfer cart never implies checkout/payment availability, which
+  // the checkout conversion path continues to gate separately.
 
   const replayReservation = await reserveAgenticRequestId({
     agentId: mutation.agentId,

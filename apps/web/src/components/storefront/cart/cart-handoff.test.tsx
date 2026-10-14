@@ -369,3 +369,79 @@ describe('CartHandoff', () => {
     }
   });
 });
+
+describe('new guest handoff', () => {
+  it('bootstraps only after the guest explicitly connects and scopes redemption to the merchant', async () => {
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const href = String(url);
+      if (href.includes('/handoff?'))
+        return jsonResponse({
+          merchant: { slug: 'ogabassey' },
+          snapshot: snapshot(),
+          status: 'pending',
+        });
+      if (href.includes('/cart?'))
+        return jsonResponse({ code: 'missing_proof' }, 401);
+      if (href.includes('/bootstrap'))
+        return jsonResponse({ proof: 'bootstrap-proof' }, 201);
+      if (href.includes('/redeem')) return jsonResponse({ ok: true });
+      throw new Error(`unexpected fetch ${href}`);
+    });
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    const connect = await screen.findByRole('button', { name: /connect/i });
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes('/bootstrap'))
+    ).toBe(false);
+    fireEvent.click(connect);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalled());
+    const urls = fetchMock.mock.calls.map(([url]) => String(url));
+    expect(urls).toContain('/api/storefront/cart/bootstrap');
+    expect(urls).toContain(
+      '/api/storefront/cart/handoff/redeem?merchantSlug=ogabassey'
+    );
+    expect(urls.findIndex((url) => url.includes('/bootstrap'))).toBeLessThan(
+      urls.findIndex((url) => url.includes('/redeem'))
+    );
+  });
+
+  it('does not treat a destination lookup outage as an empty cart', async () => {
+    mockFetchSequence(
+      {
+        merchant: { slug: 'ogabassey' },
+        snapshot: snapshot(),
+        status: 'pending',
+      },
+      { code: 'temporarily_unavailable' },
+      503
+    );
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole('button', { name: /connect/i })
+    ).not.toBeInTheDocument();
+  });
+});
+
+it('recovers a temporary destination outage without discarding the handoff', async () => {
+  const preview = {
+    merchant: { slug: 'ogabassey' },
+    snapshot: snapshot(),
+    status: 'pending',
+  };
+  mockFetchSequence(preview, { code: 'temporarily_unavailable' }, 503);
+  render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+  expect(
+    await screen.findByRole('heading', { name: 'We could not check your cart' })
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole('heading', { name: 'This cart link ended' })
+  ).not.toBeInTheDocument();
+  mockFetchSequence(preview, { code: 'missing_proof' }, 401);
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(
+    await screen.findByRole('button', { name: /connect/i })
+  ).toBeInTheDocument();
+  expect(
+    fetchMock.mock.calls.some(([url]) => String(url).includes('/bootstrap'))
+  ).toBe(false);
+});

@@ -33,7 +33,7 @@ export const cartValidateSchema = z.object({
   cartItems: z.array(cartItemSchema).max(50).optional(),
 });
 
-const cartItemIdentitySchema = z.strictObject({
+export const cartItemIdentitySchema = z.strictObject({
   condition: z.enum(['new', 'used', 'open_box', 'refurbished']).optional(),
   options: z.record(z.string().min(1), z.string()).optional(),
   productId: z.uuid(),
@@ -44,10 +44,10 @@ const cartLineAttachmentsSchema = z.strictObject({
   negotiatedUnitPriceMinor: z.number().int().positive().optional(),
   negotiationStatus: z.enum(['pending', 'accepted', 'rejected']).optional(),
   voucherAwardId: z.string().trim().min(1).max(128).optional(),
-  voucherToken: z.string().trim().min(1).max(256).optional(),
+  voucherToken: z.string().trim().min(1).max(512).optional(),
 });
 
-const cartInputLineSchema = z
+export const cartInputLineSchema = z
   .strictObject({
     item: cartItemIdentitySchema,
     quantity: z.number().int().min(1).max(10),
@@ -127,14 +127,31 @@ const handoffResolutionSchema = z.strictObject({
   keep: z.enum(['incoming', 'existing']),
 });
 
-export const cartHandoffRedeemRequestSchema = z.strictObject({
-  attemptId: z.string().trim().min(1).max(128),
-  choice: z.enum(['connect', 'merge', 'keep_existing']),
-  destCartId: z.uuid().optional(),
-  expectedDestVersion: z.number().int().min(1).optional(),
-  expectedIncomingVersion: z.number().int().min(1).optional(),
-  handoffId: z.uuid(),
-  lines: z.array(cartInputLineSchema).max(20).optional(),
-  resolutions: z.array(handoffResolutionSchema).max(20).optional(),
-  token: z.string().regex(/^ch1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
-});
+export const cartHandoffRedeemRequestSchema = z
+  .strictObject({
+    attemptId: z.string().trim().min(1).max(128),
+    choice: z.enum(['connect', 'merge', 'keep_existing']),
+    destCartId: z.uuid().optional(),
+    expectedDestVersion: z.number().int().min(1).optional(),
+    expectedIncomingVersion: z.number().int().min(1).optional(),
+    handoffId: z.uuid(),
+    lines: z.array(cartInputLineSchema).max(20).optional(),
+    resolutions: z.array(handoffResolutionSchema).max(20).optional(),
+    token: z.string().regex(/^ch1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
+  })
+  .superRefine((value, context) => {
+    if (value.choice !== 'merge') return;
+    for (const key of [
+      'lines',
+      'destCartId',
+      'expectedIncomingVersion',
+      'expectedDestVersion',
+    ] as const) {
+      if (value[key] === undefined)
+        context.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'A complete reviewed merge is required',
+        });
+    }
+  });

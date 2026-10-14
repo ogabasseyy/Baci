@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { checkoutGenerationRestoreGate } from '@/lib/checkout-generation-restore-gate';
+import { CONFIG } from '@/lib/config';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
@@ -13,6 +14,7 @@ import {
 } from './cart-line';
 import type { CartItem } from './cart-store.types';
 import { createCheckoutGenerationActions } from './cart-store-generation-actions';
+import { mergeCartStore } from './cart-store-merge';
 import {
   applyReprice,
   clearGroupNegotiation,
@@ -22,6 +24,10 @@ import {
 import type { CartState } from './cart-store-state';
 import { partializeCartStore } from './partialize-cart-store';
 import { rotateEmptyCheckoutCart } from './rotate-empty-checkout-cart';
+import {
+  forwardSharedCartWrite,
+  hasSharedCartWriter,
+} from './shared-cart-writer';
 
 export type { CartItem } from './cart-store.types';
 export { formatPrice, selectCartQuantities };
@@ -62,6 +68,8 @@ export const useCartStore = create<CartState>()(
       },
 
       addItem: (item) => {
+        const forwarded = forwardSharedCartWrite({ type: 'add', item });
+        if (forwarded) return;
         set((state) => {
           const itemToAdd =
             item.voucher_token || item.voucher_award_id
@@ -111,6 +119,8 @@ export const useCartStore = create<CartState>()(
       },
 
       removeItem: async (id) => {
+        const forwarded = forwardSharedCartWrite({ type: 'remove', id });
+        if (forwarded) return await forwarded;
         const state = get();
         const items = state.items.filter((item) => item.id !== id);
         if (items.length === 0) {
@@ -131,6 +141,12 @@ export const useCartStore = create<CartState>()(
       },
 
       updateQuantity: async (id, quantity) => {
+        const forwarded = forwardSharedCartWrite({
+          type: 'quantity',
+          id,
+          quantity,
+        });
+        if (forwarded) return await forwarded;
         const state = get();
         if (quantity <= 0) {
           const items = state.items.filter((item) => item.id !== id);
@@ -171,6 +187,8 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: async () => {
+        const forwarded = forwardSharedCartWrite({ type: 'clear' });
+        if (forwarded) return await forwarded;
         await rotateEmptyCheckoutCart(set, {
           previousGeneration: get().checkoutGeneration,
           retainCreditSnapshot: false,
@@ -185,6 +203,12 @@ export const useCartStore = create<CartState>()(
       },
 
       applyNegotiatedPrice: (id, negotiatedPrice) => {
+        const forwarded = forwardSharedCartWrite({
+          type: 'negotiate',
+          id,
+          price: negotiatedPrice,
+        });
+        if (forwarded) return;
         set((state) => {
           const base = state.cartWideNegotiationActive
             ? clearGroupNegotiation(state.items)
@@ -205,6 +229,11 @@ export const useCartStore = create<CartState>()(
       },
 
       applyCartWideNegotiation: (newTotal) => {
+        const forwarded = forwardSharedCartWrite({
+          type: 'negotiate_group',
+          total: newTotal,
+        });
+        if (forwarded) return;
         const { items } = get();
         const currentTotal = items.reduce((sum, item) => {
           const price = item.negotiatedPrice ?? item.price;
@@ -228,6 +257,11 @@ export const useCartStore = create<CartState>()(
       },
 
       clearNegotiatedPrice: (id) => {
+        const forwarded = forwardSharedCartWrite({
+          type: 'clear_negotiation',
+          id,
+        });
+        if (forwarded) return;
         set((state) => ({
           items: state.items.map((item) =>
             item.id === id
@@ -245,10 +279,14 @@ export const useCartStore = create<CartState>()(
       ...createCheckoutGenerationActions(set),
 
       repriceItems: (priceById) => {
+        const forwarded = forwardSharedCartWrite({ type: 'legacy_reprice' });
+        if (forwarded) return;
         set((state) => applyReprice(state, priceById));
       },
 
       toggleAssurance: (id) => {
+        const forwarded = forwardSharedCartWrite({ type: 'assurance', id });
+        if (forwarded) return;
         set((state) => ({
           items: state.items.map((item) =>
             item.id === id
@@ -263,6 +301,13 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'cart-storage',
+      merge: (persisted, current) =>
+        mergeCartStore(
+          persisted,
+          current,
+          CONFIG.MERCHANT_ID,
+          hasSharedCartWriter()
+        ),
       storage: createJSONStorage(() => syncStorage),
       partialize: partializeCartStore,
       onRehydrateStorage: () => (state) => {
@@ -273,7 +318,8 @@ export const useCartStore = create<CartState>()(
               checkoutGenerationRestoreGate.noteRestoredGeneration(
                 checkoutGeneration
               );
-              useCartStore.setState({ checkoutGeneration });
+              if (!hasSharedCartWriter())
+                useCartStore.setState({ checkoutGeneration });
             },
             {
               generationWhenReadBegan,

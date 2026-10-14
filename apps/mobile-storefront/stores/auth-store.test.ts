@@ -1,3 +1,11 @@
+// biome-ignore-all lint/correctness/noUndeclaredVariables: Jest globals are provided by jest-expo in this legacy store test.
+jest.mock('expo-crypto', () => ({
+  randomUUID: jest.fn(() => 'test-generation'),
+}));
+jest.mock('@/lib/persist-checkout-generation', () => ({
+  persistCheckoutGenerationDetached: jest.fn(),
+}));
+
 /**
  * Tests for auth-store — focused on OAuth checkout fix behaviors:
  * - Customer lookup by user_id (not email)
@@ -8,7 +16,6 @@
  * - cleanup() unsubscribes auth listener
  */
 
-// biome-ignore-all lint/correctness/noUndeclaredVariables: Jest globals are provided by jest-expo in this legacy store test.
 import { act } from '@testing-library/react-native';
 
 // ---------------------------------------------------------------------------

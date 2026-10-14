@@ -148,6 +148,7 @@ describe('issueCartSessionProof', () => {
         'set_quantity',
         'remove',
         'clear',
+        'replace',
       ]);
     }
   });
@@ -287,4 +288,44 @@ describe('verifyCartSessionProof', () => {
 
     expect(verified).toEqual({ error: 'expired_proof', ok: false });
   });
+});
+it('includes replace in the session transport vocabulary while database grants remain authoritative', () => {
+  const now = new Date('2026-10-12T04:00:00Z');
+  const proof = issueCartSessionProof(sessionInput(), {
+    environment: ENVIRONMENT,
+    now,
+    secret: SECRET,
+  });
+  const result = verifyCartSessionProof(proof, {
+    environment: ENVIRONMENT,
+    now,
+    secret: SECRET,
+  });
+  expect(result.ok && result.session.allowedOperations).toContain('replace');
+});
+it('allows an expired signed proof only for revocation, preserving signature and environment checks', async () => {
+  const { verifyCartSessionProofForRevocation } = await import(
+    './session-proof'
+  );
+  const proof = issueCartSessionProof(sessionInput(), {
+    environment: ENVIRONMENT,
+    now: new Date('2026-10-12T00:00:00Z'),
+    secret: SECRET,
+  });
+  const options = {
+    environment: ENVIRONMENT,
+    now: new Date('2026-10-14T00:00:00Z'),
+    secret: SECRET,
+  };
+  expect(verifyCartSessionProof(proof, options).ok).toBe(false);
+  expect(verifyCartSessionProofForRevocation(proof, options).ok).toBe(true);
+  expect(
+    verifyCartSessionProofForRevocation(`${proof}changed`, options).ok
+  ).toBe(false);
+  expect(
+    verifyCartSessionProofForRevocation(proof, {
+      ...options,
+      environment: 'other',
+    }).ok
+  ).toBe(false);
 });

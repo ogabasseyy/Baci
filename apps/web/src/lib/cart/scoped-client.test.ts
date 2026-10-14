@@ -122,3 +122,57 @@ describe('createCartReceiveClient', () => {
     ).toBeLessThanOrEqual(CART_SCOPED_TOKEN_TTL_SECONDS);
   });
 });
+
+it('bounds a receive token by the verified cart proof expiry', () => {
+  const now = new Date('2026-10-12T04:00:00Z');
+  const client = createCartReceiveClient(
+    { ...PRINCIPAL, expiresAt: new Date(now.getTime() + 30_000).toISOString() },
+    {
+      now,
+      signer: SIGNER,
+      anonKey: 'test-anon-key',
+      supabaseUrl: 'https://test.supabase.co',
+    }
+  );
+  const payload = bearerPayload(
+    client as unknown as Parameters<typeof bearerPayload>[0]
+  );
+  expect(Number(payload.exp) - Number(payload.iat)).toBe(30);
+});
+
+it.each([
+  'not-a-date',
+  '2026-10-12T03:59:59Z',
+])('refuses expired or malformed receive authority: %s', (expiresAt) => {
+  expect(() =>
+    createCartReceiveClient(
+      { ...PRINCIPAL, expiresAt },
+      {
+        now: new Date('2026-10-12T04:00:00Z'),
+        signer: SIGNER,
+        anonKey: 'test-anon-key',
+        supabaseUrl: 'https://test.supabase.co',
+      }
+    )
+  ).toThrow('Cart proof has expired');
+});
+
+it('mints expired proofs only into a short-lived revocation-only role', async () => {
+  const { createCartRevocationClient } = await import('./scoped-client');
+  const options = {
+    anonKey: 'test-anon-key',
+    now: new Date('2026-10-14T04:00:00Z'),
+    signer: SIGNER,
+    supabaseUrl: 'https://test.supabase.co',
+  };
+  expect(() => createCartScopedClient(PRINCIPAL, options)).toThrow('expired');
+  expect(() => createCartReceiveClient(PRINCIPAL, options)).toThrow('expired');
+  const payload = bearerPayload(
+    createCartRevocationClient(PRINCIPAL, options) as unknown as Parameters<
+      typeof bearerPayload
+    >[0]
+  );
+  expect(payload.role).toBe('commerce_cart_revoker');
+  expect(payload.exp).toBe(Math.floor(options.now.getTime() / 1000) + 300);
+  expect(payload.cart_customer_id).toBeUndefined();
+});

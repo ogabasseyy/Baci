@@ -6,7 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 import CartLoadedView from '@/components/cart/CartLoadedView';
 import CartStateView from '@/components/cart/CartStateView';
+import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel';
 import PriceChangeModal from '@/components/cart/PriceChangeModal';
+import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
 import { unavailableCartActions } from '@/components/cart/unavailable-cart-actions';
 import { useCartNegotiation } from '@/components/cart/use-cart-negotiation';
 import { useCartReprice } from '@/components/cart/use-cart-reprice';
@@ -16,12 +18,16 @@ import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
 import { useHaptics } from '@/hooks/use-haptics';
+import { sharedCartCheckoutReady } from '@/lib/cart/checkout-ready';
 import { isValidCartStore } from '@/lib/cart-validation';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import { type CartItem, formatPrice, useCartStore } from '@/stores/cart-store';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
 export default function CartScreen() {
+  const sharedCartEnabled = useNativeSharedCartStore((state) => state.enabled);
+  const sharedCartStatus = useNativeSharedCartStore((state) => state.status);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
@@ -125,6 +131,13 @@ export default function CartScreen() {
 
   const handleCheckout = () => {
     triggerHaptic();
+    if (!sharedCartCheckoutReady(useNativeSharedCartStore.getState())) {
+      Alert.alert(
+        'Cart is syncing',
+        'Finish syncing your cart before checkout.'
+      );
+      return;
+    }
     if (isAuthenticated) {
       router.push('/checkout');
     } else {
@@ -193,6 +206,13 @@ export default function CartScreen() {
       });
   };
 
+  if (
+    sharedCartEnabled &&
+    (sharedCartStatus === 'choice_required' ||
+      (items.length === 0 && sharedCartStatus !== 'ready'))
+  )
+    return <SharedCartStatusPanel />;
+
   if (hasCartLoadError) {
     return (
       <CartStateView
@@ -221,6 +241,8 @@ export default function CartScreen() {
 
   return (
     <>
+      <SharedCartStatusPanel />
+      <NativeCartAccountPanel />
       <CartLoadedView
         colorScheme={colorScheme}
         colors={colors}

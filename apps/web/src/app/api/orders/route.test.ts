@@ -850,6 +850,98 @@ describe('POST /api/orders REDVAULT integration', () => {
     }
   });
 
+  it('rejects shared-cart REDVAULT orders before any unbound draft', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const events = await import(
+      '@/lib/events/record-platform-order-created-event'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          {
+            order: {
+              created_at: '2026-09-21T11:00:00.000Z',
+              currency: 'NGN',
+              id: 'rv-order-1',
+              order_number: 'RV-1',
+              total: 1500,
+            },
+          },
+          { status: 201 }
+        ) as never
+      );
+    const eventSpy = vi.spyOn(events, 'recordPlatformOrderCreatedEvent');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-event-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+            shared_cart: {
+              cart_id: '22222222-2222-4222-8222-222222222222',
+              checkout_session_id: '33333333-3333-4333-8333-333333333333',
+              checkout_generation: 1,
+              cart_version: 3,
+            },
+          }),
+        })
+      );
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe(
+        'REDVAULT_COMBINATION_UNSUPPORTED'
+      );
+      expect(checkoutSpy).not.toHaveBeenCalled();
+      expect(eventSpy).not.toHaveBeenCalled();
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      eventSpy.mockRestore();
+    }
+  });
+
   it('emits the platform order-created event for first-time REDVAULT orders', async () => {
     vi.clearAllMocks();
     primeAdminOrderCurrencyRead();

@@ -12,18 +12,24 @@ import { createDateOfBirthAction } from './auth-store-account-date-of-birth';
 import { createProfileActions } from './auth-store-account-profile';
 import { clearLocalAndDeactivatePushToken } from './auth-store-push';
 import { useCartStore } from './cart-store';
+import { clearDeviceCartForAccountTeardown } from './clear-device-cart';
 import { useComparisonStore } from './comparison-store';
 import { useQuizStore } from './quiz-store';
 import { useSavedStore } from './saved-store';
+import {
+  hasSharedCartWriter,
+  retireSharedCartWriter,
+} from './shared-cart-writer';
 
 const log = createLogger('AuthStore');
 
 async function clearUserStores() {
+  const shared = hasSharedCartWriter();
   try {
-    await useCartStore.getState().clearCart();
-  } catch (error) {
-    log.error('Failed to persist empty cart during account teardown:', error);
-    if (typeof useCartStore.setState === 'function') {
+    await clearDeviceCartForAccountTeardown();
+  } catch {
+    log.error('Failed to retire cart device during account teardown');
+    if (!shared && typeof useCartStore.setState === 'function') {
       useCartStore.setState({
         items: [],
         lineSequence: 0,
@@ -41,6 +47,9 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
     signOut: async () => {
       try {
         set({ isLoading: true });
+        // Fence old cart callbacks before any Auth/network await.
+        const retireCart = retireSharedCartWriter();
+        void retireCart.catch(() => undefined);
         const storedToken = await getStoredPushToken();
         await clearLocalAndDeactivatePushToken(storedToken);
         const { error: signOutError } = await supabase.auth.signOut();
@@ -72,6 +81,8 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
         if (error)
           return { success: false, error: getDeleteAccountErrorMessage(error) };
 
+        const retireCart = retireSharedCartWriter();
+        void retireCart.catch(() => undefined);
         const storedToken = await getStoredPushToken();
         await clearLocalAndDeactivatePushToken(storedToken);
         let localSignOutError: unknown = null;

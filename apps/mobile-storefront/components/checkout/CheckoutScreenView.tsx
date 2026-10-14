@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, Text } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -17,8 +17,10 @@ import { AddressSuggestionsProvider } from '@/components/ui/address-suggestions-
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
+import { useCartCheckoutSnapshot } from '@/hooks/use-cart-checkout-snapshot';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
+import { CartCheckoutReviewNotice } from './CartCheckoutReviewNotice';
 import { CheckoutLocationPickerOverlays } from './CheckoutLocationPickerOverlays';
 import { CheckoutPaymentOverlays } from './CheckoutPaymentOverlays';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
@@ -48,6 +50,9 @@ export function CheckoutScreenView({
   const insets = useSafeAreaInsets();
   const { clearCart, items, subtotal } =
     useCheckoutDisplayCart(prizeSimulation);
+  // Canonical preparation/review for shared-cart devices; preparation
+  // never submits an order, and the submit path refuses stale reviews.
+  const cartReview = useCartCheckoutSnapshot();
   const { customer, isAuthenticated, user } = useAuthStatus();
   const { data: merchant } = useMerchant();
   const merchantPickupLocation = getMerchantPickupLocation(merchant);
@@ -201,6 +206,24 @@ export function CheckoutScreenView({
         >
           {prizeSimulation ? (
             <CheckoutSimulationBanner colors={colors} />
+          ) : null}
+          <CartCheckoutReviewNotice
+            status={cartReview.status}
+            onRetry={cartReview.retry}
+            textColor={colors.text}
+          />
+          {cartReview.review?.lines.some((line) => !line.available) ? (
+            <Text accessibilityRole="alert" style={{ color: colors.text }}>
+              Some items are unavailable. Return to your cart to update them
+              before checkout.
+            </Text>
+          ) : cartReview.review?.lines.some(
+              (line) => line.priceChanged || line.negotiationInvalidated
+            ) ? (
+            <Text accessibilityRole="alert" style={{ color: colors.text }}>
+              Prices or offers changed. Review the updated items and total
+              before placing your order.
+            </Text>
           ) : null}
           <CheckoutStepper
             step={step}

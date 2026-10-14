@@ -34,6 +34,10 @@ export function StorefrontShellFrame({
         merchantId={merchant.id}
         merchantSlug={merchantSlug}
         sharedCartEnabled={merchantHasFeature(merchant, 'shared_cart')}
+        sharedCartRealtimeEnabled={merchantHasFeature(
+          merchant,
+          'shared_cart_realtime'
+        )}
         deferValidationUntilIdle
       >
         <WebMcpStorefrontTools

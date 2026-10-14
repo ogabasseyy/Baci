@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
-import { issueCartSessionProof } from '@/lib/cart/session-proof';
+import {
+  issueCartSessionProof,
+  verifyCartSessionProof,
+} from '@/lib/cart/session-proof';
 import { POST } from './route';
 
 const MERCHANT = {
@@ -203,6 +206,33 @@ describe('POST /api/storefront/cart/commands', () => {
       cartId: CART_ID,
       merchantId: MERCHANT.id,
       scope: 'session',
+    });
+  });
+
+  it('renews the session proof after an authorized mutation', async () => {
+    const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState({ expiresAt: expiry, lines: [rawLine()] }),
+    };
+    const response = await postCommand({
+      body: addCommand('renew-proof'),
+      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+    });
+    const payload = await response.json();
+    expect(payload.proof).toEqual(expect.any(String));
+    expect(response.headers.get('set-cookie')).toContain(
+      'baci-cart-ogabassey='
+    );
+    const verified = verifyCartSessionProof(payload.proof, {
+      secret: TEST_SECRET,
+      environment: 'test',
+    });
+    expect(verified).toMatchObject({
+      ok: true,
+      session: { cartId: CART_ID, grantId: GRANT_ID },
     });
   });
 

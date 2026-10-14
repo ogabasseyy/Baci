@@ -163,7 +163,7 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
         cartId: cart.sharedCartRef.cartId,
         expectedVersion: cart.sharedCartRef.version,
         operationId: crypto.randomUUID(),
-      });
+      }, merchant?.slug);
       if (!review.ok) {
         if (review.code === 'refresh_required') {
           await cart.refreshSharedCart?.();

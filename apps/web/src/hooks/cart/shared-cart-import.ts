@@ -1,0 +1,199 @@
+import {
+  type CartInputLine,
+  type CartLine,
+  type CartSnapshot,
+  cartLineIdentity,
+  SHARED_CART_MAX_LINES,
+  SHARED_CART_MAX_QUANTITY_PER_LINE,
+} from '@baci/shared/cart';
+
+import { type CartMergeConflict, planCartMerge } from '@/lib/cart/merge';
+
+import type { CartItem } from './cart-types';
+import { cartItemToIdentity } from './shared-cart-display';
+
+/**
+ * Converts a display line to a server input line. Quantities clamp to
+ * the canonical per-line bound, voucher lines pin to one, and a
+ * negotiated price without a settled status is dropped rather than
+ * sent as an authoritative-looking half attachment.
+ */
+export function displayLineToInputLine(item: CartItem): CartInputLine {
+  const line: CartInputLine = {
+    item: cartItemToIdentity(item),
+    quantity: Math.min(
+      SHARED_CART_MAX_QUANTITY_PER_LINE,
+      Math.max(1, Math.round(item.quantity))
+    ),
+  };
+  if (item.quizVoucherToken) line.voucherToken = item.quizVoucherToken;
+  if (item.quizAwardId) line.voucherAwardId = item.quizAwardId;
+  if (line.voucherToken ?? line.voucherAwardId) line.quantity = 1;
+  if (
+    item.negotiationStatus === 'pending' ||
+    item.negotiationStatus === 'accepted' ||
+    item.negotiationStatus === 'rejected'
+  ) {
+    line.negotiationStatus = item.negotiationStatus;
+    if (
+      typeof item.negotiatedPrice === 'number' &&
+      Number.isFinite(item.negotiatedPrice) &&
+      item.negotiatedPrice > 0
+    ) {
+      line.negotiatedUnitPriceMinor = Math.round(item.negotiatedPrice * 100);
+    }
+  }
+  return line;
+}
+
+export function fnv1aHex(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+export type PlannedLegacyImport =
+  | { kind: 'nothing' }
+  | {
+      kind: 'create';
+      lines: CartInputLine[];
+      operationId: string;
+      warnings: string[];
+    }
+  | {
+      kind: 'commands';
+      adds: { line: CartInputLine; operationId: string }[];
+      sets: { lineId: string; quantity: number }[];
+      warnings: string[];
+    }
+  | { kind: 'conflicts'; conflicts: CartMergeConflict[] };
+
+export function inputLinesOf(items: CartItem[]): {
+  lines: CartInputLine[];
+  clamped: boolean;
+} {
+  let clamped = false;
+  const lines = items.map((item) => {
+    const line = displayLineToInputLine(item);
+    if (line.quantity !== Math.max(1, Math.round(item.quantity))) {
+      clamped = true;
+    }
+    return line;
+  });
+  return { clamped, lines };
+}
+
+export function syntheticIncoming(lines: CartInputLine[]): CartSnapshot {
+  return {
+    cartId: 'import-incoming',
+    currency: 'NGN',
+    estimatedTotals: false,
+    expiresAt: new Date(0).toISOString(),
+    lines: lines.map(
+      (line, index) =>
+        ({
+          hasAssurance: false,
+          id: `import-${index}`,
+          item: line.item,
+          lineTotalMinor: 0,
+          negotiatedUnitPriceMinor: line.negotiatedUnitPriceMinor,
+          negotiationStatus: line.negotiationStatus,
+          quantity: line.quantity,
+          unitPriceMinor: 0,
+          voucherAwardId: line.voucherAwardId,
+          voucherToken: line.voucherToken,
+        }) as CartLine
+    ),
+    merchantId: 'import-incoming',
+    state: 'active',
+    subtotalMinor: 0,
+    totalMinor: 0,
+    version: 0,
+  };
+}
+
+/**
+ * Plans the one-time legacy import through the Task 6 merge rules: an
+ * empty server takes every local line, a nonempty server takes the
+ * merge diff (adds plus max-quantity sets), and conflicting
+ * voucher/negotiation attachments report for explicit resolution
+ * instead of silently overwriting. Derived operation keys make import
+ * retries converge instead of duplicating.
+ */
+export function planLegacyImport(
+  local: CartItem[],
+  server: CartSnapshot | null,
+  cartId: string | null,
+  resolutions: import('@baci/shared/cart').CartMergeResolution[] = []
+): PlannedLegacyImport {
+  if (local.length === 0) return { kind: 'nothing' };
+  const { clamped, lines } = inputLinesOf(local);
+  const warnings: string[] = [];
+  if (clamped) warnings.push('quantity_clamped');
+
+  if (!server || !cartId) {
+    const truncated =
+      lines.length > SHARED_CART_MAX_LINES
+        ? lines.slice(0, SHARED_CART_MAX_LINES)
+        : lines;
+    if (truncated.length < lines.length) warnings.push('too_many_lines');
+    const fingerprint = truncated
+      .map((line) => `${cartLineIdentity(line.item)}:${line.quantity}`)
+      .sort()
+      .join('|');
+    return {
+      kind: 'create',
+      lines: truncated,
+      operationId: `import:create:${fnv1aHex(fingerprint)}`,
+      warnings,
+    };
+  }
+
+  const serverKeys = new Set(
+    server.lines.map((line) => cartLineIdentity(line.item))
+  );
+  const overlapping = lines.filter((line) =>
+    serverKeys.has(cartLineIdentity(line.item))
+  );
+  const incomingOnly = lines.filter(
+    (line) => !serverKeys.has(cartLineIdentity(line.item))
+  );
+  // Server lines win their slots; local-only lines fill what remains.
+  const capacity = Math.max(0, SHARED_CART_MAX_LINES - server.lines.length);
+  const keptIncomingOnly = incomingOnly.slice(0, capacity);
+  if (keptIncomingOnly.length < incomingOnly.length) {
+    warnings.push('too_many_lines');
+  }
+  const planned = planCartMerge(
+    server,
+    syntheticIncoming([...overlapping, ...keptIncomingOnly]),
+    resolutions
+  );
+  if (!planned.ok) {
+    if (planned.code === 'merge_conflict') {
+      return { conflicts: planned.conflicts, kind: 'conflicts' };
+    }
+    return { conflicts: [], kind: 'conflicts' };
+  }
+  const serverByKey = new Map(
+    server.lines.map((line) => [cartLineIdentity(line.item), line])
+  );
+  const adds: { line: CartInputLine; operationId: string }[] = [];
+  const sets: { lineId: string; quantity: number }[] = [];
+  for (const line of planned.lines) {
+    const key = cartLineIdentity(line.item);
+    const existing = serverByKey.get(key);
+    if (!existing) {
+      adds.push({
+        line,
+        operationId: `import:${cartId}:${fnv1aHex(key)}`,
+      });
+    } else if (existing.quantity !== line.quantity) {
+      sets.push({ lineId: existing.id, quantity: line.quantity });
+    }
+  }
+  return { adds, kind: 'commands', sets, warnings };
+}

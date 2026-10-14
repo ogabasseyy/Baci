@@ -1,18 +1,10 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type {
-  calculateCheckoutSession,
-  GPTTotal,
-} from '@/lib/agentic/checkout';
+import type { GPTTotal } from '@/lib/agentic/checkout';
 import {
   buildAgenticCheckoutOrderPayload,
   buildPaymentPendingSessionUpdate,
   readAgenticSharedCartBinding,
 } from '@/lib/agentic/checkout-completion-payloads';
-import {
-  type AgenticCheckoutBuyer,
-  buildPaymentPendingCheckoutResponse,
-  type StoredDvaAccount,
-} from '@/lib/agentic/checkout-completion-response';
+import { buildPaymentPendingCheckoutResponse } from '@/lib/agentic/checkout-completion-response';
 import {
   compensateCreatedOrderAfterFinalizationFailure,
   releaseFinalizationClaimSafely,
@@ -27,13 +19,11 @@ import {
   recordAgenticOrderFinalizationOrderCreated,
 } from '@/lib/agentic/checkout-order-finalization-claim';
 import { isValidOrderFinalizationClaim } from '@/lib/agentic/checkout-order-finalization-claim-reference';
-import type { AgenticMetadata } from '@/lib/agentic/checkout-storage';
 import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency-response-storage';
 import { revalidateAgenticOrderProductCaches } from '@/lib/agentic/revalidate-agentic-order-product-caches';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
-
-type CheckoutCalculation = Awaited<ReturnType<typeof calculateCheckoutSession>>;
+import type { FinalizeAgenticCheckoutInput } from './checkout-completion-finalize.types';
 
 export async function finalizeAgenticCheckoutPayment({
   buyer,
@@ -49,26 +39,7 @@ export async function finalizeAgenticCheckoutPayment({
   route,
   sessionId,
   supabase,
-}: {
-  buyer: AgenticCheckoutBuyer;
-  dvaAccount: StoredDvaAccount;
-  expectedSessionUpdatedAt?: string;
-  finalizationClaimOverride?: string;
-  idempotencyKey: string;
-  merchantId: string;
-  metadata: AgenticMetadata;
-  orderSession: {
-    currency: string;
-    merchant_id: string;
-    session_id: string;
-    shipping_address?: unknown;
-  };
-  orderSessionCalc: CheckoutCalculation;
-  requestId: string;
-  route: string;
-  sessionId: string;
-  supabase: SupabaseClient;
-}) {
+}: FinalizeAgenticCheckoutInput) {
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
       idempotencyKey,

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import {
   buildAuthStatus,
   createMockCartState,
@@ -51,10 +51,12 @@ jest.mock('react-native-safe-area-context', () => mockSafeAreaModule());
 jest.mock('@/stores/ui-store', () => mockUIStoreModule());
 
 import CartScreen from '@/app/cart';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
 describe('CartScreen state', () => {
   beforeEach(() => {
     setupCartMocks();
+    useNativeSharedCartStore.setState({ enabled: false, status: 'loading' });
   });
 
   it('renders empty cart state when there are no cart items', () => {
@@ -69,6 +71,27 @@ describe('CartScreen state', () => {
     expect(screen.getByText('Your cart is empty 🛒')).toBeTruthy();
     expect(screen.getByText('Start Shopping')).toBeTruthy();
     expect(screen.queryByText('Lenovo ThinkPad E16 Gen 2')).toBeNull();
+  });
+
+  it('reacts when the shared cart is enabled without a status change', () => {
+    mockCartStateHolder.current = createMockCartState({
+      items: [],
+      itemCount: () => 0,
+      subtotal: () => 0,
+    });
+    useNativeSharedCartStore.setState({
+      enabled: false,
+      status: 'choice_required',
+    });
+    render(<CartScreen />);
+    expect(screen.getByText('Your cart is empty 🛒')).toBeTruthy();
+    act(() => useNativeSharedCartStore.setState({ enabled: true }));
+    expect(screen.queryByText('Your cart is empty 🛒')).toBeNull();
+    expect(
+      screen.getByText(
+        'You have a saved cart and items on this device. Choose which cart to use.'
+      )
+    ).toBeTruthy();
   });
 
   it('renders cart error state when cart data is unavailable', () => {

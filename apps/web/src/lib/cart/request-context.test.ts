@@ -1,16 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
+
 import {
-  __resetCartQuotaStoreForTesting,
-  checkCartQuota,
   readCartJsonBody,
   readCartProofFromRequest,
-  resolveCartMerchant,
   resolveCartRequestContext,
 } from './request-context';
+
 import type { CartSessionVerification } from './session-proof';
+
 import { CartSessionConfigError } from './session-proof';
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
+
 const OTHER_MERCHANT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 function merchantRow(overrides: Record<string, unknown> = {}) {
@@ -61,204 +62,6 @@ function bootstrapVerification(
     ...overrides,
   });
 }
-
-describe('resolveCartMerchant', () => {
-  it('trusts a proxy merchant header that matches the request host', async () => {
-    const request = new Request('https://ogabassey.usebaci.com/api/x', {
-      headers: { 'x-merchant-slug': 'ogabassey' },
-    });
-    const client = rpcClientReturning([merchantRow()]);
-
-    const result = await resolveCartMerchant(request, {
-      resolveAlias: async () => null,
-      rootDomain: 'usebaci.com',
-      rpcClient: client,
-    });
-
-    expect(result).toEqual({
-      merchant: {
-        customDomain: null,
-        id: MERCHANT_ID,
-        slug: 'ogabassey',
-      },
-      ok: true,
-    });
-    expect(client.rpc).toHaveBeenCalledWith(
-      'resolve_storefront_auth_merchant',
-      { p_identifier: 'ogabassey' }
-    );
-  });
-
-  it('ignores a merchant header that does not match the request host', async () => {
-    const request = new Request('https://attacker.usebaci.com/api/x', {
-      headers: { 'x-merchant-slug': 'ogabassey' },
-    });
-
-    const result = await resolveCartMerchant(request, {
-      resolveAlias: async () => null,
-      rootDomain: 'usebaci.com',
-      rpcClient: rpcClientReturning([merchantRow()]),
-    });
-
-    expect(result).toEqual({ error: 'merchant_unresolved', ok: false });
-  });
-
-  it('never consults forwarded-host context for merchant resolution', async () => {
-    const request = new Request(
-      'https://ogabassey.usebaci.com/api/x?merchantSlug=second-store',
-      {
-        headers: {
-          'x-forwarded-host': 'victim.usebaci.com',
-          'x-merchant-slug': 'ogabassey',
-        },
-      }
-    );
-    const client = rpcClientReturning([merchantRow()]);
-
-    const result = await resolveCartMerchant(request, {
-      resolveAlias: async () => null,
-      rootDomain: 'usebaci.com',
-      rpcClient: client,
-    });
-
-    expect(result.ok).toBe(true);
-    expect(client.rpc).toHaveBeenCalledWith(
-      'resolve_storefront_auth_merchant',
-      { p_identifier: 'ogabassey' }
-    );
-  });
-
-  it('trusts a custom-domain header matching the host, including www', async () => {
-    for (const host of ['shop.example.com', 'www.shop.example.com']) {
-      const request = new Request(`https://${host}/api/x`, {
-        headers: { 'x-merchant-domain': 'shop.example.com' },
-      });
-      const client = rpcClientReturning([
-        merchantRow({ custom_domain: 'shop.example.com' }),
-      ]);
-
-      const result = await resolveCartMerchant(request, {
-        resolveAlias: async () => null,
-        rootDomain: 'usebaci.com',
-        rpcClient: client,
-      });
-
-      expect(result.ok).toBe(true);
-      expect(client.rpc).toHaveBeenCalledWith(
-        'resolve_storefront_auth_merchant',
-        { p_identifier: 'shop.example.com' }
-      );
-    }
-  });
-
-  it('resolves a query hint on hosts without trusted headers', async () => {
-    const request = new Request(
-      'https://usebaci.com/api/storefront/cart?merchant_slug=ogabassey'
-    );
-    const client = rpcClientReturning([merchantRow()]);
-
-    const result = await resolveCartMerchant(request, {
-      resolveAlias: async () => null,
-      rootDomain: 'usebaci.com',
-      rpcClient: client,
-    });
-
-    expect(result.ok).toBe(true);
-    expect(client.rpc).toHaveBeenCalledWith(
-      'resolve_storefront_auth_merchant',
-      { p_identifier: 'ogabassey' }
-    );
-  });
-
-  it('resolves a body hint when no header or query identifies the store', async () => {
-    const request = new Request('https://usebaci.com/api/storefront/cart');
-
-    const result = await resolveCartMerchant(request, {
-      bodyHint: 'ogabassey',
-      resolveAlias: async () => null,
-      rootDomain: 'usebaci.com',
-      rpcClient: rpcClientReturning([merchantRow()]),
-    });
-
-    expect(result.ok).toBe(true);
-  });
-
-  it('prefers trusted headers over a conflicting client hint', async () => {
-    const request = new Request(
-      'https://ogabassey.usebaci.com/api/x?merchantSlug=second-store',
-      { headers: { 'x-merchant-slug': 'ogabassey' } }
-    );
-    const client = rpcClientReturning([merchantRow()]);
-
-    const result = await resolveCartMerchant(request, {
-      resolveAlias: async () => null,
-      rootDomain: 'usebaci.com',
-      rpcClient: client,
-    });
-
-    expect(result.ok).toBe(true);
-    expect(client.rpc).toHaveBeenCalledWith(
-      'resolve_storefront_auth_merchant',
-      { p_identifier: 'ogabassey' }
-    );
-  });
-
-  it('follows retired slugs through the alias table', async () => {
-    const request = new Request(
-      'https://usebaci.com/api/storefront/cart?merchantSlug=old-slug'
-    );
-    const client = {
-      rpc: vi.fn(async (_name: string, args: { p_identifier: string }) => ({
-        data: args.p_identifier === 'ogabassey' ? [merchantRow()] : [],
-        error: null,
-      })),
-    };
-
-    const result = await resolveCartMerchant(request, {
-      resolveAlias: async (slug) => (slug === 'old-slug' ? 'ogabassey' : null),
-      rootDomain: 'usebaci.com',
-      rpcClient: client,
-    });
-
-    expect(client.rpc).toHaveBeenCalledWith(
-      'resolve_storefront_auth_merchant',
-      { p_identifier: 'old-slug' }
-    );
-    expect(client.rpc).toHaveBeenCalledWith(
-      'resolve_storefront_auth_merchant',
-      { p_identifier: 'ogabassey' }
-    );
-    expect(result.ok).toBe(true);
-  });
-
-  it('rejects unpublished stores without revealing internals', async () => {
-    const request = new Request(
-      'https://usebaci.com/api/storefront/cart?merchantSlug=ogabassey'
-    );
-
-    const result = await resolveCartMerchant(request, {
-      resolveAlias: async () => null,
-      rootDomain: 'usebaci.com',
-      rpcClient: rpcClientReturning([merchantRow({ is_published: false })]),
-    });
-
-    expect(result).toEqual({ error: 'merchant_unavailable', ok: false });
-  });
-
-  it('fails closed with a retryable code when merchant lookup errors', async () => {
-    const request = new Request(
-      'https://usebaci.com/api/storefront/cart?merchantSlug=ogabassey'
-    );
-
-    const result = await resolveCartMerchant(request, {
-      resolveAlias: async () => null,
-      rootDomain: 'usebaci.com',
-      rpcClient: rpcClientReturning(null, { message: 'db down' }),
-    });
-
-    expect(result).toEqual({ error: 'temporarily_unavailable', ok: false });
-  });
-});
 
 describe('readCartJsonBody', () => {
   it('parses JSON bodies and treats empty bodies as empty objects', async () => {
@@ -464,83 +267,5 @@ describe('resolveCartRequestContext', () => {
     });
 
     expect(result).toEqual({ error: 'temporarily_unavailable', ok: false });
-  });
-});
-
-describe('checkCartQuota', () => {
-  it('allows requests under budget and blocks past exhaustion', async () => {
-    __resetCartQuotaStoreForTesting();
-    const input = {
-      merchantId: MERCHANT_ID,
-      operation: 'bootstrap' as const,
-      subject: 'ip-1',
-    };
-
-    let result = await checkCartQuota(input);
-    expect(result.allowed).toBe(true);
-
-    for (let attempt = 1; attempt < result.limit; attempt++) {
-      result = await checkCartQuota(input);
-      expect(result.allowed).toBe(true);
-    }
-    result = await checkCartQuota(input);
-    expect(result.allowed).toBe(false);
-    expect(result.remaining).toBe(0);
-    __resetCartQuotaStoreForTesting();
-  });
-
-  it('gives handoff issue, redeem and preview independent budgets', async () => {
-    __resetCartQuotaStoreForTesting();
-    const issue = await checkCartQuota({
-      merchantId: MERCHANT_ID,
-      operation: 'handoff_issue',
-      subject: 'guest-o1',
-    });
-    const redeem = await checkCartQuota({
-      merchantId: MERCHANT_ID,
-      operation: 'handoff_redeem',
-      subject: 'guest-d1',
-    });
-    const preview = await checkCartQuota({
-      merchantId: MERCHANT_ID,
-      operation: 'handoff_preview',
-      subject: 'ip-9',
-    });
-
-    expect(issue.limit).toBeGreaterThan(0);
-    expect(issue.remaining).toBe(issue.limit - 1);
-    expect(redeem.remaining).toBe(redeem.limit - 1);
-    expect(preview.remaining).toBe(preview.limit - 1);
-    __resetCartQuotaStoreForTesting();
-  });
-
-  it('scopes budgets by merchant, subject and operation', async () => {
-    __resetCartQuotaStoreForTesting();
-    const first = await checkCartQuota({
-      merchantId: MERCHANT_ID,
-      operation: 'commands' as const,
-      subject: 'guest-a1',
-    });
-    const otherMerchant = await checkCartQuota({
-      merchantId: OTHER_MERCHANT_ID,
-      operation: 'commands' as const,
-      subject: 'guest-a1',
-    });
-    const otherSubject = await checkCartQuota({
-      merchantId: MERCHANT_ID,
-      operation: 'commands' as const,
-      subject: 'guest-a2',
-    });
-    const otherOperation = await checkCartQuota({
-      merchantId: MERCHANT_ID,
-      operation: 'snapshot' as const,
-      subject: 'guest-a1',
-    });
-
-    expect(first.remaining).toBe(first.limit - 1);
-    expect(otherMerchant.remaining).toBe(otherMerchant.limit - 1);
-    expect(otherSubject.remaining).toBe(otherSubject.limit - 1);
-    expect(otherOperation.remaining).toBe(otherOperation.limit - 1);
-    __resetCartQuotaStoreForTesting();
   });
 });

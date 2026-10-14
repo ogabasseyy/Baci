@@ -6,7 +6,9 @@ import { useCart } from '@/hooks/cart';
 import { useToast } from '@/hooks/use-toast';
 import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
 import { resolveGuestCartTransfer } from '@/lib/resolve-guest-cart-transfer';
+import { CartAccountLink } from '../../cart/cart-account-link';
 import { CartHandoff } from '../../cart/cart-handoff';
+import { CartImportConflicts } from '../../cart/cart-import-conflicts';
 import { CartPage } from './cart-page';
 
 interface CartPageWrapperProps {
@@ -128,7 +130,13 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     );
   }
 
-  return <CartPage vatEnabled={vatEnabled} vatRate={vatRate} />;
+  return (
+    <>
+      <CartImportConflicts />
+      <CartAccountLink />
+      <CartPage vatEnabled={vatEnabled} vatRate={vatRate} />
+    </>
+  );
 }
 
 function parseHandoffPairing(hash: string): { token: string; handoffId: string } | null {

@@ -371,7 +371,7 @@ describe('useCheckoutOrderSubmission', () => {
         cartId: SHARED_REF.cartId,
         expectedVersion: 3,
         operationId: expect.any(String),
-      });
+      }, 'ada-store');
       expect(submitPreparedCheckout).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({

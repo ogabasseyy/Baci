@@ -147,3 +147,86 @@ describe('validateCartCommand', () => {
     expect(badPrice?.code).toBe('invalid_item');
   });
 });
+
+describe('cart command validation boundaries', () => {
+  const item = { productId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' };
+
+  it.each([
+    -1,
+    0,
+    0.5,
+    11,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])('rejects invalid quantity %s across add, set_quantity, and replacement', (quantity) => {
+    expect(validateCartCommand({ type: 'add', item, quantity })?.code).toBe(
+      'invalid_item'
+    );
+    expect(
+      validateCartCommand({ type: 'set_quantity', lineId: 'line-1', quantity })
+        ?.code
+    ).toBe('invalid_item');
+    expect(
+      validateCartCommand({ type: 'replace', lines: [{ item, quantity }] })
+        ?.code
+    ).toBe('invalid_item');
+  });
+
+  it.each([1, 10])('accepts quantity boundary %s', (quantity) => {
+    expect(validateCartCommand({ type: 'add', item, quantity })).toBeNull();
+    expect(
+      validateCartCommand({ type: 'set_quantity', lineId: 'line-1', quantity })
+    ).toBeNull();
+  });
+
+  it('accepts twenty valid replacement lines and rejects twenty-one', () => {
+    const lines = Array.from({ length: 21 }, (_, index) => ({
+      item: {
+        productId: `11111111-1111-4111-8111-${String(index).padStart(12, '0')}`,
+      },
+      quantity: 1,
+    }));
+    expect(
+      validateCartCommand({ type: 'replace', lines: lines.slice(0, 20) })
+    ).toBeNull();
+    expect(validateCartCommand({ type: 'replace', lines })?.code).toBe(
+      'invalid_item'
+    );
+  });
+
+  it('checks later lines rather than accepting a valid first line alone', () => {
+    expect(
+      validateCartCommand({
+        type: 'replace',
+        lines: [
+          { item, quantity: 1 },
+          { item, quantity: 0 },
+        ],
+      })?.code
+    ).toBe('invalid_item');
+  });
+
+  it('allows different variants of the same product', () => {
+    expect(
+      validateCartCommand({
+        type: 'replace',
+        lines: [
+          {
+            item: {
+              ...item,
+              variantId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            },
+            quantity: 1,
+          },
+          {
+            item: {
+              ...item,
+              variantId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            },
+            quantity: 1,
+          },
+        ],
+      })
+    ).toBeNull();
+  });
+});

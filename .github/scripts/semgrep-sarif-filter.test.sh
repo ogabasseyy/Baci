@@ -152,6 +152,12 @@ t helper-alias-evil 1 "helper-untrusted-exec" happy.sarif "$H${FS}set -euo pipef
 
 # --- trusted-set change signal ---
 t trusted-changed 1 "trusted-tree-changed" happy.sarif "none" "" "true"
+t trusted-advisory-false 1 "trusted-tree-changed" happy.sarif "none" "" "true" "false"
+
+# --- advisory mode (required job treats trusted-only drift as warning) ---
+t trusted-advisory-pass 0 "advisory mode" happy.sarif "none" 1 "true" "true"
+t trusted-advisory-empty 0 "advisory mode" absent "none" "" "true" "true"
+t trusted-advisory-plus-drift 1 "pr-controlled-checkout-count" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}a${FS}          ref: \${{ github.event.pull_request.head.sha }}" "" "true" "true"
 
 # --- SARIF temp symlink (low: O_NOFOLLOW refuses write-through) ---
 t sarif-tmp-symlink 1 "SARIF temp write refused" happy.sarif "ln:semgrep.sarif.tmp${FS}/dev/null"

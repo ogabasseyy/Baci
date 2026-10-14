@@ -36,6 +36,18 @@ from semgrep_sarif_steps import audit_step_commands
 
 def main():
     drift = []
+    # TRUSTED_CHANGE_ADVISORY detaches the change signal from the
+    # exit code: a trusted-tree edit with no other drift warns
+    # (human eyes arrive via the advisory tripwire job) while real
+    # hardening drift still fails. Absent/false preserves the
+    # fail-closed default; the workflow always runs the base-tree
+    # copy of this file, so a PR cannot soften its own audit.
+    advisory = os.environ.get("TRUSTED_CHANGE_ADVISORY") == "true"
+
+    def fatal():
+        return [d for d in drift
+                if not (advisory and d == "trusted-tree-changed")]
+
     # Resolve all file reads against the workspace root, not the
     # process CWD: a future working-directory default would
     # otherwise make the audit read the wrong tree (or report an
@@ -65,11 +77,17 @@ def main():
         # was recorded (trusted-tree change, hidden flow/alias ref),
         # which always needs review. Labels print (like the main
         # drift exit) so the message names the actual cause.
-        if drift:
+        if fatal():
             print("::error::No PR-controlled checkout left in "
                   + AUDITED_PATH + " but drift was recorded ("
                   + ", ".join(drift) + "); needs human review.")
             return 1
+        if drift:
+            print("::warning::No PR-controlled checkout left in "
+                  + AUDITED_PATH + " but trusted-tree-changed "
+                  + "recorded (advisory mode); human review "
+                  + "recommended.")
+            return 0
         print("::notice::No PR-controlled checkout in " + AUDITED_PATH
               + "; exemption inactive.")
         return 0
@@ -88,10 +106,14 @@ def main():
     audit_agent_runner(drift)
     audit_installer(drift)
     audit_helpers(ctx, drift)
-    if drift:
+    if fatal():
         print(f"::error::muse-code-review.yml hardening drifted "
               f"({', '.join(drift)}); keeping SARIF unfiltered.")
         return 1
+    if drift:
+        print(f"::warning::muse-code-review.yml change signal "
+              f"({', '.join(drift)}) recorded in advisory mode; "
+              f"human review recommended, SARIF filtered as usual.")
 
     def is_audited_checkout(result):
         suppressions = result.get("suppressions") or []

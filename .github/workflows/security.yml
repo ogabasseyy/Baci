@@ -77,15 +77,18 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
-            # Any change under the trusted set fails the SARIF
-            # filter loudly for human review: directly hostile
-            # helper code is indistinguishable from legitimate
-            # token use, so no content rule can auto-pass it.
-            # Advisory, not blocking (Security is not required):
-            # the red X draws merger eyes, the human decides.
+            # Any change under the trusted set summons human review:
+            # directly hostile helper code is indistinguishable
+            # from legitimate token use, so no content rule can
+            # auto-pass it. Split design: the required Semgrep SAST
+            # job below treats a trusted-only change as advisory
+            # (warning, still filtered) and fails only on real
+            # findings or hardening drift; the separate
+            # Trusted-change tripwire job (never required) turns
+            # red so the change cannot slip past merger eyes.
             # Invariant: every trusted_changed path also matches
-            # semgrep_relevant above — otherwise the job that reads
-            # the signal is skipped and the red X never appears.
+            # semgrep_relevant above — otherwise the SAST job is
+            # skipped and the audit never runs.
             trusted_changed:
               - '.github/scripts/muse-review/**'
               - '.github/scripts/semgrep-sarif*'
@@ -238,6 +241,10 @@ jobs:
           python3 "${filter_dir}/semgrep-sarif-filter.py"
         env:
           TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
+          # Advisory mode: trusted-only drift warns instead of
+          # failing this required job. Real hardening drift still
+          # fails here; the tripwire below carries the loud signal.
+          TRUSTED_CHANGE_ADVISORY: 'true'
 
       - name: Verify SARIF exists
         id: verify-sarif
@@ -259,6 +266,22 @@ jobs:
       - name: Fail if Semgrep reported findings
         if: steps.verify-sarif.outputs.sarif_exists == 'true' && (steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure')
         run: exit 1
+
+  tripwire:
+    name: Trusted-change tripwire
+    needs: [changes]
+    # Advisory only: NEVER add this job to required status
+    # checks. It exists to turn red (and block nothing) when
+    # trusted files change, so the edit cannot slip past
+    # merger eyes. The required Semgrep SAST job above still
+    # fails on real findings and on hardening drift.
+    if: needs.changes.outputs.trusted_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Flag trusted-tree change for human review
+        run: |
+          echo "::error::Trusted files changed (.github/scripts/muse-review, semgrep-sarif-*, security/muse-code-review/muse-review-selftest workflows); a human must review this diff before merge."
+          exit 1
 
   secrets-scan:
     name: Secret Scanning

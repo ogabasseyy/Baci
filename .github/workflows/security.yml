@@ -74,25 +74,35 @@ jobs:
               # changes must run the job that executes the audit.
               - '.github/scripts/semgrep-sarif*'
               - '.github/scripts/semgrep_sarif_*'
+              - '.github/CODEOWNERS'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
-            # Any change under the trusted set fails the SARIF
-            # filter loudly for human review: directly hostile
-            # helper code is indistinguishable from legitimate
-            # token use, so no content rule can auto-pass it.
-            # Advisory, not blocking (Security is not required):
-            # the red X draws merger eyes, the human decides.
-            # Invariant: every trusted_changed path also matches
-            # semgrep_relevant above — otherwise the job that reads
-            # the signal is skipped and the red X never appears.
+            # Any change under the trusted set summons human review:
+            # directly hostile helper code is indistinguishable
+            # from legitimate token use, so no content rule can
+            # auto-pass it. Split design: the required Semgrep SAST
+            # job below treats a trusted-only change as advisory
+            # (warning, still filtered) and fails only on real
+            # findings or hardening drift; the separate
+            # semgrep-tripwire.yml workflow (never required) turns
+            # red when it runs — but a deletion/rename removes the
+            # run itself, so absence proves nothing (see notes).
+            # Threat model: paths signal, tripwire, and advisory env
+            # are PR-controlled; backstop is CODEOWNERS review on
+            # .github/** (itself in this set). Only the audit LOGIC
+            # is base-pinned (see .github/sarif-filter-notes.md).
+            # Invariant: every trusted_changed path also matches semgrep_relevant
+            # above — otherwise the SAST job is skipped, audit never runs.
             trusted_changed:
               - '.github/scripts/muse-review/**'
               - '.github/scripts/semgrep-sarif*'
               - '.github/scripts/semgrep_sarif_*'
               - '.github/workflows/security.yml'
+              - '.github/workflows/semgrep-tripwire.yml'
               - '.github/workflows/muse-code-review.yml'
               - '.github/workflows/muse-review-selftest.yml'
+              - '.github/CODEOWNERS'
 
       - name: Resolve Semgrep scope output
         id: scope
@@ -169,7 +179,8 @@ jobs:
             exit 0
           fi
 
-          semgrep scan --config auto --sarif --output=semgrep.sarif "${changed_files[@]}"
+          # --error: bare scan exits 0 with findings; the gate reads the outcome.
+          semgrep scan --error --config auto --sarif --output=semgrep.sarif "${changed_files[@]}"
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
@@ -179,7 +190,7 @@ jobs:
         if: github.event_name == 'push'
         id: semgrep_push
         run: |
-          semgrep scan --config auto --sarif --output=semgrep.sarif \
+          semgrep scan --error --config auto --sarif --output=semgrep.sarif \
             apps/web/src/app/api \
             apps/web/src/lib \
             apps/web/src/schemas \
@@ -238,6 +249,11 @@ jobs:
           python3 "${filter_dir}/semgrep-sarif-filter.py"
         env:
           TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
+          # Advisory mode: trusted-only drift warns instead of failing
+          # this required job (hardening drift still fails; tripwire
+          # workflow carries the loud signal). Inert on old base
+          # filters, so enabling here fails closed as before.
+          TRUSTED_CHANGE_ADVISORY: 'true'
 
       - name: Verify SARIF exists
         id: verify-sarif
@@ -256,8 +272,10 @@ jobs:
         with:
           sarif_file: semgrep.sarif
 
-      - name: Fail if Semgrep reported findings
-        if: steps.verify-sarif.outputs.sarif_exists == 'true' && (steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure')
+      # Fail-closed on scanner errors too (a crash with no SARIF must not
+      # report green); the zero-changed-files exit counts as success.
+      - name: Fail on Semgrep findings or scanner errors
+        if: steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure'
         run: exit 1
 
   secrets-scan:

@@ -134,6 +134,29 @@ def _revision_resolves(revision, cwd="."):
     return proc.returncode == 0
 
 
+def _comparison_base(base, cwd="."):
+    """The baseline the change is measured against.
+
+    Pull requests diff against the merge-base (three-dot), so the baseline
+    register must come from there too — comparing against the raw base tip
+    would fail a genuine re-review whenever main advanced the register after
+    the PR branched. Pushes compare tip-to-tip (two-dot): the base is used
+    directly. Falls back to the raw base when the merge-base is unresolvable.
+    """
+    if os.environ.get("GITHUB_EVENT_NAME") == "push":
+        return base
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(cwd), "merge-base", str(base), "HEAD"],
+            capture_output=True, text=True,
+        )
+    except Exception:
+        return base  # Best-effort probe: callers fall back to the raw base.
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return base
+    return proc.stdout.strip()
+
+
 def _base_register(base, cwd="."):
     probe = subprocess.run(
         ["git", "-C", str(cwd), "show", f"{base}:{REGISTER_PATH}"],
@@ -219,7 +242,7 @@ def main():
         if changed is None:
             print(f"capability gate: cannot compute the changed-path set for base {base[:12]}; refusing to run blind")
             return 1
-        base_register = _base_register(base) if register is not None else None
+        base_register = _base_register(_comparison_base(base), cwd=".") if register is not None else None
         if requires_register_update(register, changed, base_register, _revision_resolves):
             print(
                 "unverified capability sources changed without a register re-review; "

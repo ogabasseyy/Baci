@@ -32,5 +32,11 @@ function resolveAssuranceDefault(policy: {
   smartCartProEnabled: boolean;
   merchantSlug: string | null | undefined;
 }): boolean {
-  return policy.smartCartProEnabled && policy.merchantSlug === 'ogabassey';
+  // Slugs arrive from URL route params and build config, neither of which
+  // guarantees lowercase; compare case-insensitively so a casing variant
+  // cannot silently disable the intended default.
+  return (
+    policy.smartCartProEnabled &&
+    policy.merchantSlug?.toLowerCase() === 'ogabassey'
+  );
 }

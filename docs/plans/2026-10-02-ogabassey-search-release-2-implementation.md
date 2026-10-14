@@ -46,6 +46,26 @@ The new price projection adds SQL work; it avoids application full-catalog hydra
 3. Repair/verify Android delivery separately. The prior missing runner C/C++ toolchain failure is not modified here.
 4. Merge, deploy web, and deliver app only within separately authorized release scope. Local code/tests do not prove customer delivery.
 
+## Product-request intake provisioning
+
+The intake route authenticates to Postgres with a dedicated JWT in the
+`SUPABASE_STOREFRONT_INTAKE_KEY` server setting — not the service key.
+Provision it after applying migration `20261004170500`:
+
+1. Mint a JWT whose `role` claim is exactly `storefront_intake`, signed by
+   the project's JWT secret. The role is `NOINHERIT`/`NOBYPASSRLS` with a
+   single `EXECUTE` grant on `submit_storefront_product_request`; any other
+   role (including `service_role`) is rejected.
+2. Set `SUPABASE_STOREFRONT_INTAKE_KEY` to that JWT in the web deployment
+   environment only. Never expose it to clients or commit it.
+3. Verify in staging with a real POST to `/api/storefront/product-requests`:
+   expect `200`/`409`/`429`, never `503 Intake unavailable` (which means the
+   key is missing, malformed, or privileged). Rotate by minting a new token
+   and replacing the setting; no code or migration change is needed.
+4. Provision Cron for merchant inbox delivery; intake stays queued while
+   Cron is absent. Local fixtures and unit tests do not establish deployed
+   permissions or delivery.
+
 ## Review disposition
 
 CodeRabbit completed review of all staged runtime additions and changes. Its valid blank-brand and unfiltered condition-metadata findings were addressed; reversed-range UI coverage and explicit public-role SQL assertions were added. Recommendations to discard matching price/selection entirely when no price/condition filter is active were not applied: that would make unfiltered global price sorting disagree with displayed price and product selection. Original condition metadata is preserved without price/condition constraints. Native condition metadata was already preserved. Parallelizing facets with result loading is a deferred latency optimization; category and brand reads within the facet adapter already run together.
@@ -60,7 +80,7 @@ Native quick controls now read Price, Brand, Condition without the redundant fil
 
 ## Authorized database repair
 
-After the user requested the fix, the additive migration was applied to the configured Baci project `aivqthbxdshhltbwipbr`. Supabase recorded version `20261002090046`; the new, uncommitted migration filename and hash-registry references were aligned with that actual version. Existing historical migrations and the old v2 RPC were not changed. Public anon API verification returned 40 iPhone results, 14 Apple/Used results between NGN 200000 and 500000 with ascending prices, descending-price results, and one brand facet, all HTTP 200. Requests were approximately 195–546ms in this small live probe, not a comprehensive performance benchmark. Migration gate 1 is now applied for this project; installed-device result/card selection and full production performance QA remain pending. Security advisors flagged the intentionally public bounded SECURITY DEFINER price projection; its published merchant/product scope and restricted price-only return shape were reviewed.
+After the user requested the fix, the additive migration was applied to the configured Baci project (ref redacted). Supabase recorded version `20261002090046`; the new, uncommitted migration filename and hash-registry references were aligned with that actual version. Existing historical migrations and the old v2 RPC were not changed. Public anon API verification returned 40 iPhone results, 14 Apple/Used results between NGN 200000 and 500000 with ascending prices, descending-price results, and one brand facet, all HTTP 200. Requests were approximately 195–546ms in this small live probe, not a comprehensive performance benchmark. Migration gate 1 is now applied for this project; installed-device result/card selection and full production performance QA remain pending. Security advisors flagged the intentionally public bounded SECURITY DEFINER price projection; its published merchant/product scope and restricted price-only return shape were reviewed.
 
 
 ## Search rendering follow-up (2026-10-02)

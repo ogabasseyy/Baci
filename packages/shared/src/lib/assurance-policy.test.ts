@@ -45,6 +45,17 @@ describe('resolveAddedLineAssurance', () => {
       resolveAddedLineAssurance(undefined, undefined, fixture.policy)
     ).toBe(fixture.expected);
   });
+  it.each(['Ogabassey', 'OGABASSEY', 'oGaBaSsEy'])(
+    'matches the Ogabassey default case-insensitively: %s',
+    (merchantSlug) => {
+      expect(
+        resolveAddedLineAssurance(undefined, undefined, {
+          smartCartProEnabled: true,
+          merchantSlug,
+        })
+      ).toBe(true);
+    }
+  );
   it.each([
     { incoming: undefined, existing: undefined, expected: false },
     {

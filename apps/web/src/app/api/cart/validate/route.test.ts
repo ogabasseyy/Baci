@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   variantError: null as { message: string } | null,
   offers: [] as unknown[],
   offerError: null as { message: string } | null,
+  baseInventory: [] as unknown[],
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -41,7 +42,12 @@ function buildSupabaseMock() {
     rpc: vi.fn((name: string) =>
       name === 'get_product_offers'
         ? Promise.resolve({ data: mocks.offers, error: mocks.offerError })
-        : Promise.resolve({ data: mocks.variants, error: mocks.variantError })
+        : name === 'get_storefront_product_base_inventory'
+          ? Promise.resolve({ data: mocks.baseInventory, error: null })
+          : Promise.resolve({
+              data: mocks.variants,
+              error: mocks.variantError,
+            })
     ),
   };
 
@@ -66,6 +72,7 @@ describe('POST /api/cart/validate', () => {
     mocks.variantError = null;
     mocks.offers = [];
     mocks.offerError = null;
+    mocks.baseInventory = [];
   });
 
   it('returns 403 for invalid CSRF token', async () => {
@@ -838,5 +845,47 @@ describe('POST /api/cart/validate', () => {
     expect(response.status).toBe(200);
     expect(body.invalidProductIds).toEqual([]);
     expect(body.validProducts).toHaveLength(1);
+  });
+
+  it('invalidates sibling simple lines whose aggregate exceeds the strict pool', async () => {
+    const { supabase } = buildSupabaseMock();
+    mocks.createClient.mockResolvedValue(supabase);
+    mocks.products = [
+      {
+        id: PRODUCT_ID,
+        name: 'Strict Phone',
+        price: 500_000,
+        stock: 0,
+        stock_quantity: 1,
+        status: 'active',
+        manage_stock: true,
+        has_condition_offers: true,
+        has_variants: false,
+        variant_model: 'legacy',
+        inventory_tracking_policy: 'serialized_strict',
+      },
+    ];
+    mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
+    mocks.baseInventory = [{ product_id: PRODUCT_ID, available_units: 1 }];
+
+    const response = await postCartValidate({
+      cartItems: [
+        { id: PRODUCT_ID, price: 500_000, quantity: 1 },
+        {
+          id: PRODUCT_ID,
+          price: 400_000,
+          offerId: OFFER_ID,
+          condition: 'Used',
+          quantity: 1,
+        },
+      ],
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.invalidProductIds).toEqual([
+      PRODUCT_ID,
+      `${PRODUCT_ID}::offer=${OFFER_ID}`,
+    ]);
   });
 });

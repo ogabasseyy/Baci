@@ -119,6 +119,7 @@ describe('storefront-cart-validation', () => {
             price: index + 1,
             quantity: 1,
             variantId: index === 0 ? 'variant-1' : undefined,
+            isQuizVoucherLine: false,
           })),
         }),
         signal: controller.signal,
@@ -167,6 +168,7 @@ describe('storefront-cart-validation', () => {
                 storage: '128GB',
               },
               variantId: 'iphone15-openbox-128-black-esim',
+              isQuizVoucherLine: false,
             },
           ],
         }),
@@ -390,6 +392,42 @@ describe('storefront-cart-validation', () => {
               price: 400,
               quantity: 1,
               offerId: 'offer-a',
+              isQuizVoucherLine: false,
+            },
+          ],
+        }),
+      })
+    );
+  });
+
+  it('marks pre-reserved voucher lines for server-side pool exemption', async () => {
+    mocks.fetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({ invalidProductIds: [], priceChanges: [] }),
+    });
+
+    await validateStorefrontCart(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::prize',
+          price: 0,
+          quizAwardId: 'award-1',
+        }),
+      ],
+      new AbortController().signal
+    );
+
+    expect(mocks.fetchWithCsrf).toHaveBeenCalledWith(
+      '/api/cart/validate',
+      expect.objectContaining({
+        body: JSON.stringify({
+          cartItems: [
+            {
+              id: 'product-1',
+              price: 0,
+              quantity: 1,
+              isQuizVoucherLine: true,
             },
           ],
         }),

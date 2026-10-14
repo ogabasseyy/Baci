@@ -6,13 +6,20 @@ import {
   fetchCartOfferPrices,
   type OfferQueryResult,
 } from './cart-offer-prices';
+import {
+  buildCartValidationCatalog,
+  fetchStrictPoolUnits,
+  resolveCartValidationCatalog,
+} from './cart-validation-catalog';
 import { prepareCartValidationItems } from './prepare-cart-validation-items';
 import {
   buildOfferQuantityTotals,
+  buildSimpleProductQuantityTotals,
   getCartValidationKey,
   getInvalidOfferLineKey,
   isOfferParentEligible,
   readOfferQuantityTotal,
+  readSimpleProductQuantityTotal,
   resolveReportedLineStock,
 } from './resolve-cart-validation-offer-line';
 
@@ -27,6 +34,7 @@ type CartProductRow = {
   has_condition_offers: boolean | null;
   has_variants: boolean | null;
   variant_model: string | null;
+  inventory_tracking_policy: string | null;
 };
 
 type CartVariantRow = {
@@ -105,7 +113,7 @@ export async function POST(request: NextRequest) {
         ? supabase
             .from('products')
             .select(
-              'id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model'
+              'id, name, price, stock, stock_quantity, status, manage_stock, has_condition_offers, has_variants, variant_model, inventory_tracking_policy'
             )
             .in('id', validFormatIds)
             .returns<CartProductRow[]>()
@@ -129,45 +137,21 @@ export async function POST(request: NextRequest) {
       ),
     ]);
 
-    if (productsResult.error) {
-      console.error('Cart validation query error:', productsResult.error);
-      return NextResponse.json(
-        { error: 'Failed to validate cart.' },
-        { status: 500 }
-      );
+    const catalog = resolveCartValidationCatalog({
+      productsResult,
+      variantsResult,
+      offerMap,
+    });
+    if (catalog.catalogError) {
+      return catalog.catalogError;
     }
-
-    if (variantsResult.error) {
-      console.error(
-        'Cart validation variant query error:',
-        variantsResult.error
-      );
-      return NextResponse.json(
-        { error: 'Failed to validate cart.' },
-        { status: 500 }
-      );
-    }
-
-    if (offerMap instanceof Error) {
-      console.error('Cart validation offer query error:', offerMap);
-      return NextResponse.json(
-        { error: 'Failed to validate cart.' },
-        { status: 500 }
-      );
-    }
+    const validatedOfferMap = catalog.offerMap;
 
     const products = productsResult.data || [];
     const variants = variantsResult.data || [];
 
-    const productMap = new Map(
-      products.map((product) => [String(product.id), product])
-    );
-    const variantMap = new Map(
-      variants.map((variant) => [String(variant.id), variant])
-    );
-    const productsWithLiveVariants = new Set(
-      variants.map((variant) => String(variant.product_id))
-    );
+    const { productMap, variantMap, productsWithLiveVariants } =
+      buildCartValidationCatalog(products, variants);
 
     const validProducts: {
       id: string;
@@ -189,6 +173,13 @@ export async function POST(request: NextRequest) {
     const seenPriceChangeKeys = new Set<string>();
 
     const offerQuantityTotals = buildOfferQuantityTotals(validationItems);
+    const simpleProductTotals =
+      buildSimpleProductQuantityTotals(validationItems);
+    const strictPoolUnits = await fetchStrictPoolUnits({
+      supabase,
+      products,
+      simpleProductTotals,
+    });
 
     for (const item of validationItems) {
       const strId = String(item.id);
@@ -224,7 +215,7 @@ export async function POST(request: NextRequest) {
       // replace the advertised offer price on every validation pass.
       const offer =
         !item.variantId && item.offerId
-          ? offerMap.get(`${strId}::${item.offerId}`)
+          ? validatedOfferMap.get(`${strId}::${item.offerId}`)
           : undefined;
       const invalidOfferKey = getInvalidOfferLineKey({
         strId,
@@ -236,6 +227,11 @@ export async function POST(request: NextRequest) {
           !item.variantId && item.offerId
             ? readOfferQuantityTotal(offerQuantityTotals, strId, item.offerId)
             : undefined,
+        aggregateSimpleQuantity: !item.variantId
+          ? readSimpleProductQuantityTotal(simpleProductTotals, strId)
+          : undefined,
+        strictPoolUnits: strictPoolUnits.get(strId),
+        isQuizVoucherLine: item.isQuizVoucherLine,
         offer,
         parentEligible: isOfferParentEligible(
           product,

@@ -43,12 +43,19 @@ interface StoredReplayEconomics {
   discountAmount: number | null;
   /** Fee-identity key → stored lines in projection order. */
   lines: Map<string, StoredReplayLine[]>;
+  /**
+   * Reduced-identity (product/quantity/assurance, no offer) key →
+   * stored lines whose offer row was deleted (ON DELETE SET NULL).
+   * Retry lines match here only when exactly one candidate exists.
+   */
+  offerlessLines: Map<string, StoredReplayLine[]>;
 }
 
 const EMPTY_REPLAY_ECONOMICS: StoredReplayEconomics = {
   taxAmount: null,
   discountAmount: null,
   lines: new Map<string, StoredReplayLine[]>(),
+  offerlessLines: new Map<string, StoredReplayLine[]>(),
 };
 
 /**
@@ -89,6 +96,28 @@ function replayLineIdentityKey(parts: {
     num(parts.quantity),
     parts.hasAssurance === true,
   ].join('::');
+}
+
+/**
+ * Pops the single offerless stored line for a reduced identity, or
+ * returns null when zero or several candidates exist. Consuming (not
+ * peeking) keeps repeated identical retry lines honest: only the
+ * first replays from the stored row, later ones fail open per line.
+ */
+function consumeUnambiguousOfferlessLine(
+  offerlessLines: Map<string, StoredReplayLine[]>,
+  parts: {
+    productId: unknown;
+    quantity: unknown;
+    hasAssurance: unknown;
+  }
+): StoredReplayLine | null {
+  const key = replayLineIdentityKey({ ...parts, offerId: null });
+  const queue = offerlessLines.get(key);
+  if (queue?.length !== 1) {
+    return null;
+  }
+  return queue.shift() ?? null;
 }
 
 async function readStoredReplayEconomics({
@@ -138,6 +167,7 @@ async function readStoredReplayEconomics({
       return Number.isFinite(value) ? value : null;
     };
     const lines = new Map<string, StoredReplayLine[]>();
+    const offerlessLines = new Map<string, StoredReplayLine[]>();
     const items = row?.items;
     if (Array.isArray(items)) {
       // An order can repeat one product+offer across lines (distinct
@@ -155,14 +185,15 @@ async function readStoredReplayEconomics({
         quantity?: unknown;
         has_assurance?: unknown;
       }[]) {
-        if (entry?.product_id == null || entry?.offer_id == null) continue;
+        if (entry?.product_id == null) continue;
         const key = replayLineIdentityKey({
           productId: entry.product_id,
           offerId: entry.offer_id,
           quantity: entry.quantity,
           hasAssurance: entry.has_assurance,
         });
-        const queue = lines.get(key) ?? [];
+        const target = entry?.offer_id == null ? offerlessLines : lines;
+        const queue = target.get(key) ?? [];
         queue.push({
           condition:
             typeof entry?.condition === 'string' && entry.condition !== ''
@@ -170,13 +201,14 @@ async function readStoredReplayEconomics({
               : null,
           fee: coerceAmount(entry?.assurance_fee),
         });
-        lines.set(key, queue);
+        target.set(key, queue);
       }
     }
     return {
       taxAmount: coerceAmount(row?.tax_amount),
       discountAmount: coerceAmount(row?.discount_amount),
       lines,
+      offerlessLines,
     };
   } catch (readError) {
     logger.warn({
@@ -277,7 +309,18 @@ export async function resolveIdempotentOfferReplay({
       quantity: item.quantity,
       hasAssurance: item.has_assurance,
     });
-    const storedLine = stored.lines.get(key)?.shift();
+    // Exact fee-identity first; when the offer row was deleted after
+    // the first attempt (ON DELETE SET NULL) the stored line sits in
+    // the offerless map instead. Fall back only when exactly one
+    // reduced-identity candidate exists — sibling deleted offers stay
+    // fail-open (conflict) rather than restoring the wrong spelling.
+    const storedLine =
+      stored.lines.get(key)?.shift() ??
+      consumeUnambiguousOfferlessLine(stored.offerlessLines, {
+        productId: item.product_id,
+        quantity: item.quantity,
+        hasAssurance: item.has_assurance,
+      });
     if (storedLine == null) continue;
     if (storedLine.condition != null) {
       item.condition = storedLine.condition;

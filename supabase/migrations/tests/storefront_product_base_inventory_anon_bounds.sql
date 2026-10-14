@@ -81,14 +81,18 @@ BEGIN
 END $$;
 RESET ROLE;
 
--- The owning user keeps single-merchant unpublished preview.
-SELECT set_config('request.jwt.claim.role', 'authenticated', true);
-SELECT set_config('request.jwt.claim.sub', '01d40000-0000-4000-8000-000000000004', true);
-SET LOCAL ROLE authenticated;
+-- The owning user keeps single-merchant unpublished preview. Claims are
+-- set inside the DO block: the replay runner applies each file with
+-- plain psql -f (autocommit per statement), so transaction-local
+-- settings from standalone statements evaporate before a later block
+-- runs. The RPC reads auth.uid()/auth.role() from these claims; the
+-- session role is already the default after the anon block's reset.
 DO $$
 DECLARE
   n bigint;
 BEGIN
+  PERFORM set_config('request.jwt.claim.role', 'authenticated', true);
+  PERFORM set_config('request.jwt.claim.sub', '01d40000-0000-4000-8000-000000000004', true);
   SELECT count(*) INTO n
   FROM public.get_storefront_product_base_inventory(
     ARRAY['01d40000-0000-4000-8000-000000000012'::uuid]);
@@ -96,4 +100,3 @@ BEGIN
     RAISE EXCEPTION 'Owner must keep unpublished preview, got %', n;
   END IF;
 END $$;
-RESET ROLE;

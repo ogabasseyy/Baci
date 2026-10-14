@@ -5,6 +5,7 @@ export type CartValidationItem = {
   offerId?: string;
   condition?: string;
   quantity?: number;
+  isQuizVoucherLine?: boolean;
 };
 
 type RawCartItem = {
@@ -15,6 +16,7 @@ type RawCartItem = {
   offerId?: string;
   condition?: string;
   quantity?: number;
+  isQuizVoucherLine?: boolean;
 };
 
 const uuidRegex =
@@ -44,6 +46,7 @@ export function prepareCartValidationItems(
         offerId: item.offerId,
         condition: item.condition,
         quantity: item.quantity,
+        isQuizVoucherLine: item.isQuizVoucherLine,
       }))
     : ((productIds ?? []) as string[]).map((id) => ({ id, price: null }));
 

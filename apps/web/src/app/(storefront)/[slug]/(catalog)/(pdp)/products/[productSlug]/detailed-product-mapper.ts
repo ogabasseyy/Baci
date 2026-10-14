@@ -161,6 +161,23 @@ export function mapDetailedCachedProductToProduct(
   const categoryName = resolveStorefrontProductCategoryName(categoryInput);
   const categorySlug =
     resolveMappedStorefrontProductCategorySlug(categoryInput);
+  // Anchor-first effective policy (mirrors the base-inventory RPC CTE):
+  // a simple product whose hidden anchor supplies serialized tracking
+  // while the row policy is null must still cap offer adds by the pool.
+  // Derived from the raw snapshot rows — the normalized variants may
+  // exclude non-public anchors.
+  const rawVariants = Array.isArray(detailedProduct.product_variants)
+    ? detailedProduct.product_variants
+    : [];
+  const anchorSerializedPolicy = rawVariants.find(
+    (variant) =>
+      variant?.is_inventory_anchor === true &&
+      (variant.inventory_tracking_policy === 'serialized_strict' ||
+        variant.inventory_tracking_policy === 'serialized_then_unlimited' ||
+        variant.inventory_tracking_policy === 'off')
+  )?.inventory_tracking_policy;
+  const effectiveInventoryPolicy =
+    anchorSerializedPolicy ?? detailedProduct.inventory_tracking_policy;
 
   return {
     id: detailedProduct.id,
@@ -195,8 +212,7 @@ export function mapDetailedCachedProductToProduct(
     // NULL means managed (platform policy shared with search, the cart,
     // and order creation): only explicit false disables stock checks.
     manage_stock: detailedProduct.manage_stock ?? true,
-    inventory_tracking_policy:
-      detailedProduct.inventory_tracking_policy ?? undefined,
+    inventory_tracking_policy: effectiveInventoryPolicy ?? undefined,
     stock: getEffectiveStock(detailedProduct),
     // Strict-pool aggregate cap reads stock_quantity (offer adds
     // overwrite stock with the selected allocation): without the folded

@@ -134,6 +134,7 @@ export const ProductRowSchema = z.object({
   offers: z.array(ProductConditionOfferSchema).nullable().optional(),
   offers_hydration_failed: z.boolean().nullable().optional(),
   variants_hydration_failed: z.boolean().nullable().optional(),
+  base_inventory_hydration_failed: z.boolean().nullable().optional(),
   categories: z
     .union([
       z.array(

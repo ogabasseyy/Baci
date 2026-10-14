@@ -12,6 +12,7 @@ const cartItemSchema = z
   .object({
     condition: z.string().optional(),
     id: z.string(),
+    isQuizVoucherLine: z.boolean().optional(),
     offerId: offerIdSchema.optional(),
     price: z.number(),
     quantity: z.number().int().positive().optional(),

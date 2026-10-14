@@ -49,6 +49,22 @@ describe('resolveProductDetailsRouteSelection', () => {
     expect(selection.routeOfferId).toBeNull();
   });
 
+  it('flags a missing exact variant instead of silently discarding it', () => {
+    const resolveVariant = (query: string) =>
+      resolveProductDetailsRouteSelection({
+        offers,
+        resolutionProduct: { variants: [{ id: 'v-live' }] } as never,
+        searchParams: new URLSearchParams(query),
+        usesVariantRouteSelection: true,
+      });
+    expect(resolveVariant('variant_id=v-gone').routeVariantMissing).toBe(true);
+    expect(resolveVariant('variant_id=v-live').routeVariantMissing).toBe(
+      false
+    );
+    expect(resolveVariant('').routeVariantMissing).toBe(false);
+    expect(resolve('variant_id=v-gone').routeVariantMissing).toBe(false);
+  });
+
   it('flags a missing exact offer instead of silently discarding it', () => {
     expect(resolve('offer_id=offer-gone').routeOfferMissing).toBe(true);
     expect(resolve('offer_id=offer-used-1').routeOfferMissing).toBe(false);

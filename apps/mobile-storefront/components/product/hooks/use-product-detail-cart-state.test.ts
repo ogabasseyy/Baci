@@ -80,4 +80,60 @@ describe('useProductDetailCartState', () => {
 
     mockCartStoreState.items = [];
   });
+
+  it('totals sibling lines per product while skipping voucher lines', () => {
+    mockCartStoreState.items = [
+      {
+        cartItemId: 'line-a',
+        product_id: 'product-1',
+        condition: 'Used',
+        offer_id: 'offer-a',
+        quantity: 2,
+      },
+      {
+        cartItemId: 'line-b',
+        product_id: 'product-1',
+        condition: 'Used',
+        offer_id: 'offer-b',
+        quantity: 5,
+      },
+      {
+        cartItemId: 'line-prize',
+        product_id: 'product-1',
+        quantity: 1,
+        voucher_award_id: 'award-1',
+      },
+      {
+        cartItemId: 'line-other',
+        product_id: 'product-2',
+        quantity: 9,
+      },
+    ] as never;
+
+    const { result } = renderHook(() =>
+      useProductDetailCartState({
+        currentVariantDisplaySelection: null,
+        effectiveSelectedAttributes: {},
+        effectiveSelectedColor: null,
+        effectiveSelectedStorage: null,
+        effectiveSelectedVariantId: null,
+        offerConditionKey: 'used',
+        routeOfferId: 'offer-b',
+        suppressConditionOfferMatch: false,
+        product: {
+          condition: 'new',
+          has_variants: false,
+          id: 'product-1',
+          offers: [
+            { id: 'offer-a', condition: 'used' },
+            { id: 'offer-b', condition: 'used' },
+          ],
+        },
+      } as never)
+    );
+
+    expect(result.current.productQuantityInCart).toBe(7);
+
+    mockCartStoreState.items = [];
+  });
 });

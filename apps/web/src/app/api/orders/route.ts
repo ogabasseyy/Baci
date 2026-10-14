@@ -1333,9 +1333,13 @@ export async function POST(request: NextRequest) {
     // F1 replay: the bypass skipped the negotiation recompute, so the
     // stored discount restores unconditionally (like the stored tax
     // above) — hashing a recomputed zero against the first attempt's
-    // nonzero discount would conflict instead of replaying.
+    // nonzero discount would conflict instead of replaying. REDVAULT
+    // replays skip the restore: the first attempt hashed a zero
+    // negotiation discount while the draft persisted the quote
+    // discount, so restoring it would hash nonzero and conflict
+    // instead of replaying.
     const serverDerivedDiscountAmount =
-      storedReplayDiscountAmount != null
+      !redvaultRequested && storedReplayDiscountAmount != null
         ? storedReplayDiscountAmount
         : shouldApplyServerDerivedDiscount
           ? (negotiationDiscount?.totalDiscount ?? 0)

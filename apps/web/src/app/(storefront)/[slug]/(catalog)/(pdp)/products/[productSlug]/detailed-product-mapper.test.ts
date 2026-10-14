@@ -396,4 +396,28 @@ describe('mapDetailedCachedProductToProduct', () => {
 
     expect(product.inventory_tracking_policy).toBe('serialized_strict');
   });
+
+  it('prefers the hidden anchor policy when the row policy is null', () => {
+    const product = mapDetailedCachedProductToProduct(
+      {
+        id: 'product-1',
+        merchant_id: 'merchant-1',
+        name: 'Inherited Strict Phone',
+        price: 100,
+        stock: 0,
+        manage_stock: true,
+        inventory_tracking_policy: null,
+        product_variants: [
+          {
+            id: 'anchor-1',
+            inventory_tracking_policy: 'serialized_strict',
+            is_inventory_anchor: true,
+          },
+        ],
+      } as never,
+      'merchant-1'
+    );
+
+    expect(product.inventory_tracking_policy).toBe('serialized_strict');
+  });
 });

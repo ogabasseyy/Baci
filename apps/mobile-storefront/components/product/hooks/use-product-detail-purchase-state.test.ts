@@ -91,7 +91,8 @@ it.each([
         } as never,
       }),
       quantityInCart,
-      null
+      null,
+      quantityInCart
     )
   );
   expect(result.current.canPurchase).toBe(expected);
@@ -140,7 +141,8 @@ it.each([
         product: { id: 'p1', price: 100, ...product } as Product,
       }),
       quantityInCart,
-      null
+      null,
+      quantityInCart
     )
   );
   expect(result.current.canPurchase).toBe(expected);
@@ -217,7 +219,8 @@ it.each([
         product: { id: 'p1', price: 100, ...product } as Product,
       }),
       quantityInCart,
-      null
+      null,
+      quantityInCart
     )
   );
   expect(result.current.canPurchase).toBe(expected);
@@ -255,7 +258,8 @@ it.each([
         } as never,
       }),
       quantityInCart,
-      null
+      null,
+      quantityInCart
     )
   );
   expect(result.current.canPurchase).toBe(expected);
@@ -266,7 +270,8 @@ it('forwards an exact offer id into price resolution and offer selection', () =>
     useProductDetailPurchaseState(
       routeData({ routeOfferId: 'offer-9' }),
       0,
-      null
+      null,
+      0
     )
   );
 
@@ -288,7 +293,8 @@ it('forwards ID-less base-match suppression instead of an offer id', () => {
     useProductDetailPurchaseState(
       routeData({ routeOfferId: null, suppressConditionOfferMatch: true }),
       0,
-      null
+      null,
+      0
     )
   );
 
@@ -313,7 +319,8 @@ it('skips offer matching for variant products but keeps price forwarding', () =>
         routeOfferId: 'offer-9',
       }),
       0,
-      null
+      null,
+      0
     )
   );
 
@@ -322,4 +329,30 @@ it('skips offer matching for variant products but keeps price forwarding', () =>
   for (const call of mockUseEffectivePrice.mock.calls) {
     expect(call[4]).toBe('offer-9');
   }
+});
+
+it('compares the strict pool against the product-wide cart total', () => {
+  mockFindMatchingConditionOffer.mockReturnValue({
+    id: 'o2',
+    stock_quantity: 5,
+  } as never);
+  // Sibling offer lines already hold both pool units while the
+  // selected line holds none: the offer allocation fits, the pool
+  // does not, so purchase stays disabled.
+  const { result } = renderHook(() =>
+    useProductDetailPurchaseState(
+      routeData({
+        product: {
+          id: 'p1',
+          price: 100,
+          base_effective_policy: 'serialized_strict',
+          base_available_units: 2,
+        } as Product,
+      }),
+      0,
+      null,
+      2
+    )
+  );
+  expect(result.current.canPurchase).toBe(false);
 });

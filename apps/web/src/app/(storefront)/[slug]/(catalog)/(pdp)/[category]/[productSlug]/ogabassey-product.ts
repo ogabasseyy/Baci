@@ -77,6 +77,11 @@ export function toOgabasseyProduct(
     brand: product.brand,
     stock: product.stock,
     manage_stock: product.manage_stock,
+    // Strict-pool aggregate cap reads these: without them a simple
+    // serialized product added from this PDP never identifies its pool
+    // and sibling lines over-claim until order creation rejects.
+    stock_quantity: product.stock_quantity ?? undefined,
+    inventory_tracking_policy: product.inventory_tracking_policy,
     storage: storageOptions,
     colors: product.colors,
     variant_attributes: normalizedVariantAttributes,

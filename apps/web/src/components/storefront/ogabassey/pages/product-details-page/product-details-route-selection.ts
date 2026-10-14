@@ -14,6 +14,7 @@ export interface ProductDetailsRouteSelection {
   routeSelectionAttributes: Record<string, string>;
   routeSelectionAttributesKey: string;
   routeVariantId: string | undefined;
+  routeVariantMissing: boolean;
 }
 
 /**
@@ -74,6 +75,14 @@ export function resolveProductDetailsRouteSelection<
     usesVariantRouteSelection && routeSelectionInput.variantId
       ? routeSelectionInput.variantId
       : undefined;
+  // Exact-match contract (mirrors the generic PDP and native route data):
+  // a link variant id absent from the hydrated variants means the option
+  // was removed or sold — surface it as missing instead of silently
+  // falling back to the default variant (which can advertise and charge
+  // a different, higher price).
+  const routeVariantMissing =
+    usesVariantRouteSelection &&
+    routeSelectionResolution?.type === 'invalid_variant_id';
   return {
     routeCondition,
     routeOfferId,
@@ -81,5 +90,6 @@ export function resolveProductDetailsRouteSelection<
     routeSelectionAttributes,
     routeSelectionAttributesKey,
     routeVariantId,
+    routeVariantMissing,
   };
 }

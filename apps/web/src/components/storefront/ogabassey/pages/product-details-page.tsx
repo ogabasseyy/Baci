@@ -18,6 +18,8 @@ import { useIsDesktopViewport } from './product-details-page/use-is-desktop-view
 import { useProductDetailsAttributeHandlers } from './product-details-page/use-product-details-attribute-handlers';
 import { RouteOfferMissingNotice } from './product-details-page/route-offer-missing-notice';
 import { useRouteOfferMissing } from './product-details-page/use-route-offer-missing';
+import { RouteVariantMissingNotice } from './product-details-page/route-variant-missing-notice';
+import { useRouteVariantMissing } from './product-details-page/use-route-variant-missing';
 
 interface ProductDetailsPageProps {
   mode?: 'full' | 'commerce' | 'belowFold';
@@ -67,6 +69,7 @@ export function ProductDetailsPage(props: ProductDetailsPageProps) {
     quantityInCart,
     relatedProductsProduct,
     routeOfferMissing,
+    routeVariantMissing,
     secondaryColor,
     selectedAttributes,
     selectedColor,
@@ -86,8 +89,24 @@ export function ProductDetailsPage(props: ProductDetailsPageProps) {
   } = useProductDetailsState(product);
 
   const isDesktop = useIsDesktopViewport();
-  const { effectiveCanPurchase, handleSetCondition, routeOfferMissingActive } =
-    useRouteOfferMissing(routeOfferMissing, canPurchase, setSelectedCondition);
+  const {
+    effectiveCanPurchase: offerGatedCanPurchase,
+    handleSetCondition,
+    routeOfferMissingActive,
+  } = useRouteOfferMissing(
+    routeOfferMissing,
+    canPurchase,
+    setSelectedCondition
+  );
+  const {
+    effectiveCanPurchase,
+    handleSetAttributes,
+    routeVariantMissingActive,
+  } = useRouteVariantMissing(
+    routeVariantMissing,
+    offerGatedCanPurchase,
+    setSelectedAttributes
+  );
   const {
     handleAttributeSelection,
     handleModalAttributeSelection,
@@ -97,7 +116,7 @@ export function ProductDetailsPage(props: ProductDetailsPageProps) {
     handleColorSelection,
     productData,
     setMissingFields,
-    setSelectedAttributes,
+    setSelectedAttributes: handleSetAttributes,
   });
 
   const isCommerceMode = mode === 'commerce';
@@ -142,6 +161,7 @@ export function ProductDetailsPage(props: ProductDetailsPageProps) {
           />
         )}
         {routeOfferMissingActive && <RouteOfferMissingNotice />}
+        {routeVariantMissingActive && <RouteVariantMissingNotice />}
 
         <div
           className={

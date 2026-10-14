@@ -14,8 +14,10 @@ export class ProductRequestSubmitError extends Error {
 //
 // Idempotency binds the payload: retries must resend the identical
 // query/contact with the same requestId. Reusing an id with different
-// content (even equivalent phone punctuation) returns 409; equivalent
-// repeats under fresh ids are covered by the 24h canonical dedup.
+// content is rejected as invalid (400); equivalent repeats under any
+// id are absorbed by the 24h canonical dedup (200). A 409 only
+// escapes on a concurrent-insert race — retrying the same payload is
+// safe (it dedups to the winner's row).
 export async function submitProductRequest(
   endpoint: string,
   input: ProductRequest,
@@ -46,7 +48,7 @@ export async function submitProductRequest(
   if (response.status === 409)
     throw new ProductRequestSubmitError(
       409,
-      'This request conflicts with an earlier submission. Please try again.'
+      'Something went wrong. Please try again.'
     );
   throw new Error('Couldn’t send your request. Please try again.');
 }

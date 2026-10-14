@@ -75,6 +75,48 @@ export function readOfferQuantityTotal(
   return totals.get(`${productId}::${offerId}`);
 }
 
+export type SimpleProductQuantityTotalInput = {
+  id: string | number;
+  variantId?: string;
+  offerId?: string;
+  quantity?: number;
+  isQuizVoucherLine?: boolean;
+};
+
+/**
+ * Total validated quantity per product across the base line and every
+ * sibling offer line. Under strict serialized tracking all of those
+ * lines claim the same hidden-anchor pool, so the pool check compares
+ * this aggregate — not each line alone. Variant lines never share the
+ * pool and pre-reserved voucher lines redeem units outside it, so both
+ * contribute nothing.
+ */
+export function buildSimpleProductQuantityTotals(
+  items: readonly SimpleProductQuantityTotalInput[]
+): Map<string, number> {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    if (
+      item.variantId ||
+      item.isQuizVoucherLine ||
+      typeof item.quantity !== 'number'
+    ) {
+      continue;
+    }
+    const key = String(item.id);
+    totals.set(key, (totals.get(key) ?? 0) + item.quantity);
+  }
+  return totals;
+}
+
+/** Reads one product aggregate built by buildSimpleProductQuantityTotals. */
+export function readSimpleProductQuantityTotal(
+  totals: ReadonlyMap<string, number>,
+  productId: string
+): number | undefined {
+  return totals.get(productId);
+}
+
 export type OfferLineResolutionInput = {
   strId: string;
   variantId?: string;
@@ -92,6 +134,20 @@ export type OfferLineResolutionInput = {
   aggregateOfferQuantity?: number;
   offer?: { condition: string | null; stock_quantity?: number | string | null };
   parentEligible: boolean;
+  /**
+   * Total quantity across this product's base line and every sibling
+   * offer line (voucher lines excluded). Compared against
+   * strictPoolUnits for serialized_strict products.
+   */
+  aggregateSimpleQuantity?: number;
+  /**
+   * Live shared-unit pool from the base-inventory projection, or null
+   * when the product is not strict-tracked or the projection read
+   * failed (fail-open: the check is skipped, matching past behavior).
+   */
+  strictPoolUnits?: number | null;
+  /** Pre-reserved voucher lines redeem units outside the pool. */
+  isQuizVoucherLine?: boolean;
 };
 
 /**
@@ -99,10 +155,11 @@ export type OfferLineResolutionInput = {
  * live row (the RPC returns active rows only), a stale row on a
  * variant-bearing or flag-disabled parent, a condition the merchant
  * changed after the line landed in the cart, an aggregate offer
- * quantity above the live offer allocation, or a contradictory
+ * quantity above the live offer allocation, a simple-line aggregate
+ * above the shared strict serialized pool, or a contradictory
  * variant+offer combo.
  * Returns the invalid-line key, or null when the line passes every
- * offer check (non-offer lines always pass).
+ * offer check.
  */
 export type ReportedLineStockItem = {
   variantId?: string;
@@ -142,6 +199,9 @@ export function getInvalidOfferLineKey({
   offer,
   parentEligible,
   aggregateOfferQuantity,
+  aggregateSimpleQuantity,
+  strictPoolUnits,
+  isQuizVoucherLine,
 }: OfferLineResolutionInput): string | null {
   // Non-variant offer lines price from the live condition offer, not
   // the parent: pricing them from products.price would silently
@@ -198,6 +258,23 @@ export function getInvalidOfferLineKey({
     ) {
       return getCartValidationKey(strId, undefined, offerId);
     }
+  }
+
+  // Sibling simple lines share one strict serialized pool: the base
+  // line plus every offer line draw from the same hidden-anchor
+  // units, and order creation claims that pool. When their combined
+  // cart quantity exceeds the live projection, each simple line is
+  // invalid — the shopper re-adds within the cap. Variant lines never
+  // share the pool and voucher lines redeem pre-reserved units
+  // outside it, so both skip the check.
+  if (
+    !variantId &&
+    !isQuizVoucherLine &&
+    typeof aggregateSimpleQuantity === 'number' &&
+    typeof strictPoolUnits === 'number' &&
+    aggregateSimpleQuantity > strictPoolUnits
+  ) {
+    return getCartValidationKey(strId, undefined, offerId);
   }
 
   // A line naming both a variant and a condition offer is contradictory:

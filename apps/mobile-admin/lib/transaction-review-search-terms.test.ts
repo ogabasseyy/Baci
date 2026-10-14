@@ -32,6 +32,20 @@ describe('splitTransactionSearchTerms', () => {
   it('returns no terms for blank queries', () => {
     expect(splitTransactionSearchTerms('   ')).toEqual([]);
   });
+
+  it('pins the JS-sorted non-ASCII subset past the term cap', () => {
+    // Documents the known divergence: the server lower() DISTINCT plus
+    // database collation may select a different subset for non-ASCII
+    // terms past the cap. The client subset stays deterministic (JS
+    // sort), so a mismatch at most narrows results — never widens.
+    const terms = Array.from(
+      { length: TRANSACTION_REVIEW_MAX_SEARCH_TERMS + 1 },
+      (_, index) => `térm${index}`
+    );
+    expect(splitTransactionSearchTerms(terms.join(' '))).toEqual(
+      [...terms].sort().slice(0, TRANSACTION_REVIEW_MAX_SEARCH_TERMS)
+    );
+  });
 });
 
 describe('filterTransactionOrders', () => {

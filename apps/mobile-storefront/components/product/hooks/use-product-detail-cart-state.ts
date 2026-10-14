@@ -57,10 +57,28 @@ export function useProductDetailCartState(routeData: RouteData) {
       )
     : undefined;
 
+  // Sibling lines share one strict serialized pool, so the
+  // purchasability check compares the pool against the product-wide
+  // total — not the single matched line. Voucher lines redeem
+  // pre-reserved units outside the pool and contribute nothing.
+  const productQuantityInCart =
+    routeData.product?.id == null
+      ? 0
+      : items.reduce(
+          (total, item) =>
+            item.product_id === routeData.product?.id &&
+            !item.voucher_token &&
+            !item.voucher_award_id
+              ? total + item.quantity
+              : total,
+          0
+        );
+
   return {
     addItem,
     cartItem,
     getConditionDisplay,
+    productQuantityInCart,
     quantityInCart: cartItem ? cartItem.quantity : 0,
     removeItem,
     updateQuantity,

@@ -98,6 +98,16 @@ describe('product-transform', () => {
     );
   });
 
+  it('carries the base-inventory-hydration failure marker onto the product', () => {
+    const product = transformProduct({
+      ...variantProductRow,
+      base_inventory_hydration_failed: true,
+    });
+    expect(product).toEqual(
+      expect.objectContaining({ base_inventory_hydration_failed: true })
+    );
+  });
+
   it('carries hydrated base policy and units onto simple products', () => {
     const product = transformProduct({
       ...variantProductRow,

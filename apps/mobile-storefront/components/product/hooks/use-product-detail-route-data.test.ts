@@ -177,6 +177,28 @@ it('ignores the variant hydration marker without an exact variant link', () => {
   expect(result.current.error).toBeNull();
 });
 
+it('fails closed when the base-inventory projection fetch failed', () => {
+  mockParams = { slug: 'phone' };
+  const marked = {
+    ...product,
+    has_variants: false,
+    base_inventory_hydration_failed: true,
+  };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: marked,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  // Without the projection the PDP cannot tell "no units" from
+  // "unknown units": surface retry instead of a confident OOS.
+  expect(result.current.routeBaseInventoryHydrationFailed).toBe(true);
+  expect(result.current.error).toMatch(/Availability could not be loaded/);
+});
+
 it('honors an ID-only offer through the synced selection on product load', () => {
   mockParams = { slug: 'phone', offer_id: 'o1' };
   const { result, rerender } = renderHook(

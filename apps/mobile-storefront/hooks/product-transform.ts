@@ -244,6 +244,8 @@ export function transformProduct(item: unknown): Product | null {
     has_condition_offers: product.has_condition_offers ?? false,
     offers_hydration_failed: product.offers_hydration_failed ?? undefined,
     variants_hydration_failed: product.variants_hydration_failed ?? undefined,
+    base_inventory_hydration_failed:
+      product.base_inventory_hydration_failed ?? undefined,
     offers: Array.isArray(product.offers)
       ? product.offers.map((offer) => ({
           id: offer.id,

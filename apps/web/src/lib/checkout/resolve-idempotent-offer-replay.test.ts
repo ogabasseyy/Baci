@@ -132,6 +132,71 @@ describe('resolveIdempotentOfferReplay', () => {
     expect(payload[0].condition).toBe('refurbished');
   });
 
+  it('restores from an unambiguous offerless stored line after offer deletion', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: null,
+              condition: 'refurbished',
+            },
+          ],
+        },
+      ],
+    });
+    const payload = [{ ...offerLine, condition: 'open_box' }];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(payload[0].condition).toBe('refurbished');
+  });
+
+  it('stays fail-open when several offerless lines share one identity', async () => {
+    const c = clients({
+      probeHit: true,
+      offers: [],
+      storedTax: [
+        {
+          tax_amount: 30000,
+          items: [
+            {
+              product_id: PRODUCT_ID,
+              offer_id: null,
+              condition: 'refurbished',
+            },
+            {
+              product_id: PRODUCT_ID,
+              offer_id: null,
+              condition: 'used',
+            },
+          ],
+        },
+      ],
+    });
+    const payload = [{ ...offerLine, condition: 'open_box' }];
+
+    const result = await resolveIdempotentOfferReplay({
+      merchantId: MERCHANT_ID,
+      orderItemsPayload: payload,
+      requestIdempotencyKey: 'checkout-1',
+      supabase: c.supabase,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(payload[0].condition).toBe('open_box');
+  });
+
   it('leaves unmatched lines on a replay hit (fail-open per line)', async () => {
     const c = clients({
       probeHit: true,

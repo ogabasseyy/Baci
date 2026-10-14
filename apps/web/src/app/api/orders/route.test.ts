@@ -849,6 +849,108 @@ describe('POST /api/orders REDVAULT integration', () => {
     }
   });
 
+  it('hashes a zero negotiation discount on REDVAULT replays despite the stored quote discount', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const offerReplay = await import(
+      '@/lib/checkout/resolve-idempotent-offer-replay'
+    );
+    const idempotency = await import(
+      '@/lib/checkout/checkout-idempotency-replay'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          { order: { id: 'protected-order' } },
+          { status: 201 }
+        ) as never
+      );
+    // The first attempt hashed discount 0 (negotiation is bypassed for
+    // REDVAULT) while the draft persisted the quote discount: the retry
+    // must hash 0 again, not restore the stored quote discount.
+    const replaySpy = vi
+      .spyOn(offerReplay, 'resolveIdempotentOfferReplay')
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          isIdempotentOfferOrderReplay: true,
+          liveOfferPrices: new Map(),
+          liveOfferConditions: new Map(),
+          storedReplayTaxAmount: null,
+          storedReplayDiscountAmount: 500,
+        },
+      });
+    const prepareSpy = vi
+      .spyOn(idempotency, 'prepareCheckoutIdempotencyReplay')
+      .mockResolvedValue({
+        checkoutRequestHash: 'test-request-hash',
+        isLegacyIdempotencyReplay: false,
+      });
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-retry-key' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+          }),
+        })
+      );
+      expect(response.status).toBe(201);
+      expect(prepareSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ discount_amount: 0 }),
+        })
+      );
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      replaySpy.mockRestore();
+      prepareSpy.mockRestore();
+    }
+  });
+
   it('emits the platform order-created event for first-time REDVAULT orders', async () => {
     vi.clearAllMocks();
     primeAdminOrderCurrencyRead();

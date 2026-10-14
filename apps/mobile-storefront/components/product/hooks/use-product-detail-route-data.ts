@@ -91,6 +91,16 @@ export function useProductDetailRouteData({
   const routeVariantHydrationError = routeVariantHydrationFailed
     ? 'This option could not be loaded. Check your connection and try again.'
     : null;
+  // A failed base-inventory fetch must not render as a confident
+  // out-of-stock verdict: without the projection the PDP cannot tell
+  // "no units" from "unknown units", and a serialized product with a
+  // zero legacy scalar would show unavailable with no retry. Surface
+  // the existing error path (retry via refetch) instead.
+  const routeBaseInventoryHydrationFailed =
+    product?.base_inventory_hydration_failed === true;
+  const routeBaseInventoryHydrationError = routeBaseInventoryHydrationFailed
+    ? 'Availability could not be loaded. Check your connection and try again.'
+    : null;
   // Search/compare entry points forward the advertised matched offer id.
   // Accept it only when it names one of this product's own offers; the
   // condition-compatibility check happens at selection time so a later
@@ -256,6 +266,7 @@ export function useProductDetailRouteData({
       error ??
       routeOfferHydrationError ??
       routeVariantHydrationError ??
+      routeBaseInventoryHydrationError ??
       routeVariantMissingError,
     isLoading,
     isOnline,
@@ -267,6 +278,7 @@ export function useProductDetailRouteData({
     refetch,
     resolvedColorImages,
     reviewsState,
+    routeBaseInventoryHydrationFailed,
     routeOfferHydrationFailed,
     routeOfferId,
     routeParams,

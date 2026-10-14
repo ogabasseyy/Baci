@@ -139,10 +139,51 @@ it('shows a retry signal instead of a validation error on idempotency conflict',
   fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
   await waitFor(() =>
     expect(screen.getByRole('alert').textContent).toContain(
-      'conflicts with an earlier one'
+      'Something went wrong'
     )
   );
   expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('fails closed without a CSPRNG instead of minting a weak id', async () => {
+  vi.mocked(submitProductRequest).mockResolvedValue();
+  const uuidDescriptor = Object.getOwnPropertyDescriptor(crypto, 'randomUUID');
+  const valuesDescriptor = Object.getOwnPropertyDescriptor(
+    crypto,
+    'getRandomValues'
+  );
+  Object.defineProperty(crypto, 'randomUUID', {
+    value: undefined,
+    configurable: true,
+  });
+  Object.defineProperty(crypto, 'getRandomValues', {
+    value: undefined,
+    configurable: true,
+  });
+  try {
+    render(<ProductRequest query="iPhone 20" merchantSlug="ogabassey" />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Request this product' })
+    );
+    fireEvent.change(screen.getByLabelText('Email or phone number'), {
+      target: { value: 'shopper@example.com' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toContain('Couldn’t send')
+    );
+    expect(submitProductRequest).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).toBeNull();
+  } finally {
+    // Both methods may live on the prototype (no own descriptor): then
+    // the shadowing own property must be deleted to restore them.
+    if (uuidDescriptor)
+      Object.defineProperty(crypto, 'randomUUID', uuidDescriptor);
+    else delete (crypto as Record<string, unknown>).randomUUID;
+    if (valuesDescriptor)
+      Object.defineProperty(crypto, 'getRandomValues', valuesDescriptor);
+    else delete (crypto as Record<string, unknown>).getRandomValues;
+  }
 });
 it('mints a CSRF token for cold sessions before submitting', async () => {
   vi.mocked(submitProductRequest).mockResolvedValue();

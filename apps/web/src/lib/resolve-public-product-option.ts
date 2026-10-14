@@ -1,6 +1,7 @@
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 import { getEffectiveStock } from './product-stock';
+import { resolveSerializedOfferStock } from './serialized-offer-stock';
 import { resolveSerializedVariantStock } from './serialized-variant-stock';
 
 type Parent = {
@@ -10,6 +11,8 @@ type Parent = {
   manage_stock?: boolean | null;
   stock?: number | null;
   stock_quantity?: number | null;
+  inventory_tracking_policy?: string | null;
+  effective_policy?: string | null;
 };
 type Variant = {
   price_override?: number | null;
@@ -53,7 +56,13 @@ export function resolvePublicProductOption(
       variant.stock_quantity ??
       getEffectiveStock(parent))
     : offer
-      ? getEffectiveStock(offer)
+      ? (resolveSerializedOfferStock(offer, {
+          ...parent,
+          // Serialized policies fold exact units into stock_quantity
+          // while legacy rows carry the scalar on stock: reconcile
+          // first so the strict cap reads the folded pool either way.
+          stock: getEffectiveStock(parent),
+        }) ?? getEffectiveStock(offer))
       : getEffectiveStock(parent);
   const purchasable = variant
     ? isPublicVariantPurchasable(parent, variant)

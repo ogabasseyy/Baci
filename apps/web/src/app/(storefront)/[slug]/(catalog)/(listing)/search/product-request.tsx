@@ -10,7 +10,9 @@ import { getClientCsrfToken } from '@/lib/csrf';
 /**
  * Request idempotency id that survives non-secure contexts: randomUUID
  * needs a secure context, but getRandomValues does not, and the server
- * requires a valid v4 UUID either way.
+ * requires a valid v4 UUID either way. Fails closed without a CSPRNG:
+ * a Math.random fallback would mint guessable budget keys, and the
+ * submit flow already clears pending on a throw here.
  */
 function createProductRequestId(): string {
   if (
@@ -19,17 +21,14 @@ function createProductRequestId(): string {
   ) {
     return crypto.randomUUID();
   }
-  const bytes = new Uint8Array(16);
   if (
-    typeof crypto !== 'undefined' &&
-    typeof crypto.getRandomValues === 'function'
+    typeof crypto === 'undefined' ||
+    typeof crypto.getRandomValues !== 'function'
   ) {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let index = 0; index < bytes.length; index += 1) {
-      bytes[index] = Math.floor(Math.random() * 256);
-    }
+    throw new Error('Secure random number generation is unavailable.');
   }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   const hex = Array.from(bytes, (byte) =>
@@ -96,7 +95,7 @@ export function ProductRequest({
         error instanceof ProductRequestSubmitError && error.status === 429
           ? 'Too many requests. Please try again later.'
           : error instanceof ProductRequestSubmitError && error.status === 409
-            ? 'This request conflicts with an earlier one. Please try again.'
+            ? 'Something went wrong. Please try again.'
             : 'Couldn’t send. Check the product name and email or phone number, then try again.'
       );
     } finally {

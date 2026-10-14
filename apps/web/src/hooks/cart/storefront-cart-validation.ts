@@ -68,6 +68,10 @@ export const validateStorefrontCart = async (
     variantAttributes: item.variantAttributes,
     variantId: item.variantId,
     offerId: item.offerId,
+    // Pool-exempt pre-reserved units: the validate route excludes
+    // voucher lines from the strict serialized aggregate so a prize
+    // line is never invalidated for pool headroom it does not consume.
+    isQuizVoucherLine: Boolean(item.quizAwardId || item.quizVoucherToken),
   }));
 
   const response = await fetchWithCsrf('/api/cart/validate', {

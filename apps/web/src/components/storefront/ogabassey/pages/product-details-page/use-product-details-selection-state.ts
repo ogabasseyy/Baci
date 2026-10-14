@@ -91,6 +91,7 @@ export function useProductDetailsSelectionState(
     routeSelectionAttributes,
     routeSelectionAttributesKey,
     routeVariantId,
+    routeVariantMissing,
   } = resolveProductDetailsRouteSelection({
     offers: productData.offers,
     resolutionProduct: {
@@ -292,6 +293,7 @@ export function useProductDetailsSelectionState(
     routeOfferId,
     routeOfferMissing,
     routeResolvedVariantSelection,
+    routeVariantMissing,
     setSelectedImage,
     variantSelectionAttributes,
   };

@@ -10,7 +10,8 @@ type RouteData = ReturnType<typeof useProductDetailRouteData>;
 export function useProductDetailPurchaseState(
   routeData: RouteData,
   quantityInCart: number,
-  negotiatedPrice: number | null
+  negotiatedPrice: number | null,
+  productQuantityInCart: number
 ) {
   const { price: effectivePrice, comparePrice: effectiveComparePrice } =
     useEffectivePrice(
@@ -75,17 +76,18 @@ export function useProductDetailPurchaseState(
         ? (!selectedConditionOffer &&
             routeData.product.manage_stock === false) ||
           (typeof selectedConditionOffer?.stock_quantity === 'number'
-            ? Math.min(
-                selectedConditionOffer.stock_quantity,
-                baseStrictUnitCap
-              ) > quantityInCart
+            ? // The offer allocation is per-offer but the strict pool
+              // is product-wide: the selected line must fit its
+              // allocation AND the sibling total must fit the pool.
+              selectedConditionOffer.stock_quantity > quantityInCart &&
+              baseStrictUnitCap > productQuantityInCart
             : routeData.product.base_effective_policy ===
                 'serialized_then_unlimited'
               ? true
               : routeData.product.base_effective_policy === 'serialized_strict'
                 ? (typeof routeData.product.base_available_units === 'number'
                     ? routeData.product.base_available_units
-                    : 0) > quantityInCart
+                    : 0) > productQuantityInCart
                 : typeof routeData.product.stock_quantity === 'number'
                   ? routeData.product.stock_quantity > quantityInCart
                   : routeData.product.in_stock === true)

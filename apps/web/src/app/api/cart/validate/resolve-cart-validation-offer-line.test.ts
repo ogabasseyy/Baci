@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildSimpleProductQuantityTotals,
   getCartValidationKey,
   getInvalidOfferLineKey,
   isOfferParentEligible,
+  readSimpleProductQuantityTotal,
   resolveReportedLineStock,
 } from './resolve-cart-validation-offer-line';
 
@@ -207,6 +209,71 @@ describe('getInvalidOfferLineKey', () => {
         parentEligible: true,
       })
     ).toBe(`${STR_ID}::v1::offer=${OFFER_ID}`);
+  });
+
+  it('invalidates simple lines whose aggregate exceeds the strict pool', () => {
+    const base = {
+      strId: STR_ID,
+      aggregateSimpleQuantity: 2,
+      strictPoolUnits: 1,
+      parentEligible: true,
+    };
+    expect(getInvalidOfferLineKey(base)).toBe(STR_ID);
+    expect(
+      getInvalidOfferLineKey({
+        ...base,
+        offerId: OFFER_ID,
+        offer: { condition: 'used', stock_quantity: 5 },
+      })
+    ).toBe(`${STR_ID}::offer=${OFFER_ID}`);
+  });
+
+  it('passes simple lines within the strict pool and skips exempt lines', () => {
+    const fitting = {
+      strId: STR_ID,
+      aggregateSimpleQuantity: 1,
+      strictPoolUnits: 1,
+      parentEligible: true,
+    };
+    expect(getInvalidOfferLineKey(fitting)).toBeNull();
+    // Unknown pool (non-strict product or failed projection read).
+    expect(
+      getInvalidOfferLineKey({ ...fitting, strictPoolUnits: null })
+    ).toBeNull();
+    // Voucher lines redeem pre-reserved units outside the pool.
+    expect(
+      getInvalidOfferLineKey({
+        ...fitting,
+        aggregateSimpleQuantity: 2,
+        strictPoolUnits: 1,
+        isQuizVoucherLine: true,
+      })
+    ).toBeNull();
+    // Variant lines never share the simple pool.
+    expect(
+      getInvalidOfferLineKey({
+        ...fitting,
+        variantId: 'v1',
+        aggregateSimpleQuantity: 2,
+        strictPoolUnits: 1,
+      })
+    ).toBeNull();
+  });
+});
+
+describe('buildSimpleProductQuantityTotals', () => {
+  it('totals base and offer lines while skipping variants and vouchers', () => {
+    const totals = buildSimpleProductQuantityTotals([
+      { id: STR_ID, quantity: 1 },
+      { id: STR_ID, offerId: OFFER_ID, quantity: 2 },
+      { id: STR_ID, variantId: 'v1', quantity: 9 },
+      { id: STR_ID, quantity: 9, isQuizVoucherLine: true },
+      { id: STR_ID },
+      { id: 'other', quantity: 4 },
+    ]);
+    expect(readSimpleProductQuantityTotal(totals, STR_ID)).toBe(3);
+    expect(readSimpleProductQuantityTotal(totals, 'other')).toBe(4);
+    expect(readSimpleProductQuantityTotal(totals, 'missing')).toBeUndefined();
   });
 });
 

@@ -1,5 +1,5 @@
 BEGIN;
-CREATE TABLE public.storefront_product_requests (
+CREATE TABLE IF NOT EXISTS public.storefront_product_requests (
   id uuid PRIMARY KEY,
   merchant_id uuid NOT NULL REFERENCES public.merchants(id) ON DELETE CASCADE,
   query text NOT NULL CHECK (char_length(query) BETWEEN 2 AND 120),
@@ -8,8 +8,8 @@ CREATE TABLE public.storefront_product_requests (
   delivered_at timestamptz,
   notification_id uuid UNIQUE REFERENCES public.notifications(id) ON DELETE SET NULL
 );
-CREATE INDEX storefront_product_requests_pending_idx ON public.storefront_product_requests(created_at) WHERE delivered_at IS NULL;
-CREATE INDEX storefront_product_requests_merchant_created_idx ON public.storefront_product_requests(merchant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS storefront_product_requests_pending_idx ON public.storefront_product_requests(created_at) WHERE delivered_at IS NULL;
+CREATE INDEX IF NOT EXISTS storefront_product_requests_merchant_created_idx ON public.storefront_product_requests(merchant_id, created_at DESC);
 ALTER TABLE public.storefront_product_requests ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.storefront_product_requests FROM anon, authenticated;
 GRANT SELECT ON public.storefront_product_requests TO authenticated;

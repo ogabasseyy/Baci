@@ -144,6 +144,11 @@ export interface Product {
   // list means "unknown", not "variantless". Exact variant links must
   // fail closed (retry) instead of rendering a normal PDP.
   variants_hydration_failed?: boolean;
+  // Explicit marker: the base-inventory projection fetch failed, so
+  // strict serialized availability is "unknown", not "zero". The PDP
+  // must fail closed (retry) instead of rendering a confident
+  // out-of-stock verdict with no recovery.
+  base_inventory_hydration_failed?: boolean;
 }
 
 export interface ProductVariant {

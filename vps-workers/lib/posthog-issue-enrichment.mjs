@@ -2,7 +2,7 @@ import {
   OCCURRENCE_WINDOW,
   requiredConfiguration,
   safeIssueId,
-} from './posthog-error-events.mjs';
+} from './posthog-remediation-config.mjs';
 import { redactCodexOutput } from './remediation-codex-output.mjs';
 
 const boundedString = (value, length) =>
@@ -18,8 +18,11 @@ const safeTechnicalValue = (value, length) =>
 
 const frameCoordinate = (frame) => {
   if (!frame || typeof frame !== 'object') return '';
+  // Drop URL query/fragment metadata before sanitizing: arbitrary keys and
+  // values are user data, not repository coordinates.
+  const source = String(frame.source || '').split(/[?#]/, 1)[0];
   const parts = [
-    safeTechnicalValue(frame.source, 160),
+    safeTechnicalValue(source, 160),
     safeTechnicalValue(frame.function, 120),
   ].filter(Boolean);
   if (parts.length === 0) return '';
@@ -27,6 +30,12 @@ const frameCoordinate = (frame) => {
   const coordinate =
     parts.join(' :: ') + (Number.isSafeInteger(line) && line > 0 ? `:${line}` : '');
   return coordinate.slice(0, 240);
+};
+
+const safeReleaseVersion = (value) => {
+  const version = boundedString(value, 120);
+  // Canonical release identifiers only: versions, tags, and commit SHAs.
+  return /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(version) ? version : '';
 };
 
 export async function enrichPostHogRemediationCandidate({
@@ -79,7 +88,7 @@ export async function enrichPostHogRemediationCandidate({
   }
 
   const coordinate = frameCoordinate(detail.top_in_app_frame);
-  const release = safeTechnicalValue(detail.latest_release?.version, 120);
+  const release = safeReleaseVersion(detail.latest_release?.version);
   return {
     ...candidate,
     sample: {

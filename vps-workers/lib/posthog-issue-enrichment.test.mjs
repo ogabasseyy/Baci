@@ -88,6 +88,32 @@ describe('PostHog remediation candidate enrichment', () => {
     );
   });
 
+  it('drops URL query metadata and non-canonical releases from the sample', async () => {
+    const enriched = await enrichPostHogRemediationCandidate({
+      candidate,
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            latest_release: { version: 'release for AliceSmith (build 42)' },
+            top_in_app_frame: {
+              function: 'handleCheckout',
+              line: 7,
+              source: 'app.js?user=AliceSmith&account=merchant-123',
+            },
+          })
+        ),
+    });
+
+    assert.equal(
+      enriched.sample.route,
+      'app.js :: handleCheckout:7'
+    );
+    assert.equal(enriched.sample.route.includes('AliceSmith'), false);
+    assert.equal(enriched.sample.route.includes('merchant-123'), false);
+    assert.equal(enriched.sample.release, undefined);
+  });
+
   it('keeps the redacted route when the detail has no usable frame', async () => {
     const enriched = await enrichPostHogRemediationCandidate({
       candidate,

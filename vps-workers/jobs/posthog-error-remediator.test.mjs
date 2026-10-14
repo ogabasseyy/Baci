@@ -67,7 +67,7 @@ describe('PostHog error remediator', () => {
     assert.match(first.candidates[0].caseKey, /^posthog:posthog_issue:/);
     assert.equal(
       first.candidates[0].sample.route,
-      'apps/web/checkout.py :: handleCheckout:42'
+      'checkout.py :: handleCheckout:42'
     );
     assert.equal(first.candidates[0].sample.release, '2026.10.1');
     assert.equal(first.actions[0].type, 'prompt_written');

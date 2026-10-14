@@ -53,7 +53,7 @@ describe('PostHog remediation candidate enrichment', () => {
 
     assert.equal(
       enriched.sample.route,
-      'apps/web/checkout.py :: handleCheckout:42'
+      'checkout.py :: handleCheckout:42'
     );
     assert.equal(enriched.sample.release, '2026.10.1');
     assert.equal(enriched.sample.message, 'TypeError');
@@ -131,7 +131,7 @@ describe('PostHog remediation candidate enrichment', () => {
         ),
     });
 
-    assert.equal(enriched.sample.route, '/app.js :: handleCheckout:11');
+    assert.equal(enriched.sample.route, 'app.js :: handleCheckout:11');
     assert.equal(enriched.sample.route.includes('somepassword'), false);
     assert.equal(enriched.sample.route.includes('cdn.example'), false);
     assert.equal(enriched.sample.route.includes('deploy'), false);
@@ -168,6 +168,67 @@ describe('PostHog remediation candidate enrichment', () => {
         ),
     });
     assert.equal(sha.sample.release, 'abc1234def5678');
+  });
+
+  it('keeps only the basename of absolute local frame paths', async () => {
+    for (const source of [
+      '/Users/AliceSmith/ClientA/app.js',
+      'C:\\Users\\AliceSmith\\ClientA\\app.js',
+    ]) {
+      const enriched = await enrichPostHogRemediationCandidate({
+        candidate,
+        env: environment,
+        fetchFn: async () =>
+          new Response(
+            JSON.stringify({
+              top_in_app_frame: { function: 'render', source },
+            })
+          ),
+      });
+      assert.equal(enriched.sample.route, 'app.js :: render', source);
+      assert.equal(enriched.sample.route.includes('AliceSmith'), false);
+      assert.equal(enriched.sample.route.includes('ClientA'), false);
+    }
+  });
+
+  it('redacts compact phone runs in frame metadata', async () => {
+    const enriched = await enrichPostHogRemediationCandidate({
+      candidate,
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            top_in_app_frame: {
+              function: 'notify08031234567',
+              source: 'dialer.js',
+            },
+          })
+        ),
+    });
+
+    assert.equal(enriched.sample.route.includes('08031234567'), false);
+    assert.match(enriched.sample.route, /dialer\.js/);
+  });
+
+  it('rejects dotted release values that are not canonical versions', async () => {
+    for (const version of [
+      'Alice.Smith',
+      '0803.123.4567',
+      'sk.secretvalue123456789',
+    ]) {
+      const enriched = await enrichPostHogRemediationCandidate({
+        candidate,
+        env: environment,
+        fetchFn: async () =>
+          new Response(
+            JSON.stringify({
+              latest_release: { version },
+              top_in_app_frame: { function: 'f', source: 'a.js' },
+            })
+          ),
+      });
+      assert.equal(enriched.sample.release, undefined, version);
+    }
   });
 
   it('keeps the redacted route when the detail has no usable frame', async () => {

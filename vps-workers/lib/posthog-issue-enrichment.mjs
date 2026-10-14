@@ -10,22 +10,33 @@ const boundedString = (value, length) =>
 
 // Redaction runs before character filtering: stripping punctuation first
 // would break email and secret patterns into unmatchable fragments.
+// Mirrors the normalizer's compact-phone guard: enrichment output feeds
+// the prompt directly without passing case normalization again.
+const redactCompactPhone = (value) =>
+  value.replace(/(?<!\d)\d{10,19}(?!\d)/g, '[REDACTED_PHONE]');
+
 const safeTechnicalValue = (value, length) =>
-  boundedString(redactCodexOutput(value), length)
+  boundedString(redactCompactPhone(redactCodexOutput(value)), length)
     .replace(/[^A-Za-z0-9_$.:<>/ +()-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
 const framePath = (source) => {
   const text = String(source || '').split(/[?#]/, 1)[0];
-  if (!text.includes('://')) return text;
-  // Absolute URLs may carry userinfo credentials: keep only the path so
-  // neither credentials nor host flow into prompts and reports.
-  try {
-    return new URL(text).pathname || '';
-  } catch {
-    return '';
+  let path = text;
+  if (text.includes('://')) {
+    // Absolute URLs may carry userinfo credentials: keep only the path so
+    // neither credentials nor host flow into prompts and reports.
+    try {
+      path = new URL(text).pathname || '';
+    } catch {
+      return '';
+    }
   }
+  // Absolute local paths may embed usernames and customer directories:
+  // keep only the basename for every path shape.
+  const segments = path.split(/[\\/]/).filter(Boolean);
+  return segments.length > 0 ? segments[segments.length - 1] : '';
 };
 
 const frameCoordinate = (frame) => {
@@ -47,9 +58,18 @@ const frameCoordinate = (frame) => {
 const safeReleaseVersion = (value) => {
   const version = boundedString(value, 120);
   if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(version)) return '';
-  // Dotted versions and tags pass; commit SHAs must contain a hex letter
-  // so pure digit runs (phone-shaped) and bare names are dropped.
-  if (version.includes('.')) return version;
+  // Canonical semver/calver/tags only; a phone-shaped digit run hiding
+  // behind dots is still dropped.
+  if (
+    /^v?\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
+      version
+    )
+  ) {
+    const digits = version.replace(/\D/g, '');
+    return digits.length >= 10 && digits.length <= 19 ? '' : version;
+  }
+  // Commit SHAs must contain a hex letter so pure digit runs and bare
+  // names are dropped.
   if (/^[0-9a-fA-F]{7,40}$/.test(version) && /[a-fA-F]/.test(version)) {
     return version;
   }

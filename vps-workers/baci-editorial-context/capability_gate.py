@@ -40,6 +40,10 @@ _comparison_base = _paths._comparison_base
 _resolve_cited_filenames = _paths._resolve_cited_filenames
 _canon = _paths._canon
 _matches = _paths._matches
+_is_ancestor = _paths._is_ancestor
+_touches_unverified_refs = _paths._touches_unverified_refs
+_touches_cited_refs = _paths._touches_cited_refs
+_changed_refs_unbound = _paths._changed_refs_unbound
 
 
 def changed_paths(base, cwd=".", mode=None):
@@ -72,28 +76,6 @@ def changed_paths(base, cwd=".", mode=None):
             i += 1
     return paths
 
-
-
-def _touches_unverified_refs(register, changed):
-    try:
-        refs = {_canon(ref) for row in register["capabilities"] if row.get("status") == "unverified" for ref in row["source_refs"]}
-    except (KeyError, TypeError, AttributeError):
-        return True
-    return any(_matches(p, refs) for p in changed)
-
-
-def _touches_cited_refs(register, changed):
-    """Any cited source_refs, regardless of row status.
-
-    Content-bound rows are digest-enforced, but a redigest alone (new
-    source_revision, same reviewed_at) must still count as pending re-review:
-    the digest proves the content was seen, not that the claims were reviewed.
-    """
-    try:
-        refs = {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
-    except (KeyError, TypeError, AttributeError):
-        return True
-    return any(_matches(p, refs) for p in changed)
 
 
 def _register_stale(register):
@@ -142,18 +124,16 @@ def _replacement_revision_ok(new_rev, old_rev, cwd="."):
     Mere existence proves nothing: an older ancestor predating the reviewed
     change also resolves. Content validation stays with the binding test's
     provenance check; here the tripwire is continuity — rebase onto current
-    history and re-point when it fails.
+    history and re-point when it fails. When the old revision no longer
+    resolves (rewritten/squash-merged history), continuity is unestablishable:
+    accept an explicit re-point to a resolvable tree rather than deadlocking
+    every future re-review.
     """
     if not _revision_resolves(new_rev, cwd):
         return False
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(cwd), "merge-base", "--is-ancestor", str(old_rev), str(new_rev)],
-            capture_output=True, text=True,
-        )
-    except Exception:
-        return False
-    return proc.returncode == 0
+    if not _revision_resolves(old_rev, cwd):
+        return True
+    return _is_ancestor(old_rev, new_rev, cwd)
 
 
 def _base_register(base, cwd="."):
@@ -195,9 +175,14 @@ def requires_register_update(register, changed, base_register=None, rev_acceptab
     # it, and a redigest of a content-bound change without a date advance is
     # still pending re-review.
     registers = [register] if base_register is None else [register, base_register]
-    if not any(_touches_cited_refs(item, changed) for item in registers):
+    touched = any(_touches_cited_refs(item, changed) for item in registers)
+    register_touched = REGISTER_PATH in changed
+    if not touched and not register_touched:
         return False
-    if REGISTER_PATH not in changed:
+    # A register-only edit (claims, limitations, statuses, refs) with the old
+    # review metadata presents new writer claims as previously audited: the
+    # metadata comparisons below apply with or without a cited touch.
+    if not register_touched:
         return True
     if base_register is None:
         return False
@@ -252,6 +237,13 @@ def main(cwd="."):
                 f"update {REGISTER_PATH} (reviewed_at + digests) in this change"
             )
             return 1
+        if register is not None:
+            unbound = _changed_refs_unbound(register, changed, cwd)
+            if unbound:
+                print("capability register re-review does not bind its changed sources:")
+                for failure in unbound:
+                    print(f"  - {failure}")
+                return 1
         if register is not None and not should_run(base, register, changed, cwd):
             print("capability register and cited sources untouched; skipping binding suite")
             return 0

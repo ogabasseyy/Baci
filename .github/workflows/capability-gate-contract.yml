@@ -1,12 +1,17 @@
 name: Capability Gate Contract
 
-# Independent guard for the capability gate's own caller: this workflow runs
-# the ci.yml invocation contract outside the suite that the ci.yml step
-# invokes, so conditioning or removing that step cannot silence the check.
-# Keep this file minimal and dependency-free on purpose.
+# Independent guard for the capability gate's own caller. This workflow runs
+# from the BASE revision (pull_request_target) and asserts with pure text
+# matching — PR code under test is only EVER read, never executed — so a PR
+# that conditions or removes the ci.yml gate step, weakens the asserted
+# test, or deletes this file cannot silence the guard: the base version still
+# runs against the PR head. Residual limit: direct pushes to protected
+# branches bypass PR guards; branch protection with required reviews plus
+# this required check is the remaining layer (owner action).
 
 on:
-  pull_request:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
   push:
 
 permissions:
@@ -20,9 +25,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # PR head under test; empty on push events (checks out the ref).
+          ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
           persist-credentials: false
       - name: Assert ci.yml invokes the capability gate unconditionally
+        shell: bash
         run: |
-          cd vps-workers/baci-editorial-context
-          python3 -m unittest test_capability_register_binding.CapabilityBindingTests.test_ci_invokes_capability_gate_unconditionally
+          block=$(sed -n '/- name: Test capability register binding/,/^      - /p' .github/workflows/ci.yml | head -n -1)
+          if ! printf '%s\n' "$block" | grep -qF 'uses: ./.github/actions/capability-gate'; then
+            echo "capability gate invocation missing from ci.yml"
+            exit 1
+          fi
+          if printf '%s\n' "$block" | grep -qE '^[[:space:]]+if:'; then
+            echo "capability gate invocation must stay unconditional"
+            exit 1
+          fi
+          echo "capability gate invocation intact"

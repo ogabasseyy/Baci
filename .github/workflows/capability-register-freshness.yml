@@ -26,25 +26,7 @@ jobs:
       - name: Probe register evidence window
         id: window
         run: |
-          status=$(python3 -c "
-          import datetime, json
-          try:
-              data = json.load(open('docs/product/baci-capabilities.json'))
-              reviewed = datetime.datetime.fromisoformat(str(data['reviewed_at']).replace('Z', '+00:00'))
-              if reviewed.tzinfo is None:
-                  raise ValueError('naive reviewed_at')
-              age = datetime.datetime.now(datetime.timezone.utc) - reviewed
-              if age < datetime.timedelta():
-                  status = 'broken'
-              elif age > datetime.timedelta(days=14):
-                  status = 'stale'
-              else:
-                  status = 'fresh'
-          except Exception:
-              status = 'broken'
-          print(status)
-          ")
-          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "status=$(python3 vps-workers/baci-editorial-context/register_status.py)" >> "$GITHUB_OUTPUT"
       - name: Assert capability register is inside its evidence window
         env:
           BACI_REGISTER_REQUIRE_FRESH: '1'
@@ -56,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Capability register outside its 14-day evidence window"
-          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq 'length')
+          existing=$(gh issue list --state open --limit 100 --json title --jq --arg t "$title" '[.[] | select(.title == $t)] | length')
           if [ "$existing" = "0" ]; then
             gh issue create --title "$title" --body "The scheduled capability-register freshness check failed: docs/product/baci-capabilities.json is outside its 14-day evidence window (or no longer binds to its cited evidence), so the VPS writer lane is in its fail-closed Register-unavailable fallback. Re-review the register claims against the cited sources, refresh reviewed_at/source_revision/evidence_digest/claims_digest per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
           fi
@@ -67,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Capability register missing or invalid (not ordinary staleness)"
-          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq 'length')
+          existing=$(gh issue list --state open --limit 100 --json title --jq --arg t "$title" '[.[] | select(.title == $t)] | length')
           if [ "$existing" = "0" ]; then
             gh issue create --title "$title" --body "The scheduled capability-register check failed and docs/product/baci-capabilities.json is missing, malformed, or carries an invalid reviewed_at (naive or future-dated): do not just refresh reviewed_at/digests, which would re-bind unreviewed claims. Restore and validate the file, re-review the claims against the cited sources per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
           fi
@@ -78,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Capability binding suite failed (register still inside its evidence window)"
-          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq 'length')
+          existing=$(gh issue list --state open --limit 100 --json title --jq --arg t "$title" '[.[] | select(.title == $t)] | length')
           if [ "$existing" = "0" ]; then
             gh issue create --title "$title" --body "The scheduled capability-register check failed while docs/product/baci-capabilities.json is still inside its 14-day evidence window, so this is NOT a staleness re-review: do not just refresh reviewed_at/digests. Triage the failing suite test (digest binding mismatch, agent-access-map path drift, or connector-manifest mismatch) and fix the underlying breakage, then confirm the check passes again."
           fi

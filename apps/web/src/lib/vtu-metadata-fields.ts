@@ -88,7 +88,6 @@ export function getSafeMetadataDiagnostics(
   metadata: Record<string, unknown>
 ): Record<string, unknown> {
   const safeKeys = [
-    'customerNewBalance',
     'customerWalletCredited',
     'dataPlanCode',
     'gateway',
@@ -109,6 +108,11 @@ export function getSafeMetadataDiagnostics(
   }
   if ('customerName' in metadata) {
     diagnostics.customerName = '[REDACTED]';
+  }
+  // Exact wallet balances must never enter logs (wallet-only
+  // exception) — presence marker only (Codex R92 P1).
+  if ('customerNewBalance' in metadata) {
+    diagnostics.customerNewBalance = '[REDACTED]';
   }
 
   return diagnostics;

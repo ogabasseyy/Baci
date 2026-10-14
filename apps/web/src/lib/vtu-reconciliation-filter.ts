@@ -54,7 +54,15 @@ export const RECONCILABLE_VTU_TYPES = [
 // token-ready email is never retried. Only RECORDED failures match
 // (`eq.false` on the receipt, token-ready, or legacy sent keys —
 // never-attempted rows stay excluded); the email-claim RPC
-// serializes concurrent re-drives. Absent flags match too, via an
+// serializes concurrent re-drives. Receipt failures retire once the
+// token email succeeds (Codex R92 P2): a tokenless bill whose
+// receipt fails, then gains a PIN via backfill, switches notify to
+// the token state — the token sends but the receipt Sent=false (or
+// stuck marker) is never cleared, and without retirement the row
+// matches forever with no work left, an ever-growing backlog. So
+// the receipt/legacy-failure disjuncts (recorded AND stuck) carry a
+// token-unsent gate; the token-failure disjuncts are ungated (a
+// failed token is itself work). Absent flags match too, via an
 // explicit null arm: `->>` extracts TEXT, and `IS NOT TRUE` on text
 // is a Postgres type error that would 500 the whole cron (Codex R82
 // P1) — boolean intent must be `neq.true` + `is.null` (text
@@ -91,15 +99,25 @@ function getEmailStuckClaimDisjunct({
   attemptedKey,
   attemptedAtKey,
   cutoff,
+  gate,
   sentKey,
 }: {
   attemptedAtKey: string;
   attemptedKey: string;
   cutoff: string;
+  gate?: string;
   sentKey: string;
 }) {
-  return `and(metadata->>${sentKey}.is.null,or(metadata->>${attemptedKey}.eq.false,and(metadata->>${attemptedKey}.eq.true,or(metadata->>${attemptedAtKey}.is.null,metadata->>${attemptedAtKey}.lt.${cutoff}))))`;
+  const stuck = `metadata->>${sentKey}.is.null,or(metadata->>${attemptedKey}.eq.false,and(metadata->>${attemptedKey}.eq.true,or(metadata->>${attemptedAtKey}.is.null,metadata->>${attemptedAtKey}.lt.${cutoff})))`;
+  return gate ? `and(${stuck},${gate})` : `and(${stuck})`;
 }
+
+// Token-unsent gate for receipt-failure retirement (Codex R92 P2):
+// the token key is TEXT via `->>`, so unsent is `is.null` OR
+// `neq.true` (R82: never `is not true`). Matches unset AND
+// explicitly-failed tokens; only `true` retires the row.
+const TOKEN_UNSENT_GATE =
+  'or(metadata->>customerTokenEmailNotificationSent.is.null,metadata->>customerTokenEmailNotificationSent.neq.true)';
 
 export function getReconciliableStatusFilter(now: Date) {
   const cutoff = new Date(
@@ -109,6 +127,7 @@ export function getReconciliableStatusFilter(now: Date) {
     attemptedAtKey: 'customerReceiptEmailNotificationAttemptedAt',
     attemptedKey: 'customerReceiptEmailNotificationAttempted',
     cutoff,
+    gate: TOKEN_UNSENT_GATE,
     sentKey: 'customerReceiptEmailNotificationSent',
   });
   const stuckTokenClaim = getEmailStuckClaimDisjunct({
@@ -117,5 +136,7 @@ export function getReconciliableStatusFilter(now: Date) {
     cutoff,
     sentKey: 'customerTokenEmailNotificationSent',
   });
-  return `status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),${TOKEN_BACKFILL_ARM},and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false,${stuckReceiptClaim},${stuckTokenClaim}))))`;
+  const retiredReceiptFailure = `and(metadata->>customerReceiptEmailNotificationSent.eq.false,${TOKEN_UNSENT_GATE})`;
+  const retiredLegacyFailure = `and(metadata->>customerEmailNotificationSent.eq.false,${TOKEN_UNSENT_GATE})`;
+  return `status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),${TOKEN_BACKFILL_ARM},and(customer_id.not.is.null,or(${retiredReceiptFailure},metadata->>customerTokenEmailNotificationSent.eq.false,${retiredLegacyFailure},${stuckReceiptClaim},${stuckTokenClaim}))))`;
 }

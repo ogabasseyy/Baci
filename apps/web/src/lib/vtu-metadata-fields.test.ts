@@ -58,6 +58,7 @@ describe('vtu-metadata-fields', () => {
         paymentReference: 'VTU-1',
         voucherPin: '1234',
         customerName: 'Ada',
+        customerNewBalance: 500,
         internalToken: 'secret',
       })
     ).toEqual({
@@ -65,6 +66,8 @@ describe('vtu-metadata-fields', () => {
       paymentReference: 'VTU-1',
       voucherPin: '[REDACTED]',
       customerName: '[REDACTED]',
+      // Codex R92 P1: exact wallet balances must never enter logs.
+      customerNewBalance: '[REDACTED]',
     });
     expect(getSafeMetadataDiagnostics({})).toEqual({});
   });

@@ -500,8 +500,8 @@
       "git_status_entries": 0,
       "status_detail": "clean Git status",
       "classification": "PRESERVE_IMPROVEMENT",
-      "finding": "Unique semantic-RPC timeout change disables retries after timeout; focused tests added. Broader function diff merits deeper review.",
-      "pr_state": null,
+      "finding": "Unique semantic-RPC timeout change disables retries after timeout; focused tests added. Broader function diff merits deeper review. Exact-head PR #3427 is closed unmerged; check why it was rejected before salvaging.",
+      "pr_state": "CLOSED #3427",
       "remote_branch": "not found in live branch listing"
     },
     {
@@ -719,10 +719,10 @@
       "unique_commit_count": 10,
       "changed_path_count": 70,
       "git_status_entries": 29,
-      "status_detail": "Ten unique durable cache-invalidation commits plus 29 dirty event/cache files.",
+      "status_detail": "Ten unique durable cache-invalidation commits plus 29 dirty event/cache files. Exact-head PR #3229 is closed unmerged; check why it was rejected before salvaging.",
       "classification": "PRESERVE_DIRTY",
-      "finding": "Ten unique durable cache-invalidation commits plus 29 dirty event/cache files.",
-      "pr_state": null,
+      "finding": "Ten unique durable cache-invalidation commits plus 29 dirty event/cache files. Exact-head PR #3229 is closed unmerged; check why it was rejected before salvaging.",
+      "pr_state": "CLOSED #3229",
       "remote_branch": "not found in live branch listing"
     },
     {
@@ -1105,6 +1105,7 @@
     15,
     177,
     45,
+    1,
     33,
     80,
     84,

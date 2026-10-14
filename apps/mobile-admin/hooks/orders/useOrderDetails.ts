@@ -198,13 +198,15 @@ export async function fetchOrderById(
     fulfillment_details: orderWithMeta.fulfillment_details ?? null,
     items: await attachOrderItemOfferLabels(
       mapOrderItems(items as Parameters<typeof mapOrderItems>[0]),
-      (productId) =>
-        supabase.rpc('get_product_offers', {
-          p_product_id: productId,
-        }) as unknown as Promise<{
-          data: { offer_id?: unknown }[] | null;
-          error: unknown;
-        }>
+      (args) =>
+        supabase.rpc(
+          'get_storefront_offer_resolution',
+          args
+        ) as unknown as Promise<{
+          data: unknown;
+          error: { message: string } | null;
+        }>,
+      merchantId
     ),
     recorded_by_name: recordedByName,
     staff_terminal: staffTerminal,

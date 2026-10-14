@@ -1,3 +1,4 @@
+import { makeOfferLineKey } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 
@@ -149,7 +150,7 @@ export async function computeCanonicalOrderSubtotal({
     // and throws rather than silently pricing the parent.
     const offerKey =
       !item.variant_id && item.offer_id && item.product_id
-        ? `${item.product_id}::${item.offer_id}`
+        ? makeOfferLineKey(item.product_id, item.offer_id)
         : null;
     const offerPrice =
       offerKey !== null ? offerPrices?.get(offerKey) : undefined;

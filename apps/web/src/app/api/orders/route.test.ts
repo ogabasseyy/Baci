@@ -305,7 +305,7 @@ interface RpcOverrides {
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
   get_storefront_order_replay_economics?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
-  get_product_offers?: { data: unknown; error: unknown };
+  get_storefront_offer_resolution?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
   redeem_savings_for_order?: { data: unknown; error: unknown };
   finalize_wallet_order_payment?: { data: unknown; error: unknown };
@@ -3589,10 +3589,17 @@ describe('POST /api/orders — checkout idempotency', () => {
       const originalRpc = sb.rpc;
       sb.rpc = vi.fn((name: string, params?: unknown) => {
         rpcSpy(name, params);
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           return Promise.resolve({
             data: [
-              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+              {
+                product_id: OFFER_PRODUCT_ID,
+                offer_id: LIVE_OFFER_ID,
+                price_basis: 400_000,
+                condition: 'used',
+                allocatable_stock: 3,
+                parent_eligible: true,
+              },
             ],
             error: null,
           });
@@ -4279,9 +4286,16 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     const supabaseMod = await import('@/lib/supabase/server');
     const supabase = buildMockSupabase(
       {
-        get_product_offers: {
+        get_storefront_offer_resolution: {
           data: [
-            { offer_id: LIVE_OFFER_ID, price: 500_000, condition: 'used' },
+            {
+              product_id: '11111111-1111-4111-8111-111111111111',
+              offer_id: LIVE_OFFER_ID,
+              price_basis: 500_000,
+              condition: 'used',
+              allocatable_stock: 3,
+              parent_eligible: true,
+            },
           ],
           error: null,
         },
@@ -5085,10 +5099,17 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
         if (name === 'create_storefront_order') {
           return rpcSpy(args);
         }
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           return Promise.resolve({
             data: [
-              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+              {
+                product_id: OFFER_PRODUCT_ID,
+                offer_id: LIVE_OFFER_ID,
+                price_basis: 400_000,
+                condition: 'used',
+                allocatable_stock: 3,
+                parent_eligible: true,
+              },
             ],
             error: null,
           });
@@ -5182,7 +5203,7 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
         }
         // The offer died between attempts: live verification is skipped
         // on the replay hit, so this returning empty must not 400.
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           return Promise.resolve({ data: [], error: null });
         }
         return Promise.resolve({ data: null, error: null });
@@ -5285,10 +5306,17 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
         if (name === 'create_storefront_order') {
           return rpcSpy(args);
         }
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           return Promise.resolve({
             data: [
-              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+              {
+                product_id: OFFER_PRODUCT_ID,
+                offer_id: LIVE_OFFER_ID,
+                price_basis: 400_000,
+                condition: 'used',
+                allocatable_stock: 3,
+                parent_eligible: true,
+              },
             ],
             error: null,
           });
@@ -5383,13 +5411,16 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
     vi.mocked(supabaseMod.createClient).mockImplementation((() => {
       const sb = buildMockSupabase();
       sb.rpc = ((name: string) => {
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           return Promise.resolve({
             data: [
               {
+                product_id: OFFER_PRODUCT_ID,
                 offer_id: LIVE_OFFER_ID,
-                price: 400_000,
+                price_basis: 400_000,
                 condition: 'refurbished',
+                allocatable_stock: 3,
+                parent_eligible: true,
               },
             ],
             error: null,
@@ -5431,7 +5462,7 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
     vi.mocked(supabaseMod.createClient).mockImplementation((() => {
       const sb = buildMockSupabase();
       sb.rpc = ((name: string) => {
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           return Promise.resolve({ data: [], error: null });
         }
         return Promise.resolve({ data: null, error: null });
@@ -5478,7 +5509,7 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
         if (name === 'has_storefront_order_idempotency_key') {
           return Promise.resolve({ data: true, error: null });
         }
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           // The offer was live for the first attempt but deleted since.
           return Promise.resolve({ data: [], error: null });
         }
@@ -5557,7 +5588,7 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
             error: null,
           });
         }
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           return Promise.resolve({ data: [], error: null });
         }
         if (name === 'create_storefront_order') {
@@ -5625,13 +5656,16 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
         if (name === 'create_storefront_order') {
           return rpcSpy(args);
         }
-        if (name === 'get_product_offers') {
+        if (name === 'get_storefront_offer_resolution') {
           return Promise.resolve({
             data: [
               {
+                product_id: OFFER_PRODUCT_ID,
                 offer_id: LIVE_OFFER_ID,
-                price: 400_000,
+                price_basis: 400_000,
                 condition: 'refurbished',
+                allocatable_stock: 3,
+                parent_eligible: true,
               },
             ],
             error: null,
@@ -9555,7 +9589,7 @@ describe('POST /api/orders — discount code', () => {
           data: [DISCOUNT_CODE_ROW],
           error: null,
         },
-        get_product_offers: { data: [], error: null },
+        get_storefront_offer_resolution: { data: [], error: null },
         has_storefront_order_idempotency_key: { data: true, error: null },
         create_storefront_order_with_discount_code: {
           data: [{ ...orderRowWithDiscount, idempotency_replayed: true }],

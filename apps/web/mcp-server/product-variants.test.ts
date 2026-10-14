@@ -82,7 +82,7 @@ describe('loadMcpProductVariants', () => {
       },
     );
     expect(supabase.rpc).not.toHaveBeenCalledWith(
-      'get_product_offers',
+      'get_storefront_offer_resolution',
       expect.anything(),
     );
     expect(supabase.query.select).toHaveBeenCalledWith(

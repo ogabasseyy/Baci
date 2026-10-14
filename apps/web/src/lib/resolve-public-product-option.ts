@@ -1,4 +1,7 @@
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import {
+  normalizeCanonicalProductCondition,
+  resolveOfferAllocatableStock,
+} from '@baci/shared/lib';
 import { isPublicVariantPurchasable } from './is-public-variant-purchasable';
 import { getEffectiveStock } from './product-stock';
 import { resolveSerializedVariantStock } from './serialized-variant-stock';
@@ -10,6 +13,9 @@ type Parent = {
   manage_stock?: boolean | null;
   stock?: number | null;
   stock_quantity?: number | null;
+  effective_policy?: string | null;
+  inventory_tracking_policy?: string | null;
+  available_units?: number | null;
 };
 type Variant = {
   price_override?: number | null;
@@ -48,13 +54,22 @@ export function resolvePublicProductOption(
       price(variant.price_override) ??
       price(parent.price))
     : (price(offer?.price) ?? price(parent.price));
+  // Offer stock resolves through the shared authority (the finite
+  // scalar binds; a missing scalar inherits the parent stock): exactly
+  // what checkout enforces.
+  const offerStock = offer
+    ? resolveOfferAllocatableStock(offer.stock_quantity, {
+        effective_policy: parent.effective_policy,
+        inventory_tracking_policy: parent.inventory_tracking_policy,
+        availableUnits: parent.available_units,
+        parentStock: getEffectiveStock(parent),
+      })
+    : undefined;
   const stockQuantity = variant
     ? (resolveSerializedVariantStock(variant) ??
       variant.stock_quantity ??
       getEffectiveStock(parent))
-    : offer
-      ? getEffectiveStock(offer)
-      : getEffectiveStock(parent);
+    : (offerStock ?? getEffectiveStock(parent));
   const purchasable = variant
     ? isPublicVariantPurchasable(parent, variant)
     : parent.manage_stock === false ||

@@ -12,7 +12,7 @@
  * the SAME sources the server's order validation uses:
  *   - base price  -> products.price
  *   - variant     -> get_order_variant_overrides RPC (RLS-safe, anon-granted)
- *   - offer       -> get_product_offers RPC (active offers only)
+ *   - offer       -> get_storefront_offer_resolution RPC (active offers only)
  * so the reconciled cart basis matches what checkout will accept.
  */
 

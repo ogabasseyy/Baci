@@ -459,9 +459,14 @@ describe('cart-stock helpers', () => {
 
   it('validates the offer stock instead of a zero parent total', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 2 }],
-      get_storefront_product_base_inventory: [
-        { product_id: 'product-1', effective_policy: 'legacy' },
+      get_storefront_offer_resolution: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 2,
+          effective_policy: 'legacy',
+          parent_eligible: true,
+        },
       ],
     });
 
@@ -483,9 +488,14 @@ describe('cart-stock helpers', () => {
 
   it('honors the offer scalar on explicitly unmanaged parents', async () => {
     mockProductAndRpc(parent({ manage_stock: false }), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 2 }],
-      get_storefront_product_base_inventory: [
-        { product_id: 'product-1', effective_policy: 'legacy' },
+      get_storefront_offer_resolution: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 2,
+          effective_policy: 'legacy',
+          parent_eligible: true,
+        },
       ],
     });
 
@@ -507,9 +517,14 @@ describe('cart-stock helpers', () => {
 
   it('lets a null offer quantity inherit the parent stock', async () => {
     mockProductAndRpc(parent({ stock_quantity: 5 }), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: null }],
-      get_storefront_product_base_inventory: [
-        { product_id: 'product-1', effective_policy: 'legacy' },
+      get_storefront_offer_resolution: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 5,
+          effective_policy: 'legacy',
+          parent_eligible: true,
+        },
       ],
     });
 
@@ -524,7 +539,15 @@ describe('cart-stock helpers', () => {
 
   it('reports zero for an offer missing from the projection', async () => {
     mockProductAndRpc(parent({ stock_quantity: 5 }), {
-      get_product_offers: [{ offer_id: 'offer-other', stock_quantity: 9 }],
+      get_storefront_offer_resolution: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-other',
+          allocatable_stock: 9,
+          effective_policy: 'legacy',
+          parent_eligible: true,
+        },
+      ],
     });
 
     await expect(
@@ -538,7 +561,7 @@ describe('cart-stock helpers', () => {
 
   it('throws when the offer lookup fails', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: { error: { message: 'boom' } },
+      get_storefront_offer_resolution: { error: { message: 'boom' } },
     });
 
     await expect(
@@ -548,12 +571,14 @@ describe('cart-stock helpers', () => {
 
   it('caps the offer stock at strict serialized base units', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
-      get_storefront_product_base_inventory: [
+      get_storefront_offer_resolution: [
         {
           product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 2,
           effective_policy: 'serialized_strict',
           available_units: 2,
+          parent_eligible: true,
         },
       ],
     });
@@ -576,12 +601,14 @@ describe('cart-stock helpers', () => {
 
   it('lets a null offer quantity inherit strict serialized units', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: null }],
-      get_storefront_product_base_inventory: [
+      get_storefront_offer_resolution: [
         {
           product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 3,
           effective_policy: 'serialized_strict',
           available_units: 3,
+          parent_eligible: true,
         },
       ],
     });
@@ -597,12 +624,14 @@ describe('cart-stock helpers', () => {
 
   it('caps strict sibling offers at the shared serialized units', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
-      get_storefront_product_base_inventory: [
+      get_storefront_offer_resolution: [
         {
           product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 1,
           effective_policy: 'serialized_strict',
           available_units: 1,
+          parent_eligible: true,
         },
       ],
     });
@@ -633,12 +662,14 @@ describe('cart-stock helpers', () => {
 
   it('keeps the per-offer scalar binding under shared strict units', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 1 }],
-      get_storefront_product_base_inventory: [
+      get_storefront_offer_resolution: [
         {
           product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 1,
           effective_policy: 'serialized_strict',
           available_units: 5,
+          parent_eligible: true,
         },
       ],
     });
@@ -657,7 +688,6 @@ describe('cart-stock helpers', () => {
 
   it('caps the strict base line by sibling offer quantities', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [],
       get_storefront_product_base_inventory: [
         {
           product_id: 'product-1',
@@ -678,9 +708,14 @@ describe('cart-stock helpers', () => {
 
   it('ignores the product aggregate without strict serialized units', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
-      get_storefront_product_base_inventory: [
-        { product_id: 'product-1', effective_policy: 'legacy' },
+      get_storefront_offer_resolution: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 5,
+          effective_policy: 'legacy',
+          parent_eligible: true,
+        },
       ],
     });
 
@@ -696,31 +731,39 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  it('throws when a strict offer has no unit count', async () => {
+  it('reports zero when a strict offer has no unit count', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
-      get_storefront_product_base_inventory: [
+      get_storefront_offer_resolution: [
         {
           product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 0,
           effective_policy: 'serialized_strict',
           available_units: null,
+          parent_eligible: true,
         },
       ],
     });
 
     await expect(
       checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
-    ).rejects.toThrow('Cannot verify stock availability');
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 0,
+      requestedQuantity: 1,
+    });
   });
 
   it('lets unlimited offers bypass the unit cap', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: null }],
-      get_storefront_product_base_inventory: [
+      get_storefront_offer_resolution: [
         {
           product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: null,
           effective_policy: 'serialized_then_unlimited',
           available_units: 0,
+          parent_eligible: true,
         },
       ],
     });
@@ -734,10 +777,18 @@ describe('cart-stock helpers', () => {
     });
   });
 
-  it('reports zero when the offer base inventory row is missing', async () => {
+  it('reports zero when strict units are exhausted', async () => {
     mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
-      get_storefront_product_base_inventory: [],
+      get_storefront_offer_resolution: [
+        {
+          product_id: 'product-1',
+          offer_id: 'offer-7',
+          allocatable_stock: 0,
+          effective_policy: 'serialized_strict',
+          available_units: 0,
+          parent_eligible: true,
+        },
+      ],
     });
 
     await expect(
@@ -747,17 +798,6 @@ describe('cart-stock helpers', () => {
       currentStock: 0,
       requestedQuantity: 1,
     });
-  });
-
-  it('throws when the offer base inventory lookup fails', async () => {
-    mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 5 }],
-      get_storefront_product_base_inventory: { error: { message: 'boom' } },
-    });
-
-    await expect(
-      checkStock('product-1', 1, undefined, { offerId: 'offer-7' })
-    ).rejects.toThrow('Cannot verify stock availability');
   });
 
   it('bypasses the quantity check for unlimited serialized base options', async () => {
@@ -824,9 +864,7 @@ describe('cart-stock helpers', () => {
   });
 
   it('prefers the variant identity when both option ids are present', async () => {
-    mockProductAndRpc(parent(), {
-      get_product_offers: [{ offer_id: 'offer-7', stock_quantity: 9 }],
-    });
+    mockProductAndRpc(parent(), {});
     mockVariants([
       {
         id: 'variant-2',

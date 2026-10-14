@@ -15,14 +15,14 @@ describe('buildMcpProductDetail', () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     const rpc = vi.fn(async (name: string) => name === 'get_storefront_product_variants'
       ? { data: null, error: { message: 'variants unavailable' } }
-      : { data: [{ condition: 'used', price: 70000, stock_quantity: 2, grade: null, condition_notes: null }], error: null });
+      : { data: [{ product_id: 'option-phone', offer_id: 'offer-used', condition: 'used', price_basis: 70000, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null }], error: null });
     try {
       const result = await buildMcpProductDetail({
         product: { ...product, description: 'A useful phone', has_condition_offers: true },
         supabase: { rpc } as unknown as SupabaseClient,
         formatPrice: String, getSafeCatalogImageUrl: () => undefined,
       });
-      expect(rpc).toHaveBeenCalledWith('get_product_offers', { p_product_id: product.id });
+      expect(rpc).toHaveBeenCalledWith('get_storefront_offer_resolution', { p_merchant_id: null, p_product_ids: [product.id] });
       expect(result.content[0].text).toContain('A useful phone');
       expect(result.content[0].text).toContain('• used: 70000 - In Stock');
       expect(result.structuredContent).toMatchObject({
@@ -36,7 +36,7 @@ describe('buildMcpProductDetail', () => {
 
   it('keeps stocked variants when a combined product offer lookup fails', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const rpc = vi.fn(async (name: string) => name === 'get_product_offers'
+    const rpc = vi.fn(async (name: string) => name === 'get_storefront_offer_resolution'
       ? { data: null, error: { message: 'offers unavailable' } }
       : { data: [{ attributes: { color: 'Red' }, price_override: null, stock_quantity: 2, condition: 'new', images: [] }], error: null });
     try {
@@ -60,8 +60,8 @@ describe('buildMcpProductDetail', () => {
   it('lists only stocked offers as available while retaining sold-out offers in structured output', async () => {
     const supabase = { rpc: vi.fn(async () => ({
       data: [
-        { condition: 'new', price: 100000, stock_quantity: 2, grade: null, condition_notes: null },
-        { condition: 'used', price: 70000, stock_quantity: 0, grade: null, condition_notes: null },
+        { product_id: 'option-phone', offer_id: 'offer-new', condition: 'new', price_basis: 100000, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null },
+        { product_id: 'option-phone', offer_id: 'offer-used', condition: 'used', price_basis: 70000, allocatable_stock: 0, parent_eligible: true, grade: null, condition_notes: null },
       ], error: null,
     })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
@@ -82,7 +82,7 @@ describe('buildMcpProductDetail', () => {
 
   it('shows the stocked offer price when base inventory is unavailable', async () => {
     const supabase = { rpc: vi.fn(async () => ({ data: [
-      { condition: 'used', price: 80000, stock_quantity: 2, grade: null, condition_notes: null },
+      { product_id: 'option-phone', offer_id: 'offer-used', condition: 'used', price_basis: 80000, allocatable_stock: 2, parent_eligible: true, grade: null, condition_notes: null },
     ], error: null })) } as unknown as SupabaseClient;
     const result = await buildMcpProductDetail({
       product: { ...product, has_variants: false, has_condition_offers: true, compare_at_price: 120000 },

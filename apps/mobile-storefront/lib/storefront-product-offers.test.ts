@@ -34,14 +34,21 @@ describe('storefront-product-offers', () => {
   });
 
   it('attaches offers to matching rows and leaves the rest untouched', async () => {
-    mockRpc
-      .mockReturnValueOnce(
-        Promise.resolve({
-          data: [{ offer_id: 'offer-7', condition: 'used', price: 80000 }],
-          error: null,
-        })
-      )
-      .mockReturnValueOnce(Promise.resolve({ data: [], error: null }));
+    mockRpc.mockReturnValueOnce(
+      Promise.resolve({
+        data: [
+          {
+            product_id: 'product-1',
+            offer_id: 'offer-7',
+            condition: 'used',
+            price_basis: 80000,
+            allocatable_stock: null,
+            parent_eligible: true,
+          },
+        ],
+        error: null,
+      })
+    );
 
     const rows = [{ id: 'product-1' }, { id: 'product-2' }];
     await expect(hydrateProductRowsWithConditionOffers(rows)).resolves.toEqual([

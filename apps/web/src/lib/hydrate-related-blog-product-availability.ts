@@ -1,3 +1,7 @@
+import {
+  buildOfferResolutionMap,
+  type ResolvedOfferResolution,
+} from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { hasStockedOffer } from '@/lib/has-stocked-offer';
 import { hasStockedRelatedBlogVariant } from '@/lib/has-stocked-related-blog-variant';
@@ -106,38 +110,90 @@ export async function hydrateRelatedBlogProductAvailability(
     return [...products];
   }
 
-  const offerAvailabilityPromise: Promise<AvailabilityPair[]> = Promise.all(
-    offerCandidates.map(async (product) => {
-      try {
-        const { data, error } = await supabase.rpc('get_product_offers', {
-          p_product_id: product.id,
-        });
+  // Malformed ids cannot join the batched authority call; they resolve
+  // undefined individually, like a per-product lookup failure did.
+  const validOfferCandidates = offerCandidates.filter((product) =>
+    isValidUuid(product.id)
+  );
+  const unresolvableOfferIds = offerCandidates
+    .filter((product) => !isValidUuid(product.id))
+    .map((product) => product.id);
+  const offerAvailabilityPromise: Promise<AvailabilityPair[]> =
+    validOfferCandidates.length > 0
+      ? (async () => {
+          try {
+            const { data, error } = await supabase.rpc(
+              'get_storefront_offer_resolution',
+              {
+                p_merchant_id:
+                  merchantId && isValidUuid(merchantId) ? merchantId : null,
+                p_product_ids: validOfferCandidates.map(
+                  (product) => product.id
+                ),
+              }
+            );
 
-        if (error) {
-          availabilityErrors.push(error);
-          console.warn('Related blog product offer availability unavailable', {
-            productId: product.id,
-            error,
-          });
-          return [product.id, undefined] as const;
-        }
+            if (error) {
+              availabilityErrors.push(error);
+              console.warn(
+                'Related blog product offer availability unavailable',
+                {
+                  productIds: validOfferCandidates.map((product) => product.id),
+                  error,
+                }
+              );
+              return validOfferCandidates.map<AvailabilityPair>((product) => [
+                product.id,
+                undefined,
+              ]);
+            }
 
-        return [
-          product.id,
-          {
-            available: hasStockedOffer(data, product.condition),
-            offers: normalizeOfferRows(data, product.condition),
-          },
-        ] as const;
-      } catch (error) {
-        availabilityErrors.push(error);
-        console.warn('Related blog product offer availability unavailable', {
-          productId: product.id,
-          error,
-        });
-        return [product.id, undefined] as const;
-      }
-    })
+            const resolutions = buildOfferResolutionMap(data);
+            const byProduct = new Map<string, ResolvedOfferResolution[]>();
+            for (const resolution of resolutions.values()) {
+              const list = byProduct.get(resolution.productId) ?? [];
+              list.push(resolution);
+              byProduct.set(resolution.productId, list);
+            }
+            return validOfferCandidates.map((product) => {
+              // Availability prices from the live basis and counts the
+              // allocatable stock (policy-capped, parent-inherited):
+              // exactly what checkout enforces.
+              const rows = (byProduct.get(product.id) ?? []).map(
+                (resolution) => ({
+                  condition: resolution.condition,
+                  price: resolution.priceBasis,
+                  compare_at_price: resolution.compareAtPrice ?? null,
+                  status: 'active',
+                  stock_quantity: resolution.allocatableStock,
+                })
+              );
+              return [
+                product.id,
+                {
+                  available: hasStockedOffer(rows, product.condition),
+                  offers: normalizeOfferRows(rows, product.condition),
+                },
+              ] as const;
+            });
+          } catch (error) {
+            availabilityErrors.push(error);
+            console.warn(
+              'Related blog product offer availability unavailable',
+              {
+                productIds: validOfferCandidates.map((product) => product.id),
+                error,
+              }
+            );
+            return validOfferCandidates.map<AvailabilityPair>((product) => [
+              product.id,
+              undefined,
+            ]);
+          }
+        })()
+      : Promise.resolve([] as AvailabilityPair[]);
+  const unresolvableOfferPairs: AvailabilityPair[] = unresolvableOfferIds.map(
+    (id) => [id, undefined]
   );
   const variantAvailabilityPromise: Promise<AvailabilityPair[]> =
     variantCandidates.length > 0
@@ -196,7 +252,10 @@ export async function hydrateRelatedBlogProductAvailability(
     variantAvailabilityPromise,
   ]);
 
-  const offerAvailabilityById = new Map(offerAvailability);
+  const offerAvailabilityById = new Map([
+    ...offerAvailability,
+    ...unresolvableOfferPairs,
+  ]);
   const variantAvailabilityById = new Map(variantAvailability);
   let resolvedProducts = products.map((product) => {
     const offerResolution = offerAvailabilityById.get(product.id);

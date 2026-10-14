@@ -553,9 +553,18 @@ describe('agentic checkout order dispatch', () => {
     const productId = '22222222-2222-4222-8222-222222222222';
     const offerId = '33333333-3333-4333-8333-333333333333';
     const rpc = vi.fn((name: string) => {
-      if (name === 'get_product_offers') {
+      if (name === 'get_storefront_offer_resolution') {
         return Promise.resolve({
-          data: [{ offer_id: offerId, price: 400_000, condition: 'open_box' }],
+          data: [
+            {
+              product_id: productId,
+              offer_id: offerId,
+              price_basis: 400_000,
+              condition: 'open_box',
+              allocatable_stock: 3,
+              parent_eligible: true,
+            },
+          ],
           error: null,
         });
       }
@@ -586,8 +595,8 @@ describe('agentic checkout order dispatch', () => {
 
     expect(result).toMatchObject({ ok: true, status: 201 });
     expect(rpc).toHaveBeenCalledWith(
-      'get_product_offers',
-      expect.objectContaining({ p_product_id: productId })
+      'get_storefront_offer_resolution',
+      expect.objectContaining({ p_product_ids: [productId] })
     );
     expect(rpc).toHaveBeenCalledWith(
       'create_storefront_order',
@@ -606,7 +615,7 @@ describe('agentic checkout order dispatch', () => {
   it('rejects an offer alias that is not live for its product', async () => {
     const productId = '22222222-2222-4222-8222-222222222222';
     const rpc = vi.fn((name: string) => {
-      if (name === 'get_product_offers') {
+      if (name === 'get_storefront_offer_resolution') {
         return Promise.resolve({ data: [], error: null });
       }
       return Promise.resolve({ data: [], error: null });
@@ -641,7 +650,7 @@ describe('agentic checkout order dispatch', () => {
   it('maps offer lookup failures to a retryable 500', async () => {
     const productId = '22222222-2222-4222-8222-222222222222';
     const rpc = vi.fn((name: string) => {
-      if (name === 'get_product_offers') {
+      if (name === 'get_storefront_offer_resolution') {
         return Promise.reject(new Error('offers offline'));
       }
       return Promise.resolve({ data: [], error: null });
@@ -715,9 +724,18 @@ describe('agentic checkout order dispatch', () => {
       throw new Error('unexpected');
     };
     const rpc = vi.fn((name: string) => {
-      if (name === 'get_product_offers') {
+      if (name === 'get_storefront_offer_resolution') {
         return Promise.resolve({
-          data: [{ offer_id: offerId, price: 400_000, condition: 'used' }],
+          data: [
+            {
+              product_id: productId,
+              offer_id: offerId,
+              price_basis: 400_000,
+              condition: 'used',
+              allocatable_stock: 3,
+              parent_eligible: true,
+            },
+          ],
           error: null,
         });
       }

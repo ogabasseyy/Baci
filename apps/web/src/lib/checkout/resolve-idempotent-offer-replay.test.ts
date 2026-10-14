@@ -41,9 +41,12 @@ function clients({
 
 const liveOffers = [
   {
+    product_id: PRODUCT_ID,
     offer_id: OFFER_ID,
     condition: 'refurbished',
-    price: 400000,
+    price_basis: 400000,
+    allocatable_stock: 3,
+    parent_eligible: true,
   },
 ];
 
@@ -91,7 +94,7 @@ describe('resolveIdempotentOfferReplay', () => {
     expect(result.value.liveOfferPrices.size).toBe(0);
     expect(result.value.storedReplayTaxAmount).toBe(30000);
     expect(c.rpc).not.toHaveBeenCalledWith(
-      'get_product_offers',
+      'get_storefront_offer_resolution',
       expect.anything()
     );
     expect(c.rpc).toHaveBeenCalledWith(

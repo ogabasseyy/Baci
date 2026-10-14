@@ -3,6 +3,7 @@ import {
   resolveDefaultVariantSelection,
   resolveVariantDisplaySelection,
   resolveVariantSelection,
+  selectConditionOffer,
 } from '@baci/shared/lib';
 import { useState } from 'react';
 import type { Product, ProductVariant } from '@/lib/products';
@@ -99,39 +100,19 @@ export function useProductOfferSelection(product: Product) {
     !routeOfferId &&
     !routeVariantId &&
     (selectedCondition === routeCondition || !routeCondition);
-  const explicitOfferId =
-    selectedOfferId &&
-    product.offers?.some(
-      (offer: { id: string }) => String(offer.id) === selectedOfferId
-    )
-      ? selectedOfferId
-      : null;
+  // Offer identity resolves through the shared authority: the
+  // explicit pick wins, then the routed advertised id, then the first
+  // canonical condition match (excluding the parent family's own
+  // condition). Variant-owned conditions and base-row entries resolve
+  // no offer. Unknown ids fall through to the condition match.
   const selectedOffer = usesVariantConditions
     ? null
-    : (explicitOfferId &&
-        product.offers?.find(
-          (offer: { id: string; condition: string }) =>
-            String(offer.id) === explicitOfferId &&
-            normalizeCanonicalProductCondition(offer.condition) ===
-              selectedCondition
-        )) ||
-      (routeOfferId &&
-        product.offers?.find(
-          (offer: { id: string; condition: string }) =>
-            String(offer.id) === routeOfferId &&
-            normalizeCanonicalProductCondition(offer.condition) ===
-              selectedCondition
-        )) ||
-      (!suppressConditionOfferMatch &&
-      selectedCondition !==
-        (normalizeCanonicalProductCondition(product.condition) || 'new')
-        ? product.offers?.find(
-            (offer: { condition: string }) =>
-              normalizeCanonicalProductCondition(offer.condition) ===
-              selectedCondition
-          )
-        : null) ||
-      null;
+    : (selectConditionOffer(product.offers ?? null, {
+        selectedCondition,
+        preferredOfferIds: [selectedOfferId, routeOfferId],
+        suppressMatch: suppressConditionOfferMatch,
+        parentCondition: product.condition,
+      }) ?? null);
 
   const [prevRouteSeedKey, setPrevRouteSeedKey] = useState<string | null>(null);
   if (routeSeedKey !== prevRouteSeedKey) {

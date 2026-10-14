@@ -5,6 +5,7 @@ import {
 import {
   isProductNegotiable,
   MAX_AUTO_NEGOTIATION_DISCOUNT_RATE,
+  makeOfferLineKey,
 } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
@@ -253,7 +254,7 @@ export async function computeOrderNegotiationDiscount({
     // mismatch fails at the RPC's invalid_offer guard instead.
     const offerPrice =
       item.offer_id && item.product_id
-        ? offerPrices?.get(`${item.product_id}::${item.offer_id}`)
+        ? offerPrices?.get(makeOfferLineKey(item.product_id, item.offer_id))
         : undefined;
     lines.push({
       catalogUnitPrice: Number(

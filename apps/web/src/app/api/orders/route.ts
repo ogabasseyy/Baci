@@ -1,3 +1,4 @@
+import { makeOfferLineKey } from '@baci/shared/lib';
 import { cookies } from 'next/headers';
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { getQuizPhaseEnv, getQuizProductionApprovedEnv } from '@/env';
@@ -302,7 +303,7 @@ async function buildOrderQuoteValidationItems({
       // booking guard later rejects fulfillment as a quote mismatch.
       const liveOfferPrice =
         item.offer_id && item.product_id
-          ? offerPrices.get(`${item.product_id}::${item.offer_id}`)
+          ? offerPrices.get(makeOfferLineKey(item.product_id, item.offer_id))
           : undefined;
       return {
         name: product?.name ?? null,

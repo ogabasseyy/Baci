@@ -7,7 +7,6 @@ import {
 import { prepareAgenticOfferEconomics } from '@/lib/agentic/prepare-agentic-offer-economics';
 import { sendAgenticWebhook } from '@/lib/agentic/webhooks';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
-import type { OrderOfferQueryResult } from '@/lib/checkout/verify-order-offer-lines';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { orderCreateSchema } from '@/schemas/orders';
@@ -112,11 +111,16 @@ export async function createAgenticCheckoutOrder(
   // the order would price and reserve the parent instead of the
   // selected offer.
   const preparedOffers = await prepareAgenticOfferEconomics(
-    (productId) =>
-      supabase.rpc('get_product_offers', {
-        p_product_id: productId,
-      }) as unknown as Promise<OrderOfferQueryResult>,
-    orderItemsPayload
+    (args) =>
+      supabase.rpc(
+        'get_storefront_offer_resolution',
+        args
+      ) as unknown as Promise<{
+        data: unknown;
+        error: { message: string } | null;
+      }>,
+    orderItemsPayload,
+    body.merchant_id
   );
   if (!preparedOffers.ok) {
     return preparedOffers.result;

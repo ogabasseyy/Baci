@@ -7,6 +7,15 @@
 # shellcheck source=semgrep-sarif-test-lib.sh disable=SC2154
 . "$(dirname "$0")/semgrep-sarif-test-lib.sh"
 
+read -r MUSE_PINNED_VERSION MUSE_PINNED_SHA_X86 < <(python3 - "$ROOT" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1] + "/.github/scripts")
+from semgrep_sarif_pins import MUSE_PINNED_VERSION, MUSE_PINNED_SHA_X86
+print(MUSE_PINNED_VERSION, MUSE_PINNED_SHA_X86)
+PY
+)
+MUSE_BAD_SHA_X86="$(python3 -c 'import sys; s=sys.argv[1]; print(s[:-1] + ("0" if s[-1] != "0" else "1"))' "$MUSE_PINNED_SHA_X86")"
+
 # --- happy paths, span, shape, empty scans ---
 t happy 0 "" happy.sarif "none" 1
 t span-end 0 "" span-end.sarif "none" 1
@@ -108,14 +117,14 @@ t combined-flags-fp 0 "" happy.sarif "$S${FS}bash \"\${SCRIPT_DIR}/guard.sh\"${F
 
 # --- agent runner + installer guards ---
 t runner-missing 1 "agent-runner-missing" happy.sarif "rm:$R"
-t runner-count 1 "agent-invocation-count" happy.sarif "$R${FS}muse_rc=\$?${FS}a${FS}muse --version"
+t runner-count 1 "agent-invocation-count" happy.sarif "$R${FS}run_rc=\$?${FS}a${FS}muse --version"
 t runner-shell 1 "agent-shell-boundary" happy.sarif "$R${FS}2:--disable-shell${FS}r${FS}--disable-shell${FS}--disable-shelx"
 t runner-suffix 1 "agent-shell-boundary" happy.sarif "$R${FS}2:--disable-shell${FS}d${RS}$R${FS}2:--disable-write${FS}d${RS}$R${FS}muse-stderr.log\"${FS}r${FS}muse-stderr.log\"${FS}muse-stderr.log\"; echo --disable-shell --disable-write"
 t token-alias 1 "agent-token-expression" happy.sarif "$S${FS}META_API_KEY: \${{ secrets.META_API_KEY }}${FS}a${FS}          MUSE_GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}"
 t token-jobenv 1 "agent-token-expression" happy.sarif "$S${FS}MUSE_EFFORT_RESOLVED:${FS}a${FS}      SHARED_TOKEN: \${{ secrets.GITHUB_TOKEN }}"
 t installer-missing 1 "muse-installer-missing" happy.sarif "rm:$I"
-t installer-version 1 "muse-installer-version" happy.sarif "$I${FS}MUSE_VERSION=\"${FS}r${FS}1.4.1-R4503.1${FS}9.9.9"
-t installer-checksum 1 "muse-installer-checksum" happy.sarif "$I${FS}SHA_X86_LINUX=\"${FS}r${FS}8b53c9cdbc025bc2d9068bc7016e2c1e51c3a0c608821da17528ad23be900a12${FS}8b53c9cdbc025bc2d9068bc7016e2c1e51c3a0c608821da17528ad23be900a13"
+t installer-version 1 "muse-installer-version" happy.sarif "$I${FS}MUSE_VERSION=\"${FS}r${FS}${MUSE_PINNED_VERSION}${FS}9.9.9"
+t installer-checksum 1 "muse-installer-checksum" happy.sarif "$I${FS}SHA_X86_LINUX=\"${FS}r${FS}${MUSE_PINNED_SHA_X86}${FS}${MUSE_BAD_SHA_X86}"
 t installer-noverify 1 "muse-installer-no-verify" happy.sarif "$I${FS}sha256sum${FS}d"
 t installer-url 1 "muse-installer-url" happy.sarif "$I${FS}version=\${MUSE_VERSION}${FS}r${FS}version=\${MUSE_VERSION}${FS}version=latest"
 

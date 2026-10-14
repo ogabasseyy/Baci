@@ -94,6 +94,35 @@ if (cd "${linkdir}" && head_readable "${linkdir}/real/AGENTS.md"); then got_hr="
 assert_eq "readable-absolute" "no" "${got_hr}"
 rm -rf "${linkdir}"
 
+# --- capture-jsonl.jq ---
+capture_fixture="$(mktemp)"
+cat > "${capture_fixture}" <<'JSONL'
+{"payload_type":"run.terminal.completed","payload":{"text":"review result"}}
+JSONL
+captured="$(jq -cS -n -f "${SCRIPT_DIR}/capture-jsonl.jq" < "${capture_fixture}")"
+assert_eq "capture-answer" '{"text":"review result"}' "${captured}"
+cat > "${capture_fixture}" <<'EXPORT'
+{"events":[
+  {"kind":"record","envelope":{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}}},
+  {"kind":"record","envelope":{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-spark-1.3"}}},
+  {"kind":"record","envelope":{"payload_type":"session.tokenUsage","payload":{"modelId":"bad model\n::error::secret"}}},
+  {"kind":"record","envelope":{"payload_type":"model_completed","payload":{"modelId":"not-the-session-usage-source"}}},
+  {"payload_type":"session.tokenUsage","payload":{"modelId":"must-ignore-top-level"}}
+]}
+EXPORT
+captured_models="$(jq -r -f "${SCRIPT_DIR}/capture-model-ids.jq" "${capture_fixture}" | paste -sd ',' -)"
+assert_eq "capture-model-ids-from-export" "muse-spark-1.3" "${captured_models}"
+printf '%s\n' '{"events":[]}' > "${capture_fixture}"
+if jq -e -f "${SCRIPT_DIR}/capture-model-ids.jq" "${capture_fixture}" >/dev/null 2>&1; then capture_missing_model="no"; else capture_missing_model="yes"; fi
+assert_eq "capture-model-ids-empty" "yes" "${capture_missing_model}"
+printf '%s\n' '{"payload_type":"session.tokenUsage","payload":{"modelId":"muse-wonder-1.0"}}' > "${capture_fixture}"
+if jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" < "${capture_fixture}" >/dev/null 2>&1; then capture_missing_answer="no"; else capture_missing_answer="yes"; fi
+assert_eq "capture-requires-answer" "yes" "${capture_missing_answer}"
+printf '%s\n' 'not json' > "${capture_fixture}"
+if jq -n -f "${SCRIPT_DIR}/capture-jsonl.jq" < "${capture_fixture}" >/dev/null 2>&1; then capture_invalid_json="no"; else capture_invalid_json="yes"; fi
+assert_eq "capture-rejects-invalid-jsonl" "yes" "${capture_invalid_json}"
+rm -f "${capture_fixture}"
+
 # --- sweep_workspace_symlinks ---
 sweepdir="$(mktemp -d)"
 mkdir -p "${sweepdir}/.git" "${sweepdir}/trusted-scripts" "${sweepdir}/sub"

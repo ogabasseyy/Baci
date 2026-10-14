@@ -1,0 +1,224 @@
+name: Muse CLI pin update
+
+on:
+  schedule:
+    - cron: '17 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialize scheduled and manual runs so two overlapping executions cannot
+# both pass the existing-PR check and open duplicate pin-update PRs.
+concurrency:
+  group: muse-code-pin-update
+  cancel-in-progress: false
+
+jobs:
+  # Resolve the pin and execute the unreviewed binary here, in a read-only
+  # job with no write credentials and no credential-bearing steps after it.
+  # Only the verified pin files cross into the write job, as an artifact.
+  smoke:
+    # Read-only: safe to exercise from any branch via manual dispatch so
+    # the pin resolution and artifact layout can be verified before the
+    # workflow ever lands on main. Only update-pin stays main-gated.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.pin.outputs.version }}
+      install_sha: ${{ steps.stage.outputs.install_sha }}
+      install_content_sha: ${{ steps.stage.outputs.install_content_sha }}
+      pins_sha: ${{ steps.stage.outputs.pins_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve latest public stable pin
+        id: pin
+        run: python3 .github/scripts/muse-pin-update.py
+
+      # Stage, hash, and upload the resolved pin files BEFORE the
+      # unreviewed binary is executed below, so it cannot tamper with
+      # the bytes that cross into the write job.
+      - name: Stage the resolved pin files
+        id: stage
+        if: steps.pin.outcome == 'success'
+        run: |
+          set -euo pipefail
+          mkdir -p pin-files/.github/scripts/muse-review
+          cp .github/scripts/muse-review/install.sh pin-files/.github/scripts/muse-review/install.sh
+          cp .github/scripts/semgrep_sarif_pins.py pin-files/.github/scripts/semgrep_sarif_pins.py
+          {
+            echo "install_sha=$(sha256sum pin-files/.github/scripts/muse-review/install.sh | awk '{print $1}')"
+            echo "install_content_sha=$(python3 .github/scripts/muse-pin-update.py --normalized-installer-sha pin-files/.github/scripts/muse-review/install.sh)"
+            echo "pins_sha=$(sha256sum pin-files/.github/scripts/semgrep_sarif_pins.py | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload the resolved pin files
+        if: steps.pin.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: muse-pin-files
+          path: pin-files
+          # The staged files live under pin-files/.github, a hidden
+          # directory that upload-artifact skips by default.
+          include-hidden-files: true
+          if-no-files-found: error
+
+      - name: Smoke-test the pinned installer against the real binary
+        if: steps.pin.outcome == 'success'
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Muse pin unchanged; skipping installer smoke test."
+            exit 0
+          fi
+          # The offline suites only prove install.sh and the SARIF pins
+          # agree with each other; both are rewritten from the same
+          # manifest. Run the installer so a wrong manifest checksum
+          # fails closed here instead of at Muse review runtime.
+          # Capture the expected ARM64 values BEFORE install.sh runs
+          # the unreviewed binary (muse --version): afterwards no
+          # workspace file, staged copies included, can be trusted.
+          version="$(grep -oP '^MUSE_VERSION="\K[^"]+' pin-files/.github/scripts/muse-review/install.sh)"
+          want_arm="$(grep -oP '^SHA_AARCH64_LINUX="\K[^"]+' pin-files/.github/scripts/muse-review/install.sh)"
+          export HOME="${RUNNER_TEMP}/muse-smoke-home"
+          mkdir -p "$HOME"
+          export GITHUB_PATH="${RUNNER_TEMP}/muse-smoke-path"
+          bash .github/scripts/muse-review/install.sh
+          # install.sh only verifies the runner's own architecture;
+          # verify the ARM64 checksum against the real artifact too.
+          arm_bin="$(mktemp)"
+          curl --disable --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            --connect-timeout 15 --max-time 600 -fsSL -o "$arm_bin" \
+            "https://lookaside.facebook.com/lookaside/muse/download/?channel=muse&version=${version}&file=muse-aarch64-linux"
+          got_arm="$(sha256sum "$arm_bin" | awk '{print $1}')"
+          rm -f "$arm_bin"
+          if [[ "$got_arm" != "$want_arm" ]]; then
+            echo "::error::Muse ARM64 checksum mismatch for ${version}; refusing to open a pin update." >&2
+            exit 1
+          fi
+
+  update-pin:
+    needs: smoke
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download the smoke-verified pin files
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: muse-pin-files
+
+      - name: Verify the downloaded pin files landed byte-identical
+        env:
+          INSTALL_SHA: ${{ needs.smoke.outputs.install_sha }}
+          INSTALL_CONTENT_SHA: ${{ needs.smoke.outputs.install_content_sha }}
+          PINS_SHA: ${{ needs.smoke.outputs.pins_sha }}
+        run: |
+          set -euo pipefail
+          test "$(sha256sum .github/scripts/muse-review/install.sh | awk '{print $1}')" = "$INSTALL_SHA"
+          test "$(sha256sum .github/scripts/semgrep_sarif_pins.py | awk '{print $1}')" = "$PINS_SHA"
+
+      - name: Run Muse review and SARIF regression suites
+        run: |
+          set -euo pipefail
+          python3 -m py_compile .github/scripts/muse-pin-update.py .github/scripts/muse-pin-update.test.py
+          python3 .github/scripts/muse-pin-update.test.py
+          bash .github/scripts/muse-pin-update-selftests-complete.test.sh
+          python3 -m py_compile .github/scripts/semgrep-sarif-filter.py .github/scripts/semgrep_sarif_*.py .github/scripts/muse-pin-update.py
+          bash .github/scripts/muse-review/test.sh
+          bash .github/scripts/semgrep-sarif-filter.test.sh
+          for shard in 1 2 3 4; do
+            bash .github/scripts/semgrep-sarif-hardening-shard.test.sh "$shard"
+          done
+          for script in .github/scripts/muse-review/*.sh; do bash -n "$script"; done
+
+      - name: Create pin update pull request
+        env:
+          # Prefer a dedicated automation token when configured: pushes and
+          # PRs created with GITHUB_TOKEN do not trigger pull_request
+          # workflows, so generated PRs would never get required checks.
+          GH_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN || github.token }}
+          HAS_PIN_TOKEN: ${{ secrets.BACI_PIN_UPDATE_TOKEN != '' }}
+          VERSION: ${{ needs.smoke.outputs.version }}
+          INSTALL_SHA: ${{ needs.smoke.outputs.install_sha }}
+          INSTALL_CONTENT_SHA: ${{ needs.smoke.outputs.install_content_sha }}
+          PINS_SHA: ${{ needs.smoke.outputs.pins_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "Muse pin already matches stable $VERSION."
+            exit 0
+          fi
+          existing="$(gh pr list --state open --base main --limit 200 --json headRefName,url,isCrossRepository \
+            --jq '.[] | select(.isCrossRepository == false) | select(.headRefName | startswith("automation/muse-code-pin-'"$VERSION"'-")) | .headRefName' | head -n1)"
+          if [[ -n "$existing" ]]; then
+            echo "An open Muse pin update already exists on $existing; verifying its pins and checks."
+            # Never bless an existing branch whose pins drifted from the
+            # ones just resolved and smoke-verified.
+            gh api "repos/${REPO}/contents/.github/scripts/muse-review/install.sh?ref=${existing}" \
+              --jq .content | base64 -d > "${RUNNER_TEMP}/existing-install.sh"
+            gh api "repos/${REPO}/contents/.github/scripts/semgrep_sarif_pins.py?ref=${existing}" \
+              --jq .content | base64 -d > "${RUNNER_TEMP}/existing-pins.py"
+            # Full-file hash comparison: the whole trust files must be
+            # byte-identical to the smoke-verified copies, not just
+            # their version/checksum lines.
+            existing_install_content_sha="$(python3 .github/scripts/muse-pin-update.py --normalized-installer-sha "${RUNNER_TEMP}/existing-install.sh")"
+            if [ "$existing_install_content_sha" != "$INSTALL_CONTENT_SHA" ] \
+              || [ "$(sha256sum "${RUNNER_TEMP}/existing-pins.py" | awk '{print $1}')" != "$PINS_SHA" ]; then
+              echo "::error::Existing pin-update branch $existing carries different pin files than the verified stable $VERSION; refusing to reuse it." >&2
+              exit 1
+            fi
+            # Re-dispatch only checks that are actually missing, so a
+            # healthy open PR does not burn CI capacity every week.
+            head_sha="$(gh pr view "$existing" --json headRefOid --jq .headRefOid)"
+            # Check each latest run's conclusion so canceled, failed, or
+            # skipped gates are dispatched again instead of reused.
+            check_runs="$(gh api "repos/${REPO}/commits/${head_sha}/check-runs?per_page=100" --jq '[.check_runs[] | [.name, (.started_at // ""), (.created_at // ""), (.completed_at // ""), .id, (.conclusion // "")] | @tsv] | join("\n")')"
+            if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh 'Quality Gate'; then
+              echo "Quality Gate is missing or unsuccessful on $existing; its pull_request run must be approved or rerun by a maintainer." >&2
+            fi
+            # Security is advisory here: the trusted-tree audit intentionally
+            # fails on these pin changes, so any completed result means this
+            # exact head was already scanned and must not be redispatched.
+            if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh --terminal 'Semgrep SAST'; then
+              gh workflow run security.yml --ref "$existing" -f force_trusted_change=true
+            fi
+            if ! printf '%s\n' "$check_runs" | bash .github/scripts/muse-pin-update-selftests-complete.sh; then
+              gh workflow run muse-review-selftest.yml --ref "$existing"
+            fi
+            exit 0
+          fi
+          branch="automation/muse-code-pin-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add .github/scripts/muse-review/install.sh .github/scripts/semgrep_sarif_pins.py
+          git commit -m "chore: update Muse review CLI pin to $VERSION"
+          git -c http.extraheader="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)" push origin "HEAD:refs/heads/$branch"
+          if ! gh pr view "$branch" >/dev/null 2>&1; then
+            gh pr create --base main --head "$branch" \
+              --title "chore: update Muse review CLI pin to $VERSION" \
+              --body "Automated weekly update from Meta's public Muse stable channel. The updater verified the channel manifest, HTTPS host, version, and Linux SHA256 checksums, then passed the Muse review and SARIF regression suites before opening this PR. Please review the binary pin and trust-anchor change before merging."
+            if [ "$HAS_PIN_TOKEN" = "true" ]; then
+              echo "Pin update PR created with the dedicated token; pull_request checks run with forced quality gates."
+            else
+              echo "Pin update PR created with GITHUB_TOKEN. GitHub may require a maintainer to approve its pull_request workflows before checks run." >&2
+              gh workflow run security.yml --ref "$branch" -f force_trusted_change=true
+              gh workflow run muse-review-selftest.yml --ref "$branch"
+            fi
+          fi

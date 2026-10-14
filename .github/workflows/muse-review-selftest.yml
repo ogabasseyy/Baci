@@ -13,6 +13,8 @@ on:
     branches: [main]
     paths:
       - '.github/scripts/muse-review/**'
+      - '.github/scripts/muse-pin-update*'
+      - '.github/workflows/muse-code-pin-update.yml'
       - '.github/scripts/semgrep-sarif-filter*'
       - '.github/scripts/semgrep_sarif_*.py'
       - '.github/scripts/semgrep-sarif-test-lib.sh'
@@ -26,6 +28,8 @@ on:
   pull_request:
     paths:
       - '.github/scripts/muse-review/**'
+      - '.github/scripts/muse-pin-update*'
+      - '.github/workflows/muse-code-pin-update.yml'
       - '.github/scripts/semgrep-sarif-filter*'
       - '.github/scripts/semgrep_sarif_*.py'
       - '.github/scripts/semgrep-sarif-test-lib.sh'
@@ -39,6 +43,9 @@ on:
   schedule:
     # Weekly bump signal so the pinned CLI cannot go silently stale.
     - cron: '17 9 * * 1'
+  # Lets the pin-update workflow dispatch this suite for generated PRs,
+  # whose pull_request workflows are suppressed under GITHUB_TOKEN.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -75,6 +82,9 @@ jobs:
               bash .github/scripts/semgrep-sarif-hardening-shard.test.sh "${SHARD#hard-}"
               ;;
             static)
+              python3 -m py_compile .github/scripts/muse-pin-update.py .github/scripts/muse-pin-update.test.py
+              python3 .github/scripts/muse-pin-update.test.py
+              bash .github/scripts/muse-pin-update-selftests-complete.test.sh
               for f in .github/scripts/muse-review/*.sh; do
                 bash -n "${f}"
               done
@@ -104,7 +114,7 @@ jobs:
                 exit 1
               fi
               tar -xzf "${tmpdir}/actionlint.tar.gz" -C "${tmpdir}"
-              "${tmpdir}/actionlint" .github/workflows/muse-code-review.yml .github/workflows/muse-review-selftest.yml .github/workflows/security.yml .github/workflows/dependency-review.yml
+              "${tmpdir}/actionlint" .github/workflows/muse-code-review.yml .github/workflows/muse-review-selftest.yml .github/workflows/muse-code-pin-update.yml .github/workflows/security.yml .github/workflows/dependency-review.yml
               ;;
           esac
 

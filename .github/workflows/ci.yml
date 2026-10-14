@@ -10,6 +10,11 @@ on:
   # that never start. See the `changes` job for merge_group handling.
   merge_group:
   workflow_dispatch:
+    inputs:
+      force_quality_gates:
+        description: 'Run lint, typecheck, and test gates even when no web paths changed (used by automation branches)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -47,6 +52,8 @@ jobs:
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test Sentry Storefront Release Provenance
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
+      - name: Test CI change-scope resolver
+        run: bash .github/scripts/resolve-ci-change-scope.test.sh
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -65,31 +72,11 @@ jobs:
           FILTER_QUIZ_DB: ${{ steps.filter.outputs.quiz_db }}
           FILTER_CWV_RUNNER: ${{ steps.filter.outputs.cwv_runner }}
           FILTER_DEPLOY_SCRIPTS: ${{ steps.filter.outputs.deploy_scripts }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT_NAME" = "merge_group" ]; then
-            mobile_admin=true
-            mobile_storefront=true
-            web=true
-            quiz_db=true
-            cwv_runner=true
-            deploy_scripts=true
-          else
-            mobile_admin="${FILTER_MOBILE_ADMIN:-false}"
-            mobile_storefront="${FILTER_MOBILE_STOREFRONT:-false}"
-            web="${FILTER_WEB:-false}"
-            quiz_db="${FILTER_QUIZ_DB:-false}"
-            cwv_runner="${FILTER_CWV_RUNNER:-false}"
-            deploy_scripts="${FILTER_DEPLOY_SCRIPTS:-false}"
-          fi
-          {
-            echo "mobile_admin=$mobile_admin"
-            echo "mobile_storefront=$mobile_storefront"
-            echo "web=$web"
-            echo "quiz_db=$quiz_db"
-            echo "cwv_runner=$cwv_runner"
-            echo "deploy_scripts=$deploy_scripts"
-          } >> "$GITHUB_OUTPUT"
+          # Generated Muse pin PRs must run the real gates in their
+          # pull_request context; workflow_dispatch checks do not satisfy
+          # required PR checks.
+          FORCE_QUALITY_GATES: ${{ inputs.force_quality_gates || startsWith(github.head_ref, 'automation/muse-code-pin-') }}
+        run: bash .github/scripts/resolve-ci-change-scope.sh
       - name: Resolve test plan
         id: test-plan
         env:

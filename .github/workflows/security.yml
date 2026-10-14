@@ -12,6 +12,11 @@ on:
     # Run daily at 3:00 AM UTC
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      force_trusted_change:
+        description: 'Fail the SARIF filter as if trusted files changed (for automation that cannot trigger pull_request checks)'
+        type: boolean
+        default: false
 
 concurrency:
   group: security-${{ github.ref }}
@@ -69,6 +74,8 @@ jobs:
               # that tree, so a runner-script change gets semantic SAST
               # at most ~24h after merge. Keep that schedule enabled.
               - '.github/scripts/muse-review/**'
+              - '.github/scripts/muse-pin-update*'
+              - '.github/scripts/resolve-ci-change-scope*'
               # The drift auditor itself (both spellings: the filter
               # is hyphenated, its modules underscored): auditor
               # changes must run the job that executes the audit.
@@ -87,11 +94,14 @@ jobs:
             # semgrep_relevant above — otherwise the job that reads
             # the signal is skipped and the red X never appears.
             trusted_changed:
+              - '.github/scripts/resolve-ci-change-scope*'
               - '.github/scripts/muse-review/**'
+              - '.github/scripts/muse-pin-update*'
               - '.github/scripts/semgrep-sarif*'
               - '.github/scripts/semgrep_sarif_*'
               - '.github/workflows/security.yml'
               - '.github/workflows/muse-code-review.yml'
+              - '.github/workflows/muse-code-pin-update.yml'
               - '.github/workflows/muse-review-selftest.yml'
 
       - name: Resolve Semgrep scope output
@@ -103,8 +113,15 @@ jobs:
           else
             echo "semgrep_relevant=true" >> "$GITHUB_OUTPUT"
             # Push/schedule/dispatch carry no PR diff; content
-            # rules still apply, only the change signal rests.
-            echo "trusted_changed=false" >> "$GITHUB_OUTPUT"
+            # rules still apply, only the change signal rests —
+            # unless a dispatch explicitly asserts a trusted change
+            # (the Muse pin updater, whose PR checks are dispatched
+            # because GITHUB_TOKEN cannot trigger pull_request runs).
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_trusted_change }}" = "true" ]; then
+              echo "trusted_changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "trusted_changed=false" >> "$GITHUB_OUTPUT"
+            fi
           fi
 
   semgrep:

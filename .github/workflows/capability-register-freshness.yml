@@ -26,7 +26,7 @@ jobs:
       - name: Probe register evidence window
         id: window
         run: |
-          stale=$(python3 -c "
+          status=$(python3 -c "
           import datetime, json
           try:
               data = json.load(open('docs/product/baci-capabilities.json'))
@@ -34,18 +34,23 @@ jobs:
               if reviewed.tzinfo is None:
                   raise ValueError('naive reviewed_at')
               age = datetime.datetime.now(datetime.timezone.utc) - reviewed
-              fresh = datetime.timedelta() <= age <= datetime.timedelta(days=14)
+              if age < datetime.timedelta():
+                  status = 'broken'
+              elif age > datetime.timedelta(days=14):
+                  status = 'stale'
+              else:
+                  status = 'fresh'
           except Exception:
-              fresh = False
-          print('true' if not fresh else 'false')
+              status = 'broken'
+          print(status)
           ")
-          echo "stale=$stale" >> "$GITHUB_OUTPUT"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
       - name: Assert capability register is inside its evidence window
         env:
           BACI_REGISTER_REQUIRE_FRESH: '1'
         run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_*capabilit*.py'
       - name: Open an issue when the register goes stale
-        if: failure() && steps.window.outputs.stale == 'true' && github.event_name == 'schedule'
+        if: failure() && steps.window.outputs.status == 'stale' && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -55,8 +60,19 @@ jobs:
           if [ "$existing" = "0" ]; then
             gh issue create --title "$title" --body "The scheduled capability-register freshness check failed: docs/product/baci-capabilities.json is outside its 14-day evidence window (or no longer binds to its cited evidence), so the VPS writer lane is in its fail-closed Register-unavailable fallback. Re-review the register claims against the cited sources, refresh reviewed_at/source_revision/evidence_digest/claims_digest per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
           fi
+      - name: Open an issue when the register is invalid
+        if: failure() && steps.window.outputs.status == 'broken' && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          title="Capability register missing or invalid (not ordinary staleness)"
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --title "$title" --body "The scheduled capability-register check failed and docs/product/baci-capabilities.json is missing, malformed, or carries an invalid reviewed_at (naive or future-dated): do not just refresh reviewed_at/digests, which would re-bind unreviewed claims. Restore and validate the file, re-review the claims against the cited sources per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
+          fi
       - name: Open an issue when the binding suite fails for another reason
-        if: failure() && steps.window.outputs.stale != 'true' && github.event_name == 'schedule'
+        if: failure() && steps.window.outputs.status == 'fresh' && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

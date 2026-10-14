@@ -106,15 +106,19 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # entirely — zero cost, zero throw, zero env mutation. Empty
 # leftover dirs pass silently and unrelated strays (.DS_Store,
 # renamed leftovers) warn. RUNTIME boots split by
-# finding: fillers/ NEVER quarantines — any finding there (hash
-# drift, staged shape, confinement break, stray merchant file)
-# refuses WITHOUT moving, because the directory holds COMMITTED
-# fixtures and quarantining the entry would delete tracked files
-# from the deployment and break later lab boots. A same-tree build
-# already passed these bytes, so a finding means post-build tamper
-# (the lab never stages into fillers/): restore
+# finding: fillers/ NEVER quarantines — findings there refuse WITHOUT
+# moving (staged shape, confinement break, stray merchant file),
+# because the directory holds COMMITTED fixtures and quarantining
+# the entry would delete tracked files from the deployment and
+# break later lab boots. Hash drift specifically is intent-gated:
+# it refuses with pilot intent or lab on (a same-tree build already
+# passed these bytes and the lab never stages into fillers/, so the
+# finding means post-build tamper — restore
 # public/__pilot/fillers from version control or re-pin the
-# fixture, then restart. Staged-content and confinement findings
+# fixture, then restart), but only warns on a box that never opted
+# into the pilot (deploy-pipeline recompression must not brick an
+# unrelated production boot over synthetic fixtures). Staged-content
+# and confinement findings
 # elsewhere move the offending entry to __pilot-quarantine/ beside
 # public/ (timestamped, same filesystem — symlinked entries move
 # as links, un-traversed) and continue with the tree clean, so a

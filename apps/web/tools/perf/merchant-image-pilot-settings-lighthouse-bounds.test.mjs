@@ -171,6 +171,19 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
     });
     expect(missingUa.error).not.toBe(null);
     expect(missingUa.stdout).toMatch(/lighthouse\.browser/);
+    // chrome-headless-shell nests the full-Chrome token inside its
+    // own (`HeadlessChrome/154.` contains `Chrome/154.`): without an
+    // explicit shell rejection, shell evidence would qualify as the
+    // matched full-Chrome run the measurement contract requires.
+    const shellUA = HOST_UA.replace('Chrome/154.', 'HeadlessChrome/154.');
+    const shell = await runWithReport({
+      harPages,
+      pngBytes,
+      report: lhReport(urls, shellUA),
+    });
+    expect(shell.error).not.toBe(null);
+    expect(shell.stdout).toMatch(/lighthouse\.browser/);
+    expect(shell.stdout).toMatch(/chrome-headless-shell/);
   });
 
   it('rejects a structurally valid screenshot whose pixels do not decode', async () => {

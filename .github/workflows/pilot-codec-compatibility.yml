@@ -121,10 +121,28 @@ jobs:
           # which recomputes the closure and fails on any reachable
           # file the pattern misses — add the branch, never shrink
           # the walker.
-          if ! names=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[].filename' 2>/dev/null); then
+          # Transient GitHub API failures must not turn unrelated PRs
+          # heavy: retry before the fail-closed fallback runs the
+          # suites. Only a sustained outage goes heavy. (A
+          # workflow-level paths pre-filter cannot do this job: it
+          # would reject the labeled opt-in event itself. The per-PR
+          # detection job is the documented price of the opt-in.)
+          api_with_retry() {
+            attempt=1
+            while [ "$attempt" -le 3 ]; do
+              if result=$(gh api "$@" 2>/dev/null); then
+                printf '%s\n' "$result"
+                return 0
+              fi
+              attempt=$((attempt + 1))
+              sleep 5
+            done
+            return 1
+          }
+          if ! names=$(api_with_retry "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[].filename'); then
             echo 'pilot=true' >> "$GITHUB_OUTPUT"
             echo 'transformer=true' >> "$GITHUB_OUTPUT"
-          elif ! changed=$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" -q '.changed_files' 2>/dev/null); then
+          elif ! changed=$(api_with_retry "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" -q '.changed_files'); then
             echo 'pilot=true' >> "$GITHUB_OUTPUT"
             echo 'transformer=true' >> "$GITHUB_OUTPUT"
           else

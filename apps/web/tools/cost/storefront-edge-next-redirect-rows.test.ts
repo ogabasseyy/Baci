@@ -1,3 +1,4 @@
+import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 import { describe, expect, it } from 'vitest';
 import nextConfig from '../../next.config';
 import { STOREFRONT_EDGE_NEXT_REDIRECT_ROWS } from './storefront-edge-next-redirect-rows';
@@ -48,7 +49,9 @@ describe('STOREFRONT_EDGE_NEXT_REDIRECT_ROWS', () => {
 
   it('matches every redirect declared by the active Next configuration', async () => {
     // Arrange
-    const redirects = await nextConfig.redirects?.();
+    // The config export is a function of Next's phase: resolve the
+    // shipped (production-build) config before reading redirects.
+    const redirects = await nextConfig(PHASE_PRODUCTION_BUILD).redirects?.();
     if (!redirects)
       throw new Error('active Next config does not declare redirects');
 

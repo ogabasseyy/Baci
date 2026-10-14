@@ -7,44 +7,29 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  PHASE_DEVELOPMENT_SERVER,
+  PHASE_EXPORT,
+  PHASE_INFO,
+  PHASE_PRODUCTION_BUILD,
+  PHASE_PRODUCTION_SERVER,
+  PHASE_TEST,
+} from 'next/constants';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyPilotPublicGate, classifyGatePhase } from './pilot-next-gate';
 
-const NEXT_BIN = '/repo/node_modules/next/dist/bin/next';
-const BUILD_ARGV = ['node', NEXT_BIN, 'build', '/repo/apps/web'];
-const START_ARGV = ['node', NEXT_BIN, 'start'];
-const DEV_ARGV = ['node', NEXT_BIN, 'dev'];
-const TOOLING_ARGV = ['node', '/repo/node_modules/vitest/vitest.mjs', 'run'];
-
 describe('classifyGatePhase', () => {
   it.each([
-    ['build', BUILD_ARGV, 'build'],
-    ['start', START_ARGV, 'start'],
-    ['dev', DEV_ARGV, 'dev'],
-    ['dev with flags', ['node', NEXT_BIN, 'dev', '--turbo'], 'dev'],
-    [
-      'pnpm shim path',
-      ['node', '/repo/node_modules/.pnpm/next@16/bin/next', 'build'],
-      'build',
-    ],
-    ['windows backslashes', ['node', 'C:\\repo\\bin\\next', 'start'], 'start'],
-    ['windows exe', ['node', 'C:\\repo\\bin\\next.exe', 'dev'], 'dev'],
-    ['bare next without subcommand', ['node', NEXT_BIN], 'other'],
-    [
-      'experimental subcommand',
-      ['node', NEXT_BIN, 'experimental-test'],
-      'other',
-    ],
-    ['next-server standalone entry', ['node', '/app/server.js'], 'other'],
-    ['vitest worker', TOOLING_ARGV, 'other'],
-    [
-      'tsx CLI',
-      ['node', '/repo/node_modules/tsx/dist/cli.mjs', 'x.ts'],
-      'other',
-    ],
-    ['empty argv', [], 'other'],
-  ])('%s classifies as %s', (_name, argv, phase) => {
-    expect(classifyGatePhase(argv)).toBe(phase);
+    ['production build', PHASE_PRODUCTION_BUILD, 'build'],
+    ['production server', PHASE_PRODUCTION_SERVER, 'start'],
+    ['development server', PHASE_DEVELOPMENT_SERVER, 'dev'],
+    ['test phase', PHASE_TEST, 'other'],
+    ['info phase', PHASE_INFO, 'other'],
+    ['export phase', PHASE_EXPORT, 'other'],
+    ['unknown phase', 'phase-something-else', 'other'],
+    ['missing phase', undefined, 'other'],
+  ])('%s classifies as %s', (_name, phase, gatePhase) => {
+    expect(classifyGatePhase(phase)).toBe(gatePhase);
   });
 });
 
@@ -57,9 +42,9 @@ describe('applyPilotPublicGate', () => {
   it('stashes the config-anchored public dir for the dev/start boot gate', () => {
     const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
-    for (const argv of [DEV_ARGV, START_ARGV]) {
+    for (const phase of [PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_SERVER]) {
       delete process.env.BACI_PILOT_PUBLIC_DIR;
-      const publicDir = applyPilotPublicGate(configDir, argv);
+      const publicDir = applyPilotPublicGate(configDir, phase);
       expect(publicDir).toBe(join(configDir, 'public'));
       expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe(join(configDir, 'public'));
     }
@@ -75,9 +60,9 @@ describe('applyPilotPublicGate', () => {
       'staged'
     );
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
-    expect(() => applyPilotPublicGate(configDir, BUILD_ARGV)).toThrow(
-      /staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1/
-    );
+    expect(() =>
+      applyPilotPublicGate(configDir, PHASE_PRODUCTION_BUILD)
+    ).toThrow(/staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1/);
     // The build refuses without mutating: quarantine is runtime-only.
     expect(
       existsSync(
@@ -103,8 +88,8 @@ describe('applyPilotPublicGate', () => {
       'staged'
     );
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
-    for (const argv of [DEV_ARGV, START_ARGV]) {
-      expect(() => applyPilotPublicGate(configDir, argv)).not.toThrow();
+    for (const phase of [PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_SERVER]) {
+      expect(() => applyPilotPublicGate(configDir, phase)).not.toThrow();
     }
   });
 
@@ -122,9 +107,11 @@ describe('applyPilotPublicGate', () => {
     );
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/operator/tree/public');
-    const publicDir = applyPilotPublicGate(configDir, TOOLING_ARGV);
-    expect(publicDir).toBe(join(configDir, 'public'));
-    expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe('/operator/tree/public');
+    for (const phase of [PHASE_TEST, PHASE_INFO, undefined]) {
+      const publicDir = applyPilotPublicGate(configDir, phase);
+      expect(publicDir).toBe(join(configDir, 'public'));
+      expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe('/operator/tree/public');
+    }
   });
 
   it('refuses a merchant image renamed to a pinned filler name at build', () => {
@@ -138,9 +125,9 @@ describe('applyPilotPublicGate', () => {
     mkdirSync(fillers, { recursive: true });
     writeFileSync(join(fillers, 'grid-filler-600x400-a.png'), 'merchant bytes');
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
-    expect(() => applyPilotPublicGate(configDir, BUILD_ARGV)).toThrow(
-      /does not match the pinned hash/
-    );
+    expect(() =>
+      applyPilotPublicGate(configDir, PHASE_PRODUCTION_BUILD)
+    ).toThrow(/does not match the pinned hash/);
   });
 
   it('keeps an agreeing operator BACI_PILOT_PUBLIC_DIR preset', () => {
@@ -154,8 +141,12 @@ describe('applyPilotPublicGate', () => {
       'BACI_PILOT_PUBLIC_DIR',
       realpathSync(join(configDir, 'public'))
     );
-    for (const argv of [BUILD_ARGV, DEV_ARGV, START_ARGV]) {
-      const publicDir = applyPilotPublicGate(configDir, argv);
+    for (const phase of [
+      PHASE_PRODUCTION_BUILD,
+      PHASE_DEVELOPMENT_SERVER,
+      PHASE_PRODUCTION_SERVER,
+    ]) {
+      const publicDir = applyPilotPublicGate(configDir, phase);
       expect(publicDir).toBe(join(configDir, 'public'));
       expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe(
         realpathSync(join(configDir, 'public'))
@@ -170,8 +161,12 @@ describe('applyPilotPublicGate', () => {
     const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/operator/tree/public');
-    for (const argv of [BUILD_ARGV, DEV_ARGV, START_ARGV]) {
-      expect(() => applyPilotPublicGate(configDir, argv)).toThrow(
+    for (const phase of [
+      PHASE_PRODUCTION_BUILD,
+      PHASE_DEVELOPMENT_SERVER,
+      PHASE_PRODUCTION_SERVER,
+    ]) {
+      expect(() => applyPilotPublicGate(configDir, phase)).toThrow(
         /preset .* disagrees with the served config tree/
       );
     }
@@ -184,7 +179,7 @@ describe('applyPilotPublicGate', () => {
     const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
-    const publicDir = applyPilotPublicGate(configDir, DEV_ARGV);
+    const publicDir = applyPilotPublicGate(configDir, PHASE_DEVELOPMENT_SERVER);
     expect(publicDir).toBe(join(configDir, 'public'));
     expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe(join(configDir, 'public'));
   });

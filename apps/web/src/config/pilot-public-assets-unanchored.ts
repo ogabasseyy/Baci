@@ -77,7 +77,7 @@ export const PILOT_UNANCHORED_ACK_FLAG = 'BACI_IMAGE_PILOT_UNANCHORED_ACK';
 // DID configure for the pilot but that cannot anchor is a loud
 // misconfiguration and refuses. This keeps the lab-off fail-closed
 // without bricking unrelated production boots.
-function hasPilotIntent(): boolean {
+export function hasPilotIntent(): boolean {
   return Object.keys(process.env).some(
     (key) =>
       (key.startsWith('BACI_IMAGE_PILOT') || key === 'BACI_PILOT_PUBLIC_DIR') &&
@@ -113,15 +113,21 @@ export function assertUnanchoredPublicTrees(): void {
       `merchant image pilot: startup gate cannot anchor the public tree; checked ${candidates.length} candidate tree(s) instead — a custom server rooted elsewhere would be unseen. Set BACI_PILOT_PUBLIC_DIR to silence this.`
     );
   }
+  // Intent-gated drift: filler fixtures are synthetic, so drift on a
+  // box that never opted into the pilot (deploy-pipeline
+  // recompression, smudged checkout) warns instead of bricking an
+  // unrelated migration or worker. With pilot intent the box is a
+  // lab participant and drift stays fatal (post-build tamper).
+  const fillerDrift = hasPilotIntent() ? 'throw' : 'warn';
   for (const candidate of candidates) {
-    // Runtime severities without quarantine: drift refuses, content
-    // findings warn — a dirty candidate tree warns-and-continues
-    // rather than bricking a migration or worker that merely runs
-    // near an app dir. No quarantine here: a candidate is a FOREIGN
-    // tree that may belong to a live lab session elsewhere on the
-    // box, and this process must not mutate it. The zero-candidate
-    // refusal above is unchanged: checking nothing under pilot
-    // intent stays fatal.
-    assertPilotPublicAssets(candidate, undefined, 'throw', 'warn', false);
+    // Runtime severities without quarantine: drift refuses under
+    // intent, content findings warn — a dirty candidate tree
+    // warns-and-continues rather than bricking a migration or
+    // worker that merely runs near an app dir. No quarantine here:
+    // a candidate is a FOREIGN tree that may belong to a live lab
+    // session elsewhere on the box, and this process must not mutate
+    // it. The zero-candidate refusal above is unchanged: checking
+    // nothing under pilot intent stays fatal.
+    assertPilotPublicAssets(candidate, undefined, fillerDrift, 'warn', false);
   }
 }

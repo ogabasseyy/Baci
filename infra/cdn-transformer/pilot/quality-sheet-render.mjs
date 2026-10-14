@@ -3,6 +3,7 @@
 // stays in quality-sheet.mjs, which re-exports PilotSheetError.
 import sharp from 'sharp';
 import { RESAMPLE_PIPELINE } from './constants.mjs';
+import { desiredInspectionWidth } from './quality-sheet-inspect.mjs';
 import {
   normalizeFormat,
   orientedDimensions,
@@ -181,18 +182,20 @@ export async function buildRungRows({
   record,
   requestedWidth,
   snapshotBytes,
+  snapshotHeight,
   snapshotWidth,
   tiers,
 }) {
   let embeddedBytes = 0;
   const rows = [];
   for (const dpr of DPR_LEVELS) {
-    // Per-candidate caps: the original caps by the VERIFIED oriented
-    // snapshot width (never the record label) and each tier by its
-    // verified width, so a narrow sibling never thins a wide
-    // candidate's inspection — and nothing ever upscales.
-    const dprWidth = geometry.cssWidth * dpr;
-    const originalWidth = Math.min(dprWidth, snapshotWidth);
+    // Per-candidate caps on VERIFIED widths (never record labels),
+    // with cover-crop mounts boosted so the visible crop carries
+    // full density — and nothing ever upscales.
+    const desiredOriginal = desiredInspectionWidth(
+      geometry.cssWidth, dpr, snapshotWidth, snapshotHeight, crop
+    );
+    const originalWidth = Math.min(desiredOriginal, snapshotWidth);
     const originalRaster = await resampleForInspection(
       snapshotBytes,
       originalWidth
@@ -201,17 +204,24 @@ export async function buildRungRows({
     embeddedBytes += 'data:image/png;base64,'.length + base64Length(originalRaster.length);
     const tierCellsHtml = [];
     for (const tier of tiers) {
-      const tierWidth = Math.min(dprWidth, tier.width);
+      const desiredTier = desiredInspectionWidth(
+        geometry.cssWidth,
+        dpr,
+        tier.width,
+        tier.height,
+        crop
+      );
+      const tierWidth = Math.min(desiredTier, tier.width);
       const raster = await resampleForInspection(
         files.get(tier.path),
         tierWidth
       );
       embeddedBytes += 'data:image/png;base64,'.length + base64Length(raster.length);
       tierCellsHtml.push(
-        `<td>${tierCells(tier, { bytes: raster, capped: tierWidth < dprWidth, contentType: 'image/png', width: tierWidth }, crop, geometry.cssWidth)}</td>`
+        `<td>${tierCells(tier, { bytes: raster, capped: tierWidth < desiredTier, contentType: 'image/png', width: tierWidth }, crop, geometry.cssWidth)}</td>`
       );
     }
-    const ceilingNote = originalWidth < dprWidth ? ' · encoded-pixel ceiling' : '';
+    const ceilingNote = originalWidth < desiredOriginal ? ' · encoded-pixel ceiling' : '';
     const originalStyle =
       crop === null
         ? `width:${geometry.cssWidth}px`
@@ -279,6 +289,7 @@ export function parseMountCrop(geometry, slot) {
   }
   return {
     aspectRatio: `${ratio[1]} / ${ratio[2]}`,
+    boxAspect: Number(ratio[1]) / Number(ratio[2]),
     fit: mount.fit,
     position: mount.position,
   };

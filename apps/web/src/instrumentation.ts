@@ -65,10 +65,23 @@ export async function register() {
       '@/config/pilot-public-assets-roots'
     );
     const { isPilotLabEnabled } = await import('@/config/pilot-lab-enabled');
+    const { hasPilotIntent } = await import(
+      '@/config/pilot-public-assets-unanchored'
+    );
     let pilotPublicDir: string;
     try {
       pilotPublicDir = resolvePilotPublicDir();
-      assertPilotPublicAssets(pilotPublicDir);
+      // Intent-gated drift: filler fixtures are synthetic, so drift
+      // on a box that never opted into the pilot (deploy-pipeline
+      // recompression) warns instead of bricking an unrelated
+      // production boot. With pilot intent the box is a lab
+      // participant and drift stays fatal (post-build tamper). Lab
+      // mode always counts as intent (its flag matches the prefix).
+      assertPilotPublicAssets(
+        pilotPublicDir,
+        undefined,
+        hasPilotIntent() ? 'throw' : 'warn'
+      );
     } catch (error) {
       // The catch discriminates by failure, not by message: lab mode
       // demands a verified tree and stays fatal on everything, and a

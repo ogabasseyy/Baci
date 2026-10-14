@@ -190,4 +190,54 @@ describe('assertUnanchoredPublicTrees', () => {
     }
     expect(existsSync(join(originals, 'm1-a1.png'))).toBe(true);
   });
+
+  it('warns on candidate filler drift without pilot intent', () => {
+    // Intent-gated drift: synthetic fixtures on a box that never
+    // opted in warn (deploy-pipeline recompression) instead of
+    // bricking an unrelated migration or worker.
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    const dir = root();
+    const fillers = join(dir, 'public', '__pilot', 'fillers');
+    mkdirSync(join(dir, 'public', '__pilot', 'originals'), { recursive: true });
+    mkdirSync(fillers, { recursive: true });
+    writeFileSync(
+      join(fillers, 'grid-filler-600x400-a.png'),
+      'recompressed bytes'
+    );
+    const previousCwd = process.cwd();
+    process.chdir(dir);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() => assertUnanchoredPublicTrees()).not.toThrow();
+      expect(
+        warn.mock.calls.some((call) =>
+          String(call[0]).match(/does not match the pinned hash/)
+        )
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+      process.chdir(previousCwd);
+    }
+  });
+
+  it('refuses candidate filler drift with pilot intent', () => {
+    // With pilot intent the box is a lab participant: drift means
+    // post-build tamper and stays fatal.
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    vi.stubEnv('BACI_IMAGE_PILOT_ORIGIN', 'https://lab.example');
+    const dir = root();
+    const fillers = join(dir, 'public', '__pilot', 'fillers');
+    mkdirSync(join(dir, 'public', '__pilot', 'originals'), { recursive: true });
+    mkdirSync(fillers, { recursive: true });
+    writeFileSync(join(fillers, 'grid-filler-600x400-a.png'), 'tampered bytes');
+    const previousCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      expect(() => assertUnanchoredPublicTrees()).toThrow(
+        /does not match the pinned hash/
+      );
+    } finally {
+      process.chdir(previousCwd);
+    }
+  });
 });

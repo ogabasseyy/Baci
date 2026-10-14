@@ -79,9 +79,21 @@ export async function checkLighthouse(args, pass, fail, recorded) {
   // The HOST user agent names the real browser executable Lighthouse
   // drove — not the emulated request UA the HAR checks. Metrics from a
   // different Chrome major are not comparable even when route, viewport,
-  // and throttling all match.
+  // and throttling all match. chrome-headless-shell reports
+  // `HeadlessChrome/<major>...`, which CONTAINS the `Chrome/<major>.`
+  // token: without an explicit shell rejection, shell evidence would
+  // qualify as the matched full-Chrome run. (Full Chrome in new
+  // headless mode reports the standard Chrome token, so this rejects
+  // only the shell binary and pre-112 old headless.)
   const hostUserAgent = report?.environment?.hostUserAgent;
-  if (!hostUserAgent?.includes(`Chrome/${args['expect-chrome-major']}.`)) {
+  if (hostUserAgent?.includes('HeadlessChrome')) {
+    fail(
+      'lighthouse.browser',
+      `host browser is chrome-headless-shell, not full Chrome ${args['expect-chrome-major']} (${hostUserAgent})`
+    );
+  } else if (
+    !hostUserAgent?.includes(`Chrome/${args['expect-chrome-major']}.`)
+  ) {
     fail(
       'lighthouse.browser',
       `host browser is not Chrome ${args['expect-chrome-major']} (${hostUserAgent ?? 'no host user agent recorded'})`

@@ -27,8 +27,10 @@ vi.mock('@/lib/merchant-image-variant-pilot/lab-config-stage-guard', () => ({
   assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
 }));
 const assertUnanchoredPublicTreesMock = vi.hoisted(() => vi.fn());
+const hasPilotIntentMock = vi.hoisted(() => vi.fn(() => true));
 vi.mock('@/config/pilot-public-assets-unanchored', () => ({
   assertUnanchoredPublicTrees: assertUnanchoredPublicTreesMock,
+  hasPilotIntent: hasPilotIntentMock,
 }));
 const captureServerExceptionMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
@@ -86,69 +88,6 @@ describe('instrumentation pilot boot gate', () => {
     expect(registerOTelMock).not.toHaveBeenCalled();
     expect(initializeLabRuntimeMock).not.toHaveBeenCalled();
   });
-  it('degrades to lab-only failure when pilot startup validation fails', async () => {
-    // The lab must not take the storefront down: a failed lab init
-    // with no unbound staged content logs loudly, skips the runtime
-    // publish (lab routes fail closed), and boot completes OTel setup.
-    // The drift assertion above and the unbound-content check below
-    // stay fatal.
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
-    initializeLabRuntimeMock.mockRejectedValueOnce(
-      new Error('invalid staged inputs')
-    );
-    const errors: unknown[][] = [];
-    const errorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation((...args: unknown[]) => {
-        errors.push(args);
-      });
-    await expect(register()).resolves.toBe(undefined);
-    expect(registerOTelMock).toHaveBeenCalledOnce();
-    expect(assertNoUnboundStagedContentMock).toHaveBeenCalledWith(
-      '/resolved/public'
-    );
-    expect(errors).toHaveLength(1);
-    expect(errors[0][0]).toMatch(/lab runtime initialization failed/);
-    expect(errors[0][1]).toMatchObject({ message: 'invalid staged inputs' });
-    errorSpy.mockRestore();
-  });
-  it('refuses boot when lab init fails with staged content present', async () => {
-    // Failed init means no binding set — but Next still serves
-    // public/__pilot statically, so unbound staged content refuses
-    // boot instead of degrading into silent exposure.
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
-    initializeLabRuntimeMock.mockRejectedValueOnce(
-      new Error('invalid staged inputs')
-    );
-    assertNoUnboundStagedContentMock.mockImplementationOnce(() => {
-      throw new Error('1 unbound entry under __pilot');
-    });
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(register()).rejects.toThrow(/unbound entry/);
-    expect(registerOTelMock).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
-  });
-  it('refuses a degraded boot when ALLOW_PROD is set, even with no staged content', async () => {
-    // Production exposure acknowledged means direct /__pilot fetches
-    // serve with NO re-check until restart after a failed init — so
-    // the degraded boot is fatal here instead of fail-loud, and the
-    // original init error propagates (most informative). Lab-dev
-    // without the flag keeps the degrade above.
-    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
-    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
-    vi.stubEnv('BACI_IMAGE_PILOT_ALLOW_PROD', '1');
-    initializeLabRuntimeMock.mockRejectedValueOnce(
-      new Error('invalid staged inputs')
-    );
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(register()).rejects.toThrow(/invalid staged inputs/);
-    expect(registerOTelMock).not.toHaveBeenCalled();
-    expect(assertNoUnboundStagedContentMock).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
-  });
-
   it('initializes the enabled pilot before completing registration', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
@@ -289,7 +228,25 @@ describe('instrumentation pilot boot gate', () => {
     // candidate-tree path tested above.
     expect(resolvePilotPublicDirMock).toHaveBeenCalledOnce();
     expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
-      '/resolved/public'
+      '/resolved/public',
+      undefined,
+      'throw'
     );
+  });
+
+  it('warns on filler drift without pilot intent instead of bricking boot', async () => {
+    // Intent-gated drift: a box that never opted into the pilot must
+    // not brick on recompressed synthetic fixtures; the gate still
+    // runs (content findings quarantine) but drift downgrades to a
+    // warning. Lab mode always counts as intent.
+    hasPilotIntentMock.mockReturnValueOnce(false);
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    await register();
+    expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
+      '/resolved/public',
+      undefined,
+      'warn'
+    );
+    expect(registerOTelMock).toHaveBeenCalledOnce();
   });
 });

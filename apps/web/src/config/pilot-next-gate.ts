@@ -1,4 +1,9 @@
 import path from 'node:path';
+import {
+  PHASE_DEVELOPMENT_SERVER,
+  PHASE_PRODUCTION_BUILD,
+  PHASE_PRODUCTION_SERVER,
+} from 'next/constants';
 import { assertPilotPublicAssets } from './pilot-public-assets';
 import { canonicalDir } from './pilot-public-assets-roots';
 
@@ -6,58 +11,41 @@ import { canonicalDir } from './pilot-public-assets-roots';
 // next.config.ts under the repo line ceiling: public assets bypass
 // route guards, so refuse non-lab builds with staged data.
 //
-// Phase-scoped: next.config.ts evaluates on EVERY config load (dev,
-// build, start, typegen, any tooling importing it), but only the
-// build enforces here. Dev/start stash the verified root for the
-// boot gate (which owns runtime enforcement via instrumentation)
-// without asserting, and unrelated loads do nothing at all — a
-// local staged tree or stale preset must never fail typegen or a
-// dev server that never serves the app.
+// Phase-scoped on the phase Next itself passes to the config
+// function: the build asserts, dev/start stash the verified root for
+// the boot gate (which owns runtime enforcement via instrumentation)
+// without asserting, and every other phase skips the gate entirely —
+// a local staged tree or stale preset never fails typegen, tests, or
+// tooling that imports the config without calling it. argv sniffing
+// cannot cover programmatic builds (nextBuild() passes the phase but
+// no CLI argv), and process.env.NEXT_PHASE is unset at config time
+// (Next assigns it late in the build, after loadConfig), so the
+// phase parameter is the only truthful signal.
 export type PilotGatePhase = 'build' | 'dev' | 'other' | 'start';
 
-// Classifies the invoking Next subcommand from argv: the subcommand
-// is the arg after the entry whose basename is `next` (covers
-// bin/next, pnpm/npx shims, next.exe). Vitest workers, tsx CLIs,
-// typegen, custom servers, and bare `next` (no subcommand) are all
-// 'other'. Pure over the passed argv for unit tests; production
-// callers pass process.argv by default.
-export function classifyGatePhase(
-  argv: readonly string[] = process.argv
-): PilotGatePhase {
-  for (let index = 0; index < argv.length - 1; index++) {
-    const entry = argv[index] ?? '';
-    const basename = entry
-      .split('/')
-      .pop()
-      ?.split('\\')
-      .pop()
-      ?.toLowerCase()
-      .replace(/\.exe$/, '');
-    if (basename !== 'next') {
-      continue;
-    }
-    const subcommand = (argv[index + 1] ?? '').toLowerCase();
-    if (subcommand === 'build') {
-      return 'build';
-    }
-    if (subcommand === 'start') {
-      return 'start';
-    }
-    if (subcommand === 'dev') {
-      return 'dev';
-    }
-    return 'other';
+// Pure over the passed phase for unit tests; production callers pass
+// the phase Next supplies. Anything but the three serving phases —
+// test, info, export, programmatic callers that pass nothing — is
+// 'other' and skips the gate.
+export function classifyGatePhase(phase: string | undefined): PilotGatePhase {
+  if (phase === PHASE_PRODUCTION_BUILD) {
+    return 'build';
+  }
+  if (phase === PHASE_PRODUCTION_SERVER) {
+    return 'start';
+  }
+  if (phase === PHASE_DEVELOPMENT_SERVER) {
+    return 'dev';
   }
   return 'other';
 }
 
 export function applyPilotPublicGate(
   configDir: string,
-  argv: readonly string[] = process.argv
+  phase?: string
 ): string {
   const pilotPublicDir = path.join(configDir, 'public');
-  const phase = classifyGatePhase(argv);
-  if (phase === 'other') {
+  if (classifyGatePhase(phase) === 'other') {
     // Unrelated config evaluation: zero gate cost, zero throw, zero
     // env mutation. Nothing here boots or serves the app, so even a
     // disagreeing preset is ignored — it only constrains boots.
@@ -68,7 +56,7 @@ export function applyPilotPublicGate(
   // fatal (post-build tamper) but quarantine content findings and
   // continue, so a leftover staged tree neither bricks prod nor stays
   // served.
-  if (phase === 'build') {
+  if (phase === PHASE_PRODUCTION_BUILD) {
     assertPilotPublicAssets(pilotPublicDir, undefined, 'throw', 'throw');
   }
   // A preset that disagrees with the served config tree refuses the
@@ -89,7 +77,7 @@ export function applyPilotPublicGate(
   // boot process. The build deliberately does NOT stash: the value
   // would die with the build process anyway, and a same-process
   // stash leaks into spawned child tooling that later resolves it.
-  if (phase !== 'build' && !preset) {
+  if (phase !== PHASE_PRODUCTION_BUILD && !preset) {
     process.env.BACI_PILOT_PUBLIC_DIR = pilotPublicDir;
   }
   return pilotPublicDir;

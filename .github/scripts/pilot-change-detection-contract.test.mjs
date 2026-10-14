@@ -92,6 +92,21 @@ test('lab render closure (depth<=2) matches the pattern', async () => {
   );
 });
 
+test('detection retries transient API failures before failing closed', async () => {
+  // A single transient GitHub API failure must not turn an
+  // unrelated PR into heavy suite runs: both list calls retry
+  // before the fail-closed fallback. Only a sustained outage goes
+  // heavy. (A workflow-level paths pre-filter cannot replace this:
+  // it would reject the labeled opt-in event itself.)
+  const workflow = await readFile(
+    new URL('../workflows/pilot-codec-compatibility.yml', import.meta.url),
+    'utf8'
+  );
+  assert.ok(workflow.includes('api_with_retry() {'));
+  assert.equal(workflow.match(/api_with_retry "/g)?.length, 2);
+  assert.ok(!workflow.includes('names=$(gh api '));
+});
+
 test('core pilot paths still set pilot=true', async () => {
   const pattern = await pilotPattern();
   const core = [

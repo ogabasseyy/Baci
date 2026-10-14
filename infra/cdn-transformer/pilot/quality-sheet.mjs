@@ -201,6 +201,7 @@ export async function buildQualitySheet({
         record,
         requestedWidth,
         snapshotBytes: snapshot.bytes,
+        snapshotHeight: snapshotSize.height,
         snapshotWidth: snapshotSize.width,
         tiers,
       });

@@ -128,11 +128,13 @@ test('parseMountCrop derives canonical mounts, explicit wins, hero stays intrins
   // lab consumers paint; an explicit --slots mount always wins.
   assert.deepEqual(parseMountCrop({ cssWidth: 40 }, 'header-logo'), {
     aspectRatio: '1 / 1',
+    boxAspect: 1,
     fit: 'cover',
     position: '50% 50%',
   });
   assert.deepEqual(parseMountCrop({ cssWidth: 384 }, 'product-card'), {
     aspectRatio: '16 / 9',
+    boxAspect: 16 / 9,
     fit: 'cover',
     position: '50% 50%',
   });
@@ -144,7 +146,7 @@ test('parseMountCrop derives canonical mounts, explicit wins, hero stays intrins
       },
       'header-logo'
     ),
-    { aspectRatio: '4 / 3', fit: 'contain', position: 'center' }
+    { aspectRatio: '4 / 3', boxAspect: 4 / 3, fit: 'contain', position: 'center' }
   );
   // mobile-hero-slide-0 has no canonical mount (its fit is data-driven,
   // contain or cover per projection): absent mount keeps the legacy

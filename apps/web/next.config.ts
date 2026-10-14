@@ -24,8 +24,10 @@ import {
 } from './src/lib/posthog/config';
 
 // Public assets bypass route guards; refuse non-lab builds with staged
-// data (helper holds the gate: this file stays under no new weight).
-applyPilotPublicGate(__dirname);
+// data. The gate runs inside the exported config function (below),
+// keyed on the phase Next itself passes — never at module top level,
+// so importing this file (typegen, tests, tooling) has no gate side
+// effects and programmatic builds are covered exactly like CLI ones.
 
 // Keep this as an explicit static-asset suffix list. A generic dotted-path
 // exclusion drops valid HTML routes such as `/products/iphone-v1.2`.
@@ -753,4 +755,14 @@ function applyPostHogConfig(config: NextConfig): NextConfig {
   });
 }
 
-export default applyPostHogConfig(nextConfig);
+// Function form so the pilot gate reads Next's own phase signal:
+// PHASE_PRODUCTION_BUILD asserts, dev/start stash for the boot gate,
+// and every other phase (test, info, tooling imports that never call
+// this) skips the gate entirely. argv sniffing cannot cover
+// programmatic builds, and process.env.NEXT_PHASE is unset at config
+// time (Next assigns it late in the build, after loadConfig), so the
+// phase parameter is the only truthful signal here.
+export default function pilotNextConfig(phase: string): NextConfig {
+  applyPilotPublicGate(__dirname, phase);
+  return applyPostHogConfig(nextConfig);
+}

@@ -19,7 +19,21 @@ module Spaceship
   class GatewayTimeoutError < StandardError; end
 
   module ConnectAPI
+    module Platform
+      IOS = 'IOS'
+    end
+
+    module App
+      class << self
+        attr_accessor :fixture
+        def find(_bundle_id); fixture; end
+      end
+    end
+
     module ReviewSubmission
+      module ReviewSubmissionState
+        CANCELING = 'CANCELING'
+      end
       @script = []
       @calls = 0
 
@@ -44,9 +58,110 @@ module Spaceship
   end
 end
 
+module UI
+  def self.important(_message); end
+  def self.user_error!(message); raise message; end
+end
+
+BUNDLE_ID = 'com.ogabassey.app'
+
 module Faraday
   class ConnectionFailed < StandardError; end
   class TimeoutError < StandardError; end
+end
+
+class PublishedVersionSlotTest < Minitest::Test
+  class AppFixture
+    attr_accessor :state, :editable, :submission, :reviews, :latest_error
+
+    def initialize(state)
+      @state = state
+      @reviews = []
+    end
+
+    def get_in_progress_review_submission(platform:); submission; end
+    def get_review_submissions(filter:); reviews; end
+    def get_edit_app_store_version(platform:); editable; end
+    def get_latest_app_store_version(platform:)
+      raise latest_error if latest_error
+      return nil unless state
+      Struct.new(:version_string, :app_version_state).new('2.1.559', state)
+    end
+  end
+
+  def setup
+    @cancel_env = ENV.delete('IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT')
+  end
+
+  def teardown
+    if @cancel_env
+      ENV['IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT'] = @cancel_env
+    else
+      ENV.delete('IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT')
+    end
+  end
+
+  def slot_ready(state)
+    Spaceship::ConnectAPI::App.fixture = AppFixture.new(state)
+    app_store_version_slot_ready?(app_version: '2.1.632', build_number: '632')
+  end
+
+  def test_live_version_allows_creating_the_next_version
+    %w[READY_FOR_DISTRIBUTION READY_FOR_SALE].each do |state|
+      assert slot_ready(state), "published #{state} must permit a new version"
+    end
+  end
+
+  def test_unreleased_and_unknown_states_still_block_new_versions
+    ['PENDING_DEVELOPER_RELEASE', 'PENDING_APPLE_RELEASE', 'PROCESSING_FOR_DISTRIBUTION', 'UNKNOWN', nil].each do |state|
+      refute slot_ready(state), "#{state.inspect} must not permit a new version"
+    end
+  end
+
+  def test_review_still_blocks_even_when_latest_version_is_public
+    app = AppFixture.new('READY_FOR_DISTRIBUTION')
+    app.submission = Object.new
+    Spaceship::ConnectAPI::App.fixture = app
+    refute app_store_version_slot_ready?(app_version: '2.1.632', build_number: '632')
+  end
+
+  def test_failed_latest_version_lookup_skips_submission
+    app = AppFixture.new('READY_FOR_DISTRIBUTION')
+    app.latest_error = Faraday::TimeoutError
+    Spaceship::ConnectAPI::App.fixture = app
+    refute app_store_version_slot_ready?(app_version: '2.1.632', build_number: '632')
+  end
+
+  def test_public_version_without_a_target_version_skips_submission
+    Spaceship::ConnectAPI::App.fixture = AppFixture.new('READY_FOR_DISTRIBUTION')
+    refute app_store_version_slot_ready?(app_version: '', build_number: '')
+  end
+
+  def test_existing_editable_version_still_allows_implicit_target
+    app = AppFixture.new('READY_FOR_DISTRIBUTION')
+    app.editable = Object.new
+    Spaceship::ConnectAPI::App.fixture = app
+    assert app_store_version_slot_ready?(app_version: '', build_number: '')
+  end
+
+  def test_public_version_rejects_equal_older_and_invalid_targets
+    Spaceship::ConnectAPI::App.fixture = AppFixture.new('READY_FOR_DISTRIBUTION')
+    ['2.1.559', '2.1.558', 'invalid'].each do |target|
+      refute app_store_version_slot_ready?(app_version: target, build_number: '632')
+    end
+  end
+
+  def test_public_version_requires_a_build_number_for_its_successor
+    Spaceship::ConnectAPI::App.fixture = AppFixture.new('READY_FOR_DISTRIBUTION')
+    refute app_store_version_slot_ready?(app_version: '2.1.632', build_number: '')
+  end
+
+  def test_cancellation_wind_down_still_blocks_a_public_version
+    app = AppFixture.new('READY_FOR_DISTRIBUTION')
+    app.reviews = [Struct.new(:state).new('CANCELING')]
+    Spaceship::ConnectAPI::App.fixture = app
+    refute app_store_version_slot_ready?(app_version: '2.1.632', build_number: '632')
+  end
 end
 
 load File.expand_path('../fastlane/asc_version_slot.rb', __dir__)

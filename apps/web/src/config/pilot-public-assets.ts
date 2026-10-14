@@ -234,9 +234,12 @@ export function assertPilotPublicAssets(
       assertConfinedEntry(root, name);
       continue;
     }
+    // Reached only in lab mode: the flag IS set, so the message names
+    // the offending entry and the approval failure instead of sending
+    // the operator to check a flag that is already on.
     if (labEnabled) {
       throw new Error(
-        'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
+        `lab public pilot tree entry "${name}" is not an approved lab entry (expected fillers, originals, or a 64-hex generation id)`
       );
     }
     // Non-lab from here: staged-merchant shapes and symlink

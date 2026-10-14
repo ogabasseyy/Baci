@@ -94,8 +94,52 @@ describe('lab filler validation', () => {
     const dir = root();
     mkdirSync(join(dir, '__pilot', 'generation-hash'), { recursive: true });
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(
-      /staged merchant pilot assets/
+      /not an approved lab entry/
     );
+  });
+  it('names the unexpected entry in the lab-mode diagnostic', () => {
+    // The flag IS set on this path, so the message names the entry
+    // and the approval failure instead of blaming the flag.
+    const dir = root();
+    mkdirSync(join(dir, '__pilot', 'generation-hash'), { recursive: true });
+    expect(() => assertPilotPublicAssets(dir, true)).toThrow(
+      /entry "generation-hash" is not an approved lab entry/
+    );
+  });
+  it('still refuses symlinked filler layouts in non-lab warn mode', () => {
+    // Confinement is a security property, not drift: a symlinked
+    // fillers dir (or link inside it) would serve out-of-tree bytes,
+    // so warn mode refuses exactly like strict mode. Pipelines that
+    // link public assets must keep fillers/ as regular files.
+    const dir = root();
+    mkdirSync(join(dir, '__pilot'), { recursive: true });
+    mkdirSync(join(dir, 'real-fillers'), { recursive: true });
+    symlinkSync(join(dir, 'real-fillers'), join(dir, '__pilot', 'fillers'));
+    expect(() =>
+      assertPilotPublicAssets(dir, false, 'warn', 'warn', false)
+    ).toThrow(/not a confined directory/);
+  });
+  it('still refuses hardlinked filler files in non-lab warn mode', () => {
+    // Same inode, two names: the served bytes alias an outside file,
+    // so warn mode refuses rather than shipping the alias.
+    const dir = root();
+    cpSync(
+      join(process.cwd(), 'public/__pilot/fillers'),
+      join(dir, '__pilot/fillers'),
+      {
+        recursive: true,
+      }
+    );
+    const outside = join(dir, 'outside-twin.png');
+    writeFileSync(outside, 'aliased bytes');
+    rmSync(join(dir, '__pilot', 'fillers', 'grid-filler-600x400-a.png'));
+    linkSync(
+      outside,
+      join(dir, '__pilot', 'fillers', 'grid-filler-600x400-a.png')
+    );
+    expect(() =>
+      assertPilotPublicAssets(dir, false, 'warn', 'warn', false)
+    ).toThrow(/hardlinked file/);
   });
   it('rejects symlinked staging roots', () => {
     const dir = root();

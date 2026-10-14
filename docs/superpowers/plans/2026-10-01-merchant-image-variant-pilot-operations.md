@@ -126,7 +126,13 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # it must stay synthetic-only: the three hash-pinned fixtures and
 # nothing else. Never stage merchant bytes there; anything added
 # ships to production at /__pilot/fillers/* with only a drift
-# warning on non-lab builds. Staged-content
+# warning on non-lab builds. Layout requirement: fillers/ must be
+# regular files in a real directory — symlinks, hardlinks, and
+# special files refuse in EVERY mode (build, boot, warn), because a
+# link would serve out-of-tree bytes and warn-and-ship would put the
+# escape into the artifact. Pipelines that symlink or dedup public
+# assets must exclude fillers/ (the refusal names the layout).
+# Staged-content
 # and confinement findings
 # elsewhere move the offending entry to __pilot-quarantine/ beside
 # public/ (timestamped, same filesystem — symlinked entries move

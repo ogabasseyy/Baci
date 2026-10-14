@@ -101,8 +101,8 @@ Unique commits use `git log --right-only --cherry-pick baseline...HEAD`; paths u
 
 ## Direct Baseline Checks
 
-- ID 24: `apps/web/src/lib/feature-flags.ts` removes legacy premium-slug entitlement fallback and fails closed on absent/malformed `plan_tier`; its commit also adds the NOT NULL snapshot migration and replay coverage. The patch filter found no equivalent commit in frozen baseline.
-- ID 72: baseline `apps/web/src/app/api/merchant/settings/route.ts` accepts a requested merchant ID through `getMerchantForApiRequest`; the branch resolves `getUserAccess` and checks settings permission, and adds guarded identity/social-media migrations and SQL tests. This is a preservation candidate, not proof of production authorization.
+- ID 24 (REVISED — do not salvage on prior evidence): the cited safeguards are already in frozen baseline `ae94a5075d` — `feature-flags.ts` fails closed on absent/malformed `plan_tier`, migration `20260927060000_plan_tier_authoritative_snapshot_entitlement.sql` is present with its regression test (`plan-tier-authoritative-snapshot-migration.test.ts`). Patch-id absence does not establish branch novelty; re-derive from remaining tree deltas if pursued.
+- ID 72 (REVISED — do not salvage on prior evidence): baseline `route.ts` already converts the merchant context via `toUserAccess` and checks `hasPermission(access, 'settings', 'edit')`. The patch-id check does not establish these behaviors are absent from baseline; compare actual remaining tree deltas (guarded identity/social-media migrations, SQL tests) before directing salvage work.
 - ID 87: semantic inventory diff removes the total-timeout/retry wrapper and changes cache identity inputs. The commit title says timeout retry suppression, but this broader diff needs review; not asserted as verified improvement.
 - ID 150: builder structure guard changes protected-anchor representation and duplicate-ID resolution with dedicated tests.
 - ID 168: `readStorefrontPdpCoreSnapshot` retries one retryable failure under a shared deadline signal; baseline file differs.

@@ -1,26 +1,21 @@
 import { createHash } from 'node:crypto';
 import { readBoundedJson } from './posthog-bounded-json.mjs';
+import { posthogQueryContract as posthogQuery } from './posthog-query-contract.mjs';
 import { requiredConfiguration } from './posthog-remediation-config.mjs';
 
 const PAGE_SIZE = 100;
 const HARD_MAXIMUM_PAGES = 10;
-// Keep in sync with posthog-issue-enrichment.mjs: list and detail queries
-// must measure the same trailing window.
-const OCCURRENCE_WINDOW = '-7d';
-const MAX_RESPONSE_BYTES = 1_000_000;
 
-const boundedString = (value, length) =>
-  typeof value === 'string' ? value.trim().slice(0, length) : '';
+const {
+  MAX_RESPONSE_BYTES,
+  OCCURRENCE_WINDOW,
+  boundedString,
+  safeIssueId,
+} = posthogQuery;
 
 const positiveInteger = (value, fallback) => {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-// Keep in sync with posthog-issue-enrichment.mjs.
-const safeIssueId = (value) => {
-  const issueId = boundedString(value, 120);
-  return /^[A-Za-z0-9_-]+$/.test(issueId) ? issueId : '';
 };
 
 const safeTimestamp = (value) => {

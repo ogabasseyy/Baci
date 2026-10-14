@@ -1,20 +1,14 @@
 import { readBoundedJson } from './posthog-bounded-json.mjs';
+import { posthogQueryContract as posthogQuery } from './posthog-query-contract.mjs';
 import { requiredConfiguration } from './posthog-remediation-config.mjs';
 import { redactCodexOutput } from './remediation-codex-output.mjs';
 
-// Keep in sync with posthog-error-events.mjs: list and detail queries
-// must measure the same trailing window.
-const OCCURRENCE_WINDOW = '-7d';
-const MAX_RESPONSE_BYTES = 1_000_000;
-
-const boundedString = (value, length) =>
-  typeof value === 'string' ? value.trim().slice(0, length) : '';
-
-// Keep in sync with posthog-error-events.mjs.
-const safeIssueId = (value) => {
-  const issueId = boundedString(value, 120);
-  return /^[A-Za-z0-9_-]+$/.test(issueId) ? issueId : '';
-};
+const {
+  MAX_RESPONSE_BYTES,
+  OCCURRENCE_WINDOW,
+  boundedString,
+  safeIssueId,
+} = posthogQuery;
 
 // Redaction runs before character filtering: stripping punctuation first
 // would break email and secret patterns into unmatchable fragments.

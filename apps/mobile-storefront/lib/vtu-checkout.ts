@@ -1,6 +1,11 @@
+import { fetchJsonWithDeadline } from '@baci/shared';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
-import { DEFAULT_TIMEOUT, fetchWithTimeout } from '@/lib/fetch-with-timeout';
+import {
+  DEFAULT_TIMEOUT,
+  fetchWithTimeout,
+  HttpError,
+} from '@/lib/fetch-with-timeout';
 import {
   getAccessToken,
   getResponseErrorMessage,
@@ -76,22 +81,31 @@ export async function chargeWalletForVtu(
     requireSubmitterBinding: true,
   });
   const normalized = normalizeVtuCheckoutPayload(rest);
-  const response = await fetchWithTimeout(VTU_CHECKOUT_WALLET_ONLY_URL, {
-    method: 'POST',
-    timeout: DEFAULT_TIMEOUT,
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'Idempotency-Key': idempotencyKey,
-    },
+  // One shared deadline for headers + body (Codex R77 6sNGOy):
+  // fetchWithTimeout resolves on headers, so a stalled body used to
+  // hang the submitting guard forever even after the debit landed.
+  // fetchJsonWithDeadline aborts the fetch itself on expiry.
+  const deadlineMs = Date.now() + DEFAULT_TIMEOUT;
+  const { data, response } = await fetchJsonWithDeadline<
+    Record<string, unknown>
+  >(VTU_CHECKOUT_WALLET_ONLY_URL, {
     body: JSON.stringify({
       ...normalized,
       ...(expectedUserId ? { expectedUserId } : {}),
       merchantSlug: CONFIG.MERCHANT_SLUG,
     }),
+    deadlineMs,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+    },
+    method: 'POST',
   });
+  if (!response.ok) {
+    throw new HttpError(response.status, getResponseErrorMessage(data));
+  }
 
-  const data = await parseJsonResponse(response);
   return WalletOnlyVtuResponseSchema.parse({
     ...data,
     status: normalizeConfirmCheckoutStatus(data.status),
@@ -106,24 +120,25 @@ export async function confirmVtuCheckout({
   reference: string;
 }) {
   const accessToken = await getAccessToken();
-  const response = await fetchWithTimeout(
-    `${API_URL}/api/vtu/checkout/confirm`,
-    {
-      method: 'POST',
-      timeout: DEFAULT_TIMEOUT,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        gateway,
-        merchantSlug: CONFIG.MERCHANT_SLUG,
-        reference,
-      }),
-    }
-  );
+  // Shared headers+body deadline (Codex R77 6sNGOy): the history-sync
+  // guard held across this call must not hang on a stalled body.
+  const deadlineMs = Date.now() + DEFAULT_TIMEOUT;
+  const { data, response } = await fetchJsonWithDeadline<
+    Record<string, unknown>
+  >(`${API_URL}/api/vtu/checkout/confirm`, {
+    body: JSON.stringify({
+      gateway,
+      merchantSlug: CONFIG.MERCHANT_SLUG,
+      reference,
+    }),
+    deadlineMs,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  });
 
-  const data = (await response.json()) as Record<string, unknown>;
   if (!response.ok) {
     const gatewayStatus =
       typeof data.status === 'string' ? data.status.toLowerCase() : '';

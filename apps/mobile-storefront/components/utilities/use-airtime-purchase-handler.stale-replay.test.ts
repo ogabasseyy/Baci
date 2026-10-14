@@ -14,6 +14,10 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
+import {
+  releaseUtilityCheckout,
+  tryAcquireUtilityCheckout,
+} from '@/lib/utility-checkout-inflight';
 import { useAirtimePurchaseHandler } from './use-airtime-purchase-handler';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
@@ -691,5 +695,84 @@ describe('airtime stale success replay', () => {
     release();
     await pending;
     expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+  });
+});
+
+describe('airtime purchase checkout guard', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetSettlementPass.mockReturnValue(null);
+    clearPendingVtuKeys();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    releaseUtilityCheckout();
+  });
+
+  function renderGuardedHandler() {
+    return renderHook(() =>
+      useAirtimePurchaseHandler({
+        amount: '500',
+        numericAmount: 500,
+        phoneNumber: '08037654321',
+        selectedProvider: 'mtn',
+        payment: {
+          canFundByBankTransfer: false,
+          isAuthenticated: true,
+          refetchWallet: jest.fn(),
+          walletBalance: 5000,
+          walletError: null,
+          walletIsLoading: false,
+          isWalletRefetching: () => false,
+          getWalletIdempotencyKey: jest.fn(() => 'airtime-key'),
+          scopePendingVtuDescriptor: (d: string) => d,
+          captureSubmittingOwner: () => 'test-owner',
+          captureSubmittingUserId: () => 'test-user',
+          invalidateWallets: jest.fn(),
+          isSubmittingOwnerCurrent: () => true,
+          resetWalletIdempotencyKey: jest.fn(),
+          hasRetainedVtuAttempt: jest.fn(() => false),
+        } as PaymentState,
+        customer: null,
+        onSuccess: jest.fn(),
+        dismissKeyboard: jest.fn(),
+      })
+    );
+  }
+
+  it('refuses a second concurrent checkout without charging', async () => {
+    // Codex R77 6sNGO3: a submit on another tab while this checkout
+    // is in flight must refuse (Alert) and never reach charge.
+    expect(tryAcquireUtilityCheckout()).toBe(true);
+    try {
+      const { result } = renderGuardedHandler();
+
+      await result.current.handlePurchase();
+
+      expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Checkout in progress',
+        expect.any(String)
+      );
+      expect(result.current.isSubmitting).toBe(false);
+    } finally {
+      releaseUtilityCheckout();
+    }
+  });
+
+  it('releases the guard when the checkout settles', async () => {
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      amount: 500,
+      reference: 'REF-G',
+      status: 'successful',
+    });
+    const { result } = renderGuardedHandler();
+
+    await result.current.handlePurchase();
+
+    expect(result.current.isSubmitting).toBe(false);
+    expect(tryAcquireUtilityCheckout()).toBe(true);
   });
 });

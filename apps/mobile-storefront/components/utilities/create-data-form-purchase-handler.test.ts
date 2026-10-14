@@ -2,6 +2,10 @@ import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { HttpError } from '@/lib/fetch-with-timeout';
+import {
+  releaseUtilityCheckout,
+  tryAcquireUtilityCheckout,
+} from '@/lib/utility-checkout-inflight';
 import { createDataFormPurchaseHandler } from './create-data-form-purchase-handler';
 
 type PaymentState = ReturnType<typeof useUtilityPayment>;
@@ -195,5 +199,82 @@ describe('data form purchase cashback', () => {
     resolveRefetch();
     await pending;
     expect(order).toEqual(['refetch-start', 'refetch-done', 'alert']);
+  });
+});
+
+describe('data form purchase checkout guard', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    releaseUtilityCheckout();
+  });
+
+  function runGuardedPurchase(setIsSubmitting: jest.Mock) {
+    const handlePurchase = createDataFormPurchaseHandler({
+      customer: null,
+      dismissKeyboard: jest.fn(),
+      getIsSubmitting: () => false,
+      onSuccess: jest.fn(),
+      payment: {
+        canFundByBankTransfer: false,
+        isAuthenticated: true,
+        refetchWallet: jest.fn(),
+        walletBalance: 5000,
+        walletError: null,
+        walletIsLoading: false,
+        isWalletRefetching: () => false,
+        getWalletIdempotencyKey: jest.fn(() => 'data-key'),
+        scopePendingVtuDescriptor: (d: string) => d,
+        captureSubmittingOwner: () => 'test-owner',
+        captureSubmittingUserId: () => 'test-user',
+        invalidateWallets: jest.fn(),
+        isSubmittingOwnerCurrent: () => true,
+        resetWalletIdempotencyKey: jest.fn(),
+        hasRetainedVtuAttempt: jest.fn(() => false),
+      } as PaymentState,
+      phoneNumber: '08031234567',
+      planAmount: 1000,
+      selectedPlan: 'MTN-DATA-1GB',
+      selectedProvider: 'mtn',
+      setIsSubmitting,
+    });
+    return handlePurchase();
+  }
+
+  it('refuses a second concurrent checkout without charging', async () => {
+    // Codex R77 6sNGO3: a submit on another tab while this checkout
+    // is in flight must refuse (Alert) and never reach charge — the
+    // first success unmounts the pager and would strand its receipt.
+    expect(tryAcquireUtilityCheckout()).toBe(true);
+    try {
+      const setIsSubmitting = jest.fn();
+
+      await runGuardedPurchase(setIsSubmitting);
+
+      expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Checkout in progress',
+        expect.any(String)
+      );
+      expect(setIsSubmitting).toHaveBeenLastCalledWith(false);
+    } finally {
+      releaseUtilityCheckout();
+    }
+  });
+
+  it('releases the guard when the checkout settles', async () => {
+    mockChargeWalletForVtu.mockResolvedValueOnce({
+      amount: 1000,
+      reference: 'REF-G',
+      status: 'successful',
+    });
+
+    await runGuardedPurchase(jest.fn());
+
+    expect(tryAcquireUtilityCheckout()).toBe(true);
   });
 });

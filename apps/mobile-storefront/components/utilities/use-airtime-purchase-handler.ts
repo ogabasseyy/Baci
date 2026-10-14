@@ -8,6 +8,10 @@ import {
   notePendingVtuReference,
 } from '@/lib/pending-vtu-idempotency';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
+import {
+  acquireUtilityCheckoutOrAlert,
+  releaseUtilityCheckout,
+} from '@/lib/utility-checkout-inflight';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
@@ -74,9 +78,8 @@ async function executeAirtimePurchase({
   request,
 }: ExecuteAirtimePurchaseInput): Promise<void> {
   try {
-    // Descriptor-keyed recall: a remount (Back to Home, reopen) after
-    // a 202 processing or a timeout retries with the SAME key, so the
-    // route dedupes instead of debiting a second transaction.
+    // Descriptor-keyed recall: remount retries reuse the SAME key so
+    // the route dedupes instead of debiting a second transaction.
     const descriptor = payment.scopePendingVtuDescriptor(
       buildVtuPurchaseDescriptor(request)
     );
@@ -98,16 +101,14 @@ async function executeAirtimePurchase({
           getIsActive
         )
       ) {
-        // Finalize the SUBMITTER's entry (descriptor captured at
-        // submit) so their switch-back repeat replays the original
-        // outcome instead of minting fresh and debiting twice.
+        // Finalize the SUBMITTER's entry so switch-back repeats replay
+        // the original outcome instead of minting fresh.
         await preserveSuppressedVtuSuccess(payment, descriptor, result);
         return;
       }
       if (getIsActive && !getIsActive()) {
-        // Back-navigated mid-flight: preserve so a reopen retries
-        // with the SAME key and replays. Suppress onSuccess/Alert:
-        // the screen is gone.
+        // Back-navigated mid-flight: preserve for SAME-key replay on
+        // reopen; suppress onSuccess/Alert (screen gone).
         await preserveSuppressedVtuSuccess(payment, descriptor, result);
         return;
       }
@@ -122,10 +123,8 @@ async function executeAirtimePurchase({
         return;
       }
       if (isStalePendingVtuSuccess(descriptor, result.reference)) {
-        // The remembered purchase completed long ago: this replay
-        // answers a NEW intent with the old vend. Forget so the next
-        // tap mints a fresh key, and say so instead of presenting the
-        // earlier purchase as the new one.
+        // Old replay answering a NEW intent: forget so the next tap
+        // mints fresh, and say so instead of presenting it as new.
         payment.resetWalletIdempotencyKey(descriptor);
         Alert.alert(
           'Purchase Already Completed',
@@ -161,15 +160,10 @@ async function executeAirtimePurchase({
       }
       if (shouldRotateWalletIdempotencyKeyForError(error)) {
         payment.resetWalletIdempotencyKey(descriptor);
-        // The rejection may prove a stale balance (e.g. 400
-        // insufficient funds after another spend): AWAIT the refetch
-        // (fire-and-forget would let a quick retry re-pass on the
-        // stale balance — `walletIsLoading` is false during
-        // background refetches). Never rejects, so the original
-        // error below always survives. On-screen only: off-screen
-        // falls through to the never-fails refresh below (one
-        // refetch, and a rejection must not defeat the suppression
-        // by landing in the outer catch's Alert).
+        // The rejection may prove a stale balance (e.g. 400 after
+        // another spend): AWAIT the refetch (never rejects), else a
+        // quick retry re-passes on it. On-screen only — off-screen
+        // uses the never-fails refresh below, never the Alert.
         if (!getIsActive || getIsActive()) {
           await payment.refetchWallet();
         }
@@ -244,11 +238,9 @@ export function useAirtimePurchaseHandler({
       type: 'airtime' as const,
       walletAmount: numericAmount,
     };
-    // Settle-then-submit gate (R60), awaited BEFORE the retained
-    // peek (R66 6rvh_M): peeking first would bypass the balance gate
-    // on an entry the pass then proves terminal and forgets, minting
-    // fresh underfunded. The ref guard above was set synchronously at
-    // entry, so this await admits no second submit.
+    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
+    // peeking first bypasses the balance gate on entries the pass
+    // then proves terminal. Sync ref guard admits no second submit.
     const settlementPass = getPendingVtuSettlementPass();
     if (settlementPass) {
       await settlementPass;
@@ -275,19 +267,29 @@ export function useAirtimePurchaseHandler({
       return;
     }
 
+    // Screen-wide guard (Codex R77 6sNGO3): per-tab refs don't see
+    // sibling tabs — refuse concurrent checkouts, don't queue.
+    if (!acquireUtilityCheckoutOrAlert()) {
+      isSubmittingRef.current = false;
+      return;
+    }
     setIsSubmitting(true);
-    await executeAirtimePurchase({
-      getIsActive,
-      numericAmount,
-      onSettled: () => {
-        isSubmittingRef.current = false;
-        setIsSubmitting(false);
-      },
-      onSuccess,
-      payment,
-      phoneNumber,
-      request,
-    });
+    try {
+      await executeAirtimePurchase({
+        getIsActive,
+        numericAmount,
+        onSettled: () => {
+          isSubmittingRef.current = false;
+          setIsSubmitting(false);
+        },
+        onSuccess,
+        payment,
+        phoneNumber,
+        request,
+      });
+    } finally {
+      releaseUtilityCheckout();
+    }
   };
 
   return {

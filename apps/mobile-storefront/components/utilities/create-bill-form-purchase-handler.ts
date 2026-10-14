@@ -6,6 +6,10 @@ import {
   isStalePendingVtuSuccess,
   notePendingVtuReference,
 } from '@/lib/pending-vtu-idempotency';
+import {
+  acquireUtilityCheckoutOrAlert,
+  releaseUtilityCheckout,
+} from '@/lib/utility-checkout-inflight';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
@@ -64,6 +68,9 @@ export function createBillFormPurchaseHandler({
       return;
     }
 
+    // Function scope: the finally below runs for validation returns
+    // too, and must release the guard only when this submit holds it.
+    let checkoutAcquired = false;
     try {
       if (!selectedBiller) {
         Alert.alert('Missing Provider', 'Please select a provider.');
@@ -122,13 +129,10 @@ export function createBillFormPurchaseHandler({
         ...(validationReference ? { validationReference } : {}),
         walletAmount: numericAmount,
       };
-      // Enter submitting BEFORE the settle await: the ref flips
-      // synchronously, so a second tap during the wait still hits the
-      // guard. Validation rejections above never reach this (no
-      // flash); a readiness rejection returns through finally, which
-      // resets. Await BEFORE the peek (R66 6rvh_M): peeking first
-      // would bypass the balance gate on an entry the pass then
-      // proves terminal and forgets, minting fresh underfunded.
+      // Submitting flips synchronously, so taps during the wait hit the
+      // guard; validation above never reaches this (no flash).
+      // Settle-await BEFORE the peek (R66): peeking first bypasses the
+      // balance gate on entries the pass then forgets.
       setIsSubmitting(true);
       const settlementPass = getPendingVtuSettlementPass();
       if (settlementPass) {
@@ -155,12 +159,20 @@ export function createBillFormPurchaseHandler({
         return;
       }
 
+      // Screen-wide guard (Codex R77 6sNGO3): per-tab refs don't see
+      // sibling tabs — refuse concurrent checkouts, don't queue.
+      // Flagged: this try's validation returns run the finally,
+      // which must release only when held.
+      checkoutAcquired = acquireUtilityCheckoutOrAlert();
+      if (!checkoutAcquired) {
+        return;
+      }
+
       // Attach the verified meter address to every success result (API omits it).
       const emitSuccess: typeof onSuccess = (r) =>
         onSuccess(customerAddress ? { ...r, address: customerAddress } : r);
-      // Descriptor-keyed recall: a remount (Back to Home, reopen) after
-      // a 202 processing or a timeout retries with the SAME key, so the
-      // route dedupes instead of debiting a second transaction.
+      // Descriptor-keyed recall: remount retries reuse the SAME key so
+      // the route dedupes instead of debiting a second transaction.
       const descriptor = payment.scopePendingVtuDescriptor(
         buildVtuPurchaseDescriptor(request)
       );
@@ -189,9 +201,8 @@ export function createBillFormPurchaseHandler({
           return;
         }
         if (getIsActive && !getIsActive()) {
-          // Back-navigated mid-flight: preserve so a reopen retries
-          // with the SAME key and replays. Suppress onSuccess/Alert:
-          // the screen is gone.
+          // Back-navigated mid-flight: preserve for SAME-key replay on
+          // reopen; suppress onSuccess/Alert (screen gone).
           await preserveSuppressedVtuSuccess(payment, descriptor, result);
           return;
         }
@@ -209,10 +220,8 @@ export function createBillFormPurchaseHandler({
           return;
         }
         if (isStalePendingVtuSuccess(descriptor, result.reference)) {
-          // The remembered purchase completed long ago: this replay
-          // answers a NEW intent with the old vend. Forget so the next
-          // tap mints a fresh key, and say so instead of presenting the
-          // earlier purchase as the new one.
+          // Old replay answering a NEW intent: forget so the next tap
+          // mints fresh, and say so instead of presenting it as new.
           payment.resetWalletIdempotencyKey(descriptor);
           Alert.alert(
             'Purchase Already Completed',
@@ -255,15 +264,10 @@ export function createBillFormPurchaseHandler({
         // route 4xx — the same key would just keep failing.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
           payment.resetWalletIdempotencyKey(descriptor);
-          // The rejection may prove a stale balance (e.g. 400
-          // insufficient funds after another spend): AWAIT the refetch
-          // (fire-and-forget would let a quick retry re-pass on the
-          // stale balance — `walletIsLoading` is false during
-          // background refetches). Never rejects, so the original
-          // error below always survives. On-screen only: off-screen
-          // falls through to the never-fails refresh below (one
-          // refetch, and a rejection must not defeat the suppression
-          // by landing in the outer catch's Alert).
+          // The rejection may prove a stale balance (e.g. 400 after
+          // another spend): AWAIT the refetch (never rejects), else a
+          // quick retry re-passes on it. On-screen only — off-screen
+          // uses the never-fails refresh below, never the Alert.
           if (!getIsActive || getIsActive()) {
             await payment.refetchWallet();
           }
@@ -283,6 +287,9 @@ export function createBillFormPurchaseHandler({
     } catch (error) {
       Alert.alert('Payment Failed', getSafePaymentErrorMessage(error));
     } finally {
+      if (checkoutAcquired) {
+        releaseUtilityCheckout();
+      }
       if (!getIsActive || getIsActive()) {
         setIsSubmitting(false);
       }

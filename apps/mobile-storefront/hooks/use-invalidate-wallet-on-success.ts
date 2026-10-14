@@ -7,7 +7,12 @@ import { walletKeys } from '@/hooks/use-wallet';
 // this {merchantId, ownerId} prefix clears stored keys both with and
 // without the optional userId segment (sessions with a customer row but
 // no auth user store the shorter key). Passing userId here would miss
-// those sessions and leave stale balances cached.
+// those sessions and leave stale balances cached. The wallet root goes
+// along (Codex R77 6sNGPB): the read owner is customer-first, so a
+// customer row arriving between submit (cached under the auth-user
+// owner) and success would otherwise leave the user-owner query
+// serving the pre-debit balance as fresh. Same-tick invalidations
+// dedupe to one refetch for active observers.
 export function invalidateWalletBalanceQueries({
   merchantId,
   ownerId,
@@ -22,6 +27,10 @@ export function invalidateWalletBalanceQueries({
   }
   void queryClient.invalidateQueries({
     queryKey: walletKeys.data({ merchantId, ownerId }),
+    exact: false,
+  });
+  void queryClient.invalidateQueries({
+    queryKey: walletKeys.all,
     exact: false,
   });
 }

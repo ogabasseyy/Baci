@@ -8,6 +8,10 @@ import {
   notePendingVtuReference,
 } from '@/lib/pending-vtu-idempotency';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
+import {
+  acquireUtilityCheckoutOrAlert,
+  releaseUtilityCheckout,
+} from '@/lib/utility-checkout-inflight';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import {
   chargeWalletForVtu,
@@ -103,11 +107,9 @@ export function createDataFormPurchaseHandler({
       type: 'data' as const,
       walletAmount: planAmount,
     };
-    // Enter submitting BEFORE the settle await: the ref flips
-    // synchronously, so a second tap during the wait still hits the
-    // guard. Await BEFORE the peek (R66 6rvh_M): peeking first would
-    // bypass the balance gate on an entry the pass then proves
-    // terminal and forgets, minting fresh underfunded.
+    // Submitting flips synchronously, so taps during the wait hit the
+    // guard. Settle-await BEFORE the peek (R66): peeking first
+    // bypasses the balance gate on entries the pass then forgets.
     setIsSubmitting(true);
     const settlementPass = getPendingVtuSettlementPass();
     if (settlementPass) {
@@ -132,6 +134,13 @@ export function createDataFormPurchaseHandler({
       })
     ) {
       // Outside the try below: reset explicitly (finally can't).
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Screen-wide guard (Codex R77 6sNGO3): per-tab refs don't see
+    // sibling tabs — refuse concurrent checkouts, don't queue.
+    if (!acquireUtilityCheckoutOrAlert()) {
       setIsSubmitting(false);
       return;
     }
@@ -207,10 +216,8 @@ export function createDataFormPurchaseHandler({
           result.status === 'successful' &&
           isStalePendingVtuSuccess(descriptor, result.reference)
         ) {
-          // The remembered purchase completed long ago: this replay
-          // answers a NEW intent with the old vend. Forget so the next
-          // tap mints a fresh key, and say so instead of presenting the
-          // earlier purchase as the new one.
+          // Old replay answering a NEW intent: forget so the next tap
+          // mints fresh, and say so instead of presenting it as new.
           payment.resetWalletIdempotencyKey(descriptor);
           Alert.alert(
             'Purchase Already Completed',
@@ -257,15 +264,10 @@ export function createDataFormPurchaseHandler({
         // table protects retries. Rotate only on definitive route 4xx.
         if (shouldRotateWalletIdempotencyKeyForError(error)) {
           payment.resetWalletIdempotencyKey(descriptor);
-          // The rejection may prove a stale balance (e.g. 400
-          // insufficient funds after another spend): AWAIT the refetch
-          // (fire-and-forget would let a quick retry re-pass on the
-          // stale balance — `walletIsLoading` is false during
-          // background refetches). Never rejects, so the original
-          // error below always survives. On-screen only: off-screen
-          // falls through to the never-fails refresh below (one
-          // refetch, and a rejection must not defeat the suppression
-          // by landing in the outer catch's Alert).
+          // The rejection may prove a stale balance (e.g. 400 after
+          // another spend): AWAIT the refetch (never rejects), else a
+          // quick retry re-passes on it. On-screen only — off-screen
+          // uses the never-fails refresh below, never the Alert.
           if (!getIsActive || getIsActive()) {
             await payment.refetchWallet();
           }
@@ -288,6 +290,8 @@ export function createDataFormPurchaseHandler({
         error instanceof Error ? error.message : 'Something went wrong.'
       );
     } finally {
+      // Unconditional: this try is entered only after acquiring.
+      releaseUtilityCheckout();
       if (!getIsActive || getIsActive()) {
         setIsSubmitting(false);
       }

@@ -7,6 +7,7 @@ import {
   jest,
 } from '@jest/globals';
 import {
+  DEFAULT_TIMEOUT,
   HttpError,
   NetworkError,
   TimeoutError,
@@ -46,11 +47,19 @@ type MockSessionResult = {
 
 const mockFetchWithTimeout =
   jest.fn<(...args: unknown[]) => Promise<MockFetchResponse>>();
+
+type MockDeadlineResult = {
+  data: Record<string, unknown>;
+  response: { ok: boolean; status?: number };
+};
+
+const mockFetchJsonWithDeadline =
+  jest.fn<(...args: unknown[]) => Promise<MockDeadlineResult>>();
 const mockGetUser = jest.fn<() => Promise<MockUserResult>>();
 const mockGetSession = jest.fn<() => Promise<MockSessionResult>>();
 
 function getMockRequestInit(callIndex = 0): JsonRequestInit {
-  const requestInit = mockFetchWithTimeout.mock.calls[callIndex]?.[1];
+  const requestInit = mockFetchJsonWithDeadline.mock.calls[callIndex]?.[1];
   expect(requestInit).toHaveProperty('body');
   if (!requestInit || typeof (requestInit as RequestInit).body !== 'string') {
     throw new Error('Expected request body to be a JSON string');
@@ -79,6 +88,16 @@ jest.mock('@/lib/fetch-with-timeout', () => {
   return {
     ...actual,
     fetchWithTimeout: (...args: unknown[]) => mockFetchWithTimeout(...args),
+  };
+});
+
+jest.mock('@baci/shared', () => {
+  const actual =
+    jest.requireActual<typeof import('@baci/shared')>('@baci/shared');
+  return {
+    ...actual,
+    fetchJsonWithDeadline: (...args: unknown[]) =>
+      mockFetchJsonWithDeadline(...args),
   };
 });
 
@@ -146,14 +165,14 @@ describe('vtu-checkout service', () => {
   });
 
   it('confirms a successful VTU checkout', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         success: true,
         status: 'SUCCESSFUL',
         reference: 'VTU-123',
         amount: 1000,
-      }),
+      },
+      response: { ok: true },
     });
 
     const result = await confirmVtuCheckout({
@@ -165,12 +184,12 @@ describe('vtu-checkout service', () => {
   });
 
   it('throws a clear error for non-string confirmation status', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         reference: 'VTU-123',
         status: 123,
-      }),
+      },
+      response: { ok: true },
     });
 
     await expect(
@@ -182,12 +201,12 @@ describe('vtu-checkout service', () => {
   });
 
   it('throws a clear error for unexpected checkout statuses', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         reference: 'VTU-123',
         status: 'failed',
-      }),
+      },
+      response: { ok: true },
     });
 
     await expect(
@@ -199,13 +218,12 @@ describe('vtu-checkout service', () => {
   });
 
   it('treats a not-yet-successful gateway confirmation as processing', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: false,
-      status: 409,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         error: 'Payment is not yet successful',
         status: 'pending',
-      }),
+      },
+      response: { ok: false, status: 409 },
     });
 
     const result = await confirmVtuCheckout({
@@ -220,12 +238,12 @@ describe('vtu-checkout service', () => {
   });
 
   it('throws a typed processing error instead of a payment failure after polling', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         reference: 'VTU-123',
         status: 'processing',
-      }),
+      },
+      response: { ok: true },
     });
 
     await expect(
@@ -240,12 +258,12 @@ describe('vtu-checkout service', () => {
   it('does not wait after the final polling attempt', async () => {
     jest.useFakeTimers();
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         reference: 'VTU-123',
         status: 'processing',
-      }),
+      },
+      response: { ok: true },
     });
 
     try {
@@ -292,13 +310,13 @@ describe('vtu-checkout service', () => {
   });
 
   it('chargeWalletForVtu: posts to wallet-only with the caller-supplied Idempotency-Key header', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         status: 'successful',
         reference: 'VTU-456',
         amount: 1000,
-      }),
+      },
+      response: { ok: true },
     });
 
     // Caller-supplied UUID — the contract change. The form
@@ -319,7 +337,7 @@ describe('vtu-checkout service', () => {
       status: 'successful',
       reference: 'VTU-456',
     });
-    const [url, init] = mockFetchWithTimeout.mock.calls[0] ?? [];
+    const [url, init] = mockFetchJsonWithDeadline.mock.calls[0] ?? [];
     expect(url).toBe(VTU_CHECKOUT_WALLET_ONLY_URL);
     const headers = (init as RequestInit).headers as Record<string, string>;
     expect(headers['Idempotency-Key']).toBe(idempotencyKey);
@@ -334,14 +352,45 @@ describe('vtu-checkout service', () => {
     expect(body).not.toHaveProperty('idempotencyKey');
   });
 
-  it('chargeWalletForVtu: proceeds when the token belongs to the captured user', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+  it('chargeWalletForVtu: reads headers and body under one shared deadline', async () => {
+    // Codex R77 6sNGOy: a stalled body must abort like stalled
+    // headers instead of hanging the submitting guard forever.
+    // (Expiry behavior itself is proven in @baci/shared's
+    // fetch-with-timeout suite; this pins the charge path onto it.)
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         status: 'successful',
         reference: 'VTU-456',
         amount: 1000,
-      }),
+      },
+      response: { ok: true },
+    });
+
+    const before = Date.now();
+    await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: '11111111-2222-3333-4444-555555555555',
+      expectedUserId: 'user-1',
+    });
+
+    const [, init] = mockFetchJsonWithDeadline.mock.calls[0] ?? [];
+    const deadlineMs = (init as { deadlineMs: number }).deadlineMs;
+    expect(deadlineMs).toBeGreaterThanOrEqual(before + DEFAULT_TIMEOUT);
+    expect(deadlineMs).toBeLessThanOrEqual(Date.now() + DEFAULT_TIMEOUT);
+  });
+
+  it('chargeWalletForVtu: proceeds when the token belongs to the captured user', async () => {
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
+        status: 'successful',
+        reference: 'VTU-456',
+        amount: 1000,
+      },
+      response: { ok: true },
     });
 
     const result = await chargeWalletForVtu({
@@ -373,7 +422,7 @@ describe('vtu-checkout service', () => {
         idempotencyKey: '11111111-2222-3333-4444-555555555555',
       })
     ).rejects.toThrow('Account still loading. Please try again.');
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(mockFetchJsonWithDeadline).not.toHaveBeenCalled();
   });
 
   it('chargeWalletForVtu: aborts before any POST when the token belongs to another user', async () => {
@@ -397,7 +446,7 @@ describe('vtu-checkout service', () => {
         expectedUserId: 'user-1',
       })
     ).rejects.toThrow('Account changed during checkout. Please try again.');
-    expect(mockFetchWithTimeout).not.toHaveBeenCalled();
+    expect(mockFetchJsonWithDeadline).not.toHaveBeenCalled();
   });
 });
 

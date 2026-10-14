@@ -2,9 +2,9 @@
 // surface in Playwright, records console/request hygiene, image URLs,
 // and the measured geometry the pure checks verdict. Split from the
 // driver (merchant-image-pilot-readiness.mjs) under the repo line ceiling.
-import { join, resolve, sep } from 'node:path';
 import sharp from 'sharp';
 import { orientedDimensions } from '../../../../infra/cdn-transformer/pilot/encode-worker.mjs';
+import { readStagedBytes } from './merchant-image-pilot-preflight-shared.mjs';
 
 // Control-arm physical width: the global custom loader appends inert
 // ?w/?q params to the unchanged staged original, so a collected
@@ -22,13 +22,14 @@ async function controlPhysicalWidth(currentSrc, publicDir) {
   if (!pathname.startsWith('/__pilot/')) {
     return null;
   }
-  const root = resolve(publicDir);
-  const target = resolve(join(root, pathname));
-  if (target !== root && !target.startsWith(`${root}${sep}`)) {
-    return null;
-  }
   try {
-    const meta = await sharp(target).metadata();
+    // Guarded bytes, never a pathname decode: sharp(target) would
+    // follow a swapped-in FIFO (hanging the gate — no timeout covers
+    // this call) or symlink (dims outside the staged tree). Same
+    // helper as the served preflight; failures fail the surface closed.
+    const meta = await sharp(
+      await readStagedBytes(publicDir, pathname.slice(1))
+    ).metadata();
     const oriented = orientedDimensions(meta);
     return Number.isFinite(oriented.width) && oriented.width > 0
       ? oriented.width

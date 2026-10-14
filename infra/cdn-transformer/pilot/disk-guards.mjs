@@ -209,9 +209,19 @@ export async function writeConfinedFile(dir, name, bytes, options = {}) {
       await handle.sync();
     }
     identity = await handle.stat();
-  } finally {
-    await handle.close();
+  } catch (error) {
+    // Failed content must not linger: without this, an ENOSPC/EIO
+    // write (or sync/stat) failure leaves the exclusively created
+    // name behind with partial or non-durable bytes — a
+    // report-looking file after publication failed. Close first
+    // (Windows cannot unlink an open name), then unlink best-effort
+    // in the same post-close order as the rebind block below; the
+    // original error propagates, never a close error.
+    await handle.close().catch(() => undefined);
+    await unlink(path).catch(() => undefined);
+    throw error;
   }
+  await handle.close();
   try {
     if ((await canonicalConfinedDir(dir)) !== expected) {
       throw new PilotDiskError(

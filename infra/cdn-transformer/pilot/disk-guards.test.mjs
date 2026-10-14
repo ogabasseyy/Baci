@@ -230,6 +230,20 @@ test('writeConfinedFile sync:false still confines and rebinds', async () => {
   );
 });
 
+test('writeConfinedFile unlinks the name when the write fails', async () => {
+  // A failed write must not leave a report-looking file behind:
+  // invalid bytes throw inside writeFile after the exclusive
+  // create, and the name must be gone when the error propagates
+  // (same for ENOSPC/EIO mid-write in production).
+  const { lstat } = await import('node:fs/promises');
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-confined-fail-'));
+  await assert.rejects(
+    () => writeConfinedFile(dir, 'report.json', undefined),
+    /ERR_INVALID_ARG_TYPE/
+  );
+  await assert.rejects(() => lstat(join(dir, 'report.json')), /ENOENT/);
+});
+
 test('writeConfinedFile refuses a parent swapped for a symlink', async () => {
   // A staging parent renamed away and replaced with a link after setup:
   // 'wx' alone would create through the link outside the owned tree.

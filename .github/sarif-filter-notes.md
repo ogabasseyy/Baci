@@ -34,8 +34,10 @@ delete this step, force the `TRUSTED_CHANGED` signal, or point `filter_dir`
 at the head copy before the base auditor runs. The same residual covers
 the tripwire workflow and the `TRUSTED_CHANGE_ADVISORY` env flag — all
 PR-controlled signal, none of it enforcement. The backstop is human and
-blocking: branch protection requires code-owner review, and
-`.github/CODEOWNERS` names `@ogabasseyy` on any `.github/**` diff, so
+blocking: branch protection requires code-owner review (verified live
+2026-10-14: `Main Branch Protection` ruleset active with
+`require_code_owner_review: true`; re-verify before re-requiring SAST),
+and `.github/CODEOWNERS` names `@ogabasseyy` on any `.github/**` diff, so
 neutering the signal is a loud diff the owner must approve — but a
 base-owned `pull_request_target` gate would close even the loud vector
 (social-engineering the owner); tracked in issue #3622, while the

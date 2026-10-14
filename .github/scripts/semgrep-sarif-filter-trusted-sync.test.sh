@@ -121,13 +121,32 @@ EOF
 fi
 
 # The loud signal must stay loud: anchored (comment-proof) pins on
-# the tripwire's failing exit and the SAST job's advisory env.
+# the tripwire's failing exit, its pull_request trigger, and the
+# SAST job's advisory env.
 if ! grep -q '^ *exit 1 *$' "$TRIP"; then
   echo "::error::tripwire job no longer fails; the loud signal is neutered"
   fail=1
 fi
+if ! grep -q '^  pull_request:$' "$TRIP" \
+  || ! grep -q '^    branches: \[main, develop\]$' "$TRIP"; then
+  echo "::error::tripwire lost its pull_request trigger on main/develop"
+  fail=1
+fi
 if ! grep -q "^ *TRUSTED_CHANGE_ADVISORY: 'true' *$" "$SEC"; then
   echo "::error::Semgrep SAST job lost TRUSTED_CHANGE_ADVISORY=true"
+  fail=1
+fi
+
+# The real-findings gate depends on both scan --error flags and the
+# outcome-based final step: pin both so neither can silently revert.
+if [[ "$(grep -c 'semgrep scan --error' "$SEC")" -ne 2 ]]; then
+  echo "::error::expected 2 semgrep scan --error invocations in $SEC"
+  fail=1
+fi
+fail_if="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; print}' "$SEC")"
+if [[ "$fail_if" != *"steps.semgrep_pr.outcome == 'failure'"* ]] \
+  || [[ "$fail_if" == *"sarif_exists"* ]]; then
+  echo "::error::final gate must key on scan outcomes without a SARIF guard"
   fail=1
 fi
 

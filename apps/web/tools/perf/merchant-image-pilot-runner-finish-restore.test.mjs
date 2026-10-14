@@ -153,9 +153,13 @@ describe('merchant-image-pilot-runner finish restore', () => {
     const secondHar = join(dir, 'second.har');
     await writeHar(secondHar);
     await capture();
+    const { writeFile: realWriteFile } = await import('node:fs/promises');
     const io = {
-      copyFile() {
-        throw new Error('ENOSPC: staged screenshot write failed');
+      writeFile(path, ...rest) {
+        if (String(path).endsWith('screenshot.png')) {
+          throw new Error('ENOSPC: staged screenshot write failed');
+        }
+        return realWriteFile(path, ...rest);
       },
     };
     await expect(finishRun({ ...base, har: secondHar, io })).rejects.toThrow(

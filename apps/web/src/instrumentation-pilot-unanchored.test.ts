@@ -1,7 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  seedCommittedFillers,
+  setupLabRoots,
+} from './app/pilot-lab/lab-test-roots';
 import { register } from './instrumentation';
 
 // Unanchored-boot tests against the REAL public-assets resolver (the
@@ -45,15 +50,45 @@ function withStagedTree(publicDir: string) {
 }
 
 describe('instrumentation unanchored boot', () => {
-  it('refuses a nothing-checkable boot without the explicit ack', async () => {
-    // Bare sandbox cwd (no public/, no next.config) and a vitest
-    // worker argv with no adjacent public/: the gate checked nothing,
-    // so boot refuses instead of serving an unseen tree unverified.
+  it('warns and completes for a serverless-style boot with no pilot env', async () => {
+    // Bare sandbox cwd (no public/, no next.config), a vitest worker
+    // argv with no adjacent public/, and zero pilot configuration:
+    // serverless/Vercel functions and unrelated workers structurally
+    // cannot anchor, so the lab-off boot warns loudly and completes
+    // instead of bricking before OTel setup.
     const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-bare-'));
     const previousCwd = process.cwd();
     process.chdir(sandbox);
     try {
       stubUnanchoredBoot();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await expect(register()).resolves.toBe(undefined);
+        expect(warnSpy).toHaveBeenCalledOnce();
+        expect(warnSpy.mock.calls[0][0]).toMatch(
+          /no pilot configuration detected/
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
+      expect(registerOTelMock).toHaveBeenCalledOnce();
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(sandbox, { force: true, recursive: true });
+    }
+  });
+
+  it('refuses a nothing-checkable boot when pilot intent is configured', async () => {
+    // Same bare sandbox, but the operator configured pilot env: an
+    // unanchorable boot with pilot intent is a loud misconfiguration
+    // (a custom server rooted elsewhere would serve its real tree
+    // unverified), so boot refuses and names the anchor fix.
+    const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-bare-'));
+    const previousCwd = process.cwd();
+    process.chdir(sandbox);
+    try {
+      stubUnanchoredBoot();
+      vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', '/operator/input');
       await expect(register()).rejects.toThrow(/refusing an unchecked boot/);
       expect(registerOTelMock).not.toHaveBeenCalled();
     } finally {
@@ -159,6 +194,43 @@ describe('instrumentation unanchored boot', () => {
     vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
     vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '');
     await expect(register()).rejects.toThrow(/cannot anchor/);
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('instrumentation lab-on boot gate (real runtime)', () => {
+  it('refuses a fourth filler file planted before boot', async () => {
+    // End-to-end boot wiring: the boot shape gate's exact-set filler
+    // check fires first here, and the boot binding check binds the
+    // pinned filler paths exactly like the request path as the second
+    // layer — either way a file planted under fillers/ refuses boot
+    // instead of staying statically servable until the first lab
+    // render.
+    const lab = await setupLabRoots({
+      accepted: [
+        {
+          assetId: 'logo-a',
+          ladder: [96, 192, 384],
+          merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          role: 'logo',
+          slot: 'header-logo',
+          url: 'https://cdn.example.com/media/logo-a.png',
+        },
+      ],
+    });
+    await seedCommittedFillers(lab.publicDir);
+    await writeFile(
+      join(lab.publicDir, '__pilot', 'fillers', 'planted.png'),
+      'evil'
+    );
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', lab.publicDir);
+    vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '');
+    await expect(register()).rejects.toThrow(/unapproved filler/);
     expect(registerOTelMock).not.toHaveBeenCalled();
   });
 });

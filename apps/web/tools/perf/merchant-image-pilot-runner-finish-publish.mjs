@@ -3,16 +3,11 @@
 // destination, so the destination always holds one complete set. Split
 // from merchant-image-pilot-runner-finish.mjs under the repo line
 // ceiling.
-import { randomUUID } from 'node:crypto';
-import {
-  copyFile,
-  mkdir,
-  readdir,
-  rename,
-  rm,
-  writeFile,
-} from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MAX_SCREENSHOT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
 
 // Finish owns its destination directory: the only files it may replace
 // are the five it writes. Anything else at the destination (another
@@ -36,7 +31,6 @@ export async function publishBoundSet({
   screenshot,
 }) {
   const fsx = {
-    copyFile,
     mkdir,
     readdir,
     rename,
@@ -83,7 +77,27 @@ export async function publishBoundSet({
       `${JSON.stringify(harJson)}\n`
     );
     await writeStagedJson('screenshot-capture.json', capture);
-    await fsx.copyFile(screenshot, join(staged, 'screenshot.png'));
+    // Publish the bytes that were hashed, not the pathname that was:
+    // a screenshot modified or replaced after bindScreenshotCapture
+    // hashed it would otherwise land beside a capture record with the
+    // old hash (the settings gate rejects the bundle later). Re-read
+    // bounded, compare against the capture hash, and write the
+    // verified buffer — the written bytes are the checked bytes.
+    const shotRead = await readUpToBytes(screenshot, MAX_SCREENSHOT_BYTES);
+    if (shotRead.truncated) {
+      throw new Error(
+        `screenshot exceeds ${MAX_SCREENSHOT_BYTES} bytes: ${screenshot}`
+      );
+    }
+    const shotSha256 = createHash('sha256')
+      .update(shotRead.bytes)
+      .digest('hex');
+    if (shotSha256 !== capture.screenshotSha256) {
+      throw new Error(
+        `screenshot changed after capture binding (expected ${capture.screenshotSha256}, read ${shotSha256}); re-capture instead of publishing swapped bytes: ${screenshot}`
+      );
+    }
+    await fsx.writeFile(join(staged, 'screenshot.png'), shotRead.bytes);
     // Keep the bound set self-contained: the profile-reset record
     // travels with it. A run handle without its reset record is an
     // incomplete run, not a partial bind.

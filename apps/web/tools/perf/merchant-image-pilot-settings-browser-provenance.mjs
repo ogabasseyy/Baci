@@ -11,6 +11,8 @@
 // by at most one hour (a stale or post-run launch proves nothing about
 // this run). Split from the provenance validators under the repo
 // ceiling. No I/O, no subprocesses.
+import { CLOCK_SKEW_MS } from './merchant-image-pilot-runner-finish.mjs';
+import { SESSION_NAV_SLACK_MS } from './merchant-image-pilot-runner-finish-log.mjs';
 import { verifyBrowserVersion } from './merchant-image-pilot-settings-helpers.mjs';
 
 export function verifyBrowserProvenance(text, pages, expectMajor, sourceLabel) {
@@ -91,7 +93,12 @@ export function verifyBrowserProvenance(text, pages, expectMajor, sourceLabel) {
   }
   const earliest = Math.min(...starts);
   const launchedAt = Date.parse(artifact.launchedAt);
-  if (launchedAt > earliest) {
+  // Same ordering tolerance finish applies: stamped launches pass
+  // finish up to SESSION_NAV_SLACK_MS after the HAR start, and
+  // unstamped segments fall back to the reset stamp finish accepts
+  // within CLOCK_SKEW_MS. The gate sees only launchedAt, so it takes
+  // the max — a launch finish certifies must pass here too.
+  if (launchedAt > earliest + Math.max(SESSION_NAV_SLACK_MS, CLOCK_SKEW_MS)) {
     return {
       error: 'browser-provenance launch postdates the measured run',
       ok: false,

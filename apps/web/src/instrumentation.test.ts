@@ -7,7 +7,8 @@ const assertPilotPublicAssetsMock = vi.hoisted(() => vi.fn());
 const resolvePilotPublicDirMock = vi.hoisted(() =>
   vi.fn(() => '/resolved/public')
 );
-vi.mock('@/config/pilot-public-assets', () => ({
+vi.mock('@/config/pilot-public-assets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/config/pilot-public-assets')>()),
   assertPilotPublicAssets: assertPilotPublicAssetsMock,
 }));
 vi.mock('@/config/pilot-public-assets-roots', () => ({

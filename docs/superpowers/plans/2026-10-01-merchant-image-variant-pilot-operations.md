@@ -64,36 +64,49 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # lab origin is operator opt-in only: never enable the lab on a
 # reachable box you would not publish the merchant catalog from.
 # ALLOW_PROD pre-flight (all must hold before exporting it): the box is
-# measurement-only, not the live storefront; the lab env (flag, roots,
-# staged tree) lives only on that box and is never copied to a shared
-# deployment; every boot prints LAB ENABLED IN PRODUCTION — if you see
-# it somewhere unexpected, unset the flag there. When measurement ends,
-# unset BACI_IMAGE_PILOT_LAB and delete the staged tree (recovery line
-# below) so no later boot can serve it.
+# measurement-only, not the live storefront; the box is network-isolated
+# (loopback-only or firewalled to the operator — staged bytes are plain
+# static files, and direct asset fetches never re-check); the lab env
+# (flag, roots, staged tree) lives only on that box and is never copied
+# to a shared deployment; every boot prints LAB ENABLED IN PRODUCTION —
+# if you see it somewhere unexpected, unset the flag there. When
+# measurement ends, unset BACI_IMAGE_PILOT_LAB and delete the staged
+# tree (recovery line below) so no later boot can serve it.
 # Residual window (accepted): files planted under public/__pilot AFTER
 # boot are statically servable until the next lab page render re-runs
 # the binding check — and after a degraded boot (failed lab init),
 # every render attempt still re-checks against the empty binding set
-# and refuses loudly, so a plant is never silent even though it stays
-# servable until restart. Never live-edit the staged tree; unexpected
-# content means re-stage and restart.
+# and refuses loudly. BUT direct static-asset requests (GET
+# /__pilot/...) never invoke a lab handler, so a plant fetched only
+# that way is served with NO re-check until restart: page renders
+# fail loud, raw asset fetches do not. This is why the lab (and
+# especially ALLOW_PROD) must run on a network-isolated host —
+# loopback-only or firewalled to the operator — never on a box where
+# an untrusted party can fetch URLs. Never live-edit the staged tree;
+# unexpected content means re-stage and restart.
 #
 # Recovery when a non-lab build/boot refuses a staged tree: the gate is
 # fatal on staged-merchant shapes (image files under originals/,
 # generation dirs, fillers/, or the __pilot root) and confinement
 # breaks (symlinks, hardlinked or special files — Next would serve or
 # block on them); empty leftover dirs pass silently and unrelated
-# strays (.DS_Store, renamed leftovers) warn. Filler bytes are never
-# hash-checked outside lab mode. To clear: re-run pilot:stage with the
+# strays (.DS_Store, renamed leftovers) warn. Pinned filler bytes ARE
+# hash-checked outside lab mode: the non-lab BUILD fails on filler
+# drift (a merchant image renamed to a filler name must never ship
+# silently), while runtime boots only warn. A build refusal naming a
+# filler hash means the fixture was recompressed or replaced — restore
+# public/__pilot/fillers from version control or re-pin the fixture.
+# To clear: re-run pilot:stage with the
 # intended inventory (reconcile removes unreferenced generations), or
 # delete public/__pilot/{originals,<64-hex-dirs>} outright on a box
-# that should never have staged. An unrelated boot that refuses with
-# 'refusing an unchecked boot' found no checkable app tree at all:
-# point BACI_PILOT_PUBLIC_DIR at the served tree, or export
-# BACI_IMAGE_PILOT_UNANCHORED_ACK=1 to acknowledge the unchecked
+# that should never have staged. A boot that refuses with 'refusing an
+# unchecked boot' found no checkable app tree at all while pilot env
+# was configured: point BACI_PILOT_PUBLIC_DIR at the served tree, or
+# export BACI_IMAGE_PILOT_UNANCHORED_ACK=1 to acknowledge the unchecked
 # residual (a custom server rooted elsewhere stays unseen either way;
-# detected staged content refuses regardless). The refusal is
-# intentional fail-closed
+# detected staged content refuses regardless). Boots with zero pilot
+# configuration (serverless functions, migrations) warn instead of
+# refusing. The refusal is intentional fail-closed
 # (staging is gitignored operator state, yet a leftover stage must never
 # silently ship merchant bytes): confirmed by pilot-next-gate.test.ts
 # 'refuses staged data in non-lab mode', which runs the real build-gate

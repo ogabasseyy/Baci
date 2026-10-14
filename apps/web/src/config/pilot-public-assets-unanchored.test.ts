@@ -98,10 +98,12 @@ describe('unanchoredCandidatePublicDirs', () => {
 });
 
 describe('assertUnanchoredPublicTrees', () => {
-  it('refuses an unchecked boot without the explicit ack', () => {
-    // Zero candidates means the gate checked NOTHING: a custom server
-    // rooted elsewhere would serve its real tree unverified, so only
-    // an explicit operator acknowledgement degrades this to a warning.
+  it('refuses an unchecked boot when pilot intent is configured', () => {
+    // Zero candidates means the gate checked NOTHING: with pilot env
+    // configured (lab-off but operator intends pilot use), a custom
+    // server rooted elsewhere would serve its real tree unverified —
+    // a loud misconfiguration refusal, not a silent pass.
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', '/operator/input');
     const dir = root();
     const previousCwd = process.cwd();
     const previousArgv1 = process.argv[1];
@@ -112,6 +114,29 @@ describe('assertUnanchoredPublicTrees', () => {
         /refusing an unchecked boot/
       );
     } finally {
+      process.argv[1] = previousArgv1;
+      process.chdir(previousCwd);
+    }
+  });
+  it('warns without pilot configuration (serverless-style boot)', () => {
+    // Vercel/serverless functions, migrations, and workers carry no
+    // pilot env and structurally cannot anchor: a lab-only feature
+    // must not brick them, so the nothing-checked boot warns loudly
+    // instead of refusing. Scrub the runner's LAB=1: intent reads the
+    // live environment, and this case is defined by its absence.
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    const dir = root();
+    const previousCwd = process.cwd();
+    const previousArgv1 = process.argv[1];
+    process.chdir(dir);
+    process.argv[1] = join(dir, 'nowhere', 'runner.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() => assertUnanchoredPublicTrees()).not.toThrow();
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0][0]).toMatch(/no pilot configuration detected/);
+    } finally {
+      warn.mockRestore();
       process.argv[1] = previousArgv1;
       process.chdir(previousCwd);
     }

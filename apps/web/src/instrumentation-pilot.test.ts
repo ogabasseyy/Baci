@@ -10,7 +10,8 @@ const assertPilotPublicAssetsMock = vi.hoisted(() => vi.fn());
 const resolvePilotPublicDirMock = vi.hoisted(() =>
   vi.fn(() => '/resolved/public')
 );
-vi.mock('@/config/pilot-public-assets', () => ({
+vi.mock('@/config/pilot-public-assets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/config/pilot-public-assets')>()),
   assertPilotPublicAssets: assertPilotPublicAssetsMock,
 }));
 vi.mock('@/config/pilot-public-assets-roots', () => ({
@@ -168,7 +169,12 @@ describe('instrumentation pilot boot gate', () => {
     await expect(register()).rejects.toThrow(/drifted/);
     expect(assertNoUnexpectedStagedFilesMock).toHaveBeenCalledWith(
       stagedPaths,
-      '/resolved/public/__pilot'
+      '/resolved/public/__pilot',
+      [
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-a.png',
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-b.png',
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-c.png',
+      ]
     );
     expect(registerOTelMock).not.toHaveBeenCalled();
   });
@@ -180,9 +186,18 @@ describe('instrumentation pilot boot gate', () => {
     initializeLabRuntimeMock.mockResolvedValueOnce({ stagedPaths });
     assertNoUnexpectedStagedFilesMock.mockResolvedValueOnce(undefined);
     await expect(register()).resolves.toBe(undefined);
+    // Filler paths ride along exactly like the request path: without
+    // them the boot check never enumerates fillers/, and a fourth
+    // file planted there would stay statically servable until the
+    // first lab page render — indefinitely if none ever renders.
     expect(assertNoUnexpectedStagedFilesMock).toHaveBeenCalledWith(
       stagedPaths,
-      '/resolved/public/__pilot'
+      '/resolved/public/__pilot',
+      [
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-a.png',
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-b.png',
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-c.png',
+      ]
     );
     expect(registerOTelMock).toHaveBeenCalledOnce();
   });

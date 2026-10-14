@@ -77,10 +77,12 @@ export async function register() {
       // candidates path below runs ONLY for the coded anchor failure
       // with the lab off. There the helper checks every candidate root
       // it can find and refuses on DETECTED staged content; a boot
-      // that checked nothing degrades to a loud warning ONLY under
-      // the explicit BACI_IMAGE_PILOT_UNANCHORED_ACK=1 opt-in. No
-      // second unconditional cwd re-check: a tree the candidates
-      // deliberately excluded must not brick an unrelated boot.
+      // that checked nothing refuses when pilot env is configured
+      // (explicit BACI_IMAGE_PILOT_UNANCHORED_ACK=1 degrades to a
+      // warning) and warns when no pilot configuration exists at
+      // all — serverless/Vercel functions structurally cannot
+      // anchor. No second unconditional cwd re-check: a tree the
+      // candidates deliberately excluded must not brick a boot.
       if (
         isPilotLabEnabled() ||
         !(error instanceof Error) ||
@@ -144,18 +146,31 @@ export async function register() {
       // lab page render re-runs the per-request binding check — and
       // after a degraded (runtime-less) boot, every render ATTEMPT
       // still re-checks against the empty binding set and refuses
-      // loudly on staged content. The plant stays statically servable
-      // until restart, but never silently. Staging requires local
-      // filesystem write; anyone with that access is inside the trust
-      // boundary already, but treat unexpected __pilot content as a
-      // re-stage-and-restart event, never a live edit.
+      // loudly on staged content. But DIRECT static-asset requests
+      // (GET /__pilot/...) never invoke a lab handler, so a plant
+      // fetched only that way is served with NO re-check until
+      // restart: the "never silently" claim covers lab PAGE renders,
+      // not raw asset fetches. Operate the lab (and especially
+      // ALLOW_PROD) on a network-isolated host for exactly this
+      // reason. Staging requires local filesystem write; anyone with
+      // that access is inside the trust boundary already, but treat
+      // unexpected __pilot content as a re-stage-and-restart event,
+      // never a live edit.
       if (runtime) {
         const { assertNoUnexpectedStagedFiles } = await import(
           '@/lib/merchant-image-variant-pilot/lab-config-stage-guard'
         );
+        const { pinnedFillerEntries } = await import(
+          '@/config/pilot-public-assets'
+        );
+        // Filler paths ride along exactly like the request path: without
+        // them the boot check never enumerates fillers/, and a fourth
+        // file planted there would stay statically servable until the
+        // first lab page render — indefinitely if none ever renders.
         await assertNoUnexpectedStagedFiles(
           runtime.stagedPaths,
-          join(pilotPublicDir, '__pilot')
+          join(pilotPublicDir, '__pilot'),
+          pinnedFillerEntries(pilotPublicDir).map((entry) => entry.path)
         );
       }
     }

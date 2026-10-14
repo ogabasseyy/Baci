@@ -70,22 +70,44 @@ export function unanchoredCandidatePublicDirs(): string[] {
 // refuses regardless of this flag.
 export const PILOT_UNANCHORED_ACK_FLAG = 'BACI_IMAGE_PILOT_UNANCHORED_ACK';
 
+// Pilot intent: any non-empty BACI_IMAGE_PILOT_* var (or the gate's own
+// stash). A process with zero pilot configuration — Vercel/serverless
+// functions, migrations, workers — has nothing to do with the pilot,
+// so an unanchorable lab-off boot there warns; a process the operator
+// DID configure for the pilot but that cannot anchor is a loud
+// misconfiguration and refuses. This keeps the lab-off fail-closed
+// without bricking unrelated production boots.
+function hasPilotIntent(): boolean {
+  return Object.keys(process.env).some(
+    (key) =>
+      (key.startsWith('BACI_IMAGE_PILOT') || key === 'BACI_PILOT_PUBLIC_DIR') &&
+      (process.env[key] ?? '') !== ''
+  );
+}
+
 export function assertUnanchoredPublicTrees(): void {
   const candidates = unanchoredCandidatePublicDirs();
   if (candidates.length === 0) {
-    // Fail closed by default: this boot checked NOTHING, so only an
-    // explicit operator acknowledgement may degrade it to a warning —
-    // a custom server rooted elsewhere must not pass silently. (The
-    // candidates-found branch below DID check the plausible trees, so
-    // its narrower residual keeps the plain warning.)
-    if (process.env[PILOT_UNANCHORED_ACK_FLAG] !== '1') {
+    // This boot checked NOTHING. Fail closed when the operator shows
+    // pilot intent (explicit ack degrades to a warning); warn when no
+    // pilot configuration exists at all — serverless/Vercel functions
+    // and unrelated workers structurally cannot anchor, and a lab-only
+    // feature must not brick them. (The candidates-found branch below
+    // DID check the plausible trees, so its narrower residual keeps
+    // the plain warning.)
+    if (process.env[PILOT_UNANCHORED_ACK_FLAG] === '1') {
+      console.warn(
+        'merchant image pilot: startup gate cannot anchor the public tree and found no checkable app tree (bare cwd, no server-adjacent public/); continuing unchecked under BACI_IMAGE_PILOT_UNANCHORED_ACK=1 — staged content elsewhere would be served unverified.'
+      );
+    } else if (hasPilotIntent()) {
       throw new Error(
         'merchant image pilot: startup gate cannot anchor the public tree and found no checkable app tree (bare cwd, no server-adjacent public/); refusing an unchecked boot — set BACI_PILOT_PUBLIC_DIR to the served tree, or BACI_IMAGE_PILOT_UNANCHORED_ACK=1 to acknowledge the unchecked residual'
       );
+    } else {
+      console.warn(
+        'merchant image pilot: startup gate cannot anchor the public tree and found no checkable app tree (bare cwd, no server-adjacent public/); no pilot configuration detected, continuing unchecked — set BACI_PILOT_PUBLIC_DIR if this process serves the app tree.'
+      );
     }
-    console.warn(
-      'merchant image pilot: startup gate cannot anchor the public tree and found no checkable app tree (bare cwd, no server-adjacent public/); continuing unchecked under BACI_IMAGE_PILOT_UNANCHORED_ACK=1 — staged content elsewhere would be served unverified.'
-    );
   } else {
     console.warn(
       `merchant image pilot: startup gate cannot anchor the public tree; checked ${candidates.length} candidate tree(s) instead — a custom server rooted elsewhere would be unseen. Set BACI_PILOT_PUBLIC_DIR to silence this.`

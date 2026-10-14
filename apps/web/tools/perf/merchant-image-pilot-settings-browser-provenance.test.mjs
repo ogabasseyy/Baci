@@ -94,6 +94,14 @@ describe('merchant-image-pilot-settings browser provenance', () => {
     expect(verifyBrowserProvenance(postdated, pages, '154').error).toMatch(
       /postdates the measured run/
     );
+    // Same ordering tolerance finish applies (max of the session
+    // slack and the reset skew): a launch 1s after the HAR start
+    // passes here exactly as finish certifies it.
+    const skewed = JSON.stringify({
+      ...JSON.parse(valid),
+      launchedAt: '2026-10-04T00:10:01.000Z',
+    });
+    expect(verifyBrowserProvenance(skewed, pages, '154').ok).toBe(true);
     const stale = JSON.stringify({
       ...JSON.parse(valid),
       launchedAt: '2026-10-03T00:09:30.000Z',

@@ -178,21 +178,44 @@ export async function PATCH(
       );
     }
 
-    // A payment-cancelled order (e.g. abandoned) is terminal for manual
-    // payment updates: its loyalty claim is released for reuse once the
-    // payment is cancelled, so resurrecting it as paid here would let
+    // Terminal states are terminal in both directions: once an order is
+    // cancelled, no PATCH here may move it out again. A narrower check
+    // (cancelled -> paid only) is bypassable in two steps
+    // (cancelled -> pending -> paid): after the loyalty claim is released
+    // and re-claimed elsewhere, resurrecting the first order would let
     // two orders keep the same redeemed discount. Record late payments
-    // on a new order instead.
+    // on a new order instead. Same-value (no-op) and unrelated-field
+    // patches stay allowed.
+    const paymentWasCancelled =
+      existingOrder.payment_status === 'cancelled' ||
+      existingOrder.payment_status === 'canceled';
+    const shippingWasCancelled =
+      existingOrder.shipping_status === 'cancelled' ||
+      existingOrder.shipping_status === 'canceled';
     if (
-      (existingOrder.payment_status === 'cancelled' ||
-        existingOrder.payment_status === 'canceled') &&
-      isPaidStatusUpdate(payment_status)
+      paymentWasCancelled &&
+      payment_status !== undefined &&
+      payment_status !== existingOrder.payment_status
     ) {
       return NextResponse.json(
         {
           error:
             'This order was cancelled for non-payment and cannot be marked paid. Create a new order for the late payment.',
           code: 'PAYMENT_CANCELLED_TERMINAL',
+        },
+        { status: 409 }
+      );
+    }
+    if (
+      shippingWasCancelled &&
+      shipping_status !== undefined &&
+      shipping_status !== existingOrder.shipping_status
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'This order was cancelled and cannot be moved out of cancelled. Use the cancellation endpoint for cancellations.',
+          code: 'SHIPPING_CANCELLED_TERMINAL',
         },
         { status: 409 }
       );

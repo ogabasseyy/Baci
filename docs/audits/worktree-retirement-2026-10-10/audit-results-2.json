@@ -5,8 +5,8 @@
   "prStateLimit": "recent-500 only; missing=unknown",
   "counts": {
     "CLEAN_REDUNDANT": 7,
-    "PRESERVE_IMPROVEMENT": 18,
-    "PRESERVE_DIRTY": 23,
+    "PRESERVE_IMPROVEMENT": 17,
+    "PRESERVE_DIRTY": 24,
     "ACTIVE_OR_UNCERTAIN": 15,
     "MISSING": 1
   },
@@ -396,7 +396,7 @@
       "id": 95,
       "path": "/Users/mac/Baci-app/.worktrees/pr-2104-mobile-prod-deps",
       "head": "2c60a26a91d9ed8208a13009ad5961d01253c7ec",
-      "class": "PRESERVE_IMPROVEMENT",
+      "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
       "dirty": 275,
       "uniqueCommits": 2,

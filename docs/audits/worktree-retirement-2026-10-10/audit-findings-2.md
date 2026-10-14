@@ -2,7 +2,7 @@
 
 **Baseline:** `ae94a5075d92ebdc3625c13006a6dd4144dba4fa` (`origin/main` at audit time, 2026-10-10). Read-only review of 64 manifest entries. No worktree, branch, or source changes; no builds, tests, installs, or fetches.
 
-**Classification counts:** 7 `CLEAN_REDUNDANT`, 18 `PRESERVE_IMPROVEMENT`, 23 `PRESERVE_DIRTY`, 15 `ACTIVE_OR_UNCERTAIN`, 1 `MISSING`. Per-worktree HEAD, status count, ancestry, unique commit/path counts, PR snapshot match, activity count, and notes are in [audit-results-2.json](./audit-results-2.json).
+**Classification counts:** 7 `CLEAN_REDUNDANT`, 17 `PRESERVE_IMPROVEMENT`, 24 `PRESERVE_DIRTY`, 15 `ACTIVE_OR_UNCERTAIN`, 1 `MISSING`. Per-worktree HEAD, status count, ancestry, unique commit/path counts, PR snapshot match, activity count, and notes are in [audit-results-2.json](./audit-results-2.json).
 
 ## Priority preservation
 

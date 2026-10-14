@@ -588,7 +588,7 @@
       "path": "/Users/mac/Baci-app/.claude/worktrees/agent-a27f15a03ad086e97",
       "head": "ef133c4cb6789a66dfa4cef338931fd76afd577d",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "Plan-tier-authoritative entitlement, tests, and append-only snapshot migration; baseline patch filter finds no equivalent commit.",
+      "evidence": "RETRACTED as salvage evidence: cited plan-tier safeguards verified present in frozen baseline ae94a5075d; patch-id absence does not establish novelty. Re-derive from remaining tree deltas if pursued.",
       "shard": 3,
       "manifest": {
         "id": 24,
@@ -1533,7 +1533,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/merchant-settings-security",
       "head": "d611b6df45ed94e1abb8e2b76cadabdad0fed5cd",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "Merchant identity security: authorized merchant access, restricted update schema, guarded identity/social-media migrations and SQL tests. Baseline route differs.",
+      "evidence": "RETRACTED as salvage evidence: baseline route already converts via toUserAccess and checks settings/edit permission; patch-id absence does not establish novelty. Compare remaining tree deltas before salvage.",
       "shard": 3,
       "manifest": {
         "id": 72,
@@ -1998,8 +1998,8 @@
       "id": 95,
       "path": "/Users/mac/Baci-app/.worktrees/pr-2104-mobile-prod-deps",
       "head": "2c60a26a91d9ed8208a13009ad5961d01253c7ec",
-      "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "268 tracked deletions under node_modules are cleanup effects",
+      "classification": "PRESERVE_DIRTY",
+      "evidence": "268 tracked deletions under node_modules are cleanup effects; package, patch, and lockfile changes preserved independently.",
       "shard": 2,
       "manifest": {
         "id": 95,

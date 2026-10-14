@@ -23,8 +23,8 @@ Unique commits use `git log --right-only --cherry-pick baseline...HEAD`; paths u
 | P1 | IDs 33 and 84 | Same committed HEAD, 107 versus 17 distinct dirty files; reconcile both local edit sets. |
 | P1 | ID 3 | PR #3623 is merged at this head, but 1,047 tracked `apps/web/docs` deletions remain locally. |
 | P1 | ID 63 | Six unique CWV runner commits plus 227 dirty infra files. |
-| P2 | ID 24 | Plan-tier-authoritative entitlement and append-only snapshot migration, distinct from baseline. |
-| P2 | ID 72 | Merchant identity authorization and guarded SQL migrations/tests, distinct from baseline. |
+| P2 | ID 24 | RETRACTED as salvage evidence — cited safeguards verified in baseline (see Direct Baseline Checks); re-derive novelty from remaining deltas if pursued. |
+| P2 | ID 72 | RETRACTED as salvage evidence — cited authorization behavior verified in baseline (see Direct Baseline Checks); compare remaining tree deltas before salvage. |
 | P2 | IDs 27, 90, 105, 183, 186, 189, 192 | Related remediation worker/capability/claim/cleanup changes; reconcile as a family. |
 | P2 | IDs 141 and 144 | Overlapping storefront-AI/PageSpec/preview feature family; semantic review incomplete. |
 | P2 | IDs 54 and 126 | Large archive invalidation and cache-invalidation branches; preserve/reconcile before retirement. |

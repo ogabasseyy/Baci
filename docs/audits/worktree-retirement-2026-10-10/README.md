@@ -66,7 +66,8 @@ not an unconditional removal list. See [candidate-recheck.json](./candidate-rech
 - Broad source deletions/local edits: IDs 3, 77, 94, 148, 160. Resolve sparse or
   deliberate deletion state with the owner; do not assume these are caches.
 - Security/entitlement candidates: IDs 24 and 72 have focused current-baseline
-  comparisons in shard 3. They are preservation candidates, not tested fixes.
+  comparisons in shard 3. Recheck retracted the cited evidence (safeguards
+  already in baseline); do not salvage on the original claims.
 - Storefront timeout/PDP/builder candidates: IDs 87, 150, 168 have behavior-level
   differences worth review; the timeout patch also changes cache identity and
   must not be transplanted blindly.

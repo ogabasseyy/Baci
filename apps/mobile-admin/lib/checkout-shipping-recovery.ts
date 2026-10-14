@@ -12,6 +12,7 @@ export async function requestCheckoutShippingRecovery(
           address: string;
           city: string;
           state: string;
+          countryCode?: string;
           phone: string;
           latitude: number;
           longitude: number;

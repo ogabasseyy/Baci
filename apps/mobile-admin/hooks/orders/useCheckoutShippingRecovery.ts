@@ -5,10 +5,21 @@ import { requestCheckoutShippingRecovery } from '@/lib/checkout-shipping-recover
 import type { checkoutShippingRecoverySchema } from '@/schemas/checkout-shipping-recovery';
 
 type Preview = z.infer<typeof checkoutShippingRecoverySchema>;
+
+// Failures that retrying the same preview cannot resolve. Transport errors,
+// timeouts and 5xx responses stay ambiguous: the server may have committed,
+// so the preview is retained for a safe idempotent retry.
+const DEFINITIVE_RECOVERY_FAILURE =
+  /expir|stale|order changed|preview again|no longer eligible|differs from the paid|destination confirmation|complete destination|forbidden/i;
+
+function isDefinitiveRecoveryFailure(message: string): boolean {
+  return DEFINITIVE_RECOVERY_FAILURE.test(message);
+}
 interface Draft {
   address: string;
   city: string;
   state: string;
+  countryCode: string;
   phone: string;
   latitude: string;
   longitude: string;
@@ -118,10 +129,15 @@ export function useCheckoutShippingRecovery(orderId: string, initial: Draft) {
       }
     } catch (cause) {
       if (token === generation.current) {
-        setPreview(null);
-        setError(
-          cause instanceof Error ? cause.message : 'Could not confirm shipping.'
-        );
+        const message =
+          cause instanceof Error
+            ? cause.message
+            : 'Could not confirm shipping.';
+        // Confirmation is idempotent for the same preview: a lost or failed
+        // response may follow a committed server update, so keep the preview
+        // for retry and clear it only for definitive rejections.
+        if (isDefinitiveRecoveryFailure(message)) setPreview(null);
+        setError(message);
       }
     } finally {
       active.current = false;

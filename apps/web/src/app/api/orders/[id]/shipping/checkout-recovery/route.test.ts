@@ -134,6 +134,54 @@ describe('paid checkout shipping recovery route', () => {
     expect((await request()).status).toBe(401);
     expect(mocks.quotes).not.toHaveBeenCalled();
   });
+  it('authenticates before rejecting malformed order ids', async () => {
+    const malformed = () =>
+      POST(
+        new NextRequest(
+          'https://usebaci.com/api/orders/not-a-uuid/shipping/checkout-recovery',
+          {
+            method: 'POST',
+            body: JSON.stringify({ action: 'preview', receiver }),
+          }
+        ),
+        { params: Promise.resolve({ id: 'not-a-uuid' }) }
+      );
+    mocks.auth.mockResolvedValue({ user: null });
+    expect((await malformed()).status).toBe(401);
+    expect((await request()).status).toBe(401);
+  });
+  it('rejects malformed order ids after authentication', async () => {
+    const response = await POST(
+      new NextRequest(
+        'https://usebaci.com/api/orders/not-a-uuid/shipping/checkout-recovery',
+        {
+          method: 'POST',
+          body: JSON.stringify({ action: 'preview', receiver }),
+        }
+      ),
+      { params: Promise.resolve({ id: 'not-a-uuid' }) }
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.quotes).not.toHaveBeenCalled();
+  });
+  it('rejects non-Nigerian recovery destinations', async () => {
+    const response = await request({
+      action: 'preview',
+      receiver: { ...receiver, countryCode: 'US' },
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'This recovery supports Nigerian destinations only.',
+    });
+    expect(mocks.quotes).not.toHaveBeenCalled();
+  });
+  it('accepts Nigerian recovery destinations with an explicit country code', async () => {
+    const response = await request({
+      action: 'preview',
+      receiver: { ...receiver, countryCode: 'NG' },
+    });
+    expect(response.status).toBe(200);
+  });
   it('requires CSRF protection', async () => {
     mocks.csrf.mockResolvedValue({ valid: false });
     expect((await request()).status).toBe(403);

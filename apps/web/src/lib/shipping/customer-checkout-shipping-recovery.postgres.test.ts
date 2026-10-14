@@ -106,6 +106,14 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       );
       expect(output.match(/"confirmed": true/g)?.length).toBe(2);
     });
+    it('coerces a legacy scalar destination into an address object on confirm', () => {
+      const value = quote();
+      const output = asActor(
+        `UPDATE public.orders SET shipping_address = '"12 Test Street, Ikeja"'::jsonb WHERE id='${orderId}'; ${prepare(value)} ${confirm(value.id)} RESET ROLE;
+      SELECT jsonb_typeof(shipping_address), shipping_address->>'latitude', shipping_address->>'city' FROM public.orders WHERE id='${orderId}';`
+      );
+      expect(output).toContain('object|6.6018|Ikeja');
+    });
     it('rejects altered proofs and quote payloads', () => {
       const value = quote();
       const hash = fingerprint();

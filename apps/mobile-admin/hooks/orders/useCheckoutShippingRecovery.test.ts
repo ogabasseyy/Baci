@@ -14,6 +14,7 @@ const draft = {
   address: 'Street',
   city: 'Ikeja',
   state: 'Lagos',
+  countryCode: 'NG',
   phone: '08012345678',
   latitude: '6.5',
   longitude: '3.3',
@@ -136,6 +137,31 @@ describe('useCheckoutShippingRecovery', () => {
     await act(() => result.current.confirm());
     expect(result.current.preview).toBeNull();
     expect(result.current.error).toMatch(/changed/);
+  });
+  it('retains the preview after an ambiguous confirmation failure for retry', async () => {
+    api
+      .mockResolvedValueOnce(preview)
+      .mockRejectedValueOnce(
+        new Error('Unable to recover this shipping quote. Please try again.')
+      )
+      .mockResolvedValueOnce({ confirmed: true, quoteId: 'q' });
+    const { result } = renderHook(
+      () => useCheckoutShippingRecovery('o', draft),
+      { wrapper }
+    );
+    await act(() => result.current.requestPreview());
+    await act(() => result.current.confirm());
+    expect(result.current.confirmed).toBe(false);
+    expect(result.current.preview).toEqual(preview);
+    expect(result.current.error).toMatch(/try again/);
+    await act(() => result.current.confirm());
+    expect(api).toHaveBeenLastCalledWith('o', {
+      action: 'confirm',
+      previewId: 'p',
+      confirmDestination: true,
+    });
+    expect(result.current.confirmed).toBe(true);
+    expect(result.current.preview).toBeNull();
   });
   it('rejects an expired preview and a mismatched paid amount even if confirmation is advertised', async () => {
     api.mockResolvedValueOnce({

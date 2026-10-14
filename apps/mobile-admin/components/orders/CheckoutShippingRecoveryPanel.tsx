@@ -24,6 +24,7 @@ function RecoveryForm({
       initialAddress.address ?? order.shipping_address?.address_line1 ?? '',
     city: initialAddress.city ?? '',
     state: initialAddress.state ?? '',
+    countryCode: '',
     phone: initialAddress.phone ?? '',
     latitude: '',
     longitude: '',
@@ -55,7 +56,14 @@ function RecoveryForm({
         disabled={recovery.busy}
         onSelect={update}
         onSearchChange={(address) =>
-          update({ address, city: '', state: '', latitude: '', longitude: '' })
+          update({
+            address,
+            city: '',
+            state: '',
+            countryCode: '',
+            latitude: '',
+            longitude: '',
+          })
         }
       />
       {(
@@ -76,7 +84,12 @@ function RecoveryForm({
             onChangeText={(value) =>
               update(
                 field === 'address' || field === 'city' || field === 'state'
-                  ? { [field]: value, latitude: '', longitude: '' }
+                  ? {
+                      [field]: value,
+                      countryCode: '',
+                      latitude: '',
+                      longitude: '',
+                    }
                   : { [field]: value }
               )
             }

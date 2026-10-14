@@ -31,6 +31,17 @@ describe('checkout recovery input', () => {
       }).success
     ).toBe(false);
   });
+  it('carries an optional recovery country code', () => {
+    expect(
+      shippingCheckoutRecoverySchema.parse({
+        action: 'preview',
+        receiver: { ...receiver, countryCode: 'NG' },
+      })
+    ).toEqual({
+      action: 'preview',
+      receiver: { ...receiver, countryCode: 'NG' },
+    });
+  });
   it('requires true confirmation and rejects caller-controlled pricing', () => {
     expect(
       shippingCheckoutRecoverySchema.safeParse({

@@ -197,6 +197,7 @@ describe('CheckoutShippingRecoveryPanel', () => {
       address: 'New destination',
       city: '',
       state: '',
+      countryCode: '',
       latitude: '',
       longitude: '',
     });

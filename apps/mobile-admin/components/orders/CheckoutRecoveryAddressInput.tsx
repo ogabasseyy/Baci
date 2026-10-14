@@ -16,6 +16,7 @@ export function CheckoutRecoveryAddressInput({
     address: string;
     city: string;
     state: string;
+    countryCode: string;
     latitude: string;
     longitude: string;
   }) => void;
@@ -32,7 +33,7 @@ export function CheckoutRecoveryAddressInput({
       fetchDetails
       keyboardShouldPersistTaps="handled"
       enablePoweredByContainer={false}
-      query={{ key, language: 'en' }}
+      query={{ key, language: 'en', components: 'country:NG' }}
       listViewDisplayed={disabled ? false : 'auto'}
       textInputProps={{
         accessibilityLabel: 'Search confirmed delivery destination',
@@ -62,6 +63,7 @@ export function CheckoutRecoveryAddressInput({
           address: data.description,
           city: parsed?.city ?? '',
           state: parsed?.state ?? '',
+          countryCode: parsed?.countryCode ?? '',
           latitude: parsed?.latitude?.toString() ?? '',
           longitude: parsed?.longitude?.toString() ?? '',
         });

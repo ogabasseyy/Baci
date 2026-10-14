@@ -8,6 +8,7 @@ export const shippingCheckoutRecoverySchema = z.discriminatedUnion('action', [
       city: z.string().trim().min(1).max(120),
       state: z.string().trim().min(1).max(120),
       phone: z.string().trim().min(10).max(30),
+      countryCode: z.string().trim().max(8).optional(),
       latitude: z.number().finite().min(-90).max(90),
       longitude: z.number().finite().min(-180).max(180),
     }),

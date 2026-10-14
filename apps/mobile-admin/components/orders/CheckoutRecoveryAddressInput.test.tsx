@@ -6,8 +6,10 @@ vi.mock('react-native-google-places-autocomplete', () => ({
   GooglePlacesAutocomplete: ({
     onPress,
     textInputProps,
+    query,
   }: {
     textInputProps: { editable: boolean; onChangeText: (text: string) => void };
+    query: Record<string, string>;
     onPress: (data: { description: string }, details: unknown) => void;
   }) => (
     <>
@@ -16,12 +18,32 @@ vi.mock('react-native-google-places-autocomplete', () => ({
         disabled={!textInputProps.editable}
         onChange={(event) => textInputProps.onChangeText(event.target.value)}
       />
+      <span role="status">{query.components}</span>
       <button
         type="button"
         onClick={() =>
           onPress(
             { description: 'Selected' },
-            { geometry: { location: { lat: 6, lng: 3 } } }
+            {
+              address_components: [
+                {
+                  long_name: 'Ikeja',
+                  short_name: 'Ikeja',
+                  types: ['locality'],
+                },
+                {
+                  long_name: 'Lagos',
+                  short_name: 'LA',
+                  types: ['administrative_area_level_1'],
+                },
+                {
+                  long_name: 'Nigeria',
+                  short_name: 'NG',
+                  types: ['country'],
+                },
+              ],
+              geometry: { location: { lat: 6, lng: 3 } },
+            }
           )
         }
       >
@@ -47,11 +69,24 @@ describe('CheckoutRecoveryAddressInput', () => {
     fireEvent.click(screen.getByText('Select pin'));
     expect(select).toHaveBeenCalledWith({
       address: 'Selected',
-      city: '',
-      state: '',
+      city: 'Ikeja',
+      state: 'Lagos',
+      countryCode: 'NG',
       latitude: '6',
       longitude: '3',
     });
+    vi.unstubAllEnvs();
+  });
+  it('restricts recovery search to Nigeria', () => {
+    vi.stubEnv('EXPO_PUBLIC_GOOGLE_MAPS_API_KEY', 'test');
+    render(
+      <CheckoutRecoveryAddressInput
+        onSelect={vi.fn()}
+        onSearchChange={vi.fn()}
+        address=""
+      />
+    );
+    expect(screen.getByRole('status').textContent).toBe('country:NG');
     vi.unstubAllEnvs();
   });
   it('allows manual entry when address search is unavailable', () => {

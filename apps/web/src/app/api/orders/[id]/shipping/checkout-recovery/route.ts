@@ -84,11 +84,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  if (!z.uuid().safeParse(id).success)
-    return NextResponse.json({ error: 'Invalid order' }, { status: 400 });
   const auth = await authenticateApiRequest(request);
   if (!auth.user || !auth.supabase)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!z.uuid().safeParse(id).success)
+    return NextResponse.json({ error: 'Invalid order' }, { status: 400 });
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid)
     return (
@@ -114,6 +114,16 @@ export async function POST(
       },
       { status: 400 }
     );
+  if (parsed.data.action === 'preview') {
+    const recoveryCountry = parsed.data.receiver.countryCode
+      ?.trim()
+      .toUpperCase();
+    if (recoveryCountry && recoveryCountry !== 'NG')
+      return NextResponse.json(
+        { error: 'This recovery supports Nigerian destinations only.' },
+        { status: 400 }
+      );
+  }
   const supabase = auth.supabase;
   if (parsed.data.action === 'confirm') {
     const { data, error } = await supabase.rpc(

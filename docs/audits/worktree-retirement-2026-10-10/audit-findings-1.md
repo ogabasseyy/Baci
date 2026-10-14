@@ -49,8 +49,8 @@ The comparison uses `git status --porcelain --untracked-files=normal`, non-ignor
 | 52 | `~/Baci-app/.worktrees/expo57-modernization` | `f593be74` | no | 14/4 | 8/23 | PRESERVE_DIRTY | Follows merged #3371; Expo 57/EAS config and dirty changes remain. |
 | 55 | `~/Baci-app/.worktrees/fix-blog-prerender-cache-20260830` | `337e1818` | no | 0/0 | 1/2 | PRESERVE_IMPROVEMENT | Closed #3433; cached-category navigation interruption fix is not established in baseline. |
 | 58 | `~/Baci-app/.worktrees/fix-web-ios-production-deploys` | `dc79abd8` | no | 0/0 | 4/15 | CLEAN_REDUNDANT | Exact merged #3457 head; 263 sampled ignored media files byte-identical to primary. |
-| 61 | `~/Baci-app/.worktrees/gigl-wallet-shipping-margin` | `68903f46` | no | 1/0 | 0/0 | PRESERVE_DIRTY | One tracked local modification on `main`; inspect. |
-| 64 | `~/Baci-app/.worktrees/h0-cwv-task6-prep` | `9671aa67` | no | 14/79 | 2/1 | PRESERVE_DIRTY | CWV runner planning commits plus dirty docs/untracked files. |
+| 61 | `~/Baci-app/.worktrees/gigl-wallet-shipping-margin` | `68903f46` | no | 1/0 | 0/0 | PRESERVE_DIRTY | One tracked local modification on `main`; inspect. Same HEAD as ID 166; compare both local edit sets before retiring either. |
+| 64 | `~/Baci-app/.worktrees/h0-cwv-task6-prep` | `9671aa67` | no | 14/79 | 2/1 | PRESERVE_DIRTY | CWV runner planning commits plus dirty docs/untracked files. Same HEAD as IDs 42 and 65; reconcile all three local edit sets. |
 | 67 | `~/Baci-app/.worktrees/h1-home-critical-viewport` | `127eedc9` | no | 19/8 | 2/6 | PRESERVE_DIRTY | Hero preload contract work with dirty/untracked files; branch has a merge commit. |
 | 70 | `~/Baci-app/.worktrees/merchant-media-pipeline` | `3c4e0248` | no | 2/0 | 148/545 | PRESERVE_DIRTY | Extensive merchant media/readiness history; two dirty docs; semantic review complex. |
 | 73 | `~/Baci-app/.worktrees/metro-clean-20260817` | `a0221b27` | no | 0/0 | 26/172 | PRESERVE_IMPROVEMENT | Builder-preview security and Metro cleanup history; clean tracked state does not make unique commits disposable. |
@@ -84,11 +84,11 @@ The comparison uses `git status --porcelain --untracked-files=normal`, non-ignor
 | 157 | `~/Baci-app/.worktrees/wht-invoice-adjustments-design` | `8c71477a` | no | 0/0 | 3/2 | PRESERVE_IMPROVEMENT | WHT financial lifecycle and invoice-adjustment design docs. |
 | 160 | `~/Baci-worktrees/cursor-savings-phase1` | `2a4a8e40` | no | 1593/2920 | 0/0 | PRESERVE_DIRTY | Extremely large dirty/untracked state; no content classified as disposable. |
 | 163 | `~/Baci-worktrees/image-bitmap-memory-fix` | `c127b048` | no | 1/0 | 2/24 | PRESERVE_DIRTY | Bitmap decoding/crash guard improvements plus one local modification. |
-| 166 | `~/Baci-worktrees/oxygen-integration` | `68903f46` | no | 68/2 | 0/0 | PRESERVE_DIRTY | 68 dirty entries and two untracked files; no unique commit. |
+| 166 | `~/Baci-worktrees/oxygen-integration` | `68903f46` | no | 68/2 | 0/0 | PRESERVE_DIRTY | 68 dirty entries and two untracked files; no unique commit. Same HEAD as ID 61; compare both local edit sets before retiring either. |
 | 169 | `~/Baci-worktrees/piggyvest-3620-takeover` | `afef44ee` | no | 464/445 | 35/3286 | PRESERVE_DIRTY | Extensive PiggyVest implementation and local state; semantic review complex. |
-| 172 | `~/Baci-worktrees/pr3186-outbox-rpc` | `9634efb6` | no | 4/4 | 15/15 | PRESERVE_DIRTY | CI/replay and RPC diagnostics plus dirty/untracked state. |
+| 172 | `~/Baci-worktrees/pr3186-outbox-rpc` | `9634efb6` | no | 4/4 | 15/15 | PRESERVE_DIRTY | CI/replay and RPC diagnostics plus dirty/untracked state. Exact-head PR #3186 is merged; preserve only the dirty/untracked local state. |
 | 175 | `~/Baci-worktrees/pr3322-ci-fix` | `47c2c9ce` | no | 0/0 | 3/4 | CLEAN_REDUNDANT | Exact merged #3324 head; 263 sampled ignored media files byte-identical to primary. |
-| 178 | `~/Baci-worktrees/pr3597-refunds` | `8ba03c46` | yes | 0/0 | 12/35 | PRESERVE_IMPROVEMENT | Refund RPC currency/outstanding-leg and reference normalization fixes. |
+| 178 | `~/Baci-worktrees/pr3597-refunds` | `8ba03c46` | yes | 0/0 | 12/35 | PRESERVE_IMPROVEMENT | Refund RPC currency/outstanding-leg and reference normalization fixes. Open PR #3597 at exact head; ID 177 is behind this remote head — salvage through the active PR. |
 | 181 | `~/Baci-worktrees/semantic-timeout-fix` | n/a | n/a | n/a | n/a | MISSING | Path absent at audit time. |
 | 184 | `~/Baci-worktrees/terra-3305-followup-isolated` | `bc3b00b4` | no | 0/0 | 41/104 | PRESERVE_IMPROVEMENT | Remediation cleanup idempotency and workflow regressions; overlaps IDs 25/106/187/190. |
 | 187 | `~/Baci-worktrees/terra-3309-case-state-review` | `49aded50` | no | 0/0 | 25/44 | PRESERVE_IMPROVEMENT | Remediation stale-lock ownership/transition safety; overlapping history, preserve pending diff comparison. |

@@ -914,7 +914,7 @@
       "path": "~/Baci-app/.worktrees/cwv-critical-viewport-home",
       "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "CWV runner planning; two unique docs commits, three dirty entries, and ignored plan/review artifacts.",
+      "evidence": "CWV runner planning; two unique docs commits, three dirty entries, and ignored plan/review artifacts. Same HEAD as IDs 64 and 65; reconcile all three local edit sets (ID 42 stays ACTIVE_OR_UNCERTAIN).",
       "shard": 3,
       "manifest": {
         "id": 42,
@@ -1335,7 +1335,7 @@
       "path": "~/Baci-app/.worktrees/gigl-wallet-shipping-margin",
       "head": "68903f4628694115857b1641aaf85f43f58a7dcf",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "One local modification on main.",
+      "evidence": "One local modification on main. Same HEAD as ID 166; compare both local edit sets before retiring either.",
       "shard": 1,
       "manifest": {
         "id": 61,
@@ -1386,7 +1386,7 @@
       "path": "~/Baci-app/.worktrees/h0-cwv-task6-prep",
       "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "CWV runner planning changes with dirty docs and untracked files.",
+      "evidence": "CWV runner planning changes with dirty docs and untracked files. Same HEAD as IDs 42 and 65; reconcile all three local edit sets.",
       "shard": 1,
       "manifest": {
         "id": 64,
@@ -1403,7 +1403,7 @@
       "path": "~/Baci-app/.worktrees/h0-gate0-prep",
       "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "2 unique commits / 1 paths vs baseline; 2 dirty entries; no PR match.",
+      "evidence": "2 unique commits / 1 paths vs baseline; 2 dirty entries; no PR match. Same HEAD as IDs 42 and 64; reconcile all three local edit sets.",
       "shard": 2,
       "manifest": {
         "id": 65,
@@ -3407,7 +3407,7 @@
       "path": "~/Baci-worktrees/oxygen-integration",
       "head": "68903f4628694115857b1641aaf85f43f58a7dcf",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "68 dirty entries and two non-ignored untracked files.",
+      "evidence": "68 dirty entries and two non-ignored untracked files. Same HEAD as ID 61; compare both local edit sets before retiring either.",
       "shard": 1,
       "manifest": {
         "id": 166,
@@ -3518,7 +3518,7 @@
       "path": "~/Baci-worktrees/pr3186-outbox-rpc",
       "head": "9634efb601be727bd621af7be3d80383b3b33b53",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "CI/replay and RPC diagnostics with local dirty/untracked state.",
+      "evidence": "Exact-head PR #3186 is MERGED; committed diagnostics already in main. Preserve the 4 dirty and 4 untracked local files independently.",
       "shard": 1,
       "manifest": {
         "id": 172,
@@ -3675,7 +3675,7 @@
       "path": "~/Baci-worktrees/pr3597-refunds",
       "head": "8ba03c467ba8683b18fbd9eea16b0965e948df79",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "Refund RPC/currency/reference fixes; candidate pending current-main behavioral comparison.",
+      "evidence": "Open PR #3597 at exact head with refund RPC/currency/reference fixes. ID 177 is behind this remote head; salvage through the active PR, not outside it.",
       "shard": 1,
       "manifest": {
         "id": 178,

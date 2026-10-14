@@ -243,9 +243,9 @@
       "unique_commit_count": 2,
       "changed_path_count": 1,
       "git_status_entries": 3,
-      "status_detail": "CWV runner planning; two unique docs commits, three dirty entries, and ignored plan/review artifacts.",
+      "status_detail": "CWV runner planning; two unique docs commits, three dirty entries, and ignored plan/review artifacts. Same HEAD as IDs 64 and 65; reconcile all three local edit sets (ID 42 stays ACTIVE_OR_UNCERTAIN).",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "finding": "CWV runner planning; two unique docs commits, three dirty entries, and ignored plan/review artifacts.",
+      "finding": "CWV runner planning; two unique docs commits, three dirty entries, and ignored plan/review artifacts. Same HEAD as IDs 64 and 65; reconcile all three local edit sets (ID 42 stays ACTIVE_OR_UNCERTAIN).",
       "pr_state": null,
       "remote_branch": "not found in live branch listing"
     },

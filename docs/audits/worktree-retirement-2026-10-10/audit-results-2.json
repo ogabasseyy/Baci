@@ -280,7 +280,8 @@
       "uniqueCommits": 2,
       "uniquePaths": 1,
       "pr": "unknown",
-      "activity": 0
+      "activity": 0,
+      "notes": "Same HEAD as IDs 42 and 64; reconcile all three local edit sets."
     },
     {
       "id": 68,

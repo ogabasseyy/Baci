@@ -376,7 +376,7 @@
       "uniqueCommits": 0,
       "changedPaths": 0,
       "category": "PRESERVE_DIRTY",
-      "evidence": "One local modification on main."
+      "evidence": "One local modification on main. Same HEAD as ID 166; compare both local edit sets before retiring either."
     },
     {
       "id": 64,
@@ -389,7 +389,7 @@
       "uniqueCommits": 2,
       "changedPaths": 1,
       "category": "PRESERVE_DIRTY",
-      "evidence": "CWV runner planning changes with dirty docs and untracked files."
+      "evidence": "CWV runner planning changes with dirty docs and untracked files. Same HEAD as IDs 42 and 65; reconcile all three local edit sets."
     },
     {
       "id": 67,
@@ -892,7 +892,7 @@
       "uniqueCommits": 0,
       "changedPaths": 0,
       "category": "PRESERVE_DIRTY",
-      "evidence": "68 dirty entries and two non-ignored untracked files."
+      "evidence": "68 dirty entries and two non-ignored untracked files. Same HEAD as ID 61; compare both local edit sets before retiring either."
     },
     {
       "id": 169,
@@ -918,7 +918,12 @@
       "uniqueCommits": 15,
       "changedPaths": 15,
       "category": "PRESERVE_DIRTY",
-      "evidence": "CI/replay and RPC diagnostics with local dirty/untracked state."
+      "evidence": "Exact-head PR #3186 is merged; committed CI/replay and RPC diagnostics already in main. Preserve only the 4 dirty and 4 untracked local files independently.",
+      "pr": {
+        "number": 3186,
+        "state": "MERGED",
+        "head": "9634efb601be727bd621af7be3d80383b3b33b53"
+      }
     },
     {
       "id": 175,
@@ -953,7 +958,12 @@
       "uniqueCommits": 12,
       "changedPaths": 35,
       "category": "PRESERVE_IMPROVEMENT",
-      "evidence": "Refund RPC/currency/reference fixes; candidate pending current-main behavioral comparison."
+      "evidence": "Open PR #3597 at exact head with refund RPC/currency/reference fixes; candidate pending behavioral comparison. ID 177 is behind this remote head; salvage through the active PR.",
+      "pr": {
+        "number": 3597,
+        "state": "OPEN",
+        "head": "8ba03c467ba8683b18fbd9eea16b0965e948df79"
+      }
     },
     {
       "id": 181,

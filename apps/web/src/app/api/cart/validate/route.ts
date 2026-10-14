@@ -255,10 +255,21 @@ export async function POST(request: NextRequest) {
           : (offer?.price ?? product.price)
       );
 
+      // Non-variant offer lines report the live offer allocation, not the
+      // parent: the order RPC decrements product_offers.stock_quantity, so
+      // reporting parent stock would show a purchasable offer line as
+      // unavailable (or overstate its cap). Rows without a finite scalar
+      // fall back to the parent, same as the invalid-line check's skip.
+      const offerAllocation =
+        !item.variantId && item.offerId
+          ? Number(offer?.stock_quantity ?? Number.NaN)
+          : Number.NaN;
       validProducts.push({
         id: String(product.id),
         price: currentPrice,
-        stock: getEffectiveStock(product),
+        stock: Number.isFinite(offerAllocation)
+          ? offerAllocation
+          : getEffectiveStock(product),
         name: product.name,
         manage_stock: product.manage_stock ?? true,
         ...(item.variantId ? { variantId: item.variantId } : {}),

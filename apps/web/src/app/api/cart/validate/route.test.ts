@@ -413,6 +413,11 @@ describe('POST /api/cart/validate', () => {
     expect(response.status).toBe(200);
     expect(body.invalidProductIds).toEqual([]);
     expect(body.priceChanges).toEqual([]);
+    // Parent stock is 0 while both offers hold allocation: the reported
+    // stock must follow the live offer, not the parent.
+    expect(
+      body.validProducts.map((row: { stock: number }) => row.stock)
+    ).toEqual([3, 2]);
     expect(supabase.rpc).toHaveBeenCalledWith('get_product_offers', {
       p_product_id: PRODUCT_ID,
     });

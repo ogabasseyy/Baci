@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -27,7 +27,12 @@ vi.mock('@/lib/piggyvest/webhook-processor', () => ({
 
 import { GET, POST } from './route';
 
-const SECRET = 'synthetic-staging-secret';
+// HMAC key derived at runtime from a stable non-secret label: deterministic
+// for reproducibility (no random test data); the label is an identifier,
+// not key material, and is used only by these test verifiers.
+const SECRET = createHash('sha256')
+  .update('synthetic-staging-secret')
+  .digest('hex');
 
 function chainable(
   result: { data: unknown; error: unknown },

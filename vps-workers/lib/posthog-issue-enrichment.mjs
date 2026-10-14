@@ -85,10 +85,9 @@ const framePath = (source) => {
       return '';
     }
     // Deployment URL paths are not repository structure: basename only.
-    // Virtual sourcemap schemes fall through to relative handling below,
-    // unless the pathname is recognizably an absolute local path.
-    reduceToBasename = !virtualScheme || isAbsoluteLocalUrlPath(path);
-    if (reduceToBasename) virtualScheme = false;
+    // Virtual schemes are classified after decoding below, since an
+    // encoded root would otherwise bypass absolute-path detection.
+    reduceToBasename = !virtualScheme;
   }
   // Decode to a bounded fixed point so double-encoded delimiters cannot
   // smuggle metadata past the redactor: single and double encoding
@@ -105,6 +104,12 @@ const framePath = (source) => {
     return '';
   }
   path = path.split(/[?#]/, 1)[0];
+  if (virtualScheme && isAbsoluteLocalUrlPath(path)) {
+    // Virtual schemes around absolute build paths still expose usernames
+    // and customer directories: basename only.
+    reduceToBasename = true;
+    virtualScheme = false;
+  }
   // Absolute local paths may embed usernames and customer directories.
   // Virtual-scheme pathnames are exempt: their leading slash is a URL
   // artifact, not a filesystem root.

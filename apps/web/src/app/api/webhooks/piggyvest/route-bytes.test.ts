@@ -1,12 +1,18 @@
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ createServiceClient: vi.fn() }));
-const secret = 'synthetic-staging-byte-test';
+// Holder for the deterministic key: mock factories below are hoisted above
+// imports, so they read the shared derived value instead of a literal secret.
+const testSecret = vi.hoisted(() => ({ value: '' }));
+testSecret.value = createHash('sha256')
+  .update('synthetic-staging-byte-test')
+  .digest('hex');
+const secret = testSecret.value;
 
 vi.mock('@/env', () => ({
-  getPiggyvestWebhookSecret: () => 'synthetic-staging-byte-test',
+  getPiggyvestWebhookSecret: () => testSecret.value,
   getPiggyvestApiConfig: () => null,
 }));
 vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
@@ -22,7 +28,7 @@ vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
     }) => {
       const secret = actual.matchPiggyvestWebhookSecret({
         ...input,
-        secrets: ['synthetic-staging-byte-test'],
+        secrets: [testSecret.value],
       });
       // Family binding is covered by dedicated tests; these suites pin
       // downstream handling with the legacy-authorized family.

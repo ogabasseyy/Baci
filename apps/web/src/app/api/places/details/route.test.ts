@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
+vi.mock('../provider-budget', () => ({
+  reserveGooglePlacesRequest: vi.fn(async () => true),
+}));
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -82,9 +85,12 @@ describe('GET /api/places/details', () => {
     );
     expect(requestUrl.searchParams.get('sessiontoken')).toBe('session-123');
     expect(requestUrl.searchParams.get('key')).toBe('test-api-key');
-    expect(mockFetch).toHaveBeenCalledWith(expect.any(String), {
-      opentelemetry: { ignore: true },
-    });
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        opentelemetry: { ignore: true },
+      })
+    );
   });
 
   it('returns 400 for malformed placeId', async () => {
@@ -243,5 +249,27 @@ describe('GET /api/places/details', () => {
       error: 'Failed to fetch place details',
       code: 'PLACES_DETAILS_UPSTREAM_ERROR',
     });
+  });
+
+  it('fails fast on a stalled upstream instead of retrying timeouts', async () => {
+    mockFetch.mockRejectedValueOnce(
+      new DOMException('Timed out', 'TimeoutError')
+    );
+    const response = await GET(makeRequest({ placeId: 'ChIJ1234' }));
+    expect(response.status).toBe(500);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a whitespace-only Google key as unconfigured', async () => {
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', '   ');
+    vi.stubEnv('GOOGLE_MAPS_API_KEY', '  ');
+    const response = await GET(makeRequest({ placeId: 'ChIJ1234' }));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Google Places API not configured',
+    });
+    expect(mockFetch).not.toHaveBeenCalled();
+    vi.stubEnv('GOOGLE_PLACES_API_KEY', '');
+    vi.stubEnv('GOOGLE_MAPS_API_KEY', 'test-api-key');
   });
 });

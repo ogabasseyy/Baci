@@ -1,0 +1,14 @@
+diff --git a/ios/AppleAuthenticationRequest.swift b/ios/AppleAuthenticationRequest.swift
+--- a/ios/AppleAuthenticationRequest.swift
++++ b/ios/AppleAuthenticationRequest.swift
+@@ -81,8 +81,8 @@
+   // MARK: - ASAuthorizationControllerPresentationContextProviding
+ 
+   func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+-    guard let window = UIApplication.shared.keyWindow else {
+-      fatalError("Unable to present authentication modal because UIApplication.shared.keyWindow is not available")
++    guard let window = Utilities.keyWindow() else {
++      fatalError("Unable to present authentication modal because Utilities.keyWindow() is not available")
+     }
+     return window
+   }

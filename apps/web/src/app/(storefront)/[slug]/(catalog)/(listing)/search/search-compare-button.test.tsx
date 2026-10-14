@@ -1,5 +1,5 @@
 import { fireEvent, render as renderWeb, screen } from '@testing-library/react';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { NormalizedProduct } from '@/lib/normalize-product';
 

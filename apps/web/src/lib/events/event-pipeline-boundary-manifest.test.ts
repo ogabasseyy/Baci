@@ -80,6 +80,7 @@ describe('event pipeline authority manifest', () => {
     expect(manifest.trustedWrapperImporters).toEqual([
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
+      'apps/web/src/app/api/search/submissions/route.ts',
     ]);
     expect(manifest.sdkConstructorHashes).toEqual({
       'apps/web/src/lib/events/event-ingress-capability.ts':

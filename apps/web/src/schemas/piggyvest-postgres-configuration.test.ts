@@ -72,6 +72,9 @@ describe('piggyvestPostgresConfigurationSchema', () => {
     { password: '' },
     { password: 'contains\0nul' },
     { database: '' },
+    // Negative case: proves the schema REJECTS rejectUnauthorized:false.
+    // The dangerous value must appear literally to assert rejection.
+    // nosemgrep: problem-based-packs.insecure-transport.js-node.bypass-tls-verification.bypass-tls-verification
     { ssl: { rejectUnauthorized: false } },
     { certificateAuthority: '' },
   ])('rejects unapproved host, project, credentials or TLS overrides', (change) => {

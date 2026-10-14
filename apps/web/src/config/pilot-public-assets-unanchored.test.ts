@@ -270,6 +270,8 @@ describe('assertUnanchoredPublicTrees', () => {
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     vi.stubEnv('BACI_IMAGE_PILOT_UNANCHORED_ACK', '1');
     expect(hasPilotIntent()).toBe(false);
+    vi.stubEnv('BACI_IMAGE_PILOT_UNANCHORED_ACK', 'true');
+    expect(hasPilotIntent()).toBe(true);
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     expect(hasPilotIntent()).toBe(true);
   });

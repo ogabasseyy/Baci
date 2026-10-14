@@ -87,13 +87,25 @@ export const PILOT_UNANCHORED_ACK_FLAG = 'BACI_IMAGE_PILOT_UNANCHORED_ACK';
 // misconfiguration and refuses. This keeps the lab-off fail-closed
 // without bricking unrelated production boots.
 export function hasPilotIntent(): boolean {
-  return Object.keys(process.env).some(
-    (key) =>
-      ((key.startsWith('BACI_IMAGE_PILOT') &&
-        key !== PILOT_UNANCHORED_ACK_FLAG) ||
-        (key === 'BACI_PILOT_PUBLIC_DIR' && !isPublicDirAutoStashed())) &&
-      (process.env[key] ?? '') !== ''
-  );
+  return Object.keys(process.env).some((key) => {
+    if ((process.env[key] ?? '') === '') {
+      return false;
+    }
+    if (key === 'BACI_PILOT_PUBLIC_DIR') {
+      return !isPublicDirAutoStashed();
+    }
+    if (!key.startsWith('BACI_IMAGE_PILOT')) {
+      return false;
+    }
+    // The ACK opts out of intent ONLY at its documented strict '1':
+    // any other nonempty value is a misconfigured acknowledgement
+    // that keeps intent, so the boot refuses with the actionable
+    // message (naming ACK=1) instead of warning past the typo.
+    if (key === PILOT_UNANCHORED_ACK_FLAG) {
+      return process.env[key] !== '1';
+    }
+    return true;
+  });
 }
 
 export function assertUnanchoredPublicTrees(): void {

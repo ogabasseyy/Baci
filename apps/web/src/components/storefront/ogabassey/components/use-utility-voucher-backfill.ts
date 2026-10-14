@@ -62,6 +62,14 @@ export interface UtilityVoucherBackfill {
   successful: boolean;
 }
 
+const INITIAL_UTILITY_VOUCHER_BACKFILL: UtilityVoucherBackfill = {
+  failed: false,
+  pin: null,
+  refundConfirmed: false,
+  refundedAmount: null,
+  successful: false,
+};
+
 interface HistoryTransactionRow {
   refund_pending?: unknown;
   refunded_to_wallet?: unknown;
@@ -165,13 +173,9 @@ export function useUtilityVoucherBackfill({
   reference: string;
   utilityTab: string;
 }): UtilityVoucherBackfill {
-  const [backfill, setBackfill] = useState<UtilityVoucherBackfill>({
-    failed: false,
-    pin: null,
-    refundConfirmed: false,
-    refundedAmount: null,
-    successful: false,
-  });
+  const [backfill, setBackfill] = useState<UtilityVoucherBackfill>(
+    INITIAL_UTILITY_VOUCHER_BACKFILL
+  );
 
   useEffect(() => {
     const historyType = TAB_TO_HISTORY_TYPE[utilityTab];
@@ -252,32 +256,40 @@ export function useUtilityVoucherBackfill({
           return;
         }
         if (parsed) {
-          // Surface every observation (e.g. failed with a pending
-          // refund) while polling continues. Settlement is decoupled
-          // from the pin hunt: terminality forgets the retained entry
-          // on first observation (the success is shown, so a repeat
-          // must mint fresh), while the loop may keep hunting a
-          // late token.
-          setBackfill(parsed);
+          // Publish only observations attributable to the still-
+          // signed-in submitter on a still-mounted view. A history
+          // body resolving after an account switch belongs to the
+          // previous customer: publishing it would render their
+          // voucher PIN to the new account and fire onSettled (which
+          // forgets the submitter's key despite the guarded direct
+          // forget below), so a switch-back would mint fresh and
+          // debit twice (Codex R85 P1). Withdraw anything published
+          // for the previous account and keep polling unpublished —
+          // the entry stays, so switch-back replays (R68 6rwg83).
+          // Surface every attributed observation (e.g. failed with a
+          // pending refund) while polling continues. Settlement is
+          // decoupled from the pin hunt: terminality forgets the
+          // retained entry on first observation (the success is
+          // shown, so a repeat must mint fresh), while the loop may
+          // keep hunting a late token.
+          const currentUserId = await readUserId();
           if (
-            parsed.successful ||
-            (parsed.failed && parsed.refundConfirmed)
+            !cancelled &&
+            submitterUserId !== null &&
+            submitterUserId === currentUserId
           ) {
-            // Forget only for the still-signed-in submitter on a
-            // still-mounted view: after a switch the entry must stay
-            // (switch-back replays), and after an unmount-during-read
-            // the unseen result must replay too (R68 6rwg83).
-            const currentUserId = await readUserId();
+            setBackfill(parsed);
             if (
-              !cancelled &&
-              submitterUserId !== null &&
-              submitterUserId === currentUserId
+              parsed.successful ||
+              (parsed.failed && parsed.refundConfirmed)
             ) {
               forgetPendingVtuByReference(reference);
             }
-          }
-          if (isTerminalBackfill(parsed, tokenExpected)) {
-            return;
+            if (isTerminalBackfill(parsed, tokenExpected)) {
+              return;
+            }
+          } else if (!cancelled) {
+            setBackfill({ ...INITIAL_UTILITY_VOUCHER_BACKFILL });
           }
         }
         if (attempt < UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS) {

@@ -775,6 +775,11 @@ describe('useUtilityVoucherBackfill', () => {
     // to the submitter, so their key must stay — a switch-back
     // identical purchase replays instead of minting fresh and
     // debiting a second time.
+    // Codex R85 P1: the cross-account observation must not even be
+    // PUBLISHED — publishing would show the previous customer's
+    // result to the new account and fire onSettled (forgetting the
+    // submitter's key despite the guarded direct forget). The loop
+    // keeps polling unpublished so a switch-back still resolves.
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('{"hook-switch":true}', 'key-hook-switch');
     notePendingVtuReference('{"hook-switch":true}', 'VTU-1');
@@ -810,11 +815,68 @@ describe('useUtilityVoucherBackfill', () => {
       );
     });
 
-    expect(result.current.successful).toBe(true);
+    expect(result.current.successful).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(recallPendingVtuKey('{"hook-switch":true}')).toBe(
       'key-hook-switch'
     );
+
+    // Switch-back resumes: the next poll publishes and forgets.
+    currentUserId = 'user-1';
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+    expect(result.current.successful).toBe(true);
+    expect(recallPendingVtuKey('{"hook-switch":true}')).toBeUndefined();
+  });
+
+  it('withholds the voucher pin observed under a different account', async () => {
+    // Codex R85 P1: a success+pin resolving after an account switch
+    // belongs to the previous customer — publishing it would render
+    // their voucher PIN (resolvedPin = voucherPin ?? backfill.pin)
+    // to the new account. Withhold until the submitter returns.
+    let calls = 0;
+    const fetchMock = mockHistory(() => {
+      calls += 1;
+      return calls === 1
+        ? { transactions: [pendingRow] }
+        : {
+            transactions: [
+              {
+                request_reference: 'VTU-1',
+                status: 'successful',
+                voucher_pin: 'PIN-PREVIOUS-USER',
+                refund_pending: false,
+              },
+            ],
+          };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { result } = renderHook(() => useUtilityVoucherBackfill(input));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    currentUserId = 'user-2';
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+
+    expect(result.current.pin).toBeNull();
+    expect(result.current.successful).toBe(false);
+
+    currentUserId = 'user-1';
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(
+        UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
+      );
+    });
+    expect(result.current.pin).toBe('PIN-PREVIOUS-USER');
   });
 
   it('retains the entry when the view unmounts during the session read', async () => {
@@ -874,7 +936,9 @@ describe('useUtilityVoucherBackfill', () => {
   });
 
   it('retains the entry when no session is captured', async () => {
-    // Fail closed like mobile: a null capture never forgets.
+    // Fail closed like mobile: a null capture never forgets — and
+    // (Codex R85 P1) never publishes either, since no polling
+    // account was established to attribute the result to.
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('{"hook-nosession":true}', 'key-hook-nosession');
     notePendingVtuReference('{"hook-nosession":true}', 'VTU-1');
@@ -899,7 +963,7 @@ describe('useUtilityVoucherBackfill', () => {
       );
     });
 
-    expect(result.current.successful).toBe(true);
+    expect(result.current.successful).toBe(false);
     expect(recallPendingVtuKey('{"hook-nosession":true}')).toBe(
       'key-hook-nosession'
     );

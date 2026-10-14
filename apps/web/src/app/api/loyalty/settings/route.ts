@@ -128,24 +128,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
-    if (!merchantContext) {
-      return NextResponse.json(
-        { error: 'Merchant not found' },
-        { status: 404 }
-      );
-    }
-
-    const access = toUserAccess(merchantContext);
-    if (!hasPermission(access, 'marketing', 'edit')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const merchantId = merchantContext.merchantId;
-
     // Validate before any database operation: malformed JSON, a
     // non-object body, and wrongly-typed fields fail closed with 400
-    // instead of throwing or coercing into the upsert.
+    // instead of triggering merchant or permission lookups.
     let rawBody: unknown;
     try {
       rawBody = await request.json();
@@ -169,6 +154,22 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
+    if (!merchantContext) {
+      return NextResponse.json(
+        { error: 'Merchant not found' },
+        { status: 404 }
+      );
+    }
+
+    const access = toUserAccess(merchantContext);
+    if (!hasPermission(access, 'marketing', 'edit')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const merchantId = merchantContext.merchantId;
+
     const {
       enabled,
       program_name,

@@ -46,4 +46,27 @@ describe('LoyaltyEnrollmentForm', () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('calls onReceiptDismiss when the receipt is dismissed', async () => {
+    enrolledNow = false;
+    const onReceiptDismiss = vi.fn();
+
+    render(
+      <LoyaltyEnrollmentForm
+        merchantId="m"
+        customerId="c"
+        onReceiptDismiss={onReceiptDismiss}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Join Loyalty Program' })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Welcome to the Club!')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'View my rewards' }));
+
+    expect(onReceiptDismiss).toHaveBeenCalledTimes(1);
+  });
 });

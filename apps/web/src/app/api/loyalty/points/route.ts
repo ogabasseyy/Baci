@@ -156,24 +156,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
-    if (!merchantContext) {
-      return NextResponse.json(
-        { error: 'Merchant not found' },
-        { status: 404 }
-      );
-    }
-    // Manual adjustments are owner-only (matching the RLS write policies
-    // and the RPC's own check): fail staff closed here with an honest
-    // 403 instead of letting the RPC answer a misleading 404.
-    if (!merchantContext.staffAccess.isOwner) {
-      return NextResponse.json(
-        { error: 'Only the merchant owner can adjust loyalty points' },
-        { status: 403 }
-      );
-    }
-    const merchantId = merchantContext.merchantId;
-
+    // Validate before any database operation: malformed JSON and
+    // wrongly-typed fields fail closed with 400 instead of triggering
+    // merchant or owner lookups.
     let rawBody: unknown = {};
     try {
       rawBody = await request.json();
@@ -192,6 +177,24 @@ export async function POST(request: NextRequest) {
       );
     }
     const { customerId, points, reason, type } = parsed.data;
+
+    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
+    if (!merchantContext) {
+      return NextResponse.json(
+        { error: 'Merchant not found' },
+        { status: 404 }
+      );
+    }
+    // Manual adjustments are owner-only (matching the RLS write policies
+    // and the RPC's own check): fail staff closed here with an honest
+    // 403 instead of letting the RPC answer a misleading 404.
+    if (!merchantContext.staffAccess.isOwner) {
+      return NextResponse.json(
+        { error: 'Only the merchant owner can adjust loyalty points' },
+        { status: 403 }
+      );
+    }
+    const merchantId = merchantContext.merchantId;
 
     // Adjust through the atomic RPC: it re-verifies merchant membership
     // and the customer row, serializes first-award creation, and locks

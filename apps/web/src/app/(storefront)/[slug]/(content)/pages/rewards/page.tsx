@@ -54,6 +54,17 @@ export default function RewardsPage() {
     setRefreshToken((token) => token + 1);
   };
 
+  // Keeps the enrollment receipt mounted after the page-level refetch
+  // reports enrolled: without this, onEnrolled's refetch flips the
+  // subtree to the status card and unmounts the form, discarding the
+  // success card (points + referral code) before the shopper dismisses
+  // it. Cleared on dismiss or identity change.
+  const [showEnrollmentReceipt, setShowEnrollmentReceipt] = useState(false);
+  const handleEnrolled = () => {
+    setShowEnrollmentReceipt(true);
+    void refetch();
+  };
+
   // The skeleton shows until the first settled fetch for THIS identity. A
   // same-identity background refetch (e.g. after onRedeemed) keeps the
   // enrolled subtree mounted so the success dialog survives; a merchant or
@@ -78,6 +89,7 @@ export default function RewardsPage() {
     if (seenIdentity.current !== identity) {
       seenIdentity.current = identity;
       wasLoading.current = true;
+      setShowEnrollmentReceipt(false);
       return;
     }
     if (wasLoading.current && !loading) setLoadedIdentity(identity);
@@ -125,12 +137,13 @@ export default function RewardsPage() {
           <Skeleton className="h-48 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
-      ) : !enrolled ? (
+      ) : !enrolled || showEnrollmentReceipt ? (
         <LoyaltyEnrollmentForm
           merchantId={merchantId}
           customerId={customerId}
           merchantName={merchantName}
-          onEnrolled={refetch}
+          onEnrolled={handleEnrolled}
+          onReceiptDismiss={() => setShowEnrollmentReceipt(false)}
         />
       ) : (
         <div className="space-y-6">

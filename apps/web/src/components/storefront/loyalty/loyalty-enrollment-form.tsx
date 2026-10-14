@@ -14,6 +14,7 @@ interface LoyaltyEnrollmentFormProps {
   customerId: string;
   merchantName?: string;
   onEnrolled?: () => void;
+  onReceiptDismiss?: () => void;
 }
 
 interface SubmitLoyaltyEnrollmentParams {
@@ -69,6 +70,7 @@ export function LoyaltyEnrollmentForm({
   customerId,
   merchantName = 'this store',
   onEnrolled,
+  onReceiptDismiss,
 }: LoyaltyEnrollmentFormProps) {
   const { toast } = useToast();
   const { enrolled, enroll, data } = useLoyalty(merchantId, customerId);
@@ -123,6 +125,11 @@ export function LoyaltyEnrollmentForm({
                   Share with friends to earn bonus points
                 </p>
               </div>
+            )}
+            {onReceiptDismiss && (
+              <Button onClick={onReceiptDismiss} className="w-full mt-4">
+                View my rewards
+              </Button>
             )}
           </div>
         </CardContent>

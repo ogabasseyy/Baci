@@ -184,6 +184,7 @@ describe('POST /api/loyalty/points', () => {
       expect(response.status).toBe(400);
     }
     expect(mocks.mockRpc).not.toHaveBeenCalled();
+    expect(mocks.mockGetMerchant).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid JSON body with 400', async () => {
@@ -198,5 +199,6 @@ describe('POST /api/loyalty/points', () => {
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body).toEqual({ error: 'Invalid JSON body' });
+    expect(mocks.mockGetMerchant).not.toHaveBeenCalled();
   });
 });

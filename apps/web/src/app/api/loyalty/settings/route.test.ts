@@ -160,6 +160,17 @@ describe('POST /api/loyalty/settings', () => {
     expect(json.error).toBe('Forbidden');
   });
 
+  it('returns 400 for invalid settings without a merchant lookup', async () => {
+    getMerchantForApiRequest.mockClear();
+
+    const response = await POST(makeRequest({ enabled: 'yes' }));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe('Invalid request body');
+    expect(getMerchantForApiRequest).not.toHaveBeenCalled();
+  });
+
   it('returns 500 when persisting settings fails', async () => {
     upsertError = { message: 'db failure' };
 

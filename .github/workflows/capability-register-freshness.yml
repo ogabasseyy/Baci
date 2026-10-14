@@ -32,11 +32,12 @@ jobs:
               data = json.load(open('docs/product/baci-capabilities.json'))
               reviewed = datetime.datetime.fromisoformat(str(data['reviewed_at']).replace('Z', '+00:00'))
               if reviewed.tzinfo is None:
-                  reviewed = reviewed.replace(tzinfo=datetime.timezone.utc)
+                  raise ValueError('naive reviewed_at')
               age = datetime.datetime.now(datetime.timezone.utc) - reviewed
-              print('true' if age > datetime.timedelta(days=14) else 'false')
+              fresh = datetime.timedelta() <= age <= datetime.timedelta(days=14)
           except Exception:
-              print('false')
+              fresh = False
+          print('true' if not fresh else 'false')
           ")
           echo "stale=$stale" >> "$GITHUB_OUTPUT"
       - name: Assert capability register is inside its evidence window

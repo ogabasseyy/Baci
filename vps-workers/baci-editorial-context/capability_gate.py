@@ -214,7 +214,11 @@ def requires_register_update(register, changed, base_register=None):
         return False
     if _register_stale(register):
         return False
-    if not _touches_unverified_refs(register, changed):
+    # Union of head and base unverified refs: editing an unverified cited
+    # file while replacing or removing its reference (reviewed_at unchanged)
+    # must not slip through just because the head register no longer cites it.
+    registers = [register] if base_register is None else [register, base_register]
+    if not any(_touches_unverified_refs(item, changed) for item in registers):
         return False
     if REGISTER_PATH not in changed:
         return True

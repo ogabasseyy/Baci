@@ -21,6 +21,10 @@ EDITABLE_VERSION_POLL_INTERVAL_SECONDS = 15
 # a usable replacement for a review we are about to withdraw.
 SUBMITTABLE_BUILD_PROCESSING_STATE = "VALID"
 
+# A public version has released the editable slot; set_changelog can create
+# its successor. Keep pending/processing releases blocked.
+PUBLISHED_APP_STORE_VERSION_STATES = %w[READY_FOR_DISTRIBUTION READY_FOR_SALE].freeze
+
 def review_cancellation_allowed?
   %w[1 true yes].include?(ENV["IOS_STOREFRONT_CANCEL_REVIEW_FOR_RESUBMIT"].to_s.strip.downcase)
 end
@@ -76,6 +80,15 @@ def blocking_app_store_version_state(app, platform)
   "#{version.version_string} #{version.app_version_state}"
 rescue StandardError => e
   "unavailable (#{e.class})"
+end
+
+# A failed state lookup must skip submission, never infer that the slot is free.
+def latest_app_store_version_allows_successor?(app, platform, target_version)
+  version = app.get_latest_app_store_version(platform: platform)
+  version && PUBLISHED_APP_STORE_VERSION_STATES.include?(version.app_version_state) &&
+    Gem::Version.new(target_version) > Gem::Version.new(version.version_string)
+rescue StandardError
+  false
 end
 
 def wait_for_editable_app_store_version(app, platform)
@@ -198,6 +211,13 @@ def app_store_version_slot_ready?(app_version:, build_number:)
     end
 
     return true if app.get_edit_app_store_version(platform: platform)
+
+    # set_changelog cannot infer a successor when there is no editable version.
+    if app_version.to_s.strip.empty? || build_number.to_s.strip.empty?
+      UI.important("No editable App Store version exists; specify app_version and build_number to create its successor. Skipping submission.")
+      return false
+    end
+    return true if latest_app_store_version_allows_successor?(app, platform, app_version)
 
     # Nothing is in review, yet the slot is still occupied — e.g. a version in
     # PENDING_DEVELOPER_RELEASE or PENDING_APPLE_RELEASE. There is no safe

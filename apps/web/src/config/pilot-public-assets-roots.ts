@@ -11,6 +11,24 @@ import { dirname, join, resolve } from 'node:path';
 // root, detected via Next's standalone marker. A custom server with an
 // inline conf object and a cwd outside the app dir defeats every
 // anchor — that boot fails closed in resolvePilotPublicDir below.
+
+// Stash origin: the gate auto-stashes its resolved root when the
+// operator set no preset, and that automatic value must NOT count as
+// pilot intent — otherwise every dev/start boot shows intent and the
+// intent-gated warn paths never trigger. Module state (not a second
+// env var) so the marker cannot leak into spawned child tooling the
+// way the stash itself could. Set exactly when the gate introduces
+// the variable, so repeat gate calls in one process (tests only)
+// keep the first answer; tests reset modules between cases.
+let publicDirAutoStashed = false;
+
+export function recordPublicDirAutoStash(): void {
+  publicDirAutoStashed = true;
+}
+
+export function isPublicDirAutoStashed(): boolean {
+  return publicDirAutoStashed;
+}
 export function resolveRoutePublicDir(): string {
   // Request-path twin of resolvePilotPublicDir below: the build/boot
   // gate inspects the tree stashed in BACI_PILOT_PUBLIC_DIR while the

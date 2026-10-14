@@ -1,13 +1,12 @@
 import { createHash } from 'node:crypto';
-import {
-  lstatSync,
-  mkdirSync,
-  readdirSync,
-  realpathSync,
-  renameSync,
-} from 'node:fs';
-import { join, sep } from 'node:path';
+import { lstatSync, readdirSync, renameSync } from 'node:fs';
+import { join } from 'node:path';
 import { isPilotLabEnabled } from './pilot-lab-enabled';
+import {
+  entryGone,
+  quarantinePilotEntry,
+  type RenameEntryFn,
+} from './pilot-public-assets-quarantine';
 import {
   assertConfinedEntry,
   assertNonLabEntry,
@@ -48,48 +47,6 @@ function directoryExists(path: string): boolean {
 // (read-only tree) stays fatal. Only the anchored boot quarantines —
 // unanchored candidates pass quarantine=false, since a foreign tree
 // may belong to a live lab session elsewhere on the box.
-// True only when the entry is genuinely gone: any other lstat failure
-// (permissions, I/O) keeps the fail-closed refusal below.
-function entryGone(root: string, name: string): boolean {
-  try {
-    lstatSync(join(root, name));
-    return false;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'ENOENT';
-  }
-}
-
-function quarantinePilotEntry(
-  publicDir: string,
-  root: string,
-  name: string,
-  renameEntry: (source: string, target: string) => void
-): string {
-  const vault = join(publicDir, '..', '__pilot-quarantine');
-  mkdirSync(vault, { recursive: true });
-  // Vault confinement: mkdir -p follows a pre-existing symlink, so a
-  // vault link into public/ would report successful quarantine while
-  // the entry stays statically served at the target path. The vault
-  // must be a real directory whose canonical path sits outside the
-  // served tree; anything else fails the quarantine (and the boot).
-  const vaultStat = lstatSync(vault);
-  if (!vaultStat.isDirectory() || vaultStat.isSymbolicLink()) {
-    throw new Error(
-      `quarantine vault "${vault}" is not a real directory — refusing to move staged content into it`
-    );
-  }
-  const realVault = realpathSync(vault);
-  const realPublic = realpathSync(publicDir);
-  if (realVault === realPublic || realVault.startsWith(`${realPublic}${sep}`)) {
-    throw new Error(
-      `quarantine vault "${vault}" resolves inside the served public tree — refusing a quarantine that stays statically served`
-    );
-  }
-  const target = join(vault, `${Date.now()}-${process.pid}-${name}`);
-  renameEntry(join(root, name), target);
-  return target;
-}
-
 // Pinned filler entries for request-time re-verification: the lab
 // renders these sibling-card images on every page, so a mid-measurement
 // edit (landing between control and pilot captures) would corrupt the
@@ -172,7 +129,7 @@ export function assertPilotPublicAssets(
   // options-bag precedent as publishQualitySheet's fsyncDir):
   // replaces the quarantine rename so the test can fail the move
   // after the winner removed the source. Production callers omit it.
-  io?: { renameEntry?: (source: string, target: string) => void }
+  io?: { renameEntry?: RenameEntryFn }
 ): void {
   const root = join(publicDir, '__pilot');
   if (!directoryExists(root)) {

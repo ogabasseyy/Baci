@@ -213,3 +213,39 @@ describe('applyPilotPublicGate', () => {
     expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe(join(configDir, 'public'));
   });
 });
+
+describe('stash origin vs pilot intent', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    delete process.env.BACI_PILOT_PUBLIC_DIR;
+  });
+
+  it('excludes the automatic stash from pilot intent', async () => {
+    // The gate auto-stashes on dev/start when the operator set no
+    // preset; that automatic value must not count as intent, or
+    // every boot shows intent and the warn paths never trigger (a
+    // recompressed filler would pass the non-lab build as a warning
+    // and then fail every boot as fatal). Fresh modules per case:
+    // the origin marker is process state, and real processes
+    // evaluate the gate once.
+    vi.resetModules();
+    const { applyPilotPublicGate: gate } = await import('./pilot-next-gate');
+    const { hasPilotIntent } = await import('./pilot-public-assets-unanchored');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    gate(configDir, PHASE_DEVELOPMENT_SERVER);
+    expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe(join(configDir, 'public'));
+    expect(hasPilotIntent()).toBe(false);
+  });
+
+  it('counts an operator preset as pilot intent', async () => {
+    vi.resetModules();
+    const { applyPilotPublicGate: gate } = await import('./pilot-next-gate');
+    const { hasPilotIntent } = await import('./pilot-public-assets-unanchored');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', join(configDir, 'public'));
+    gate(configDir, PHASE_DEVELOPMENT_SERVER);
+    expect(hasPilotIntent()).toBe(true);
+  });
+});

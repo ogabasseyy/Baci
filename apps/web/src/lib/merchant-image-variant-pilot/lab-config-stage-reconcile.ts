@@ -56,6 +56,14 @@ export async function reconcileStagedTree(input: {
       return;
     }
     if (!info.isFile() && !info.isSymbolicLink()) {
+      // Special files (FIFO/socket/device) are never valid staged
+      // content at any path: a FIFO at a bound path would hang the
+      // staged write, a device node would redirect it, and an unbound
+      // one would fail boot confinement while re-staging never
+      // repairs it. Unlink (never follows the entry) and fail staging
+      // loudly when the removal itself fails.
+      await unlink(childPath);
+      removed.push(relative(input.pilotStage, childPath));
       return;
     }
     if (!currentFiles.has(childPath)) {

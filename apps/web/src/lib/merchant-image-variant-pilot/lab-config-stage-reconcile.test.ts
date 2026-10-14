@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import {
   chmod,
   lstat,
@@ -58,6 +59,32 @@ describe('reconcileStagedTree', () => {
     });
     expect(removed).toEqual([`${GEN}/tier.avif`]);
     await expect(lstat(tierPath)).rejects.toThrow(/ENOENT/);
+  });
+
+  it('removes special files at unbound and bound paths', async () => {
+    // A FIFO left in place would fail boot confinement while
+    // re-staging never repairs it; at a bound path it would hang the
+    // staged write (or redirect it, for a device node). Unlink
+    // instead of silently skipping. POSIX-only (mkfifo).
+    if (process.platform === 'win32') {
+      return;
+    }
+    const pilotStage = await stageTree();
+    const strayFifo = join(pilotStage, 'originals', 'stray-fifo');
+    execFileSync('mkfifo', [strayFifo]);
+    const boundFifo = join(pilotStage, GEN, 'tier.avif');
+    execFileSync('mkfifo', [boundFifo]);
+    const removed = await reconcileStagedTree({
+      generationIds: [GEN],
+      pilotStage,
+      stagedFiles: [boundFifo],
+    });
+    expect([...removed].sort()).toEqual([
+      `${GEN}/tier.avif`,
+      'originals/stray-fifo',
+    ]);
+    await expect(lstat(strayFifo)).rejects.toThrow(/ENOENT/);
+    await expect(lstat(boundFifo)).rejects.toThrow(/ENOENT/);
   });
 
   it('keeps current files and the fillers directory', async () => {

@@ -6,7 +6,10 @@ import {
 } from 'next/constants';
 import { isPilotLabEnabled } from './pilot-lab-enabled';
 import { assertPilotPublicAssets } from './pilot-public-assets';
-import { canonicalDir } from './pilot-public-assets-roots';
+import {
+  canonicalDir,
+  recordPublicDirAutoStash,
+} from './pilot-public-assets-roots';
 
 // Merchant-image-pilot gate for Next config load, split out of
 // next.config.ts under the repo line ceiling: public assets bypass
@@ -88,6 +91,10 @@ export function applyPilotPublicGate(
   // stash leaks into spawned child tooling that later resolves it.
   if (phase !== PHASE_PRODUCTION_BUILD && !preset) {
     process.env.BACI_PILOT_PUBLIC_DIR = pilotPublicDir;
+    // Origin marker (module state, not env): the automatic stash is
+    // not operator intent — hasPilotIntent must ignore it, or every
+    // boot shows intent and the warn paths never trigger.
+    recordPublicDirAutoStash();
   }
   return pilotPublicDir;
 }

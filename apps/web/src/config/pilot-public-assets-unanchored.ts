@@ -18,6 +18,7 @@
 import { statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { assertPilotPublicAssets } from './pilot-public-assets';
+import { isPublicDirAutoStashed } from './pilot-public-assets-roots';
 
 // Candidate public trees for an unanchored lab-off boot, in check
 // order: the cwd tree when the cwd is plausibly the served app root
@@ -84,7 +85,8 @@ export const PILOT_UNANCHORED_ACK_FLAG = 'BACI_IMAGE_PILOT_UNANCHORED_ACK';
 export function hasPilotIntent(): boolean {
   return Object.keys(process.env).some(
     (key) =>
-      (key.startsWith('BACI_IMAGE_PILOT') || key === 'BACI_PILOT_PUBLIC_DIR') &&
+      (key.startsWith('BACI_IMAGE_PILOT') ||
+        (key === 'BACI_PILOT_PUBLIC_DIR' && !isPublicDirAutoStashed())) &&
       (process.env[key] ?? '') !== ''
   );
 }

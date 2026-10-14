@@ -116,7 +116,12 @@ const lastSegment = (value) => {
 const assembleRelativePath = (value) => {
   const segments = value.split(/[\\/]/).filter(Boolean);
   if (segments.includes('..')) return lastSegment(value);
-  return segments.filter((segment) => segment !== '.').join('/');
+  const clean = segments.filter((segment) => segment !== '.');
+  // Only the allowlisted root and the basename are exported: middle
+  // segments are unverified provider text and can smuggle customer
+  // identifiers (apps/customers/AliceSmith/route.ts) into prompts.
+  if (clean.length > 2) return `${clean[0]}/${clean[clean.length - 1]}`;
+  return clean.join('/');
 };
 
 const framePath = (source) => {

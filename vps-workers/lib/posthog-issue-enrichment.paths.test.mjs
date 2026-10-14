@@ -69,7 +69,7 @@ describe('PostHog enrichment frame paths', () => {
         source: 'src\\app\\route.ts',
       },
     });
-    assert.equal(backslash.sample.route, 'src/app/route.ts:3');
+    assert.equal(backslash.sample.route, 'src/route.ts:3');
 
     const traversal = await enrichDetail({
       top_in_app_frame: {
@@ -121,10 +121,29 @@ describe('PostHog enrichment frame paths', () => {
         source: 'supabase/functions/sync-orders/index.ts',
       },
     });
-    assert.equal(
-      repoRoot.sample.route,
-      'supabase/functions/sync-orders/index.ts:4'
-    );
+    assert.equal(repoRoot.sample.route, 'supabase/index.ts:4');
+  });
+
+  it('omits unverified middle segments under recognized roots', async () => {
+    const nested = await enrichDetail({
+      top_in_app_frame: {
+        function: 'render',
+        line: 9,
+        source: 'apps/customers/AliceSmith/route.ts',
+      },
+    });
+    assert.equal(nested.sample.route, 'apps/route.ts:9');
+    assert.equal(nested.sample.route.includes('customers'), false);
+    assert.equal(nested.sample.route.includes('AliceSmith'), false);
+
+    const shallow = await enrichDetail({
+      top_in_app_frame: {
+        function: 'render',
+        line: 9,
+        source: 'apps/route.ts',
+      },
+    });
+    assert.equal(shallow.sample.route, 'apps/route.ts:9');
   });
 
   it('keeps only the basename of absolute local frame paths', async () => {

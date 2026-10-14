@@ -37,10 +37,7 @@ describe('PostHog enrichment frame URIs', () => {
         source: 'webpack:///./apps/web/src/app/api/orders/route.ts',
       },
     });
-    assert.equal(
-      virtual.sample.route,
-      'apps/web/src/app/api/orders/route.ts:42'
-    );
+    assert.equal(virtual.sample.route, 'apps/route.ts:42');
 
     const fileUrl = await enrichDetail({
       top_in_app_frame: {
@@ -67,7 +64,7 @@ describe('PostHog enrichment frame URIs', () => {
         source: 'webpack:///src/app/route.ts',
       },
     });
-    assert.equal(namespaced.sample.route, 'src/app/route.ts:3');
+    assert.equal(namespaced.sample.route, 'src/route.ts:3');
   });
 
   it('reduces virtual schemes around absolute local paths to basenames', async () => {

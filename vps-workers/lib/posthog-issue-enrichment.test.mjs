@@ -58,7 +58,7 @@ describe('PostHog remediation candidate enrichment', () => {
       },
     });
 
-    assert.equal(enriched.sample.route, 'apps/web/checkout.py:42');
+    assert.equal(enriched.sample.route, 'apps/checkout.py:42');
     assert.equal(enriched.sample.release, '2026.10.1');
     assert.equal(enriched.sample.message, 'TypeError');
     assert.equal(enriched.fingerprint, 'posthog-abc123');
@@ -223,7 +223,7 @@ describe('PostHog remediation candidate enrichment', () => {
       future_provider_field: 'ignore-me',
     });
 
-    assert.equal(enriched.sample.route, 'apps/web/checkout.py:42');
+    assert.equal(enriched.sample.route, 'apps/checkout.py:42');
     assert.equal(enriched.sample.release, '2026.10.1');
     assert.equal(enriched.sample.message, 'TypeError');
     const serialized = JSON.stringify(enriched);

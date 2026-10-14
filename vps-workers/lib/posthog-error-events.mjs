@@ -103,7 +103,9 @@ const classifyPostHogIssueName = (value) => {
   if (/\bcrash\b|\bfatal\b|application not responding|\banr\b/i.test(name)) {
     return 'Native crash';
   }
-  if (/out of memory|javascript heap|allocation failure/i.test(name)) {
+  if (
+    /\bout of memory\b|\bjavascript heap\b|\ballocation failure\b/i.test(name)
+  ) {
     return 'Out of memory';
   }
   if (/\btimed? ?out\b|\bdeadline exceeded\b|\bETIMEDOUT\b/i.test(name)) {

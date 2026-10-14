@@ -90,6 +90,12 @@ describe('PostHog issue-name classification', () => {
                 aggregations: { occurrences: 4 },
                 name: 'fetch failed: socket hang up',
               },
+              {
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a016',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'Layout of memory panel failed',
+              },
             ],
           })
         ),
@@ -110,6 +116,7 @@ describe('PostHog issue-name classification', () => {
         'PostHog error tracking issue',
         'PostHog error tracking issue',
         'Network failure',
+        'PostHog error tracking issue',
       ]
     );
     assert.equal(

@@ -16,20 +16,66 @@ SUITE_DIR = "vps-workers/baci-editorial-context"
 STEP_NAME_LINE = "      - name: Test capability register binding"
 STEP_USES_LINE = "        uses: ./.github/actions/capability-gate"
 
-# The contract workflow's run block, stripped per line. Any edit — an added
-# step, a dropped fetch, head-owned execution — fails workflow_failures
-# until this expectation is updated alongside it (a declared checker change).
-EXPECTED_RUN = [
-    'if [ -n "${{ github.event.pull_request.head.sha }}" ]; then',
-    "rm -rf /tmp/cg-check && mkdir -p /tmp/cg-check",
-    'git fetch --no-tags --depth 1 origin "${{ github.base_ref }}"',
-    "git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_text_checks.py | tar -x -C /tmp/cg-check",
-    "CHECKER=/tmp/cg-check/.github/scripts/capability_gate_contract_check.py",
-    "else",
-    "CHECKER=.github/scripts/capability_gate_contract_check.py",
-    "fi",
-    'python3 "$CHECKER" "$PINNED_CHECKER_SHA256"',
-]
+def _on_block_subs(lines):
+    """Parse an on: block into ({trigger: [(subkey, rest, line_idx)]}, end)."""
+    try:
+        on = next(i for i, line in enumerate(lines) if line == "on:")
+    except StopIteration:
+        return None, 0
+    end = len(lines)
+    for i in range(on + 1, len(lines)):
+        line = lines[i]
+        if line and not line[0].isspace() and not line.startswith("#"):
+            end = i
+            break
+    subs = {}
+    current = None
+    for i in range(on + 1, end):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key = _TRIGGER_KEY.match(line)
+        if key:
+            current = key.group(1)
+            subs[current] = []
+            continue
+        sub = _TRIGGER_SUBKEY.match(line)
+        if sub and current is not None:
+            subs[current].append((sub.group(1), sub.group(2), i))
+    return subs, end
+
+
+def _ordered_branch_match(subs, trig, lines, end):
+    """Ordered GitHub glob evaluation; None when no branches key is present
+    (unfiltered matches everything). A later !pattern excludes main even
+    after an earlier positive hit."""
+    if "branches" not in [k for k, _, _ in subs.get(trig, [])]:
+        return None
+    matched = False
+    for key, rest, idx in subs.get(trig, []):
+        if key != "branches":
+            continue
+        pats = [rest] if rest.strip() else []
+        j = idx + 1
+        while j < end:
+            item = _TRIGGER_ITEM.match(lines[j])
+            if not item:
+                break
+            pats.append(item.group(1))
+            j += 1
+        for raw in pats:
+            for part in raw.strip().strip("[]").split(","):
+                pat = part.strip().strip("'\"")
+                if not pat:
+                    continue
+                if pat.startswith("!"):
+                    if fnmatch.fnmatchcase("main", pat[1:]):
+                        matched = False
+                elif fnmatch.fnmatchcase("main", pat):
+                    matched = True
+    return matched
+
 
 def _norm(line):
     """Normalize YAML spacing without changing semantics: valid YAML permits
@@ -55,34 +101,10 @@ def trigger_failures(ci_text):
     never fire, so they cannot satisfy the check.
     """
     lines = ci_text.splitlines()
-    try:
-        on = next(i for i, line in enumerate(lines) if line == "on:")
-    except StopIteration:
+    subs, end = _on_block_subs(lines)
+    if subs is None:
         return ["ci.yml must declare workflow triggers"]
-    end = len(lines)
-    for i in range(on + 1, len(lines)):
-        line = lines[i]
-        if line and not line[0].isspace() and not line.startswith("#"):
-            end = i
-            break
-    keys = set()
-    subs = {}
-    current = None
-    for i in range(on + 1, end):
-        line = lines[i]
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        key = _TRIGGER_KEY.match(line)
-        if key:
-            current = key.group(1)
-            keys.add(current)
-            subs[current] = []
-            continue
-        sub = _TRIGGER_SUBKEY.match(line)
-        if sub and current is not None:
-            subs[current].append((sub.group(1), sub.group(2), i))
-    failures = [f"ci.yml must keep the {name} trigger" for name in sorted({"push", "pull_request"} - keys)]
+    failures = [f"ci.yml must keep the {name} trigger" for name in sorted({"push", "pull_request"} - set(subs))]
     for trig in ("push", "pull_request"):
         for key, rest, idx in subs.get(trig, []):
             if key in ("paths", "paths-ignore", "branches-ignore"):
@@ -92,23 +114,8 @@ def trigger_failures(ci_text):
                 # [opened] silences synchronize); the gate must run on all
                 # of them, so the key must stay absent.
                 failures.append(f"ci.yml must not narrow the {trig} trigger with types:")
-            if key == "branches":
-                branches = [rest] if rest.strip() else []
-                j = idx + 1
-                while j < end:
-                    item = _TRIGGER_ITEM.match(lines[j])
-                    if not item:
-                        break
-                    branches.append(item.group(1))
-                    j += 1
-                patterns = []
-                for raw in branches:
-                    for part in raw.strip().strip("[]").split(","):
-                        cleaned = part.strip().strip("'\"")
-                        if cleaned:
-                            patterns.append(cleaned)
-                if not any(fnmatch.fnmatchcase("main", pat) for pat in patterns):
-                    failures.append(f"ci.yml must keep an exact main match in the {trig} branches:")
+        if _ordered_branch_match(subs, trig, lines, end) is False:
+            failures.append(f"ci.yml must keep an exact main match in the {trig} branches:")
     return failures
 
 

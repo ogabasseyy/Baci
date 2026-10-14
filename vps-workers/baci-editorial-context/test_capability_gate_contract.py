@@ -108,7 +108,7 @@ class ContractCheckTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             scripts = Path(tmp, ".github", "scripts")
             scripts.mkdir(parents=True)
-            for name in ("capability_gate_contract_check.py", "capability_gate_contract_text_checks.py"):
+            for name in ("capability_gate_contract_check.py", "capability_gate_contract_ci_checks.py", "capability_gate_contract_workflow_checks.py"):
                 shutil.copy(repo / ".github/scripts" / name, scripts / name)
             proc = subprocess.run(
                 [sys.executable, str(scripts / "capability_gate_contract_check.py")],
@@ -156,7 +156,8 @@ class ContractCheckTests(unittest.TestCase):
             "vps-workers/baci-editorial-context/register_digests.py",
             "vps-workers/baci-editorial-context/platform_capabilities.py",
             "vps-workers/baci-editorial-context/test_capability_register_binding.py",
-            ".github/scripts/capability_gate_contract_text_checks.py",
+            ".github/scripts/capability_gate_contract_ci_checks.py",
+            ".github/scripts/capability_gate_contract_workflow_checks.py",
             ".github/workflows/capability-register-freshness.yml",
         ):
             self.assertIn(rel, declared)

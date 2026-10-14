@@ -120,7 +120,13 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # public/__pilot/fillers from version control or re-pin the
 # fixture, then restart), but only warns on a box that never opted
 # into the pilot (deploy-pipeline recompression must not brick an
-# unrelated production boot over synthetic fixtures). Staged-content
+# unrelated production boot over synthetic fixtures). fillers/ is
+# PUBLICLY SERVED on every deployment (Next serves public/
+# unconditionally — the lab flag gates pages, not static assets), so
+# it must stay synthetic-only: the three hash-pinned fixtures and
+# nothing else. Never stage merchant bytes there; anything added
+# ships to production at /__pilot/fillers/* with only a drift
+# warning on non-lab builds. Staged-content
 # and confinement findings
 # elsewhere move the offending entry to __pilot-quarantine/ beside
 # public/ (timestamped, same filesystem — symlinked entries move

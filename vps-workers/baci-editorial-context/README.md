@@ -54,11 +54,16 @@ register path (`BACI_CAPABILITY_REGISTER_PATH`) as prompt control: the file is
 operator-reviewed evidence whose text reaches the writer prompt, so only
 trusted operators may write it, and the hash printed into each prompt is the
 editorial cross-check that the reviewed file is the one being used. In this
-repo the writer side is verified against a stub `codex_content_agent`
-checkout replicating the writer's `build_prompt` interface (see
-`test_platform_capability_prompt.py`, 8 tests), and `prompt-builder.patch`
-is verified to apply to that interface with `git apply --check` (reverse
-check passes against the tested file). At first apply to a real writer
+repo the writer side is verified against the checked-in fixture stub
+`tests/fixtures/writer_stub/codex_content_agent`, which replicates the
+writer's `build_prompt` interface with `prompt-builder.patch` applied and
+re-exports this directory's real `platform_capabilities` runtime (never a
+second copy, so the stub cannot drift from the enforced code). The prompt
+suite (`test_platform_capability_prompt.py`, 9 tests) uses the real writer
+package when present and the fixture otherwise, so it runs unskipped in the
+gate; one test reverse-applies the patch to the stub with `git apply
+--check`, so an incompatible patch fails the suite instead of merging
+silently. At first apply to a real writer
 checkout, record that checkout's revision here (`Verified writer
 revision: <sha>`) after re-running the prompt suite against it, and
 re-verify the `platform_marketing` task value on the

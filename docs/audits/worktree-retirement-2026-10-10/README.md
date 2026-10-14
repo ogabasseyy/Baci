@@ -5,7 +5,8 @@
 This is a read-only retirement triage of 193 registered Baci worktrees captured
 on 2026-10-10, split between three GPT-6 Luna agents. Comparison baseline:
 `ae94a5075d92ebdc3625c13006a6dd4144dba4fa` (`origin/main`, fetched on the audit date).
-The findings branch itself is excluded from the inventory. Paths use `~` for
+The findings branch itself (ID 193) is excluded from the inventory, which
+holds IDs 1–192 and 194. Paths use `~` for
 the audit machine's home directory; transient process IDs are omitted.
 
 No audited worktree, source, dependency directory, branch, or process was removed.

@@ -702,10 +702,10 @@
       "unique_commit_count": 1,
       "changed_path_count": 3,
       "git_status_entries": 3,
-      "status_detail": "Unique scoped Sentry issue-event route plus dirty worker/docs paths and ignored logs.",
+      "status_detail": "Unique scoped Sentry issue-event route plus dirty worker/docs paths and ignored logs. Branch-name match to closed PR #3322 (remote a2e667ae0598; checkout at different head 9acddc04d720): check the rejected PR and reconcile both heads before salvaging.",
       "classification": "PRESERVE_DIRTY",
-      "finding": "Unique scoped Sentry issue-event route plus dirty worker/docs paths and ignored logs.",
-      "pr_state": null,
+      "finding": "Unique scoped Sentry issue-event route plus dirty worker/docs paths and ignored logs. Branch-name match to closed PR #3322 (remote a2e667ae0598; checkout at different head 9acddc04d720): check the rejected PR and reconcile both heads before salvaging.",
+      "pr_state": "CLOSED #3322",
       "remote_branch": "present at a2e667ae0598"
     },
     {
@@ -874,8 +874,8 @@
       "git_status_entries": null,
       "status_detail": null,
       "classification": "MISSING",
-      "finding": "Manifest path absent; no Git metadata or file status.",
-      "pr_state": null,
+      "finding": "Manifest path absent; no Git metadata or file status. Branch-name match to OPEN PR #3355 at d51254200647 (non-exact; manifest hash bcdbf54cb591 is stale): relevant recovery/ownership context before registration cleanup.",
+      "pr_state": "OPEN #3355",
       "remote_branch": "not found in live branch listing"
     },
     {

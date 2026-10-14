@@ -4,7 +4,8 @@
   "notes": [
     "Classification is triage, not deletion authorization.",
     "PR matches are from a bounded live recent-500 snapshot; branch matches do not imply identical HEAD.",
-    "No source was removed; future retirement needs fresh status/activity and ignored-data preservation."
+    "No source was removed; future retirement needs fresh status/activity and ignored-data preservation.",
+    "IDs 1-192 and 194 are present (193 rows); ID 193 was the findings worktree, excluded from self-audit (original path not recorded)."
   ],
   "rows": [
     {
@@ -12,7 +13,7 @@
       "path": "~/Baci-app",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "Merged PR does not account for broad dirty and untracked edits across instructions, mobile, web, migrations, and tools. Active processes; preserve all state.",
+      "evidence": "Merged PR does not account for broad dirty and untracked edits across instructions, mobile, web, migrations, and tools. Active processes; preserve all state. Same HEAD as IDs 33, 80, and 84 (107/34/17 dirty files); reconcile together.",
       "shard": 1,
       "manifest": {
         "id": 1,

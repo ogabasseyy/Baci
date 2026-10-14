@@ -52,7 +52,7 @@
         "turbo"
       ],
       "envFilenameCount": 18,
-      "evidence": "Merged PR does not account for broad dirty and untracked edits across instructions, mobile, web, migrations, and tools. Active processes; preserve all state."
+      "evidence": "Merged PR does not account for broad dirty and untracked edits across instructions, mobile, web, migrations, and tools. Active processes; preserve all state. Same HEAD (9e9a95ac) as IDs 33, 80, and 84; reconcile against their 107/34/17 dirty-file edit sets."
     },
     {
       "id": 4,

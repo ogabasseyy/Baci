@@ -22,6 +22,7 @@ def claims_digest_for(data):
         "reviewed_at": data["reviewed_at"],
         "source_revision": data["source_revision"],
         "review_scope": data.get("review_scope", ""),
+        "evidence_digest": data.get("evidence_digest", ""),
     }
     return hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest()
 
@@ -56,14 +57,16 @@ def main(argv=None):
     register_path = Path(args.register) if args.register else Path(__file__).resolve().parents[2] / "docs/product/baci-capabilities.json"
     repo = Path(args.repo) if args.repo else register_path.resolve().parents[2]
     data = json.loads(register_path.read_text())
-    evidence = evidence_digest_for(repo, data)
-    claims = claims_digest_for(data)
-    print(f"evidence_digest: {evidence}")
-    print(f"claims_digest: {claims}")
+    # Evidence first: the claims digest binds the evidence value, so it must
+    # be computed after the fresh evidence digest is set.
+    data["evidence_digest"] = evidence_digest_for(repo, data)
+    data["claims_digest"] = claims_digest_for(data)
+    print(f"evidence_digest: {data['evidence_digest']}")
+    print(f"claims_digest: {data['claims_digest']}")
     if args.write:
         text = register_path.read_text()
-        text, n_evidence = re.subn(r'"evidence_digest"\s*:\s*"[a-f0-9]{64}"', f'"evidence_digest": "{evidence}"', text, count=1)
-        text, n_claims = re.subn(r'"claims_digest"\s*:\s*"[a-f0-9]{64}"', f'"claims_digest": "{claims}"', text, count=1)
+        text, n_evidence = re.subn(r'"evidence_digest"\s*:\s*"[a-f0-9]{64}"', f'"evidence_digest": "{data["evidence_digest"]}"', text, count=1)
+        text, n_claims = re.subn(r'"claims_digest"\s*:\s*"[a-f0-9]{64}"', f'"claims_digest": "{data["claims_digest"]}"', text, count=1)
         if n_evidence != 1 or n_claims != 1:
             print(f"error: could not update digest fields in {register_path} (evidence replaced: {n_evidence}, claims replaced: {n_claims}); fix the register JSON manually", file=sys.stderr)
             return 2

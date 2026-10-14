@@ -157,6 +157,33 @@ class CapabilityGateTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
 
+    def test_bare_cited_filenames_resolve_to_tracked_paths(self):
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+            git("init", "-q", ".")
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/agent-access-map.md").write_text("See `useFollowUpQueue.ts` for queue state.")
+            (repo / "apps/x").mkdir(parents=True)
+            (repo / "apps/x/useFollowUpQueue.ts").write_text("export {};\n")
+            git("add", ".")
+            git("commit", "-q", "-m", "one")
+            previous = os.getcwd()
+            os.chdir(repo)
+            try:
+                citing = {"capabilities": []}
+                relevant = gate.relevant_paths(citing)
+                self.assertIn("apps/x/useFollowUpQueue.ts", relevant)
+                self.assertNotIn("useFollowUpQueue.ts", relevant)
+                self.assertTrue(gate.should_run("base", citing, {"apps/x/useFollowUpQueue.ts"}))
+                # Same basename, different untracked path: no longer a "cited source".
+                self.assertFalse(gate.should_run("base", citing, {"apps/other/useFollowUpQueue.ts"}))
+            finally:
+                os.chdir(previous)
+
     def test_freshness_scoping(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         fresh = {"reviewed_at": now, "capabilities": [

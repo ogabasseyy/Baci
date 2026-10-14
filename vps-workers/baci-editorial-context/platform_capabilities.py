@@ -53,6 +53,7 @@ def capability_context(*, now=None):
             "reviewed_at": data["reviewed_at"],
             "source_revision": revision,
             "review_scope": data.get("review_scope", ""),
+            "evidence_digest": digest,
         }
         actual_claims = hashlib.sha256(json.dumps(bound_payload, sort_keys=True).encode()).hexdigest()
         if actual_claims != claims_digest:

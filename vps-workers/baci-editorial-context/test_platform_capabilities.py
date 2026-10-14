@@ -33,6 +33,7 @@ def _register(rows, **overrides):
             "reviewed_at": value["reviewed_at"],
             "source_revision": value["source_revision"],
             "review_scope": value.get("review_scope", ""),
+            "evidence_digest": value.get("evidence_digest", ""),
         }
         value["claims_digest"] = hashlib.sha256(
             json.dumps(bound, sort_keys=True).encode()
@@ -276,6 +277,31 @@ class CapabilityContextTests(unittest.TestCase):
             "reviewed_at": value["reviewed_at"],
             "source_revision": value["source_revision"],
             "review_scope": value.get("review_scope", ""),
+            "evidence_digest": value.get("evidence_digest", ""),
+        }
+        value["claims_digest"] = hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest()
+        self.assertNotEqual(value["claims_digest"], original_pin)
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / "capabilities.json"
+            path.write_text(json.dumps(value))
+            env = {"BACI_CAPABILITY_REGISTER_PATH": str(path), "BACI_CAPABILITY_REGISTER_DIGEST": original_pin}
+            with patch.dict(os.environ, env):
+                result = capability_context()
+            self.assertIn("Register unavailable, invalid or stale", result)
+
+    def test_evidence_digest_tamper_fails_closed(self):
+        # Attacker rewrites only the evidence_digest field (the value copied
+        # into the writer prompt) and recomputes the stored claims digest.
+        # The pin binds the reviewed evidence value too, so rendering refuses.
+        value = _register([_row()])
+        original_pin = value["claims_digest"]
+        value["evidence_digest"] = "d" * 64
+        bound = {
+            "capabilities": value["capabilities"],
+            "reviewed_at": value["reviewed_at"],
+            "source_revision": value["source_revision"],
+            "review_scope": value.get("review_scope", ""),
+            "evidence_digest": value.get("evidence_digest", ""),
         }
         value["claims_digest"] = hashlib.sha256(json.dumps(bound, sort_keys=True).encode()).hexdigest()
         self.assertNotEqual(value["claims_digest"], original_pin)

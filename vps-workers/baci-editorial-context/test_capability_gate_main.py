@@ -39,6 +39,30 @@ class CapabilityGateMainTests(unittest.TestCase):
                 suite.assert_called_once()
                 self.assertEqual(suite.call_args.kwargs.get("cwd"), root)
 
+    def test_main_resolves_relative_checkout_once(self):
+        with tempfile.TemporaryDirectory() as parent:
+            repo = Path(parent, "checkout")
+            repo.mkdir()
+            previous = os.getcwd()
+            os.chdir(parent)
+            try:
+                with patch.object(gate.subprocess, "run") as suite:
+                    suite.return_value.returncode = 0
+                    with patch.dict(os.environ, {}, clear=False):
+                        os.environ.pop("BASE_SHA", None)
+                        self.assertEqual(gate.main(cwd="checkout"), 0)
+                    suite.assert_called_once()
+                    child_cwd = suite.call_args.kwargs.get("cwd")
+                    # realpath: macOS symlinks /var into /private/var.
+                    self.assertEqual(os.path.realpath(child_cwd), os.path.realpath(str(repo)))
+                    suite_dir = suite.call_args.args[0]
+                    self.assertTrue(
+                        any(str(repo) in str(arg) and "checkout/checkout" not in str(arg) for arg in suite_dir),
+                        f"suite path must not double the checkout: {suite_dir}",
+                    )
+            finally:
+                os.chdir(previous)
+
     def test_main_operates_on_explicit_cwd(self):
         with tempfile.TemporaryDirectory() as root:
             repo = Path(root)

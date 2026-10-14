@@ -21,7 +21,10 @@ if _check_spec is None or _check_spec.loader is None:
 check = importlib.util.module_from_spec(_check_spec)
 _check_spec.loader.exec_module(check)
 
-CI = """jobs:
+CI = """on:
+  push:
+  pull_request:
+jobs:
   changes:
     runs-on: ubuntu-24.04
     steps:
@@ -97,7 +100,10 @@ class ContractCheckTests(unittest.TestCase):
         self.assertTrue(check.ci_failures(ci))
 
     def test_relocation_into_never_running_job_fails(self):
-        ci = """jobs:
+        ci = """on:
+  push:
+  pull_request:
+jobs:
   changes:
     runs-on: ubuntu-24.04
     steps:
@@ -113,6 +119,21 @@ class ContractCheckTests(unittest.TestCase):
         self.assertTrue(failures)
         self.assertIn("unconditional", failures[0])
 
+    def test_continue_on_error_job_fails(self):
+        ci = CI.replace(
+            "  changes:\n    runs-on: ubuntu-24.04\n",
+            "  changes:\n    continue-on-error: true\n    runs-on: ubuntu-24.04\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("unconditional", failures[0])
+
+    def test_dropped_trigger_fails(self):
+        self.assertTrue(check.ci_failures(CI.replace("  pull_request:\n", "", 1)))
+        commented = CI.replace("  pull_request:\n", "  # pull_request:\n", 1)
+        self.assertTrue(check.ci_failures(commented))
+
     def test_needs_gated_job_fails(self):
         ci = CI.replace(
             "  changes:\n    runs-on: ubuntu-24.04\n",
@@ -122,7 +143,10 @@ class ContractCheckTests(unittest.TestCase):
         self.assertTrue(check.ci_failures(ci))
 
     def test_fake_comment_cannot_satisfy(self):
-        ci = """jobs:
+        ci = """on:
+  push:
+  pull_request:
+jobs:
   changes:
     runs-on: ubuntu-24.04
     steps:
@@ -164,6 +188,11 @@ class ContractCheckTests(unittest.TestCase):
             self.assertEqual(len(notices), 1)
             failures, _ = check.checker_file_failures(root, digest, digest)
             self.assertTrue(failures)
+            # Advance declaration while the checker is unchanged must fail.
+            target.write_bytes(b"logic")
+            failures, _ = check.checker_file_failures(root, digest, "e" * 64)
+            self.assertTrue(failures)
+            self.assertIn("without a checker change", failures[0])
             target.unlink()
             failures, _ = check.checker_file_failures(root, digest, new)
             self.assertIn("missing", failures[0])
@@ -179,6 +208,50 @@ class ContractCheckTests(unittest.TestCase):
         )
         self.assertNotEqual(dropped, workflow.read_text())
         self.assertTrue(check.workflow_failures(dropped))
+
+    def test_pin_set_covers_enforcement_core(self):
+        # A comment-swallowed dict entry once silently unpinned the gate:
+        # the files that decide and produce the verdict must stay declared.
+        repo = Path(__file__).resolve().parents[2]
+        checker = repo / ".github/scripts/capability_gate_contract_check.py"
+        if not checker.exists():
+            self.skipTest("contract checker unavailable")
+        declared = check.declared_pins(checker)
+        for rel in (
+            ".github/actions/capability-gate/action.yml",
+            "vps-workers/baci-editorial-context/capability_gate.py",
+            "vps-workers/baci-editorial-context/capability_gate_paths.py",
+            "vps-workers/baci-editorial-context/register_status.py",
+            "vps-workers/baci-editorial-context/register_digests.py",
+            "vps-workers/baci-editorial-context/platform_capabilities.py",
+            "vps-workers/baci-editorial-context/test_capability_register_binding.py",
+        ):
+            self.assertIn(rel, declared)
+
+    def test_advance_declaration_without_file_change_fails(self):
+        with tempfile.TemporaryDirectory() as root:
+            _, target = _tree(root, pins={"gate.py": "0" * 64})
+            digest = check.sha256_of(target)
+            base = {"gate.py": digest}
+            failures, _ = check.pin_failures(root, base, {"gate.py": "f" * 64})
+            self.assertTrue(failures)
+            self.assertIn("without a file change", failures[0])
+            failures, _ = check.pin_failures(root, base, {"gate.py": digest})
+            self.assertEqual(failures, [])
+
+    def test_markers_only_as_comments_fail(self):
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/capability-gate-contract.yml"
+        if not workflow.exists():
+            self.skipTest("contract workflow unavailable")
+        text = workflow.read_text()
+        # Comment every line containing a marker.
+        commented = "\n".join(
+            ("# " + line if ("git show FETCH_HEAD" in line or "python3 /tmp/contract_check.py" in line) else line)
+            for line in text.splitlines()
+        )
+        self.assertNotEqual(commented, text)
+        self.assertTrue(check.workflow_failures(commented))
 
     def test_head_pins_match_declared(self):
         # Forgetting a pin refresh after an enforcement edit fails the suite

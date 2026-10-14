@@ -124,6 +124,45 @@ describe('applyStorefrontCartLineAdd', () => {
     expect(result[0].stock_quantity).toBe(5);
   });
 
+  it('preserves pool metadata when the incoming projection omits it', () => {
+    const strictProduct = {
+      ...product,
+      stock: 5,
+      stock_quantity: 5,
+      inventory_tracking_policy: 'serialized_strict',
+    } as Product;
+    const fresh = applyStorefrontCartLineAdd({
+      previousCart: [],
+      product: strictProduct,
+      productForCart: strictProduct,
+      normalizedOptions: undefined,
+      quantity: 1,
+      caps: openCaps,
+      assurance,
+    });
+    // A chat/agent partial projection carries no pool fields.
+    const partial = {
+      ...product,
+      stock: 5,
+      stock_quantity: undefined,
+      inventory_tracking_policy: undefined,
+    } as unknown as Product;
+
+    const result = applyStorefrontCartLineAdd({
+      previousCart: fresh,
+      product: partial,
+      productForCart: partial,
+      normalizedOptions: undefined,
+      quantity: 1,
+      caps: openCaps,
+      assurance,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].stock_quantity).toBe(5);
+    expect(result[0].inventory_tracking_policy).toBe('serialized_strict');
+  });
+
   it('leaves fresh lines unassured when insurance is disabled', () => {
     const result = applyStorefrontCartLineAdd({
       previousCart: [],

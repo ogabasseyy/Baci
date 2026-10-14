@@ -3,15 +3,19 @@
 -- published-merchant rows only, and authorized owner preview of a
 -- single unpublished merchant still works.
 ALTER TABLE public.merchants DISABLE TRIGGER USER;
+-- merchants.user_id is unique: each fixture merchant needs its own owner.
 INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password,
   email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
 VALUES ('01d40000-0000-4000-8000-000000000002', '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated', 'base-inventory-owner@example.com', 'test',
+  now(), now(), now(), '{}', '{}'),
+  ('01d40000-0000-4000-8000-000000000004', '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'base-inventory-hidden-owner@example.com', 'test',
   now(), now(), now(), '{}', '{}');
 INSERT INTO public.merchants (id, user_id, email, business_name, slug, is_published)
 VALUES ('01d40000-0000-4000-8000-000000000001', '01d40000-0000-4000-8000-000000000002',
   'base-inventory-pub@example.com', 'Base Inventory Pub', 'base-inventory-pub', true),
-  ('01d40000-0000-4000-8000-000000000003', '01d40000-0000-4000-8000-000000000002',
+  ('01d40000-0000-4000-8000-000000000003', '01d40000-0000-4000-8000-000000000004',
   'base-inventory-hidden@example.com', 'Base Inventory Hidden', 'base-inventory-hidden', false);
 ALTER TABLE public.merchants ENABLE TRIGGER USER;
 
@@ -79,7 +83,7 @@ RESET ROLE;
 
 -- The owning user keeps single-merchant unpublished preview.
 SELECT set_config('request.jwt.claim.role', 'authenticated', true);
-SELECT set_config('request.jwt.claim.sub', '01d40000-0000-4000-8000-000000000002', true);
+SELECT set_config('request.jwt.claim.sub', '01d40000-0000-4000-8000-000000000004', true);
 SET LOCAL ROLE authenticated;
 DO $$
 DECLARE

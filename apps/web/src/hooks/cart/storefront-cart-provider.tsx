@@ -77,6 +77,7 @@ export function StorefrontCartProvider({
   const [showUpsell, setShowUpsell] = useState(false);
   const upsellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidatedCartHashRef = useRef('');
+  const cartRef = useRef<CartItem[]>(cart);
   // Merchant context is the same source the line items use for the
   // shipping-insurance toggle, so the add-time default can never charge
   // a fee the toggle hides. Null outside a merchant provider (tests,
@@ -122,6 +123,16 @@ export function StorefrontCartProvider({
   useEffect(() => {
     cartWideNegotiationActiveRef.current = cartWideNegotiationActive;
   }, [cartWideNegotiationActive]);
+
+  // Serializes batched adds for outcome reporting: addToCart probes
+  // against this ref and advances it synchronously on applied adds, so
+  // two adds in the same tick observe each other (the render's `cart`
+  // would show both the same stale snapshot). Updater-based writers
+  // (remove, quantity edits, validation) converge here after commit;
+  // value writers below sync it eagerly.
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
 
   // Hydrate cart + merchant slug from localStorage after mount (storage is
   // unavailable during SSR), gated by `isHydrated` so consumers keep rendering
@@ -431,18 +442,26 @@ export function StorefrontCartProvider({
         shippingInsuranceEnabled,
       },
     };
-    // Probe the outcome against the current render's cart so callers can
-    // gate success effects (upsell, toasts, analytics) on it. The write
-    // below still runs through the updater against committed state:
-    // same-tick adds can only err toward 'applied' (today's behavior),
-    // and only a same-tick removal racing this add can produce a false
-    // 'rejected' — that edge merely skips one success toast while the
-    // cart badge still updates.
+    // Probe the outcome against the serialized cart ref so callers can
+    // gate success effects (upsell, toasts, analytics) on it, and advance
+    // the ref on applied adds so batched same-tick adds observe each
+    // other. The write below still runs through the updater against
+    // committed state (preserving multi-writer safety with the
+    // updater-based remove/edit paths); only a same-tick removal or
+    // edit racing this add can skew the probe. That edge skips one
+    // success toast while the cart badge still updates, and can leave
+    // the group flag set after the updater stripped the lines — the
+    // money paths key off per-line negotiatedPrice so no charged total
+    // changes, and the next validation drift self-heals the flag.
+    const probeResult = applyStorefrontCartLineAdd({
+      previousCart: cartRef.current,
+      ...lineAddInput,
+    });
     const outcome: AddToCartOutcome =
-      applyStorefrontCartLineAdd({ previousCart: cart, ...lineAddInput }) ===
-      cart
-        ? 'rejected'
-        : 'applied';
+      probeResult === cartRef.current ? 'rejected' : 'applied';
+    if (outcome === 'applied') {
+      cartRef.current = probeResult;
+    }
 
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
@@ -471,7 +490,10 @@ export function StorefrontCartProvider({
       return result;
     });
 
-    if (wasGroupActive) {
+    // A rejected add changes nothing, so the group deal survives it;
+    // clearing the flag here would persist discounted lines under a
+    // false inactive flag.
+    if (wasGroupActive && outcome === 'applied') {
       setCartWideNegotiationActive(false);
     }
 
@@ -604,6 +626,9 @@ export function StorefrontCartProvider({
     saveCartToStorage([], slugToClear);
     saveCartWideNegotiationToStorage(false, slugToClear);
     setCart([]);
+    // Keep the serialized add-probe ref aligned: a same-tick add after
+    // this clear must probe against the empty cart, not the stale one.
+    cartRef.current = [];
     merchantSlugRef.current = null;
     setMerchantSlugState(null);
     saveMerchantSlugToStorage(null);
@@ -621,6 +646,9 @@ export function StorefrontCartProvider({
     const merchantCartState = getMerchantCartState(slug);
     setMerchantSlugState(slug);
     setCart(merchantCartState.cart);
+    // Same-tick adds after a merchant switch must probe against the
+    // newly loaded cart, not the previous merchant's lines.
+    cartRef.current = merchantCartState.cart;
     setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
     saveMerchantSlugToStorage(slug);
   };

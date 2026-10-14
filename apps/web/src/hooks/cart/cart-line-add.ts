@@ -68,10 +68,15 @@ export function applyStorefrontCartLineAdd({
       // Refresh the cap metadata from the live product: the merged
       // quantity was computed under the fresh allocation/pool, so the
       // retained stock scalars must match — otherwise the next
-      // quantity edit re-clamps the line from stale values.
-      stock: productForCart.stock,
-      stock_quantity: productForCart.stock_quantity,
-      inventory_tracking_policy: productForCart.inventory_tracking_policy,
+      // quantity edit re-clamps the line from stale values. Partial
+      // projections (chat/agent adds) omit pool fields, so a missing
+      // value keeps the stored one rather than erasing it.
+      stock: productForCart.stock ?? existingItem.stock,
+      stock_quantity:
+        productForCart.stock_quantity ?? existingItem.stock_quantity,
+      inventory_tracking_policy:
+        productForCart.inventory_tracking_policy ??
+        existingItem.inventory_tracking_policy,
       quantity: capped.quantity,
       cartItemId: existingItem.cartItemId || cartItemId,
       hasAssurance: resolveAddedLineAssurance(

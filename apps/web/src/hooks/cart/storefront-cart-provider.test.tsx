@@ -363,6 +363,88 @@ describe('StorefrontCartProvider', () => {
     ).toBe(3);
   });
 
+  it('keeps a cart-wide negotiation when the add is rejected', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </StorefrontCartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    // One strict base unit, then a group deal over it. The follow-up
+    // sibling offer add rejects through the probe/updater (pool
+    // exhausted) — not the early out-of-stock guard — so it exercises
+    // the flag reset on the rejection path.
+    const strictBase = {
+      ...mockProduct,
+      manage_stock: true,
+      stock: 5,
+      stock_quantity: 1,
+      inventory_tracking_policy: 'serialized_strict' as const,
+    };
+    act(() => {
+      result.current.addToCart(strictBase, 1);
+    });
+    act(() => {
+      result.current.applyCartWideNegotiation?.(90);
+    });
+    expect(result.current.cartWideNegotiationActive).toBe(true);
+
+    let outcome: unknown;
+    act(() => {
+      outcome = result.current.addToCart({ ...strictBase }, 1, {
+        offerId: 'offer-x',
+      });
+    });
+
+    // A rejected add changes nothing, so the group deal — flag and
+    // per-line negotiated prices — must survive it.
+    expect(outcome).toBe('rejected');
+    expect(result.current.cart).toHaveLength(1);
+    expect(result.current.cartWideNegotiationActive).toBe(true);
+    expect(result.current.cart[0]?.negotiatedPrice).toBeDefined();
+    expect(result.current.cart[0]?.negotiationStatus).toBe('accepted');
+  });
+
+  it('serializes batched same-tick adds through the outcome probe', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    // One strict base unit shared by two sibling offer lines: the
+    // second add in the same tick must observe the first through the
+    // serialized probe ref, not the stale render snapshot.
+    const strictProduct = {
+      ...mockProduct,
+      manage_stock: true,
+      stock: 5,
+      stock_quantity: 1,
+      inventory_tracking_policy: 'serialized_strict' as const,
+    };
+    let first: unknown;
+    let second: unknown;
+    act(() => {
+      first = result.current.addToCart(strictProduct, 1, {
+        offerId: 'offer-a',
+      });
+      second = result.current.addToCart(strictProduct, 1, {
+        offerId: 'offer-b',
+      });
+    });
+
+    expect(first).toBe('applied');
+    expect(second).toBe('rejected');
+    expect(result.current.cart).toHaveLength(1);
+    expect(result.current.cart[0]?.offerId).toBe('offer-a');
+  });
+
   it('caps merged offer adds at the carried allocation', async () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <StorefrontCartProvider merchantSlug="ogabassey">

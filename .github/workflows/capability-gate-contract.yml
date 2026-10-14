@@ -1,13 +1,22 @@
 name: Capability Gate Contract
 
 # Independent guard for the capability gate's own caller. This workflow runs
-# from the BASE revision (pull_request_target) and asserts with pure text
-# matching — PR code under test is only EVER read, never executed — so a PR
-# that conditions or removes the ci.yml gate step, weakens the asserted
-# test, or deletes this file cannot silence the guard: the base version still
-# runs against the PR head. Residual limit: direct pushes to protected
-# branches bypass PR guards; branch protection with required reviews plus
-# this required check is the remaining layer (owner action).
+# from the BASE revision (pull_request_target) and asserts with exact text
+# matching plus hash pins — PR code under test is only EVER read, never
+# executed — so a PR that conditions or removes the ci.yml gate step, fakes
+# the invocation with crafted comments, or hollows the composite action or
+# gate implementation cannot silence the guard: the base version still runs
+# against the PR head. Changing a pinned enforcement file (or the invocation
+# block) fails this check until the pin update lands in the same change, so
+# the weakening is a visible, reviewable diff — never silent. After a
+# reviewed enforcement change, refresh pins with:
+#   sha256sum .github/actions/capability-gate/action.yml \
+#     vps-workers/baci-editorial-context/capability_gate.py \
+#     vps-workers/baci-editorial-context/capability_gate_paths.py \
+#     vps-workers/baci-editorial-context/register_status.py
+# Residual limit: direct pushes to protected branches bypass PR guards;
+# branch protection with required reviews plus this required check is the
+# remaining layer (owner action).
 
 on:
   pull_request_target:
@@ -16,6 +25,12 @@ on:
 
 permissions:
   contents: read
+
+env:
+  PINNED_ACTION_SHA256: 257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9
+  PINNED_GATE_SHA256: 7f69987ba95c8a276e2479320e6fcbd1e75cfd9db45cfb2c380709a2fc09e0a6
+  PINNED_GATE_PATHS_SHA256: 595176f8bbabc44a40aad26e310fa1466d0d532283a16605d23debf0bc6cdf92
+  PINNED_STATUS_SHA256: 32e9341ee335eec54f64a23f6baf0535c1b6df5021d722fcb394ce4ded7d6a79
 
 jobs:
   gate-contract:
@@ -32,13 +47,37 @@ jobs:
       - name: Assert ci.yml invokes the capability gate unconditionally
         shell: bash
         run: |
-          block=$(sed -n '/- name: Test capability register binding/,/^      - /p' .github/workflows/ci.yml | head -n -1)
-          if ! printf '%s\n' "$block" | grep -qF 'uses: ./.github/actions/capability-gate'; then
-            echo "capability gate invocation missing from ci.yml"
+          start=$(grep -nF -- '- name: Test capability register binding' .github/workflows/ci.yml | head -n 1 | cut -d: -f1)
+          if [ -z "$start" ]; then
+            echo "capability gate step missing from ci.yml"
             exit 1
           fi
-          if printf '%s\n' "$block" | grep -qE '^[[:space:]]+if:'; then
-            echo "capability gate invocation must stay unconditional"
+          # Step block runs to the next same-indent step. Comments and blank
+          # lines are stripped before comparison: a crafted comment can
+          # neither satisfy the check (comments never execute) nor hide an
+          # extra key — any executable line beyond the pinned two fails.
+          block=$(awk -v s="$start" 'NR>s && /^      - /{exit} NR>=s{print}' .github/workflows/ci.yml)
+          code=$(printf '%s\n' "$block" | grep -vE '^[[:space:]]*(#|$)')
+          expected='      - name: Test capability register binding
+        uses: ./.github/actions/capability-gate'
+          if [ "$code" != "$expected" ]; then
+            echo "capability gate invocation must be exactly the pinned block (no conditions, no extra keys):"
+            printf '%s\n' "$code"
             exit 1
           fi
           echo "capability gate invocation intact"
+      - name: Assert pinned enforcement files unchanged
+        shell: bash
+        run: |
+          check() {
+            actual=$(sha256sum "$1" | cut -d' ' -f1)
+            if [ "$actual" != "$2" ]; then
+              echo "enforcement file changed without a pin update: $1"
+              exit 1
+            fi
+          }
+          check .github/actions/capability-gate/action.yml "$PINNED_ACTION_SHA256"
+          check vps-workers/baci-editorial-context/capability_gate.py "$PINNED_GATE_SHA256"
+          check vps-workers/baci-editorial-context/capability_gate_paths.py "$PINNED_GATE_PATHS_SHA256"
+          check vps-workers/baci-editorial-context/register_status.py "$PINNED_STATUS_SHA256"
+          echo "enforcement pins intact"

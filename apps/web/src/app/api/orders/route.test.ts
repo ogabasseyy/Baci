@@ -4165,6 +4165,117 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     );
   });
 
+  function expiredTopshipQuote() {
+    return {
+      provider: 'TOPSHIP',
+      provider_rate_id: 'TOPSHIP_DOM_1',
+      price: 2500,
+      expires_at: '2020-01-01T00:00:00.000Z',
+      quote_request: {
+        merchantId: MERCHANT_ID,
+        sessionId: 'session-1',
+        shipmentType: 'domestic',
+        receiver: {
+          name: 'Test Customer',
+          phone: '08012345678',
+          address: '12 Allen Avenue, Ikeja, Lagos',
+          city: 'Ikeja',
+          state: 'Lagos',
+          country: 'Nigeria',
+          countryCode: 'NG',
+          latitude: 6.5244,
+          longitude: 3.3792,
+        },
+        items: [{ name: 'Widget', quantity: 1, weight: 1, value: 1000 }],
+      },
+    };
+  }
+
+  function expiredTopshipOrderBody() {
+    return {
+      ...baseOrderPayload,
+      subtotal: 1000,
+      shipping_fee: 2500,
+      selected_quote_id: '22222222-2222-4222-8222-222222222222',
+      shipping_provider: 'TOPSHIP',
+      shipping_address: {
+        address: '12 Allen Avenue, Ikeja, Lagos',
+        city: 'Ikeja',
+        state: 'Lagos',
+      },
+    };
+  }
+
+  it('replays a confirmed same-key TOPSHIP retry after its quote expires', async () => {
+    // Arrange — the shopper retries with the same Idempotency-Key after the
+    // one-hour quote expired, but the key already has an order. The retry
+    // must reach the order RPC (which replays on a matching hash) instead of
+    // 400ing on the stale expiry.
+    const supabaseMod = await import('@/lib/supabase/server');
+    const supabase = buildMockSupabase(
+      {
+        has_storefront_order_idempotency_key: { data: true, error: null },
+      },
+      {
+        productRows: [{ id: 'p-1', name: 'Widget', price: 1000 }],
+        shippingQuote: expiredTopshipQuote(),
+      }
+    );
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+
+    // Act
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'topship-expired-replay-key' },
+        body: JSON.stringify(expiredTopshipOrderBody()),
+      })
+    );
+
+    // Assert
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('still rejects an expired TOPSHIP quote on a first attempt', async () => {
+    // Arrange — same expired quote, but no Idempotency-Key, so there is no
+    // confirmed replay to protect.
+    const supabaseMod = await import('@/lib/supabase/server');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [{ id: 'p-1', name: 'Widget', price: 1000 }],
+        shippingQuote: expiredTopshipQuote(),
+      }
+    );
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+
+    // Act
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(expiredTopshipOrderBody()),
+      })
+    );
+
+    // Assert
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      code: 'INTERNATIONAL_QUOTE_EXPIRED',
+    });
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
   it('rejects selected GIGL international quotes with stale product shipping metadata', async () => {
     const supabaseMod = await import('@/lib/supabase/server');
     const supabase = buildMockSupabase(

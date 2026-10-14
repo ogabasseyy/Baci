@@ -39,8 +39,12 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned for validated checkout-coordinate provenance: the route passes
   // its existing idempotent-replay decision to quote enrichment. Notification,
   // payment, tenant authorization, and privileged-client authority are unchanged.
+  // Re-pinned for confirmed-replay quote recovery: a same-key retry restores
+  // the first-attempt validation shape with only the expiry check skipped, so
+  // the order RPC can replay it. Notification, payment, tenant authorization,
+  // and privileged-client authority are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'd0e74f98308b19478a9f3c5e440e5bba7d70596f0b5ea0e022a180e7db338095',
+    '859b67641cdc96c820a34d3420a0d6a6a3707efc04836f241e75e2e791aa3d76',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

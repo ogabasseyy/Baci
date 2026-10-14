@@ -26,6 +26,14 @@ type CheckoutItemForQuote = PhysicalQuoteMetadata & {
 export type QuoteCheckoutContext = {
   /** Only order creation may adopt the pin from its validated checkout quote. */
   isNewOrder?: boolean;
+  /**
+   * A confirmed same-key retry reproduces the first attempt so the order RPC
+   * can replay it: the time-based quote expiry check is skipped, and a
+   * cleaned-up quote row passes the address through untouched. Every other
+   * check still runs — matching is deterministic, so a live quote yields the
+   * first attempt's destination and hash exactly.
+   */
+  isConfirmedReplay?: boolean;
   items?: CheckoutItemForQuote[];
   merchantId?: string;
   shippingFee?: number;

@@ -23,6 +23,7 @@ import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-c
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
+import { hasExistingKeyedOrder } from '@/lib/checkout/has-existing-keyed-order';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
@@ -1371,6 +1372,26 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+    // A confirmed same-key retry must reach the RPC replay path even after
+    // its quote expired. Quote matching is deterministic, so re-running the
+    // first-attempt validation reproduces its destination and hash exactly —
+    // except the time-based expiry check, which would 400 the retry instead
+    // of replaying it. When (merchant + idempotency key) already has an
+    // order, restore the first-attempt shape (new-order transformation plus
+    // fee/provider checks, expiry skipped) so the recomputed hash matches and
+    // the RPC replays. Airport replays keep their existing bypass; a
+    // cleaned-up quote row passes the address through untouched inside the
+    // enrichment below so the RPC can still replay pre-validation orders.
+    const isConfirmedQuoteReplay =
+      resolvedSelectedQuoteId &&
+      requestIdempotencyKey &&
+      !isIdempotentLocalAirportReplay
+        ? await hasExistingKeyedOrder({
+            merchantId: body.merchant_id,
+            requestIdempotencyKey,
+            supabase,
+          })
+        : false;
     let shippingAddressForOrder: OrderCreateInput['shipping_address'];
     try {
       shippingAddressForOrder = await enrichShippingAddressWithQuoteDestination(
@@ -1378,15 +1399,18 @@ export async function POST(request: NextRequest) {
         resolvedSelectedQuoteId,
         shipping_address,
         {
-          isNewOrder: !isIdempotentOrderReplay,
+          isConfirmedReplay: isConfirmedQuoteReplay,
+          isNewOrder: !isIdempotentOrderReplay || isConfirmedQuoteReplay,
           items: quoteValidationItems,
           merchantId: body.merchant_id,
           shippingFee:
-            isIdempotentLocalAirportReplay || isIdempotentOrderReplay
+            (isIdempotentLocalAirportReplay || isIdempotentOrderReplay) &&
+            !isConfirmedQuoteReplay
               ? undefined
               : shippingFeeValue,
           shippingProvider:
-            isIdempotentLocalAirportReplay || isIdempotentOrderReplay
+            (isIdempotentLocalAirportReplay || isIdempotentOrderReplay) &&
+            !isConfirmedQuoteReplay
               ? null
               : resolvedShippingProvider,
         }

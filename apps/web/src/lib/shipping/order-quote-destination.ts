@@ -75,14 +75,21 @@ export async function enrichShippingAddressWithQuoteDestination(
     );
   }
 
-  if (
-    !quote &&
-    (context.shippingProvider || context.shippingFee !== undefined)
-  ) {
-    throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
+  if (!quote) {
+    // Cleanup may have removed the quote row before a confirmed retry
+    // arrives. Preserve the keyed replay with the caller's address as-is;
+    // the order RPC's hash comparison stays authoritative for
+    // replay-vs-conflict.
+    if (context.isConfirmedReplay) {
+      return shippingAddress;
+    }
+    if (context.shippingProvider || context.shippingFee !== undefined) {
+      throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
+    }
+    return shippingAddress;
   }
 
-  if (!quote || !isShippingProviderCode(quote.provider)) {
+  if (!isShippingProviderCode(quote.provider)) {
     return shippingAddress;
   }
 
@@ -91,7 +98,15 @@ export async function enrichShippingAddressWithQuoteDestination(
   }
 
   const expiresAt = Date.parse(quote.expires_at ?? '');
-  if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+  // A confirmed same-key retry must reach the order RPC's replay path even
+  // after its quote expired. Expiry is the only non-deterministic check here,
+  // so skipping it alone reproduces the first attempt's destination and hash;
+  // the RPC hash comparison stays authoritative for replay-vs-conflict.
+  if (
+    !context.isConfirmedReplay &&
+    Number.isFinite(expiresAt) &&
+    expiresAt <= Date.now()
+  ) {
     throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_EXPIRED');
   }
 

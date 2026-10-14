@@ -181,6 +181,28 @@ class CapabilityBindingTests(unittest.TestCase):
             self.assertTrue(binding_failures(repo, {"capabilities": [{"source_refs": ["missing.txt"]}], "evidence_digest": "x"}), "missing cited source must fail")
             self.assertTrue(binding_failures(repo, {"capabilities": [{"source_refs": ["../escape.txt"]}], "evidence_digest": "x"}), "escaping cited source must fail")
 
+    def test_ci_invokes_capability_gate_unconditionally(self):
+        # The gate cannot notice its own caller changing: if ci.yml drops or
+        # conditions the invocation, cited-source changes bypass re-review.
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/ci.yml"
+        action = repo / ".github/actions/capability-gate/action.yml"
+        if not workflow.exists() or not action.exists():
+            self.skipTest("CI workflow or gate action unavailable")
+        lines = workflow.read_text().splitlines()
+        starts = [i for i, line in enumerate(lines) if line.strip() == "- name: Test capability register binding"]
+        self.assertEqual(len(starts), 1, "ci.yml must invoke the capability gate exactly once")
+        step = []
+        for line in lines[starts[0] + 1:]:
+            if re.match(r"^      - ", line):
+                break
+            step.append(line)
+        self.assertIn("uses: ./.github/actions/capability-gate", "\n".join(step))
+        self.assertFalse(
+            any(re.match(r"^\s+if:", line) for line in step),
+            "gate invocation must stay unconditional",
+        )
+
     def test_register_status_classifies_fresh_stale_broken(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         row = {"id": "x", "title": "X", "claim": "c", "limitations": "l", "status": "code_evidenced", "source_refs": ["cited.txt"]}

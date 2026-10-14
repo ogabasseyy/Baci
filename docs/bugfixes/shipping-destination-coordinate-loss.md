@@ -27,8 +27,10 @@ guard that rejects the subsequent booking.
 - Apply validated pin adoption to supported carrier quotes, including GIGL and
   TOPSHIP, with the same merchant, provider, fee, item and destination checks.
 - Reject malformed or conflicting pins. Keep existing matching order pins.
-- Existing order reuse and idempotent replay cannot adopt missing coordinates
-  from matching address text alone. The booking guard stays intact.
+- Existing order reuse never adopts missing coordinates from matching address
+  text alone. A confirmed same-key idempotent replay re-derives the first
+  attempt's validated quote pin in memory only (the stored order row is never
+  rewritten). The booking guard stays intact.
 
 Unchanged schema helpers were extracted to keep the edited schemas below the
 repository's 300-line limit. Public schema imports remain compatible.

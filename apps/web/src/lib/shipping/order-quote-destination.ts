@@ -64,11 +64,14 @@ export async function lookupCheckoutQuoteProvider(
   selectedQuoteId: string,
   merchantId: string | undefined
 ): Promise<string | null> {
-  const { quote } = await lookupCheckoutQuote(
+  const { error, quote } = await lookupCheckoutQuote(
     supabase,
     selectedQuoteId,
     merchantId
   );
+  // A lookup outage must fail closed at the call site: falling back to a
+  // null provider would persist a carrier-less quoted order.
+  if (error) throw error;
   return quote && isShippingProviderCode(quote.provider)
     ? quote.provider
     : null;

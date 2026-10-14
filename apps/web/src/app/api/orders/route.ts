@@ -27,6 +27,7 @@ import { hasExistingKeyedOrder } from '@/lib/checkout/has-existing-keyed-order';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
+import type { OrderIdempotencyPayloadInput } from '@/lib/checkout/order-idempotency';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
@@ -88,6 +89,7 @@ import {
   lookupCheckoutQuoteProvider,
   OrderQuoteDestinationMismatchError,
 } from '@/lib/shipping/order-quote-destination';
+import { SHIPPING_PROVIDER_CODES } from '@/lib/shipping/types';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
@@ -1428,19 +1430,33 @@ export async function POST(request: NextRequest) {
     // A quoted checkout may omit the redundant provider: validation already
     // accepted the merchant-scoped quote as authoritative, so carry its
     // carrier into the hash and RPC payload. Otherwise the stored order has
-    // a quote but no carrier and fulfillment rejects it.
+    // a quote but no carrier and fulfillment rejects it. A lookup failure
+    // fails closed: persisting a null provider would poison fulfillment.
     let effectiveShippingProvider = resolvedShippingProvider;
+    let omittedProviderUnresolved = false;
     if (
       !isMerchantRateOrder &&
       !body.shipping_provider &&
       resolvedSelectedQuoteId
     ) {
-      const quoteProvider = await lookupCheckoutQuoteProvider(
-        supabase,
-        resolvedSelectedQuoteId,
-        body.merchant_id
-      );
+      let quoteProvider: string | null;
+      try {
+        quoteProvider = await lookupCheckoutQuoteProvider(
+          supabase,
+          resolvedSelectedQuoteId,
+          body.merchant_id
+        );
+      } catch {
+        return NextResponse.json(
+          {
+            error:
+              'Unable to verify the selected shipping quote. Please try again.',
+          },
+          { status: 500 }
+        );
+      }
       if (quoteProvider) effectiveShippingProvider = quoteProvider;
+      else omittedProviderUnresolved = true;
     }
     // Capture the post-enrichment destination before Nigerian state repair so
     // the idempotency hash below stays byte-compatible with orders created
@@ -1986,44 +2002,57 @@ export async function POST(request: NextRequest) {
       return pilotOrderRejection;
     }
 
+    const idempotencyPayload: OrderIdempotencyPayloadInput | null =
+      requestIdempotencyKey
+        ? {
+            ...body,
+            shipping_address: selectIdempotencyShippingAddress({
+              addressBeforeMerchantRateNormalization:
+                shippingAddressBeforeMerchantRateNormalization,
+              normalizedAddress: shippingAddressForOrder,
+            }),
+            // STABLE code identity, NOT the recomputed amount, so a merchant
+            // editing the code between a checkout and its retry can't trip
+            // checkout_idempotency_conflict before the wrapper's replay path.
+            discount_amount: discountCodeId ? 0 : serverDerivedDiscountAmount,
+            discount_code: requestedDiscountCode,
+            delivery_method: canonicalDeliveryMethod,
+            gift_wrapping_fee: giftWrappingFeeValue,
+            airport_type: canonicalAirportType,
+            items: orderItemsPayload,
+            shipping_fee: shippingFeeValue,
+            // Merchant-rate orders null shipping_provider + selected_quote_id, so
+            // the rate id is the only field that distinguishes two same-priced
+            // merchant rates (same fee + address) on an Idempotency-Key reuse.
+            // Without it the RPC would replay the ORIGINAL order instead of
+            // returning checkout_idempotency_conflict.
+            // Hash the EFFECTIVE quote selection, not the raw body: a stray
+            // selected_quote_id alongside shipping_rate_id would otherwise
+            // classify this quote-less order as quoted and drop its pin
+            // from the hash, replaying the first destination on retry.
+            selected_quote_id: resolvedSelectedQuoteId,
+            shipping_provider: effectiveShippingProvider,
+            shipping_rate_id: body.shipping_rate_id,
+            tax_amount: orderTaxAmount,
+          }
+        : null;
+    // The quote row may be cleaned up between the first attempt (hashed
+    // with the derived provider) and a same-key retry (derivation now
+    // unresolvable). Probe each provider hash so the retry replays the
+    // original order instead of conflicting.
     const { checkoutRequestHash, isLegacyIdempotencyReplay } =
       await prepareCheckoutIdempotencyReplay({
+        alternatePayloads:
+          omittedProviderUnresolved && idempotencyPayload
+            ? SHIPPING_PROVIDER_CODES.map((code) => ({
+                ...idempotencyPayload,
+                shipping_provider: code,
+              }))
+            : undefined,
         canonicalAirportType,
         canonicalDeliveryMethod,
         merchantId: merchant_id,
-        payload: requestIdempotencyKey
-          ? {
-              ...body,
-              shipping_address: selectIdempotencyShippingAddress({
-                addressBeforeMerchantRateNormalization:
-                  shippingAddressBeforeMerchantRateNormalization,
-                normalizedAddress: shippingAddressForOrder,
-              }),
-              // STABLE code identity, NOT the recomputed amount, so a merchant
-              // editing the code between a checkout and its retry can't trip
-              // checkout_idempotency_conflict before the wrapper's replay path.
-              discount_amount: discountCodeId ? 0 : serverDerivedDiscountAmount,
-              discount_code: requestedDiscountCode,
-              delivery_method: canonicalDeliveryMethod,
-              gift_wrapping_fee: giftWrappingFeeValue,
-              airport_type: canonicalAirportType,
-              items: orderItemsPayload,
-              shipping_fee: shippingFeeValue,
-              // Merchant-rate orders null shipping_provider + selected_quote_id, so
-              // the rate id is the only field that distinguishes two same-priced
-              // merchant rates (same fee + address) on an Idempotency-Key reuse.
-              // Without it the RPC would replay the ORIGINAL order instead of
-              // returning checkout_idempotency_conflict.
-              // Hash the EFFECTIVE quote selection, not the raw body: a stray
-              // selected_quote_id alongside shipping_rate_id would otherwise
-              // classify this quote-less order as quoted and drop its pin
-              // from the hash, replaying the first destination on retry.
-              selected_quote_id: resolvedSelectedQuoteId,
-              shipping_provider: effectiveShippingProvider,
-              shipping_rate_id: body.shipping_rate_id,
-              tax_amount: orderTaxAmount,
-            }
-          : null,
+        payload: idempotencyPayload,
         requestIdempotencyKey,
         supabase,
       });

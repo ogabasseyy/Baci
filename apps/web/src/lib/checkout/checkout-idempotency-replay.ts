@@ -13,6 +13,13 @@ type CheckoutIdempotencyReplayInput = {
   canonicalDeliveryMethod: OrderCreateInput['delivery_method'];
   merchantId: string;
   payload: OrderIdempotencyPayloadInput | null;
+  /**
+   * Evolving request fields (e.g. a provider backfilled after the original
+   * request) change the hash across retries of the same key. Each alternate
+   * is probed against the stored hash and the first stored match is adopted,
+   * so a retry replays instead of conflicting. Probe errors fail closed.
+   */
+  alternatePayloads?: OrderIdempotencyPayloadInput[];
   requestIdempotencyKey: string | null;
   supabase: SupabaseClient;
 };
@@ -66,6 +73,7 @@ async function isStoredCheckoutRequestHash({
  * pre-metadata order, rebuild the legacy hash used by that original request.
  */
 export async function prepareCheckoutIdempotencyReplay({
+  alternatePayloads,
   canonicalAirportType,
   canonicalDeliveryMethod,
   merchantId,
@@ -97,6 +105,28 @@ export async function prepareCheckoutIdempotencyReplay({
     });
     if (localeHashStored) {
       checkoutRequestHash = localeRequestHash;
+    }
+  }
+
+  // Evolved fields (e.g. a provider backfilled from the validated quote after
+  // the original request) change the current hash. Probe each alternate and
+  // adopt the first one the database confirms, so a retry whose source row
+  // was cleaned up still replays the original order instead of conflicting.
+  for (const alternatePayload of alternatePayloads ?? []) {
+    const alternateHash = hashOrderIdempotencyPayload(
+      buildOrderIdempotencyPayload(alternatePayload)
+    );
+    if (alternateHash === checkoutRequestHash) continue;
+    const alternateStored = await isStoredCheckoutRequestHash({
+      failureMessage: 'Alternate checkout request hash probe failed',
+      merchantId,
+      requestHash: alternateHash,
+      requestIdempotencyKey,
+      supabase,
+    });
+    if (alternateStored) {
+      checkoutRequestHash = alternateHash;
+      break;
     }
   }
 

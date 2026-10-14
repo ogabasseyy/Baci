@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { authenticateApiRequest } from '@/lib/api-auth';
-import { resolveVtuCustomer } from '@/lib/vtu-pending-transaction';
+import { resolveVtuCustomer } from '@/lib/vtu-customer-resolution';
 import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
 
 /**

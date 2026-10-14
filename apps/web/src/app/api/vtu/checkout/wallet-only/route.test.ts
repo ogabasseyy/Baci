@@ -33,8 +33,14 @@ vi.mock('@/lib/csrf', () => ({
 
 vi.mock('@/lib/vtu-pending-transaction', () => ({
   preparePendingVtuTransaction: mockPrepare,
-  resolveVtuCustomer: mockResolveVtuCustomer,
   VTU_TYPE_LABELS: { airtime: 'Airtime' },
+}));
+
+// resolveRequestingOwnership resolves via vtu-customer-resolution
+// directly (not the pending-transaction re-export), so the replay
+// path never imports the preparation module's provider graph.
+vi.mock('@/lib/vtu-customer-resolution', () => ({
+  resolveVtuCustomer: mockResolveVtuCustomer,
 }));
 
 vi.mock('@/lib/vtu-fulfillment', () => ({

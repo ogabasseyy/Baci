@@ -3,6 +3,20 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { UtilitySuccessView } from './UtilitySuccessView';
 
+// The backfill hook publishes only for the still-signed-in polling
+// account (Codex R85 P1): establish a stable submitter session, as a
+// real purchase view always renders post-authentication.
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({
+    auth: {
+      getSession: async () => ({
+        data: { session: { user: { id: 'user-1' } } },
+        error: null,
+      }),
+    },
+  }),
+}));
+
 describe('UtilitySuccessView', () => {
   it('renders transaction details and closes the modal', async () => {
     const user = userEvent.setup();

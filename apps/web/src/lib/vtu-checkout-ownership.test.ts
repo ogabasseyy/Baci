@@ -5,8 +5,7 @@ const { mockResolveVtuCustomer } = vi.hoisted(() => ({
   mockResolveVtuCustomer: vi.fn(),
 }));
 
-vi.mock('@/lib/vtu-pending-transaction', async (importOriginal) => ({
-  ...((await importOriginal()) as Record<string, unknown>),
+vi.mock('@/lib/vtu-customer-resolution', () => ({
   resolveVtuCustomer: mockResolveVtuCustomer,
 }));
 

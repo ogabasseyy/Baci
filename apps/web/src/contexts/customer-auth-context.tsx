@@ -3,6 +3,7 @@
 import { createContext, type ReactNode, use, useEffect, useState } from 'react';
 import { clearCartStorage } from '@/hooks/use-cart';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
+import { publishCustomerIdentity } from './customer-live-identity';
 
 export interface CustomerUser {
   id: string;
@@ -123,15 +124,18 @@ async function loadCustomerSession(
     if (session) {
       setUser(session.user);
       setCustomer(session.customer);
+      publishCustomerIdentity(session.user, session.customer);
     } else {
       setUser(null);
       setCustomer(null);
+      publishCustomerIdentity(null, null);
     }
   } catch (error) {
     if (isCancelled()) return;
     console.error('Session check error:', error);
     setUser(null);
     setCustomer(null);
+    publishCustomerIdentity(null, null);
   } finally {
     if (!isCancelled()) setIsLoading(false);
   }
@@ -151,6 +155,7 @@ async function performCustomerLogout(
   } finally {
     setUser(null);
     setCustomer(null);
+    publishCustomerIdentity(null, null);
     setOtpState(null);
     // Clear cart on logout to prevent cart data leakage between users
     clearCartStorage(merchantSlug);
@@ -180,6 +185,7 @@ export function CustomerAuthProvider({
     setIsLoading(true);
     setUser(null);
     setCustomer(null);
+    publishCustomerIdentity(null, null);
     setOtpState(null);
   }
 
@@ -260,6 +266,7 @@ export function CustomerAuthProvider({
       // Set user and customer from response
       setUser(data.user);
       setCustomer(data.customer);
+      publishCustomerIdentity(data.user, data.customer);
       setOtpState(null);
 
       return { success: true };

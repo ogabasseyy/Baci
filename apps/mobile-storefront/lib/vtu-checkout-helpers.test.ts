@@ -35,6 +35,17 @@ describe('vtu checkout helpers', () => {
     ).toBe(false);
   });
 
+  it('keeps the key for pre-route and timeout statuses', () => {
+    // Codex R95 P1: 408/425 can arrive after the handler accepted the
+    // request or committed the debit — rotating would mint a fresh
+    // UUID and debit a second transaction (mirrors web).
+    for (const status of [401, 403, 408, 413, 415, 425, 429]) {
+      expect(
+        shouldRotateWalletIdempotencyKeyForError(new HttpError(status, 'x'))
+      ).toBe(false);
+    }
+  });
+
   it('surfaces cashback only when the server credited it', () => {
     const credited = { amount: 50, credited: true, newBalance: 1200 };
     expect(creditedVtuCashback(credited)).toBe(credited);

@@ -160,6 +160,18 @@ export async function writeVtuProviderSubmissionMarkerOrRestore({
  * row the reconciliation claim declines. Refreshes the row's CAS
  * token and metadata in place for downstream restores.
  *
+ * Lost-race CAS (Codex R95 P1): the write gates on
+ * status=processing AND the claimed updated_at token (fresh: the
+ * fulfillment claim refreshed it in place and no non-terminal
+ * write runs between the claim and this persist). A worker paused
+ * after its debit RPC would otherwise overwrite a reclaiming
+ * worker's submission marker and advance updated_at, letting its
+ * own marker CAS succeed too — both workers submitting the same
+ * Kuda purchase. Zero-match means another worker moved the row:
+ * restore (a no-op against the stale token — the row progressed
+ * under the other worker) and throw so the client replays onto
+ * the progressed row.
+ *
  * Extracted from `fulfillPendingVtuTransaction` per the 300-line
  * Boy Scout Rule (Codex R81 P1).
  */
@@ -173,12 +185,18 @@ export async function persistVtuWalletDebitConfirmation({
   supabase: SupabaseClient;
 }): Promise<void> {
   const debitedMetadata = { ...preDebitMetadata, walletDebited: true };
-  const { data: debitedRow, error: walletDebitedPersistError } = await supabase
+  const confirmQuery = supabase
     .from('vtu_transactions')
     .update({ metadata: debitedMetadata })
     .eq('id', row.id)
-    .select('updated_at')
-    .maybeSingle();
+    .eq('status', 'processing');
+  const { data: debitedRow, error: walletDebitedPersistError } =
+    await (typeof row.updated_at === 'string'
+      ? confirmQuery.eq('updated_at', row.updated_at)
+      : confirmQuery
+    )
+      .select('updated_at')
+      .maybeSingle();
   if (walletDebitedPersistError) {
     console.error('Failed to persist VTU walletDebited metadata:', {
       error: walletDebitedPersistError.message,
@@ -195,6 +213,24 @@ export async function persistVtuWalletDebitConfirmation({
     });
     throwVtuPersistenceError(
       `Failed to persist walletDebited for ${row.id}: ${walletDebitedPersistError.message}`
+    );
+  }
+  if (!debitedRow) {
+    console.error('VTU walletDebited confirmation lost race:', {
+      transactionId: row.id,
+    });
+    await restoreInterruptedPreVendVtuRow({
+      // Fixed user-safe template (see above). The restore CASes on
+      // the stale token, so against the progressed row it no-ops —
+      // the throw below is what routes the client replay onto the
+      // other worker's progressed row.
+      userSafeMessage:
+        'VTU wallet debit confirmation conflicted; the purchase will resume automatically.',
+      row,
+      supabase,
+    });
+    throwVtuPersistenceError(
+      `VTU walletDebited confirmation lost race for ${row.id}: row moved or settled`
     );
   }
   // Refresh the CAS token (Codex R65 6ru4mQ): this write advanced

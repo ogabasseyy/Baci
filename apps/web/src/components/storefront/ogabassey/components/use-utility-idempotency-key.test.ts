@@ -419,6 +419,15 @@ describe('shouldRotateVtuKeyForStatus', () => {
     }
   });
 
+  it('returns false for 408/425 timeouts — ambiguous infrastructure responses', () => {
+    // Codex R95 P1: either can arrive after the handler accepted the
+    // request or committed the debit, so the retry must dedupe on the
+    // retained key instead of minting a fresh UUID and debiting twice.
+    for (const status of [408, 425]) {
+      expect(shouldRotateVtuKeyForStatus(status)).toBe(false);
+    }
+  });
+
   it('returns false for 5xx and missing statuses', () => {
     expect(shouldRotateVtuKeyForStatus(500)).toBe(false);
     expect(shouldRotateVtuKeyForStatus(502)).toBe(false);

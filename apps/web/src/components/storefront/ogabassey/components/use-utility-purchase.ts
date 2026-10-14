@@ -2,6 +2,7 @@
 
 import { type Dispatch, type SetStateAction, useRef, useState } from 'react';
 import type { Customer, CustomerUser } from '@/contexts/customer-auth-context';
+import { getLiveCustomerIdentity } from '@/contexts/customer-live-identity';
 import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
@@ -89,9 +90,10 @@ export function useUtilityPurchase({
   >(null);
   // Replays reuse the SAME transaction: never decrement twice.
   const appliedBalanceRefs = useRef<Set<string>>(new Set());
-  // Per-render identity (user-first: customer-first flips on hydration).
-  const latestIdentityRef = useRef<string | null>(null);
-  latestIdentityRef.current = user?.id ?? customer?.id ?? null;
+  // No render-derived identity ref: settlement compares against the
+  // LIVE auth identity (see below) — a ref updated only during
+  // render still names the submitting account when the switch lands
+  // after dispatch but before React commits the rerender.
   const submittingRef = useRef(false);
   const {
     captureAttemptKey,
@@ -179,7 +181,15 @@ export function useUtilityPurchase({
       return;
     }
 
-    if (latestIdentityRef.current !== submittingIdentity) {
+    // LIVE identity (Codex R95 P1, web mirror of the R94 mobile
+    // fix): the auth context publishes synchronously at every
+    // mutation, so a logout/switch that lands after dispatch but
+    // before the next render still discards the stale result here.
+    // User-first like the capture: customer-first flips on hydration.
+    const liveIdentity = getLiveCustomerIdentity();
+    const liveSubmittingIdentity =
+      liveIdentity.userId ?? liveIdentity.customerId ?? null;
+    if (liveSubmittingIdentity !== submittingIdentity) {
       // Switched mid-flight: finalize the SUBMITTER's entry, drop the result.
       finalizeSuppressedAttempt(captured.attempt, result);
       toast({

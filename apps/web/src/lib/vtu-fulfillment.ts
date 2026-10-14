@@ -16,8 +16,9 @@ import {
 } from '@/lib/monnify-bills';
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
 import { resolveConcurrentFailedVtuTransaction } from '@/lib/vtu-concurrent-failed-refund';
+import type { CustomerEmailNotificationState } from '@/lib/vtu-email-claim-lease';
+import { isCustomerEmailClaimLeaseExpired } from '@/lib/vtu-email-claim-lease';
 import {
-  CUSTOMER_EMAIL_NOTIFICATION_CLAIM_LEASE_MS,
   getSafeMetadataDiagnostics,
   VTU_CUSTOMER_FAILURE_MESSAGE,
   VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
@@ -231,13 +232,6 @@ const LEGACY_CUSTOMER_EMAIL_SENT_KEY = 'customerEmailNotificationSent';
 const LEGACY_CUSTOMER_PENDING_TOKEN_EMAIL_SENT_KEY =
   'customerPendingTokenEmailNotificationSent';
 
-export interface CustomerEmailNotificationState {
-  attemptedKey: string;
-  legacySentKeys?: readonly string[];
-  sentKey: string;
-  sentWriteKeys?: readonly string[];
-}
-
 function getCustomerEmailNotificationState({
   isTokenReady,
   type,
@@ -271,33 +265,6 @@ function isCustomerEmailNotificationSent(
     metadata[state.sentKey] === true ||
     (state.legacySentKeys?.some((key) => metadata[key] === true) ?? false)
   );
-}
-
-function getCustomerEmailAttemptedAtKey(state: CustomerEmailNotificationState) {
-  return `${state.attemptedKey}At`;
-}
-
-export function isCustomerEmailClaimLeaseExpired({
-  metadata,
-  nowMs = Date.now(),
-  state,
-}: {
-  metadata: Record<string, unknown>;
-  nowMs?: number;
-  state: CustomerEmailNotificationState;
-}) {
-  const stamped = metadata[getCustomerEmailAttemptedAtKey(state)];
-  if (typeof stamped !== 'string' || stamped.trim() === '') {
-    return true;
-  }
-  const stampedMs = Date.parse(stamped);
-  if (!Number.isFinite(stampedMs)) {
-    return true;
-  }
-  // Strict `<`, matching the claim RPC's `attempted_at < cutoff` and
-  // the reconciler's `.lt.` arm: all three enforcement points must
-  // agree at the boundary (the RPC is the atomic backstop).
-  return stampedMs + CUSTOMER_EMAIL_NOTIFICATION_CLAIM_LEASE_MS < nowMs;
 }
 
 function setCustomerEmailNotificationResult({

@@ -623,4 +623,74 @@ describe('useWallet', () => {
       vi.useRealTimers();
     }
   });
+
+  it('drops a previous-account body that resolves after an identity switch', async () => {
+    // Codex R95 P1: the old effect's cleanup runs only after the new
+    // render commits, so a body resolving in between must be gated by
+    // the render-phase generation bump — not by the abort signal.
+    // Abort is stubbed to a no-op to isolate the gate (a real abort
+    // drops it too, but only after cleanup runs — the window under
+    // test is before that).
+    let resolveOldBody!: (data: unknown) => void;
+    let resolveNewBody!: (data: unknown) => void;
+    mockFetch
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            new Promise((resolve) => {
+              resolveOldBody = resolve;
+            }),
+        }),
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            new Promise((resolve) => {
+              resolveNewBody = resolve;
+            }),
+        }),
+      );
+    const abortSpy = vi
+      .spyOn(AbortController.prototype, 'abort')
+      .mockImplementation(() => {});
+    try {
+      const { result, rerender } = renderHook(
+        ({ userId }: { userId: string }) =>
+          useWallet({ userId, merchantSlug: 'test-merchant' }),
+        { initialProps: { userId: 'user-a' } },
+      );
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+      // Park the old fetch at the body await (headers resolved).
+      await act(async () => {});
+      await waitFor(() => {
+        expect(resolveOldBody).toBeDefined();
+      });
+
+      rerender({ userId: 'user-b' });
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      });
+
+      // The old body resolves after the switch render committed: the
+      // new session must never show the previous balance.
+      await act(async () => {
+        resolveOldBody({ balance: 9999 });
+      });
+      expect(result.current.walletBalance).toBe(0);
+
+      await act(async () => {
+        resolveNewBody({ balance: 50 });
+      });
+      await waitFor(() => {
+        expect(result.current.walletBalance).toBe(50);
+      });
+      expect(result.current.walletLoading).toBe(false);
+    } finally {
+      abortSpy.mockRestore();
+    }
+  });
 });

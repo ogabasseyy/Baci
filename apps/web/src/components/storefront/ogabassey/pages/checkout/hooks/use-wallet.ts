@@ -126,6 +126,13 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   const [fetchedIdentity, setFetchedIdentity] = useState<string | null>(null);
   if (identity !== fetchedIdentity) {
     setFetchedIdentity(identity);
+    // Claim the next generation NOW, not in the effect (Codex R95
+    // P1, same as refreshWallet below): the old effect's cleanup
+    // runs only after this render commits, so a previous-account
+    // response resolving in between would otherwise see an
+    // un-superseded generation and repopulate the new session with
+    // the previous customer's balance and funding account.
+    fetchGenerationRef.current += 1;
     setWalletBalance(0);
     setWalletErrorLive(false);
     setPayWithWallet(false);

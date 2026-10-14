@@ -154,6 +154,18 @@ vi.mock('@/contexts/customer-auth-context', () => ({
   useOptionalCustomerAuth: () => mockUseCustomerAuth(),
 }));
 
+vi.mock('@/contexts/customer-live-identity', () => ({
+  // Live settlement identity (Codex R95 P1): mirrors the mocked auth
+  // state so modal tests settle as the currently-mocked account.
+  getLiveCustomerIdentity: () => {
+    const auth = mockUseCustomerAuth();
+    return {
+      customerId: auth?.customer?.id ?? null,
+      userId: auth?.user?.id ?? null,
+    };
+  },
+}));
+
 vi.mock('@/components/storefront/ogabassey/pages/checkout/hooks/use-wallet', () => ({
   useWallet: () => mockUseWallet(),
 }));

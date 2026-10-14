@@ -34,6 +34,7 @@ vi.mock('@/lib/vtu-submission-marker', () => ({
 import type { VtuTransactionRow } from '@/lib/vtu-fulfillment';
 import { VtuPersistenceError } from '@/lib/vtu-persistence-error';
 import {
+  persistVtuWalletDebitConfirmation,
   recoverStrandedPreVendVtuRow,
   shouldSkipRefundWithoutCollectionEvidence,
   writeVtuProviderSubmissionMarkerOrRestore,
@@ -142,5 +143,121 @@ describe('vtu-fulfillment-recovery', () => {
     await expect(
       shouldSkipRefundWithoutCollectionEvidence({ metadata, row, supabase })
     ).resolves.toBe(true);
+  });
+
+  describe('persistVtuWalletDebitConfirmation', () => {
+    function createConfirmSupabase(confirmResult: {
+      data: { updated_at: string } | null;
+      error: { message: string } | null;
+    }) {
+      const eqCalls: [string, unknown][] = [];
+      const confirmMaybeSingle = vi.fn(() => Promise.resolve(confirmResult));
+      const makeChain = (): {
+        eq: ReturnType<typeof vi.fn>;
+        select: ReturnType<typeof vi.fn>;
+      } => {
+        const chain = {} as {
+          eq: ReturnType<typeof vi.fn>;
+          select: ReturnType<typeof vi.fn>;
+        };
+        chain.eq = vi.fn((column: string, value: unknown) => {
+          eqCalls.push([column, value]);
+          return chain;
+        });
+        chain.select = vi.fn(() => ({ maybeSingle: confirmMaybeSingle }));
+        return chain;
+      };
+      const update = vi.fn(() => makeChain());
+      return {
+        eqCalls,
+        supabase: { from: vi.fn(() => ({ update })) },
+        update,
+      };
+    }
+
+    function confirmRow(updated_at: string | null) {
+      return {
+        id: 'vtu-1',
+        metadata: { split: 'wallet' },
+        status: 'processing',
+        updated_at,
+      } as unknown as VtuTransactionRow;
+    }
+
+    it('persists the flag and refreshes the CAS token', async () => {
+      const { eqCalls, supabase: confirmSupabase } = createConfirmSupabase({
+        data: { updated_at: 'tok-2' },
+        error: null,
+      });
+      const debitRow = confirmRow('tok-1');
+
+      await persistVtuWalletDebitConfirmation({
+        preDebitMetadata: { split: 'wallet' },
+        row: debitRow,
+        supabase: confirmSupabase as unknown as SupabaseClient,
+      });
+
+      expect(debitRow.metadata).toEqual({
+        split: 'wallet',
+        walletDebited: true,
+      });
+      expect(debitRow.updated_at).toBe('tok-2');
+      expect(eqCalls).toContainEqual(['status', 'processing']);
+      expect(eqCalls).toContainEqual(['updated_at', 'tok-1']);
+      expect(mocks.restoreInterruptedPreVendVtuRow).not.toHaveBeenCalled();
+    });
+
+    it('throws a lost-race error on zero-match without flagging the debit', async () => {
+      // Codex R95 P1: another worker moved the row after our claim
+      // (stale recovery restored it, a replay reclaimed it). The
+      // ungated write would clobber the reclaiming worker's marker
+      // and let both workers submit the same Kuda purchase.
+      const { supabase: confirmSupabase } = createConfirmSupabase({
+        data: null,
+        error: null,
+      });
+      const debitRow = confirmRow('tok-1');
+
+      await expect(
+        persistVtuWalletDebitConfirmation({
+          preDebitMetadata: { split: 'wallet' },
+          row: debitRow,
+          supabase: confirmSupabase as unknown as SupabaseClient,
+        })
+      ).rejects.toBeInstanceOf(VtuPersistenceError);
+      await expect(
+        persistVtuWalletDebitConfirmation({
+          preDebitMetadata: { split: 'wallet' },
+          row: confirmRow('tok-1'),
+          supabase: confirmSupabase as unknown as SupabaseClient,
+        }).catch((error: unknown) => (error as Error).message)
+      ).resolves.toMatch(/lost race/);
+      expect(debitRow.metadata).toEqual({ split: 'wallet' });
+      expect(mocks.restoreInterruptedPreVendVtuRow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          row: debitRow,
+          userSafeMessage:
+            'VTU wallet debit confirmation conflicted; the purchase will resume automatically.',
+        })
+      );
+    });
+
+    it('keeps the status-only gate for rows without a CAS token', async () => {
+      const { eqCalls, supabase: confirmSupabase } = createConfirmSupabase({
+        data: { updated_at: 'tok-9' },
+        error: null,
+      });
+      const debitRow = confirmRow(null);
+
+      await persistVtuWalletDebitConfirmation({
+        preDebitMetadata: {},
+        row: debitRow,
+        supabase: confirmSupabase as unknown as SupabaseClient,
+      });
+
+      expect(debitRow.metadata).toEqual({ walletDebited: true });
+      expect(eqCalls).toContainEqual(['status', 'processing']);
+      expect(eqCalls.some(([column]) => column === 'updated_at')).toBe(false);
+    });
   });
 });

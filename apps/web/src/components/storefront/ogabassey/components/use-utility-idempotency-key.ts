@@ -49,23 +49,26 @@ interface UseUtilityIdempotencyKeyResult {
 }
 
 /**
- * Statuses emitted before the checkout handler runs: the proxy security
- * stage (429 rate limit, 413 payload, 415 content, 403 guard) and the
- * in-route auth/CSRF guards (401/403). No outcome is recorded for
- * these, so the key must be kept — rotating after a 429 retry would
- * mint a fresh key for an already-committed attempt and debit twice.
+ * Statuses that must NOT rotate the key: the proxy security stage
+ * (429 rate limit, 413 payload, 415 content, 403 guard), the
+ * in-route auth/CSRF guards (401/403), and ambiguous timeout
+ * infrastructure responses (408 timeout, 425 too early — either can
+ * arrive after the handler accepted the request or even committed
+ * the debit). No terminal outcome is recorded for these, so the key
+ * must be kept — rotating after a 429 retry would mint a fresh key
+ * for an already-committed attempt and debit twice.
  * Mirrors mobile's shouldRotateWalletIdempotencyKeyForError carve-out.
  */
 const PRE_ROUTE_NO_ROTATION_STATUSES: ReadonlySet<number> = new Set([
-  401, 403, 413, 415, 429,
+  401, 403, 408, 413, 415, 425, 429,
 ]);
 
 /**
  * True when an error status proves the attempt terminal: a definitive
  * route response (validation, insufficient balance, key collision, …)
  * whose outcome the server recorded under this key. Pre-route
- * 401/403/413/415/429 responses, 5xx, and missing statuses stay
- * ambiguous — keep the key so the retry dedupes.
+ * 401/403/413/415/429 responses, 408/425 timeouts, 5xx, and missing
+ * statuses stay ambiguous — keep the key so the retry dedupes.
  */
 export function shouldRotateVtuKeyForStatus(status: unknown): boolean {
   return (

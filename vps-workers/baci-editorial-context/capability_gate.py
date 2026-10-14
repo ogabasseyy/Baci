@@ -79,18 +79,19 @@ def _resolve_cited_filenames(names, cwd="."):
     if not names:
         return set(), set()
     try:
+        # -z/NUL: whitespace splitting would truncate tracked paths with spaces.
         proc = subprocess.run(
-            ["git", "-C", str(cwd), "ls-files"], capture_output=True, text=True
+            ["git", "-C", str(cwd), "ls-files", "-z"], capture_output=True, text=True
         )
     except OSError:
         return set(), set(names)
     if proc.returncode != 0:
         return set(), set(names)
-    resolved, unresolved = set(), set(names)
-    for line in proc.stdout.split():
-        if Path(line).name in unresolved:
-            resolved.add(line)
-            unresolved.discard(Path(line).name)
+    # Every tracked path sharing a cited basename stays relevant: keeping
+    # only the first match would silently drop the real cited file once a
+    # same-basename file sorts earlier.
+    resolved = {line for line in proc.stdout.split("\0") if line and Path(line).name in names}
+    unresolved = set(names) - {Path(path).name for path in resolved}
     return resolved, unresolved
 
 
@@ -164,7 +165,9 @@ def _register_stale(register):
         return True
     if reviewed.tzinfo is None:
         reviewed = reviewed.replace(tzinfo=dt.timezone.utc)
-    return dt.datetime.now(dt.timezone.utc) - reviewed > dt.timedelta(days=14)
+    # Mirror the runtime window: future-dated registers are rejected, not fresh.
+    age = dt.datetime.now(dt.timezone.utc) - reviewed
+    return not dt.timedelta() <= age <= dt.timedelta(days=14)
 
 
 def freshness_required(register, changed):

@@ -76,19 +76,30 @@ class CapabilityGateTests(unittest.TestCase):
 
             git("init", "-q", ".")
             (repo / "docs/product").mkdir(parents=True)
-            (repo / "docs/product/agent-access-map.md").write_text("See `useFollowUpQueue.ts` for queue state.")
+            (repo / "docs/product/agent-access-map.md").write_text("See `useFollowUpQueue.ts` for queue state and `spaced.ts` for spacing.")
             (repo / "apps/x").mkdir(parents=True)
             (repo / "apps/x/useFollowUpQueue.ts").write_text("export {};\n")
+            (repo / "apps/aardvark").mkdir(parents=True)
+            (repo / "apps/aardvark/useFollowUpQueue.ts").write_text("export {};\n")
+            (repo / "apps/with space").mkdir(parents=True)
+            (repo / "apps/with space/spaced.ts").write_text("export {};\n")
             git("add", ".")
             git("commit", "-q", "-m", "one")
             previous = os.getcwd()
             os.chdir(repo)
             try:
                 citing = {"capabilities": []}
+                resolved, unresolved = gate._resolve_cited_filenames({"useFollowUpQueue.ts", "spaced.ts", "ghost.ts"})
+                self.assertEqual(resolved, {"apps/x/useFollowUpQueue.ts", "apps/aardvark/useFollowUpQueue.ts", "apps/with space/spaced.ts"})
+                self.assertEqual(unresolved, {"ghost.ts"})
                 relevant = gate.relevant_paths(citing)
                 self.assertIn("apps/x/useFollowUpQueue.ts", relevant)
+                self.assertIn("apps/aardvark/useFollowUpQueue.ts", relevant)
+                self.assertIn("apps/with space/spaced.ts", relevant)
                 self.assertNotIn("useFollowUpQueue.ts", relevant)
                 self.assertTrue(gate.should_run("base", citing, {"apps/x/useFollowUpQueue.ts"}))
+                self.assertTrue(gate.should_run("base", citing, {"apps/aardvark/useFollowUpQueue.ts"}))
+                self.assertTrue(gate.should_run("base", citing, {"apps/with space/spaced.ts"}))
                 # Same basename, different untracked path: no longer a "cited source".
                 self.assertFalse(gate.should_run("base", citing, {"apps/other/useFollowUpQueue.ts"}))
             finally:
@@ -102,6 +113,9 @@ class CapabilityGateTests(unittest.TestCase):
         ]}
         stale = {**fresh, "reviewed_at": "2020-01-01T00:00:00Z"}
         bound_change = {"apps/web/src/lib/feeds.ts"}
+        future = {**fresh, "reviewed_at": (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=1)).isoformat()}
+        self.assertTrue(gate._register_stale(future), "future-dated register must stale like the runtime rejects it")
+        self.assertTrue(gate.freshness_required(future, bound_change))
         self.assertFalse(gate.freshness_required(fresh, bound_change))
         self.assertTrue(gate.freshness_required(stale, bound_change), "re-digesting must not bypass a stale register")
         self.assertTrue(gate.freshness_required(fresh, {"docs/product/baci-capabilities.json"}))
@@ -125,7 +139,7 @@ class CapabilityGateTests(unittest.TestCase):
         ]}
         stale = {**fresh, "reviewed_at": "2020-01-01T00:00:00Z"}
         base = {**fresh, "reviewed_at": (now - dt.timedelta(days=1)).isoformat()}
-        rereviewed = {**fresh, "reviewed_at": (now + dt.timedelta(hours=1)).isoformat()}
+        rereviewed = {**fresh}  # now: fresh and advanced past base, not future-dated
         unverified_change = {"apps/web/src/app/(platform)/pricing/page.tsx"}
         touched = unverified_change | {gate.REGISTER_PATH}
         # Fresh register + unverified source changed + register untouched: re-review required.

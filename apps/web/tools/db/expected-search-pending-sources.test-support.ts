@@ -102,7 +102,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008150000_search_platform_admin_visibility.sql',
-    sha256: 'bf179aa2e39c9d483d35531b32b955460107fd4352e750aa74b185e1a6f7ba9d',
+    sha256: '039b49f8c0d03185650f9c3bcfad53d24207064dfff675f7f3c8bba0e64c886b',
   },
   {
     repositoryPath:

@@ -2,13 +2,19 @@
 --
 -- The refined candidates function and the price-options function gated on
 -- m.is_published alone, but the established public storefront projections
--- (bounded search option projection, MCP search options, serialized
--- inventory, PDP snapshots) expose active products for platform-admin
--- merchants regardless of is_published. Since refined search is now the
--- default path on both web and native, an unpublished platform-admin
--- storefront returned no products or facets. Both predicates now match the
--- established published-or-platform-admin form; all other behavior is
--- unchanged.
+-- expose active products for platform-admin merchants regardless of
+-- is_published. Since refined search is now the default path on both web
+-- and native, an unpublished platform-admin storefront returned no products
+-- or facets. Both predicates now match the established
+-- published-or-platform-admin form; all other behavior is unchanged.
+--
+-- Established-precedent citations (pre-existing, not introduced here):
+-- 20260615181534_serialized_variant_inventory.sql:7337 gates the public
+-- get_public_serialized_variant_availability_counts projection on
+-- (is_platform_admin OR is_published); 20260722150000 documents
+-- is_platform_admin as deliberately granted alongside the anon column set.
+-- Treating platform-admin merchants as publicly visible is therefore a
+-- platform-wide product decision; narrowing it is out of scope for search.
 BEGIN;
 
 CREATE OR REPLACE FUNCTION storefront_search_private.storefront_search_refined_candidates(

@@ -81,6 +81,7 @@ jobs:
                 bash -n "${f}"
               done
               bash .github/scripts/semgrep-sarif-filter-trusted-sync.test.sh
+              bash .github/scripts/semgrep-sarif-filter-trusted-sync-negatives.test.sh
               perl -c .github/scripts/muse-review/ranges.pl
               # schema.json is data (validate it); the .jq files are programs, and
               # `jq empty` would misparse them as JSON input — they are executed

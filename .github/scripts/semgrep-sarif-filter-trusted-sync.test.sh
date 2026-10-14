@@ -73,12 +73,18 @@ EOF
 }
 
 fail=0
-trusted="$(extract "$SEC" trusted_changed)"
-relevant="$(extract "$SEC" semgrep_relevant)"
+# Graceful extraction: a missing/unreadable list reports its own
+# error and lets the remaining pins run, instead of aborting before
+# the specific pin (e.g. the trigger check) can diagnose the cause.
+trusted="$(extract "$SEC" trusted_changed 2>/dev/null)" \
+  || { echo "::error::could not read trusted_changed list from $SEC"; fail=1; trusted=""; }
+relevant="$(extract "$SEC" semgrep_relevant 2>/dev/null)" \
+  || { echo "::error::could not read semgrep_relevant list from $SEC"; fail=1; relevant=""; }
 # Scoped to on.pull_request.paths: an unscoped first-`paths:` match
 # would accept the canonical list under a push event while PRs use
 # a narrower list and never fire the tripwire.
-trippaths="$(extract "$TRIP" paths pull_request)"
+trippaths="$(extract "$TRIP" paths pull_request 2>/dev/null)" \
+  || { echo "::error::could not read pull_request paths from $TRIP"; fail=1; trippaths=""; }
 canonical="$(printf '%s\n' "${CANONICAL[@]}")"
 
 for name in trusted trippaths; do
@@ -151,6 +157,13 @@ if ! grep -q '^ *exit 1 *$' "$TRIP"; then
   echo "::error::tripwire job no longer fails; the loud signal is neutered"
   fail=1
 fi
+# Reachability: an `exit 1` that never executes (e.g. an `exit 0`
+# inserted above it) is no loud signal. The tripwire must contain
+# exactly one exit line, and it must be `exit 1`.
+if [[ "$(grep -cE '^[[:space:]]*exit([[:space:]]|$)' "$TRIP")" -ne 1 ]]; then
+  echo "::error::tripwire must contain exactly one exit line so the failure is reachable"
+  fail=1
+fi
 # `if:` or `continue-on-error:` anywhere in the tripwire would let it
 # report skipped/success while every pin above stays green. This file
 # is ~30 lines whose only job is to fail; neither key has a
@@ -177,6 +190,7 @@ if [[ "$(grep -c 'semgrep scan --error' "$SEC")" -ne 2 ]]; then
   fail=1
 fi
 fail_if="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; print}' "$SEC")"
+fail_run="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; getline; print}' "$SEC")"
 for scan in semgrep_pr semgrep_push semgrep_full; do
   if [[ "$fail_if" != *"steps.${scan}.outcome == 'failure'"* ]]; then
     echo "::error::final gate lost the ${scan} outcome disjunct"
@@ -185,6 +199,19 @@ for scan in semgrep_pr semgrep_push semgrep_full; do
 done
 if [[ "$fail_if" == *"sarif_exists"* ]]; then
   echo "::error::final gate must key on scan outcomes without a SARIF guard"
+  fail=1
+fi
+# The gate must actually fail: pin `run: exit 1` as the step body and
+# ban failure suppression anywhere in the step block (a `run: true`
+# swap or continue-on-error would otherwise keep the required gate
+# green while scans report failure).
+if ! grep -Eqx '[[:space:]]*run:[[:space:]]*exit 1[[:space:]]*' <<<"$fail_run"; then
+  echo "::error::final gate step body must be exactly 'run: exit 1'"
+  fail=1
+fi
+gate_block="$(awk '/- name: Fail on Semgrep findings/{on=1} on{print} on&&/^      - name: /&&!/Fail on Semgrep/{exit} on&&/^  [a-z_]/{exit}' "$SEC")"
+if grep -Eq '^[[:space:]]*continue-on-error:' <<<"$gate_block"; then
+  echo "::error::final gate step must not carry continue-on-error"
   fail=1
 fi
 

@@ -331,7 +331,7 @@
       "path": "/Users/mac/.codex/worktrees/ogabassey-persistent-cart/Baci-app",
       "head": "4737bdb040e512cd89a7c2932adca211de511276",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "78 unique commits / 149 paths vs baseline; clean worktree; PR #3639 OPEN.",
       "shard": 2,
       "manifest": {
         "id": 14,
@@ -404,7 +404,7 @@
       "path": "/Users/mac/.codex/worktrees/ogabassey-search-summary/Baci-app",
       "head": "7d8353d5a53c329abb820d497b5827bb665bb060",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "3 unique commits / 14 paths vs baseline; clean worktree; PR #3613 OPEN; process activity observed.",
       "shard": 2,
       "manifest": {
         "id": 17,
@@ -622,7 +622,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/3309-transition-cluster-bb725742",
       "head": "59296a71cf83f5ac614b4a39ef3c76d146e96cbd",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "25 unique commits / 43 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 26,
@@ -724,7 +724,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/aws-offload",
       "head": "5dd21bc1ae1cc0eec4f269070b16a2bde7469a6e",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "12 unique commits / 9 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 32,
@@ -775,7 +775,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/cd-3203",
       "head": "822a6925ab65bb8cef778e9f50b3699cc956745d",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "4 unique commits / 28 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 35,
@@ -836,7 +836,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/codeql-piggyvest-fixes",
       "head": "d182440020a1c347c69645ff01ed08563ad518de",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "1 unique commits / 8 paths vs baseline; clean worktree; PR #3645 OPEN.",
       "shard": 2,
       "manifest": {
         "id": 38,
@@ -897,7 +897,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/customizable-pay-on-delivery-plan",
       "head": "49e8c8c9490d6d881cd7b9c6bdbc3cb1ce1fd902",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "5 unique commits / 1 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 41,
@@ -959,7 +959,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/dep-bump-9",
       "head": "8050f71462914dd712d7f6ef8872898718d511aa",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "30 unique commits / 45 paths vs baseline; clean worktree; PR #3634 OPEN.",
       "shard": 2,
       "manifest": {
         "id": 44,
@@ -1032,7 +1032,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/expense-edit-exposure-20260824",
       "head": "ed9fba16264ae1aae6c8e43755481ccbf149ce94",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "4 unique commits / 8 paths vs baseline; clean worktree; PR #3389 MERGED.",
       "shard": 2,
       "manifest": {
         "id": 47,
@@ -1094,7 +1094,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/expo-ota-foundation",
       "head": "7f28c647729bf91be12a13321609252fdabc09a6",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "6 unique commits / 8 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 50,
@@ -1156,7 +1156,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/expo57-patches",
       "head": "63351e259c0147b54d60314dfa4ab5b8f57428e6",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "6 unique commits / 10 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 53,
@@ -1218,7 +1218,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/fix-payout-context-race",
       "head": "2805e0eb8cd6fde0863cc15fdee6269edbe9fa2e",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "44 unique commits / 115 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 56,
@@ -1291,7 +1291,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/flight-delivery-review-20260827",
       "head": "fc7a2ef5be58e37342a16b97946e18dc15425fc8",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "1 unique commits / 7 paths vs baseline; 7 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 59,
@@ -1352,7 +1352,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task1-prep",
       "head": "60fc68f0e6ff9d083bca785bf042fdf5e145f1de",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "3 unique commits / 104 paths vs baseline; 12 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 62,
@@ -1403,7 +1403,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/h0-gate0-prep",
       "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "2 unique commits / 1 paths vs baseline; 2 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 65,
@@ -1465,7 +1465,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/homepage-early-css-pr-20260913",
       "head": "afd2f941ee4e01535c6333db111f5b1ac87eee65",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "zero patch-unique commits and zero changed paths; 3 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 68,
@@ -1516,7 +1516,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/merchant-scoped-invalidation",
       "head": "9cc236d6c65be05ee9eaa375b30e994a516defc0",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "zero patch-unique commits and zero changed paths; 7 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 71,
@@ -1567,7 +1567,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/metro-current-main-20260808",
       "head": "4a8e55ef7b3e44e5431c34804de3fa61c86723a1",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "15 unique commits / 125 paths vs baseline; 6 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 74,
@@ -1700,7 +1700,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/multimodal-messaging",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "38 unique commits / 219 paths vs baseline; 34 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 80,
@@ -1762,7 +1762,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/ogabassey-camera-seo-review",
       "head": "2a95ebf9adb5d6479428b8373dbc1bc086dea469",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "45 unique commits / 107 paths vs baseline; 17 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 83,
@@ -1886,7 +1886,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/openrouter-ai-offload",
       "head": "c6e27ce88ee669f3623b37e21fa0f30d6d095b6e",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "55 unique commits / 111 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 89,
@@ -1937,7 +1937,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/paystack-manual-reconcile",
       "head": "1f023e7c237183991364156c0c1dd8a55ad0b53a",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "2 unique commits / 6 paths vs baseline; 3 dirty entries; PR #3335 CLOSED.",
       "shard": 2,
       "manifest": {
         "id": 92,
@@ -2061,7 +2061,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/pr2627-posthog-upload",
       "head": "f27e42b54828ad6efca87ca55212e95b94de50ff",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "1 unique commits / 5 paths vs baseline; 2 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 98,
@@ -2112,7 +2112,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/pr3269-comments",
       "head": "685305e321bb482461cce169ec8b5348d96cc47b",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "25 unique commits / 162 paths vs baseline; clean worktree; PR #3269 MERGED.",
       "shard": 2,
       "manifest": {
         "id": 101,
@@ -2246,7 +2246,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/pr3309-transition-locks-sparse",
       "head": "e9d43f7e9b574bcbe3d9480548c801e374ee6fa9",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "14 unique commits / 34 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 107,
@@ -2296,7 +2296,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/pr3338-clean-20260814",
       "head": "c79e79af018fefa96c99128d07236a2c95f8b57c",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "20 unique commits / 169 paths vs baseline; 2 dirty entries; PR #3338 CLOSED.",
       "shard": 2,
       "manifest": {
         "id": 110,
@@ -2379,7 +2379,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/quiz-testing-20260909",
       "head": "4312d2a1022b055b7d53d590ee4e904fe7290f3c",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "2 unique commits / 28 paths vs baseline; 13 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 113,
@@ -2429,7 +2429,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/readiness-task10-invalidation",
       "head": "1a0f666e78ff59254231f8e353fa0d28fff8f295",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "30 unique commits / 109 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 116,
@@ -2480,7 +2480,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/rebase-3127",
       "head": "a4f31b88ff30e9eada61ac8e5faa0147333defff",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "3 unique commits / 9 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 119,
@@ -2542,7 +2542,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/remediation-final-deferred-sparse",
       "head": "497df71d343940ffee03170f3d078fc5b2805556",
       "classification": "ACTIVE_OR_UNCERTAIN",
-      "evidence": "",
+      "evidence": "45 unique commits / 105 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 122,
@@ -2603,7 +2603,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/rum-nav-timing",
       "head": "b31f35e8a7c8b8e2555dc73dfbeb5588d4c4bf6a",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "3 unique commits / 6 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 125,
@@ -2665,7 +2665,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/semrush-crawl-depth-july04",
       "head": "7037e80c2ea6c403d61a3b1befca902317ecef0c",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "1 unique commits / 4 paths vs baseline; 1 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 128,
@@ -2789,7 +2789,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/shopify-mobile-e2e-luna",
       "head": "b9bb0b1a73d9b3c9dfd2847213636fbb5d0d9e7e",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "1 unique commits / 3 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 134,
@@ -2840,7 +2840,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/social-media-audit-guard",
       "head": "41b30a31c263a5e596164079dc96eeafdd80a882",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "zero patch-unique commits and zero changed paths; 16 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 137,
@@ -2942,7 +2942,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r3-plan",
       "head": "edad4f48ccf3eb824ecf5d90dd8c5ed6a49a35fe",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "52 unique commits / 271 paths vs baseline; 6 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 143,
@@ -2993,7 +2993,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/storefront-edge-renderer-pilot",
       "head": "55c3ad3cbf7d4722aa3ba0a1de9435b7c22e3091",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "40 unique commits / 119 paths vs baseline; 12 dirty entries; PR #3379 CLOSED.",
       "shard": 2,
       "manifest": {
         "id": 146,
@@ -3055,7 +3055,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/storefront-width",
       "head": "d9107c943f7991db3106c08210c83e7f02a1c4c1",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "1 unique commits / 2 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 149,
@@ -3549,7 +3549,7 @@
       "path": "/Users/mac/Baci-worktrees/pr3203-tenant",
       "head": "06f81cb6de53c9373524b26ed84600e22e021aa9",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "6 unique commits / 24 paths vs baseline; clean worktree; PR #3203 CLOSED.",
       "shard": 2,
       "manifest": {
         "id": 173,
@@ -3633,7 +3633,7 @@
       "path": "/Users/mac/Baci-worktrees/pr3359-review-followup",
       "head": "58b1e0b8ef528dcbaecc95babe2d5b975fe90426",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "4 unique commits / 24 paths vs baseline; 14 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 176,
@@ -3705,7 +3705,7 @@
       "path": "/Users/mac/Baci-worktrees/remediation-credential",
       "head": "843ab191059ed5894e53ef90361df134681bf8b3",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "17 unique commits / 24 paths vs baseline; 15 dirty entries; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 179,
@@ -3753,7 +3753,7 @@
       "path": "/Users/mac/Baci-worktrees/sparse-vps-readiness-checkout",
       "head": "2b52f514152d8665028921db6170e6db459ec1ca",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "",
+      "evidence": "0 unique commits / 2 paths vs baseline; 1 dirty entries; PR #3422 MERGED.",
       "shard": 2,
       "manifest": {
         "id": 182,
@@ -3815,7 +3815,7 @@
       "path": "/Users/mac/Baci-worktrees/terra-3305-storage-stale-claim",
       "head": "7a31c64bdd81e56612f203fdd4540816465d32f4",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "1 unique commits / 2 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 185,
@@ -3866,7 +3866,7 @@
       "path": "/Users/mac/Baci-worktrees/terra-3309-claim-atomic",
       "head": "c3a0d9041e0d43703fd20190b90c843e77eb5d59",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "7 unique commits / 18 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 188,
@@ -3917,7 +3917,7 @@
       "path": "/Users/mac/Baci-worktrees/terra-3309-lock-capability",
       "head": "7b4de1b6e89317c3c03f3bc9670efd26eb4aa68d",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "",
+      "evidence": "10 unique commits / 20 paths vs baseline; clean worktree; no PR match.",
       "shard": 2,
       "manifest": {
         "id": 191,

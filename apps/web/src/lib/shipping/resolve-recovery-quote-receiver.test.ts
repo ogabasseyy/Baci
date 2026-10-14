@@ -40,6 +40,29 @@ describe('resolveRecoveryQuoteReceiver', () => {
         'Destination pins must fall within Nigeria. Search for the address to attach its country.',
     });
   });
+  it('rejects Garoua, Cameroon even though a box covering Borno contains it', () => {
+    // Garoua (~9.3N 13.4E) falls inside any rectangle covering Borno, so the
+    // border polygon (not a bounding box) must reject it.
+    const resolved = resolveRecoveryQuoteReceiver(
+      { ...receiver, countryCode: 'NG', latitude: 9.3, longitude: 13.4 },
+      {}
+    );
+    expect(resolved).toEqual({
+      error:
+        'Destination pins must fall within Nigeria. Search for the address to attach its country.',
+    });
+  });
+  it('accepts border-region Nigerian cities (Maiduguri, Sokoto, Yola)', () => {
+    for (const pin of [
+      { latitude: 11.85, longitude: 13.15 },
+      { latitude: 13.06, longitude: 5.24 },
+      { latitude: 9.28, longitude: 12.43 },
+    ]) {
+      expect(resolveRecoveryQuoteReceiver({ ...receiver, ...pin }, {})).toEqual(
+        { override: expect.objectContaining({}) }
+      );
+    }
+  });
   it('accepts in-bounds manual pins and carries the legacy postal code', () => {
     const resolved = resolveRecoveryQuoteReceiver(receiver, {
       postal_code: '100001',

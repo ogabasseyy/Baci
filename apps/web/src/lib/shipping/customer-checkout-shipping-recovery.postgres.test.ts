@@ -1,51 +1,22 @@
-import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createCustomerCheckoutShippingRecoveryTestDatabase } from '../../../../../supabase/tests/customer-checkout-shipping-recovery-test-harness.mjs';
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getSupabaseServiceRoleKey: () => 's'.repeat(32) }));
 
+import {
+  recoveryJson as json,
+  RECOVERY_MERCHANT_ID as merchantId,
+  RECOVERY_ORDER_ID as orderId,
+  RECOVERY_OWNER_ID as ownerId,
+  recoveryQuote as quote,
+  type RecoveryQuote,
+  recoveryActorAuth,
+  recoveryConfirm,
+  recoveryPrepare,
+} from './customer-checkout-shipping-recovery.postgres.test-support';
 import { createShippingQuoteRouteProof } from './shipping-quote-route-proof';
 
-const merchantId = '10000000-0000-4000-8000-000000000001';
-const orderId = '40000000-0000-4000-8000-000000000001';
-const ownerId = '20000000-0000-4000-8000-000000000001';
-function json(value: unknown) {
-  return `'${JSON.stringify(value).replaceAll("'", "''")}'::jsonb`;
-}
-function quote() {
-  return {
-    id: randomUUID(),
-    merchant_id: merchantId,
-    session_id: orderId,
-    provider: 'GIGL',
-    service_tier: 'standard',
-    carrier_name: 'GIG Logistics',
-    price: 110,
-    provider_cost: 100,
-    platform_margin: 10,
-    platform_margin_bps: 1000,
-    pricing_version: 'gigl_platform_margin_v1',
-    currency: 'NGN',
-    expires_at: new Date(Date.now() + 3600000).toISOString(),
-    quote_request: {
-      merchantId,
-      shipmentType: 'domestic',
-      receiver: {
-        name: 'Test Customer',
-        phone: '08000000000',
-        address: '12 Test Street',
-        city: 'Ikeja',
-        state: 'Lagos',
-        country: 'Nigeria',
-        countryCode: 'NG',
-        latitude: 6.6018,
-        longitude: 3.3515,
-      },
-      items: [{ name: 'Phone', quantity: 1, weight: 1, value: 1000 }],
-    },
-  };
-}
 describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
   'checkout shipping recovery PostgreSQL boundary',
   () => {
@@ -55,8 +26,9 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
     beforeAll(async () => database.start(), 60000);
     afterAll(() => database.stop());
     function asActor(sql: string, actor = ownerId) {
-      return database.query(`BEGIN; SELECT set_config('request.jwt.claim.role','authenticated',true);
-      SELECT set_config('request.jwt.claim.sub','${actor}',true); SET LOCAL ROLE authenticated; ${sql} ROLLBACK;`);
+      return database.query(
+        `BEGIN; ${recoveryActorAuth(actor)} ${sql} ROLLBACK;`
+      );
     }
     function fingerprint() {
       return (
@@ -69,7 +41,7 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       );
     }
     function prepare(
-      value = quote(),
+      value: RecoveryQuote = quote(),
       hash = fingerprint(),
       signed = createShippingQuoteRouteProof({
         action: 'prepare_customer_checkout_shipping_recovery',
@@ -78,10 +50,10 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
         payload: { order_id: orderId, fingerprint: hash, quote: value },
       })
     ) {
-      return `SELECT public.prepare_customer_checkout_shipping_recovery('${orderId}','${hash}',${json(value)},${json(signed)});`;
+      return recoveryPrepare(value, hash, signed);
     }
     function confirm(id: string) {
-      return `SELECT public.confirm_customer_checkout_shipping_recovery('${orderId}','${id}',true);`;
+      return recoveryConfirm(id);
     }
     it('stages a signed quote without changing destination, quote binding or funding', () => {
       const value = quote();
@@ -165,6 +137,19 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
         .filter((line) => line.includes('|'));
       expect(rows).toContain('{}|{"redacted": true}');
       expect(rows.some((line) => line.includes('Ikeja'))).toBe(true);
+    });
+    it('returns idempotent success when a committed confirmation is retried after redaction', () => {
+      const value = quote();
+      const output = asActor(
+        `${prepare(value)} ${confirm(value.id)} RESET ROLE;
+        SELECT public.cleanup_customer_checkout_shipping_recovery_previews(1000, '0 seconds', '0 seconds');
+        SET LOCAL ROLE authenticated; ${confirm(value.id)} RESET ROLE;
+        SELECT quote::text FROM private.customer_checkout_shipping_recovery_previews WHERE id='${value.id}';`
+      );
+      // Both the first commit and the post-redaction retry report success;
+      // the stored quote payload is redacted by the sweep in between.
+      expect(output.match(/"confirmed": true/g)?.length).toBe(2);
+      expect(output).toContain('{"redacted": true}');
     });
     it('rejects altered proofs and quote payloads', () => {
       const value = quote();
@@ -271,68 +256,6 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
           (SELECT count(*) FROM private.customer_checkout_shipping_recovery_previews WHERE confirmed_at IS NOT NULL)
         FROM public.orders WHERE id='${orderId}';`);
       expect(output).toContain('f|t|0|0');
-    });
-    it('serializes simultaneous confirmations into one quote and one audit record', async () => {
-      const value = quote();
-      const auth = `SELECT set_config('request.jwt.claim.role','authenticated',true);
-        SELECT set_config('request.jwt.claim.sub','${ownerId}',true); SET LOCAL ROLE authenticated;`;
-      database.query(`BEGIN; ${auth} ${prepare(value)} COMMIT;`);
-      const results = await Promise.all([
-        database.queryAsync(
-          `BEGIN; ${auth} ${confirm(value.id)} SELECT pg_sleep(0.15); COMMIT;`
-        ),
-        database.queryAsync(`BEGIN; ${auth} ${confirm(value.id)} COMMIT;`),
-      ]);
-      for (const result of results)
-        expect(result).toContain('"confirmed": true');
-      expect(
-        database
-          .query(`SELECT
-        (SELECT count(*) FROM public.shipping_quotes WHERE id='${value.id}'),
-        (SELECT count(*) FROM public.shipping_quote_attestations WHERE quote_id='${value.id}'),
-        (SELECT count(*) FROM private.customer_checkout_shipping_recovery_previews WHERE id='${value.id}' AND confirmed_at IS NOT NULL);`)
-          .trim()
-      ).toBe('1|1|1');
-    });
-    it('blocks concurrent product edits until context and confirmation release their input locks', async () => {
-      const value = quote();
-      const auth = `SELECT set_config('request.jwt.claim.role','authenticated',true);
-        SELECT set_config('request.jwt.claim.sub','${ownerId}',true); SET LOCAL ROLE authenticated;`;
-      database.query(`BEGIN; ${auth} ${prepare(value)} COMMIT;`);
-      const confirmer = database.queryAsync(`BEGIN; ${auth}
-        SELECT public.get_customer_checkout_shipping_recovery_context('${orderId}');
-        SELECT public.confirm_customer_checkout_shipping_recovery('${orderId}','${value.id}',true);
-        SELECT pg_sleep(1); COMMIT;`);
-      // Observe the relation lock before starting the editor, rather than
-      // guessing transaction timing from a fixed client delay.
-      let locked = false;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        locked =
-          database
-            .query(`SELECT EXISTS(SELECT 1 FROM pg_locks
-          WHERE relation='public.products'::regclass AND mode='RowShareLock' AND granted);`)
-            .trim() === 't';
-        if (locked) break;
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
-      }
-      const editor =
-        database.queryAsync(`SET application_name='recovery_product_editor';
-        UPDATE public.products SET weight_value=2 RETURNING weight_value;`);
-      let blocked = false;
-      for (let attempt = 0; attempt < 10; attempt++) {
-        blocked =
-          database
-            .query(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity
-          WHERE application_name='recovery_product_editor' AND wait_event_type='Lock');`)
-            .trim() === 't';
-        if (blocked) break;
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
-      }
-      const results = await Promise.all([confirmer, editor]);
-      expect(locked).toBe(true);
-      expect(blocked).toBe(true);
-      expect(results[0]).toContain('"confirmed": true');
-      expect(results[1].trim()).toBe('2');
     });
   }
 );

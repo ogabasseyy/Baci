@@ -58,8 +58,10 @@ idempotent for the same already-confirmed destination and selected quote.
 
 The private preview record retains actor, original destination, signed replacement
 inputs, creation/expiry and confirmation time as audit evidence. It has no client
-table grants or RLS policies. An hourly pg_cron sweep purges unconfirmed rows
-past expiry plus a one-day grace window; confirmed rows keep their audit keys
+table grants, and an explicit restrictive RLS policy denies direct access to
+every role. An hourly pg_cron sweep purges unconfirmed rows
+past expiry plus a one-day grace window, with a CRON_SECRET-gated web cron
+route as fallback where pg_cron is absent; confirmed rows keep their audit keys
 while destination and economics are redacted past ninety days. Private helpers are not executable by clients;
 public recovery functions are granted only to authenticated users and authorize
 each invocation. No service-role client fallback was introduced.
@@ -70,8 +72,9 @@ Apply every recovery migration before deploying the web API, then release the
 mobile UI: `20261013213516_customer_checkout_shipping_recovery_context.sql`,
 `20261013213522_customer_checkout_shipping_recovery_confirmation.sql`,
 `20261014080000_customer_checkout_shipping_recovery_scalar_address.sql`,
-`20261014120000_customer_checkout_shipping_recovery_review_followups.sql` and
-`20261014130000_customer_checkout_shipping_recovery_hardening.sql`.
+`20261014120000_customer_checkout_shipping_recovery_review_followups.sql`,
+`20261014130000_customer_checkout_shipping_recovery_hardening.sql` and
+`20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql`.
 The automated migration runner applies the whole directory; a manual rollout
 must include every recovery migration or legacy scalar destinations stay
 unbookable and the context schema check fails closed. No native dependency

@@ -70,7 +70,7 @@ bash "$script_dir/historical-migration-repair-backfill.test.sh"
 bash "$repo_root/supabase/tests/run-serialized-variant-inventory-concurrency-test.sh"
 bash "$repo_root/supabase/tests/run-storefront-order-private-schema-boundary-test.sh"
 node "$repo_root/supabase/tests/run-order-shipment-booking-permissions-test.mjs"
-BACI_SHIPPING_QUOTE_POSTGRES=1 pnpm --filter @baci/web exec vitest run src/lib/shipping/shipping-quote-route-proof.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery.postgres.test.ts src/lib/shipping/prepare-checkout-shipping-recovery.postgres.test.ts
+BACI_SHIPPING_QUOTE_POSTGRES=1 pnpm --filter @baci/web exec vitest run src/lib/shipping/shipping-quote-route-proof.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-concurrency.postgres.test.ts src/lib/shipping/prepare-checkout-shipping-recovery.postgres.test.ts
 bash "$repo_root/supabase/tests/run-paystack-reference-claim-concurrency-test.sh"
 bash "$repo_root/supabase/tests/run-merchant-invoice-partial-payment-review-index-test.sh"
 bash "$repo_root/supabase/tests/run-gigl-tracking-retry-repair-test.sh"

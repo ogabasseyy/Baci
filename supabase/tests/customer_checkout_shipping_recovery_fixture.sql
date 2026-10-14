@@ -17,10 +17,11 @@ UPDATE public.orders SET shipping_provider='GIGL', shipping_fee=110,
 INSERT INTO public.products VALUES (
   '50000000-0000-4000-8000-000000000001',1,'kg',NULL,NULL
 );
-INSERT INTO public.order_items VALUES (
+INSERT INTO public.order_items
+  (id,order_id,product_id,name,quantity,price,fulfillment_data) VALUES (
   '60000000-0000-4000-8000-000000000001',
   '40000000-0000-4000-8000-000000000001',
-  '50000000-0000-4000-8000-000000000001','Phone',1,1000
+  '50000000-0000-4000-8000-000000000001','Phone',1,1000,NULL
 );
 
 CREATE TABLE public.merchant_settlements (source_type text, source_id uuid, merchant_id uuid, status text, metadata jsonb, id uuid DEFAULT gen_random_uuid());

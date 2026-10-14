@@ -11,7 +11,6 @@ import {
   hasPermission,
 } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { logger } from '@/lib/logger';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
 import { selectPreferredQuote } from '@/lib/shipping/order-shipment-booking-utils';
@@ -21,79 +20,7 @@ import { resolveRecoveryQuoteReceiver } from '@/lib/shipping/resolve-recovery-qu
 import type { ShippingQuote } from '@/lib/shipping/types';
 import { shippingCheckoutRecoverySchema } from '@/schemas/shipping-checkout-recovery';
 import { shippingRecoveryContextSchema } from '@/schemas/shipping-checkout-recovery-context';
-
-function failure(error: { message?: string; code?: string } | null) {
-  const message = error?.message ?? '';
-  if (message.includes('forbidden'))
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  if (message.includes('price_changed'))
-    return NextResponse.json(
-      {
-        error:
-          'The fresh quote differs from the shipping fee already paid. This recovery cannot change the paid amount.',
-        code: 'SHIPPING_RECOVERY_PRICE_CHANGED',
-      },
-      { status: 409 }
-    );
-  if (message.includes('funding_not_ready'))
-    return NextResponse.json(
-      {
-        error:
-          'Prepaid shipping funding is not yet available for this order. Verify payment settlement before recovering its quote.',
-        code: 'SHIPPING_RECOVERY_FUNDING_NOT_READY',
-      },
-      { status: 409 }
-    );
-  if (
-    message.includes('expired') ||
-    message.includes('stale') ||
-    error?.code === '40001' ||
-    error?.code === '40P01'
-  )
-    return NextResponse.json(
-      {
-        error:
-          'This preview expired or the order changed. Review the destination and preview again.',
-        code: 'SHIPPING_RECOVERY_STALE',
-      },
-      { status: 409 }
-    );
-  // A missing Vault signing secret is a configuration outage, not a caller
-  // error: surface it distinctly from authorization failures (42501) so
-  // operators can tell misconfiguration apart. Never leaks the secret.
-  if (message.includes('shipping_recovery_signing_unavailable')) {
-    logger.error({
-      message: 'checkout shipping recovery signing unavailable',
-      code: error?.code,
-    });
-    return NextResponse.json(
-      {
-        error:
-          'Shipping recovery signing is temporarily unavailable. Please try again later.',
-        code: 'SHIPPING_RECOVERY_SIGNING_UNAVAILABLE',
-      },
-      { status: 503 }
-    );
-  }
-  if (
-    message.includes('unavailable') ||
-    message.includes('order_refunded') ||
-    message.includes('order_cancelled')
-  )
-    return NextResponse.json(
-      {
-        error:
-          'This order is no longer eligible for prepaid shipping recovery.',
-        code: 'SHIPPING_RECOVERY_UNAVAILABLE',
-      },
-      { status: 409 }
-    );
-  console.error('Checkout shipping recovery failed', { code: error?.code });
-  return NextResponse.json(
-    { error: 'Unable to recover this shipping quote. Please try again.' },
-    { status: 500 }
-  );
-}
+import { recoveryFailure } from './route.failure';
 
 export async function POST(
   request: NextRequest,
@@ -142,21 +69,21 @@ export async function POST(
         p_confirm_destination: parsed.data.confirmDestination,
       } as never
     );
-    if (error) return failure(error);
+    if (error) return recoveryFailure(error);
     const confirmed = z
       .object({ quoteId: z.uuid(), confirmed: z.literal(true) })
       .safeParse(data);
     return confirmed.success
       ? NextResponse.json(confirmed.data)
-      : failure(null);
+      : recoveryFailure(null);
   }
   const { data, error } = await supabase.rpc(
     'get_customer_checkout_shipping_recovery_context' as never,
     { p_order_id: id } as never
   );
-  if (error) return failure(error);
+  if (error) return recoveryFailure(error);
   const context = shippingRecoveryContextSchema.safeParse(data);
-  if (!context.success) return failure(null);
+  if (!context.success) return recoveryFailure(null);
   // A context row for another order or merchant means the caller is probing
   // outside its access scope: fail closed with 403, not a generic error.
   if (
@@ -257,6 +184,10 @@ export async function POST(
       serviceTier: preference?.service_tier ?? null,
       carrierName: preference?.carrier_name ?? null,
       providerRateId: preference?.provider_rate_id ?? null,
+      // The original quote row is usually gone in recovery: without a saved
+      // preference, match the paid fee so a GoFaster order is not reported
+      // price-changed when its exact candidate is still offered.
+      samePrice: order.shipping_fee,
     }
   );
   if (!quote)
@@ -285,16 +216,16 @@ export async function POST(
       quoteRequest: built.request,
     });
   } catch {
-    return failure({
+    return recoveryFailure({
       message: 'invalid_checkout_shipping_recovery_proof_context',
     });
   }
-  if (staged.error) return failure(staged.error);
+  if (staged.error) return recoveryFailure(staged.error);
   if (
     typeof staged.data !== 'string' ||
     !z.uuid().safeParse(staged.data).success
   )
-    return failure(null);
+    return recoveryFailure(null);
   return NextResponse.json({
     previewId: staged.data,
     quote: {

@@ -207,20 +207,16 @@ export function createRemediationCaseState({
         groups.set(candidate.category, group);
       }
       // Rotate within each category so a recurring hot case cannot hold
-      // the single per-run slot forever: unseen and least-recently
-      // selected cases go first. The sort is stable, so ties keep the
-      // loader (highest-volume-first) order.
+      // the single per-run slot forever: unseen and least-served cases
+      // (fewest recorded outcomes) go first. Outcomes are only appended
+      // after a selection, so the count doubles as selection history
+      // with no ledger schema change. The sort is stable, so ties keep
+      // the loader (highest-volume-first) order.
       for (const group of groups.values()) {
         group.sort((left, right) => {
-          const leftSelected =
-            state.cases[left.caseKey]?.lastSelectedAt || '';
-          const rightSelected =
-            state.cases[right.caseKey]?.lastSelectedAt || '';
-          return leftSelected < rightSelected
-            ? -1
-            : leftSelected > rightSelected
-              ? 1
-              : 0;
+          const leftServed = state.cases[left.caseKey]?.outcomes?.length ?? 0;
+          const rightServed = state.cases[right.caseKey]?.outcomes?.length ?? 0;
+          return leftServed - rightServed;
         });
       }
       const categories = [...groups.keys()].sort();
@@ -250,7 +246,6 @@ export function createRemediationCaseState({
           const item = state.cases[candidate.caseKey];
           if (item) {
             item.status = 'investigating';
-            item.lastSelectedAt = new Date(nowMs).toISOString();
             return candidateWithLifecycle(state, candidate);
           }
           return candidate;

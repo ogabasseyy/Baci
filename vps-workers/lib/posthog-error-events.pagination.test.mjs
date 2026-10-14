@@ -61,6 +61,31 @@ describe('PostHog remediation candidate pagination', () => {
     assert.equal(candidates[0].occurrences, 8);
   });
 
+  it('rejects a numeric-string nextOffset instead of coercing it', async () => {
+    await assert.rejects(
+      fetchPostHogRemediationCandidates({
+        env: { ...environment, BACI_POSTHOG_REMEDIATION_MAX_PAGES: '2' },
+        fetchFn: async () =>
+          new Response(
+            JSON.stringify({
+              hasMore: true,
+              limit: 100,
+              nextOffset: '23',
+              offset: 0,
+              results: [
+                {
+                  id: 'one-off',
+                  status: 'active',
+                  aggregations: { occurrences: 1 },
+                },
+              ],
+            })
+          ),
+      }),
+      /unsafe nextOffset/
+    );
+  });
+
   it('fails closed when the configured page ceiling would leave issues unmeasured', async () => {
     await assert.rejects(
       fetchPostHogRemediationCandidates({

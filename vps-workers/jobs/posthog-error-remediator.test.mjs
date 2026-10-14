@@ -78,6 +78,28 @@ describe('PostHog error remediator', () => {
     );
   });
 
+  it('short-circuits without side effects when the worker is disabled', async () => {
+    const result = await runPostHogErrorRemediator({
+      env: {
+        BACI_POSTHOG_REMEDIATION_OUTPUT_DIR: mkdtempSync(
+          join(tmpdir(), 'posthog-remediator-')
+        ),
+        POSTHOG_REMEDIATION_HOST: 'https://eu.posthog.com',
+        POSTHOG_REMEDIATION_PERSONAL_API_KEY: 'phx_read_only_personal_key',
+        POSTHOG_REMEDIATION_PROJECT_ID: '202711',
+      },
+      fetchFn: () => {
+        throw new Error('fetch must not run while disabled');
+      },
+      logger: silentLogger,
+    });
+
+    assert.equal(result.skipped, true);
+    assert.equal(result.mode, 'disabled');
+    assert.deepEqual(result.actions, []);
+    assert.deepEqual(result.candidates, []);
+  });
+
   it('rejects a public PostHog ingestion key before making a request', async () => {
     await assert.rejects(
       runPostHogErrorRemediator({

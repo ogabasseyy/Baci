@@ -87,6 +87,10 @@ describe('remediation case ordering', () => {
       ['hot-1', 'cold-1']
     );
     state.recordSelections(first.slice(0, 1));
+    state.recordOutcome(first[0], {
+      detail: 'prompt written',
+      type: 'prompt_written',
+    });
 
     nowMs += 15 * 60 * 1000;
     const recurred = [hot, cold].map((item) => ({
@@ -98,6 +102,23 @@ describe('remediation case ordering', () => {
     assert.deepEqual(
       second.map((value) => value.fingerprint),
       ['cold-1', 'hot-1']
+    );
+    state.recordSelections(second.slice(0, 1));
+    state.recordOutcome(second[0], {
+      detail: 'prompt written',
+      type: 'prompt_written',
+    });
+
+    nowMs += 15 * 60 * 1000;
+    const recurredAgain = [hot, cold].map((item) => ({
+      ...item,
+      lastSeen: '2026-08-01T10:34:00.000Z',
+    }));
+    const third = state.orderCandidates(state.reconcile(recurredAgain));
+
+    assert.deepEqual(
+      third.map((value) => value.fingerprint),
+      ['hot-1', 'cold-1']
     );
   });
 });

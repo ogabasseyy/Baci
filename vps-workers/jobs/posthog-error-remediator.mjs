@@ -12,6 +12,15 @@ export function runPostHogErrorRemediator({
   logger = console,
   remediationLock,
 } = {}) {
+  if (env.BACI_POSTHOG_REMEDIATION_ENABLED !== '1') {
+    return {
+      actions: [],
+      candidates: [],
+      email: null,
+      mode: 'disabled',
+      skipped: true,
+    };
+  }
   const outputDir =
     env.BACI_POSTHOG_REMEDIATION_OUTPUT_DIR || 'logs/posthog-error-remediator';
   const remediatorEnvironment = {
@@ -21,10 +30,7 @@ export function runPostHogErrorRemediator({
       env.BACI_POSTHOG_REMEDIATION_STATE_PATH ||
       `${outputDir}/handled-state.json`,
   };
-  const candidateLoader =
-    env.BACI_POSTHOG_REMEDIATION_ENABLED === '1'
-      ? fetchPostHogRemediationCandidates
-      : async () => [];
+  const candidateLoader = fetchPostHogRemediationCandidates;
 
   return runRemediationWorker({
     autofixRunner,

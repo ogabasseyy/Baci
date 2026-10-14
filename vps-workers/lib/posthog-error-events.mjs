@@ -207,8 +207,12 @@ export async function fetchPostHogRemediationCandidates({
       return selectCandidates(issues, env, projectId);
     }
 
-    const nextOffset = Number(payload.nextOffset);
-    if (!Number.isSafeInteger(nextOffset) || nextOffset <= offset) {
+    const nextOffset = payload.nextOffset;
+    if (
+      typeof nextOffset !== 'number' ||
+      !Number.isSafeInteger(nextOffset) ||
+      nextOffset <= offset
+    ) {
       throw new Error(
         'PostHog error-tracking issues response returned an unsafe nextOffset'
       );

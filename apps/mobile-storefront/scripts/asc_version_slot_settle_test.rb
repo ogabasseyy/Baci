@@ -72,7 +72,7 @@ end
 
 class PublishedVersionSlotTest < Minitest::Test
   class AppFixture
-    attr_accessor :state, :editable, :submission, :reviews
+    attr_accessor :state, :editable, :submission, :reviews, :latest_error
 
     def initialize(state)
       @state = state
@@ -83,6 +83,7 @@ class PublishedVersionSlotTest < Minitest::Test
     def get_review_submissions(filter:); reviews; end
     def get_edit_app_store_version(platform:); editable; end
     def get_latest_app_store_version(platform:)
+      raise latest_error if latest_error
       return nil unless state
       Struct.new(:version_string, :app_version_state).new('2.1.559', state)
     end
@@ -120,6 +121,13 @@ class PublishedVersionSlotTest < Minitest::Test
   def test_review_still_blocks_even_when_latest_version_is_public
     app = AppFixture.new('READY_FOR_DISTRIBUTION')
     app.submission = Object.new
+    Spaceship::ConnectAPI::App.fixture = app
+    refute app_store_version_slot_ready?(app_version: '2.1.632', build_number: '632')
+  end
+
+  def test_failed_latest_version_lookup_skips_submission
+    app = AppFixture.new('READY_FOR_DISTRIBUTION')
+    app.latest_error = Faraday::TimeoutError
     Spaceship::ConnectAPI::App.fixture = app
     refute app_store_version_slot_ready?(app_version: '2.1.632', build_number: '632')
   end

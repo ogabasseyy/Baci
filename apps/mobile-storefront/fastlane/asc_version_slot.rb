@@ -82,6 +82,14 @@ rescue StandardError => e
   "unavailable (#{e.class})"
 end
 
+# A failed state lookup must skip submission, never infer that the slot is free.
+def latest_app_store_version_published?(app, platform)
+  version = app.get_latest_app_store_version(platform: platform)
+  version && PUBLISHED_APP_STORE_VERSION_STATES.include?(version.app_version_state)
+rescue StandardError
+  false
+end
+
 def wait_for_editable_app_store_version(app, platform)
   EDITABLE_VERSION_POLL_ATTEMPTS.times do |attempt|
     version = app.get_edit_app_store_version(platform: platform)
@@ -203,8 +211,7 @@ def app_store_version_slot_ready?(app_version:, build_number:)
 
     return true if app.get_edit_app_store_version(platform: platform)
 
-    latest_version = app.get_latest_app_store_version(platform: platform)
-    return true if latest_version && PUBLISHED_APP_STORE_VERSION_STATES.include?(latest_version.app_version_state)
+    return true if latest_app_store_version_published?(app, platform)
 
     # Nothing is in review, yet the slot is still occupied — e.g. a version in
     # PENDING_DEVELOPER_RELEASE or PENDING_APPLE_RELEASE. There is no safe

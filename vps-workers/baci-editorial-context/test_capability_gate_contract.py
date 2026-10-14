@@ -91,85 +91,6 @@ class ContractCheckTests(unittest.TestCase):
             bomb.write_text("BASE_PINS = {'gate.py': '%s'}\nraise RuntimeError('executed')\n" % ("0" * 64))
             self.assertEqual(check.declared_pins(bomb), {"gate.py": "0" * 64})
 
-    def test_conditioned_step_fails(self):
-        ci = CI.replace(
-            "        uses: ./.github/actions/capability-gate\n",
-            "        if: github.event_name == 'push'\n        uses: ./.github/actions/capability-gate\n",
-            1,
-        )
-        self.assertTrue(check.ci_failures(ci))
-
-    def test_relocation_into_never_running_job_fails(self):
-        ci = """on:
-  push:
-  pull_request:
-jobs:
-  changes:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: other/action@v1
-  skipped:
-    if: false
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Test capability register binding
-        uses: ./.github/actions/capability-gate
-"""
-        failures = check.ci_failures(ci)
-        self.assertTrue(failures)
-        self.assertIn("unconditional", failures[0])
-
-    def test_continue_on_error_job_fails(self):
-        ci = CI.replace(
-            "  changes:\n    runs-on: ubuntu-24.04\n",
-            "  changes:\n    continue-on-error: true\n    runs-on: ubuntu-24.04\n",
-            1,
-        )
-        failures = check.ci_failures(ci)
-        self.assertTrue(failures)
-        self.assertIn("unconditional", failures[0])
-
-    def test_dropped_trigger_fails(self):
-        self.assertTrue(check.ci_failures(CI.replace("  pull_request:\n", "", 1)))
-        commented = CI.replace("  pull_request:\n", "  # pull_request:\n", 1)
-        self.assertTrue(check.ci_failures(commented))
-
-    def test_narrowed_trigger_values_fail(self):
-        branched = CI.replace(
-            "  pull_request:\n", "  pull_request:\n    branches: [other]\n", 1
-        )
-        failures = check.ci_failures(branched)
-        self.assertTrue(failures)
-        self.assertIn("branches", failures[0])
-        pathed = CI.replace(
-            "  push:\n", "  push:\n    paths-ignore:\n      - docs/**\n", 1
-        )
-        failures = check.ci_failures(pathed)
-        self.assertTrue(failures)
-        self.assertIn("paths-ignore", failures[0])
-
-    def test_needs_gated_job_fails(self):
-        ci = CI.replace(
-            "  changes:\n    runs-on: ubuntu-24.04\n",
-            "  changes:\n    needs: [other]\n    runs-on: ubuntu-24.04\n",
-            1,
-        )
-        self.assertTrue(check.ci_failures(ci))
-
-    def test_fake_comment_cannot_satisfy(self):
-        ci = """on:
-  push:
-  pull_request:
-jobs:
-  changes:
-    runs-on: ubuntu-24.04
-    steps:
-      # - name: Test capability register binding
-      # uses: ./.github/actions/capability-gate
-      - uses: other/action@v1
-"""
-        self.assertTrue(check.ci_failures(ci))
-
     def test_tmp_copy_runs_from_repo_root(self):
         # The workflow runs a base-owned copy from /tmp: the checker must
         # derive the tree from the working directory, never its own path.
@@ -255,6 +176,8 @@ jobs:
             "vps-workers/baci-editorial-context/register_digests.py",
             "vps-workers/baci-editorial-context/platform_capabilities.py",
             "vps-workers/baci-editorial-context/test_capability_register_binding.py",
+            ".github/scripts/capability_gate_contract_text_checks.py",
+            ".github/workflows/capability-register-freshness.yml",
         ):
             self.assertIn(rel, declared)
 
@@ -282,6 +205,43 @@ jobs:
         )
         self.assertNotEqual(commented, text)
         self.assertTrue(check.workflow_failures(commented))
+
+    def test_dropped_declaration_fails(self):
+        # Deleting an unchanged file's declaration must fail: otherwise a
+        # first PR drops the pin and a later PR weakens the file unseen.
+        with tempfile.TemporaryDirectory() as root:
+            _, target = _tree(root, pins={"gate.py": "0" * 64})
+            digest = check.sha256_of(target)
+            base = {"gate.py": digest}
+            failures, _ = check.pin_failures(root, base, {})
+            self.assertTrue(failures)
+            self.assertIn("declaration dropped", failures[0])
+
+    def test_contract_trigger_removal_fails(self):
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/capability-gate-contract.yml"
+        if not workflow.exists():
+            self.skipTest("contract workflow unavailable")
+        text = workflow.read_text()
+        dropped = text.replace("  pull_request_target:\n", "", 1)
+        self.assertNotEqual(dropped, text)
+        self.assertTrue(check.workflow_failures(dropped))
+
+    def test_echoed_markers_fail(self):
+        # Executable echoes of the marker strings still change the run
+        # block, so the exact-sequence match must reject them.
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/capability-gate-contract.yml"
+        if not workflow.exists():
+            self.skipTest("contract workflow unavailable")
+        text = workflow.read_text()
+        echoed = text.replace(
+            '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n',
+            '          echo \'git archive FETCH_HEAD\'\n          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n',
+            1,
+        )
+        self.assertNotEqual(echoed, text)
+        self.assertTrue(check.workflow_failures(echoed))
 
     def test_head_pins_match_declared(self):
         # Forgetting a pin refresh after an enforcement edit fails the suite

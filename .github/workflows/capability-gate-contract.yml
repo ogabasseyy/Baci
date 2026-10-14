@@ -21,7 +21,9 @@ name: Capability Gate Contract
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    # edited covers base retargets, which otherwise would not re-run the
+    # base-owned checker even though it resolves scripts via base_ref.
+    types: [opened, synchronize, reopened, edited]
   push:
 
 permissions:
@@ -31,7 +33,7 @@ env:
   # Baseline hash of the checker script itself. The checker cannot pin
   # itself, so the base-owned workflow carries the baseline and passes it as
   # argv[1]; a same-PR checker change declares its new hash here.
-  PINNED_CHECKER_SHA256: 937e0ee7aeaf8e02b1d155889dca5d8667792d00483aef36b59b892e184f5a9f
+  PINNED_CHECKER_SHA256: 13bc259a7d66c605044ed08ef3a19dce1e294ff137a2e0efa7874ef0b509462e
 
 jobs:
   gate-contract:

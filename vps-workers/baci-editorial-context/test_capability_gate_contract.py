@@ -134,6 +134,20 @@ jobs:
         commented = CI.replace("  pull_request:\n", "  # pull_request:\n", 1)
         self.assertTrue(check.ci_failures(commented))
 
+    def test_narrowed_trigger_values_fail(self):
+        branched = CI.replace(
+            "  pull_request:\n", "  pull_request:\n    branches: [other]\n", 1
+        )
+        failures = check.ci_failures(branched)
+        self.assertTrue(failures)
+        self.assertIn("branches", failures[0])
+        pathed = CI.replace(
+            "  push:\n", "  push:\n    paths-ignore:\n      - docs/**\n", 1
+        )
+        failures = check.ci_failures(pathed)
+        self.assertTrue(failures)
+        self.assertIn("paths-ignore", failures[0])
+
     def test_needs_gated_job_fails(self):
         ci = CI.replace(
             "  changes:\n    runs-on: ubuntu-24.04\n",
@@ -163,13 +177,13 @@ jobs:
         if not (repo / ".github/workflows/ci.yml").exists():
             self.skipTest("CI workflow unavailable")
         with tempfile.TemporaryDirectory() as tmp:
-            copy = Path(tmp, "contract_check.py")
-            shutil.copy(
-                repo / ".github/scripts/capability_gate_contract_check.py", copy
-            )
+            scripts = Path(tmp, ".github", "scripts")
+            scripts.mkdir(parents=True)
+            for name in ("capability_gate_contract_check.py", "capability_gate_contract_text_checks.py"):
+                shutil.copy(repo / ".github/scripts" / name, scripts / name)
             proc = subprocess.run(
-                [sys.executable, str(copy)], cwd=repo,
-                capture_output=True, text=True,
+                [sys.executable, str(scripts / "capability_gate_contract_check.py")],
+                cwd=repo, capture_output=True, text=True,
             )
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
@@ -204,10 +218,26 @@ jobs:
             self.skipTest("contract workflow unavailable")
         self.assertEqual(check.workflow_failures(workflow.read_text()), [])
         dropped = workflow.read_text().replace(
-            "            git show FETCH_HEAD:.github/scripts/capability_gate_contract_check.py > /tmp/contract_check.py\n", ""
+            "            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_text_checks.py | tar -x -C /tmp/cg-check\n", ""
         )
         self.assertNotEqual(dropped, workflow.read_text())
         self.assertTrue(check.workflow_failures(dropped))
+
+    def test_extra_run_step_fails(self):
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/capability-gate-contract.yml"
+        if not workflow.exists():
+            self.skipTest("contract workflow unavailable")
+        text = workflow.read_text()
+        extra = text.replace(
+            '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n',
+            '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n      - name: Extra\n        run: |\n          echo hijack\n',
+            1,
+        )
+        self.assertNotEqual(extra, text)
+        failures = check.workflow_failures(extra)
+        self.assertTrue(failures)
+        self.assertIn("exactly one run step", failures[0])
 
     def test_pin_set_covers_enforcement_core(self):
         # A comment-swallowed dict entry once silently unpinned the gate:
@@ -247,7 +277,7 @@ jobs:
         text = workflow.read_text()
         # Comment every line containing a marker.
         commented = "\n".join(
-            ("# " + line if ("git show FETCH_HEAD" in line or "python3 /tmp/contract_check.py" in line) else line)
+            ("# " + line if ("git archive FETCH_HEAD" in line or 'python3 "$CHECKER"' in line) else line)
             for line in text.splitlines()
         )
         self.assertNotEqual(commented, text)

@@ -1,15 +1,20 @@
 name: Capability Gate Contract
 
 # Independent guard for the capability gate's own caller. This workflow runs
-# from the BASE revision (pull_request_target): it fetches the base-owned
-# checker script and runs THAT against the PR head, so a PR that weakens the
-# checker, the invocation, or any enforcement file cannot silence the guard —
-# the running logic always comes from the target branch. The checker only
-# reads PR files as data (hash + parse, never import or execute). On push
-# events the checkout itself is the revision under test, so its own script
-# runs. Enforcement files and their declared hashes both live in
-# .github/scripts/capability_gate_contract_check.py; see its header for the
+# from the BASE revision (pull_request_target): it extracts the base-owned
+# checker scripts and runs THOSE against the PR head, so a PR that weakens
+# the checker, the invocation, or any enforcement file cannot silence the
+# guard — the running logic always comes from the target branch. The checker
+# only reads PR files as data (hash + parse, never import or execute).
+# Enforcement files and their declared hashes live in
+# .github/scripts/capability_gate_contract_check.py (with text checks in its
+# companion capability_gate_contract_text_checks.py); see its header for the
 # refresh procedure.
+# Push-leg note: on push events the running scripts come from the pushed
+# revision itself, so that leg is self-attested defense-in-depth only. Do NOT
+# configure it as a required status for protected branches: the required
+# check must be this workflow's pull_request_target leg plus required human
+# reviews, which run base-owned logic against the head.
 # Residual limit: direct pushes to protected branches bypass PR guards;
 # branch protection with required reviews plus this required check is the
 # remaining layer (owner action).
@@ -26,7 +31,7 @@ env:
   # Baseline hash of the checker script itself. The checker cannot pin
   # itself, so the base-owned workflow carries the baseline and passes it as
   # argv[1]; a same-PR checker change declares its new hash here.
-  PINNED_CHECKER_SHA256: fec2a79960820c617c210f77c9ba65a343e461fddbbe88fd27d1fa32ecdbedc8
+  PINNED_CHECKER_SHA256: 937e0ee7aeaf8e02b1d155889dca5d8667792d00483aef36b59b892e184f5a9f
 
 jobs:
   gate-contract:
@@ -44,9 +49,11 @@ jobs:
         shell: bash
         run: |
           if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            rm -rf /tmp/cg-check && mkdir -p /tmp/cg-check
             git fetch --no-tags --depth 1 origin "${{ github.base_ref }}"
-            git show FETCH_HEAD:.github/scripts/capability_gate_contract_check.py > /tmp/contract_check.py
+            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_text_checks.py | tar -x -C /tmp/cg-check
+            CHECKER=/tmp/cg-check/.github/scripts/capability_gate_contract_check.py
           else
-            cp .github/scripts/capability_gate_contract_check.py /tmp/contract_check.py
+            CHECKER=.github/scripts/capability_gate_contract_check.py
           fi
-          python3 /tmp/contract_check.py "$PINNED_CHECKER_SHA256"
+          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"

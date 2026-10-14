@@ -25,6 +25,24 @@ export function dedupeLadderByName<T extends LadderRung>(
   });
 }
 
+// Mirror award_purchase_points' multiplier reading (migration 03):
+// tier->>'multiplier' extracts JSON numbers and numeric strings alike
+// as text, and the ^-?[0-9]+(\.[0-9]+)?$ grammar casts both. Legacy
+// rows the old unvalidated endpoint persisted can therefore carry
+// "2" while earning at 2x; the status payload must coerce the same
+// grammar instead of nulling it, or the UI hides a live benefit.
+// Anything else (text, booleans, unsafe magnitudes) is unusable.
+const MULTIPLIER_PATTERN = /^-?[0-9]+(\.[0-9]+)?$/;
+
+export function toLadderMultiplier(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && MULTIPLIER_PATTERN.test(value)) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 export function toLadderThreshold(value: unknown): number | null {
   if (
     typeof value === 'number' &&

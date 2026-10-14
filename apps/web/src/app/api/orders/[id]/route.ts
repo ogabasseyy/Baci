@@ -194,6 +194,17 @@ export async function PATCH(
       return NextResponse.json(cancelledRejection, { status: 409 });
     }
 
+    // The terminal-state predicates ride on the UPDATEs below so a
+    // cancellation committing after this read cannot be resurrected —
+    // but only when this PATCH actually moves a status: the evaluator
+    // deliberately allows metadata-only edits on cancelled orders, and
+    // unconditional predicates would exclude those rows entirely.
+    const movesStatus =
+      (payment_status !== undefined &&
+        payment_status !== existingOrder.payment_status) ||
+      (shipping_status !== undefined &&
+        shipping_status !== existingOrder.shipping_status);
+
     // A conditional update that matched zero rows (PGRST116) may mean
     // a cancellation committed between the read above and the write:
     // re-read the statuses and let the same policy answer, so the race
@@ -342,8 +353,10 @@ export async function PATCH(
         .update({ payment_status: paidStatus })
         .eq('id', id)
         .eq('merchant_id', merchantId);
-      for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
-        paidUpdateQuery = paidUpdateQuery.neq(column, spelling);
+      if (movesStatus) {
+        for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
+          paidUpdateQuery = paidUpdateQuery.neq(column, spelling);
+        }
       }
       const { error: paidUpdateError } = await paidUpdateQuery
         .select('id')
@@ -509,8 +522,10 @@ export async function PATCH(
       .update(updates)
       .eq('id', id)
       .eq('merchant_id', merchantId);
-    for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
-      updateQuery = updateQuery.neq(column, spelling);
+    if (movesStatus) {
+      for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
+        updateQuery = updateQuery.neq(column, spelling);
+      }
     }
 
     if (shipmentBookingLockToken) {
@@ -526,6 +541,17 @@ export async function PATCH(
 
     if (updateError) {
       console.error('Error updating order:', updateError);
+      // A raced cancellation owns the row now: answer the terminal 409
+      // BEFORE any rollback — restoring the stale pre-cancellation
+      // statuses here would reopen the cancelled order after its
+      // loyalty claim was already released.
+      const racedRejection =
+        updateError.code === 'PGRST116'
+          ? await racedCancellationRejection()
+          : null;
+      if (racedRejection) {
+        return NextResponse.json(racedRejection, { status: 409 });
+      }
       if (inventoryConfirmedBeforeOrderUpdate) {
         try {
           await rollbackOrderStatusAfterInventoryConfirmationFailure(
@@ -562,13 +588,6 @@ export async function PATCH(
             transactionId: null,
           });
         }
-      }
-      const racedRejection =
-        updateError.code === 'PGRST116'
-          ? await racedCancellationRejection()
-          : null;
-      if (racedRejection) {
-        return NextResponse.json(racedRejection, { status: 409 });
       }
       const mappedUpdateError = mapOrderPatchUpdateError(updateError);
       if (mappedUpdateError) {

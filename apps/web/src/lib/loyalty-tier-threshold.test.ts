@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   dedupeLadderByName,
+  toLadderMultiplier,
   toLadderThreshold,
 } from './loyalty-tier-threshold';
 
@@ -35,6 +36,21 @@ describe('toLadderThreshold', () => {
     expect(toLadderThreshold('gold')).toBeNull();
     expect(toLadderThreshold('')).toBeNull();
     expect(toLadderThreshold({})).toBeNull();
+  });
+
+  it('coerces numeric-string multipliers like the award SQL grammar', () => {
+    expect(toLadderMultiplier('2')).toBe(2);
+    expect(toLadderMultiplier('1.5')).toBe(1.5);
+    expect(toLadderMultiplier('-0.5')).toBe(-0.5);
+    expect(toLadderMultiplier(2.5)).toBe(2.5);
+  });
+
+  it('nulls multipliers outside the award grammar', () => {
+    expect(toLadderMultiplier('2x')).toBeNull();
+    expect(toLadderMultiplier('')).toBeNull();
+    expect(toLadderMultiplier(true)).toBeNull();
+    expect(toLadderMultiplier(null)).toBeNull();
+    expect(toLadderMultiplier(Number.POSITIVE_INFINITY)).toBeNull();
   });
 
   it('keeps the lowest rung per case-insensitive name', () => {

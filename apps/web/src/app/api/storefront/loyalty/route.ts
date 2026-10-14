@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
 import {
   dedupeLadderByName,
+  toLadderMultiplier,
   toLadderThreshold,
 } from '@/lib/loyalty-tier-threshold';
 import { createClient } from '@/lib/supabase/server';
@@ -158,11 +159,9 @@ export async function GET(request: NextRequest) {
             ...entry,
             name: typeof entry.name === 'string' ? entry.name : '',
             minPoints,
-            multiplier:
-              typeof entry.multiplier === 'number' &&
-              Number.isFinite(entry.multiplier)
-                ? entry.multiplier
-                : null,
+            // Numeric strings coerce like award_purchase_points'
+            // text-extraction grammar; anything else stays null.
+            multiplier: toLadderMultiplier(entry.multiplier),
             perks: Array.isArray(entry.perks)
               ? entry.perks.filter(
                   (perk): perk is string => typeof perk === 'string'

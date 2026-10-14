@@ -86,7 +86,7 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010000017_loyalty_redemption_max_percentage.sql',
-    sha256: '133f610f79e7113b6ef44e6fde8ff0e7da05c1b36242481a03bb182823551ffe',
+    sha256: '76eb6726179947da1b9434a569145a4b78f9581696ab16c9d274db9cb0a5c459',
   },
   {
     repositoryPath:

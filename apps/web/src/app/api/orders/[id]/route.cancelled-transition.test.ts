@@ -53,6 +53,7 @@ vi.mock('@/lib/shipping/order-shipment-booking-utils', () => ({
 }));
 
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { rollbackOrderStatusAfterInventoryConfirmationFailure } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { PATCH } from './route';
 import {
   createCancelledTransitionHarness,
@@ -189,7 +190,7 @@ describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
         id: 'order-1',
         order_number: 'BACI-001',
         shipping_status: 'pending',
-        payment_status: 'pending',
+        payment_status: 'paid',
         is_credit_order: false,
         customer_id: null,
         selected_quote_id: null,
@@ -199,7 +200,7 @@ describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
       },
       {
         id: 'order-1',
-        shipping_status: 'pending',
+        shipping_status: 'processing',
         shipping_provider: null,
         tracking_number: null,
       }
@@ -211,7 +212,7 @@ describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
     });
 
     const response = await PATCH(
-      createPatchRequest({ notes: 'Customer called' }),
+      createPatchRequest({ shipping_status: 'processing' }),
       { params: Promise.resolve({ id: 'order-1' }) }
     );
 
@@ -234,5 +235,87 @@ describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
       'shipping_status',
       'canceled'
     );
+  });
+
+  it('allows metadata-only edits on cancelled orders', async () => {
+    const { supabase, orderUpdateBuilder } = createCancelledTransitionHarness(
+      {
+        id: 'order-1',
+        order_number: 'BACI-001',
+        shipping_status: 'cancelled',
+        payment_status: 'cancelled',
+        is_credit_order: false,
+        customer_id: null,
+        selected_quote_id: null,
+        shipping_provider: null,
+        tracking_number: null,
+        shipment_id: null,
+      },
+      {
+        id: 'order-1',
+        shipping_status: 'cancelled',
+        shipping_provider: null,
+        tracking_number: null,
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+
+    const response = await PATCH(
+      createPatchRequest({ notes: 'Refund handled by support' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    // No status moves, so no terminal predicates may exclude the row.
+    expect(orderUpdateBuilder.neq).not.toHaveBeenCalled();
+  });
+
+  it('answers a raced cancellation with 409 before any rollback', async () => {
+    // Fixture models the post-race world the re-read observes:
+    // payment_status is already 'cancelled' when the conditional
+    // update matches zero rows.
+    const { supabase } = createCancelledTransitionHarness(
+      {
+        id: 'order-1',
+        order_number: 'BACI-001',
+        shipping_status: 'cancelled',
+        payment_status: 'cancelled',
+        is_credit_order: false,
+        customer_id: null,
+        selected_quote_id: null,
+        shipping_provider: null,
+        tracking_number: null,
+        shipment_id: null,
+      },
+      {
+        id: 'order-1',
+        shipping_status: 'processing',
+        shipping_provider: null,
+        tracking_number: null,
+      },
+      { failMainUpdateWithPgrst116: true }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+
+    const response = await PATCH(
+      createPatchRequest({ shipping_status: 'processing' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'SHIPPING_CANCELLED_TERMINAL',
+    });
+    expect(
+      rollbackOrderStatusAfterInventoryConfirmationFailure
+    ).not.toHaveBeenCalled();
   });
 });

@@ -55,16 +55,22 @@ function createUpdateBuilder<T>(result: { data: T | null; error: unknown }) {
 
 export function createCancelledTransitionHarness(
   existingOrder: ExistingOrderFixture,
-  updatedOrder: UpdatedOrderFixture
+  updatedOrder: UpdatedOrderFixture,
+  options?: { failMainUpdateWithPgrst116?: boolean }
 ) {
   const orderSelectBuilder = createSelectBuilder({
     data: existingOrder,
     error: null,
   });
-  const orderUpdateBuilder = createUpdateBuilder({
-    data: updatedOrder,
-    error: null,
-  });
+  const orderUpdateBuilder = options?.failMainUpdateWithPgrst116
+    ? createUpdateBuilder({
+        data: null,
+        error: { code: 'PGRST116', message: 'no rows' },
+      })
+    : createUpdateBuilder({
+        data: updatedOrder,
+        error: null,
+      });
   const ordersSelect = vi.fn(() => orderSelectBuilder);
   const ordersUpdate = vi.fn(() => orderUpdateBuilder);
   const supabase = {

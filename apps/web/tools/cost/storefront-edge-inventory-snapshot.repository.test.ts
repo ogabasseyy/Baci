@@ -1,6 +1,7 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, it } from 'vitest';
+import { readStorefrontEdgeInventory } from './read-storefront-edge-inventory';
 import { validateStorefrontEdgeInventorySnapshot } from './validate-storefront-edge-inventory-snapshot';
 
 it('binds the checked-in inventory snapshot to current committed source content', async () => {
@@ -17,8 +18,23 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      '169136b41248e89b0fd046047e54e2ade6744be6f2ac63e35817bbd56ba3ed62',
+      '0099963d1cda6725506df187a73c2fe5488feb0ecdc64fc6c54fa5bdaf6f3b19',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
-    rowCount: 573,
+    rowCount: 582,
   });
+});
+
+it('keeps every private cart endpoint on the dynamic origin', async () => {
+  const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+  const inventory = await readStorefrontEdgeInventory(
+    join(
+      repoRoot,
+      'docs/superpowers/evidence/storefront-edge/task-1a-inventory.json'
+    )
+  );
+  const cartRows = inventory.rows.filter((row) =>
+    row.sourcePath?.startsWith('apps/web/src/app/api/storefront/cart/')
+  );
+  expect(cartRows).toHaveLength(9);
+  for (const row of cartRows) expect(row.decision).toBe('origin_dynamic');
 });

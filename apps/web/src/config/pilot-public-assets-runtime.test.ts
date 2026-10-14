@@ -219,6 +219,27 @@ describe('non-lab runtime severities and quarantine', () => {
     expect(existsSync(join(pilot, 'merchant.avif'))).toBe(true);
   });
 
+  it('refuses quarantine into a symlinked vault', () => {
+    // mkdir -p follows a pre-existing symlink: without confinement
+    // the rename would land inside public/ while the boot reports
+    // successful quarantine and continues serving. The vault nests
+    // under this test's own root (not the shared tmpdir vault) so
+    // parallel workers never see the link.
+    const base = root();
+    const publicDir = join(base, 'app', 'public');
+    const pilot = join(publicDir, '__pilot', 'originals');
+    mkdirSync(pilot, { recursive: true });
+    writeFileSync(join(pilot, 'merchant.avif'), 'private fixture');
+    const trap = join(publicDir, 'trap');
+    mkdirSync(trap, { recursive: true });
+    symlinkSync(trap, join(base, 'app', '__pilot-quarantine'));
+    expect(() => assertPilotPublicAssets(publicDir, false)).toThrow(
+      /automatic quarantine failed.*refusing to serve unverified bytes/s
+    );
+    expect(existsSync(join(pilot, 'merchant.avif'))).toBe(true);
+    expect(existsSync(join(trap, 'originals'))).toBe(false);
+  });
+
   it('warns without moving when quarantine is disabled for a foreign tree', () => {
     // The unanchored-candidates shade: a candidate tree may belong to
     // a live lab session elsewhere, so the gate warns and leaves it

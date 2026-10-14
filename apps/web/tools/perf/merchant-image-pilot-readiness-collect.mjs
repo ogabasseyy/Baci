@@ -148,12 +148,12 @@ export async function collectSurface(page, url, surface, options = {}) {
         y: rect.y,
       };
     };
-    // Selected w-descriptor width: with a w-descriptor srcset the browser
-    // density-corrects naturalWidth (resource pixels / selected density),
-    // so resolution verdicts need the physical resource width. Pilot mounts
-    // render <picture> with the srcsets on child <source> elements (the
-    // fallback <img> carries only src), so scan those too; plain-src
-    // images (and x-descriptor sets) report null and keep natural pixels.
+    // Selected-descriptor physical width: w-descriptor sets report the
+    // claimed resource width; x-descriptor sets (Next Image 1x/2x)
+    // recover it from naturalWidth * selected density (the browser
+    // density-corrects naturals either way). Pilot <picture> mounts
+    // carry srcsets on child <source> elements, so scan those too;
+    // plain-src images report null and keep natural pixels.
     const resourceWidthOf = (img) => {
       const srcsets = [img.getAttribute('srcset')];
       const parent = img.parentElement;
@@ -168,14 +168,22 @@ export async function collectSurface(page, url, surface, options = {}) {
         }
         for (const candidate of srcset.split(',')) {
           const [url, descriptor] = candidate.trim().split(/\s+/);
-          if (
-            url &&
-            descriptor?.endsWith('w') &&
-            new URL(url, document.baseURI).href === img.currentSrc
-          ) {
+          if (!url || new URL(url, document.baseURI).href !== img.currentSrc) {
+            continue;
+          }
+          if (descriptor?.endsWith('w')) {
             const width = Number.parseInt(descriptor, 10);
             if (Number.isFinite(width) && width > 0) {
               return width;
+            }
+          } else if (descriptor?.endsWith('x')) {
+            // Rounding is inherent (CSS px discard the remainder);
+            // control re-derives the exact width from decoded bytes
+            // below, pilot compares the recovered value.
+            const density = Number.parseFloat(descriptor);
+            const natural = img.naturalWidth ?? 0;
+            if (Number.isFinite(density) && density > 0 && natural > 0) {
+              return Math.round(natural * density);
             }
           }
         }

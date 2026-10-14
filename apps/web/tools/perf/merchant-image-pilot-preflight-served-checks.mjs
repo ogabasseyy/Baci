@@ -19,8 +19,8 @@ import {
 } from './merchant-image-pilot-preflight-html.mjs';
 import { readBoundedBody } from './merchant-image-pilot-preflight-served-body.mjs';
 import {
+  readStagedBytes,
   readUpToBytes,
-  resolveStagedPath,
   sha256Hex,
 } from './merchant-image-pilot-preflight-shared.mjs';
 
@@ -89,7 +89,7 @@ export async function assertServedDescriptors(
         // Exempt, bare (no-op control srcSets, standalone img src), or
         // density-described: the staged file must exist and decode.
         try {
-          await sharp(await resolveStagedPath(publicDir, base)).metadata();
+          await sharp(await readStagedBytes(publicDir, base)).metadata();
         } catch {
           failures.push(`${name}: staged file does not decode: "${base}"`);
         }
@@ -103,7 +103,7 @@ export async function assertServedDescriptors(
       }
       let meta;
       try {
-        meta = await sharp(await resolveStagedPath(publicDir, base)).metadata();
+        meta = await sharp(await readStagedBytes(publicDir, base)).metadata();
       } catch {
         failures.push(
           `${name}: staged file does not decode: "${candidate.url}"`

@@ -114,9 +114,28 @@ describe('applyPilotPublicGate', () => {
     }
   });
 
-  it('refuses a merchant image renamed to a pinned filler name at build', () => {
-    // Strict build-gate drift: warn-only at runtime would let a
-    // renamed merchant png ship silently, so the build fails it.
+  it('refuses filler drift at build when the lab is enabled', () => {
+    // Lab builds need exact fixtures (measurement exactness): a
+    // drifted filler fails the build rather than corrupting the
+    // comparison.
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    const fillers = join(configDir, 'public', '__pilot', 'fillers');
+    mkdirSync(join(configDir, 'public', '__pilot', 'originals'), {
+      recursive: true,
+    });
+    mkdirSync(fillers, { recursive: true });
+    writeFileSync(join(fillers, 'grid-filler-600x400-a.png'), 'merchant bytes');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    expect(() =>
+      applyPilotPublicGate(configDir, PHASE_PRODUCTION_BUILD)
+    ).toThrow(/unapproved filler/);
+  });
+
+  it('warns on filler drift at build when the lab is disabled', () => {
+    // Synthetic fixtures must not brick unrelated storefront
+    // deploys: a pipeline recompression is not tamper, and staged
+    // content still refuses every build (see above). Lab boots
+    // re-assert exact fillers, so drift never enters a lab run.
     const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
     const fillers = join(configDir, 'public', '__pilot', 'fillers');
     mkdirSync(join(configDir, 'public', '__pilot', 'originals'), {
@@ -125,9 +144,19 @@ describe('applyPilotPublicGate', () => {
     mkdirSync(fillers, { recursive: true });
     writeFileSync(join(fillers, 'grid-filler-600x400-a.png'), 'merchant bytes');
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
-    expect(() =>
-      applyPilotPublicGate(configDir, PHASE_PRODUCTION_BUILD)
-    ).toThrow(/does not match the pinned hash/);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() =>
+        applyPilotPublicGate(configDir, PHASE_PRODUCTION_BUILD)
+      ).not.toThrow();
+      expect(
+        warn.mock.calls.some((call) =>
+          String(call[0]).match(/does not match the pinned hash/)
+        )
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('keeps an agreeing operator BACI_PILOT_PUBLIC_DIR preset', () => {

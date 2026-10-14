@@ -1,4 +1,5 @@
 import 'server-only';
+import type { Dirent } from 'node:fs';
 import { lstat, readdir, realpath } from 'node:fs/promises';
 import { basename, join, relative, sep } from 'node:path';
 import { listStagedDir } from './lab-config-stage-listing';
@@ -241,18 +242,28 @@ async function stageFingerprint(
   return parts.join('\n');
 }
 
+// Fail-closed listing: only a genuinely absent directory reads as
+// empty — files under a searchable-but-unlistable tree stay
+// servable by known pathname, so every other listing error aborts.
+async function readdirIfPresent(dir: string): Promise<Dirent[] | null> {
+  try {
+    return await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 // Empty-allowlist twin of the enumeration above: with zero staged
 // paths, any servable content is unbound by definition. Name-based
 // presence only (no traversal into entries, so a symlinked name
 // cannot redirect the check); fillers/ is the boot shape guard's
 // business (pinned fixtures this check cannot verify), but root-level
 // files, squatting non-directories, and non-empty non-hex dirs refuse
-// like the bound path. An unreadable root passes — there is nothing
-// to serve from it.
+// like the bound path. Only an absent tree passes — an unreadable
+// one still serves by known pathname, so it aborts (see above).
 async function assertEmptyAllowlistTree(stageRoot: string): Promise<void> {
-  const topEntries = await readdir(stageRoot, { withFileTypes: true }).catch(
-    () => null
-  );
+  const topEntries = await readdirIfPresent(stageRoot);
   if (!topEntries) {
     return;
   }
@@ -266,9 +277,7 @@ async function assertEmptyAllowlistTree(stageRoot: string): Promise<void> {
       );
     }
     if (entry.name !== 'originals' && !HEX64_PATTERN.test(entry.name)) {
-      const extra = await readdir(join(stageRoot, entry.name)).catch(
-        () => null
-      );
+      const extra = await readdirIfPresent(join(stageRoot, entry.name));
       if (extra && extra.length > 0) {
         throw new Error(
           `merchant image pilot: staged directory "${entry.name}" with an empty binding set — re-stage to reconcile`
@@ -276,9 +285,7 @@ async function assertEmptyAllowlistTree(stageRoot: string): Promise<void> {
       }
       continue;
     }
-    const children = await readdir(join(stageRoot, entry.name)).catch(
-      () => null
-    );
+    const children = await readdirIfPresent(join(stageRoot, entry.name));
     if (children && children.length > 0) {
       throw new Error(
         `merchant image pilot: staged content with an empty binding set under "${entry.name}" — re-stage to reconcile`

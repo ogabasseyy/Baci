@@ -210,6 +210,65 @@ describe('collectSurface', () => {
     expect(collected.geometry.selectedImg?.controlBytesUnverified).toBe(true);
   });
 
+  it('recovers physical width from selected x-descriptors', async () => {
+    // Next Image 1x/2x sets: the browser density-corrects naturals,
+    // so a null resourceWidth would halve the pixels in resolution
+    // verdicts (96px original read as 48px). The recovered value
+    // also unlocks the decoded-bytes override on control.
+    stubBrowser({
+      selectedImg: fakeImg({
+        getAttribute: (name) =>
+          name === 'srcset'
+            ? '/__pilot/abc/x-384.avif 1x, /__pilot/abc/x-768.avif 2x'
+            : null,
+        naturalHeight: 375,
+        naturalWidth: 384,
+      }),
+      slotImg: fakeImg({ srcset: null }),
+    });
+    const collected = await collectSurface(
+      fakePage(),
+      'https://lab/pilot-lab/store/omnimart',
+      'grid',
+      { arm: 'pilot' }
+    );
+    expect(collected.geometry.selectedImg?.resourceWidth).toBe(768);
+  });
+
+  it('decodes control bytes for x-described images', async () => {
+    // The finding's exact case: a control 1x/2x set must engage the
+    // decoded-width override (exact bytes) instead of keeping the
+    // density-corrected naturals.
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-collect-x-'));
+    await mkdir(join(publicDir, '__pilot', 'originals'), { recursive: true });
+    const bytes = await sharp({
+      create: { background: '#1c1917', channels: 3, height: 72, width: 96 },
+    })
+      .png()
+      .toBuffer();
+    await writeFile(join(publicDir, '__pilot', 'originals', 'x.png'), bytes);
+    stubBrowser({
+      selectedImg: fakeImg({
+        currentSrc: 'https://lab/__pilot/originals/x.png',
+        getAttribute: (name) =>
+          name === 'srcset' ? 'https://lab/__pilot/originals/x.png 2x' : null,
+        naturalHeight: 36,
+        naturalWidth: 48,
+      }),
+      slotImg: null,
+    });
+    const collected = await collectSurface(
+      fakePage(),
+      'https://lab/pilot-lab/store/omnimart',
+      'grid',
+      { arm: 'control', publicDir }
+    );
+    expect(collected.geometry.selectedImg?.resourceWidth).toBe(96);
+    expect(
+      collected.geometry.selectedImg?.controlBytesUnverified
+    ).toBeUndefined();
+  });
+
   it('leaves pilot descriptors untouched without staged access', async () => {
     // Pilot tiers are distinct files per candidate, so the collected
     // descriptor IS the physical width — no decode, no publicDir

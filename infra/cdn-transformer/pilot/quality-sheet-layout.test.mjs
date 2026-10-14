@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { buildQualitySheet } from './quality-sheet.mjs';
 import { publishQualitySheet } from './quality-sheet-publish.mjs';
-import { parseMountCrop } from './quality-sheet-render.mjs';
+import { parseMountCrop } from './quality-sheet-mounts.mjs';
 import { setupPilot } from './quality-sheet-fixtures.mjs';
 
 test('keeps tier aspect ratio in DPR rows and warns on over-source', async () => {
@@ -92,6 +92,40 @@ test('rejects malformed mount boxes instead of misrendering the clip', async () 
         }),
       /invalid mount/,
       `mount ${name} must fail closed`
+    );
+  }
+});
+
+test('rejects axis-invalid position pairs instead of misclaiming the crop', () => {
+  // Same-axis keyword pairs are invalid CSS: the browser would drop
+  // the declaration (centered crop) while the caption claims the
+  // supplied position. Percents lock their slot (first horizontal,
+  // second vertical); `center` is neutral and keywords swap.
+  const good = { aspectRatio: '16 / 9', fit: 'cover' };
+  for (const position of [
+    '50% 50%',
+    'center',
+    'left top',
+    'top left',
+    'center left',
+    'left 50%',
+    '50% top',
+  ]) {
+    assert.equal(
+      parseMountCrop({ mount: { ...good, position } }, 'x').position,
+      position
+    );
+  }
+  for (const position of [
+    'left right',
+    'right left',
+    'top bottom',
+    '50% left',
+    'top 50%',
+  ]) {
+    assert.throws(
+      () => parseMountCrop({ mount: { ...good, position } }, 'x'),
+      /incompatible axes/
     );
   }
 });

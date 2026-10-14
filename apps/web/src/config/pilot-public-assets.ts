@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
-import { join } from 'node:path';
+import {
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  realpathSync,
+  renameSync,
+} from 'node:fs';
+import { join, sep } from 'node:path';
 import { isPilotLabEnabled } from './pilot-lab-enabled';
 import {
   assertConfinedEntry,
@@ -49,6 +55,24 @@ function quarantinePilotEntry(
 ): string {
   const vault = join(publicDir, '..', '__pilot-quarantine');
   mkdirSync(vault, { recursive: true });
+  // Vault confinement: mkdir -p follows a pre-existing symlink, so a
+  // vault link into public/ would report successful quarantine while
+  // the entry stays statically served at the target path. The vault
+  // must be a real directory whose canonical path sits outside the
+  // served tree; anything else fails the quarantine (and the boot).
+  const vaultStat = lstatSync(vault);
+  if (!vaultStat.isDirectory() || vaultStat.isSymbolicLink()) {
+    throw new Error(
+      `quarantine vault "${vault}" is not a real directory — refusing to move staged content into it`
+    );
+  }
+  const realVault = realpathSync(vault);
+  const realPublic = realpathSync(publicDir);
+  if (realVault === realPublic || realVault.startsWith(`${realPublic}${sep}`)) {
+    throw new Error(
+      `quarantine vault "${vault}" resolves inside the served public tree — refusing a quarantine that stays statically served`
+    );
+  }
   const target = join(vault, `${Date.now()}-${process.pid}-${name}`);
   renameSync(join(root, name), target);
   return target;

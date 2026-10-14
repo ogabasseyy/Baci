@@ -220,6 +220,24 @@ describe('assertNoUnexpectedStagedFiles', () => {
     await expect(assertNoUnexpectedStagedFiles([])).resolves.toBe(undefined);
   });
 
+  it('aborts when the root cannot be listed under an empty binding set', async () => {
+    // Twin of the bound-path listing abort: an unlistable root still
+    // serves known pathnames, so only an absent tree reads as empty.
+    // POSIX-only.
+    if (process.platform === 'win32') {
+      return;
+    }
+    const pilotStage = await stageTree();
+    await chmod(pilotStage, 0o111);
+    try {
+      await expect(
+        assertNoUnexpectedStagedFiles([], pilotStage)
+      ).rejects.toThrow(/EACCES/);
+    } finally {
+      await chmod(pilotStage, 0o755);
+    }
+  });
+
   it('aborts when a staged directory cannot be listed', async () => {
     // Searchable-but-unreadable originals still serves known
     // pathnames: the guard must abort, not accept-and-cache an

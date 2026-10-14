@@ -14,6 +14,13 @@
 // unrelated session can neither supply nor override the version.
 const BROWSER_VERSION_PATTERN =
   /(?:"browserVersion"\s*:\s*"(\d+\.\d+\.\d+\.\d+)"|\bbrowserVersion:\s*(\d+\.\d+\.\d+\.\d+))/g;
+// Recorded executable product: the same session-capabilities line names
+// the browser ('chrome', or 'chrome-headless-shell' for the shell
+// binary — same dotted build, different product). Both renderings
+// carry it (chromedriver JSON and selenium Caps), so its absence
+// fails the bind like a missing version.
+const BROWSER_NAME_PATTERN =
+  /(?:"browserName"\s*:\s*"([^"]+)"|\bbrowserName:\s*([A-Za-z][\w.-]*))/g;
 // Chromedriver epoch-second stamps ([1702635762.891], millis or micros):
 // the prepared launch segment's first stamp is the session creation,
 // which must precede the bound navigation. Same-process clock as the
@@ -31,6 +38,19 @@ function executableVersionFromLog(launchSegment, browserLog) {
   if (found === undefined) {
     throw new Error(
       `prepared-profile launch records no browserVersion (need its WebDriver session-capabilities line); refusing to bind: ${browserLog}`
+    );
+  }
+  return found;
+}
+
+function executableNameFromLog(launchSegment, browserLog) {
+  let found;
+  for (const match of launchSegment.matchAll(BROWSER_NAME_PATTERN)) {
+    found = match[1] ?? match[2];
+  }
+  if (found === undefined) {
+    throw new Error(
+      `prepared-profile launch records no browserName (need its WebDriver session-capabilities line); refusing to bind: ${browserLog}`
     );
   }
   return found;
@@ -108,8 +128,11 @@ export function resolvePreparedLaunch(logText, profileDir, browserLog) {
     );
   }
   return {
-    navigationCount: navigations.length,
+    // Version parses first: a segment missing both still reports the
+    // senior field, preserving the established bind refusal.
     executableVersion: executableVersionFromLog(launchSegment, browserLog),
+    browserName: executableNameFromLog(launchSegment, browserLog),
+    navigationCount: navigations.length,
     sessionMs: sessionTimeFromSegment(launchSegment),
   };
 }

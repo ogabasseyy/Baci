@@ -13,6 +13,7 @@ import { assertNoUnexpectedStagedFiles } from '@/lib/merchant-image-variant-pilo
 import {
   getFrozenLabRuntime,
   publishLabRuntime,
+  tryGetFrozenLabRuntime,
 } from '@/lib/merchant-image-variant-pilot/lab-runtime';
 import { readBoundedOperatorJson } from './lab-route-operator-json';
 import {
@@ -130,6 +131,12 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
 }
 
 export async function initializeLabRuntime(): Promise<PilotLabConfig> {
+  // Idempotent: a second init in one process reuses the frozen config
+  // instead of throwing 'restart to replace' (see tryGetFrozenLabRuntime).
+  // Staleness stays fail-closed — the boot binding check runs against
+  // these frozen stagedPaths right after, and request time re-verifies.
+  const frozen = tryGetFrozenLabRuntime();
+  if (frozen) return frozen;
   const config = await loadLabConfigAtStartup();
   publishLabRuntime(config);
   return config;

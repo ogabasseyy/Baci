@@ -41,6 +41,22 @@ describe('getLabConfig', () => {
     );
   });
 
+  it('reuses the frozen runtime when initialized twice in one process', async () => {
+    // Dev-server reloads re-run register(): the second init must reuse
+    // the frozen config instead of throwing 'restart to replace' —
+    // which the boot gate would misread as a failed init and refuse
+    // on the normal staged tree. The publish guard itself still
+    // refuses replacement (see lab-runtime.test.ts).
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    await stageRouteFiles(lab);
+    const first = await initializeLabRuntime();
+    await expect(initializeLabRuntime()).resolves.toBe(first);
+  });
+
   it('fails closed when a file is planted after boot', async () => {
     // Next serves public/__pilot statically without invoking lab
     // handlers, so a file planted after boot is servable until the

@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import sharp from 'sharp';
@@ -90,6 +91,47 @@ describe('assertServedDescriptors', () => {
     });
     // Both the bare img src and the width-described source refuse.
     expect(failures.length).toBe(2);
+    for (const failure of failures) {
+      expect(failure).toMatch(/does not decode/);
+    }
+  });
+
+  it('refuses staged candidates swapped for links or FIFOs', async () => {
+    // Swap-window twin of the traversal test: the outside decoy
+    // matches the descriptor, so a pathname decode would pass by
+    // following the link — the guarded no-follow read refuses
+    // instead. The FIFO twin must refuse, never hang (no enclosing
+    // deadline governs local reads). POSIX-only.
+    if (process.platform === 'win32') {
+      return;
+    }
+    const publicDir = await mkdtemp(join(tmpdir(), 'pilot-served-swap-'));
+    const outside = await mkdtemp(join(tmpdir(), 'pilot-served-swap-out-'));
+    await mkdir(join(publicDir, '__pilot', GEN), { recursive: true });
+    const decoy = join(outside, 'decoy.webp');
+    await writeFile(
+      decoy,
+      await sharp({
+        create: { background: '#1c1917', channels: 3, height: 10, width: 48 },
+      })
+        .webp()
+        .toBuffer()
+    );
+    const staged = `/__pilot/${GEN}/${'e'.repeat(64)}.webp`;
+    await symlink(decoy, join(publicDir, staged));
+    const fifo = `/__pilot/${GEN}/${'f'.repeat(64)}.webp`;
+    execFileSync('mkfifo', [join(publicDir, fifo)]);
+    const html = section({
+      binding: `${MERCHANT}/logo-a`,
+      inner: `<picture><source srcSet="${staged} 48w, ${fifo} 48w" type="image/webp"/><img src="${staged}" alt="logo"/></picture><img src="${fifo}" alt="standalone"/>`,
+      slot: 'header-logo',
+    });
+    const failures = await assertServedDescriptors(html, {
+      arm: 'pilot',
+      origin: 'http://localhost:3000',
+      publicDir,
+    });
+    expect(failures.length).toBe(3);
     for (const failure of failures) {
       expect(failure).toMatch(/does not decode/);
     }

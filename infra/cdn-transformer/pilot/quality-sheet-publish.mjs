@@ -4,7 +4,7 @@
 import { open, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fsyncDir, isUnsupportedSyncError } from './disk-guards.mjs';
-import { PilotSheetError } from './quality-sheet-render.mjs';
+import { PilotSheetError } from './quality-sheet-mounts.mjs';
 
 // A direct write truncates the final path first, so an interruption or
 // filesystem error leaves a valid-looking HTML prefix showing only the

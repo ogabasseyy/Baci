@@ -98,7 +98,16 @@ export async function checkHar(args, pass, fail, warn, recorded) {
   // The request User-Agent is emulated configuration, not independent proof
   // of the browser executable version. The required --browser-provenance
   // runner launch record proves the executable separately below.
-  if (!ua?.includes(`Chrome/${args['expect-chrome-major']}.`)) {
+  // chrome-headless-shell reports `HeadlessChrome/<major>...`, which
+  // CONTAINS the `Chrome/<major>.` token: reject the shell identity
+  // first (same as the Lighthouse browser gate) so shell evidence
+  // cannot qualify as the matched full-Chrome run.
+  if (ua?.includes('HeadlessChrome')) {
+    fail(
+      'har.browser',
+      `recorded UA is chrome-headless-shell, not full Chrome ${args['expect-chrome-major']} (${ua})`
+    );
+  } else if (!ua?.includes(`Chrome/${args['expect-chrome-major']}.`)) {
     fail(
       'har.browser',
       `recorded UA does not show Chrome ${args['expect-chrome-major']} (emulated UA, not executable proof)`

@@ -4,6 +4,7 @@ import {
   PHASE_PRODUCTION_BUILD,
   PHASE_PRODUCTION_SERVER,
 } from 'next/constants';
+import { isPilotLabEnabled } from './pilot-lab-enabled';
 import { assertPilotPublicAssets } from './pilot-public-assets';
 import { canonicalDir } from './pilot-public-assets-roots';
 
@@ -51,13 +52,21 @@ export function applyPilotPublicGate(
     // disagreeing preset is ignored — it only constrains boots.
     return pilotPublicDir;
   }
-  // Strict severities: the build is the enforcement point, so both
-  // drift and content findings refuse here. Runtime boots keep drift
-  // fatal (post-build tamper) but quarantine content findings and
-  // continue, so a leftover staged tree neither bricks prod nor stays
-  // served.
+  // Strict severities: the build is the enforcement point, so
+  // content findings refuse here. Filler drift is lab-scoped:
+  // fixtures must be exact for lab builds (measurement exactness)
+  // but must not brick unrelated storefront deploys — a pipeline
+  // recompression is not tamper, and anyone who can drift a filler
+  // can add a static file directly. Lab boots re-assert exact
+  // fillers regardless, so a lab build without the flag still
+  // refuses drift at startup.
   if (phase === PHASE_PRODUCTION_BUILD) {
-    assertPilotPublicAssets(pilotPublicDir, undefined, 'throw', 'throw');
+    assertPilotPublicAssets(
+      pilotPublicDir,
+      undefined,
+      isPilotLabEnabled() ? 'throw' : 'warn',
+      'throw'
+    );
   }
   // A preset that disagrees with the served config tree refuses the
   // process: the boot gate and request resolver trust the stash, so

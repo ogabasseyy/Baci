@@ -9,6 +9,7 @@ describe('merchant-image-pilot-settings browser provenance', () => {
     },
   ];
   const valid = JSON.stringify({
+    browserName: 'chrome',
     event: 'browser-launch',
     executableVersion: '154.0.0.0',
     launchedAt: '2026-10-04T00:09:30.000Z',
@@ -19,11 +20,29 @@ describe('merchant-image-pilot-settings browser provenance', () => {
   it('binds a runner launch to the measured navigation', () => {
     expect(verifyBrowserProvenance(valid, pages, '154', 'launch.json')).toEqual(
       {
+        browserName: 'chrome',
         executableVersion: '154.0.0.0',
         ok: true,
         summary: 'browsertime@154.0.0.0',
       }
     );
+  });
+
+  it('refuses headless-shell launches and missing product records', () => {
+    // Same dotted build, different product: the version check alone
+    // would certify shell evidence, including runs whose HAR UA is
+    // emulated past the har.browser substring check.
+    const shell = JSON.stringify({
+      ...JSON.parse(valid),
+      browserName: 'chrome-headless-shell',
+    });
+    expect(verifyBrowserProvenance(shell, pages, '154').error).toMatch(
+      /not full Chrome/
+    );
+    const { browserName: _dropped, ...nameless } = JSON.parse(valid);
+    expect(
+      verifyBrowserProvenance(JSON.stringify(nameless), pages, '154').error
+    ).toMatch(/records no browserName/);
   });
 
   it('refuses a launch with first navigation explicitly unverified', () => {

@@ -114,7 +114,29 @@ export function verifyBrowserProvenance(text, pages, expectMajor, sourceLabel) {
   if (!checked.ok) {
     return checked;
   }
+  // Executable product, not just build: chrome-headless-shell reports
+  // the same dotted version as full Chrome, so the version check
+  // alone would certify shell evidence. The runner records the
+  // session-capabilities browserName; shell runs refuse here even
+  // when the HAR UA is emulated past the har.browser substring check.
+  if (
+    typeof artifact.browserName !== 'string' ||
+    artifact.browserName.length === 0
+  ) {
+    return {
+      error:
+        'browser-provenance artifact records no browserName (need the runner launch record with the session-capabilities browser product)',
+      ok: false,
+    };
+  }
+  if (artifact.browserName.toLowerCase().includes('headless-shell')) {
+    return {
+      error: `browser-provenance launch is ${artifact.browserName}, not full Chrome (headless-shell evidence cannot certify the measurement)`,
+      ok: false,
+    };
+  }
   return {
+    browserName: artifact.browserName,
     executableVersion: artifact.executableVersion,
     ok: true,
     summary: `${artifact.tool}@${artifact.executableVersion}`,

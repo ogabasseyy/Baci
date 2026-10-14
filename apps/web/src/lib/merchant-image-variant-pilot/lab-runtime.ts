@@ -30,3 +30,12 @@ export function getFrozenLabRuntime(): PilotLabConfig {
     );
   return config;
 }
+
+// Null-returning twin for idempotent initialization: a second
+// initializeLabRuntime() in one process (dev-server reload re-runs
+// register()) reuses the frozen config instead of throwing 'restart
+// to replace' — which the boot gate would misread as a failed init
+// and refuse on the normal staged tree.
+export function tryGetFrozenLabRuntime(): PilotLabConfig | null {
+  return (globalThis as Registry)[key] ?? null;
+}

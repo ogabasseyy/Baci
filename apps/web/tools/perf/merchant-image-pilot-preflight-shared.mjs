@@ -4,7 +4,10 @@
 import { createHash } from 'node:crypto';
 import { lstat, realpath, writeFile } from 'node:fs/promises';
 import { join, resolve, sep } from 'node:path';
-import { PILOT_UUID_PATTERN } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import {
+  MAX_INPUT_BYTES,
+  PILOT_UUID_PATTERN,
+} from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 
 import { readUpToBytes } from '../../../../infra/cdn-transformer/pilot/disk-guards.mjs';
 
@@ -209,6 +212,29 @@ export async function resolveStagedPath(publicDir, base) {
     throw new Error(`staged path escapes the public directory: "${base}"`);
   }
   return candidate;
+}
+
+// Guarded staged-file bytes: confinement alone leaves a swap window —
+// a FIFO or symlink planted after resolve would hang a pathname read
+// past every deadline (preflight has no enclosing timeout on local
+// reads) or redirect the decode outside the staged tree. The bounded
+// no-follow read refuses both (ELOOP/non-file) instead. The staged
+// ceiling is the default bound (generator contract caps staged tiers
+// and originals there); callers may tighten it, never loosen it past
+// their own ceiling.
+export async function readStagedBytes(
+  publicDir,
+  base,
+  maxBytes = MAX_INPUT_BYTES
+) {
+  const stagedPath = await resolveStagedPath(publicDir, base);
+  const read = await readUpToBytes(stagedPath, maxBytes);
+  if (read.truncated) {
+    throw new Error(
+      `staged file exceeds the ${maxBytes}-byte budget: "${base}"`
+    );
+  }
+  return read.bytes;
 }
 
 // Pretty-printed operator-artifact write: runner records stay

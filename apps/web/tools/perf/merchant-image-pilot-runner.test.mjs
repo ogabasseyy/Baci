@@ -93,6 +93,7 @@ describe('merchant-image-pilot-runner', () => {
     ).toBe(prepared.runId);
     // The launch record binds the log-recorded executable to this run.
     expect(JSON.parse(await readFile(finished.browserLaunch, 'utf8'))).toEqual({
+      browserName: 'chrome',
       event: 'browser-launch',
       executableVersion: '154.0.0.0',
       launchedAt: expect.any(String),
@@ -258,8 +259,8 @@ describe('merchant-image-pilot-runner', () => {
     // A restarted browser logs two sessions: the later (navigating)
     // session's version wins.
     await writeLog('restart.log', [
-      '[1][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserVersion": "153.0.0.0" } } }',
-      '[2][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserVersion": "154.0.0.0" } } }',
+      '[1][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserName": "chrome", "browserVersion": "153.0.0.0" } } }',
+      '[2][INFO]: RESPONSE InitSession { "value": { "capabilities": { "browserName": "chrome", "browserVersion": "154.0.0.0" } } }',
     ]);
     const restart = await finishRun({
       ...base,

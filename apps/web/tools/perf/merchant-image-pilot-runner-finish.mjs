@@ -103,7 +103,7 @@ export async function finishRun({
       `browser log exceeds ${MAX_BROWSER_LOG_BYTES} bytes: ${browserLog}`
     );
   }
-  const { executableVersion, navigationCount, sessionMs } =
+  const { browserName, executableVersion, navigationCount, sessionMs } =
     resolvePreparedLaunch(
       logRead.bytes.toString('utf8'),
       handle.profileDir,
@@ -234,6 +234,7 @@ export async function finishRun({
   // navigation and keeps the gate's ordering check meaningful only for
   // stamped logs.
   const launchRecord = {
+    browserName,
     event: 'browser-launch',
     executableVersion,
     // Markerless non-Browsertime segments (Caps-style drivers) bind

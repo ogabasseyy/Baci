@@ -95,11 +95,14 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # the enforcement point and refuses: staged-merchant shapes (image
 # files under originals/, generation dirs, fillers/, or the __pilot
 # root), confinement breaks (symlinks, hardlinked or special files —
-# Next would serve or block on them), pinned-filler drift (a merchant
-# image renamed to a filler name must never ship silently), and a
+# Next would serve or block on them), and a
 # BACI_PILOT_PUBLIC_DIR preset that disagrees with the served config
 # tree (the boot gate trusts the stash — unset or correct the
-# preset). The next.config gate is phase-scoped: it asserts only for
+# preset). Pinned-filler drift is lab-scoped at build: lab builds
+# refuse it (measurement exactness), non-lab builds warn — synthetic
+# fixtures must not brick unrelated storefront deploys, and lab boots
+# re-assert exact fillers, so drift never enters a lab run. The
+# next.config gate is phase-scoped: it asserts only for
 # `next build`; dev/start stash the verified root for the boot gate
 # without asserting (runtime boots own enforcement, below), and
 # unrelated config loads (typegen, tests, tooling) skip the gate

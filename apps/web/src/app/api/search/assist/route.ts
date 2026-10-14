@@ -70,36 +70,19 @@ export async function POST(request: NextRequest) {
   const tenant = await resolveAgenticChatTenant(tenantRequest);
   if (!tenant)
     return Response.json({ error: 'Assistance unavailable' }, { status: 503 });
-  // Cookie-less callers (the native app and unauthenticated curl alike)
-  // share a small sub-budget checked BEFORE the tenant bucket: without it,
-  // a distributed caller rotating IPs burns the full 60/min merchant
-  // allowance and every legitimate shopper gets 429. Cookie-less calls
-  // still consume the tenant bucket below, so total AI spend stays bounded
-  // at 60/min and CSRF-verified web sessions keep headroom. A denial here
-  // never touches the tenant bucket, preserving it for web traffic.
-  if (!request.headers.get('cookie')) {
-    const anonVerdict = await checkTenantRateLimit(
-      'search_assist_anon',
-      tenant.merchantId,
-      { maxRequests: 15, windowMs: 60_000 }
-    );
-    if (anonVerdict === 'unavailable')
-      return Response.json(
-        { error: 'Assistance unavailable' },
-        { status: 503 }
-      );
-    if (anonVerdict === 'denied')
-      return Response.json(
-        { error: 'Please try again shortly' },
-        { status: 429 }
-      );
-  }
   // Per-IP budget (5/min) is enforced distributively by the proxy
   // (rate-limit-routes '/api/search/assist'). This tenant-wide budget bounds
   // use even when the caller's network identifier is absent or changes, and
   // runs on Upstash Redis (same backend as the proxy) so it holds across
   // Vercel instances with no Supabase client at all. It fails closed: an
   // unverifiable budget must not silently unlock an expensive AI route.
+  // No cookie-split sub-budget: shoppers have no server-verified identity
+  // and double-submit CSRF is self-mintable by direct callers, so any
+  // cookie-presence split is bypassed by its exact target while only
+  // throttling honest native users. A distributed flood can therefore burn
+  // the 60/min tenant allowance (bounded AI spend, shopper 429s) — an
+  // accepted residual pending owner sign-off on CAPTCHA/proof-of-work or
+  // signed session tokens, not a per-request control.
   const tenantVerdict = await checkTenantRateLimit(
     'search_assist',
     tenant.merchantId,

@@ -135,6 +135,18 @@ class CapabilityGateTests(unittest.TestCase):
             self.assertFalse(gate.should_run(None, citing, changed, cwd=str(repo)),
                              "head-only resolution must not see the deleted path")
 
+    def test_action_only_change_runs_suite(self):
+        register = {"capabilities": []}
+        self.assertTrue(gate.should_run("base", register, {gate.ACTION_PATH}))
+
+    def test_main_without_base_runs_suite_for_dispatch(self):
+        with patch.object(gate.subprocess, "run") as suite:
+            suite.return_value.returncode = 0
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("BASE_SHA", None)
+                self.assertEqual(gate.main(), 0)
+            suite.assert_called_once()
+
     def test_main_fails_when_changed_set_unknowable(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         register = {"reviewed_at": now, "capabilities": [
@@ -172,6 +184,8 @@ class CapabilityGateTests(unittest.TestCase):
             {"status": "unverified", "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx"]},
         ]}
         stale = {**fresh, "reviewed_at": "2020-01-01T00:00:00Z"}
+        naive = {**fresh, "reviewed_at": "2026-10-14T07:27:04"}
+        self.assertTrue(gate._register_stale(naive), "naive reviewed_at must stale like the runtime rejects it")
         bound_change = {"apps/web/src/lib/feeds.ts"}
         future = {**fresh, "reviewed_at": (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=1)).isoformat()}
         self.assertTrue(gate._register_stale(future), "future-dated register must stale like the runtime rejects it")
@@ -217,6 +231,12 @@ class CapabilityGateTests(unittest.TestCase):
         # Same removal with an advanced re-review: accepted.
         dropped_reviewed = {**dropped, "reviewed_at": rereviewed["reviewed_at"]}
         self.assertFalse(gate.requires_register_update(dropped_reviewed, touched, base))
+        # Content-bound change with a redigest but no date advance: still required.
+        coded_change = {"apps/web/src/lib/feeds.ts"}
+        self.assertTrue(gate.requires_register_update(fresh, coded_change))
+        redigest = coded_change | {gate.REGISTER_PATH}
+        self.assertTrue(gate.requires_register_update(same_date, redigest, base))
+        self.assertFalse(gate.requires_register_update(rereviewed, redigest, base))
         # Base register unloadable: the path touch is the only signal, accepted.
         self.assertFalse(gate.requires_register_update(fresh, touched, None))
         self.assertFalse(gate.requires_register_update(fresh, touched))

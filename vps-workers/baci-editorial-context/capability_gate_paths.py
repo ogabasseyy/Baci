@@ -11,6 +11,7 @@ from pathlib import Path
 REGISTER_PATH = "docs/product/baci-capabilities.json"
 MAP_PATH = "docs/product/agent-access-map.md"
 SUITE_DIR = "vps-workers/baci-editorial-context"
+ACTION_PATH = ".github/actions/capability-gate/action.yml"
 
 def map_cited_paths(text):
     paths = set()
@@ -103,7 +104,9 @@ def _resolve_cited_filenames(names, cwd=".", base=None):
 
 
 def relevant_paths(register, cwd=".", base=None):
-    paths = {REGISTER_PATH, MAP_PATH}
+    # The enforcement layer itself (suite code plus the composite action that
+    # invokes it) is always relevant: an action-only change must run the suite.
+    paths = {REGISTER_PATH, MAP_PATH, ACTION_PATH}
     try:
         paths |= {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
     except (KeyError, TypeError, AttributeError):

@@ -34,10 +34,11 @@ The PostHog worker requires `POSTHOG_REMEDIATION_HOST`,
 `POSTHOG_REMEDIATION_PERSONAL_API_KEY` limited to `error_tracking:read`. Do not
 use a `phc_` project ingestion key or the source-map upload credential as a
 read credential. It remains dormant unless `BACI_POSTHOG_REMEDIATION_ENABLED=1`.
-It uses the documented Error Tracking query endpoint with offset pagination,
-reads at most 100 summaries per page, defaults to ten pages, and fails closed if
-the configured page ceiling would leave a measurement gap. Occurrence counts
-cover the trailing 7 days.
+It uses the documented Error Tracking query endpoint with provider nextOffset
+cursor pagination, reads at most 100 summaries per page, defaults to ten pages,
+and fails closed if the configured page ceiling would leave a measurement gap.
+Past 1,000 active issues the source remediates nothing until issues are
+resolved or muted. Occurrence counts cover the trailing 7 days.
 
 Autofix mode is off by default. With `BACI_REMEDIATION_AUTOFIX_ENABLED=1`, the
 worker creates an isolated worktree from the full checkout at `BACI_REPO_DIR`,

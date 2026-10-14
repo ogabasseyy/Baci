@@ -16,11 +16,23 @@ const safeTechnicalValue = (value, length) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const framePath = (source) => {
+  const text = String(source || '').split(/[?#]/, 1)[0];
+  if (!text.includes('://')) return text;
+  // Absolute URLs may carry userinfo credentials: keep only the path so
+  // neither credentials nor host flow into prompts and reports.
+  try {
+    return new URL(text).pathname || '';
+  } catch {
+    return '';
+  }
+};
+
 const frameCoordinate = (frame) => {
   if (!frame || typeof frame !== 'object') return '';
   // Drop URL query/fragment metadata before sanitizing: arbitrary keys and
   // values are user data, not repository coordinates.
-  const source = String(frame.source || '').split(/[?#]/, 1)[0];
+  const source = framePath(frame.source);
   const parts = [
     safeTechnicalValue(source, 160),
     safeTechnicalValue(frame.function, 120),
@@ -34,8 +46,14 @@ const frameCoordinate = (frame) => {
 
 const safeReleaseVersion = (value) => {
   const version = boundedString(value, 120);
-  // Canonical release identifiers only: versions, tags, and commit SHAs.
-  return /^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(version) ? version : '';
+  if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(version)) return '';
+  // Dotted versions and tags pass; commit SHAs must contain a hex letter
+  // so pure digit runs (phone-shaped) and bare names are dropped.
+  if (version.includes('.')) return version;
+  if (/^[0-9a-fA-F]{7,40}$/.test(version) && /[a-fA-F]/.test(version)) {
+    return version;
+  }
+  return '';
 };
 
 export async function enrichPostHogRemediationCandidate({

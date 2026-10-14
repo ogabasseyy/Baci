@@ -114,6 +114,62 @@ describe('PostHog remediation candidate enrichment', () => {
     assert.equal(enriched.sample.release, undefined);
   });
 
+  it('strips URL credentials from frame sources entirely', async () => {
+    const enriched = await enrichPostHogRemediationCandidate({
+      candidate,
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            latest_release: { version: '2026.10.1' },
+            top_in_app_frame: {
+              function: 'handleCheckout',
+              line: 11,
+              source: 'https://deploy:somepassword@cdn.example/app.js',
+            },
+          })
+        ),
+    });
+
+    assert.equal(enriched.sample.route, '/app.js :: handleCheckout:11');
+    assert.equal(enriched.sample.route.includes('somepassword'), false);
+    assert.equal(enriched.sample.route.includes('cdn.example'), false);
+    assert.equal(enriched.sample.route.includes('deploy'), false);
+  });
+
+  it('drops phone-shaped and bare-name release values', async () => {
+    for (const version of ['08031234567', 'AliceSmith', 'v2']) {
+      const enriched = await enrichPostHogRemediationCandidate({
+        candidate,
+        env: environment,
+        fetchFn: async () =>
+          new Response(
+            JSON.stringify({
+              latest_release: { version },
+              top_in_app_frame: {
+                function: 'handleCheckout',
+                source: 'app.js',
+              },
+            })
+          ),
+      });
+      assert.equal(enriched.sample.release, undefined, version);
+    }
+
+    const sha = await enrichPostHogRemediationCandidate({
+      candidate,
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            latest_release: { version: 'abc1234def5678' },
+            top_in_app_frame: { function: 'f', source: 'a.js' },
+          })
+        ),
+    });
+    assert.equal(sha.sample.release, 'abc1234def5678');
+  });
+
   it('keeps the redacted route when the detail has no usable frame', async () => {
     const enriched = await enrichPostHogRemediationCandidate({
       candidate,

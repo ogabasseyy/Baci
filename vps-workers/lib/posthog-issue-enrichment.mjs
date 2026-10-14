@@ -23,6 +23,11 @@ const safeTechnicalValue = (value, length) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// Source coordinates above eight digits are implausible as line numbers
+// and overlap phone-shaped identifiers, so they are dropped from the
+// route instead of being exported to the prompt.
+const MAX_FRAME_LINE = 99_999_999;
+
 // Bundler sourcemap schemes whose URL pathnames are repository structure,
 // not deployment locations: their paths are preserved like relative paths.
 const VIRTUAL_SOURCE_SCHEMES = new Set([
@@ -96,8 +101,11 @@ const frameCoordinate = (frame) => {
   // cannot be verified against repository symbols here, while file and
   // line already locate the failing code.
   const line = Number(frame.line);
-  const coordinate =
-    source + (Number.isSafeInteger(line) && line > 0 ? `:${line}` : '');
+  const plausibleLine =
+    Number.isSafeInteger(line) &&
+    line > 0 &&
+    line <= MAX_FRAME_LINE;
+  const coordinate = source + (plausibleLine ? `:${line}` : '');
   return coordinate.slice(0, 240);
 };
 

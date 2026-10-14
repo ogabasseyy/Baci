@@ -103,6 +103,7 @@ export async function handleAgenticCheckoutSessionUpdate(
       merchantSlug: merchant.slug,
     });
     const idempotency = await reserveAgenticIdempotencyKey({
+      agentId: mutation.agentId,
       apiVersion: mutation.apiVersion,
       body: mutation.rawBody,
       key: mutation.idempotencyKey,
@@ -129,6 +130,7 @@ export async function handleAgenticCheckoutSessionUpdate(
     }
     respondWithIdempotency = (response: unknown, status: number) =>
       buildStoredAgenticIdempotencyResponse({
+        agentId: mutation.agentId,
         idempotencyKey: mutation.idempotencyKey,
         merchantId: merchant.id,
         requestId: mutation.requestId,

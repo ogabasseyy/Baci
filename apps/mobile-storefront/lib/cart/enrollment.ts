@@ -13,3 +13,16 @@ export function nativeCartEnabled(
       merchant.premium_features.includes('shared_cart_native')
   );
 }
+
+/** Account linking additionally requires the accounts enrollment. */
+export function nativeCartAccountsEnabled(
+  merchant:
+    | { id: string; slug: string; premium_features?: string[] | null }
+    | undefined,
+  config: { merchantId: string; merchantSlug: string }
+): boolean {
+  return Boolean(
+    nativeCartEnabled(merchant, config) &&
+      merchant?.premium_features?.includes('shared_cart_accounts')
+  );
+}

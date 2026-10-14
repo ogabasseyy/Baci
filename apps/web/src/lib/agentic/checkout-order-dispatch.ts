@@ -270,6 +270,8 @@ export async function createAgenticCheckoutOrder(
         { client: supabase },
         {
           args: orderRpcArgs as Record<string, unknown>,
+          cartId: sharedCartBinding.cart_id,
+          cartVersion: sharedCartBinding.cart_version,
           generation: sharedCartBinding.checkout_generation,
           sessionId: sharedCartBinding.checkout_session_id,
           variant: 'base',

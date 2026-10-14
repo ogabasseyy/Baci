@@ -98,6 +98,7 @@ BEGIN
   SELECT * INTO v_session
   FROM public.commerce_cart_checkout_sessions
   WHERE merchant_id = v_merchant AND cart_id = p_cart_id
+    AND principal_id = v_principal
     AND status = 'active' AND expires_at > now()
     AND cart_version_reviewed = v_cart.version
   ORDER BY checkout_generation DESC, created_at DESC

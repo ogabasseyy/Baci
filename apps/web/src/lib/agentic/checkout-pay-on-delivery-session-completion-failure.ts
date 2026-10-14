@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 
 export async function handlePayOnDeliverySessionCompletionFailure({
+  agentId,
   finalizationClaim,
   idempotencyKey,
   merchantId,
@@ -21,6 +22,7 @@ export async function handlePayOnDeliverySessionCompletionFailure({
   supabase,
   updateError,
 }: {
+  agentId?: string | null;
   finalizationClaim: string;
   idempotencyKey: string;
   merchantId: string;
@@ -35,6 +37,7 @@ export async function handlePayOnDeliverySessionCompletionFailure({
 }) {
   const failureBody = { error: 'Database error' };
   const failurePersisted = await persistAgenticIdempotencyResponse({
+    agentId,
     idempotencyKey,
     merchantId,
     requestId,

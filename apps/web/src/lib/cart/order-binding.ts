@@ -104,6 +104,14 @@ export interface SubmitCartBoundOrderInput {
   variant: OrderBindingVariant;
   sessionId: string;
   generation: number;
+  /** Reviewed cart identity from the submitted binding; checked in SQL. */
+  cartId?: string;
+  cartVersion?: number;
+  /**
+   * Verified preparing principal (orders route only, after cart-proof
+   * verification). Platform-delegated agentic submits omit it.
+   */
+  principalId?: string | null;
   /** Named inner-RPC arguments (p_merchant_id, p_items, ...). */
   args: Record<string, unknown>;
 }
@@ -237,7 +245,16 @@ export async function submitCartBoundOrder(
     response = await deps.client.rpc(
       'create_storefront_order_with_cart_binding',
       {
-        p_args: input.args,
+        p_args: {
+          ...input.args,
+          ...(input.cartId ? { p_cart_id: input.cartId } : {}),
+          ...(input.cartVersion !== undefined
+            ? { p_cart_version: input.cartVersion }
+            : {}),
+          ...(input.principalId
+            ? { p_cart_principal_id: input.principalId }
+            : {}),
+        },
         p_generation: input.generation,
         p_session_id: input.sessionId,
         p_variant: input.variant,

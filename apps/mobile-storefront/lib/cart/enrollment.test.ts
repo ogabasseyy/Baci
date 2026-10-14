@@ -1,4 +1,4 @@
-import { nativeCartEnabled } from './enrollment';
+import { nativeCartAccountsEnabled, nativeCartEnabled } from './enrollment';
 
 it('requires explicit shared and native enrollment plus the configured merchant identity', () => {
   const merchant = {
@@ -21,4 +21,31 @@ it('requires explicit shared and native enrollment plus the configured merchant 
   expect(
     nativeCartEnabled(merchant, { merchantId: '', merchantSlug: 'alpha' })
   ).toBe(false);
+});
+
+it('requires the separate accounts enrollment for account linking', () => {
+  const merchant = {
+    id: 'a',
+    slug: 'alpha',
+    premium_features: ['shared_cart', 'shared_cart_native'],
+  };
+  expect(
+    nativeCartAccountsEnabled(merchant, {
+      merchantId: 'a',
+      merchantSlug: 'alpha',
+    })
+  ).toBe(false);
+  expect(
+    nativeCartAccountsEnabled(
+      {
+        ...merchant,
+        premium_features: [
+          'shared_cart',
+          'shared_cart_native',
+          'shared_cart_accounts',
+        ],
+      },
+      { merchantId: 'a', merchantSlug: 'alpha' }
+    )
+  ).toBe(true);
 });

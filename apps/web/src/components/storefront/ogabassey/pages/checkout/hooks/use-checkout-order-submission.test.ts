@@ -11,9 +11,13 @@ import type { CheckoutOrderSubmissionContext } from './checkout-order-submission
 import { useCheckoutOrderSubmission } from './use-checkout-order-submission';
 
 vi.mock('@/hooks/use-toast', () => ({ toast: vi.fn() }));
-vi.mock('@/hooks/cart/shared-cart-client', () => ({
-  prepareSharedCartCheckout: vi.fn(),
-}));
+vi.mock('@/hooks/cart/shared-cart-client', async (importOriginal) => {
+  const actual =
+    await importOriginal<
+      typeof import('@/hooks/cart/shared-cart-client')
+    >();
+  return { ...actual, prepareSharedCartCheckout: vi.fn() };
+});
 vi.mock('../handlers/direct-payment', () => ({
   executeResumedDirectPayment: vi.fn().mockResolvedValue(undefined),
 }));
@@ -325,6 +329,31 @@ describe('useCheckoutOrderSubmission', () => {
       checkoutSessionId: '55555555-5555-4555-8555-555555555555',
       currency: 'NGN',
       generation: 1,
+      lines: [
+        {
+          assuranceRate: null,
+          available: true,
+          condition: null,
+          effectiveUnitPriceMinor: 25000,
+          hasAssurance: false,
+          id: 'line-1',
+          lastUnitPriceMinor: 25000,
+          manageStock: true,
+          negotiatedUnitPriceMinor: null,
+          negotiationInvalidated: false,
+          negotiationStatus: null,
+          options: {},
+          priceChanged: false,
+          productId: '44444444-4444-4444-8444-444444444444',
+          quantity: 1,
+          stockQty: 5,
+          unavailableReason: null,
+          validatedUnitPriceMinor: 25000,
+          variantId: null,
+          voucherAwardId: null,
+          voucherToken: null,
+        },
+      ],
       merchantId: 'merchant-1',
       subtotalMinor: 25000,
       unavailableCount: 0,
@@ -332,6 +361,17 @@ describe('useCheckoutOrderSubmission', () => {
 
     function freshContext() {
       const context = createContext();
+      context.cart.checkoutCart = [
+        {
+          cartItemId: 'line-1',
+          id: '44444444-4444-4444-8444-444444444444',
+          name: 'Phone',
+          price: 250,
+          quantity: 1,
+          serverLineId: 'line-1',
+        } as never,
+      ];
+      context.cart.checkoutCartTotal = 250;
       context.resumed.order = null;
       context.resumed.preferredGateway = null;
       vi.mocked(prepareCheckoutOrderSubmission).mockReturnValue({
@@ -385,6 +425,55 @@ describe('useCheckoutOrderSubmission', () => {
           }),
         })
       );
+    });
+
+    it('stops the submit when the review reports unavailable lines', async () => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
+      context.cart.refreshSharedCart = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        ok: true,
+        replayed: false,
+        review: {
+          ...REVIEW,
+          lines: [{ ...REVIEW.lines[0], available: false }],
+          unavailableCount: 1,
+        },
+        sessionReused: false,
+      });
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+      expect(context.cart.refreshSharedCart).toHaveBeenCalled();
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Update Your Cart' })
+      );
+      expect(context.processing.isOrderInFlightRef.current).toBe(false);
+    });
+
+    it('stops the submit when the reviewed subtotal moved', async () => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
+      context.cart.refreshSharedCart = vi.fn().mockResolvedValue(undefined);
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        ok: true,
+        replayed: false,
+        review: { ...REVIEW, subtotalMinor: 24000 },
+        sessionReused: false,
+      });
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Prices Updated' })
+      );
+      expect(context.processing.isOrderInFlightRef.current).toBe(false);
     });
 
     it.each(['pending', 'retrying'] as const)(

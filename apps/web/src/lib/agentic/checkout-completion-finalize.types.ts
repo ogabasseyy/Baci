@@ -9,6 +9,7 @@ import type { AgenticMetadata } from '@/lib/agentic/checkout-storage';
 type CheckoutCalculation = Awaited<ReturnType<typeof calculateCheckoutSession>>;
 
 export interface FinalizeAgenticCheckoutInput {
+  agentId?: string | null;
   buyer: AgenticCheckoutBuyer;
   dvaAccount: StoredDvaAccount;
   expectedSessionUpdatedAt?: string;

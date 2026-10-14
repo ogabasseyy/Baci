@@ -38,10 +38,11 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
   const sharedRef = cart.sharedCartRef;
 
   useEffect(() => {
-    if (authenticated && cart.sharedCartEnabled) void loadSavedCart();
-  }, [authenticated, cart.sharedCartEnabled, loadSavedCart]);
+    if (authenticated && cart.sharedCartAccountsEnabled) void loadSavedCart();
+  }, [authenticated, cart.sharedCartAccountsEnabled, loadSavedCart]);
 
-  if (!authenticated || !cart.sharedCartEnabled || !sharedRef) return null;
+  if (!authenticated || !cart.sharedCartAccountsEnabled || !sharedRef)
+    return null;
   const choicesBlocked = pending || cart.syncStatus !== 'synced';
   const saved = savedCart;
   const showChoices = Boolean(saved && saved.cartId !== sharedRef.cartId);

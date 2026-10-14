@@ -292,7 +292,10 @@ export const CheckoutPage: React.FC = () => {
     actions: {
       onReturnToCart: () => router.push(asRoute(getHref('/cart'))),
     },
-    availability: { redvaultAvailable },
+    availability: {
+      redvaultAvailable,
+      sharedCartActive: Boolean(checkoutSharedCartRef),
+    },
   });
 
   return <CheckoutScreen {...screenModel} />;

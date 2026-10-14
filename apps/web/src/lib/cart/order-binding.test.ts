@@ -95,6 +95,44 @@ describe('submitCartBoundOrder', () => {
     }
   });
 
+  it('forwards the reviewed cart identity and verified principal', async () => {
+    const client = clientReturning({
+      binding: rawBinding(),
+      code: null,
+      ok: true,
+      order: rawOrder(),
+      replayed: false,
+    });
+
+    await submitCartBoundOrder(
+      { client: client as never },
+      {
+        args: ARGS,
+        cartId: '22222222-2222-4222-8222-222222222222',
+        cartVersion: 3,
+        generation: 1,
+        principalId: 'guest-principal-001',
+        sessionId: SESSION_ID,
+        variant: 'base',
+      }
+    );
+
+    expect(client.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      {
+        p_args: {
+          ...ARGS,
+          p_cart_id: '22222222-2222-4222-8222-222222222222',
+          p_cart_principal_id: 'guest-principal-001',
+          p_cart_version: 3,
+        },
+        p_generation: 1,
+        p_session_id: SESSION_ID,
+        p_variant: 'base',
+      }
+    );
+  });
+
   it('parses a replayed binding without resubmitting', async () => {
     const client = clientReturning({
       binding: rawBinding(),

@@ -100,6 +100,7 @@ BEGIN
   SELECT * INTO v_session
   FROM public.commerce_cart_checkout_sessions
   WHERE merchant_id = v_merchant AND cart_id = p_cart_id
+    AND principal_id = v_principal
     AND status = 'active' AND expires_at > now()
     AND cart_version_reviewed = v_cart.version
   ORDER BY checkout_generation DESC, created_at DESC
@@ -180,6 +181,7 @@ DECLARE
   v_key text;
   v_hash text;
   v_route_proof jsonb;
+  v_snapshot jsonb;
   v_save_goal uuid;
   v_save_amount numeric;
   v_save_key text;
@@ -235,6 +237,36 @@ BEGIN
       AND v_agentic_merchant IS DISTINCT FROM v_session.merchant_id) THEN
     RAISE EXCEPTION 'cart_order_merchant_mismatch' USING ERRCODE = 'P0001';
   END IF;
+  -- The body binding must name the reviewed cart and version. This RPC
+  -- is reachable only with a server-minted context JWT, and both server
+  -- callers forward the submitted cart identity on every bound submit;
+  -- a supplied value that disagrees with the session is stale, never
+  -- silently ignored.
+  IF nullif(p_args ->> 'p_cart_id', '') IS NOT NULL
+    AND (
+      (p_args ->> 'p_cart_id') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      OR (p_args ->> 'p_cart_id')::uuid IS DISTINCT FROM v_session.cart_id
+    ) THEN
+    RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';
+  END IF;
+  IF nullif(p_args ->> 'p_cart_version', '') IS NOT NULL
+    AND (
+      (p_args ->> 'p_cart_version') !~ '^[0-9]+$'
+      OR (p_args ->> 'p_cart_version')::integer IS DISTINCT FROM v_session.cart_version_reviewed
+    ) THEN
+    RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';
+  END IF;
+  -- Shopper submissions must prove the preparing principal. The orders
+  -- route verifies the cart session proof and forwards only its verified
+  -- principal; the platform-delegated agentic context is merchant-scoped
+  -- and supplies no shopper principal (delegation remains a future gate),
+  -- but a supplied principal must always match the session owner. This
+  -- check precedes the submitted-replay return so a leaked session id
+  -- cannot replay another principal's order receipt.
+  IF nullif(p_args ->> 'p_cart_principal_id', '') IS NOT NULL
+    AND (p_args ->> 'p_cart_principal_id') IS DISTINCT FROM v_session.principal_id THEN
+    RAISE EXCEPTION 'cart_order_unauthorized' USING ERRCODE = 'P0001';
+  END IF;
   IF p_generation IS DISTINCT FROM v_session.checkout_generation THEN
     RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';
   END IF;
@@ -267,8 +299,13 @@ BEGIN
   END IF;
 
   -- The reviewed version alone does not bind browser-supplied items.
-  -- Match the complete multiset by stable line identity, rejecting missing,
-  -- extra, duplicate or changed items before the inner order RPC executes.
+  -- Match the complete multiset by stable line identity and reviewed
+  -- value, rejecting missing, extra, duplicate or changed items before
+  -- the inner order RPC executes. Reviewed values come from the same
+  -- snapshot builder that priced the prepare review, so the effective
+  -- price (accepted negotiation, else validated catalog price) is the
+  -- single source of truth; the submitted price is in major units.
+  v_snapshot := public.commerce_cart_build_checkout_snapshot(v_merchant, v_cart.id);
   v_items := p_args -> 'p_items';
   IF jsonb_typeof(v_items) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';
@@ -290,6 +327,25 @@ BEGIN
             AND coalesce(item -> 'variant_attributes', '{}'::jsonb) = coalesce(l.options, '{}'::jsonb)
             AND item -> 'quantity' = to_jsonb(l.quantity)
             AND nullif(item ->> 'voucher_award_id', '') IS NOT DISTINCT FROM l.voucher_award_id::text
+            AND nullif(item ->> 'price', '') IS NOT NULL
+            AND (item ->> 'price') ~ '^[0-9]+(\.[0-9]+)?$'
+            AND round((item ->> 'price')::numeric * 100) = (
+              SELECT (sl ->> 'effectiveUnitPriceMinor')::numeric
+              FROM jsonb_array_elements(coalesce(v_snapshot -> 'lines', '[]'::jsonb)) AS sl
+              WHERE sl ->> 'id' = l.id::text
+            )
+            AND coalesce((item ->> 'has_assurance')::boolean, false) = l.has_assurance
+            AND (
+              NOT l.has_assurance
+              OR l.assurance_rate IS NULL
+              OR round(coalesce((item ->> 'assurance_fee')::numeric, -1) * 100) = round(
+                (
+                  SELECT (sl ->> 'effectiveUnitPriceMinor')::numeric
+                  FROM jsonb_array_elements(coalesce(v_snapshot -> 'lines', '[]'::jsonb)) AS sl
+                  WHERE sl ->> 'id' = l.id::text
+                ) * l.quantity * l.assurance_rate
+              )
+            )
         )
     ) THEN
     RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';

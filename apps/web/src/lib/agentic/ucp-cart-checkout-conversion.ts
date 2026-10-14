@@ -29,6 +29,7 @@ import {
   coerceNullableJsonRecord,
   coerceUcpCartItems,
   UcpCartMigratedError,
+  ucpCartCallerMismatch,
 } from '@/lib/agentic/ucp-cart-storage';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
@@ -51,6 +52,7 @@ export async function convertUcpCartToCheckout({
   supabase: SupabaseClient;
 }): Promise<NextResponse> {
   const idempotency = await reserveAgenticIdempotencyKey({
+    agentId: mutation.agentId,
     apiVersion: mutation.apiVersion,
     body: mutation.rawBody,
     key: mutation.idempotencyKey,
@@ -78,6 +80,7 @@ export async function convertUcpCartToCheckout({
 
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId: mutation.agentId,
       idempotencyKey: mutation.idempotencyKey,
       merchantId: merchant.id,
       requestId: mutation.requestId,
@@ -123,6 +126,9 @@ export async function convertUcpCartToCheckout({
     return respond({ error: 'Database error' }, 500);
   }
   if (!cartResult.cart) return respond({ error: 'Cart not found' }, 404);
+  if (ucpCartCallerMismatch(cartResult.cart, mutation.agentId)) {
+    return respond({ error: 'Cart not found' }, 404);
+  }
 
   // A migrated cart is retired: its authority moved to the shared
   // canonical cart, so the legacy conversion path must not create an

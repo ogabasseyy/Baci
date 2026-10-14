@@ -2,7 +2,10 @@ import { useEffect } from 'react';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { useMerchant } from '@/hooks/use-merchant';
 import { useSharedCart } from '@/hooks/use-shared-cart';
-import { nativeCartEnabled } from '@/lib/cart/enrollment';
+import {
+  nativeCartAccountsEnabled,
+  nativeCartEnabled,
+} from '@/lib/cart/enrollment';
 import { CONFIG } from '@/lib/config';
 import { useAuthStore } from '@/stores/auth-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
@@ -18,6 +21,12 @@ export function SharedCartBridge() {
     enabled:
       !isPlaceholderData &&
       nativeCartEnabled(merchant, {
+        merchantId: CONFIG.MERCHANT_ID,
+        merchantSlug: CONFIG.MERCHANT_SLUG,
+      }),
+    accountsEnabled:
+      !isPlaceholderData &&
+      nativeCartAccountsEnabled(merchant, {
         merchantId: CONFIG.MERCHANT_ID,
         merchantSlug: CONFIG.MERCHANT_SLUG,
       }),

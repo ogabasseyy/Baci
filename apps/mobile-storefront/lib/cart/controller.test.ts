@@ -1,5 +1,6 @@
 import type { CartItem } from '@/stores/cart-store.types';
 import { createNativeCartController } from './controller';
+import { NativeCartError } from './native-cart-error';
 
 jest.mock('expo/fetch', () => ({ fetch: jest.fn() }));
 jest.mock('expo-secure-store', () => ({
@@ -97,6 +98,20 @@ it('treats a completed cart as finished and starts a fresh cart on the next writ
   await s.controller.write({ type: 'clear' });
   expect(restart).toHaveBeenCalledTimes(1);
   expect(s.client.create).toHaveBeenCalledTimes(1);
+});
+it('retires a server-completed cart when clear is rejected as locked', async () => {
+  const s = setup();
+  s.connect();
+  await s.controller.refresh();
+  s.client.command.mockRejectedValue(new NativeCartError('cart_locked'));
+  s.client.read.mockResolvedValue({
+    cart: { ...snapshot, state: 'completed' as const },
+  });
+  await expect(s.controller.write({ type: 'clear' })).resolves.not.toThrow();
+  expect(s.publish).toHaveBeenCalledWith(
+    expect.objectContaining({ state: 'completed' }),
+    expect.objectContaining({ items: [] })
+  );
 });
 it('clears the display for an expired cart instead of offering it for checkout', async () => {
   const s = setup();

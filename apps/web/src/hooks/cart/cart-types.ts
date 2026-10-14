@@ -95,6 +95,8 @@ export interface CartContextType {
   isHydrated: boolean;
   /** Present only when the provider delegates to the shared server cart. */
   sharedCartEnabled?: boolean;
+  /** Account linking additionally requires the accounts enrollment. */
+  sharedCartAccountsEnabled?: boolean;
   /**
    * Authoritative cart identity for checkout binding. Null until the
    * shared snapshot is adopted; absent in legacy mode.

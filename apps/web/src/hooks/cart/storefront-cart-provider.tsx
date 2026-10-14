@@ -46,6 +46,7 @@ interface StorefrontCartProviderProps {
    */
   merchantId?: string | null;
   sharedCartEnabled?: boolean;
+  sharedCartAccountsEnabled?: boolean;
   sharedCartRealtimeEnabled?: boolean;
 }
 
@@ -132,6 +133,7 @@ export function StorefrontCartProvider({
   validationActivationTimeoutMs = DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
   merchantId = null,
   sharedCartEnabled = false,
+  sharedCartAccountsEnabled = false,
   sharedCartRealtimeEnabled = false,
 }: StorefrontCartProviderProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -970,6 +972,7 @@ export function StorefrontCartProvider({
     hasSmartCartPro: enableSmartCartPro,
     isHydrated: delegated ? shared.isHydrated : isHydrated,
     sharedCartEnabled: delegated,
+    sharedCartAccountsEnabled: delegated && sharedCartAccountsEnabled,
     ...(delegated
       ? {
           syncStatus: shared.syncStatus,

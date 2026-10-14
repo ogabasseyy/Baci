@@ -11,6 +11,8 @@ import type { NativeCheckoutSnapshot } from '@/schemas/cart-checkout-snapshot';
 
 interface SharedCartState {
   enabled: boolean;
+  /** Account linking requires its own enrollment beyond cart/native. */
+  accountsEnabled: boolean;
   status: NativeCartStatus;
   code?: string;
   snapshot: CartSnapshot | null;
@@ -49,6 +51,7 @@ interface SharedCartState {
 /** Ephemeral, nonsecret authority status. Proofs and pairing tokens never enter this store. */
 export const useNativeSharedCartStore = create<SharedCartState>(() => ({
   enabled: false,
+  accountsEnabled: false,
   status: 'loading',
   snapshot: null,
   metadataReady: false,

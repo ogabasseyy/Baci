@@ -103,6 +103,7 @@ export async function handleAgenticCheckoutSessionComplete(
       merchantSlug: merchant.slug,
     });
     const idempotency = await reserveAgenticIdempotencyKey({
+      agentId: mutation.agentId,
       apiVersion: mutation.apiVersion,
       body: mutation.rawBody,
       key: mutation.idempotencyKey,
@@ -131,6 +132,7 @@ export async function handleAgenticCheckoutSessionComplete(
     }
     respondWithIdempotency = async (response: unknown, status: number) =>
       buildStoredAgenticIdempotencyResponse({
+        agentId: mutation.agentId,
         idempotencyKey: mutation.idempotencyKey,
         merchantId: merchant.id,
         requestId: mutation.requestId,
@@ -230,6 +232,7 @@ export async function handleAgenticCheckoutSessionComplete(
       }
 
       return await finalizeAgenticPayOnDeliveryCheckout({
+        agentId: mutation.agentId,
         buyer,
         idempotencyKey: mutation.idempotencyKey,
         merchantId: merchant.id,
@@ -262,6 +265,7 @@ export async function handleAgenticCheckoutSessionComplete(
     }
 
     return await finalizeAgenticCheckoutPayment({
+      agentId: mutation.agentId,
       buyer,
       dvaAccount: preparedPayment.payment.dvaAccount,
       idempotencyKey: mutation.idempotencyKey,

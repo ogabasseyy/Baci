@@ -1324,7 +1324,7 @@ BEGIN
         'p_merchant_id', '11111111-1111-4111-8111-111111111111',
         'p_customer_email', 'buyer@example.com',
         'p_customer_name', 'Buyer',
-        'p_items', jsonb_build_array(jsonb_build_object('cart_line_id','dddddddd-c000-4000-8000-000000000000','product_id','44444444-4444-4444-8444-444444444444','quantity',1)),
+        'p_items', jsonb_build_array(jsonb_build_object('cart_line_id','dddddddd-c000-4000-8000-000000000000','product_id','44444444-4444-4444-8444-444444444444','quantity',1,'price',15)),
         'p_expected_total', 0,
         'p_checkout_idempotency_key', 'order-key-a12',
         'p_checkout_request_hash', 'hash-a12'

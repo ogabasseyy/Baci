@@ -14,6 +14,7 @@ it('retries the original account choice and keeps other choices blocked until it
     .mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({
     enabled: true,
+    accountsEnabled: true,
     accountUserId: '44444444-4444-4444-8444-444444444444',
     linkAccount,
     loadSavedCart: jest.fn().mockResolvedValue(undefined),
@@ -40,6 +41,7 @@ it('does not publish a previous account choice after the shopper changes', async
   );
   useNativeSharedCartStore.setState({
     enabled: true,
+    accountsEnabled: true,
     accountUserId: '44444444-4444-4444-8444-444444444444',
     linkAccount,
     loadSavedCart: jest.fn().mockResolvedValue(undefined),
@@ -62,6 +64,7 @@ it('does not publish a previous account choice after the shopper changes', async
 it('offers a fresh choice instead of a nonexistent retry after a definitive rejection', async () => {
   useNativeSharedCartStore.setState({
     enabled: true,
+    accountsEnabled: true,
     accountUserId: '44444444-4444-4444-8444-444444444444',
     linkAccount: jest
       .fn()
@@ -78,4 +81,20 @@ it('offers a fresh choice instead of a nonexistent retry after a definitive reje
     ).toBeTruthy()
   );
   expect(view.queryByText('Retry the same cart choice')).toBeNull();
+});
+
+it('stays hidden and does not load account carts without accounts enrollment', async () => {
+  const loadSavedCart = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    accountsEnabled: false,
+    accountUserId: '44444444-4444-4444-8444-444444444444',
+    linkAccount: jest.fn().mockResolvedValue(undefined),
+    loadSavedCart,
+    savedCart: null,
+    snapshot: null,
+  });
+  const view = render(<NativeCartAccountPanel />);
+  expect(view.queryByText('Save this cart to your account')).toBeNull();
+  await waitFor(() => expect(loadSavedCart).not.toHaveBeenCalled());
 });

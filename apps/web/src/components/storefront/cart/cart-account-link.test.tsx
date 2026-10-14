@@ -11,6 +11,7 @@ vi.mock('@/contexts/customer-auth-context', () => ({
 }));
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
+    sharedCartAccountsEnabled: true,
     sharedCartEnabled: true,
     sharedCartRef: { cartId: 'old', version: 10 },
     syncStatus: 'synced',

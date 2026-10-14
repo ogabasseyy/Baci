@@ -34,6 +34,10 @@ export function StorefrontShellFrame({
         merchantId={merchant.id}
         merchantSlug={merchantSlug}
         sharedCartEnabled={merchantHasFeature(merchant, 'shared_cart')}
+        sharedCartAccountsEnabled={merchantHasFeature(
+          merchant,
+          'shared_cart_accounts'
+        )}
         sharedCartRealtimeEnabled={merchantHasFeature(
           merchant,
           'shared_cart_realtime'

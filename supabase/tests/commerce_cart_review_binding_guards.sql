@@ -8,6 +8,20 @@ DO $$ DECLARE prep jsonb; BEGIN
   INSERT INTO test_ctx VALUES ('guard_session', prep -> 'snapshot' ->> 'checkoutSessionId');
 END $$;
 RESET ROLE;
+-- A second principal holding a grant for the same cart and version must
+-- receive its own checkout session, never the first principal's session.
+INSERT INTO public.commerce_cart_grants (id, merchant_id, cart_id, principal_id, expires_at, revoked_at) VALUES
+  ('99999999-9999-4999-8999-999999999970', '11111111-1111-4111-8111-111111111111', 'cccccccc-4000-4000-8000-000000000000', 'guest-other', now() + interval '7 days', NULL);
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-other","cart_scope":"session","cart_id":"cccccccc-4000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999970"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE prep jsonb; BEGIN
+  prep := public.commerce_cart_prepare_checkout('cccccccc-4000-4000-8000-000000000000', 1, 'review-guards-other');
+  IF NOT (prep ->> 'ok')::boolean THEN RAISE EXCEPTION 'second principal prepare failed: %', prep; END IF;
+  IF (prep -> 'snapshot' ->> 'checkoutSessionId') = (SELECT value FROM test_ctx WHERE key = 'guard_session') THEN
+    RAISE EXCEPTION 'second principal reused the first principal checkout session';
+  END IF;
+END $$;
+RESET ROLE;
 SET request.jwt.claims = '{"role":"authenticated","storefront_order_context":"route","storefront_order_merchant_id":"11111111-1111-4111-8111-111111111111"}';
 SET ROLE authenticated;
 DO $$
@@ -26,6 +40,9 @@ BEGIN
     jsonb_build_array(good || '{"variant_attributes":{"color":"wrong"}}'::jsonb),
     jsonb_build_array(good || '{"condition":"used"}'::jsonb),
     jsonb_build_array(good || '{"variant_id":"55555555-5555-4555-8555-555555555555"}'::jsonb),
+    jsonb_build_array(good || '{"price":14}'::jsonb),
+    jsonb_build_array(good || '{"price":16}'::jsonb),
+    jsonb_build_array(good || '{"has_assurance":true,"assurance_fee":1}'::jsonb),
     jsonb_build_array(good, good)
   ];
   FOREACH bad IN ARRAY cases LOOP
@@ -41,11 +58,52 @@ BEGIN
     END;
     IF NOT rejected THEN RAISE EXCEPTION 'binding accepted unrelated or incomplete cart items: %', bad; END IF;
   END LOOP;
+  -- A body binding naming another cart or version is stale.
+  rejected := false;
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
+      jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
+        'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+        'p_items',jsonb_build_array(good),'p_checkout_idempotency_key','review-invalid',
+        'p_cart_id','cccccccc-5000-4000-8000-000000000000','p_cart_version',1));
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'cart_checkout_stale' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'binding accepted a foreign cart id'; END IF;
+  rejected := false;
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
+      jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
+        'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+        'p_items',jsonb_build_array(good),'p_checkout_idempotency_key','review-invalid',
+        'p_cart_id','cccccccc-4000-4000-8000-000000000000','p_cart_version',99));
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'cart_checkout_stale' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'binding accepted a foreign cart version'; END IF;
+  -- A shopper principal that did not prepare the session cannot submit it.
+  rejected := false;
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
+      jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
+        'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+        'p_items',jsonb_build_array(good),'p_checkout_idempotency_key','review-invalid',
+        'p_cart_id','cccccccc-4000-4000-8000-000000000000','p_cart_version',1,
+        'p_cart_principal_id','guest-attacker'));
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'cart_order_unauthorized' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'binding accepted a foreign principal'; END IF;
   -- Match by stable IDs rather than array order; exact fixture succeeds.
   PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
     jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
       'p_customer_email','test@example.invalid','p_customer_name','Fixture',
-      'p_items',jsonb_build_array(good),'p_checkout_idempotency_key','review-valid'));
+      'p_items',jsonb_build_array(good),'p_checkout_idempotency_key','review-valid',
+      'p_cart_id','cccccccc-4000-4000-8000-000000000000','p_cart_version',1,
+      'p_cart_principal_id','guest-a4'));
 END $$;
 RESET ROLE;
 DO $$ BEGIN

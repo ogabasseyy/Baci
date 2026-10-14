@@ -1,7 +1,10 @@
 import type { CartErrorCode } from '@baci/shared/cart';
 
 import { fetchWithCsrf } from '@/lib/api-client';
-import { cartRoute, failureOf, isRecord, readBody } from './shared-cart-client';
+import type { CartCheckoutLine } from '@/lib/cart/checkout-snapshot';
+import { parseSnapshot } from '@/lib/cart/checkout-snapshot';
+import type { CartItem } from './cart-types';
+import { cartRoute, failureOf, readBody } from './shared-cart-client';
 
 export interface SharedCartCheckoutReview {
   checkoutSessionId: string;
@@ -12,6 +15,49 @@ export interface SharedCartCheckoutReview {
   subtotalMinor: number;
   currency: string;
   unavailableCount: number;
+  lines: CartCheckoutLine[];
+}
+
+/**
+ * Rebuilds order inputs from the authoritative review: product shells
+ * (name, image) stay local, while identity, quantity, price, negotiation
+ * and assurance come from the reviewed lines. Returns null when a
+ * reviewed line has no display shell, which means the display cart is
+ * stale and must refresh instead of submitting.
+ */
+export function reviewedCheckoutItems(
+  display: readonly (CartItem & { serverLineId?: string | null })[],
+  review: SharedCartCheckoutReview
+): CartItem[] | null {
+  const items: CartItem[] = [];
+  for (const line of review.lines) {
+    const shell = display.find((item) => item.serverLineId === line.id);
+    if (!shell) return null;
+    items.push({
+      ...shell,
+      condition: (line.condition as CartItem['condition']) ?? shell.condition,
+      hasAssurance: line.hasAssurance,
+      assuranceRate: line.assuranceRate ?? shell.assuranceRate,
+      negotiatedPrice:
+        !line.negotiationInvalidated && line.negotiatedUnitPriceMinor !== null
+          ? line.negotiatedUnitPriceMinor / 100
+          : undefined,
+      negotiationStatus:
+        !line.negotiationInvalidated &&
+        (line.negotiationStatus === 'accepted' ||
+          line.negotiationStatus === 'pending' ||
+          line.negotiationStatus === 'rejected')
+          ? line.negotiationStatus
+          : undefined,
+      price: line.validatedUnitPriceMinor / 100,
+      quantity: line.quantity,
+      quizAwardId: line.voucherAwardId ?? shell.quizAwardId,
+      quizVoucherToken: line.voucherToken ?? shell.quizVoucherToken,
+      variantAttributes: { ...line.options },
+      variantId: line.variantId ?? shell.variantId,
+    });
+  }
+  return items;
 }
 
 export type PrepareSharedCartCheckoutResult =
@@ -29,32 +75,18 @@ export type PrepareSharedCartCheckoutResult =
     };
 
 export function reviewOf(value: unknown): SharedCartCheckoutReview | null {
-  if (!isRecord(value)) return null;
-  const estimates = value.estimates;
-  if (
-    typeof value.checkoutSessionId !== 'string' ||
-    typeof value.generation !== 'number' ||
-    !Number.isInteger(value.generation) ||
-    typeof value.cartVersion !== 'number' ||
-    !Number.isInteger(value.cartVersion) ||
-    typeof value.cartId !== 'string' ||
-    typeof value.merchantId !== 'string' ||
-    !isRecord(estimates) ||
-    typeof estimates.subtotalMinor !== 'number' ||
-    typeof estimates.currency !== 'string' ||
-    typeof estimates.unavailableCount !== 'number'
-  ) {
-    return null;
-  }
+  const snapshot = parseSnapshot(value);
+  if (!snapshot) return null;
   return {
-    cartId: value.cartId,
-    cartVersion: value.cartVersion,
-    checkoutSessionId: value.checkoutSessionId,
-    currency: estimates.currency,
-    generation: value.generation,
-    merchantId: value.merchantId,
-    subtotalMinor: estimates.subtotalMinor,
-    unavailableCount: estimates.unavailableCount,
+    cartId: snapshot.cartId,
+    cartVersion: snapshot.cartVersion,
+    checkoutSessionId: snapshot.checkoutSessionId,
+    currency: snapshot.estimates.currency,
+    generation: snapshot.generation,
+    lines: snapshot.lines,
+    merchantId: snapshot.merchantId,
+    subtotalMinor: snapshot.estimates.subtotalMinor,
+    unavailableCount: snapshot.estimates.unavailableCount,
   };
 }
 

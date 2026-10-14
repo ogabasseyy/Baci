@@ -1,6 +1,9 @@
 'use client';
 
-import { prepareSharedCartCheckout } from '@/hooks/cart/shared-cart-client';
+import {
+  prepareSharedCartCheckout,
+  reviewedCheckoutItems,
+} from '@/hooks/cart/shared-cart-client';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import type { SharedCartOrderBinding } from '../types';
@@ -145,6 +148,9 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
     // refreshes the cart view and stops: the shopper reviews the updated
     // cart and submits again, never silently resubmitting changed lines.
     let sharedCartBinding: SharedCartOrderBinding | null = null;
+    let reviewedCheckoutItemsResult: ReturnType<
+      typeof buildCheckoutOrderItems
+    > | null = null;
     if (cart.sharedCartRef) {
       // The binding pins the reviewed version, but the order items come
       // from the display cart: submitting with unconfirmed optimistic
@@ -174,6 +180,40 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
         processing.isOrderInFlightRef.current = false;
         return;
       }
+      // The review is authoritative for availability and price. A line
+      // that became unavailable, or a subtotal that moved without a
+      // version change, stops here with a refreshed cart: the shopper
+      // reviews the updated lines and submits again, mirroring the
+      // native checkout path.
+      if (
+        review.review.unavailableCount > 0 ||
+        review.review.lines.some((line) => !line.available)
+      ) {
+        await cart.refreshSharedCart?.();
+        toast({ title: 'Update Your Cart', description: 'Some items are unavailable. Review your updated cart and submit again.', variant: 'destructive' });
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      if (
+        Math.abs(review.review.subtotalMinor / 100 - cart.checkoutCartTotal) >
+        0.005
+      ) {
+        await cart.refreshSharedCart?.();
+        toast({ title: 'Prices Updated', description: 'Prices changed during checkout. Review the updated cart and submit again.', variant: 'destructive' });
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      const reviewedItems = reviewedCheckoutItems(
+        cart.checkoutCart,
+        review.review
+      );
+      if (!reviewedItems) {
+        await cart.refreshSharedCart?.();
+        toast({ title: 'Cart Changed', description: 'Your cart changed during checkout. Review the updated cart and submit again.', variant: 'destructive' });
+        processing.isOrderInFlightRef.current = false;
+        return;
+      }
+      reviewedCheckoutItemsResult = buildCheckoutOrderItems(reviewedItems);
       sharedCartBinding = {
         cart_id: review.review.cartId,
         cart_version: review.review.cartVersion,
@@ -185,7 +225,16 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
     await submitPreparedCheckout(
       { ...context, merchant },
       sharedCartBinding
-        ? { ...prepared, identity: { ...prepared.identity, sharedCartBinding } }
+        ? {
+            ...prepared,
+            identity: {
+              ...prepared.identity,
+              ...(reviewedCheckoutItemsResult
+                ? { items: reviewedCheckoutItemsResult }
+                : {}),
+              sharedCartBinding,
+            },
+          }
         : prepared
     );
   };

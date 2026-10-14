@@ -178,6 +178,37 @@ describe('convertUcpCartToCheckout', () => {
     );
   });
 
+  it('hides a cart owned by another agent and scopes its receipt', async () => {
+    const { from } = createSupabaseMock({
+      cartResult: {
+        data: {
+          agent_id: 'other-agent',
+          cart_id: 'cart_123',
+          currency: 'NGN',
+          status: 'active',
+        },
+        error: null,
+      },
+    });
+
+    const response = await convertUcpCartToCheckout({
+      cartId: 'cart_123',
+      merchant,
+      mutation,
+      requestUrl: 'http://localhost/api/agentic/carts/cart_123/checkout',
+      supabase: { from } as never,
+    });
+
+    expect(response.status).toBe(404);
+    expect(reserveAgenticIdempotencyKey).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'openai-agent' })
+    );
+    expect(storeAgenticIdempotencyResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'openai-agent' })
+    );
+    expect(calculateCheckoutSession).not.toHaveBeenCalled();
+  });
+
   it('returns 409 when the cart is canceled', async () => {
     const { from } = createSupabaseMock({
       cartResult: {

@@ -637,6 +637,18 @@ BEGIN
 
   UPDATE public.commerce_carts SET version = v_dest.version + 1, updated_at = now()
   WHERE id = v_dest.id;
+  -- Notify other devices holding the destination cart, mirroring the
+  -- mutation outbox write; without this row a merge stays invisible
+  -- until a later poll or focus refresh.
+  INSERT INTO public.commerce_cart_events
+    (merchant_id, cart_id, version, operation_id, payload, expires_at)
+  VALUES (
+    v_merchant, v_dest.id, v_dest.version + 1, p_attempt_id,
+    jsonb_build_object(
+      'cartId', v_dest.id, 'version', v_dest.version + 1, 'operationId', p_attempt_id
+    ),
+    now() + interval '7 days'
+  );
   SELECT public.commerce_cart_assemble_state(v_merchant, v_dest.id) INTO v_state;
   v_receipt := jsonb_build_object('choice', 'merge', 'merchantId', v_merchant,
     'principalId', v_principal, 'destCartId', v_dest.id,

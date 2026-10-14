@@ -400,6 +400,9 @@ BEGIN
   SELECT count(*) INTO v_incoming FROM public.commerce_cart_lines
   WHERE cart_id = '22222222-2222-4222-8222-222222222222';
   IF v_incoming <> 2 THEN RAISE EXCEPTION 'merge must leave the incoming cart intact'; END IF;
+  SELECT count(*) INTO v_incoming FROM public.commerce_cart_events
+  WHERE cart_id = '77777777-7777-4777-8777-777777777777' AND version = 3;
+  IF v_incoming <> 1 THEN RAISE EXCEPTION 'merge must publish a cart event for the destination version'; END IF;
 END
 $$;
 

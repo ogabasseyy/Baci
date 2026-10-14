@@ -26,6 +26,7 @@ import { sanitizeForLog } from '@/lib/sanitize-core';
 import type { FinalizeAgenticCheckoutInput } from './checkout-completion-finalize.types';
 
 export async function finalizeAgenticCheckoutPayment({
+  agentId,
   buyer,
   dvaAccount,
   expectedSessionUpdatedAt,
@@ -42,6 +43,7 @@ export async function finalizeAgenticCheckoutPayment({
 }: FinalizeAgenticCheckoutInput) {
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId,
       idempotencyKey,
       merchantId,
       requestId,

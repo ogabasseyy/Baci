@@ -24,6 +24,7 @@ import {
 
 interface Options extends NativeCartConfig {
   enabled: boolean;
+  accountsEnabled?: boolean;
   subjectKey: string;
 }
 interface Deps {
@@ -87,6 +88,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       latest.current.subjectKey === options.subjectKey;
     useNativeSharedCartStore.setState({
       enabled: true,
+      accountsEnabled: options.accountsEnabled ?? false,
       status: 'loading',
       snapshot: null,
       metadataReady: false,
@@ -227,6 +229,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       useCartStore.setState({ isLoading: false });
       useNativeSharedCartStore.setState({
         enabled: false,
+        accountsEnabled: false,
         status: 'loading',
         snapshot: null,
         metadataReady: false,
@@ -245,6 +248,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
     };
   }, [
     options.enabled,
+    options.accountsEnabled,
     options.merchantId,
     options.merchantSlug,
     options.apiOrigin,

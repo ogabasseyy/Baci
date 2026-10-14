@@ -13,6 +13,7 @@ const FEATURE_MESSAGES: Record<MerchantFeatureGate, string> = {
   growth_integrations: 'Growth integrations require Baci Pro',
   marketplace_sync: 'Marketplace sync requires Baci Pro',
   shared_cart: 'Shared cart is not enabled for this store',
+  shared_cart_accounts: 'Cart account linking is not enabled for this store',
   shared_cart_realtime:
     'Shared cart live updates are not enabled for this store',
 };

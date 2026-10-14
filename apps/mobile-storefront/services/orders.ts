@@ -25,7 +25,10 @@ import {
 } from './orders.schemas';
 import { recordOrderCreatedAnalytics } from './orders-analytics';
 import { resolveCheckoutAuth } from './orders-auth';
-import { cartBindingMatchesCurrentDevice } from './orders-cart-binding';
+import {
+  cartBindingMatchesCurrentDevice,
+  readSharedCartOrderProof,
+} from './orders-cart-binding';
 import { buildSnapshottedOrderPayload } from './orders-credit-freeze';
 import { releaseCreditAfterDefinitiveRejection } from './orders-credit-release';
 import { getCheckoutStoredSession } from './orders-session';
@@ -196,6 +199,11 @@ export async function createOrder(
       taxAmount: orderPayload.tax_amount,
     });
 
+    const cartProof = await readSharedCartOrderProof(
+      validatedRequest.shared_cart,
+      MERCHANT_ID,
+      user?.id ?? session?.user?.id
+    );
     const response = await fetchWithRetry(
       `${API_URL}/api/orders`,
       {
@@ -203,6 +211,7 @@ export async function createOrder(
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': idempotencyKey,
+          ...(cartProof ? { 'x-cart-proof': cartProof } : {}),
           ...checkoutAuth.authorizationHeaders,
         },
         body: JSON.stringify(orderPayload),

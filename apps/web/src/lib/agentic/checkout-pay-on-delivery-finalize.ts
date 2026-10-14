@@ -35,6 +35,7 @@ import { sanitizeForLog } from '@/lib/sanitize-core';
 type CheckoutCalculation = Awaited<ReturnType<typeof calculateCheckoutSession>>;
 
 export async function finalizeAgenticPayOnDeliveryCheckout({
+  agentId,
   buyer,
   idempotencyKey,
   merchantId,
@@ -46,6 +47,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
   sessionId,
   supabase,
 }: {
+  agentId?: string | null;
   buyer: AgenticCheckoutBuyer;
   idempotencyKey: string;
   merchantId: string;
@@ -69,6 +71,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
   });
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId,
       idempotencyKey,
       merchantId,
       requestId,
@@ -215,6 +218,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
     sessionCalc: orderSessionCalc,
   });
   const persisted = await persistAgenticIdempotencyResponse({
+    agentId,
     idempotencyKey,
     merchantId,
     requestId,
@@ -256,6 +260,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
     .maybeSingle();
   if (updateError || !updatedSession) {
     return handlePayOnDeliverySessionCompletionFailure({
+      agentId,
       finalizationClaim,
       idempotencyKey,
       merchantId,

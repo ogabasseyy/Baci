@@ -133,4 +133,49 @@ describe('handoff destination checks', () => {
     ).toBe(false);
     expect(isHandoffWebOriginAllowed(null, merchant)).toBe(false);
   });
+
+  it('rejects plain-HTTP merchant origins', () => {
+    const merchant = {
+      customDomain: 'shop.example.com',
+      rootDomain: 'usebaci.com',
+      slug: 'ogabassey',
+    };
+    expect(
+      isHandoffWebOriginAllowed('http://ogabassey.usebaci.com', merchant)
+    ).toBe(false);
+    expect(isHandoffWebOriginAllowed('http://usebaci.com', merchant)).toBe(
+      false
+    );
+    expect(isHandoffWebOriginAllowed('http://shop.example.com', merchant)).toBe(
+      false
+    );
+  });
+
+  it('allows loopback only outside production', () => {
+    const merchant = {
+      customDomain: null,
+      rootDomain: 'usebaci.com',
+      slug: 'ogabassey',
+    };
+    expect(
+      isHandoffWebOriginAllowed('http://localhost:3000', merchant, 'test')
+    ).toBe(true);
+    expect(
+      isHandoffWebOriginAllowed(
+        'http://ogabassey.localhost:3000',
+        merchant,
+        'development'
+      )
+    ).toBe(true);
+    expect(
+      isHandoffWebOriginAllowed('http://localhost:3000', merchant, 'production')
+    ).toBe(false);
+    expect(
+      isHandoffWebOriginAllowed(
+        'https://anything.localhost',
+        merchant,
+        'production'
+      )
+    ).toBe(false);
+  });
 });

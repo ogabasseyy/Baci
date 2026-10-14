@@ -109,7 +109,11 @@ export async function POST(request: NextRequest) {
       CART_SESSION_PROOF_TTL_SECONDS,
       Math.floor((Date.parse(result.cart.expiresAt) - Date.now()) / 1000)
     );
-    setCartSessionCookie(response, context.merchant.slug, proof, maxAge);
+    // A non-positive lifetime would delete the cookie the body proof just
+    // renewed; omit the cookie instead and let the body proof govern.
+    if (maxAge > 0) {
+      setCartSessionCookie(response, context.merchant.slug, proof, maxAge);
+    }
     return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart/commands:', {

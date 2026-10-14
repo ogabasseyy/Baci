@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithCsrf } from '@/lib/api-client';
 
-import { prepareSharedCartCheckout } from './shared-cart-client';
+import {
+  prepareSharedCartCheckout,
+  reviewedCheckoutItems,
+  type SharedCartCheckoutReview,
+} from './shared-cart-client';
 
 vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: vi.fn(),
@@ -89,6 +93,7 @@ describe('shared-cart-client checkout prepare', () => {
         checkoutSessionId: '55555555-5555-4555-8555-555555555555',
         currency: 'NGN',
         generation: 1,
+        lines: [],
         merchantId: '11111111-1111-4111-8111-111111111111',
         subtotalMinor: 25000,
         unavailableCount: 0,
@@ -148,5 +153,73 @@ describe('shared-cart-client checkout prepare', () => {
       ok: false,
       retryable: true,
     });
+  });
+});
+
+describe('reviewedCheckoutItems', () => {
+  const line = {
+    assuranceRate: null,
+    available: true,
+    condition: null,
+    effectiveUnitPriceMinor: 12000,
+    hasAssurance: false,
+    id: 'line-1',
+    lastUnitPriceMinor: 15000,
+    manageStock: true,
+    negotiatedUnitPriceMinor: 12000,
+    negotiationInvalidated: false,
+    negotiationStatus: 'accepted',
+    options: {},
+    priceChanged: true,
+    productId: '44444444-4444-4444-8444-444444444444',
+    quantity: 2,
+    stockQty: 5,
+    unavailableReason: null,
+    validatedUnitPriceMinor: 15000,
+    variantId: null,
+    voucherAwardId: null,
+    voucherToken: null,
+  } satisfies SharedCartCheckoutReview['lines'][number];
+  const review: SharedCartCheckoutReview = {
+    cartId: '22222222-2222-4222-8222-222222222222',
+    cartVersion: 3,
+    checkoutSessionId: '55555555-5555-4555-8555-555555555555',
+    currency: 'NGN',
+    generation: 1,
+    lines: [line],
+    merchantId: '11111111-1111-4111-8111-111111111111',
+    subtotalMinor: 24000,
+    unavailableCount: 0,
+  };
+  const shell = {
+    cartItemId: 'line-1',
+    id: '44444444-4444-4444-8444-444444444444',
+    name: 'Phone',
+    price: 150,
+    product_id: '44444444-4444-4444-8444-444444444444',
+    quantity: 1,
+    serverLineId: 'line-1',
+  } as never;
+
+  it('uses reviewed quantity and effective prices over display values', () => {
+    const items = reviewedCheckoutItems([shell], review);
+    expect(items).toHaveLength(1);
+    expect(items?.[0]).toMatchObject({
+      negotiatedPrice: 120,
+      price: 150,
+      quantity: 2,
+    });
+  });
+
+  it('drops an invalidated negotiation', () => {
+    const items = reviewedCheckoutItems([shell], {
+      ...review,
+      lines: [{ ...line, negotiationInvalidated: true }],
+    });
+    expect(items?.[0].negotiatedPrice).toBeUndefined();
+  });
+
+  it('returns null when a reviewed line has no display shell', () => {
+    expect(reviewedCheckoutItems([], review)).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ import {
   selectOrderBindingVariant,
   submitCartBoundOrder,
 } from '@/lib/cart/order-binding';
+import { verifySharedCartOrderProof } from '@/lib/cart/order-proof';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -976,6 +977,29 @@ export async function POST(request: NextRequest) {
         { error: 'Merchant not found' },
         { status: 404 }
       );
+    }
+
+    // Bound submits must prove the preparing cart principal: the session
+    // id alone is never sufficient authority to close another shopper's
+    // cart or replay its receipt.
+    let sharedCartPrincipalId: string | null = null;
+    if (shared_cart) {
+      const proof = verifySharedCartOrderProof(request, {
+        cartId: shared_cart.cart_id,
+        merchantId: merchant_id,
+        merchantSlug: merchant.slug,
+      });
+      if (!proof.ok) {
+        return NextResponse.json(
+          {
+            code: 'SHARED_CART_PROOF_REQUIRED',
+            error:
+              'This checkout session belongs to another shopper. Review your cart and submit again.',
+          },
+          { status: 401 }
+        );
+      }
+      sharedCartPrincipalId = proof.principalId;
     }
 
     // Canonical merchant currency (payout_currency -> country -> NGN). The
@@ -2263,7 +2287,10 @@ export async function POST(request: NextRequest) {
           { client: orderRpcClient },
           {
             args: orderCreateRpcArgs as Record<string, unknown>,
+            cartId: shared_cart.cart_id,
+            cartVersion: shared_cart.cart_version,
             generation: shared_cart.checkout_generation,
+            principalId: sharedCartPrincipalId,
             sessionId: shared_cart.checkout_session_id,
             variant: orderVariant,
           }

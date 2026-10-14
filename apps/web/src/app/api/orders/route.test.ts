@@ -240,6 +240,16 @@ vi.mock('@/lib/quiz-proof', () => ({
   createQuizRpcServerProof: mockCreateQuizRpcServerProof,
 }));
 
+const mockVerifySharedCartOrderProof = vi.hoisted(() =>
+  vi.fn(() => ({
+    ok: true as const,
+    principalId: 'guest-principal-001',
+  }))
+);
+vi.mock('@/lib/cart/order-proof', () => ({
+  verifySharedCartOrderProof: mockVerifySharedCartOrderProof,
+}));
+
 // The invoice email flow persists the auto-generated DVA through the
 // proof-bound reserve RPC (round 3); the reservation proof needs a service
 // key unavailable in this suite, so stub the reservation boundary here.
@@ -10187,6 +10197,27 @@ describe('POST /api/orders — shared cart binding', () => {
     });
   }
 
+  it('rejects a bound submit without the preparing principal proof', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+    mockVerifySharedCartOrderProof.mockReturnValueOnce({
+      ok: false as const,
+    } as never);
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(401);
+    expect((await response.json()).code).toBe('SHARED_CART_PROOF_REQUIRED');
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
   it('submits a bound base order through the binding RPC', async () => {
     const supabase = await setupBinding({
       create_storefront_order_with_cart_binding: {
@@ -10202,6 +10233,9 @@ describe('POST /api/orders — shared cart binding', () => {
       'create_storefront_order_with_cart_binding',
       {
         p_args: expect.objectContaining({
+          p_cart_id: SHARED_CART.cart_id,
+          p_cart_principal_id: 'guest-principal-001',
+          p_cart_version: SHARED_CART.cart_version,
           p_merchant_id: MERCHANT_ID,
           p_customer_email: 'customer@example.com',
         }),

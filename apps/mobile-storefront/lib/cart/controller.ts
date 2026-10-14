@@ -259,6 +259,31 @@ export function createNativeCartController(options: Options) {
           options.status('ready');
           return;
         }
+        if (action.type === 'clear') {
+          try {
+            await accept(
+              await coordinator.command(current.cartId, {
+                operationId: options.newOperationId(),
+                expectedVersion: current.version,
+                command,
+              })
+            );
+          } catch (error) {
+            // A bound order already completed this cart server-side, so
+            // clearing it is rejected as locked. Retire the finished
+            // generation locally instead of failing the checkout that
+            // just succeeded; the next write starts a fresh session.
+            if (
+              error instanceof NativeCartError &&
+              error.code === 'cart_locked'
+            ) {
+              await refresh();
+              return;
+            }
+            throw error;
+          }
+          return;
+        }
         await accept(
           await coordinator.command(current.cartId, {
             operationId: options.newOperationId(),

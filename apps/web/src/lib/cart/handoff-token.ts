@@ -201,34 +201,27 @@ export function detectHandoffCaller(
 
 /**
  * Approved web origins for handoff redemption: the slug subdomain, the
- * merchant custom domain, the platform root host (slug storefronts),
- * and loopback for development. Mirrors the storefront auth origin
- * builder plus the shared root host.
+ * merchant custom domain, and the platform root host (slug storefronts).
+ * Merchant origins are https-only; loopback origins are accepted only
+ * outside production so a plain-HTTP or local development host can never
+ * redeem a handoff for a real merchant domain.
  */
 export function isHandoffWebOriginAllowed(
   origin: string | null,
-  merchant: HandoffMerchantRef
+  merchant: HandoffMerchantRef,
+  environment: string | undefined = process.env.NODE_ENV
 ): boolean {
   if (!origin) return false;
   const normalized = origin.trim().toLowerCase();
   const root = merchant.rootDomain.toLowerCase();
   const slug = merchant.slug.toLowerCase();
-  const allowed = new Set([
-    `https://${slug}.${root}`,
-    `http://${slug}.${root}`,
-    `https://${root}`,
-    `http://${root}`,
-    'http://localhost',
-    'https://localhost',
-    `http://127.0.0.1`,
-    `https://127.0.0.1`,
-  ]);
+  const allowed = new Set([`https://${slug}.${root}`, `https://${root}`]);
   if (merchant.customDomain?.trim()) {
     const custom = merchant.customDomain.trim().toLowerCase();
     allowed.add(`https://${custom}`);
-    allowed.add(`http://${custom}`);
   }
   if (allowed.has(normalized)) return true;
+  if (environment === 'production') return false;
   try {
     const url = new URL(normalized);
     const host = url.hostname;

@@ -43,10 +43,16 @@ export function NativeCartAccountPanel() {
     setPicks([]);
   }, [userId]);
   useEffect(() => {
-    if (!userId || !loadSavedCart) return;
+    if (!userId || !loadSavedCart || !state.accountsEnabled) return;
     void loadSavedCart().catch(() => undefined);
-  }, [userId, loadSavedCart]);
-  if (!state.enabled || !accountUserId || !state.linkAccount) return null;
+  }, [userId, loadSavedCart, state.accountsEnabled]);
+  if (
+    !state.enabled ||
+    !state.accountsEnabled ||
+    !accountUserId ||
+    !state.linkAccount
+  )
+    return null;
   const current = state.snapshot;
   const saved = state.savedCart;
   function operationId(): string {

@@ -5,6 +5,9 @@ tests pin that behavior with fabricated trees plus a self-consistency run
 against this checkout (forgotten pin updates fail here, not in CI).
 """
 import importlib.util
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -128,6 +131,54 @@ class ContractCheckTests(unittest.TestCase):
       - uses: other/action@v1
 """
         self.assertTrue(check.ci_failures(ci))
+
+    def test_tmp_copy_runs_from_repo_root(self):
+        # The workflow runs a base-owned copy from /tmp: the checker must
+        # derive the tree from the working directory, never its own path.
+        repo = Path(__file__).resolve().parents[2]
+        if not (repo / ".github/workflows/ci.yml").exists():
+            self.skipTest("CI workflow unavailable")
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp, "contract_check.py")
+            shutil.copy(
+                repo / ".github/scripts/capability_gate_contract_check.py", copy
+            )
+            proc = subprocess.run(
+                [sys.executable, str(copy)], cwd=repo,
+                capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def test_checker_file_pin_lifecycle(self):
+        with tempfile.TemporaryDirectory() as root:
+            script = Path(root, ".github/scripts")
+            script.mkdir(parents=True)
+            target = script / "capability_gate_contract_check.py"
+            target.write_bytes(b"logic")
+            digest = check.sha256_of(target)
+            self.assertEqual(check.checker_file_failures(root, digest, digest), ([], []))
+            target.write_bytes(b"reviewed logic")
+            new = check.sha256_of(target)
+            failures, notices = check.checker_file_failures(root, digest, new)
+            self.assertEqual(failures, [])
+            self.assertEqual(len(notices), 1)
+            failures, _ = check.checker_file_failures(root, digest, digest)
+            self.assertTrue(failures)
+            target.unlink()
+            failures, _ = check.checker_file_failures(root, digest, new)
+            self.assertIn("missing", failures[0])
+
+    def test_workflow_must_keep_base_owned_execution(self):
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/capability-gate-contract.yml"
+        if not workflow.exists():
+            self.skipTest("contract workflow unavailable")
+        self.assertEqual(check.workflow_failures(workflow.read_text()), [])
+        dropped = workflow.read_text().replace(
+            "            git show FETCH_HEAD:.github/scripts/capability_gate_contract_check.py > /tmp/contract_check.py\n", ""
+        )
+        self.assertNotEqual(dropped, workflow.read_text())
+        self.assertTrue(check.workflow_failures(dropped))
 
     def test_head_pins_match_declared(self):
         # Forgetting a pin refresh after an enforcement edit fails the suite

@@ -25,7 +25,12 @@ Two guarantees:
 
 After a reviewed enforcement change, refresh the declarations with:
   sha256sum <each file in BASE_PINS>
-and paste the hashes into BASE_PINS in the same change.
+and paste the hashes into BASE_PINS in the same change. After a reviewed
+change to THIS script, record its new hash in the workflow's
+PINNED_CHECKER_SHA256 env in the same change (a self-hash is a fixed point,
+so the baseline lives in the base-owned workflow, which passes it as
+argv[1]). Run from the repo root: the tree under test is the working
+directory, never the script's own location.
 """
 import ast
 import hashlib
@@ -33,17 +38,18 @@ import re
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
 CI_YML = ".github/workflows/ci.yml"
 CHECKER = ".github/scripts/capability_gate_contract_check.py"
+WORKFLOW = ".github/workflows/capability-gate-contract.yml"
 
 STEP_NAME_LINE = "      - name: Test capability register binding"
 STEP_USES_LINE = "        uses: ./.github/actions/capability-gate"
 
 BASE_PINS = {
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
-    ".github/workflows/capability-gate-contract.yml": "d10239b73e5d470688515c81663d0eda8810010632994087d2f8d22e96f8fc5f",
-    "vps-workers/baci-editorial-context/capability_gate.py": "7f69987ba95c8a276e2479320e6fcbd1e75cfd9db45cfb2c380709a2fc09e0a6",
+    # The workflow itself is asserted structurally (workflow_failures), not
+    # pinned: it carries PINNED_CHECKER_SHA256, so a hash pin here would
+    # deadlock against checker edits the same way a self-pin would.    "vps-workers/baci-editorial-context/capability_gate.py": "7f69987ba95c8a276e2479320e6fcbd1e75cfd9db45cfb2c380709a2fc09e0a6",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "6bca40bea2577c7b3ec336e26aca2494e9cdee3409af797cd5c2d944baa48fd2",
     "vps-workers/baci-editorial-context/register_digests.py": "aae14e6e045e67fd2331e8ca5afd15926b96291bcb5408a2c2d2e41e07ce8767",
     "vps-workers/baci-editorial-context/platform_capabilities.py": "113a575d81f4af2e61182db47b2489d9a4ca0137d6457e76c6522a38a6ce394a",
@@ -51,7 +57,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
     "vps-workers/baci-editorial-context/test_capability_gate.py": "39d62daac22dadf8efd04eb815dea0f32237cee3ba689397205f68546e560e18",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "25cb89699c62ff6910ed3d6662a884795591cf74d4715a25d6033b82b930fbac",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "3271933a560f99f09566e01250065b3727f3e7e4c350d970cc3d16226ce3c8ac",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "d027897f13d9011139aab5c0ad8f59ea2937ef02fd6751107d117f969db93124",
     "vps-workers/baci-editorial-context/test_capability_register_binding.py": "243fab8b2e83d618e74226f7f3d88e3397740846ced58d3efcfd0993d3421c79",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
@@ -142,12 +148,68 @@ def pin_failures(repo_root, base_pins, declared):
     return failures, notices
 
 
-def main(root=REPO):
+def workflow_failures(workflow_text):
+    """The contract workflow must keep executing base-owned logic.
+
+    The running workflow always comes from the base revision, but its
+    PR-head text is data worth asserting: dropping the base fetch while
+    keeping a direct script run would silently switch the guard to
+    executing head code.
+    """
+    missing = [
+        marker
+        for marker in (
+            "git show FETCH_HEAD:.github/scripts/capability_gate_contract_check.py",
+            "python3 /tmp/contract_check.py",
+        )
+        if marker not in workflow_text
+    ]
+    return [f"contract workflow must keep base-owned execution ({m})" for m in missing]
+
+
+def declared_checker_pin(workflow_text):
+    """The PR-head workflow's declared checker hash, if any."""
+    match = re.search(r"PINNED_CHECKER_SHA256:\s*([0-9a-f]{64})", workflow_text)
+    return match.group(1) if match else None
+
+
+def checker_file_failures(repo_root, base_pin, declared_pin):
+    """The checker's own logic is pinned from the base-owned workflow.
+
+    The checker cannot pin itself (a self-hash is a fixed point), so the
+    baseline lives in the workflow env and same-PR updates are declared
+    there: unchanged passes, changed-with-declaration passes with a notice,
+    changed-without fails. Rewriting the guard logic while keeping pin
+    declarations consistent still lands as a visible workflow + script diff.
+    """
+    try:
+        actual = sha256_of(Path(repo_root, CHECKER))
+    except OSError:
+        return ["checker script missing"], []
+    if base_pin is not None and actual == base_pin:
+        return [], []
+    if declared_pin is not None and actual == declared_pin:
+        return [], ["declared checker change (needs review)"]
+    return [f"checker script changed without a pin update (refresh PINNED_CHECKER_SHA256 in {WORKFLOW})"], []
+
+
+def main(root=None, checker_pin=None):
+    # Root defaults to the process working directory — never the script's own
+    # path: the workflow runs a base-owned copy from /tmp, where __file__
+    # ancestry cannot reach the checkout.
+    if root is None:
+        root = Path.cwd()
     failures = []
     try:
         failures.extend(ci_failures(Path(root, CI_YML).read_text()))
     except OSError:
         failures.append("ci.yml missing")
+    try:
+        workflow_text = Path(root, WORKFLOW).read_text()
+    except OSError:
+        failures.append("contract workflow missing")
+        workflow_text = ""
+    failures.extend(workflow_failures(workflow_text))
     try:
         declared = declared_pins(Path(root, CHECKER))
     except (OSError, ValueError, SyntaxError) as exc:
@@ -159,6 +221,12 @@ def main(root=REPO):
         failures.append(f"pin check failed: {exc}")
         pin_bad, notices = [], []
     failures.extend(pin_bad)
+    if checker_pin is not None or declared_checker_pin(workflow_text) is not None:
+        self_bad, self_notices = checker_file_failures(
+            root, checker_pin, declared_checker_pin(workflow_text)
+        )
+        failures.extend(self_bad)
+        notices.extend(self_notices)
     for notice in notices:
         print(notice)
     for failure in failures:
@@ -167,4 +235,6 @@ def main(root=REPO):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # argv[1] is the base-recorded checker hash, passed by the workflow from
+    # its own env. Local runs without it skip the checker self-check.
+    sys.exit(main(checker_pin=sys.argv[1] if len(sys.argv) > 1 else None))

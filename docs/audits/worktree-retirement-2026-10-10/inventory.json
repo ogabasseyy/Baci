@@ -1998,7 +1998,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/pr-2104-mobile-prod-deps",
       "head": "2c60a26a91d9ed8208a13009ad5961d01253c7ec",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "268 tracked deletions under node_modules are cleanup effects; package, patch, and lockfile changes preserved independently.",
+      "evidence": "268 tracked deletions under node_modules are cleanup effects; package, patch, and lockfile changes still require independent preservation.",
       "shard": 2,
       "manifest": {
         "id": 95,

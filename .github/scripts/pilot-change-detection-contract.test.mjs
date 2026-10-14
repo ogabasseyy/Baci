@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { labSharedClosure } from './pilot-shared-closure.mjs';
 
 // The pilot-codec workflow's change detection must catch gate-only
 // PRs: a PR touching only the boot/build gate or the pilot-owned
@@ -49,29 +50,30 @@ test('gate-only changes set pilot=true', async () => {
   }
 });
 
-test('shared lab-rendered modules set pilot=true', async () => {
-  // The lab renders through these production modules (layout,
-  // hero/mobile, url helpers): a shared-only PR changes lab
-  // rendering/hydration exactly as a pilot-tree PR does, so the
-  // codec/transformer suites must run. Optimized-image/seo-utils are
-  // comment mentions only, not lab imports, and stay excluded.
+test('lab render closure (depth<=2) matches the pattern', async () => {
+  // Self-maintaining: the walker recomputes the shared modules the
+  // lab renders through, and every one must trip the suites. A new
+  // lab import of a shared module fails here until its branch is
+  // added to the workflow pattern — add the branch, never shrink
+  // the walker.
   const pattern = await pilotPattern();
-  const shared = [
-    'apps/web/src/app/(storefront)/storefront-eager-full-css-layout.tsx',
-    'apps/web/src/app/(storefront)/storefront-eager-full-css-layout.test.tsx',
-    'apps/web/src/components/storefront/ogabassey/components/hero-mobile-image-config.ts',
-    'apps/web/src/components/storefront/ogabassey/components/hero-mobile-carousel.tsx',
-    'apps/web/src/components/storefront/ogabassey/components/hero-mobile-geometry.ts',
-    'apps/web/src/components/storefront/ogabassey/components/hero-mobile-controls-skeleton.tsx',
-    'apps/web/src/components/storefront/ogabassey/components/LaunchCarousel.tsx',
-    'apps/web/src/lib/product-url.ts',
-    'apps/web/src/lib/product-url.test.ts',
-    'apps/web/src/lib/products.ts',
-    'apps/web/src/lib/ogabassey-image-fallback-loader.ts',
-  ];
-  for (const name of shared) {
-    assert.equal(detected(pattern, [name]), true, name);
-  }
+  const closure = labSharedClosure();
+  // The two review-found misses that motivated the walker.
+  assert.ok(
+    closure.includes('apps/web/src/components/optimized-image.tsx')
+  );
+  assert.ok(closure.includes('apps/web/src/lib/seo-utils.ts'));
+  const missing = closure.filter((name) => !detected(pattern, [name]));
+  assert.deepEqual(missing, []);
+  // Boundaries: type-only reachability stays out (LaunchCarousel is
+  // imported for its slide type only, erased at runtime), and
+  // sibling non-lab modules stay out.
+  assert.equal(
+    closure.includes(
+      'apps/web/src/components/storefront/ogabassey/components/LaunchCarousel.tsx'
+    ),
+    false
+  );
   assert.equal(
     detected(pattern, [
       'apps/web/src/components/storefront/ogabassey/components/hero-mobile-carousel-autoplay.test.tsx',

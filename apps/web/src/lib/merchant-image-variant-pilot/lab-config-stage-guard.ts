@@ -1,6 +1,7 @@
 import 'server-only';
 import { lstat, readdir, realpath } from 'node:fs/promises';
 import { basename, join, relative, sep } from 'node:path';
+import { listStagedDir } from './lab-config-stage-listing';
 import { HEX64_PATTERN } from './lab-config-stage-reconcile';
 
 // Startup/request twin of reconcileStagedTree (which only runs at
@@ -134,9 +135,7 @@ export async function assertNoUnexpectedStagedFiles(
     return;
   }
   const checkDir = async (dir: string, label: string): Promise<void> => {
-    const entries = await readdir(dir, { withFileTypes: true }).catch(
-      () => null
-    );
+    const entries = await listStagedDir(dir, label, expected);
     if (!entries) {
       return;
     }
@@ -185,9 +184,7 @@ export async function assertNoUnexpectedStagedFiles(
     'originals',
     ...[...currentGenDirs].map((dir) => basename(dir)),
   ]);
-  const topEntries = await readdir(realStage, { withFileTypes: true }).catch(
-    () => null
-  );
+  const topEntries = await listStagedDir(realStage, 'the stage root', expected);
   if (topEntries) {
     for (const entry of topEntries) {
       if (!allowedTopNames.has(entry.name)) {

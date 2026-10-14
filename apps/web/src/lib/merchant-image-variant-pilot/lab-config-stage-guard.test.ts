@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -211,5 +218,25 @@ describe('assertNoUnexpectedStagedFiles', () => {
     );
     // Without a known root there is nothing to enumerate.
     await expect(assertNoUnexpectedStagedFiles([])).resolves.toBe(undefined);
+  });
+
+  it('aborts when a staged directory cannot be listed', async () => {
+    // Searchable-but-unreadable originals still serves known
+    // pathnames: the guard must abort, not accept-and-cache an
+    // empty scan that discovered nothing. POSIX-only.
+    if (process.platform === 'win32') {
+      return;
+    }
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    const originals = join(pilotStage, 'originals');
+    await chmod(originals, 0o111);
+    try {
+      await expect(
+        assertNoUnexpectedStagedFiles(staged(pilotStage))
+      ).rejects.toThrow(/cannot list staged directory/);
+    } finally {
+      await chmod(originals, 0o755);
+    }
   });
 });

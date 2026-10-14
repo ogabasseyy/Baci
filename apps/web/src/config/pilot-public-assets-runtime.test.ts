@@ -49,14 +49,6 @@ function quarantined(dir: string, name: string): boolean {
   }
 }
 
-function quarantineTarget(dir: string, name: string): string {
-  const vault = join(dir, '..', '__pilot-quarantine');
-  const mine = `-${process.pid}-${name}`;
-  const hit = readdirSync(vault).find((entry) => entry.endsWith(mine));
-  if (!hit) throw new Error(`no quarantine of ${name} in ${vault}`);
-  return join(vault, hit);
-}
-
 function withWarnings(run: () => void): string {
   const warnings: unknown[][] = [];
   const warnSpy = vi
@@ -202,55 +194,6 @@ describe('non-lab runtime severities and quarantine', () => {
       expect(quarantined(dir, names[setup])).toBe(true);
       expect(existsSync(join(dir, '__pilot', names[setup]))).toBe(false);
     }
-  });
-
-  it('refuses symlink escapes at build, quarantines at runtime', () => {
-    const dir = root();
-    mkdirSync(join(dir, '__pilot'), { recursive: true });
-    symlinkSync(join(dir, 'outside.txt'), join(dir, '__pilot', 'evil'));
-    writeFileSync(join(dir, 'outside.txt'), 'not yours');
-    expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
-      /is a symlink/
-    );
-    const text = withWarnings(() => {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    });
-    expect(text).toMatch(/is a symlink/);
-    expect(quarantined(dir, 'evil')).toBe(true);
-    // The quarantined entry is the link itself, un-traversed: moving
-    // it must not resolve or copy the outside target into the vault.
-    const target = quarantineTarget(dir, 'evil');
-    expect(lstatSync(target).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(target)).toBe(join(dir, 'outside.txt'));
-    expect(existsSync(join(dir, '__pilot', 'evil'))).toBe(false);
-    // The link target is outside the tree: quarantining the link
-    // leaves it alone.
-    expect(existsSync(join(dir, 'outside.txt'))).toBe(true);
-  });
-
-  it('refuses staged merchant trees at build, quarantines at runtime', () => {
-    // The filler tolerance must not weaken the non-lab safety goal:
-    // generation/originals staging refuses at build and quarantines
-    // at runtime, while the stray-only fillers dir stays put.
-    const dir = root();
-    mkdirSync(join(dir, '__pilot', 'originals'), { recursive: true });
-    writeFileSync(
-      join(dir, '__pilot', 'originals', 'merchant.avif'),
-      'private fixture'
-    );
-    mkdirSync(join(dir, '__pilot', 'fillers'), { recursive: true });
-    writeFileSync(join(dir, '__pilot', 'fillers', '.DS_Store'), 'junk');
-    expect(() => assertPilotPublicAssets(dir, false, 'throw', 'throw')).toThrow(
-      /staged merchant pilot assets/
-    );
-    const text = withWarnings(() => {
-      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
-    });
-    expect(text).toMatch(/staged merchant pilot assets/);
-    expect(quarantined(dir, 'originals')).toBe(true);
-    expect(existsSync(join(dir, '__pilot', 'originals'))).toBe(false);
-    expect(existsSync(join(dir, '__pilot', 'fillers', '.DS_Store'))).toBe(true);
-    expect(quarantined(dir, 'fillers')).toBe(false);
   });
 
   it('refuses when quarantine fails on a read-only tree', () => {

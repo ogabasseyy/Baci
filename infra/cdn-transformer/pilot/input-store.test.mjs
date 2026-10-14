@@ -200,7 +200,7 @@ test('writeNewSnapshot writes durably and never clobbers a rival', async () => {
 });
 
 test('writeNewSnapshot syncs the parent dir and unlinks on sync failure', async () => {
-  const { readFile, stat } = await import('node:fs/promises');
+  const { readFile, realpath, stat } = await import('node:fs/promises');
   const { root } = await makeRoots();
   const synced = [];
   const target = join(root, 'snap.png');
@@ -209,7 +209,9 @@ test('writeNewSnapshot syncs the parent dir and unlinks on sync failure', async 
       synced.push(dir);
     },
   });
-  assert.deepEqual(synced, [root]);
+  // The canonical parent (what the write bound to), not the lexical
+  // spelling — these differ under symlinked ancestors (/var/...).
+  assert.deepEqual(synced, [await realpath(root)]);
   assert.deepEqual(await readFile(target), Buffer.from('snapshot-bytes'));
   // A real directory-sync failure throws and unlinks the file this call
   // created, so a retry does not misread the leftover as a rival win.
@@ -237,4 +239,26 @@ test('writeNewSnapshot syncs the parent dir and unlinks on sync failure', async 
     },
   });
   assert.deepEqual(await readFile(unsupported), Buffer.from('y'));
+});
+
+test('writeNewSnapshot rejects a parent swapped mid-write', async () => {
+  const { readdir, rename } = await import('node:fs/promises');
+  const { outside, root } = await makeRoots();
+  const target = join(root, 'snap.png');
+  await assert.rejects(
+    () =>
+      writeNewSnapshot(target, Buffer.from('snapshot-bytes'), {
+        fsyncDir: async () => {
+          // Swap won between the canonical open and the post-close
+          // rebind: the root name now points outside the input root.
+          await rename(root, join(root, '..', 'input-moved'));
+          await symlink(outside, root);
+        },
+      }),
+    /snapshot parent is not a directory/
+  );
+  // The write bound to the pre-swap directory and the call threw
+  // before any record could reference the name: nothing lands
+  // outside the input root.
+  assert.deepEqual(await readdir(outside), []);
 });

@@ -32,8 +32,9 @@ import {
 // geometry and hash provenance with no reviewable visual artifact. A
 // full pixel decode with scanline dimensions matching the IHDR proves
 // the screenshot is viewable at the attested size, under the same
-// generator decode limits.
-async function assertPngDecodes(bytes, dimensions) {
+// generator decode limits. Exported for the finish binder, which must
+// reject corrupt captures before publication, not after.
+export async function assertPngDecodes(bytes, dimensions) {
   let info;
   try {
     ({ info } = await sharp(bytes, { ...SHARP_LIMITS })

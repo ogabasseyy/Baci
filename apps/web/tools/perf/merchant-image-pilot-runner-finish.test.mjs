@@ -162,4 +162,66 @@ describe('merchant-image-pilot-runner finish binding', () => {
     expect(await readFile(join(outDir, 'run.har'))).toEqual(harBefore);
     expect(await readFile(join(outDir, 'screenshot.png'))).toEqual(shotBefore);
   });
+
+  it('rejects a corrupt screenshot before publication', async () => {
+    // Valid signature, IHDR dims, CRCs, and IDAT presence — but
+    // garbage compressed pixels: the header-only parser accepted
+    // this shape and finish hashed/published it, leaving the gate to
+    // fail later. The binder now reuses the gate's structural plus
+    // decode validation, so the corrupt capture refuses here and
+    // nothing is published.
+    const { pngCrc32 } = await import(
+      './merchant-image-pilot-settings-helpers.mjs'
+    );
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-corrupt-'));
+    await prepareRun({
+      dpr: '2',
+      outDir: join(dir, 'run'),
+      profileDir: join(dir, 'profile'),
+      tool: 'browsertime',
+      viewport: '375x667',
+    });
+    const tiny = await pngBuffer(750, 1334);
+    const ihdr = tiny.subarray(0, 33);
+    const iend = tiny.subarray(tiny.length - 12);
+    const garbage = Buffer.from('this-is-not-deflate-pixel-data');
+    const idatLength = Buffer.alloc(4);
+    idatLength.writeUInt32BE(garbage.length);
+    const idatType = Buffer.from('IDAT');
+    const idatCrc = Buffer.alloc(4);
+    idatCrc.writeUInt32BE(
+      pngCrc32(Buffer.concat([idatType, garbage]), 0, 4 + garbage.length)
+    );
+    await writeFile(
+      join(dir, 'har.har'),
+      JSON.stringify({
+        log: {
+          entries: [],
+          pages: [
+            {
+              _url: ROUTE,
+              startedDateTime: new Date().toISOString(),
+              title: 'u run 1',
+            },
+          ],
+        },
+      })
+    );
+    const corruptShot = join(dir, 'corrupt.png');
+    await writeFile(
+      corruptShot,
+      Buffer.concat([ihdr, idatLength, idatType, garbage, idatCrc, iend])
+    );
+    const outDir = join(dir, 'bound');
+    await expect(
+      finishRun({
+        browserLog: await browserLog(dir, 'browser.log', join(dir, 'profile')),
+        har: join(dir, 'har.har'),
+        outDir,
+        runJson: join(dir, 'run', 'run.json'),
+        screenshot: corruptShot,
+      })
+    ).rejects.toThrow(/screenshot pixels do not decode/);
+    await expect(readFile(join(outDir, 'screenshot.png'))).rejects.toThrow();
+  });
 });

@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
 import { lstat, open, realpath, stat, unlink } from 'node:fs/promises';
-import { dirname, join, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { MAX_INPUT_BYTES } from './constants.mjs';
 import { fsyncDir, isUnsupportedSyncError } from './disk-guards.mjs';
 
@@ -174,8 +174,31 @@ export async function resolveNewSnapshotPath(inputRoot, fileName) {
 // record pointing at a torn or missing snapshot. EEXIST (a rival won the
 // same-asset race) propagates untouched; only a file this call created
 // is unlinked when the write or sync fails.
+async function canonicalSnapshotParent(parent) {
+  const info = await lstat(parent).catch(() => {
+    throw new PilotInputError(`snapshot parent is not accessible`);
+  });
+  if (info.isSymbolicLink() || !info.isDirectory()) {
+    throw new PilotInputError(`snapshot parent is not a directory`);
+  }
+  return realpath(parent);
+}
+
 export async function writeNewSnapshot(target, bytes, options = {}) {
-  const handle = await open(target, 'wx');
+  // Parent rebind, mirroring writeConfinedFile: 'wx' guards only the
+  // final component, so a root renamed away and replaced with a
+  // symlink between resolveNewSnapshotPath and this open would
+  // redirect the write outside the input root. The parent
+  // re-resolves to canonical immediately before the open (no symlink
+  // components left to exploit), the bytes publish through the held
+  // descriptor, and after the close the parent name must still
+  // resolve to that same directory AND the pathname must still name
+  // the written file (handle identity vs path identity). Any
+  // mismatch unlinks the stray name best-effort and throws loudly.
+  const parent = dirname(target);
+  const expectedParent = await canonicalSnapshotParent(parent);
+  const bound = join(expectedParent, basename(target));
+  const handle = await open(bound, 'wx');
   // Directory-entry durability, like the inventory publish: the file
   // sync persists the bytes but not the new entry, so the parent dir
   // syncs before this call reports success. A real sync failure throws
@@ -183,21 +206,45 @@ export async function writeNewSnapshot(target, bytes, options = {}) {
   // platforms without sync support proceed.
   const syncDir = options.fsyncDir ?? fsyncDir;
   let synced = false;
+  let identity;
   try {
     await handle.writeFile(bytes);
     await handle.sync();
     try {
-      await syncDir(dirname(target));
+      await syncDir(expectedParent);
     } catch (error) {
       if (!isUnsupportedSyncError(error)) {
         throw error;
       }
     }
+    identity = await handle.stat();
     synced = true;
   } finally {
     await handle.close();
     if (!synced) {
-      await unlink(target).catch(() => undefined);
+      await unlink(bound).catch(() => undefined);
     }
+  }
+  try {
+    if ((await canonicalSnapshotParent(parent)) !== expectedParent) {
+      throw new PilotInputError(
+        `snapshot parent changed during the write`
+      );
+    }
+    const info = await lstat(bound).catch(() => null);
+    if (
+      !info ||
+      info.isSymbolicLink() ||
+      !info.isFile() ||
+      info.dev !== identity.dev ||
+      info.ino !== identity.ino
+    ) {
+      throw new PilotInputError(
+        `snapshot write no longer names the written file`
+      );
+    }
+  } catch (error) {
+    await unlink(bound).catch(() => undefined);
+    throw error;
   }
 }

@@ -7,25 +7,30 @@ import { createHash } from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { MAX_SCREENSHOT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
+import { assertPngDecodes } from './merchant-image-pilot-settings-har.mjs';
+import { pngDimensions } from './merchant-image-pilot-settings-helpers.mjs';
 
-// PNG geometry without a decoder dependency: 8-byte signature plus the
-// IHDR chunk (length 13, width/height big-endian). A non-PNG file, or a
-// capture at the wrong size, refuses here instead of gaining the run's
-// id with geometry the gate would trust from the record alone.
-const PNG_SIGNATURE = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-]);
-
-function pngDimensions(bytes, screenshot) {
-  if (
-    bytes.length < 24 ||
-    !bytes.subarray(0, 8).equals(PNG_SIGNATURE) ||
-    bytes.readUInt32BE(8) !== 13 ||
-    bytes.subarray(12, 16).toString('latin1') !== 'IHDR'
-  ) {
-    throw new Error(`screenshot is not a PNG file: ${screenshot}`);
+// Screenshot validation reuses the settings gate's own checks: full
+// chunk/CRC structure plus a pixel decode, not just the 24-byte
+// header. A capture with valid signature/IHDR but truncated or
+// corrupt image data would otherwise hash and publish here, then
+// fail the gate — reject it before publication instead. Gate errors
+// gain the screenshot path for the operator.
+async function validatedDimensions(bytes, screenshot) {
+  try {
+    const dimensions = pngDimensions(bytes);
+    await assertPngDecodes(bytes, dimensions);
+    return dimensions;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // Legacy operator-facing text for the non-PNG case (pinned by
+    // the finish-version suite); newer structural/decode failures
+    // carry the gate's own message.
+    if (message === 'not a PNG') {
+      throw new Error(`screenshot is not a PNG file: ${screenshot}`);
+    }
+    throw new Error(`screenshot rejected (${message}): ${screenshot}`);
   }
-  return { height: bytes.readUInt32BE(20), width: bytes.readUInt32BE(16) };
 }
 
 export async function bindScreenshotCapture({
@@ -71,7 +76,7 @@ export async function bindScreenshotCapture({
   // trust from the record alone.
   const expectedWidth = Math.round(width * deviceScaleFactor);
   const expectedHeight = Math.round(height * deviceScaleFactor);
-  const actual = pngDimensions(shotRead.bytes, screenshot);
+  const actual = await validatedDimensions(shotRead.bytes, screenshot);
   if (actual.width !== expectedWidth || actual.height !== expectedHeight) {
     throw new Error(
       `screenshot is ${actual.width}x${actual.height} but viewport ${width}x${height} at dpr ${deviceScaleFactor} requires ${expectedWidth}x${expectedHeight}: ${screenshot}`

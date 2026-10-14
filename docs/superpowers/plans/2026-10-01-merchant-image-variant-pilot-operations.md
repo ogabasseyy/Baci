@@ -30,12 +30,13 @@ node pilot/quality-sheet.mjs --input-root .pilot-input \
 # public/ after start are not served, verified 2026-10-03 on next start).
 # Export the lab env for BOTH commands: the stage CLI keeps flag-derived
 # roots in its own process, so next start needs them exported too —
-# otherwise the startup gate aborts on the staged non-lab assets.
+# otherwise the startup gate reads the staged tree as non-lab
+# leftovers and quarantines it away, and the lab boots empty.
 export BACI_IMAGE_PILOT_LAB=1
 # next start defaults to NODE_ENV=production, where the lab flag stays
-# off without this acknowledgement — and the startup gate then aborts
-# on the staged merchant tree as non-lab assets. Required for the
-# sequence below, not just for shared origins.
+# off without this acknowledgement — and the startup gate then
+# quarantines the staged merchant tree as non-lab leftovers. Required
+# for the sequence below, not just for shared origins.
 export BACI_IMAGE_PILOT_ALLOW_PROD=1
 export BACI_IMAGE_PILOT_INPUT_ROOT=<dir>
 export BACI_IMAGE_PILOT_OUTPUT_ROOT=<dir>
@@ -98,8 +99,13 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # image renamed to a filler name must never ship silently), and a
 # BACI_PILOT_PUBLIC_DIR preset that disagrees with the served config
 # tree (the boot gate trusts the stash — unset or correct the
-# preset). Empty leftover dirs pass silently and unrelated strays
-# (.DS_Store, renamed leftovers) warn. RUNTIME boots split by
+# preset). The next.config gate is phase-scoped: it asserts only for
+# `next build`; dev/start stash the verified root for the boot gate
+# without asserting (runtime boots own enforcement, below), and
+# unrelated config loads (typegen, tests, tooling) skip the gate
+# entirely — zero cost, zero throw, zero env mutation. Empty
+# leftover dirs pass silently and unrelated strays (.DS_Store,
+# renamed leftovers) warn. RUNTIME boots split by
 # finding: fillers/ NEVER quarantines — any finding there (hash
 # drift, staged shape, confinement break, stray merchant file)
 # refuses WITHOUT moving, because the directory holds COMMITTED

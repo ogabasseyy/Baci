@@ -68,6 +68,11 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   // Set synchronously in refreshWallet; cleared when the fetch
   // settles (aborted successors leave it for the winning fetch).
   const refreshPendingRef = useRef(false);
+  // Request generation (Codex R76 6r51Px): claimed synchronously
+  // by refreshWallet, captured by each effect run. An older fetch
+  // settling in the microtask window before React runs the new
+  // effect's cleanup must not clear state for the replacement.
+  const fetchGenerationRef = useRef(0);
 
   // Clear the previous identity's wallet + funding account SYNCHRONOUSLY
   // (render-phase) when the customer or storefront changes, so consumers
@@ -90,6 +95,10 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
 
   useEffect(() => {
     const abortController = new AbortController();
+    const generation = fetchGenerationRef.current;
+    const isSuperseded = () =>
+      abortController.signal.aborted ||
+      generation !== fetchGenerationRef.current;
 
     const fetchWalletBalance = () => {
       if (!userId || !merchantSlug) {
@@ -103,7 +112,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
         signal: abortController.signal,
       })
         .then(async (response) => {
-          if (abortController.signal.aborted) return;
+          if (isSuperseded()) return;
           if (!response.ok) {
             setWalletError(true);
             return;
@@ -112,7 +121,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
           // Re-check after the await: an identity change fires the effect
           // cleanup (abort) synchronously, so a superseded response that
           // resolved just before the switch won't apply a stale account.
-          if (abortController.signal.aborted) return;
+          if (isSuperseded()) return;
           const balance = Number(data.balance) || 0;
           setWalletBalance(balance);
           setFundingAccount(data.fundingAccount ?? null);
@@ -128,13 +137,17 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
           }
         })
         .catch((error) => {
-          if (error instanceof Error && error.name !== 'AbortError') {
+          if (
+            !isSuperseded() &&
+            error instanceof Error &&
+            error.name !== 'AbortError'
+          ) {
             console.error('Failed to fetch wallet balance:', error);
             setWalletError(true);
           }
         })
         .finally(() => {
-          if (!abortController.signal.aborted) {
+          if (!isSuperseded()) {
             setWalletLoading(false);
             refreshPendingRef.current = false;
           }
@@ -163,6 +176,11 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
     },
     refreshWallet: () => {
       refreshPendingRef.current = true;
+      // Claim the next generation NOW, not in the effect: the
+      // in-flight fetch may settle before React commits this
+      // update, and only a synchronously-bumped generation lets
+      // its finally recognize it is superseded.
+      fetchGenerationRef.current += 1;
       setRefreshToken((token) => token + 1);
     },
     isWalletRefreshPending: () => refreshPendingRef.current,

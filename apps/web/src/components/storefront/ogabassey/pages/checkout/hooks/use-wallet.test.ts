@@ -414,6 +414,51 @@ describe('useWallet', () => {
     });
   });
 
+  it('keeps the refresh gate set when the superseded fetch settles first', async () => {
+    // Codex R76 6r51Px: refreshWallet() while a balance request is in
+    // flight. The older request may settle before React commits the
+    // update (cleanup/abort not yet run); its finally must not clear
+    // the gate or loading for the replacement fetch. refreshWallet is
+    // called outside act on purpose: act() would flush the commit
+    // synchronously and close the very window under test.
+    let resolveFirst!: (response: unknown) => void;
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      })
+    );
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' })
+    );
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+    let resolveSecond!: (response: unknown) => void;
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSecond = resolve;
+      })
+    );
+    // Queue the stale settle BEFORE the refresh update so the whole
+    // promise chain drains ahead of React's scheduled commit.
+    resolveFirst({ ok: true, json: async () => ({ balance: 111 }) });
+    result.current.refreshWallet();
+    expect(result.current.isWalletRefreshPending()).toBe(true);
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+    // The superseded settle must neither clear the gate nor apply
+    // its stale balance; the replacement fetch still owns both.
+    expect(result.current.isWalletRefreshPending()).toBe(true);
+    expect(result.current.walletLoading).toBe(true);
+    expect(result.current.walletBalance).not.toBe(111);
+
+    resolveSecond({ ok: true, json: async () => ({ balance: 500 }) });
+    await waitFor(() => {
+      expect(result.current.isWalletRefreshPending()).toBe(false);
+    });
+    expect(result.current.walletBalance).toBe(500);
+    expect(result.current.walletLoading).toBe(false);
+  });
+
   it('should refetch when merchantSlug changes', async () => {
     mockFetch.mockResolvedValue({
       ok: true,

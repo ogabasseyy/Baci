@@ -1,0 +1,28 @@
+name: Capability Gate Contract
+
+# Independent guard for the capability gate's own caller: this workflow runs
+# the ci.yml invocation contract outside the suite that the ci.yml step
+# invokes, so conditioning or removing that step cannot silence the check.
+# Keep this file minimal and dependency-free on purpose.
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  gate-contract:
+    name: Capability Gate Contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Assert ci.yml invokes the capability gate unconditionally
+        run: |
+          cd vps-workers/baci-editorial-context
+          python3 -m unittest test_capability_register_binding.CapabilityBindingTests.test_ci_invokes_capability_gate_unconditionally

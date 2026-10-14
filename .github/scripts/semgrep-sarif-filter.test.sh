@@ -159,6 +159,12 @@ t trusted-advisory-pass 0 "advisory mode" happy.sarif "none" 1 "true" "true"
 t trusted-advisory-empty 0 "advisory mode" absent "none" "" "true" "true"
 t trusted-advisory-plus-drift 1 "pr-controlled-checkout-count" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}a${FS}          ref: \${{ github.event.pull_request.head.sha }}" "" "true" "true"
 
+# --- advisory + removed checkout (hardening audits still run) ---
+t removed-checkout-trusted 1 "needs human review" happy.sarif "rm:$S" "" "true"
+t trusted-advisory-removed 0 "advisory mode" happy.sarif "rm:$S" "" "true" "true"
+t trusted-advisory-removed-flow 1 "pr-ref-unresolved" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}r${FS}\${{ github.event.pull_request.head.sha }}${FS}\${{ env.NOPE }}" "" "true" "true"
+t trusted-advisory-removed-evil-helper 1 "helper-untrusted-exec" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}d${RS}$H${FS}set -euo pipefail${FS}a${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"" "" "true" "true"
+
 # --- SARIF temp symlink (low: O_NOFOLLOW refuses write-through) ---
 t sarif-tmp-symlink 1 "SARIF temp write refused" happy.sarif "ln:semgrep.sarif.tmp${FS}/dev/null"
 

@@ -7,7 +7,10 @@ GitHub code scanning ignores that flag -- the finding stays open as a
 phantom alert. This filter repairs the transport for exactly one
 audited finding (the reviewed pull_request_target checkout) after a
 fail-closed drift audit of the hardening the exemption rests on.
-Any drift keeps the SARIF unfiltered and fails the job.
+Any drift keeps the SARIF unfiltered and fails the job, except that
+TRUSTED_CHANGE_ADVISORY=true downgrades a trusted-tree-only signal
+to a warning (exit 0, still filtered); the separate never-required
+tripwire job carries the loud human-review signal for that case.
 """
 import json
 import os
@@ -40,13 +43,34 @@ def main():
     # exit code: a trusted-tree edit with no other drift warns
     # (human eyes arrive via the advisory tripwire job) while real
     # hardening drift still fails. Absent/false preserves the
-    # fail-closed default; the workflow always runs the base-tree
-    # copy of this file, so a PR cannot soften its own audit.
+    # fail-closed default. The workflow runs the base-tree copy of
+    # this audit logic, so a PR cannot soften the checks
+    # themselves; the TRUSTED_CHANGED signal and this env flag come
+    # from the PR-controlled workflow, whose backstop is the
+    # CODEOWNERS review required on .github/** (see
+    # .github/sarif-filter-notes.md).
     advisory = os.environ.get("TRUSTED_CHANGE_ADVISORY") == "true"
 
     def fatal():
         return [d for d in drift
                 if not (advisory and d == "trusted-tree-changed")]
+
+    def run_hardening_audits():
+        audit_pr_checkout(ctx, drift)
+        audit_trusted_checkout(ctx, drift)
+        audit_resolver(ctx, drift)
+        audit_path_literals(ctx, drift)
+        audit_checkout_order(ctx, drift)
+        audit_container_image(ctx, drift)
+        audit_invocations(ctx, drift)
+        audit_script_dir(ctx, drift)
+        audit_run_hygiene(ctx, drift)
+        audit_reviewer_env_block(ctx.workflow_lines, drift)
+        audit_step_commands(ctx, drift)
+        audit_agent_env(ctx, drift)
+        audit_agent_runner(drift)
+        audit_installer(drift)
+        audit_helpers(ctx, drift)
 
     # Resolve all file reads against the workspace root, not the
     # process CWD: a future working-directory default would
@@ -83,6 +107,20 @@ def main():
                   + ", ".join(drift) + "); needs human review.")
             return 1
         if drift:
+            # Advisory early return: a checkout removal must not
+            # smuggle helper/runner weakening past, so the
+            # hardening audits still run before downgrading —
+            # unless the workflow itself is gone, in which case
+            # there is no reachable workflow/helper system left
+            # to audit (a restore PR re-audits).
+            if ctx.workflow_lines:
+                run_hardening_audits()
+            if fatal():
+                print("::error::No PR-controlled checkout left in "
+                      + AUDITED_PATH + " but hardening drift was "
+                      + "recorded (" + ", ".join(drift) + "); needs "
+                      + "human review.")
+                return 1
             print("::warning::No PR-controlled checkout left in "
                   + AUDITED_PATH + " but trusted-tree-changed "
                   + "recorded (advisory mode); human review "
@@ -91,21 +129,7 @@ def main():
         print("::notice::No PR-controlled checkout in " + AUDITED_PATH
               + "; exemption inactive.")
         return 0
-    audit_pr_checkout(ctx, drift)
-    audit_trusted_checkout(ctx, drift)
-    audit_resolver(ctx, drift)
-    audit_path_literals(ctx, drift)
-    audit_checkout_order(ctx, drift)
-    audit_container_image(ctx, drift)
-    audit_invocations(ctx, drift)
-    audit_script_dir(ctx, drift)
-    audit_run_hygiene(ctx, drift)
-    audit_reviewer_env_block(ctx.workflow_lines, drift)
-    audit_step_commands(ctx, drift)
-    audit_agent_env(ctx, drift)
-    audit_agent_runner(drift)
-    audit_installer(drift)
-    audit_helpers(ctx, drift)
+    run_hardening_audits()
     if fatal():
         print(f"::error::muse-code-review.yml hardening drifted "
               f"({', '.join(drift)}); keeping SARIF unfiltered.")

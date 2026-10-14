@@ -84,8 +84,13 @@ jobs:
             # job below treats a trusted-only change as advisory
             # (warning, still filtered) and fails only on real
             # findings or hardening drift; the separate
-            # Trusted-change tripwire job (never required) turns
+            # semgrep-tripwire.yml workflow (never required) turns
             # red so the change cannot slip past merger eyes.
+            # Threat model: the paths signal, tripwire, and advisory
+            # env come from the PR-controlled workflow copy; the
+            # load-bearing backstop is CODEOWNERS review on
+            # .github/**. Only the audit LOGIC is base-pinned (see
+            # .github/sarif-filter-notes.md).
             # Invariant: every trusted_changed path also matches
             # semgrep_relevant above — otherwise the SAST job is
             # skipped and the audit never runs.
@@ -94,6 +99,7 @@ jobs:
               - '.github/scripts/semgrep-sarif*'
               - '.github/scripts/semgrep_sarif_*'
               - '.github/workflows/security.yml'
+              - '.github/workflows/semgrep-tripwire.yml'
               - '.github/workflows/muse-code-review.yml'
               - '.github/workflows/muse-review-selftest.yml'
 
@@ -172,7 +178,9 @@ jobs:
             exit 0
           fi
 
-          semgrep scan --config auto --sarif --output=semgrep.sarif "${changed_files[@]}"
+          # --error: bare `scan` exits 0 with findings; the gate below
+          # reads the step outcome, so findings must fail the step.
+          semgrep scan --error --config auto --sarif --output=semgrep.sarif "${changed_files[@]}"
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
@@ -182,7 +190,7 @@ jobs:
         if: github.event_name == 'push'
         id: semgrep_push
         run: |
-          semgrep scan --config auto --sarif --output=semgrep.sarif \
+          semgrep scan --error --config auto --sarif --output=semgrep.sarif \
             apps/web/src/app/api \
             apps/web/src/lib \
             apps/web/src/schemas \
@@ -243,7 +251,10 @@ jobs:
           TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
           # Advisory mode: trusted-only drift warns instead of
           # failing this required job. Real hardening drift still
-          # fails here; the tripwire below carries the loud signal.
+          # fails here; the tripwire workflow carries the loud
+          # signal. Inert on old base filters (unknown env is
+          # ignored), so enabling here before the base update is
+          # safe: worst case the job fails closed as before.
           TRUSTED_CHANGE_ADVISORY: 'true'
 
       - name: Verify SARIF exists
@@ -266,22 +277,6 @@ jobs:
       - name: Fail if Semgrep reported findings
         if: steps.verify-sarif.outputs.sarif_exists == 'true' && (steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure')
         run: exit 1
-
-  tripwire:
-    name: Trusted-change tripwire
-    needs: [changes]
-    # Advisory only: NEVER add this job to required status
-    # checks. It exists to turn red (and block nothing) when
-    # trusted files change, so the edit cannot slip past
-    # merger eyes. The required Semgrep SAST job above still
-    # fails on real findings and on hardening drift.
-    if: needs.changes.outputs.trusted_changed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Flag trusted-tree change for human review
-        run: |
-          echo "::error::Trusted files changed (.github/scripts/muse-review, semgrep-sarif-*, security/muse-code-review/muse-review-selftest workflows); a human must review this diff before merge."
-          exit 1
 
   secrets-scan:
     name: Secret Scanning

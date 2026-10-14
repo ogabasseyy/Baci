@@ -3,8 +3,10 @@ import calendar
 import datetime as dt
 import importlib.util
 import json
+import os
 import re
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -38,6 +40,89 @@ def _map_tool_names(row):
 
 
 class AgentAccessMapTests(unittest.TestCase):
+    def test_bare_cited_filenames_resolve_to_tracked_paths(self):
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+            git("init", "-q", ".")
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/agent-access-map.md").write_text("See `useFollowUpQueue.ts` for queue state and `spaced.ts` for spacing.")
+            (repo / "apps/x").mkdir(parents=True)
+            (repo / "apps/x/useFollowUpQueue.ts").write_text("export {};\n")
+            (repo / "apps/aardvark").mkdir(parents=True)
+            (repo / "apps/aardvark/useFollowUpQueue.ts").write_text("export {};\n")
+            (repo / "apps/with space").mkdir(parents=True)
+            (repo / "apps/with space/spaced.ts").write_text("export {};\n")
+            git("add", ".")
+            git("commit", "-q", "-m", "one")
+            previous = os.getcwd()
+            os.chdir(repo)
+            try:
+                citing = {"capabilities": []}
+                resolved, unresolved = gate._resolve_cited_filenames({"useFollowUpQueue.ts", "spaced.ts", "ghost.ts"})
+                self.assertEqual(resolved, {"apps/x/useFollowUpQueue.ts", "apps/aardvark/useFollowUpQueue.ts", "apps/with space/spaced.ts"})
+                self.assertEqual(unresolved, {"ghost.ts"})
+                relevant = gate.relevant_paths(citing)
+                self.assertIn("apps/x/useFollowUpQueue.ts", relevant)
+                self.assertIn("apps/aardvark/useFollowUpQueue.ts", relevant)
+                self.assertIn("apps/with space/spaced.ts", relevant)
+                self.assertNotIn("useFollowUpQueue.ts", relevant)
+                self.assertTrue(gate.should_run("base", citing, {"apps/x/useFollowUpQueue.ts"}))
+                self.assertTrue(gate.should_run("base", citing, {"apps/aardvark/useFollowUpQueue.ts"}))
+                self.assertTrue(gate.should_run("base", citing, {"apps/with space/spaced.ts"}))
+                # Same basename, different untracked path: no longer a "cited source".
+                self.assertFalse(gate.should_run("base", citing, {"apps/other/useFollowUpQueue.ts"}))
+            finally:
+                os.chdir(previous)
+
+    def test_base_union_keeps_deleted_citation_relevant(self):
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+            git("init", "-q", ".")
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/agent-access-map.md").write_text("See `same.ts` for shared state.")
+            (repo / "apps/a").mkdir(parents=True)
+            (repo / "apps/b").mkdir(parents=True)
+            (repo / "apps/a/same.ts").write_text("export {};\n")
+            (repo / "apps/b/same.ts").write_text("export {};\n")
+            git("add", ".")
+            git("commit", "-q", "-m", "one")
+            base = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            git("rm", "-q", "apps/b/same.ts")
+            git("commit", "-q", "-m", "drop duplicate")
+            # From outside the checkout: the map must still resolve via cwd.
+            citing = {"capabilities": []}
+            changed = gate.changed_paths(base, cwd=repo)
+            self.assertIn("apps/b/same.ts", changed)
+            self.assertFalse(gate.should_run(base, citing, changed),
+                             "map lookup from the process cwd must not see the fixture map")
+            self.assertTrue(gate.should_run(base, citing, changed, cwd=str(repo)),
+                            "base-tree union must keep the deleted citation relevant")
+            self.assertFalse(gate.should_run(None, citing, changed, cwd=str(repo)),
+                             "head-only resolution must not see the deleted path")
+
+    def test_action_only_change_runs_suite(self):
+        register = {"capabilities": []}
+        self.assertTrue(gate.should_run("base", register, {gate.ACTION_PATH}))
+
+    def test_noncanonical_citation_spelling_triggers_gate(self):
+        register = {"capabilities": [
+            {"status": "code_evidenced", "source_refs": ["./apps/web/src/lib/feeds.ts"]},
+            {"status": "unverified", "source_refs": ["./apps/web/src/app/(platform)/pricing/page.tsx"]},
+        ]}
+        self.assertTrue(gate.should_run("base", register, {"apps/web/src/lib/feeds.ts"}))
+        self.assertTrue(
+            gate._touches_unverified_refs(register, {"apps/web/src/app/(platform)/pricing/page.tsx"})
+        )
+        self.assertFalse(gate.should_run("base", register, {"apps/web/src/lib/other.ts"}))
+
     def test_agent_access_map_review_date_matches_register(self):
         # The map's human provenance note must agree with the enforced
         # register, or agents read a different review date than the lane uses.

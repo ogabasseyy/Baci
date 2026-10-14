@@ -40,7 +40,7 @@ jobs:
           title="Capability register outside its 14-day evidence window"
           existing=$(TITLE="$title" gh issue list --state open --limit 1000 --json title --jq '[.[] | select(.title == env.TITLE)] | length')
           if [ "$existing" = "0" ]; then
-            gh issue create --title "$title" --body "The scheduled capability-register freshness check failed: docs/product/baci-capabilities.json is outside its 14-day evidence window (or no longer binds to its cited evidence), so the VPS writer lane is in its fail-closed Register-unavailable fallback. Re-review the register claims against the cited sources, refresh reviewed_at/source_revision/evidence_digest/claims_digest per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
+            gh issue create --title "$title" --body "The scheduled capability-register freshness check failed: docs/product/baci-capabilities.json is outside its 14-day evidence window (or no longer binds to its cited evidence), so the VPS writer lane is in its fail-closed Register-unavailable fallback. Re-review the register claims against the cited sources, refresh reviewed_at/source_revision/evidence_digest/claims_digest per docs/product/capability-evidence-workflow.md, re-observe any stale production_evidence (verified_at/observation), and confirm this check passes again."
           fi
       - name: Open an issue when the register is invalid
         if: failure() && steps.window.outputs.status == 'broken' && github.event_name == 'schedule'

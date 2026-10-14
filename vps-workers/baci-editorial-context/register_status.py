@@ -23,6 +23,31 @@ def _moment(value):
     return moment
 
 
+def _evidence_state(evidence):
+    """fresh, stale, or broken for production evidence (runtime mirror)."""
+    if not isinstance(evidence, dict):
+        return "broken"
+    if any(not isinstance(evidence.get(key), str) or not evidence[key].strip() for key in ("workflow", "entitlement", "observation")):
+        return "broken"
+    deployed = evidence.get("deployed_revision", "")
+    if not isinstance(deployed, str) or not re.fullmatch(r"[a-f0-9]{40}", deployed):
+        return "broken"
+    if not isinstance(evidence.get("verified_at"), str):
+        return "broken"
+    try:
+        verified = dt.datetime.fromisoformat(evidence["verified_at"].replace("Z", "+00:00"))
+        if verified.tzinfo is None:
+            raise ValueError("naive verified_at")
+    except (ValueError, TypeError, AttributeError):
+        return "broken"
+    age = dt.datetime.now(dt.timezone.utc) - verified
+    if age < dt.timedelta():
+        return "broken"  # Future-dated: the runtime rejects it as invalid.
+    if age > dt.timedelta(days=14):
+        return "stale"  # Needs re-observation, like the register window.
+    return "fresh"
+
+
 def _valid_row(row):
     if not isinstance(row, dict):
         return False
@@ -35,18 +60,10 @@ def _valid_row(row):
         return False
     if any(not isinstance(ref, str) or not ref.strip() for ref in refs):
         return False
-    # Mirror the runtime: production_verified rows must carry evidence.
-    if row["status"] == "production_verified":
-        evidence = row.get("production_evidence")
-        if not isinstance(evidence, dict):
-            return False
-        if any(not isinstance(evidence.get(key), str) or not evidence[key].strip() for key in ("workflow", "entitlement", "observation")):
-            return False
-        deployed = evidence.get("deployed_revision", "")
-        if not isinstance(deployed, str) or not re.fullmatch(r"[a-f0-9]{40}", deployed):
-            return False
-        if not isinstance(evidence.get("verified_at"), str):
-            return False
+    # Mirror the runtime: production_verified rows must carry evidence, and
+    # structurally invalid evidence is broken (staleness is handled by classify).
+    if row["status"] == "production_verified" and _evidence_state(row.get("production_evidence")) == "broken":
+        return False
     return True
 
 
@@ -70,6 +87,12 @@ def classify(register_path):
             or len({row["id"] for row in data["capabilities"]}) != len(data["capabilities"])
         ):
             return "broken"
+        if any(
+            row.get("status") == "production_verified"
+            and _evidence_state(row.get("production_evidence")) == "stale"
+            for row in data["capabilities"]
+        ):
+            return "stale"  # Evidence needs re-observation, like the window.
         age = dt.datetime.now(dt.timezone.utc) - _moment(data["reviewed_at"])
         if age < dt.timedelta():
             return "broken"  # Future-dated: the runtime rejects it as invalid.

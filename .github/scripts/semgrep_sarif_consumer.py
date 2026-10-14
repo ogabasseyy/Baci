@@ -196,8 +196,8 @@ def audit_run_hygiene(ctx, drift, expect_checkout_uses=True):
                 drift.append("reviewer-unpinned-action")
         else:
             checkout_uses += 1
-    if expect_checkout_uses and checkout_uses != 2 \
-            and "reviewer-action-count" not in drift:
+    count_ok = (checkout_uses == 2) if expect_checkout_uses else (checkout_uses <= 1)
+    if not count_ok and "reviewer-action-count" not in drift:
         drift.append("reviewer-action-count")
     # (Reviewer env:-block poison scan lives in
     # semgrep_sarif_bashfunc, called from the filter entrypoint

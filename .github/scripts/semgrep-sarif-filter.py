@@ -56,10 +56,13 @@ def main():
                 if not (advisory and d == "trusted-tree-changed")]
 
     def run_hardening_audits(no_checkout=False):
-        # The no-checkout advisory path skips the two checkout-count
-        # assertions: a zero count there is the benign removal being
-        # downgraded, not hardening drift. Everything else still
-        # runs, so helper/runner weakening cannot smuggle past.
+        # The no-checkout advisory path skips the ref-count assertion
+        # (a zero count there is the benign removal) but the hygiene
+        # uses-count still applies with removal semantics: only full
+        # removal (at most the trusted step left) downgrades, since a
+        # still-present step without a resolvable ref cannot be
+        # guard/credential/shape-checked. Everything else runs, so
+        # helper/runner weakening cannot smuggle past.
         if not no_checkout:
             audit_pr_checkout(ctx, drift)
         audit_trusted_checkout(ctx, drift)

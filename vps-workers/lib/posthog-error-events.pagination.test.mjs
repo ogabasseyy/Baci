@@ -109,6 +109,19 @@ describe('PostHog remediation candidate pagination', () => {
     assert.equal(requests, 10);
   });
 
+  it('refuses a body that declares itself past the byte cap', async () => {
+    await assert.rejects(
+      fetchPostHogRemediationCandidates({
+        env: environment,
+        fetchFn: async () =>
+          new Response('{}', {
+            headers: { 'content-length': '1000001' },
+          }),
+      }),
+      /exceeded the 1000000-byte body cap/
+    );
+  });
+
   it('fails closed when a page exceeds the requested page size', async () => {
     await assert.rejects(
       fetchPostHogRemediationCandidates({

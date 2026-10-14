@@ -22,19 +22,21 @@ const safeTechnicalValue = (value, length) =>
     .trim();
 
 const framePath = (source) => {
-  const text = String(source || '').split(/[?#]/, 1)[0];
+  const text = String(source || '');
   let path = text;
   if (text.includes('://')) {
     // Absolute URLs may carry userinfo credentials: keep only the path so
     // neither credentials nor host flow into prompts and reports.
     try {
-      path = new URL(text).pathname || '';
+      path = new URL(text.split(/[?#]/, 1)[0]).pathname || '';
     } catch {
       return '';
     }
   }
-  // Decode escapes before redaction so encoded assignments cannot hide
-  // from secret patterns; malformed sequences fail closed.
+  // Decode before stripping delimiters so encoded query/fragment markers
+  // cannot smuggle metadata into the basename; decode before redaction so
+  // encoded assignments cannot hide from secret patterns. Malformed
+  // sequences fail closed.
   try {
     path = decodeURIComponent(path);
   } catch {
@@ -42,7 +44,7 @@ const framePath = (source) => {
   }
   // Absolute local paths may embed usernames and customer directories:
   // keep only the basename for every path shape.
-  const segments = path.split(/[\\/]/).filter(Boolean);
+  const segments = path.split(/[?#]/, 1)[0].split(/[\\/]/).filter(Boolean);
   return segments.length > 0 ? segments[segments.length - 1] : '';
 };
 

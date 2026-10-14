@@ -8,6 +8,7 @@ import {
 
 const PAGE_SIZE = 100;
 const HARD_MAXIMUM_PAGES = 10;
+const MAX_RESPONSE_BYTES = 1_000_000;
 
 const positiveInteger = (value, fallback) => {
   const parsed = Number(value);
@@ -176,6 +177,17 @@ export async function fetchPostHogRemediationCandidates({
       );
     }
 
+    // Refuse an obviously oversized body before parsing so a misbehaving
+    // endpoint cannot blow past the page bound in memory.
+    const contentLength = Number(response.headers.get('content-length'));
+    if (
+      Number.isSafeInteger(contentLength) &&
+      contentLength > MAX_RESPONSE_BYTES
+    ) {
+      throw new Error(
+        `PostHog error-tracking issues response exceeded the ${MAX_RESPONSE_BYTES}-byte body cap`
+      );
+    }
     let payload;
     try {
       payload = await response.json();

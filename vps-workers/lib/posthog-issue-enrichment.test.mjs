@@ -201,6 +201,19 @@ describe('PostHog remediation candidate enrichment', () => {
     assert.match(enriched.sample.route, /token/);
   });
 
+  it('strips encoded query delimiters after decoding', async () => {
+    const enriched = await enrichDetail({
+      top_in_app_frame: {
+        function: 'load',
+        source: 'app.js%3Fuser%3DAliceSmith%26account%3Dmerchant-123',
+      },
+    });
+
+    assert.equal(enriched.sample.route, 'app.js');
+    assert.equal(enriched.sample.route.includes('AliceSmith'), false);
+    assert.equal(enriched.sample.route.includes('merchant-123'), false);
+  });
+
   it('drops frame paths with malformed escapes', async () => {
     const enriched = await enrichDetail({
       top_in_app_frame: { function: 'load', source: 'https://x/%E0%A4%A.js' },

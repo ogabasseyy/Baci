@@ -45,7 +45,9 @@ function rateSetting(max: number, scale: number) {
 // and the redemption RPC treats a zero cap as program_unavailable.
 export const loyaltySettingsPostSchema = z.object({
   enabled: z.boolean().nullish(),
-  program_name: z.string().nullish(),
+  // loyalty_settings.program_name is varchar(100): an over-long name
+  // would 500 the upsert instead of failing validation.
+  program_name: z.string().max(100).nullish(),
   points_per_currency: rateSetting(99_999_999.99, 2),
   points_currency_unit: rateSetting(99_999_999.99, 2),
   signup_bonus_points: integerSetting,

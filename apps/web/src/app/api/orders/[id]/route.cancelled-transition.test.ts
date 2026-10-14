@@ -1,5 +1,3 @@
-import type { SupabaseClient, User } from '@supabase/supabase-js';
-import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/api-auth', () => ({
@@ -54,122 +52,22 @@ vi.mock('@/lib/shipping/order-shipment-booking-utils', () => ({
   OrderShipmentBookingError: class extends Error {},
 }));
 
-import {
-  authenticateApiRequest,
-  getMerchantIdForApiUser,
-} from '@/lib/api-auth';
-import { checkCsrfProtection } from '@/lib/csrf';
-import { ensurePaidOrderInventoryConfirmed } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
-import {
-  claimOrderShipmentBooking,
-  clearOrderShipmentBookingLock,
-} from '@/lib/shipping/order-shipment-booking-lock';
+import { authenticateApiRequest } from '@/lib/api-auth';
 import { PATCH } from './route';
-
-type ExistingOrder = {
-  id: string;
-  order_number: string;
-  shipping_status: string;
-  payment_status: string;
-  is_credit_order: boolean;
-  customer_id: string | null;
-  selected_quote_id: string | null;
-  shipping_provider: string | null;
-  tracking_number: string | null;
-  shipment_id: string | null;
-};
-
-type UpdatedOrder = {
-  id: string;
-  shipping_status: string;
-  shipping_provider: string | null;
-  tracking_number: string | null;
-};
-
-function createSelectBuilder<T>(result: { data: T | null; error: unknown }) {
-  const builder = {
-    eq: vi.fn(() => builder),
-    single: vi.fn().mockResolvedValue(result),
-  };
-  return builder;
-}
-
-function createUpdateBuilder<T>(result: { data: T | null; error: unknown }) {
-  const builder = {
-    eq: vi.fn(() => builder),
-    select: vi.fn(() => builder),
-    single: vi.fn().mockResolvedValue(result),
-  };
-  return builder;
-}
-
-function createSupabaseMock(
-  existingOrder: ExistingOrder,
-  updatedOrder: UpdatedOrder
-) {
-  const orderSelectBuilder = createSelectBuilder({
-    data: existingOrder,
-    error: null,
-  });
-  const orderUpdateBuilder = createUpdateBuilder({
-    data: updatedOrder,
-    error: null,
-  });
-  const ordersSelect = vi.fn(() => orderSelectBuilder);
-  const ordersUpdate = vi.fn(() => orderUpdateBuilder);
-  const supabase = {
-    from: vi.fn((table: string) => {
-      if (table === 'orders') {
-        return { select: ordersSelect, update: ordersUpdate };
-      }
-      if (table === 'customers') {
-        return {
-          select: vi.fn(() => createSelectBuilder({ data: null, error: null })),
-        };
-      }
-      throw new Error(`Unexpected table: ${table}`);
-    }),
-  };
-  return {
-    supabase: supabase as unknown as SupabaseClient,
-    ordersUpdate,
-  };
-}
-
-function createPatchRequest(body: Record<string, unknown>): NextRequest {
-  return {
-    json: async () => body,
-  } as NextRequest;
-}
-
-function createMockUser(): User {
-  return {
-    id: 'user-1',
-    app_metadata: {},
-    user_metadata: {},
-    aud: 'authenticated',
-    created_at: new Date().toISOString(),
-  } as User;
-}
+import {
+  createCancelledTransitionHarness,
+  createMockUser,
+  createPatchRequest,
+  setupCancelledTransitionMocks,
+} from './route.cancelled-transition.test-support';
 
 describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(checkCsrfProtection).mockResolvedValue({
-      valid: true,
-      response: undefined,
-    });
-    vi.mocked(getMerchantIdForApiUser).mockResolvedValue('merchant-1');
-    vi.mocked(ensurePaidOrderInventoryConfirmed).mockResolvedValue(undefined);
-    vi.mocked(claimOrderShipmentBooking).mockResolvedValue({
-      status: 'claimed',
-      lockToken: 'lock-1',
-    });
-    vi.mocked(clearOrderShipmentBookingLock).mockResolvedValue(undefined);
+    setupCancelledTransitionMocks();
   });
 
   it('rejects marking a payment-cancelled order as paid', async () => {
-    const { supabase, ordersUpdate } = createSupabaseMock(
+    const { supabase, ordersUpdate } = createCancelledTransitionHarness(
       {
         id: 'order-1',
         order_number: 'BACI-001',
@@ -208,7 +106,7 @@ describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
   });
 
   it('rejects moving a payment-cancelled order back to pending', async () => {
-    const { supabase, ordersUpdate } = createSupabaseMock(
+    const { supabase, ordersUpdate } = createCancelledTransitionHarness(
       {
         id: 'order-1',
         order_number: 'BACI-001',
@@ -247,7 +145,7 @@ describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
   });
 
   it('rejects moving a shipping-cancelled order back to pending', async () => {
-    const { supabase, ordersUpdate } = createSupabaseMock(
+    const { supabase, ordersUpdate } = createCancelledTransitionHarness(
       {
         id: 'order-1',
         order_number: 'BACI-001',
@@ -283,5 +181,58 @@ describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
       code: 'SHIPPING_CANCELLED_TERMINAL',
     });
     expect(ordersUpdate).not.toHaveBeenCalled();
+  });
+
+  it('attaches terminal-state predicates to the update itself', async () => {
+    const { supabase, orderUpdateBuilder } = createCancelledTransitionHarness(
+      {
+        id: 'order-1',
+        order_number: 'BACI-001',
+        shipping_status: 'pending',
+        payment_status: 'pending',
+        is_credit_order: false,
+        customer_id: null,
+        selected_quote_id: null,
+        shipping_provider: null,
+        tracking_number: null,
+        shipment_id: null,
+      },
+      {
+        id: 'order-1',
+        shipping_status: 'pending',
+        shipping_provider: null,
+        tracking_number: null,
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+
+    const response = await PATCH(
+      createPatchRequest({ notes: 'Customer called' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    // The guard is atomic with the write: a cancellation committing
+    // after the status read matches zero rows instead of resurrecting.
+    expect(orderUpdateBuilder.neq).toHaveBeenCalledWith(
+      'payment_status',
+      'cancelled'
+    );
+    expect(orderUpdateBuilder.neq).toHaveBeenCalledWith(
+      'payment_status',
+      'canceled'
+    );
+    expect(orderUpdateBuilder.neq).toHaveBeenCalledWith(
+      'shipping_status',
+      'cancelled'
+    );
+    expect(orderUpdateBuilder.neq).toHaveBeenCalledWith(
+      'shipping_status',
+      'canceled'
+    );
   });
 });

@@ -5,7 +5,7 @@
 
 import {
   formatAmountInCurrency,
-  formatMerchantCurrency,
+  formatPayoutOnlyCurrency,
 } from '@/lib/resolve-merchant-currency';
 
 export interface RedemptionRewardSummary {
@@ -73,7 +73,7 @@ export function getRedemptionInstructions(
       // in the merchant's own payout currency (NGN fallback matches the
       // previous hardcoded symbol when the merchant row is simply absent).
       return withCapNote(
-        `Apply this code at checkout to receive ${formatMerchantCurrency(
+        `Apply this code at checkout to receive ${formatPayoutOnlyCurrency(
           reward.discount_value ?? 0,
           {
             country: merchantCurrency.country ?? null,

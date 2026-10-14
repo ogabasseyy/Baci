@@ -13,6 +13,14 @@ export interface CancelledTransitionRejection {
   code: 'PAYMENT_CANCELLED_TERMINAL' | 'SHIPPING_CANCELLED_TERMINAL';
 }
 
+/** Column/value pairs spelling "cancelled" in either status axis. */
+export const CANCELLED_STATUS_SPELLINGS = [
+  ['payment_status', 'cancelled'],
+  ['payment_status', 'canceled'],
+  ['shipping_status', 'cancelled'],
+  ['shipping_status', 'canceled'],
+] as const;
+
 function isCancelledStatus(value: string | null | undefined): boolean {
   return value === 'cancelled' || value === 'canceled';
 }

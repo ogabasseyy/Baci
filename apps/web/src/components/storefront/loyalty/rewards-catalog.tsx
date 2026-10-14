@@ -13,7 +13,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { useLoyalty } from '@/hooks/use-loyalty';
 import { useToast } from '@/hooks/use-toast';
-import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
+import { formatPayoutOnlyCurrency } from '@/lib/resolve-merchant-currency';
 import {
   RedemptionSuccessDialog,
   type RedemptionSuccessResult,
@@ -129,7 +129,7 @@ export function RewardsCatalog({
             : (reward.discount_value ?? 0);
         return `${effective}% Off`;
       }
-      const formattedValue = formatMerchantCurrency(
+      const formattedValue = formatPayoutOnlyCurrency(
         reward.discount_value ?? 0,
         { country: merchantCountry, payout_currency: merchantPayoutCurrency },
         { maximumFractionDigits: 0 }
@@ -145,7 +145,7 @@ export function RewardsCatalog({
     if (reward.reward_type === 'store_credit') {
       // Up to 2 fraction digits: the RPC credits the exact value (e.g.
       // USD 5.50), so rounding to $6 would advertise money never paid.
-      const formattedValue = formatMerchantCurrency(
+      const formattedValue = formatPayoutOnlyCurrency(
         reward.discount_value ?? 0,
         { country: merchantCountry, payout_currency: merchantPayoutCurrency },
         // Explicit minimum: the shared normalizer would otherwise pin
@@ -260,7 +260,7 @@ export function RewardsCatalog({
                     reward.reward_type === 'discount' && (
                       <p className="text-xs text-muted-foreground mb-3">
                         Min. order{' '}
-                        {formatMerchantCurrency(
+                        {formatPayoutOnlyCurrency(
                           reward.minimum_order_amount ?? 0,
                           {
                             country: merchantCountry,

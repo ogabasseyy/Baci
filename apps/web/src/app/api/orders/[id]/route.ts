@@ -26,7 +26,10 @@ import {
 } from '@/lib/shipping/order-shipment-booking-utils';
 import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { orderUpdateSchema } from '@/schemas/orders';
-import { evaluateOrderCancelledTransition } from './evaluate-order-cancelled-transition';
+import {
+  CANCELLED_STATUS_SPELLINGS,
+  evaluateOrderCancelledTransition,
+} from './evaluate-order-cancelled-transition';
 import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
 
 function isPaidStatusUpdate(value: unknown): value is 'paid' | 'bnpl_approved' {
@@ -191,6 +194,26 @@ export async function PATCH(
       return NextResponse.json(cancelledRejection, { status: 409 });
     }
 
+    // A conditional update that matched zero rows (PGRST116) may mean
+    // a cancellation committed between the read above and the write:
+    // re-read the statuses and let the same policy answer, so the race
+    // surfaces as the terminal 409 instead of a generic 500.
+    const racedCancellationRejection = async () => {
+      const { data: freshOrder } = await supabase
+        .from('orders')
+        .select('payment_status, shipping_status')
+        .eq('id', id)
+        .eq('merchant_id', merchantId)
+        .single();
+      if (!freshOrder) return null;
+      return evaluateOrderCancelledTransition({
+        existingPaymentStatus: freshOrder.payment_status,
+        existingShippingStatus: freshOrder.shipping_status,
+        requestedPaymentStatus: payment_status,
+        requestedShippingStatus: shipping_status,
+      });
+    };
+
     // Validate: Cannot move to 'processing' unless paid or is_credit_order
     if (
       shipping_status === 'processing' &&
@@ -310,15 +333,30 @@ export async function PATCH(
 
     if (needsPreUpdateInventoryConfirmation) {
       const paidStatus = updates.payment_status;
-      const { error: paidUpdateError } = await supabase
+      // Atomic with the write: the terminal-state predicates ride on
+      // the UPDATE itself, so a cancellation that commits after the
+      // read above cannot be resurrected by this write (zero rows
+      // match instead of a stale-status update landing).
+      let paidUpdateQuery = supabase
         .from('orders')
         .update({ payment_status: paidStatus })
         .eq('id', id)
-        .eq('merchant_id', merchantId)
+        .eq('merchant_id', merchantId);
+      for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
+        paidUpdateQuery = paidUpdateQuery.neq(column, spelling);
+      }
+      const { error: paidUpdateError } = await paidUpdateQuery
         .select('id')
         .single();
 
       if (paidUpdateError) {
+        const racedRejection =
+          paidUpdateError.code === 'PGRST116'
+            ? await racedCancellationRejection()
+            : null;
+        if (racedRejection) {
+          return NextResponse.json(racedRejection, { status: 409 });
+        }
         logger.error({
           message:
             'PATCH orders/[id] failed to persist paid status before inventory confirmation',
@@ -463,12 +501,17 @@ export async function PATCH(
       );
     }
 
-    // Update order
+    // Update order. Terminal-state predicates ride on the UPDATE (see
+    // the pre-update note): a cancellation racing this write matches
+    // zero rows instead of being overwritten back to an active state.
     let updateQuery = supabase
       .from('orders')
       .update(updates)
       .eq('id', id)
       .eq('merchant_id', merchantId);
+    for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
+      updateQuery = updateQuery.neq(column, spelling);
+    }
 
     if (shipmentBookingLockToken) {
       updateQuery = updateQuery.eq(
@@ -519,6 +562,13 @@ export async function PATCH(
             transactionId: null,
           });
         }
+      }
+      const racedRejection =
+        updateError.code === 'PGRST116'
+          ? await racedCancellationRejection()
+          : null;
+      if (racedRejection) {
+        return NextResponse.json(racedRejection, { status: 409 });
       }
       const mappedUpdateError = mapOrderPatchUpdateError(updateError);
       if (mappedUpdateError) {

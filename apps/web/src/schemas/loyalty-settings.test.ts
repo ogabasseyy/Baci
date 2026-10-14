@@ -148,6 +148,17 @@ describe('loyaltySettingsPostSchema', () => {
     ).toBe(false);
   });
 
+  it('bounds program_name to the varchar(100) column', () => {
+    expect(
+      loyaltySettingsPostSchema.safeParse({ program_name: 'x'.repeat(100) })
+        .success
+    ).toBe(true);
+    expect(
+      loyaltySettingsPostSchema.safeParse({ program_name: 'x'.repeat(101) })
+        .success
+    ).toBe(false);
+  });
+
   it('rejects non-object bodies', () => {
     for (const body of [null, [], 'settings']) {
       expect(loyaltySettingsPostSchema.safeParse(body).success).toBe(false);

@@ -55,7 +55,9 @@ describe('resolveConcurrentFailedVtuTransaction', () => {
     });
     expect(result).toEqual({
       amount: 1000,
-      error: 'vend failed',
+      // Unflagged persisted text flattens to the fixed message
+      // (Codex R89 P1) — pre-flag rows are provider-authored.
+      error: 'Utility purchase failed. Please try again.',
       reference: 'VTU-1',
       refundedToWallet: 1000,
       status: 'failed',
@@ -79,7 +81,36 @@ describe('resolveConcurrentFailedVtuTransaction', () => {
     expect(update).not.toHaveBeenCalled();
     expect(result).toEqual({
       amount: 1000,
-      error: 'vend failed',
+      // Unflagged persisted text flattens to the fixed message
+      // (Codex R89 P1) — pre-flag rows are provider-authored.
+      error: 'Utility purchase failed. Please try again.',
+      reference: 'VTU-1',
+      status: 'failed',
+    });
+  });
+
+  it('returns flagged first-party text verbatim', async () => {
+    const { supabase } = mockSupabase(null);
+    const issueRefund = vi.fn(async () => ({
+      metadataChanged: false,
+      refundIssued: true,
+      refundedAmount: 0,
+    }));
+
+    const result = await resolveConcurrentFailedVtuTransaction({
+      issueRefund,
+      row: {
+        ...ROW,
+        error_message:
+          'Duplicate checkout request discarded; no charge was made.',
+        metadata: { customerSafeErrorMessage: true, walletDebited: true },
+      },
+      supabase,
+    });
+
+    expect(result).toEqual({
+      amount: 1000,
+      error: 'Duplicate checkout request discarded; no charge was made.',
       reference: 'VTU-1',
       status: 'failed',
     });

@@ -123,6 +123,9 @@ describe('cleanupOrphanVtuTransactionAfterKeyRace', () => {
     expect(updateCalls[0]).toEqual({
       error_message: VTU_ORPHAN_DISCARD_MESSAGE,
       metadata: {
+        // First-party fixed copy: flagged safe so replays keep it
+        // verbatim under the R89 P1 provenance rule.
+        customerSafeErrorMessage: true,
         provider: 'kuda',
         refundSkipped: VTU_REFUND_SKIPPED_NO_COLLECTION,
       },

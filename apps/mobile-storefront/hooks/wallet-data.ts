@@ -71,7 +71,79 @@ function getEmptyWalletData(loyaltyPoints: unknown = 0): WalletQueryData {
   };
 }
 
-export async function fetchWalletData(
+export function fetchWalletData(
+  customerId: string | null,
+  merchantId: string,
+  userId: string | null
+): Promise<WalletQueryData> {
+  return fetchWalletDataWithDeadline(customerId, merchantId, userId);
+}
+
+/**
+ * Whole-load deadline for the mobile wallet query (Codex R93 P2).
+ * The load is several sequential Supabase round-trips with no
+ * overall bound; a stalled request left `useWallet` loading
+ * forever, and the (mandatory) purchase gate rejects every attempt
+ * while loading — remounts re-observe the same pending query, so
+ * purchases brick until the process restarts. The race settles the
+ * query (success or a retryable error the gate surfaces with Try
+ * Again) within the timeout, and honors TanStack cancellation so
+ * unmounts don't linger. In-flight Supabase requests are not
+ * wire-cancelled — their late results are dropped.
+ */
+export const WALLET_LOAD_TIMEOUT_MS = 30_000;
+
+export function fetchWalletDataWithDeadline(
+  customerId: string | null,
+  merchantId: string,
+  userId: string | null,
+  signal?: AbortSignal
+): Promise<WalletQueryData> {
+  return new Promise<WalletQueryData>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error('Wallet load timed out'));
+    }, WALLET_LOAD_TIMEOUT_MS);
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(
+        signal?.reason instanceof Error
+          ? signal.reason
+          : new Error('Wallet load aborted')
+      );
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    signal?.addEventListener('abort', onAbort, { once: true });
+    fetchWalletDataInner(customerId, merchantId, userId).then(
+      (data) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(data);
+      },
+      (error) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(error);
+      }
+    );
+  });
+}
+
+async function fetchWalletDataInner(
   customerId: string | null,
   merchantId: string,
   userId: string | null

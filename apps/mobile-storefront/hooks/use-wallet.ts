@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { createWalletFundingAccount } from '@/lib/wallet-funding-account';
 import { useAuthStore } from '@/stores/auth-store';
-import { fetchWalletData } from './wallet-data';
+import { fetchWalletDataWithDeadline } from './wallet-data';
 import { walletKeys } from './wallet-query';
 
 export { useRedeemPoints } from './use-redeem-points';
@@ -92,8 +92,13 @@ export function useWallet(options: UseWalletOptions = {}) {
     refetch,
   } = useQuery({
     queryKey: walletQueryKey,
-    queryFn: () =>
-      fetchWalletData(customer?.id ?? null, activeMerchantId, user?.id ?? null),
+    queryFn: ({ signal }) =>
+      fetchWalletDataWithDeadline(
+        customer?.id ?? null,
+        activeMerchantId,
+        user?.id ?? null,
+        signal
+      ),
     enabled: !!walletOwnerId && !!activeMerchantId && identityAgreed,
     staleTime: cachePolicy.staleTime,
     gcTime: cachePolicy.gcTime,

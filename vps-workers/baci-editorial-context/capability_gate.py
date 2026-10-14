@@ -147,7 +147,27 @@ def freshness_required(register, changed):
     return _touches_unverified_refs(register, changed)
 
 
-def requires_register_update(register, changed):
+def _reviewed_moment(register):
+    moment = dt.datetime.fromisoformat(str(register["reviewed_at"]).replace("Z", "+00:00"))
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=dt.timezone.utc)
+    return moment
+
+
+def _base_register(base):
+    probe = subprocess.run(
+        ["git", "show", f"{base}:{REGISTER_PATH}"],
+        capture_output=True, text=True,
+    )
+    if probe.returncode != 0:
+        return None
+    try:
+        return json.loads(probe.stdout)
+    except ValueError:
+        return None
+
+
+def requires_register_update(register, changed, base_register=None):
     """A fresh register whose unverified sources changed needs re-review.
 
     Freshness alone cannot catch this: the register is still inside its
@@ -155,14 +175,26 @@ def requires_register_update(register, changed):
     and provenance ignores them too. A change to an unverified cited source
     (e.g. the pricing page gaining wholesale support) can therefore leave a
     stale "not established by this audit" claim reaching writers with every
-    check green. The same change must re-review the register in the same PR.
+    check green. The same change must re-review the register in the same PR:
+    a path touch alone (whitespace-only edit) does not count — reviewed_at
+    must advance past the base revision's. When the base register cannot be
+    loaded, the path touch is the only available signal and is accepted.
     Unknown inputs fail closed elsewhere; here there is nothing to enforce.
     """
     if changed is None or register is None:
         return False
-    if REGISTER_PATH in changed or _register_stale(register):
+    if _register_stale(register):
         return False
-    return _touches_unverified_refs(register, changed)
+    if not _touches_unverified_refs(register, changed):
+        return False
+    if REGISTER_PATH not in changed:
+        return True
+    if base_register is None:
+        return False
+    try:
+        return _reviewed_moment(register) <= _reviewed_moment(base_register)
+    except (KeyError, TypeError, ValueError):
+        return True
 
 
 def should_run(base, register, changed):
@@ -183,7 +215,8 @@ def main():
         except (OSError, ValueError):
             register = None  # Broken register: run the suite for its diagnosis.
         changed = changed_paths(base)
-        if requires_register_update(register, changed):
+        base_register = _base_register(base) if (register is not None and changed) else None
+        if requires_register_update(register, changed, base_register):
             print(
                 "unverified capability sources changed without a register re-review; "
                 f"update {REGISTER_PATH} (reviewed_at + digests) in this change"

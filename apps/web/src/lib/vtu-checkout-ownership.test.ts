@@ -54,7 +54,11 @@ describe('resolveRequestingOwnership', () => {
       merchantId: 'merchant-1',
     });
     expect(from).toHaveBeenCalledWith('merchants');
+    // Codex R86 P1: replay ownership resolution is read-only —
+    // linking here would write customers.user_id before the guards
+    // reject a mismatched replay.
     expect(mockResolveVtuCustomer).toHaveBeenCalledWith({
+      linkEmailMatch: false,
       merchantId: 'merchant-1',
       strictLookups: true,
       supabase,

@@ -7,8 +7,12 @@ import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fa
  * Merchant + customer owned by the authed user under the slug. Null =
  * genuine not-found/mismatch (400); lookup ERRORS throw (500, key
  * kept). Merchant id backs the replay storefront check (the
- * fingerprint omits merchant binding). Extracted from the
- * wallet-only checkout route per the Boy Scout Rule.
+ * fingerprint omits merchant binding). Read-only: customer resolution
+ * runs BEFORE the replay guards, so it must not link (a mismatched
+ * replay would otherwise write customers.user_id before rejection);
+ * email-linking is reserved for the fresh path inside prepare (Codex
+ * R86 P1). Extracted from the wallet-only checkout route per the Boy
+ * Scout Rule.
  */
 export async function resolveRequestingOwnership(
   supabase: SupabaseClient,
@@ -35,6 +39,7 @@ export async function resolveRequestingOwnership(
   const customer = await resolveVtuCustomer({
     supabase,
     merchantId: merchant.id as string,
+    linkEmailMatch: false,
     strictLookups: true,
     user,
   });

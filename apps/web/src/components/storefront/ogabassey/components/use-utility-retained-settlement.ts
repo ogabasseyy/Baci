@@ -8,7 +8,7 @@ import {
   listNotedPendingVtuReferences,
   markSettledPendingVtuByReference,
 } from './utility-pending-idempotency';
-import { parseUtilityVoucherBackfill } from './use-utility-voucher-backfill';
+import { parseUtilityVoucherBackfill } from './utility-voucher-backfill-model';
 
 /**
  * In-flight settlement pass, if any. Submit paths branch on

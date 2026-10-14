@@ -112,6 +112,34 @@ describe('resolveVtuCustomer', () => {
     expect(customerUpdateIs).toHaveBeenCalledWith('user_id', null);
   });
 
+  it('returns an unlinked email match without linking in read-only mode', async () => {
+    // Codex R86 P1: the replay path resolves ownership BEFORE the
+    // guards run, so linking there would cause a privileged
+    // customers.user_id write before a mismatched replay is
+    // rejected. Read-only mode returns the row as-is (the guard
+    // compares ids; linking is reserved for the fresh path).
+    const { customerUpdate, supabase } = createResolveCustomerSupabase({
+      byEmail: {
+        ...linkedCustomer,
+        user_id: null,
+      },
+    });
+
+    const customer = await resolveVtuCustomer({
+      linkEmailMatch: false,
+      merchantId: 'merchant-1',
+      supabase,
+      user: {
+        email: 'customer@example.com',
+        id: 'user-1',
+      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
+    });
+
+    expect(customer?.id).toBe('customer-1');
+    expect(customer?.user_id).toBeNull();
+    expect(customerUpdate).not.toHaveBeenCalled();
+  });
+
   it('does not relink an email-matched customer that already has a user_id', async () => {
     const { customerUpdate, supabase } = createResolveCustomerSupabase({
       byEmail: linkedCustomer,

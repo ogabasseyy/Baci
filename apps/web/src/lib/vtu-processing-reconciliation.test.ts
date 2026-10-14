@@ -91,7 +91,7 @@ describe('reconcileProcessingVtuTransactions', () => {
       head: true,
     });
     expect(countQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null))))'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))'
     );
     expect(countQuery.in).toHaveBeenCalledWith('type', [
       'airtime',
@@ -107,7 +107,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     expect(countQuery.limit).toHaveBeenCalledWith(1);
     expect(dataQuery.select).toHaveBeenCalledWith('id');
     expect(dataQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null))))'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))'
     );
     expect(dataQuery.lte).toHaveBeenCalledWith(
       'created_at',
@@ -176,7 +176,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     const expectedFilter =
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null))))';
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))';
     expect(countQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(dataQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({
@@ -210,7 +210,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     const orCalls = dataQuery.or.mock.calls as unknown as [string][];
     const filter = orCalls[0]?.[0] as string;
     expect(filter).toContain(
-      'and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null))))'
+      'and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))'
     );
     // Codex R82 P1: `->>` extracts TEXT, and `IS [NOT] TRUE` on text
     // is a Postgres type error that 500s the cron queries — boolean
@@ -259,6 +259,45 @@ describe('reconcileProcessingVtuTransactions', () => {
     expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({
       supabase,
       transactionId: 'tx-loyalty',
+    });
+    expect(result.successful).toBe(1);
+  });
+
+  it('selects successful rows with a failed receipt email for re-drive', async () => {
+    // Codex R86 P2: a ZeptoMail failure after a successful vend is
+    // recorded (sent=false, claim cleared) but fulfillment still
+    // returns success, so clients discard the key — with wallet
+    // credits and loyalty settled, no existing arm reselects the row
+    // and the receipt/token-ready email is never retried. The email
+    // arm reselects successes with a RECORDED failure (eq.false, so
+    // never-attempted rows stay excluded and cannot churn); the
+    // claim RPC serializes concurrent re-drives, and
+    // resolveSuccessful re-runs the notifier on the settle-only
+    // path, so re-driving is safe.
+    const countQuery = createProcessingQuery({ count: 1 });
+    const dataQuery = createProcessingQuery({ data: [{ id: 'tx-email' }] });
+    const supabase = createSupabase({ countQuery, dataQuery });
+    fulfillPendingVtuTransactionMock.mockResolvedValueOnce({
+      status: 'successful',
+    });
+
+    const result = await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
+      limit: 1,
+      now: new Date('2026-05-07T21:14:00.000Z'),
+      supabase: supabase as never,
+    });
+
+    const orCalls = dataQuery.or.mock.calls as unknown as [string][];
+    const filter = orCalls[0]?.[0] as string;
+    expect(filter).toContain(
+      'and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))'
+    );
+    expect(filter).not.toMatch(/->>[a-zA-Z0-9_]+(\.not)?\.is\.(true|false)/);
+    expect(countQuery.or).toHaveBeenCalledWith(filter);
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({
+      supabase,
+      transactionId: 'tx-email',
     });
     expect(result.successful).toBe(1);
   });

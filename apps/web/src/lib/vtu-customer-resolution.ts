@@ -13,9 +13,16 @@ export interface CustomerRecord {
 
 /**
  * Resolves the merchant customer row for an auth user: exact match on
- * `user_id`, else an unlinked email match (linked on the spot), else
- * null. An email match linked to a DIFFERENT auth user returns null
- * (tenant isolation — every caller fails closed).
+ * `user_id`, else an unlinked email match (linked on the spot unless
+ * `linkEmailMatch` is false), else null. An email match linked to a
+ * DIFFERENT auth user returns null (tenant isolation — every caller
+ * fails closed).
+ *
+ * Read-only mode exists for pre-guard resolution (the replay path
+ * resolves ownership BEFORE the customer/merchant/fingerprint guards
+ * run): linking there would write customers.user_id before a
+ * mismatched replay is rejected. The unlinked row is returned as-is
+ * so the guard can still compare ids (Codex R86 P1).
  *
  * Extracted from `vtu-pending-transaction.ts` per the 300-line Boy
  * Scout Rule (Codex R63 6ruGlr); the preparation module re-exports
@@ -24,11 +31,17 @@ export interface CustomerRecord {
 export async function resolveVtuCustomer({
   supabase,
   merchantId,
+  linkEmailMatch = true,
   strictLookups = false,
   user,
 }: {
   supabase: SupabaseClient;
   merchantId: string;
+  /**
+   * Link an unlinked email match on the spot. False = read-only:
+   * return the row unlinked (pre-guard replay resolution).
+   */
+  linkEmailMatch?: boolean;
   /** Strict policy (see vtu-strict-lookups): throw instead of null. */
   strictLookups?: boolean;
   user: User;
@@ -66,6 +79,9 @@ export async function resolveVtuCustomer({
   });
 
   if (byEmail && !byEmail.user_id) {
+    if (!linkEmailMatch) {
+      return byEmail as CustomerRecord;
+    }
     return linkVtuCustomerByEmail({
       byEmail,
       strictLookups,

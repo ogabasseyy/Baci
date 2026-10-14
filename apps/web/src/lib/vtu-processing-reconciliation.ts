@@ -42,13 +42,20 @@ const RECONCILABLE_VTU_TYPES = [
 // are airtime with a linked customer and points-earning cashback
 // (earned = floor(cashback/3) > 0 ⟺ cashback >= 3) lacking the
 // loyaltyPointsAwarded marker; the award RPC is idempotent
-// (already_awarded) and resolveSuccessful re-runs it. Absent flags
-// match too, via an explicit null arm: `->>` extracts TEXT, and
-// `IS NOT TRUE` on text is a Postgres type error that would 500
-// the whole cron (Codex R82 P1) — boolean intent must be
-// `neq.true` + `is.null`.
+// (already_awarded) and resolveSuccessful re-runs it. The email arm
+// (Codex R86 P2) covers the notifier sibling: a ZeptoMail failure is
+// recorded (sent=false, claim cleared) while fulfillment still
+// returns success, so clients discard the key and the receipt or
+// token-ready email is never retried. Only RECORDED failures match
+// (`eq.false` on the receipt, token-ready, or legacy sent keys —
+// never-attempted rows stay excluded); the email-claim RPC
+// serializes concurrent re-drives. Absent flags match too, via an
+// explicit null arm: `->>` extracts TEXT, and `IS NOT TRUE` on text
+// is a Postgres type error that would 500 the whole cron (Codex R82
+// P1) — boolean intent must be `neq.true` + `is.null` (text
+// equality like `eq.false` is type-safe).
 const RECONCILABLE_STATUS_FILTER =
-  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null))))';
+  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))';
 const DEFAULT_RECONCILIATION_LIMIT = 25;
 const MAX_RECONCILIATION_LIMIT = 50;
 const MIN_PROCESSING_AGE_MS = 45_000;

@@ -29,6 +29,19 @@ export interface FlaggedReferenceLessRowCandidate {
 export const VTU_SUBMISSION_MARKER_ERA_KEY = 'submissionMarkerEra';
 
 /**
+ * Marker-era metadata stamp for freshly prepared rows. Its presence
+ * proves marker-aware code prepared this row, which is what lets the
+ * reconciler re-drive a stale debited row whose submission marker
+ * never landed. Unconditional — every source and provider — so the
+ * unsubmitted proof never needs a deploy-coupled date cutoff (Codex
+ * R55 6rrU6H). Lives next to the key and its proof predicates so the
+ * preparation module doesn't own recovery metadata (Codex R86 P1).
+ */
+export function buildVtuSubmissionMarkerEraMetadata(): Record<string, true> {
+  return { [VTU_SUBMISSION_MARKER_ERA_KEY]: true };
+}
+
+/**
  * True for a processing row the reconciliation claim declines (no
  * provider reference or message) that PROVABLY moved money: fulfill
  * persists metadata.walletDebited only after the wallet debit RPC

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildVtuSubmissionMarkerEraMetadata,
   isFlaggedReferenceLessVtuRow,
   isMarkedUnsubmittedMonnifyVtuRow,
   isUnsubmittedPreparedVtuRow,
@@ -345,5 +346,16 @@ describe('isMarkedUnsubmittedMonnifyVtuRow', () => {
         },
       })
     ).toBe(false);
+  });
+});
+
+describe('buildVtuSubmissionMarkerEraMetadata', () => {
+  it('stamps the marker-era flag every prepare unconditionally', () => {
+    // Codex R86 P1: the preparation module no longer owns recovery
+    // metadata — the stamp lives next to the key and its proof
+    // predicates.
+    expect(buildVtuSubmissionMarkerEraMetadata()).toEqual({
+      [VTU_SUBMISSION_MARKER_ERA_KEY]: true,
+    });
   });
 });

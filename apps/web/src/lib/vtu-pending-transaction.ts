@@ -22,7 +22,7 @@ export { resolveVtuCustomer };
 
 import { calculateCommerce } from '@/lib/supabase/client';
 import { resolveVtuProvider } from '@/lib/vtu-commission-rates';
-import { VTU_SUBMISSION_MARKER_ERA_KEY } from '@/lib/vtu-flagged-recovery';
+import { buildVtuSubmissionMarkerEraMetadata } from '@/lib/vtu-flagged-recovery';
 import { resolveVtuMerchant } from '@/lib/vtu-merchant-lookup';
 import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
 import type { Biller, BillerProduct } from '@/schemas/monnify-bills-schema';
@@ -778,13 +778,7 @@ export async function preparePendingVtuTransaction({
       customer_name: monnifyCustomerName,
       metadata: {
         provider: resolvedProvider,
-        // Marker-era flag (see VTU_SUBMISSION_MARKER_ERA_KEY): its
-        // presence proves marker-aware code prepared this row, which
-        // is what lets the reconciler re-drive a stale debited row
-        // whose submission marker never landed. Unconditional — every
-        // source and provider — so the unsubmitted proof never needs
-        // a deploy-coupled date cutoff (Codex R55 6rrU6H).
-        [VTU_SUBMISSION_MARKER_ERA_KEY]: true,
+        ...buildVtuSubmissionMarkerEraMetadata(),
         ...(resolvedProvider === 'monnify'
           ? {
               billerCode: monnifyBillerCode,

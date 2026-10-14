@@ -178,8 +178,7 @@ jobs:
             exit 0
           fi
 
-          # --error: bare `scan` exits 0 with findings; the gate below
-          # reads the step outcome, so findings must fail the step.
+          # --error: bare scan exits 0 with findings; the gate reads the outcome.
           semgrep scan --error --config auto --sarif --output=semgrep.sarif "${changed_files[@]}"
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -249,12 +248,10 @@ jobs:
           python3 "${filter_dir}/semgrep-sarif-filter.py"
         env:
           TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
-          # Advisory mode: trusted-only drift warns instead of
-          # failing this required job. Real hardening drift still
-          # fails here; the tripwire workflow carries the loud
-          # signal. Inert on old base filters (unknown env is
-          # ignored), so enabling here before the base update is
-          # safe: worst case the job fails closed as before.
+          # Advisory mode: trusted-only drift warns instead of failing
+          # this required job (hardening drift still fails; tripwire
+          # workflow carries the loud signal). Inert on old base
+          # filters, so enabling here fails closed as before.
           TRUSTED_CHANGE_ADVISORY: 'true'
 
       - name: Verify SARIF exists
@@ -274,8 +271,10 @@ jobs:
         with:
           sarif_file: semgrep.sarif
 
-      - name: Fail if Semgrep reported findings
-        if: steps.verify-sarif.outputs.sarif_exists == 'true' && (steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure')
+      # Fail-closed on scanner errors too (a crash with no SARIF must not
+      # report green); the zero-changed-files exit counts as success.
+      - name: Fail on Semgrep findings or scanner errors
+        if: steps.semgrep_pr.outcome == 'failure' || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure'
         run: exit 1
 
   secrets-scan:

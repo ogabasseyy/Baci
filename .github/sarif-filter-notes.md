@@ -33,11 +33,10 @@ Invocation-ownership residual (accepted, post-merge follow-up): this
 delete this step, force the `TRUSTED_CHANGED` signal, or point `filter_dir`
 at the head copy before the base auditor runs. The same residual covers
 the tripwire workflow and the `TRUSTED_CHANGE_ADVISORY` env flag — all
-PR-controlled signal, none of it enforcement. The backstop is human:
-`.github/CODEOWNERS` auto-requests `@ogabasseyy` on any `.github/**` diff,
-so weakening the ~15-line invocation is a loud diff to the owner — but
-full enforcement (require code-owner review, required SAST/selftest
-checks) is a repo-settings step for the owner post-merge, tracked in
-issue #3622, while the ~5k-line auditor (unreviewable per-PR) stays
-base-pinned. A base-owned `pull_request_target` gate would close even
-the loud vector; tracked post-merge.
+PR-controlled signal, none of it enforcement. The backstop is human and
+blocking: branch protection requires code-owner review, and
+`.github/CODEOWNERS` names `@ogabasseyy` on any `.github/**` diff, so
+neutering the signal is a loud diff the owner must approve — but a
+base-owned `pull_request_target` gate would close even the loud vector
+(social-engineering the owner); tracked in issue #3622, while the
+~5k-line auditor (unreviewable per-PR) stays base-pinned.

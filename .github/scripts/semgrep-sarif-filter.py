@@ -55,8 +55,13 @@ def main():
         return [d for d in drift
                 if not (advisory and d == "trusted-tree-changed")]
 
-    def run_hardening_audits():
-        audit_pr_checkout(ctx, drift)
+    def run_hardening_audits(include_checkout_count=True):
+        # The no-checkout advisory path skips the count audit: a
+        # count of zero there is the benign removal being
+        # downgraded, not hardening drift. Everything else still
+        # runs, so helper/runner weakening cannot smuggle past.
+        if include_checkout_count:
+            audit_pr_checkout(ctx, drift)
         audit_trusted_checkout(ctx, drift)
         audit_resolver(ctx, drift)
         audit_path_literals(ctx, drift)
@@ -114,7 +119,7 @@ def main():
             # there is no reachable workflow/helper system left
             # to audit (a restore PR re-audits).
             if ctx.workflow_lines:
-                run_hardening_audits()
+                run_hardening_audits(include_checkout_count=False)
             if fatal():
                 print("::error::No PR-controlled checkout left in "
                       + AUDITED_PATH + " but hardening drift was "

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY } from '@/lib/vtu-metadata-fields';
 import { VTU_REFUND_SKIPPED_NO_COLLECTION } from './vtu-refund-collection-evidence';
 
 /** User-safe terminal message for a discarded race orphan (fixed template). */
@@ -99,6 +100,7 @@ export async function cleanupOrphanVtuTransactionAfterKeyRace({
       error_message: VTU_ORPHAN_DISCARD_MESSAGE,
       metadata: {
         ...currentMetadata,
+        [VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY]: true,
         refundSkipped: VTU_REFUND_SKIPPED_NO_COLLECTION,
       },
       status: 'failed',

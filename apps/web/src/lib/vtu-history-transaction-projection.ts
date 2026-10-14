@@ -7,7 +7,12 @@
  * stays a thin auth/query/schedule shell.
  */
 import { projectHistoryRefundFields } from '@/lib/vtu-history-refund-projection';
-import { extractMetadataField, isString } from '@/lib/vtu-metadata-fields';
+import {
+  extractMetadataField,
+  isString,
+  VTU_CUSTOMER_FAILURE_MESSAGE,
+  VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
+} from '@/lib/vtu-metadata-fields';
 
 export type PaymentGateway = 'paystack' | 'korapay';
 
@@ -131,6 +136,22 @@ export function projectHistoryTransaction({
     'paymentReference',
     isString
   );
+  // Provider error text is persisted raw in error_message for support
+  // correlation but must never reach the customer (Codex R89 P1): it
+  // returns verbatim only when the writer flagged it first-party,
+  // else the fixed customer-safe message. Null/empty stays as-is so
+  // successful rows keep a clean contract.
+  const rawErrorMessage =
+    typeof transaction.error_message === 'string' &&
+    transaction.error_message.trim() !== ''
+      ? transaction.error_message
+      : null;
+  const customerSafeErrorMessage =
+    extractMetadataField(
+      transactionMetadata,
+      VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
+      (value): value is true => value === true
+    ) === true;
   const { refund_pending, refunded_to_wallet } = projectHistoryRefundFields({
     metadata: transactionMetadata as Record<string, unknown> | null,
     row: {
@@ -145,6 +166,12 @@ export function projectHistoryTransaction({
   return {
     ...publicTransaction,
     amount: parseHistoryAmount(transaction.amount, transaction.id),
+    error_message:
+      rawErrorMessage === null
+        ? (transaction.error_message ?? null)
+        : customerSafeErrorMessage
+          ? rawErrorMessage
+          : VTU_CUSTOMER_FAILURE_MESSAGE,
     customer_cashback:
       transaction.customer_cashback != null
         ? parseHistoryCashback(transaction.customer_cashback, transaction.id)

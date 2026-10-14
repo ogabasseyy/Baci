@@ -11,6 +11,43 @@
 
 export type MetadataRecord = Record<string, unknown>;
 
+/**
+ * Fixed customer-safe failure message. Provider error text (Kuda /
+ * Monnify response bodies, which may contain identifiers) must never
+ * reach API responses — it is persisted raw server-side for support
+ * correlation and replaced with this fixed string at every return
+ * site (Codex R89 P1).
+ */
+export const VTU_CUSTOMER_FAILURE_MESSAGE =
+  'Utility purchase failed. Please try again.';
+
+/**
+ * Provenance flag for persisted failure text: present-and-true only
+ * when error_message was authored first-party (fixed strings like
+ * the wallet-race notice), never provider text. Replay resolution
+ * returns error_message verbatim only with this flag and otherwise
+ * falls back to VTU_CUSTOMER_FAILURE_MESSAGE — fail closed, since
+ * pre-flag rows are overwhelmingly provider-authored.
+ */
+export const VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY = 'customerSafeErrorMessage';
+
+/**
+ * Crash window for a VTU customer-email claim: the claim RPC sets
+ * `<attemptedKey>` + `<attemptedKey>At` (ISO UTC) atomically, but a
+ * crash between the claim and the send/clear leaves Attempted=true
+ * forever — every later claim refuses and the R86 reconciler arm
+ * (Sent `eq.false`) never matches the unset sent key, so the email
+ * is never retried. Claims older than this lease (or stamped rows
+ * missing the timestamp, i.e. pre-lease stuck rows) are reclaimable
+ * by the RPC, the TS pre-check, and the reconciler's stuck-claim arm
+ * (Codex R89 P2). 15 minutes mirrors the baseline shipment-booking
+ * lock timeout and dwarfs send latency (one ZeptoMail call), so a
+ * live sender always holds a fresh lease while a crashed one frees
+ * the row on the next cron tick. The claim RPC hardcodes the same
+ * 15-minute interval — keep both in sync.
+ */
+export const CUSTOMER_EMAIL_NOTIFICATION_CLAIM_LEASE_MS = 15 * 60 * 1000;
+
 export function isMetadataRecord(
   metadata: unknown
 ): metadata is MetadataRecord {

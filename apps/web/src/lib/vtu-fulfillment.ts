@@ -16,7 +16,12 @@ import {
 } from '@/lib/monnify-bills';
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
 import { resolveConcurrentFailedVtuTransaction } from '@/lib/vtu-concurrent-failed-refund';
-import { getSafeMetadataDiagnostics } from '@/lib/vtu-metadata-fields';
+import {
+  CUSTOMER_EMAIL_NOTIFICATION_CLAIM_LEASE_MS,
+  getSafeMetadataDiagnostics,
+  VTU_CUSTOMER_FAILURE_MESSAGE,
+  VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
+} from '@/lib/vtu-metadata-fields';
 import {
   throwVtuPersistenceError,
   VtuPersistenceError,
@@ -226,7 +231,7 @@ const LEGACY_CUSTOMER_EMAIL_SENT_KEY = 'customerEmailNotificationSent';
 const LEGACY_CUSTOMER_PENDING_TOKEN_EMAIL_SENT_KEY =
   'customerPendingTokenEmailNotificationSent';
 
-interface CustomerEmailNotificationState {
+export interface CustomerEmailNotificationState {
   attemptedKey: string;
   legacySentKeys?: readonly string[];
   sentKey: string;
@@ -266,6 +271,33 @@ function isCustomerEmailNotificationSent(
     metadata[state.sentKey] === true ||
     (state.legacySentKeys?.some((key) => metadata[key] === true) ?? false)
   );
+}
+
+function getCustomerEmailAttemptedAtKey(state: CustomerEmailNotificationState) {
+  return `${state.attemptedKey}At`;
+}
+
+export function isCustomerEmailClaimLeaseExpired({
+  metadata,
+  nowMs = Date.now(),
+  state,
+}: {
+  metadata: Record<string, unknown>;
+  nowMs?: number;
+  state: CustomerEmailNotificationState;
+}) {
+  const stamped = metadata[getCustomerEmailAttemptedAtKey(state)];
+  if (typeof stamped !== 'string' || stamped.trim() === '') {
+    return true;
+  }
+  const stampedMs = Date.parse(stamped);
+  if (!Number.isFinite(stampedMs)) {
+    return true;
+  }
+  // Strict `<`, matching the claim RPC's `attempted_at < cutoff` and
+  // the reconciler's `.lt.` arm: all three enforcement points must
+  // agree at the boundary (the RPC is the atomic backstop).
+  return stampedMs + CUSTOMER_EMAIL_NOTIFICATION_CLAIM_LEASE_MS < nowMs;
 }
 
 function setCustomerEmailNotificationResult({
@@ -1135,7 +1167,8 @@ async function claimCustomerEmailNotificationAttempt({
   supabase: SupabaseClient;
 }) {
   if (
-    metadata[state.attemptedKey] === true ||
+    (metadata[state.attemptedKey] === true &&
+      !isCustomerEmailClaimLeaseExpired({ metadata, state })) ||
     isCustomerEmailNotificationSent(metadata, state)
   ) {
     return false;
@@ -2014,6 +2047,9 @@ async function reconcileProcessingVtuTransaction({
 
     if (reconciledStatus === 'failed') {
       const failedMetadata = { ...(currentRow.metadata ?? {}) };
+      // Provider-authored text (below): drop any inherited safe flag
+      // for the same reason as the fresh path.
+      delete failedMetadata[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY];
       const failedMessage =
         providerStatus.message || 'Utility purchase failed with provider';
       const failedPersistError = await updateVtuPurchaseResultWithRetry({
@@ -2063,9 +2099,16 @@ async function reconcileProcessingVtuTransaction({
         failedMetadata: getSafeMetadataDiagnostics(failedMetadata),
         message: `Unable to confirm VTU refund before finalizing provider failure for ${currentRow.id}`,
       });
+      // As above: the provider requery message stays in
+      // error_message (persisted raw for support); the response gets
+      // the fixed customer-safe message.
+      console.error('Reconciled VTU purchase failed with provider:', {
+        provider: currentRow.network_provider,
+        transactionId: currentRow.id,
+      });
       return {
         amount: Number(currentRow.amount) || 0,
-        error: failedMessage,
+        error: VTU_CUSTOMER_FAILURE_MESSAGE,
         reference: currentRow.request_reference,
         ...(refund.refundIssued &&
           refund.refundedAmount > 0 && {
@@ -2365,9 +2408,17 @@ export async function fulfillPendingVtuTransaction({
         );
       }
     }
+    // As in the concurrent branch: persisted provider text returns
+    // verbatim only with the first-party flag, else the fixed
+    // customer-safe message (fail closed).
+    const customerSafeError =
+      row.metadata?.[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY] === true;
     return {
       amount: Number(row.amount) || 0,
-      error: row.error_message || 'Purchase failed',
+      error:
+        customerSafeError && row.error_message
+          ? row.error_message
+          : VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: row.request_reference,
       ...(refund.refundIssued && { refundedToWallet: refund.refundedAmount }),
       status: 'failed',
@@ -2526,6 +2577,9 @@ export async function fulfillPendingVtuTransaction({
       // wallet was never debited).
       if (isInsufficientWalletBalanceError(debitError)) {
         const raceMetadata = { ...preDebitMetadata };
+        // First-party fixed text (below): flag it safe so replays
+        // keep returning it verbatim (Codex R89 P1).
+        raceMetadata[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY] = true;
         const raceRefund = await refundVtuToCustomerWallet({
           metadata: raceMetadata,
           row,
@@ -2714,6 +2768,11 @@ export async function fulfillPendingVtuTransaction({
     ...(units && { units }),
     ...(voucherPin && { voucherPin }),
   };
+  // This result's error text is provider-authored: drop any prior
+  // safe-message flag it may have inherited, so a later replay never
+  // mistakes the persisted provider text for first-party copy (the
+  // replay check fails closed on a missing flag).
+  delete updatedMetadata[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY];
   if (providerErrorDetail) {
     updatedMetadata.providerErrorDetail = providerErrorDetail;
   } else {
@@ -2858,9 +2917,18 @@ export async function fulfillPendingVtuTransaction({
       failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
       message: `Unable to confirm VTU refund for failed purchase ${row.id}`,
     });
+    // Provider diagnostics (result.message) are persisted raw in
+    // error_message for support correlation but must never reach the
+    // response — return the fixed customer-safe message instead
+    // (Codex R89 P1). Telemetry carries only the transaction id and
+    // provider, never the provider body.
+    console.error('Fresh VTU vend failed:', {
+      provider: result.provider ?? row.network_provider,
+      transactionId: row.id,
+    });
     return {
       amount: Number(row.amount) || 0,
-      error: result.message,
+      error: VTU_CUSTOMER_FAILURE_MESSAGE,
       reference: row.request_reference,
       ...(refund.refundIssued && { refundedToWallet: refund.refundedAmount }),
       status: 'failed',

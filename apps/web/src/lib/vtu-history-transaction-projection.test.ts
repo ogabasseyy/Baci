@@ -130,4 +130,50 @@ describe('vtu-history-transaction-projection', () => {
     expect(parseHistoryAmount('500', 'txn-1')).toBe(500);
     expect(parseHistoryCashback(25, 'txn-1')).toBe(25);
   });
+
+  it('flattens unflagged persisted provider text to the fixed failure message', () => {
+    // Codex R89 P1: error_message is persisted raw for support, but
+    // the history spread would hand provider bodies to the customer.
+    // Fail closed — pre-flag rows are overwhelmingly provider text.
+    const projected = projectHistoryTransaction({
+      paymentStatusByReference: new Map(),
+      transaction: row({
+        error_message: 'Request successful. (biller status: k11)',
+        metadata: {},
+        status: 'failed',
+      }),
+      voucherPin: null,
+    });
+
+    expect(projected.error_message).toBe(
+      'Utility purchase failed. Please try again.'
+    );
+  });
+
+  it('keeps flagged first-party failure text verbatim in history', () => {
+    const projected = projectHistoryTransaction({
+      paymentStatusByReference: new Map(),
+      transaction: row({
+        error_message:
+          'VTU purchase confirmation failed; the purchase will resume automatically.',
+        metadata: { customerSafeErrorMessage: true },
+        status: 'failed',
+      }),
+      voucherPin: null,
+    });
+
+    expect(projected.error_message).toBe(
+      'VTU purchase confirmation failed; the purchase will resume automatically.'
+    );
+  });
+
+  it('keeps a null error message null', () => {
+    const projected = projectHistoryTransaction({
+      paymentStatusByReference: new Map(),
+      transaction: row({ error_message: null, status: 'successful' }),
+      voucherPin: null,
+    });
+
+    expect(projected.error_message).toBeNull();
+  });
 });

@@ -55,6 +55,7 @@ describe('restoreInterruptedPreVendVtuRow', () => {
       error_message:
         'VTU wallet debit failed; the purchase will resume automatically.',
       metadata: expect.objectContaining({
+        customerSafeErrorMessage: true,
         paymentSplit: { wallet: 300 },
         preVendInterruptedAt: expect.any(String),
       }),

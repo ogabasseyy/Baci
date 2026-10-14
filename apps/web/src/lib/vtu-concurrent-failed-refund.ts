@@ -13,7 +13,11 @@
  * vtu-fulfillment.ts and importing it here would cycle.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getSafeMetadataDiagnostics } from '@/lib/vtu-metadata-fields';
+import {
+  getSafeMetadataDiagnostics,
+  VTU_CUSTOMER_FAILURE_MESSAGE,
+  VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
+} from '@/lib/vtu-metadata-fields';
 import { throwVtuPersistenceError } from '@/lib/vtu-persistence-error';
 import { throwIfVtuRefundUnconfirmed } from '@/lib/vtu-refund-guard';
 
@@ -87,9 +91,19 @@ export async function resolveConcurrentFailedVtuTransaction({
       );
     }
   }
+  // Provider error text (persisted raw server-side for support
+  // correlation) must never reach the response: return it verbatim
+  // only when the writer flagged it first-party, else the fixed
+  // customer-safe message (Codex R89 P1). Fail closed — pre-flag
+  // rows are overwhelmingly provider-authored.
+  const customerSafe =
+    row.metadata?.[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY] === true;
   return {
     amount: Number(row.amount) || 0,
-    error: row.error_message || 'Purchase failed',
+    error:
+      customerSafe && row.error_message
+        ? row.error_message
+        : VTU_CUSTOMER_FAILURE_MESSAGE,
     reference: row.request_reference,
     ...(refund.refundIssued &&
       refund.refundedAmount > 0 && {

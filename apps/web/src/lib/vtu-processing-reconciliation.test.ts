@@ -91,7 +91,7 @@ describe('reconcileProcessingVtuTransactions', () => {
       head: true,
     });
     expect(countQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false,and(metadata->>customerReceiptEmailNotificationSent.is.null,or(metadata->>customerReceiptEmailNotificationAttempted.eq.false,and(metadata->>customerReceiptEmailNotificationAttempted.eq.true,or(metadata->>customerReceiptEmailNotificationAttemptedAt.is.null,metadata->>customerReceiptEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z)))),and(metadata->>customerTokenEmailNotificationSent.is.null,or(metadata->>customerTokenEmailNotificationAttempted.eq.false,and(metadata->>customerTokenEmailNotificationAttempted.eq.true,or(metadata->>customerTokenEmailNotificationAttemptedAt.is.null,metadata->>customerTokenEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z))))))))'
     );
     expect(countQuery.in).toHaveBeenCalledWith('type', [
       'airtime',
@@ -107,7 +107,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     expect(countQuery.limit).toHaveBeenCalledWith(1);
     expect(dataQuery.select).toHaveBeenCalledWith('id');
     expect(dataQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false,and(metadata->>customerReceiptEmailNotificationSent.is.null,or(metadata->>customerReceiptEmailNotificationAttempted.eq.false,and(metadata->>customerReceiptEmailNotificationAttempted.eq.true,or(metadata->>customerReceiptEmailNotificationAttemptedAt.is.null,metadata->>customerReceiptEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z)))),and(metadata->>customerTokenEmailNotificationSent.is.null,or(metadata->>customerTokenEmailNotificationAttempted.eq.false,and(metadata->>customerTokenEmailNotificationAttempted.eq.true,or(metadata->>customerTokenEmailNotificationAttemptedAt.is.null,metadata->>customerTokenEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z))))))))'
     );
     expect(dataQuery.lte).toHaveBeenCalledWith(
       'created_at',
@@ -176,7 +176,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     const expectedFilter =
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))';
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false,and(metadata->>customerReceiptEmailNotificationSent.is.null,or(metadata->>customerReceiptEmailNotificationAttempted.eq.false,and(metadata->>customerReceiptEmailNotificationAttempted.eq.true,or(metadata->>customerReceiptEmailNotificationAttemptedAt.is.null,metadata->>customerReceiptEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z)))),and(metadata->>customerTokenEmailNotificationSent.is.null,or(metadata->>customerTokenEmailNotificationAttempted.eq.false,and(metadata->>customerTokenEmailNotificationAttempted.eq.true,or(metadata->>customerTokenEmailNotificationAttemptedAt.is.null,metadata->>customerTokenEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z))))))))';
     expect(countQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(dataQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({
@@ -210,7 +210,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     const orCalls = dataQuery.or.mock.calls as unknown as [string][];
     const filter = orCalls[0]?.[0] as string;
     expect(filter).toContain(
-      'and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))'
+      'and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false,and(metadata->>customerReceiptEmailNotificationSent.is.null,or(metadata->>customerReceiptEmailNotificationAttempted.eq.false,and(metadata->>customerReceiptEmailNotificationAttempted.eq.true,or(metadata->>customerReceiptEmailNotificationAttemptedAt.is.null,metadata->>customerReceiptEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z)))),and(metadata->>customerTokenEmailNotificationSent.is.null,or(metadata->>customerTokenEmailNotificationAttempted.eq.false,and(metadata->>customerTokenEmailNotificationAttempted.eq.true,or(metadata->>customerTokenEmailNotificationAttemptedAt.is.null,metadata->>customerTokenEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z))))))))'
     );
     // Codex R82 P1: `->>` extracts TEXT, and `IS [NOT] TRUE` on text
     // is a Postgres type error that 500s the cron queries — boolean
@@ -291,7 +291,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     const orCalls = dataQuery.or.mock.calls as unknown as [string][];
     const filter = orCalls[0]?.[0] as string;
     expect(filter).toContain(
-      'and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))'
+      'and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false,'
     );
     expect(filter).not.toMatch(/->>[a-zA-Z0-9_]+(\.not)?\.is\.(true|false)/);
     expect(countQuery.or).toHaveBeenCalledWith(filter);
@@ -300,6 +300,45 @@ describe('reconcileProcessingVtuTransactions', () => {
       transactionId: 'tx-email',
     });
     expect(result.successful).toBe(1);
+  });
+
+  it('selects successful rows with a stuck email claim for re-drive', async () => {
+    // Codex R89 P2: a crash between the email-claim RPC and the sent
+    // write leaves Attempted=true with the sent key unset — the R86
+    // recorded-failure arm (eq.false) never matches a missing key, so
+    // without a stuck-claim disjunct the row is never retried. Stuck =
+    // sent key absent AND (claim cleared OR timestamp missing/older
+    // than the 15-minute lease). The cutoff derives from the
+    // invocation now (21:14 → 20:59), so a live sender's fresh lease
+    // is never selected.
+    const countQuery = createProcessingQuery({ count: 1 });
+    const dataQuery = createProcessingQuery({ data: [{ id: 'tx-stuck' }] });
+    const supabase = createSupabase({ countQuery, dataQuery });
+    fulfillPendingVtuTransactionMock.mockResolvedValueOnce({
+      status: 'successful',
+    });
+
+    await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
+      limit: 1,
+      now: new Date('2026-05-07T21:14:00.000Z'),
+      supabase: supabase as never,
+    });
+
+    const orCalls = dataQuery.or.mock.calls as unknown as [string][];
+    const filter = orCalls[0]?.[0] as string;
+    expect(filter).toContain(
+      'and(metadata->>customerReceiptEmailNotificationSent.is.null,or(metadata->>customerReceiptEmailNotificationAttempted.eq.false,and(metadata->>customerReceiptEmailNotificationAttempted.eq.true,or(metadata->>customerReceiptEmailNotificationAttemptedAt.is.null,metadata->>customerReceiptEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z))))'
+    );
+    expect(filter).toContain(
+      'and(metadata->>customerTokenEmailNotificationSent.is.null,or(metadata->>customerTokenEmailNotificationAttempted.eq.false,and(metadata->>customerTokenEmailNotificationAttempted.eq.true,or(metadata->>customerTokenEmailNotificationAttemptedAt.is.null,metadata->>customerTokenEmailNotificationAttemptedAt.lt.2026-05-07T20:59:00.000Z))))'
+    );
+    expect(filter).not.toMatch(/->>[a-zA-Z0-9_]+(\.not)?\.is\.(true|false)/);
+    expect(countQuery.or).toHaveBeenCalledWith(filter);
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({
+      supabase,
+      transactionId: 'tx-stuck',
+    });
   });
 
   it('rotates reconciliation pages through the processing backlog', async () => {

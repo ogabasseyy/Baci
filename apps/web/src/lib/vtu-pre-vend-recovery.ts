@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY } from '@/lib/vtu-metadata-fields';
 
 /** Minimal row shape the restore needs (structural; no import cycle). */
 export interface PreVendRestoreRow {
@@ -214,6 +215,10 @@ export async function restoreInterruptedPreVendVtuRow({
         metadata: {
           ...(row.metadata ?? {}),
           preVendInterruptedAt: new Date().toISOString(),
+          // userSafeMessage is fixed first-party copy (see docblock),
+          // so it stays verbatim-safe under the R89 P1 provenance
+          // rule; written atomically with the message it describes.
+          [VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY]: true,
         },
         status: 'pending',
       })

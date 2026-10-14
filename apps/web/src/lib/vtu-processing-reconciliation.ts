@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
+import { CUSTOMER_EMAIL_NOTIFICATION_CLAIM_LEASE_MS } from '@/lib/vtu-metadata-fields';
 import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
 
 // Every type the wallet-only route can leave 'processing' (202): a
@@ -53,9 +54,51 @@ const RECONCILABLE_VTU_TYPES = [
 // explicit null arm: `->>` extracts TEXT, and `IS NOT TRUE` on text
 // is a Postgres type error that would 500 the whole cron (Codex R82
 // P1) — boolean intent must be `neq.true` + `is.null` (text
-// equality like `eq.false` is type-safe).
-const RECONCILABLE_STATUS_FILTER =
-  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false))))';
+// equality like `eq.false` is type-safe). The stuck-claim disjuncts
+// (Codex R89 P2) cover the crash windows the recorded-failure arm
+// misses: a crash between the email-claim RPC and the sent write
+// leaves Attempted=true with the sent key unset (eq.false never
+// matches a missing key), and a crash between the clear RPC and the
+// settlement persist leaves Attempted=false with the sent key unset.
+// Either row would never be retried. Stuck = sent key absent AND
+// (claim cleared OR claim timestamp missing/older than the lease —
+// the same lease the claim RPC and the TS pre-check enforce, so a
+// live sender's fresh lease is never stolen); the cutoff is computed
+// from the invocation `now`, which is why the filter is built per
+// call instead of hoisted. `eq.false` on an absent attempted key is
+// NULL (no match), so never-attempted rows stay excluded.
+function getEmailStuckClaimDisjunct({
+  attemptedKey,
+  attemptedAtKey,
+  cutoff,
+  sentKey,
+}: {
+  attemptedAtKey: string;
+  attemptedKey: string;
+  cutoff: string;
+  sentKey: string;
+}) {
+  return `and(metadata->>${sentKey}.is.null,or(metadata->>${attemptedKey}.eq.false,and(metadata->>${attemptedKey}.eq.true,or(metadata->>${attemptedAtKey}.is.null,metadata->>${attemptedAtKey}.lt.${cutoff}))))`;
+}
+
+function getReconciliableStatusFilter(now: Date) {
+  const cutoff = new Date(
+    now.getTime() - CUSTOMER_EMAIL_NOTIFICATION_CLAIM_LEASE_MS
+  ).toISOString();
+  const stuckReceiptClaim = getEmailStuckClaimDisjunct({
+    attemptedAtKey: 'customerReceiptEmailNotificationAttemptedAt',
+    attemptedKey: 'customerReceiptEmailNotificationAttempted',
+    cutoff,
+    sentKey: 'customerReceiptEmailNotificationSent',
+  });
+  const stuckTokenClaim = getEmailStuckClaimDisjunct({
+    attemptedAtKey: 'customerTokenEmailNotificationAttemptedAt',
+    attemptedKey: 'customerTokenEmailNotificationAttempted',
+    cutoff,
+    sentKey: 'customerTokenEmailNotificationSent',
+  });
+  return `status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),and(customer_id.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.false,metadata->>customerTokenEmailNotificationSent.eq.false,metadata->>customerEmailNotificationSent.eq.false,${stuckReceiptClaim},${stuckTokenClaim}))))`;
+}
 const DEFAULT_RECONCILIATION_LIMIT = 25;
 const MAX_RECONCILIATION_LIMIT = 50;
 const MIN_PROCESSING_AGE_MS = 45_000;
@@ -159,7 +202,7 @@ export async function reconcileProcessingVtuTransactions({
   const { count, error: countError } = await supabase
     .from('vtu_transactions')
     .select('id', { count: 'exact', head: true })
-    .or(RECONCILABLE_STATUS_FILTER)
+    .or(getReconciliableStatusFilter(now))
     .in('type', [...RECONCILABLE_VTU_TYPES])
     .lte('created_at', olderThan.toISOString())
     .limit(1);
@@ -178,7 +221,7 @@ export async function reconcileProcessingVtuTransactions({
   const { data, error } = await supabase
     .from('vtu_transactions')
     .select('id')
-    .or(RECONCILABLE_STATUS_FILTER)
+    .or(getReconciliableStatusFilter(now))
     .in('type', [...RECONCILABLE_VTU_TYPES])
     .lte('created_at', olderThan.toISOString())
     .order('created_at', { ascending: true })

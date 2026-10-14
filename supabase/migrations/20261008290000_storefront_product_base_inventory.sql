@@ -11,6 +11,10 @@
 -- approved availability counter, 0 when absent). Visibility, batching, and
 -- grants mirror get_storefront_product_variants exactly, including the
 -- published-or-admin public branch with unpublished admin exclusion.
+-- The batch cap deliberately does NOT mirror the variants RPC's 10000:
+-- callers batch page-size ID lists (tens of rows) plus single-ID cart
+-- reads, so 500 keeps ~10x headroom while bounding the anon fan-out of
+-- the per-merchant lateral availability counts.
 BEGIN;
 
 CREATE OR REPLACE FUNCTION public.get_storefront_product_base_inventory(
@@ -27,9 +31,9 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  IF COALESCE(pg_catalog.cardinality(p_product_ids), 0) > 10000 THEN
+  IF COALESCE(pg_catalog.cardinality(p_product_ids), 0) > 500 THEN
     RAISE EXCEPTION
-      'get_storefront_product_base_inventory supports at most 10000 product IDs (received %)',
+      'get_storefront_product_base_inventory supports at most 500 product IDs (received %)',
       pg_catalog.cardinality(p_product_ids)
       USING ERRCODE = '22023';
   END IF;
@@ -39,7 +43,7 @@ BEGIN
     SELECT p.id, p.merchant_id, p.inventory_tracking_policy
     FROM public.products AS p
     WHERE COALESCE(pg_catalog.cardinality(p_product_ids), 0)
-      BETWEEN 1 AND 10000
+      BETWEEN 1 AND 500
       AND p.id = ANY(p_product_ids)
       AND p.status = 'active'
   ),
@@ -170,7 +174,7 @@ $$;
 ALTER FUNCTION public.get_storefront_product_base_inventory(uuid[]) OWNER TO postgres;
 
 COMMENT ON FUNCTION public.get_storefront_product_base_inventory(uuid[]) IS
-  'Returns the base-option effective policy and available units for batches of at most 10000 active products, including authorized owner/staff preview of unpublished merchants.';
+  'Returns the base-option effective policy and available units for batches of at most 500 active products, including authorized owner/staff preview of unpublished merchants.';
 
 REVOKE ALL ON FUNCTION public.get_storefront_product_base_inventory(uuid[])
   FROM PUBLIC, anon, authenticated, service_role;

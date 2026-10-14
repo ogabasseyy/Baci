@@ -6,8 +6,8 @@ import {
   getPrimaryProductImage,
   PRODUCT_IMAGE_PLACEHOLDER_URL,
 } from './product-image';
+import { reportCartLinkTransferOutcome } from './report-cart-link-transfer-outcome';
 import { resolveGuestQuantityToAdd } from './resolve-guest-quantity-to-add';
-import { rewriteCartLinkUrl } from './rewrite-cart-link-url';
 import { createClient } from './supabase/client';
 
 const QUIZ_PRIZE_PLATFORM = 'quiz_prize';
@@ -243,7 +243,9 @@ export async function fetchAndAddCartItems({
           });
           continue;
         }
-        addToCart(
+        // Only count lines that actually landed: a cap/guard rejection
+        // must not inflate the "N items added" toast.
+        const outcome = addToCart(
           productForCart,
           hasQuizPrizeVoucher ? 1 : quantityToAdd,
           hasQuizPrizeVoucher
@@ -256,35 +258,21 @@ export async function fetchAndAddCartItems({
               }
             : undefined
         );
-        addedCount++;
-        firstAddedProductName ??= product.name;
+        if (outcome !== 'rejected') {
+          addedCount++;
+          firstAddedProductName ??= product.name;
+        }
       }
     }
 
-    if (addedCount > 0) {
-      toast({
-        title: addedCount === 1 ? 'Added to cart' : `${addedCount} items added`,
-        description:
-          addedCount === 1
-            ? `${firstAddedProductName} has been added to your cart.`
-            : `${addedCount} products have been added to your cart.`,
-      });
-    }
-
-    if (keptHigherQuantity) {
-      toast({
-        title: 'Kept your cart quantities',
-        description:
-          'Your cart already had higher quantities for some items, so those were kept instead of the chat amounts. Chat decreases never lower website quantities.',
-      });
-    }
-
-    // Keep only retryable stock failures in the handoff URL.
-    window.history.replaceState(
-      {},
-      '',
-      rewriteCartLinkUrl(window.location.href, guestQuantities, rejectedIds)
-    );
+    reportCartLinkTransferOutcome({
+      addedCount,
+      firstAddedProductName,
+      keptHigherQuantity,
+      rejectedIds,
+      guestQuantities,
+      toast,
+    });
     return true;
   } catch (err) {
     console.error('Error adding products to cart:', err);

@@ -1,7 +1,7 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Alert, Pressable, Text, View } from 'react-native';
 import { styles } from '@/components/transactions/transactions.styles';
-import type { ThemeColors } from '@/constants/theme';
+import { SPACING, type ThemeColors } from '@/constants/theme';
 import type {
   TransactionReviewItem,
   TransactionReviewOrder,
@@ -50,7 +50,14 @@ export function TransactionOrderCardItem({
   return (
     <View style={[styles.itemRow, { borderTopColor: colors.border }]}>
       <Pressable
-        style={styles.itemRowPressable}
+        // Inline: transactions.styles.ts sits at the 300-line module
+        // ceiling, so this row layout lives with its only consumer.
+        style={{
+          alignItems: 'center',
+          flex: 1,
+          flexDirection: 'row',
+          gap: SPACING.xs,
+        }}
         onPress={() => onOpenEditor(order, item)}
         accessibilityRole="button"
         accessibilityLabel={`${itemName}, ${item.quantity} units, revenue ${formatCurrency(item.revenue)}${

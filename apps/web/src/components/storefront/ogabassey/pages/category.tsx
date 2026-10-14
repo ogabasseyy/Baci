@@ -75,7 +75,9 @@ export const OgabasseyV2CategoryPage: React.FC<
     e.preventDefault();
     e.stopPropagation();
 
-    addToCart(product as any, 1);
+    if (addToCart(product as any, 1) === 'rejected') {
+      return;
+    }
 
     const pid =
       typeof product.id === 'string'

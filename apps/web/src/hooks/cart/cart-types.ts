@@ -44,6 +44,14 @@ export interface AddToCartOptions {
   [key: string]: string | boolean | Record<string, string> | undefined;
 }
 
+/**
+ * Whether an addToCart call changed the cart. Stock-cap rejections and
+ * guard rejections (out-of-stock, missing variant) leave the cart
+ * untouched; callers gate success effects (toasts, upsells, analytics)
+ * on this instead of assuming the add landed.
+ */
+export type AddToCartOutcome = 'applied' | 'rejected';
+
 export interface CartContextType {
   cart: CartItem[];
   merchantSlug: string | null;
@@ -51,7 +59,7 @@ export interface CartContextType {
     product: Product,
     quantity?: number,
     options?: AddToCartOptions
-  ) => void;
+  ) => AddToCartOutcome;
   removeFromCart: (cartItemIdOrProductId: string, variantId?: string) => void;
   updateQuantity: (
     cartItemIdOrProductId: string,

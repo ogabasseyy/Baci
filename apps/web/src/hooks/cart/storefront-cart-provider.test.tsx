@@ -759,4 +759,57 @@ describe('StorefrontCartProvider', () => {
 
     expect(result.current.totalItems).toBe(0);
   });
+
+  it('reports applied when the add lands and rejected when caps keep the cart', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    let outcome: unknown;
+    act(() => {
+      outcome = result.current.addToCart(mockProduct, 1);
+    });
+    expect(outcome).toBe('applied');
+    expect(result.current.totalItems).toBe(1);
+
+    // Scalar stock passes the guard but the strict pool is empty, so
+    // caps keep the previous cart and the outcome reports it.
+    const depletedPoolProduct = {
+      ...mockProduct,
+      id: 'pool-0',
+      stock: 5,
+      stock_quantity: 0,
+      inventory_tracking_policy: 'serialized_strict',
+    };
+    act(() => {
+      outcome = result.current.addToCart(depletedPoolProduct, 1);
+    });
+    expect(outcome).toBe('rejected');
+    expect(result.current.totalItems).toBe(1);
+  });
+
+  it('reports rejected when the out-of-stock guard fires', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <StorefrontCartProvider merchantSlug="ogabassey">
+        {children}
+      </StorefrontCartProvider>
+    );
+
+    const { result } = renderHook(() => useCart(), { wrapper });
+
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+
+    let outcome: unknown;
+    act(() => {
+      outcome = result.current.addToCart({ ...mockProduct, stock: 0 }, 1);
+    });
+    expect(outcome).toBe('rejected');
+    expect(result.current.totalItems).toBe(0);
+  });
 });

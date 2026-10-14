@@ -357,7 +357,7 @@ export const CartProvider = ({
         productName: productForCart.name,
         stock: productForCart.stock,
       });
-      return; // Silently reject - UI should show out of stock state
+      return 'rejected'; // Silently reject - UI should show out of stock state
     }
 
     // Variant validation: Prevent adding variant products without selection
@@ -367,7 +367,7 @@ export const CartProvider = ({
         productId: productForCart.id,
         productName: productForCart.name,
       });
-      return;
+      return 'rejected';
     }
 
     setCart((prev) => {
@@ -439,6 +439,9 @@ export const CartProvider = ({
         setShowUpsell(true);
       }, 500);
     }
+    // The legacy path has no stock-cap rejections: the guards above are
+    // the only exits that leave the cart unchanged.
+    return 'applied';
   };
 
   const removeFromCart = (

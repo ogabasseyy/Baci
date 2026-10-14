@@ -69,12 +69,16 @@ export function findMatchingCartLineIndex(
 export interface CartLineAssurancePolicy {
   smartCartProEnabled: boolean;
   merchantSlug: string | null | undefined;
+  shippingInsuranceEnabled?: boolean;
 }
 
 /**
  * Per-line assurance choice for an add: quiz/voucher (free-prize) lines
  * never default on, an explicit incoming choice always wins, and merges
- * otherwise preserve the stored choice.
+ * otherwise preserve the stored choice. Callers with the live merchant
+ * setting forward it so an explicit opt-out disables the default; no
+ * legacy caller enables SmartCartPro today, so omitting it preserves
+ * current behavior.
  */
 export function resolveCartLineAssurance(
   normalizedOptions: AddToCartOptions | undefined,
@@ -87,5 +91,6 @@ export function resolveCartLineAssurance(
     hasQuizVoucher: Boolean(
       normalizedOptions?.quizAwardId || normalizedOptions?.quizVoucherToken
     ),
+    shippingInsuranceEnabled: policy.shippingInsuranceEnabled,
   });
 }

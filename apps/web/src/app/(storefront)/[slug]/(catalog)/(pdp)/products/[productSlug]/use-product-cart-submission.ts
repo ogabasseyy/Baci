@@ -74,7 +74,7 @@ export function useProductCartSubmission({
       return;
     }
 
-    addToCart(
+    const outcome = addToCart(
       productToAdd,
       quantity,
       variantForCart
@@ -87,6 +87,15 @@ export function useProductCartSubmission({
           ? { condition: selectedCondition, offerId: selectedOffer.id }
           : undefined
     );
+
+    if (outcome === 'rejected') {
+      toast({
+        title: 'Unable to add to cart',
+        description: 'There is no available stock left for this selection.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     // Track add to cart for merchant analytics
     if (merchant?.id) {

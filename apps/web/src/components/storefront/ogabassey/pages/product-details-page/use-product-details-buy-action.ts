@@ -88,7 +88,7 @@ export function useProductDetailsBuyAction({
       selectedVariantSelection,
       routeOfferId
     );
-    addToCart(
+    const outcome = addToCart(
       buildCartProduct(
         productData,
         resolvedBuyOffer,
@@ -109,6 +109,15 @@ export function useProductDetailsBuyAction({
         offerId: resolvedBuyOffer.offerId ?? undefined,
       }
     );
+    if (outcome === 'rejected') {
+      toast({
+        title: 'Unable to add to cart',
+        description:
+          'There is no available stock left for this selection.',
+        variant: 'destructive',
+      });
+      return;
+    }
     toast({
       title: 'Added to cart',
       description: `${serverProduct.name} has been added to your cart.`,

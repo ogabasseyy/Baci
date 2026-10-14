@@ -117,4 +117,21 @@ describe('resolveCartLineAssurance', () => {
       )
     ).toBe(false);
   });
+
+  it('forwards an explicit insurance opt-out to disable the default', () => {
+    expect(
+      resolveCartLineAssurance(undefined, undefined, {
+        smartCartProEnabled: true,
+        merchantSlug: 'ogabassey',
+        shippingInsuranceEnabled: false,
+      })
+    ).toBe(false);
+    expect(
+      resolveCartLineAssurance(undefined, undefined, {
+        smartCartProEnabled: true,
+        merchantSlug: 'ogabassey',
+        shippingInsuranceEnabled: true,
+      })
+    ).toBe(true);
+  });
 });

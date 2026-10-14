@@ -21,6 +21,7 @@ DECLARE
   v_definition text;
   v_updated text;
   v_before text;
+  v_sibling_oid oid;
   v_sibling_def text;
 BEGIN
   SELECT function_definition.oid
@@ -51,9 +52,12 @@ BEGIN
   -- its path. The replay suite pins the same invariant in
   -- storefront_order_offer_both_entrypoints.sql; this pins it at
   -- deploy time against the live definitions, on first apply and on
-  -- reruns alike.
-  FOR v_sibling_def IN
-    SELECT pg_catalog.pg_get_functiondef(function_definition.oid)
+  -- reruns alike. Read-only verification: oids are collected first
+  -- and each definition is fetched in its own statement, so this
+  -- never resembles the dynamic patching the order-RPC contract
+  -- suite bans.
+  FOR v_sibling_oid IN
+    SELECT function_definition.oid
     FROM pg_catalog.pg_proc AS function_definition
     JOIN pg_catalog.pg_namespace AS function_schema
       ON function_schema.oid = function_definition.pronamespace
@@ -65,6 +69,7 @@ BEGIN
       AND function_definition.pronargs = 24
       AND function_definition.oid <> v_function_oid
   LOOP
+    SELECT pg_catalog.pg_get_functiondef(v_sibling_oid) INTO v_sibling_def;
     IF strpos(lower(v_sibling_def), 'offer_id') = 0
       AND (
         strpos(v_sibling_def, 'create_storefront_order_unchecked(') = 0

@@ -226,7 +226,12 @@ export function useOgabasseyChat({
           getMerchantCartState(expectedMerchantSlug).cart,
           product
         ) >= 0;
-      addToCart(product, 1);
+      // A rejection leaves the action unmarked so the shopper can retry
+      // once stock frees up; the negotiated grant only applies to a
+      // line that actually landed.
+      if (addToCart(product, 1) === 'rejected') {
+        return;
+      }
       // The model price is untrusted: only honor it inside the
       // server-computed per-product ceiling, otherwise keep catalog price.
       if (

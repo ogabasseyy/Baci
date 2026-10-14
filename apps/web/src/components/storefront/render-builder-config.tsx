@@ -39,7 +39,7 @@ type RenderBuilderConfigProps = {
 };
 
 const previewCart: CartContextType = {
-  addToCart: () => undefined,
+  addToCart: () => 'applied',
   cart: [],
   cartCount: 0,
   cartTotal: 0,

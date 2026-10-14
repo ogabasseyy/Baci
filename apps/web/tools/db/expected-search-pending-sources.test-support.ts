@@ -172,12 +172,12 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008290000_storefront_product_base_inventory.sql',
-    sha256: '52393acaf42273ca22ec33cc002005183ab520fca91898fdd2ab007786066c3d',
+    sha256: 'b2ce1a68b2dad1a7a4800ff8749c2670d2cf316b1ab5de93e6baa0db2d0d5b77',
   },
   {
     repositoryPath:
       'supabase/migrations/20261008300000_storefront_order_item_offer.sql',
-    sha256: 'cbbbe0eee60cabd147e55f653a6b8aba34a30a219c3a1f81ae372ecd45a491fc',
+    sha256: '60908359583cd8e9a1029141bc684804b6af60f403578c8f6d1114859e39f240',
   },
   {
     repositoryPath:

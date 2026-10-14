@@ -22,7 +22,12 @@ import {
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
 } from './cart-storage';
-import type { AddToCartOptions, CartContextType, CartItem } from './cart-types';
+import type {
+  AddToCartOptions,
+  AddToCartOutcome,
+  CartContextType,
+  CartItem,
+} from './cart-types';
 import { getMerchantCartState } from './merchant-cart-storage';
 import {
   applyValidationResults,
@@ -376,7 +381,7 @@ export function StorefrontCartProvider({
         productName: productForCart.name,
         stock: productForCart.stock,
       });
-      return;
+      return 'rejected';
     }
 
     // Add-path caps (offer allocation + shared strict pool) live in
@@ -395,7 +400,7 @@ export function StorefrontCartProvider({
         productId: productForCart.id,
         productName: productForCart.name,
       });
-      return;
+      return 'rejected';
     }
 
     // The add-time assurance default must match the toggle the line
@@ -411,24 +416,39 @@ export function StorefrontCartProvider({
         ? false
         : contextMerchant?.feature_settings?.shipping_insurance_enabled;
 
+    const lineAddInput = {
+      product,
+      productForCart,
+      normalizedOptions,
+      quantity,
+      caps: addCaps,
+      assurance: {
+        smartCartProEnabled: enableSmartCartPro,
+        merchantSlug: merchantSlugRef.current,
+        hasQuizVoucher: Boolean(
+          normalizedOptions?.quizAwardId || normalizedOptions?.quizVoucherToken
+        ),
+        shippingInsuranceEnabled,
+      },
+    };
+    // Probe the outcome against the current render's cart so callers can
+    // gate success effects (upsell, toasts, analytics) on it. The write
+    // below still runs through the updater against committed state:
+    // same-tick adds can only err toward 'applied' (today's behavior),
+    // and only a same-tick removal racing this add can produce a false
+    // 'rejected' — that edge merely skips one success toast while the
+    // cart badge still updates.
+    const outcome: AddToCartOutcome =
+      applyStorefrontCartLineAdd({ previousCart: cart, ...lineAddInput }) ===
+      cart
+        ? 'rejected'
+        : 'applied';
+
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
       const result = applyStorefrontCartLineAdd({
         previousCart,
-        product,
-        productForCart,
-        normalizedOptions,
-        quantity,
-        caps: addCaps,
-        assurance: {
-          smartCartProEnabled: enableSmartCartPro,
-          merchantSlug: merchantSlugRef.current,
-          hasQuizVoucher: Boolean(
-            normalizedOptions?.quizAwardId ||
-              normalizedOptions?.quizVoucherToken
-          ),
-          shippingInsuranceEnabled,
-        },
+        ...lineAddInput,
       });
       if (result === previousCart) {
         return previousCart;
@@ -455,12 +475,13 @@ export function StorefrontCartProvider({
       setCartWideNegotiationActive(false);
     }
 
-    if (enableSmartCartPro) {
+    if (outcome === 'applied' && enableSmartCartPro) {
       setLastAddedProduct(productForCart);
       upsellTimerRef.current = setTimeout(() => {
         setShowUpsell(true);
       }, 500);
     }
+    return outcome;
   };
 
   const removeFromCart = (

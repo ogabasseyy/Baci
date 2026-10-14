@@ -133,7 +133,7 @@ export function StickyAddToCart({
         ? { ...product, price: currentPrice, stock: currentStock }
         : product;
 
-    addToCart(
+    const outcome = addToCart(
       productToAdd,
       quantity,
       selectedVariant
@@ -146,6 +146,15 @@ export function StickyAddToCart({
           ? { condition: selectedCondition }
           : undefined
     );
+
+    if (outcome === 'rejected') {
+      toast({
+        title: 'Unable to add to cart',
+        description: 'There is no available stock left for this selection.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     const variantInfo = selectedVariant
       ? ` (${Object.values(selectedAttributes || {}).join(', ')})`

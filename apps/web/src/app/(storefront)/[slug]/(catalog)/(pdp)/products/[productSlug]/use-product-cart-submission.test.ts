@@ -179,4 +179,24 @@ describe('useProductCartSubmission', () => {
     );
     expect(mockAddToCart).not.toHaveBeenCalled();
   });
+
+  it('shows a failure toast without tracking when caps reject the add', () => {
+    mockAddToCart.mockReturnValueOnce('rejected');
+    const { result } = renderHook(() => useProductCartSubmission(input()));
+
+    act(() => {
+      result.current();
+    });
+
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Unable to add to cart',
+        variant: 'destructive',
+      })
+    );
+    expect(mockToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Added to cart!' })
+    );
+    expect(mockTrackAddToCart).not.toHaveBeenCalled();
+  });
 });

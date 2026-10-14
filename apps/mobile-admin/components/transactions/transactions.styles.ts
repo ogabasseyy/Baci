@@ -104,12 +104,6 @@ export const styles = StyleSheet.create({
     gap: SPACING.xs,
     paddingTop: SPACING.md,
   },
-  itemRowPressable: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: SPACING.xs,
-  },
   itemRowDisabled: {
     opacity: 0.45,
   },

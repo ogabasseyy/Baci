@@ -17,6 +17,16 @@ interface UseWalletOptions {
   merchantSlug: string | undefined;
 }
 
+/**
+ * Bounds one balance fetch (headers + body). Without this a stalled
+ * response leaves walletLoading true forever, and the mandatory
+ * wallet-only gate rejects every purchase while loading — closing
+ * the modal does not unmount the hook, so the customer stays blocked
+ * until reload. Expiry aborts into the wallet-error state, whose
+ * gate retries the fetch (Codex R87 P2).
+ */
+export const WALLET_BALANCE_FETCH_TIMEOUT_MS = 10_000;
+
 interface UseWalletReturn {
   walletBalance: number;
   /**
@@ -133,6 +143,12 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
     const isSuperseded = () =>
       abortController.signal.aborted ||
       generation !== fetchGenerationRef.current;
+    // Deadline expiry (Codex R87 P2): set only when OUR timer fires.
+    // A successor refresh/unmount also aborts, but then the
+    // generation moved (or the view is gone) — only a timeout with no
+    // successor flips to the error state below.
+    let fetchTimedOut = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     const fetchWalletBalance = () => {
       if (!userId || !merchantSlug) {
@@ -142,6 +158,12 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
 
       setWalletLoading(true);
       setWalletErrorLive(false);
+      // Bound headers + body: aborting the signal also rejects a
+      // stalled body read, so one timer covers the whole fetch.
+      timeoutId = setTimeout(() => {
+        fetchTimedOut = true;
+        abortController.abort();
+      }, WALLET_BALANCE_FETCH_TIMEOUT_MS);
       fetch(`/api/storefront/customer/wallet?merchant=${merchantSlug}`, {
         signal: abortController.signal,
       })
@@ -171,6 +193,14 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
           }
         })
         .catch((error) => {
+          if (generation !== fetchGenerationRef.current) {
+            return;
+          }
+          if (fetchTimedOut) {
+            console.error('Wallet balance fetch timed out');
+            setWalletErrorLive(true);
+            return;
+          }
           if (
             !isSuperseded() &&
             error instanceof Error &&
@@ -181,7 +211,21 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
           }
         })
         .finally(() => {
+          if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+            timeoutId = undefined;
+          }
           if (!isSuperseded()) {
+            setWalletLoading(false);
+            refreshPendingRef.current = false;
+          } else if (
+            fetchTimedOut &&
+            generation === fetchGenerationRef.current
+          ) {
+            // A timeout abort looks superseded (signal aborted) but
+            // has no successor to clear the pending state — without
+            // this, walletLoading stays true forever and the purchase
+            // gate blocks until reload.
             setWalletLoading(false);
             refreshPendingRef.current = false;
           }
@@ -190,7 +234,12 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
 
     fetchWalletBalance();
 
-    return () => abortController.abort();
+    return () => {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
+      abortController.abort();
+    };
   }, [userId, merchantSlug, refreshToken]);
 
   return {

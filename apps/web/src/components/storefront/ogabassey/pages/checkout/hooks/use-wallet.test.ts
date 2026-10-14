@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useWallet } from './use-wallet';
+import { useWallet, WALLET_BALANCE_FETCH_TIMEOUT_MS } from './use-wallet';
 
 describe('useWallet', () => {
   const mockFetch = vi.fn();
@@ -537,5 +537,90 @@ describe('useWallet', () => {
       '/api/storefront/customer/wallet?merchant=merchant-2',
       expect.any(Object),
     );
+  });
+
+  it('times out a stalled wallet fetch so the gate can recover via the error path', async () => {
+    // Codex R87 P2: a response that never returns headers (or a
+    // stalled body) left walletLoading true forever, and the
+    // mandatory wallet-only gate rejects every purchase while
+    // loading — closing the modal does not unmount the hook, so the
+    // customer stayed blocked until reload. Expiry aborts into the
+    // wallet-error state instead, whose gate retries the fetch.
+    vi.useFakeTimers();
+    try {
+      mockFetch.mockImplementationOnce(
+        (_url: string, init?: { signal?: AbortSignal }) =>
+          new Promise<never>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(
+                new DOMException(
+                  'The operation was aborted.',
+                  'AbortError',
+                ),
+              );
+            });
+          }),
+      );
+      const { result } = renderHook(() =>
+        useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+      );
+      expect(result.current.walletLoading).toBe(true);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(WALLET_BALANCE_FETCH_TIMEOUT_MS);
+      });
+
+      expect(result.current.walletLoading).toBe(false);
+      expect(result.current.walletError).toBe(true);
+      expect(result.current.getWalletError()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers with a refresh after a fetch timeout', async () => {
+    // The error gate calls refreshWallet(): the retry must clear the
+    // timeout error and load the balance.
+    vi.useFakeTimers();
+    try {
+      mockFetch
+        .mockImplementationOnce(
+          (_url: string, init?: { signal?: AbortSignal }) =>
+            new Promise<never>((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(
+                  new DOMException(
+                    'The operation was aborted.',
+                    'AbortError',
+                  ),
+                );
+              });
+            }),
+        )
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ balance: 750 }),
+        });
+      const { result } = renderHook(() =>
+        useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(WALLET_BALANCE_FETCH_TIMEOUT_MS);
+      });
+      expect(result.current.walletError).toBe(true);
+
+      await act(async () => {
+        result.current.refreshWallet();
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.walletBalance).toBe(750);
+      expect(result.current.walletError).toBe(false);
+      expect(result.current.walletLoading).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

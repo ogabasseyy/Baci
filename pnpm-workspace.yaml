@@ -33,6 +33,29 @@ minimumReleaseAgeExclude:
 trustPolicy: no-downgrade
 trustLockfile: true
 trustPolicyExclude:
+  # SDK 57 scene-support releases: verified exact package versions/gitHead in
+  # expo/expo; available native/source files match those release commits.
+  - '@expo/prebuild-config@57.0.18'
+  - '@expo/router-server@57.0.12'
+  - 'expo-modules-jsi@57.1.2'
+  - '@expo/inline-modules@0.1.8'
+  - '@expo/metro-file-map@57.0.4'
+  - '@expo/require-utils@57.0.6'
+  - '@expo/image-utils@0.11.6'
+  - 'expo-constants@57.0.21'
+  - '@expo/cli@57.0.29'
+  - '@expo/metro-config@57.0.13'
+  - '@expo/config@57.0.10'
+  - 'expo-dev-launcher@57.0.21'
+  - 'expo-dev-menu@57.0.20'
+  - '@expo/fingerprint@0.20.14'
+  - 'babel-preset-expo@57.0.15'
+  - '@expo/local-build-cache-provider@57.0.9'
+  - 'expo-modules-autolinking@57.0.15'
+  - 'expo-modules-core@57.0.21'
+  - '@expo/config-plugins@57.0.10'
+  - 'expo-asset@57.0.19'
+  - 'expo-dev-client@57.0.20'
   # Exact exceptions for deps locked before the trustPolicy override refresh.
   - '@react-native-firebase/app@23.8.8'
   - 'react-lite-youtube-embed@3.5.1'
@@ -373,12 +396,14 @@ patchedDependencies:
   "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
   react-native@0.86.2: patches/react-native@0.86.2.patch
   "react-native-fbsdk-next@13.4.3": "patches/react-native-fbsdk-next@13.4.3.patch"
-  # expo-modules-jsi@57.0.5: drop SWIFT_RETURNS_RETAINED on RuntimeScheduler (Xcode 26.2).
-  "expo-modules-jsi@57.0.5": "patches/expo-modules-jsi@57.0.5.patch"
-  # expo-modules-core@57.0.12: backport upstream SDK 58 NonisolatedUnsafeWeakVar
+  # expo-modules-core@57.0.21: backport upstream SDK 58 NonisolatedUnsafeWeakVar
   # fix for the EventEmitter.swift data-race error under Xcode 26 complete
   # checking (SWIFT_STRICT_CONCURRENCY is ignored in Swift 6 language mode).
-  "expo-modules-core@57.0.12": "patches/expo-modules-core@57.0.12.patch"
+  "expo-modules-core@57.0.21": "patches/expo-modules-core@57.0.21.patch"
+  # SDK 57 scene-aware native presentation backports (Expo #48319, #50368).
+  'expo-web-browser@57.0.2': patches/expo-web-browser@57.0.2.patch
+  'expo-apple-authentication@57.0.1': patches/expo-apple-authentication@57.0.1.patch
+  'expo-print@57.0.1': patches/expo-print@57.0.1.patch
   image-size@1.2.1: patches/image-size@1.2.1.patch
   "next@16.3.8": "patches/next@16.3.8.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch
@@ -398,3 +423,5 @@ patchedDependencies:
   # prototype-pollution trust bypass (GHSA-238p-pmpm-9mq7) while keeping
   # @copilotkit/react-core's ^0.16.22 range.
   katex@0.16.47: patches/katex@0.16.47.patch
+  # Use native Core Animation composition for the iOS gradient hang hot path.
+  expo-linear-gradient@57.0.1: patches/expo-linear-gradient@57.0.1.patch

@@ -74,6 +74,8 @@ function createExpoPlugins({
         },
         ios: {
           deploymentTarget: '16.4',
+          // SDK 57 opt-in forwards scene startup and link callbacks on iOS 27.
+          enableSceneSupport: true,
           useFrameworks: 'static',
           // Keep Expo consumers and their JSI provider on the same native ABI.
           usePrecompiledModules: false,

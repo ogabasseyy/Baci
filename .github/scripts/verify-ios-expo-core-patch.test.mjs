@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-const patchPath = join(root, 'patches/expo-modules-core@57.0.12.patch');
+const patchPath = join(root, 'patches/expo-modules-core@57.0.21.patch');
 const workspacePath = join(root, 'pnpm-workspace.yaml');
 const lockfilePath = join(root, 'pnpm-lock.yaml');
 
@@ -27,7 +27,7 @@ test('committed expo-modules-core patch replaces the Swift 6 data-race capture',
   );
 
   // The upstream fix (expo/expo main, EventEmitter.swift): wrap the emitter in
-  // the weak @unchecked Sendable box already shipped in 57.0.12's
+  // the weak @unchecked Sendable box already shipped in 57.0.21's
   // Utilities.swift, so nothing non-Sendable crosses into @JavaScriptActor.
   const boxAdditions =
     patch.match(/^\+\s*let emitter = NonisolatedUnsafeWeakVar\(self\)$/gm) ?? [];
@@ -54,7 +54,7 @@ test('expo-modules-core patch stays wired through install', () => {
   const workspace = readFileSync(workspacePath, 'utf8');
   assert.match(
     workspace,
-    /"expo-modules-core@57\.0\.12":\s*"patches\/expo-modules-core@57\.0\.12\.patch"/,
+    /"expo-modules-core@57\.0\.21":\s*"patches\/expo-modules-core@57\.0\.21\.patch"/,
     'pnpm-workspace.yaml must map expo-modules-core to the patch',
   );
 
@@ -63,12 +63,12 @@ test('expo-modules-core patch stays wired through install', () => {
   const lockfile = readFileSync(lockfilePath, 'utf8');
   assert.match(
     lockfile,
-    /^ {2}expo-modules-core@57\.0\.12: [0-9a-f]{64}$/m,
+    /^ {2}expo-modules-core@57\.0\.21: [0-9a-f]{64}$/m,
     'pnpm-lock.yaml patchedDependencies must record the patch hash',
   );
   assert.match(
     lockfile,
-    /expo-modules-core@57\.0\.12\(patch_hash=/,
+    /expo-modules-core@57\.0\.21\(patch_hash=/,
     'pnpm-lock.yaml snapshots must reference the patched package',
   );
 });

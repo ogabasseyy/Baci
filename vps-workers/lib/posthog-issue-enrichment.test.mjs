@@ -157,6 +157,50 @@ describe('PostHog remediation candidate enrichment', () => {
     assert.equal(traversal.sample.route, 'route.ts:3');
   });
 
+  it('preserves virtual sourcemap paths while reducing deployment URLs', async () => {
+    const virtual = await enrichDetail({
+      top_in_app_frame: {
+        function: 'handleCheckout',
+        line: 42,
+        source: 'webpack:///./apps/web/src/app/api/orders/route.ts',
+      },
+    });
+    assert.equal(
+      virtual.sample.route,
+      'apps/web/src/app/api/orders/route.ts:42'
+    );
+
+    const fileUrl = await enrichDetail({
+      top_in_app_frame: {
+        function: 'handleCheckout',
+        line: 7,
+        source: 'file:///etc/app/route.ts',
+      },
+    });
+    assert.equal(fileUrl.sample.route, 'route.ts:7');
+  });
+
+  it('resolves double-encoded delimiters before redaction', async () => {
+    const query = await enrichDetail({
+      top_in_app_frame: {
+        function: 'handleCheckout',
+        line: 11,
+        source: 'app.js%253Fuser%253DAliceSmith',
+      },
+    });
+    assert.equal(query.sample.route, 'app.js:11');
+    assert.equal(query.sample.route.includes('AliceSmith'), false);
+
+    const secret = await enrichDetail({
+      top_in_app_frame: {
+        function: 'handleCheckout',
+        line: 3,
+        source: 'token%253Dsecret-value.js',
+      },
+    });
+    assert.equal(secret.sample.route.includes('secret-value'), false);
+  });
+
   it('keeps only the basename of absolute local frame paths', async () => {
     for (const source of [
       '/Users/AliceSmith/ClientA/app.js',

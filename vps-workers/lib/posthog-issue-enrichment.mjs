@@ -23,33 +23,58 @@ const safeTechnicalValue = (value, length) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// Bundler sourcemap schemes whose URL pathnames are repository structure,
+// not deployment locations: their paths are preserved like relative paths.
+const VIRTUAL_SOURCE_SCHEMES = new Set([
+  'metro',
+  'turbopack',
+  'vite',
+  'webpack',
+  'webpack-internal',
+]);
+
 const framePath = (source) => {
   const text = String(source || '');
   let path = text;
   let reduceToBasename = false;
+  let virtualScheme = false;
   if (text.includes('://')) {
     // Absolute URLs may carry userinfo credentials: keep only the path so
     // neither credentials nor host flow into prompts and reports.
     try {
-      path = new URL(text.split(/[?#]/, 1)[0]).pathname || '';
+      const parsed = new URL(text.split(/[?#]/, 1)[0]);
+      path = parsed.pathname || '';
+      virtualScheme = VIRTUAL_SOURCE_SCHEMES.has(
+        parsed.protocol.replace(/:$/, '').toLowerCase()
+      );
     } catch {
       return '';
     }
     // Deployment URL paths are not repository structure: basename only.
-    reduceToBasename = true;
+    // Virtual sourcemap schemes fall through to relative handling below.
+    reduceToBasename = !virtualScheme;
   }
-  // Decode before stripping delimiters so encoded query/fragment markers
-  // cannot smuggle metadata into the path; decode before redaction so
-  // encoded assignments cannot hide from secret patterns. Malformed
-  // sequences fail closed.
+  // Decode to a bounded fixed point so double-encoded delimiters cannot
+  // smuggle metadata past the redactor: single and double encoding
+  // resolve, while anything still changing after three rounds — or
+  // malformed at any round — fails closed.
   try {
-    path = decodeURIComponent(path);
+    for (let round = 0; round < 3; round += 1) {
+      const decoded = decodeURIComponent(path);
+      if (decoded === path) break;
+      path = decoded;
+      if (round === 2) return '';
+    }
   } catch {
     return '';
   }
   path = path.split(/[?#]/, 1)[0];
   // Absolute local paths may embed usernames and customer directories.
-  if (/^([A-Za-z]:[\\/]|\\\\|\/)/.test(path)) reduceToBasename = true;
+  // Virtual-scheme pathnames are exempt: their leading slash is a URL
+  // artifact, not a filesystem root.
+  if (!virtualScheme && /^([A-Za-z]:[\\/]|\\\\|\/)/.test(path)) {
+    reduceToBasename = true;
+  }
   const segments = path.split(/[\\/]/).filter(Boolean);
   // Traversal segments fail closed to the basename.
   if (segments.includes('..')) reduceToBasename = true;

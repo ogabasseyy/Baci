@@ -51,6 +51,18 @@ function isValidIP(ip: string): boolean {
 // Client identifier (IP)
 // ---------------------------------------------------------------------------
 
+function lastValidChainIp(value: string | null): string | null {
+  if (!value) return null;
+  const ips = value.split(',').map((ip) => ip.trim());
+  for (let i = ips.length - 1; i >= 0; i--) {
+    const candidate = ips[i];
+    if (candidate && isValidIP(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export function getClientIdentifier(request: NextRequest): string {
   // Prefer Next.js/Vercel trusted IP
   const requestWithIp = request as NextRequest & { ip?: string };
@@ -59,20 +71,33 @@ export function getClientIdentifier(request: NextRequest): string {
     return requestIp;
   }
 
+  // Proxy-header trust (mirrors ensure-action-rate-limit.ts): on Vercel the
+  // edge overwrites x-forwarded-for with the peer client IP and sets
+  // x-real-ip / x-vercel-forwarded-for to the same value, so none of them
+  // is client-spoofable in production (Vercel request-header docs). Trust
+  // holds ONLY behind such an overwriting edge: self-hosted or
+  // direct-to-origin traffic can mint a fresh header value per request and
+  // rotate buckets at will, so a non-Vercel deployment must terminate TLS
+  // behind a proxy that overwrites these headers or the per-IP budgets
+  // below are advisory only. x-vercel-forwarded-for is read first because
+  // it survives a proxy stacked on top of Vercel, where x-forwarded-for
+  // may be rewritten; on plain Vercel all three carry the same IP.
+  // Multi-entry chains resolve to the LAST valid hop, never the first:
+  // the leftmost entry is client-supplied, so .at(0) would let an attacker
+  // mint a fresh identity per request and bypass the limiter entirely,
+  // while last-hop worst case shares one bucket behind a proxy
+  // (fail-closed). Callers without any usable signal share the single
+  // 'unknown' bucket, which exhausts fast by design.
+  const vercelForwarded = lastValidChainIp(
+    request.headers.get('x-vercel-forwarded-for')
+  );
+  if (vercelForwarded) return vercelForwarded;
+
   const realIp = request.headers.get('x-real-ip');
-  const forwarded = request.headers.get('x-forwarded-for');
+  if (realIp && isValidIP(realIp.trim())) return realIp.trim();
 
-  if (realIp && isValidIP(realIp)) return realIp;
-
-  if (forwarded) {
-    const ips = forwarded.split(',').map((ip) => ip.trim());
-    for (let i = ips.length - 1; i >= 0; i--) {
-      const candidate = ips[i];
-      if (candidate && isValidIP(candidate)) {
-        return candidate;
-      }
-    }
-  }
+  const forwarded = lastValidChainIp(request.headers.get('x-forwarded-for'));
+  if (forwarded) return forwarded;
 
   return 'unknown';
 }

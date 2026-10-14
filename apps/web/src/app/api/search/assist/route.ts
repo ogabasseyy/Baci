@@ -79,10 +79,15 @@ export async function POST(request: NextRequest) {
   // No cookie-split sub-budget: shoppers have no server-verified identity
   // and double-submit CSRF is self-mintable by direct callers, so any
   // cookie-presence split is bypassed by its exact target while only
-  // throttling honest native users. A distributed flood can therefore burn
-  // the 60/min tenant allowance (bounded AI spend, shopper 429s) — an
-  // accepted residual pending owner sign-off on CAPTCHA/proof-of-work or
-  // signed session tokens, not a per-request control.
+  // throttling honest native users. Signed session tokens fail the same
+  // way (public issuance mints victim-scoped tokens at will). A durable
+  // per-origin budget like the intake RPC's would need a Supabase write
+  // path this route deliberately avoids, and would still not bound callers
+  // with many real origins. A distributed flood can therefore burn the
+  // 60/min tenant allowance (bounded AI spend, shopper 429s) — an accepted
+  // residual pending owner sign-off on CAPTCHA/proof-of-work (see the
+  // product-requests intake threat model for the full evaluation), not a
+  // per-request control.
   const tenantVerdict = await checkTenantRateLimit(
     'search_assist',
     tenant.merchantId,

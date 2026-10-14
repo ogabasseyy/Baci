@@ -11,12 +11,12 @@ BEGIN
     RAISE EXCEPTION 'PostgREST cannot select the intake role';
   END IF;
   IF NOT pg_catalog.has_function_privilege('storefront_intake',
-    'public.submit_storefront_product_request(text,text,text,uuid)', 'EXECUTE') THEN
+    'public.submit_storefront_product_request(text,text,text,uuid,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Restricted role cannot submit requests';
   END IF;
   FOREACH caller IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
     IF pg_catalog.has_function_privilege(caller,
-      'public.submit_storefront_product_request(text,text,text,uuid)', 'EXECUTE') THEN
+      'public.submit_storefront_product_request(text,text,text,uuid,text)', 'EXECUTE') THEN
       RAISE EXCEPTION 'Unrestricted caller can submit requests: %', caller;
     END IF;
   END LOOP;

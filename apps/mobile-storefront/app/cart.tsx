@@ -12,6 +12,7 @@ import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
 import { unavailableCartActions } from '@/components/cart/unavailable-cart-actions';
 import { useCartNegotiation } from '@/components/cart/use-cart-negotiation';
 import { useCartReprice } from '@/components/cart/use-cart-reprice';
+import { useCartStatusOnly } from '@/components/cart/use-cart-status-only';
 import { warmCheckoutEntry } from '@/components/checkout/checkout-entry-prefetch';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -26,8 +27,6 @@ import { type CartItem, formatPrice, useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
 export default function CartScreen() {
-  const sharedCartEnabled = useNativeSharedCartStore((state) => state.enabled);
-  const sharedCartStatus = useNativeSharedCartStore((state) => state.status);
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
@@ -35,9 +34,8 @@ export default function CartScreen() {
   const { light: triggerHaptic } = useHaptics();
   const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
   const [isRetryingCartLoad, setIsRetryingCartLoad] = useState(false);
-  // iOS keeps the native price-change modal rendered through its fade
-  // dismissal. Track dismissal separately so CART_MPU stays unmounted until
-  // the modal-owned screen is actually gone.
+  // Keep CART_MPU unmounted until the iOS price-change modal's fade and
+  // native dismissal complete.
   const [priceChangeDismissed, setPriceChangeDismissed] = useState(true);
   const pendingOperations = useRef<Set<string>>(new Set());
 
@@ -206,12 +204,8 @@ export default function CartScreen() {
       });
   };
 
-  if (
-    sharedCartEnabled &&
-    (sharedCartStatus === 'choice_required' ||
-      (items.length === 0 && sharedCartStatus !== 'ready'))
-  )
-    return <SharedCartStatusPanel />;
+  const statusOnly = useCartStatusOnly(items.length);
+  if (statusOnly) return <SharedCartStatusPanel />;
 
   if (hasCartLoadError) {
     return (

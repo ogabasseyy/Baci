@@ -85,9 +85,23 @@ def _reject_duplicate_keys(pairs):
 def classify(register_path):
     """Return fresh, stale, or broken for the register at register_path."""
     try:
+        # Mirror the runtime aggregate limits: a register past the 200k file
+        # bound is broken, never fresh — the scheduled workflow must fix or
+        # re-review it, not silently report fresh on a file the runtime
+        # refuses to load. The stat check runs before the read so the probe
+        # itself does not buffer an unbounded file.
+        if Path(register_path).stat().st_size > 200_000:
+            return "broken"
+        raw = Path(register_path).read_text()
+        if len(raw) > 200_000:
+            return "broken"
         # Same duplicate-key decoder as the runtime: a repeated key must not
         # silently keep the last value and classify fresh.
-        data = json.loads(Path(register_path).read_text(), object_pairs_hook=_reject_duplicate_keys)
+        data = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+        # Mirror the runtime 50k serialized-payload bound: structurally valid
+        # rows that serialize past it are broken, not fresh.
+        if len(json.dumps(data, sort_keys=True)) > 50_000:
+            return "broken"
         if (
             not isinstance(data, dict)
             or type(data.get("schema_version")) is not int

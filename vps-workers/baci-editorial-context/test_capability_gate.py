@@ -213,6 +213,16 @@ class CapabilityGateTests(unittest.TestCase):
                 self.assertEqual(gate.main(), 0)
             suite.assert_called_once()
 
+    def test_main_runs_suite_in_target_checkout(self):
+        with tempfile.TemporaryDirectory() as root:
+            with patch.object(gate.subprocess, "run") as suite:
+                suite.return_value.returncode = 0
+                with patch.dict(os.environ, {}, clear=False):
+                    os.environ.pop("BASE_SHA", None)
+                    self.assertEqual(gate.main(cwd=root), 0)
+                suite.assert_called_once()
+                self.assertEqual(suite.call_args.kwargs.get("cwd"), root)
+
     def test_main_operates_on_explicit_cwd(self):
         with tempfile.TemporaryDirectory() as root:
             repo = Path(root)

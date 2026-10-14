@@ -255,9 +255,15 @@ def main(cwd="."):
             # cannot bypass it); staleness is also enforced by the scheduled
             # workflow and the runtime window.
             env.pop("BACI_REGISTER_REQUIRE_FRESH", None)
+    # Explicit cwd: every other git call in this module pins its checkout, and
+    # the suite's own tests shell out to git and read the tree — an inherited
+    # cwd from a scheduler or wrapper would run them against the wrong tree.
+    # The environment stays inherited (callers such as the writer-stub tests
+    # pass PYTHONPATH through it).
     return subprocess.run(
         [sys.executable, "-m", "unittest", "discover", "-s", str(Path(root, SUITE_DIR)), "-p", "test_*capabilit*.py"],
         env=env,
+        cwd=root,
     ).returncode
 
 

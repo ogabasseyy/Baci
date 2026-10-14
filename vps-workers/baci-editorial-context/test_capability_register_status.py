@@ -85,6 +85,15 @@ class RegisterStatusTests(unittest.TestCase):
             self.assertEqual(_status.classify(path), "broken")
             path.write_text(json.dumps(register(review_scope={"smuggled": "content"})))
             self.assertEqual(_status.classify(path), "broken")
+            # Aggregate bounds mirror the runtime: past 200k on disk or 50k
+            # serialized, a current-dated register is broken, never fresh.
+            path.write_text(json.dumps(register()) + " " * 200_001)
+            self.assertEqual(_status.classify(path), "broken")
+            big_row = dict(row, claim="x" * 1000, limitations="l" * 1000,
+                           source_refs=["r%d" % i for i in range(20)])
+            path.write_text(json.dumps(register(capabilities=[dict(big_row, id="r%d" % i) for i in range(50)])))
+            self.assertGreater(len(path.read_text()), 50_000)
+            self.assertEqual(_status.classify(path), "broken")
 
 
 if __name__ == "__main__":

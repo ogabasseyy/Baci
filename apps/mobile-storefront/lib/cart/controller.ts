@@ -42,7 +42,6 @@ export function createNativeCartController(
   let incoming: CartSnapshot | null = null;
   let tail: Promise<unknown> = Promise.resolve();
   const receipts = options.receipts ?? pendingCartRequest;
-  const assurance = new Map<string, boolean>();
   function assertCurrent(): void {
     if (!options.isCurrent()) throw new NativeCartError('session_changed');
   }
@@ -100,11 +99,6 @@ export function createNativeCartController(
       options.loadProduct
     );
     assertCurrent();
-    display.items = display.items.map((item) =>
-      assurance.has(item.id)
-        ? { ...item, hasAssurance: assurance.get(item.id) }
-        : item
-    );
     snapshot = next;
     options.publish(next, display);
     options.status('ready');
@@ -196,7 +190,6 @@ export function createNativeCartController(
   }
   const operations = createNativeCartWrite({
     accept,
-    assurance,
     coordinator,
     ensureCart,
     getIncoming: () => incoming,

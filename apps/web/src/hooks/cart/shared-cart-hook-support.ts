@@ -255,5 +255,7 @@ export function buildCommand(
   const lineId = resolveCommandTarget(intent.target, state.confirmed);
   if (!lineId) return null;
   if (intent.kind === 'remove') return { lineId, type: 'remove' };
+  if (intent.kind === 'set_assurance')
+    return { hasAssurance: intent.hasAssurance, lineId, type: 'set_assurance' };
   return { lineId, quantity: intent.quantity, type: 'set_quantity' };
 }

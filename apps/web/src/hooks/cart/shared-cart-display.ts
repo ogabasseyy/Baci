@@ -238,6 +238,10 @@ export function applyIntent(
   if (intent.kind === 'remove') {
     return display.filter((_, lineIndex) => lineIndex !== index);
   }
+  if (intent.kind === 'set_assurance') {
+    // The assurance overlay already reflects the choice in the display.
+    return display;
+  }
   // A quantity edit never claims a temp id: temp targets resolve only
   // when an add reconciles, so a claim here would strand the next edit
   // on the same line behind an unresolvable block.

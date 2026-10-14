@@ -125,4 +125,28 @@ END
 $$;
 RESET ROLE;
 
+
+-- 5. Duplicate create identities merge like add instead of splitting lines.
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-grant","cart_scope":"bootstrap"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_create(
+    'op-grant-dup',
+    '[{"item":{"productId":"33333333-3333-4333-8333-333333333333"},"quantity":2},{"item":{"productId":"33333333-3333-4333-8333-333333333333"},"quantity":3}]'::jsonb,
+    'NGN'
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'duplicate create must succeed, got %', v_result; END IF;
+  IF jsonb_array_length(v_result -> 'state' -> 'lines') <> 1 THEN
+    RAISE EXCEPTION 'duplicate identities must stage one line, got %', v_result;
+  END IF;
+  IF (v_result -> 'state' -> 'lines' -> 0 ->> 'quantity')::integer <> 5 THEN
+    RAISE EXCEPTION 'duplicate quantities must sum, got %', v_result;
+  END IF;
+END
+$$;
+RESET ROLE;
+
 ROLLBACK;

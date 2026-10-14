@@ -184,9 +184,14 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'code', 'not_found');
   END IF;
   -- The preview is unauthenticated: quiz voucher tokens are bearer
-  -- credentials and never leave with the public handoff id.
+  -- credentials and negotiated terms are shopper-private, so neither
+  -- leaves with the public handoff id.
   v_snapshot := v_snapshot || jsonb_build_object('lines', COALESCE((
-    SELECT jsonb_agg(line - 'voucherToken' ORDER BY ord)
+    SELECT jsonb_agg(
+      line - 'voucherToken' - 'voucherAwardId'
+        - 'negotiatedUnitPriceMinor' - 'negotiationStatus'
+      ORDER BY ord
+    )
     FROM jsonb_array_elements(COALESCE(v_snapshot -> 'lines', '[]'::jsonb)) WITH ORDINALITY AS t(line, ord)
   ), '[]'::jsonb));
   RETURN jsonb_build_object('ok', true, 'code', null, 'status', 'pending',
@@ -388,6 +393,13 @@ BEGIN
     SELECT public.commerce_cart_assemble_state(v_merchant, v_incoming.id) INTO v_state;
     RETURN jsonb_build_object('ok', false, 'code', 'cart_locked', 'replayed', false,
       'state', v_state, 'currentVersion', v_incoming.version);
+  END IF;
+  -- A retained cart past its lifetime must not be resurrected by a
+  -- five-minute handoff: both sides must still be within retention.
+  IF v_incoming.expires_at <= now()
+    OR (p_choice = 'merge' AND v_dest.expires_at <= now()) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'expired', 'replayed', false,
+      'state', null, 'currentVersion', v_incoming.version);
   END IF;
 
   IF p_choice = 'connect' THEN

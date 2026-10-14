@@ -619,4 +619,42 @@ END
 $$;
 RESET ROLE;
 
+
+-- 15. set_assurance persists the shopper choice at the server-owned rate.
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_id":"22222222-2222-4222-8222-222222222222","cart_grant_id":"99999999-9999-4999-8999-999999999991","cart_principal_id":"guest-a1","cart_scope":"session"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_line_id text;
+  v_result jsonb;
+  v_version integer;
+BEGIN
+  SELECT id::text INTO v_line_id FROM public.commerce_cart_lines
+  WHERE cart_id = '22222222-2222-4222-8222-222222222222' LIMIT 1;
+  SELECT version INTO v_version FROM public.commerce_carts
+  WHERE id = '22222222-2222-4222-8222-222222222222';
+  v_result := public.commerce_cart_mutate(
+    '22222222-2222-4222-8222-222222222222', 'op-assurance-on', v_version,
+    jsonb_build_object('type', 'set_assurance', 'lineId', v_line_id, 'hasAssurance', true)
+  );
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'assurance on must succeed, got %', v_result; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commerce_cart_lines
+    WHERE id = v_line_id::uuid AND has_assurance AND assurance_rate = 0.05
+  ) THEN RAISE EXCEPTION 'assurance must persist at the server rate'; END IF;
+  SELECT version INTO v_version FROM public.commerce_carts
+  WHERE id = '22222222-2222-4222-8222-222222222222';
+  v_result := public.commerce_cart_mutate(
+    '22222222-2222-4222-8222-222222222222', 'op-assurance-off', v_version,
+    jsonb_build_object('type', 'set_assurance', 'lineId', v_line_id, 'hasAssurance', false)
+  );
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'assurance off must succeed, got %', v_result; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commerce_cart_lines
+    WHERE id = v_line_id::uuid AND NOT has_assurance AND assurance_rate IS NULL
+  ) THEN RAISE EXCEPTION 'assurance off must clear the rate'; END IF;
+END
+$$;
+RESET ROLE;
+
 ROLLBACK;

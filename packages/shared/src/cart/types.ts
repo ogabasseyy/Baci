@@ -76,6 +76,7 @@ export type CartCommand =
       quantity: number;
     } & CartLineAttachments)
   | { type: 'set_quantity'; lineId: string; quantity: number }
+  | { type: 'set_assurance'; lineId: string; hasAssurance: boolean }
   | { type: 'remove'; lineId: string }
   | { type: 'clear' }
   | { type: 'replace'; lines: CartInputLine[] };

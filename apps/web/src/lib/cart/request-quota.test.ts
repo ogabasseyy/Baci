@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   __resetCartQuotaStoreForTesting,
@@ -84,5 +84,43 @@ describe('checkCartQuota', () => {
     expect(otherSubject.remaining).toBe(otherSubject.limit - 1);
     expect(otherOperation.remaining).toBe(otherOperation.limit - 1);
     __resetCartQuotaStoreForTesting();
+  });
+});
+
+describe('checkCartQuota degraded store', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    __resetCartQuotaStoreForTesting();
+  });
+
+  it('fails closed for unauthenticated operations in production without Redis', async () => {
+    __resetCartQuotaStoreForTesting();
+    vi.stubEnv('NODE_ENV', 'production');
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'handoff_preview',
+        subject: 'ip-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: false, remaining: 0 });
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'bootstrap',
+        subject: 'ip-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: false });
+  });
+
+  it('keeps authenticated operations on the degraded memory budget', async () => {
+    __resetCartQuotaStoreForTesting();
+    vi.stubEnv('NODE_ENV', 'production');
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'commands',
+        subject: 'principal-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: true });
   });
 });

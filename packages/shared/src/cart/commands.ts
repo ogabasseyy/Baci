@@ -105,6 +105,15 @@ export function validateCartCommand(
       }
       return null;
     }
+    case 'set_assurance': {
+      if (!command.lineId || command.lineId.trim().length === 0) {
+        return issue('An assurance change requires a line id.');
+      }
+      if (typeof command.hasAssurance !== 'boolean') {
+        return issue('An assurance change requires a boolean choice.');
+      }
+      return null;
+    }
     case 'remove': {
       if (!command.lineId || command.lineId.trim().length === 0) {
         return issue('A removal requires a line id.');

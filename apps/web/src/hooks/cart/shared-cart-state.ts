@@ -42,6 +42,11 @@ export type SharedCartIntent =
       input?: CartInputLine;
     }
   | { kind: 'set_quantity'; target: SharedCartLineTarget; quantity: number }
+  | {
+      kind: 'set_assurance';
+      target: SharedCartLineTarget;
+      hasAssurance: boolean;
+    }
   | { kind: 'remove'; target: SharedCartLineTarget }
   | { kind: 'clear' };
 

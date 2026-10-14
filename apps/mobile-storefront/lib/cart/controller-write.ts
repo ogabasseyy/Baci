@@ -12,7 +12,6 @@ import { nativeWriteCommand } from './write-command';
 
 export interface NativeCartWriteDeps {
   accept(next: CartSnapshot): Promise<void>;
-  assurance: Map<string, boolean>;
   coordinator: ReturnType<typeof createCartCommandCoordinator>;
   ensureCart(): Promise<CartSnapshot>;
   getIncoming(): CartSnapshot | null;
@@ -35,12 +34,6 @@ export function createNativeCartWrite(deps: NativeCartWriteDeps) {
     }
     const current = await deps.ensureCart();
     deps.status('pending');
-    if (action.type === 'assurance') {
-      const line = deps.getLegacy().items.find((item) => item.id === action.id);
-      if (line) deps.assurance.set(action.id, !line.hasAssurance);
-      await deps.accept(current);
-      return;
-    }
     const command = nativeWriteCommand(action, current);
     if (!command) {
       deps.status('ready');

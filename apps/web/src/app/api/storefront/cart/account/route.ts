@@ -56,14 +56,16 @@ export async function GET(request: NextRequest): Promise<Response> {
 /** Explicit account choice, never inferred from email or a save-details checkbox. */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
+    // Authenticate the account context before consuming or validating
+    // any body: unauthenticated payloads must not drive route work.
+    const resolved = await context(request);
+    if (!resolved.ok) return cartErrorResponse(resolved.error);
     if (!(await checkCsrfProtection(request)).valid)
       return cartErrorResponse('forbidden');
     const body = await readCartJsonBody(request);
     if (!body.ok) return cartErrorResponse('invalid_request');
     const parsed = cartAccountLinkRequestSchema.safeParse(body.body);
     if (!parsed.success) return cartErrorResponse('invalid_request');
-    const resolved = await context(request);
-    if (!resolved.ok) return cartErrorResponse(resolved.error);
     if (
       !(
         await checkCartQuota({

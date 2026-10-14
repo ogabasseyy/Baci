@@ -34,6 +34,7 @@ DECLARE
   v_negotiated integer;
   v_neg_status text;
   v_line_count integer;
+  v_staged public.commerce_cart_lines%ROWTYPE;
 BEGIN
   IF nullif(v_claims ->> 'cart_merchant_id', '') IS NULL
     OR (v_claims ->> 'cart_merchant_id') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
@@ -96,17 +97,39 @@ BEGIN
       RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
     END IF;
     PERFORM public.commerce_cart_require_offer(v_merchant, v_product_id, v_variant_id);
-    INSERT INTO public.commerce_cart_lines (
-      merchant_id, cart_id, product_id, variant_id, condition, options, quantity,
-      negotiated_unit_price_minor, negotiation_status, voucher_token, voucher_award_id,
-      last_unit_price_minor
-    ) VALUES (
-      v_merchant, v_cart_id, v_product_id, v_variant_id, v_condition, v_options,
-      CASE WHEN v_voucher_token IS NOT NULL OR v_voucher_award IS NOT NULL THEN 1 ELSE v_quantity END,
-      v_negotiated, CASE WHEN v_negotiated IS NOT NULL AND v_neg_status IS NULL THEN 'accepted' ELSE v_neg_status END,
-      v_voucher_token, CASE WHEN v_voucher_award IS NULL THEN NULL ELSE v_voucher_award::uuid END,
-      public.commerce_cart_offer_price_minor(v_merchant, v_product_id, v_variant_id)
-    );
+    -- Repeated identities merge exactly like `add`: one logical line,
+    -- summed quantity within the per-line cap; voucher lines never merge.
+    SELECT * INTO v_staged
+    FROM public.commerce_cart_lines
+    WHERE merchant_id = v_merchant AND cart_id = v_cart_id
+      AND product_id = v_product_id
+      AND variant_id IS NOT DISTINCT FROM v_variant_id
+      AND condition IS NOT DISTINCT FROM v_condition
+      AND options = v_options
+      AND voucher_token IS NOT DISTINCT FROM v_voucher_token
+      AND voucher_award_id IS NOT DISTINCT FROM
+        (CASE WHEN v_voucher_award IS NULL THEN NULL ELSE v_voucher_award::uuid END);
+    IF FOUND THEN
+      IF v_staged.voucher_token IS NOT NULL OR v_staged.voucher_award_id IS NOT NULL
+        OR v_staged.quantity + v_quantity > 10 THEN
+        RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+      END IF;
+      UPDATE public.commerce_cart_lines
+      SET quantity = quantity + v_quantity, updated_at = now()
+      WHERE id = v_staged.id;
+    ELSE
+      INSERT INTO public.commerce_cart_lines (
+        merchant_id, cart_id, product_id, variant_id, condition, options, quantity,
+        negotiated_unit_price_minor, negotiation_status, voucher_token, voucher_award_id,
+        last_unit_price_minor
+      ) VALUES (
+        v_merchant, v_cart_id, v_product_id, v_variant_id, v_condition, v_options,
+        CASE WHEN v_voucher_token IS NOT NULL OR v_voucher_award IS NOT NULL THEN 1 ELSE v_quantity END,
+        v_negotiated, CASE WHEN v_negotiated IS NOT NULL AND v_neg_status IS NULL THEN 'accepted' ELSE v_neg_status END,
+        v_voucher_token, CASE WHEN v_voucher_award IS NULL THEN NULL ELSE v_voucher_award::uuid END,
+        public.commerce_cart_offer_price_minor(v_merchant, v_product_id, v_variant_id)
+      );
+    END IF;
   END LOOP;
 
   SELECT public.commerce_cart_assemble_state(v_merchant, v_cart_id) INTO v_state;

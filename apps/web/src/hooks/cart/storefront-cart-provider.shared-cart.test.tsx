@@ -481,7 +481,7 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
     expect(result.current.cartWideNegotiationActive).toBe(true);
   });
 
-  it('toggles assurance display-locally while delegated', async () => {
+  it('toggles assurance in the display and persists it while delegated', async () => {
     mockAdopted();
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(
       new Map([['prod-1', product()]])
@@ -498,7 +498,16 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
     });
 
     expect(result.current.cart[0]?.hasAssurance).toBe(true);
-    expect(sendSharedCartCommand).not.toHaveBeenCalled();
+    expect(sendSharedCartCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: {
+          hasAssurance: true,
+          lineId: 'line-1',
+          type: 'set_assurance',
+        },
+      }),
+      'ogabassey'
+    );
   });
 
   it('keeps merchant identity on delegated clear', async () => {

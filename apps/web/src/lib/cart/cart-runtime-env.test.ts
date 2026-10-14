@@ -26,6 +26,15 @@ describe('getCartProofEnvironment', () => {
     expect(getCartProofEnvironment()).toBe('development');
   });
 
+  it('binds preview proofs to the unique deployment URL', () => {
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    vi.stubEnv('VERCEL_URL', 'baci-git-feature-user.vercel.app');
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(getCartProofEnvironment()).toBe(
+      'preview:baci-git-feature-user.vercel.app'
+    );
+  });
+
   it('ignores blank overrides', () => {
     vi.stubEnv('CART_PROOF_ENVIRONMENT', '   ');
     vi.stubEnv('NODE_ENV', 'test');

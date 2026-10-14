@@ -168,7 +168,7 @@ describe('useSharedCart negotiation and totals', () => {
     await waitFor(() => expect(result.current.version).toBe(5));
   });
 
-  it('toggles assurance display-locally without queueing a command', async () => {
+  it('toggles assurance in the display and persists it as a command', async () => {
     const { result } = await linkedHook();
     const line = result.current.cart[0];
     if (!line) throw new Error('expected a line');
@@ -179,7 +179,16 @@ describe('useSharedCart negotiation and totals', () => {
     });
 
     expect(result.current.cart[0]?.hasAssurance).toBe(true);
-    expect(vi.mocked(sendSharedCartCommand)).not.toHaveBeenCalled();
+    expect(vi.mocked(sendSharedCartCommand)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: {
+          hasAssurance: true,
+          lineId: 'line-1',
+          type: 'set_assurance',
+        },
+      }),
+      'ogabassey'
+    );
   });
 
   it('derives counts and totals from the display like the legacy cart', async () => {

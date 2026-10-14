@@ -90,6 +90,15 @@ it('issues the selected rotated principal only after an atomic account choice', 
   );
   expect((await response.json()).linkedUserId).toBe('user');
 });
+it('authenticates before parsing the account-link body', async () => {
+  vi.mocked(resolveAccountCartRequest).mockResolvedValue({
+    ok: false,
+    error: 'unauthorized',
+  });
+  const response = await POST(request('not-json'));
+  expect(response.status).toBe(401);
+  expect(issueCartSessionProof).not.toHaveBeenCalled();
+});
 it('does not issue proof or cookie when account authority is rejected', async () => {
   vi.mocked(resolveAccountCartRequest).mockResolvedValue({
     ok: false,

@@ -23,14 +23,20 @@ export function getCartSessionSecret(): string | undefined {
 
 /**
  * Environment discriminator bound into cart proofs so a proof minted in
- * one deployment never verifies in another. Explicit override first,
- * then the platform environment, then a development default.
+ * one deployment never verifies in another. Explicit override first.
+ * Preview deployments all share the generic VERCEL_ENV value, so the
+ * deployment-unique VERCEL_URL binds the domain there; proofs from one
+ * preview deployment never replay on another.
  */
 export function getCartProofEnvironment(): string {
   assertServerRuntime('cart proof environment');
   const override = process.env.CART_PROOF_ENVIRONMENT?.trim();
   if (override) return override;
   const vercel = process.env.VERCEL_ENV?.trim();
+  if (vercel === 'preview') {
+    const deployment = process.env.VERCEL_URL?.trim();
+    if (deployment) return `preview:${deployment}`;
+  }
   if (vercel) return vercel;
   return process.env.NODE_ENV?.trim() || 'development';
 }

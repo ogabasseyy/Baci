@@ -31,6 +31,11 @@ const command = z.discriminatedUnion('type', [
     quantity: z.number().int().min(1).max(10),
   }),
   z.object({ type: z.literal('remove'), lineId: z.string().min(1) }),
+  z.object({
+    type: z.literal('set_assurance'),
+    lineId: z.string().min(1),
+    hasAssurance: z.boolean(),
+  }),
   z.object({ type: z.literal('clear') }),
   z.object({ type: z.literal('replace'), lines: z.array(line).max(20) }),
 ]);

@@ -2,8 +2,16 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { hasSharedCartWriter } from '@/stores/shared-cart-writer';
 import { useSharedCart } from './use-shared-cart';
 
+const mockLegacyCart = {
+  current: { items: [] as unknown[], sharedCartRef: undefined as unknown },
+};
 jest.mock('@/stores/cart-store', () => ({
-  useCartStore: { getState: () => ({ items: [] }), setState: jest.fn() },
+  useCartStore: {
+    getState: () => mockLegacyCart.current,
+    setState: (next: Record<string, unknown>) => {
+      mockLegacyCart.current = { ...mockLegacyCart.current, ...next };
+    },
+  },
 }));
 jest.mock('@/hooks/product-utils', () => ({
   fetchProductRow: jest.fn(),
@@ -54,4 +62,33 @@ it('installs one owner only in enabled mode and fences late callbacks on cleanup
   expect(hasSharedCartWriter()).toBe(true);
   unmount();
   expect(hasSharedCartWriter()).toBe(false);
+});
+
+it('discards canonical ownership when enrollment turns off', async () => {
+  mockLegacyCart.current = {
+    items: [{ id: 'item-1' }],
+    sharedCartRef: {
+      merchantId: options.merchantId,
+      cartId: '22222222-2222-4222-8222-222222222222',
+    },
+  };
+  const deps = {
+    client: jest.fn(() => ({
+      context: jest.fn().mockResolvedValue(null),
+      bootstrap: jest.fn(),
+      read: jest.fn(),
+      create: jest.fn(),
+      command: jest.fn(),
+      recoverCreation: jest.fn(),
+    })),
+    loadProduct: jest.fn().mockResolvedValue(null),
+    receipts: {
+      read: jest.fn().mockResolvedValue(null),
+      save: jest.fn(),
+      clear: jest.fn(),
+    },
+  };
+  renderHook(() => useSharedCart({ ...options, enabled: false }, deps));
+  expect(mockLegacyCart.current.sharedCartRef).toBeUndefined();
+  expect(mockLegacyCart.current.items).toEqual([]);
 });

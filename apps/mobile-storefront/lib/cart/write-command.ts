@@ -25,6 +25,15 @@ export function nativeWriteCommand(
     return { type: 'add', ...line };
   }
   if (action.type === 'clear') return { type: 'clear' };
+  if (action.type === 'assurance') {
+    const line = snapshot.lines.find((entry) => entry.id === action.id);
+    if (!line) return null;
+    return {
+      type: 'set_assurance',
+      lineId: action.id,
+      hasAssurance: !line.hasAssurance,
+    };
+  }
   if (action.type === 'remove' || action.type === 'quantity') {
     if (!snapshot.lines.some((line) => line.id === action.id)) return null;
     if (action.type === 'remove' || action.quantity <= 0)

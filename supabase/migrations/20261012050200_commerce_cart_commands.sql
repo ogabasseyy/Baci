@@ -580,6 +580,34 @@ BEGIN
     WHERE merchant_id = v_merchant AND cart_id = p_cart_id;
     v_changed := FOUND;
 
+  ELSIF v_type = 'set_assurance' THEN
+    IF (p_command ->> 'lineId') IS NULL
+      OR (p_command ->> 'lineId') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      OR (p_command ->> 'hasAssurance') NOT IN ('true', 'false') THEN
+      RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+    END IF;
+    v_line_id := (p_command ->> 'lineId')::uuid;
+    SELECT * INTO v_line
+    FROM public.commerce_cart_lines
+    WHERE id = v_line_id AND merchant_id = v_merchant AND cart_id = p_cart_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+    END IF;
+    IF (p_command ->> 'hasAssurance')::boolean = v_line.has_assurance THEN
+      v_changed := false;
+    ELSE
+      -- The coverage rate is server-owned; shoppers choose coverage only.
+      UPDATE public.commerce_cart_lines
+      SET has_assurance = (p_command ->> 'hasAssurance')::boolean,
+        assurance_rate = CASE
+          WHEN (p_command ->> 'hasAssurance')::boolean THEN 0.05
+          ELSE NULL
+        END,
+        updated_at = now()
+      WHERE id = v_line.id;
+      v_changed := true;
+    END IF;
+
   ELSIF v_type = 'replace' THEN
     IF jsonb_typeof(p_command -> 'lines') <> 'array'
       OR jsonb_array_length(p_command -> 'lines') > 20 THEN
@@ -607,12 +635,39 @@ BEGIN
         RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
       END IF;
       PERFORM public.commerce_cart_require_offer(v_merchant, v_product_id, v_variant_id);
-      INSERT INTO cart_replace_want VALUES (
-        v_product_id, v_variant_id, v_condition, v_options,
-        CASE WHEN v_voucher_token IS NOT NULL OR v_voucher_award IS NOT NULL THEN 1 ELSE v_quantity END,
-        v_voucher_token, v_voucher_award::uuid, v_negotiated,
-        CASE WHEN v_negotiated IS NOT NULL AND v_neg_status IS NULL THEN 'accepted' ELSE v_neg_status END
-      );
+      -- Repeated identities merge exactly like `add` and `create`:
+      -- one logical line with summed quantity; voucher lines never merge.
+      IF EXISTS (
+        SELECT 1 FROM cart_replace_want w
+        WHERE w.product_id = v_product_id
+          AND w.variant_id IS NOT DISTINCT FROM v_variant_id
+          AND w.condition IS NOT DISTINCT FROM v_condition
+          AND w.options = v_options
+          AND w.voucher_token IS NOT DISTINCT FROM v_voucher_token
+          AND w.voucher_award IS NOT DISTINCT FROM v_voucher_award::uuid
+      ) THEN
+        IF v_voucher_token IS NOT NULL OR v_voucher_award IS NOT NULL THEN
+          RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+        END IF;
+        UPDATE cart_replace_want w
+        SET quantity = w.quantity + v_quantity
+        WHERE w.product_id = v_product_id
+          AND w.variant_id IS NOT DISTINCT FROM v_variant_id
+          AND w.condition IS NOT DISTINCT FROM v_condition
+          AND w.options = v_options
+          AND w.voucher_token IS NOT DISTINCT FROM v_voucher_token
+          AND w.voucher_award IS NOT DISTINCT FROM v_voucher_award::uuid;
+        IF EXISTS (SELECT 1 FROM cart_replace_want w WHERE w.quantity > 10) THEN
+          RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+        END IF;
+      ELSE
+        INSERT INTO cart_replace_want VALUES (
+          v_product_id, v_variant_id, v_condition, v_options,
+          CASE WHEN v_voucher_token IS NOT NULL OR v_voucher_award IS NOT NULL THEN 1 ELSE v_quantity END,
+          v_voucher_token, v_voucher_award::uuid, v_negotiated,
+          CASE WHEN v_negotiated IS NOT NULL AND v_neg_status IS NULL THEN 'accepted' ELSE v_neg_status END
+        );
+      END IF;
     END LOOP;
     -- Delete lines with no matching wanted identity; update matched ones.
     DELETE FROM public.commerce_cart_lines l

@@ -81,10 +81,17 @@ export function incrementMemoryCounter(
   return next;
 }
 
+export interface WindowCounterResult extends WindowCounter {
+  /** True when the count came from per-instance memory, not shared Redis. */
+  degraded: boolean;
+}
+
+let quotaDegradationLogged = false;
+
 export async function incrementWindowCounter(
   key: string,
   windowMs: number
-): Promise<WindowCounter> {
+): Promise<WindowCounterResult> {
   const redis = getRedis();
   if (redis) {
     try {
@@ -98,14 +105,31 @@ export async function incrementWindowCounter(
       const count = parseCounter(
         await script.eval([key], [String(Math.max(1, windowMs))])
       );
-      return { count, resetTime: Date.now() + windowMs };
+      return { count, degraded: false, resetTime: Date.now() + windowMs };
     } catch {
-      // Fall through to per-instance memory, mirroring the storefront
-      // auth abuse store: Redis is the durable shared budget.
+      // Fall through to per-instance memory: callers governing
+      // unauthenticated operations fail closed on the degraded signal
+      // in production instead of silently multiplying their budgets.
+      if (!quotaDegradationLogged) {
+        quotaDegradationLogged = true;
+        console.warn(
+          'Cart quota store degraded: Redis unavailable, using per-instance memory counters'
+        );
+      }
     }
   }
-  return incrementMemoryCounter(key, windowMs);
+  return { ...incrementMemoryCounter(key, windowMs), degraded: true };
 }
+
+/**
+ * Unauthenticated operations whose budgets bound anonymous creation and
+ * enumeration. When the shared quota store is degraded in production
+ * these fail closed rather than multiplying limits per instance.
+ */
+const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
+  'bootstrap',
+  'handoff_preview',
+]);
 
 /**
  * Tenant/principal-scoped cart quotas reusing the Redis window-counter
@@ -121,10 +145,14 @@ export async function checkCartQuota(
     quotaKey(input),
     budget.windowMs
   );
+  const failClosed =
+    counter.degraded &&
+    process.env.NODE_ENV === 'production' &&
+    FAIL_CLOSED_OPERATIONS.has(input.operation);
   return {
-    allowed: counter.count <= budget.limit,
+    allowed: !failClosed && counter.count <= budget.limit,
     limit: budget.limit,
-    remaining: Math.max(0, budget.limit - counter.count),
+    remaining: failClosed ? 0 : Math.max(0, budget.limit - counter.count),
     resetTime: counter.resetTime,
   };
 }

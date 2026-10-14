@@ -68,6 +68,11 @@ const cartCommandSchema = z.discriminatedUnion('type', [
     type: z.literal('set_quantity'),
   }),
   z.strictObject({
+    hasAssurance: z.boolean(),
+    lineId: z.string().trim().min(1).max(64),
+    type: z.literal('set_assurance'),
+  }),
+  z.strictObject({
     lineId: z.string().trim().min(1).max(64),
     type: z.literal('remove'),
   }),

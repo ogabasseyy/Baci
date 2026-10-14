@@ -75,7 +75,16 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
   const latest = useRef(options);
   latest.current = options;
   useEffect(() => {
-    if (!options.enabled) return;
+    if (!options.enabled) {
+      // Enrollment turned off after canonical ownership was installed:
+      // discard the canonical display and reference so legacy writes and
+      // order creation are not fenced to a cart nothing can prepare.
+      const legacy = useCartStore.getState();
+      if (legacy.sharedCartRef) {
+        useCartStore.setState({ items: [], sharedCartRef: undefined });
+      }
+      return;
+    }
     let alive = true;
     let generation = sharedCartWriterGeneration();
     const isCurrent = () =>

@@ -6,15 +6,19 @@ import { CartRepositoryError, parseRawMutationResult } from './repository';
 import { ERROR_CODES } from './repository-envelope';
 
 /**
- * The preview is unauthenticated, so credential-bearing line fields
- * never leave with it — even if the preview RPC regresses, the route
- * response cannot carry a quiz voucher token.
+ * The preview is unauthenticated, so credential-bearing and
+ * shopper-private line fields never leave with it — even if the preview
+ * RPC regresses, the route response cannot carry a quiz voucher token,
+ * a voucher award reference or negotiated terms.
  */
 export function redactPreviewSnapshot(snapshot: CartSnapshot): CartSnapshot {
   return {
     ...snapshot,
     lines: snapshot.lines.map((line) => ({
       ...line,
+      negotiatedUnitPriceMinor: undefined,
+      negotiationStatus: undefined,
+      voucherAwardId: undefined,
       voucherToken: undefined,
     })),
   };

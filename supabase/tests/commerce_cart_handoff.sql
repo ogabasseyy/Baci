@@ -1004,4 +1004,49 @@ BEGIN
 END
 $$;
 
+
+-- 20. Redemption after the source cart lifetime ends reports expired.
+INSERT INTO public.commerce_carts (id, merchant_id, currency, version, state, expires_at) VALUES
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '11111111-1111-4111-8111-111111111111', 'NGN', 1, 'active', now() + interval '7 days');
+INSERT INTO public.commerce_cart_lines (merchant_id, cart_id, product_id, quantity, last_unit_price_minor) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', '44444444-4444-4444-8444-444444444444', 1, 1500);
+INSERT INTO public.commerce_cart_grants (id, merchant_id, cart_id, principal_id, expires_at, revoked_at) VALUES
+  ('99999999-9999-4999-8999-999999999996', '11111111-1111-4111-8111-111111111111', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'guest-exp-origin', now() + interval '7 days', NULL);
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-exp-origin","cart_scope":"session","cart_id":"dddddddd-dddd-4ddd-8ddd-dddddddddddd","cart_grant_id":"99999999-9999-4999-8999-999999999996"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_issue_handoff(
+    'abababababababababababababababababababababababababababababababab',
+    'dddddddd-dddd-4ddd-8ddd-ddddddddddd1',
+    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    'handoff-op-exp',
+    '{"type":"web"}'::jsonb
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'issue must succeed, got %', v_result; END IF;
+END
+$$;
+RESET ROLE;
+UPDATE public.commerce_carts SET expires_at = now() - interval '1 hour'
+WHERE id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-exp-fresh","cart_scope":"bootstrap"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_redeem_handoff(
+    'abababababababababababababababababababababababababababababababab',
+    'dddddddd-dddd-4ddd-8ddd-ddddddddddd1',
+    'attempt-exp', 'connect', 'web', NULL, 1, NULL, NULL, NULL
+  ) INTO v_result;
+  IF (v_result ->> 'ok')::boolean OR (v_result ->> 'code') <> 'expired' THEN
+    RAISE EXCEPTION 'redeem after source expiry must report expired, got %', v_result;
+  END IF;
+END
+$$;
+RESET ROLE;
+
 ROLLBACK;

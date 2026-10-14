@@ -199,11 +199,19 @@ export function createCartActions(context: SharedCartRuntime) {
     const current = stateRef.current;
     const line = current.display.find((item) => item.cartItemId === cartItemId);
     if (!line) return;
+    const hasAssurance = !(line.hasAssurance ?? false);
     dispatch({
       generation: generationRef.current,
-      hasAssurance: !(line.hasAssurance ?? false),
+      hasAssurance,
       lineKey: cartLineIdentity(cartItemToIdentity(line)),
       type: 'assurance/overlay',
+    });
+    // Persist the choice on the shared line so the checkout review and
+    // the bound order carry the same coverage the shopper selected.
+    enqueueIntent({
+      hasAssurance,
+      kind: 'set_assurance',
+      target: targetForLine(line),
     });
   }
   return {

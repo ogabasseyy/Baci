@@ -27,7 +27,7 @@
   "entries": [
     {
       "id": 1,
-      "path": "/Users/mac/Baci-app",
+      "path": "~/Baci-app",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "branch": "refs/heads/fix/mobile-admin-signup-skip-owner",
       "baselineAncestor": false,
@@ -56,7 +56,7 @@
     },
     {
       "id": 4,
-      "path": "/Users/mac/.codex/worktrees/baci-muse-production/Baci-app",
+      "path": "~/.codex/worktrees/baci-muse-production/Baci-app",
       "head": "cbea2ab34d368da4c5894d95298253cbc7c8350e",
       "branch": "refs/heads/codex/baci-legal-entity-correction",
       "baselineAncestor": false,
@@ -69,7 +69,7 @@
     },
     {
       "id": 7,
-      "path": "/Users/mac/.codex/worktrees/checkout-payment-switch/Baci-app",
+      "path": "~/.codex/worktrees/checkout-payment-switch/Baci-app",
       "head": "a09e19db1942e3d635b9a4ca88fec948b31a59e4",
       "branch": "refs/heads/codex/checkout-payment-switch",
       "baselineAncestor": false,
@@ -91,7 +91,7 @@
     },
     {
       "id": 10,
-      "path": "/Users/mac/.codex/worktrees/issue-3165/Baci-app",
+      "path": "~/.codex/worktrees/issue-3165/Baci-app",
       "head": "29a9c1ccbd067135d1df539ccab00a387e142f55",
       "branch": "refs/heads/fix/loyalty-enroll-schema",
       "baselineAncestor": true,
@@ -109,7 +109,7 @@
     },
     {
       "id": 13,
-      "path": "/Users/mac/.codex/worktrees/merchant-image-pilot/Baci-app",
+      "path": "~/.codex/worktrees/merchant-image-pilot/Baci-app",
       "head": "a0caa3ce681a348e9e14498b2d7702aeff0dfef9",
       "branch": "refs/heads/codex/merchant-image-pilot",
       "baselineAncestor": false,
@@ -127,7 +127,7 @@
     },
     {
       "id": 16,
-      "path": "/Users/mac/.codex/worktrees/ogabassey-search-relevance/Baci-app",
+      "path": "~/.codex/worktrees/ogabassey-search-relevance/Baci-app",
       "head": "a37716d88cc21a368b912fcfadd33a27ad64a997",
       "branch": "refs/heads/codex/ogabassey-search-relevance-followup",
       "baselineAncestor": false,
@@ -140,7 +140,7 @@
     },
     {
       "id": 19,
-      "path": "/Users/mac/.codex/worktrees/piggyvest-primary-release/Baci-app",
+      "path": "~/.codex/worktrees/piggyvest-primary-release/Baci-app",
       "head": "b547cb22fe9f2e635cf9fb0b8ffb657b7df42e77",
       "branch": "refs/heads/codex/piggyvest-primary-wallet-integration",
       "baselineAncestor": true,
@@ -158,7 +158,7 @@
     },
     {
       "id": 22,
-      "path": "/Users/mac/Baci-app-worktrees/airtime-wallet-only",
+      "path": "~/Baci-app-worktrees/airtime-wallet-only",
       "head": "6eda63ce245969b6a9bd23dda316f1c680762e11",
       "branch": "refs/heads/feat/airtime-wallet-only",
       "baselineAncestor": false,
@@ -176,7 +176,7 @@
     },
     {
       "id": 25,
-      "path": "/Users/mac/Baci-app/.worktrees/3309-transactional-handoff",
+      "path": "~/Baci-app/.worktrees/3309-transactional-handoff",
       "head": "e9685335bc6eb66b3e50e5048b66b0e5f5520dfa",
       "branch": "refs/heads/codex/3309-transactional-handoff",
       "baselineAncestor": false,
@@ -189,7 +189,7 @@
     },
     {
       "id": 28,
-      "path": "/Users/mac/Baci-app/.worktrees/android-disk-preflight",
+      "path": "~/Baci-app/.worktrees/android-disk-preflight",
       "head": "02aa73cd50495dbd1471079ee3cea7c5826b3544",
       "branch": "refs/heads/codex/android-disk-preflight",
       "baselineAncestor": false,
@@ -202,7 +202,7 @@
     },
     {
       "id": 31,
-      "path": "/Users/mac/Baci-app/.worktrees/anr-telemetry.Tmecix",
+      "path": "~/Baci-app/.worktrees/anr-telemetry.Tmecix",
       "head": "1e3e267dc5af4e765fc70a7ada5ced3c854861f3",
       "branch": "refs/heads/codex/android-anr-telemetry",
       "baselineAncestor": false,
@@ -215,7 +215,7 @@
     },
     {
       "id": 34,
-      "path": "/Users/mac/Baci-app/.worktrees/base-homepage-inline-css",
+      "path": "~/Baci-app/.worktrees/base-homepage-inline-css",
       "head": "8b368c38e05ac998e1c69c10047dcc8ecd587659",
       "branch": "refs/heads/fix/ogabassey-home-dedicated-route",
       "baselineAncestor": false,
@@ -228,7 +228,7 @@
     },
     {
       "id": 37,
-      "path": "/Users/mac/Baci-app/.worktrees/cloudflare-deploy-skew",
+      "path": "~/Baci-app/.worktrees/cloudflare-deploy-skew",
       "head": "61b34ab8ec3bacda5700ec7836b727edde31bc9a",
       "branch": "refs/heads/codex/fix-storefront-release-coherence",
       "baselineAncestor": false,
@@ -237,11 +237,16 @@
       "uniqueCommits": 2,
       "changedPaths": 9,
       "category": "PRESERVE_IMPROVEMENT",
-      "evidence": "Release marker/config coherence and deploy gate changes; candidate only, not behavior-verified against baseline."
+      "evidence": "Closed PR #3270 with release marker/config coherence and deploy gate changes; candidate only, not behavior-verified against baseline.",
+      "pr": {
+        "number": 3270,
+        "state": "CLOSED",
+        "head": "61b34ab8ec3bacda5700ec7836b727edde31bc9a"
+      }
     },
     {
       "id": 40,
-      "path": "/Users/mac/Baci-app/.worktrees/customizable-pay-on-delivery-implementation",
+      "path": "~/Baci-app/.worktrees/customizable-pay-on-delivery-implementation",
       "head": "4e96512cd360def702fa843a1df71e1f7fac04ed",
       "branch": "refs/heads/codex/customizable-pay-on-delivery",
       "baselineAncestor": false,
@@ -254,7 +259,7 @@
     },
     {
       "id": 43,
-      "path": "/Users/mac/Baci-app/.worktrees/cwv-ogabassey-utility-20260908",
+      "path": "~/Baci-app/.worktrees/cwv-ogabassey-utility-20260908",
       "head": "a3825baefddc2383ccb69405979bb5d2cd2eeb67",
       "branch": "refs/heads/cwv/ogabassey-utility-routes-20260908",
       "baselineAncestor": false,
@@ -273,7 +278,7 @@
     },
     {
       "id": 46,
-      "path": "/Users/mac/Baci-app/.worktrees/discount-transaction-history-pr",
+      "path": "~/Baci-app/.worktrees/discount-transaction-history-pr",
       "head": "952206d228eb722b330e486fd222b0f12853cfd0",
       "branch": "refs/heads/codex/discount-transaction-history",
       "baselineAncestor": false,
@@ -291,7 +296,7 @@
     },
     {
       "id": 49,
-      "path": "/Users/mac/Baci-app/.worktrees/expo-image-pilot",
+      "path": "~/Baci-app/.worktrees/expo-image-pilot",
       "head": "1c87b0506cc91d16a590c819065657a8253f7f9e",
       "branch": "refs/heads/codex/expo-image-pilot",
       "baselineAncestor": false,
@@ -304,7 +309,7 @@
     },
     {
       "id": 52,
-      "path": "/Users/mac/Baci-app/.worktrees/expo57-modernization",
+      "path": "~/Baci-app/.worktrees/expo57-modernization",
       "head": "f593be74e5fcdf53585de12264ce9f24c72d473f",
       "branch": "refs/heads/codex/expo57-modernization-pr",
       "baselineAncestor": false,
@@ -322,7 +327,7 @@
     },
     {
       "id": 55,
-      "path": "/Users/mac/Baci-app/.worktrees/fix-blog-prerender-cache-20260830",
+      "path": "~/Baci-app/.worktrees/fix-blog-prerender-cache-20260830",
       "head": "337e18184b2e5cd9b9a1bbd2945846fbe34f95f7",
       "branch": "refs/heads/codex/fix-blog-prerender-cache-20260830",
       "baselineAncestor": false,
@@ -340,7 +345,7 @@
     },
     {
       "id": 58,
-      "path": "/Users/mac/Baci-app/.worktrees/fix-web-ios-production-deploys",
+      "path": "~/Baci-app/.worktrees/fix-web-ios-production-deploys",
       "head": "dc79abd88c6b7fa2fa909ba145afd223a989fd70",
       "branch": "refs/heads/fix/web-ios-production-deploys",
       "baselineAncestor": false,
@@ -362,7 +367,7 @@
     },
     {
       "id": 61,
-      "path": "/Users/mac/Baci-app/.worktrees/gigl-wallet-shipping-margin",
+      "path": "~/Baci-app/.worktrees/gigl-wallet-shipping-margin",
       "head": "68903f4628694115857b1641aaf85f43f58a7dcf",
       "branch": "refs/heads/main",
       "baselineAncestor": false,
@@ -375,7 +380,7 @@
     },
     {
       "id": 64,
-      "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task6-prep",
+      "path": "~/Baci-app/.worktrees/h0-cwv-task6-prep",
       "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
       "branch": "refs/heads/codex/h0-cwv-task6-prep",
       "baselineAncestor": false,
@@ -388,7 +393,7 @@
     },
     {
       "id": 67,
-      "path": "/Users/mac/Baci-app/.worktrees/h1-home-critical-viewport",
+      "path": "~/Baci-app/.worktrees/h1-home-critical-viewport",
       "head": "127eedc9769a4285773e9681a980f18122049a14",
       "branch": "refs/heads/codex/h1-home-critical-viewport",
       "baselineAncestor": false,
@@ -401,7 +406,7 @@
     },
     {
       "id": 70,
-      "path": "/Users/mac/Baci-app/.worktrees/merchant-media-pipeline",
+      "path": "~/Baci-app/.worktrees/merchant-media-pipeline",
       "head": "3c4e02486f7bbea7debb52c3e854cccb8f20533c",
       "branch": "refs/heads/codex/merchant-media-pipeline",
       "baselineAncestor": false,
@@ -414,7 +419,7 @@
     },
     {
       "id": 73,
-      "path": "/Users/mac/Baci-app/.worktrees/metro-clean-20260817",
+      "path": "~/Baci-app/.worktrees/metro-clean-20260817",
       "head": "a0221b2734af571fd112e3f5c63311d3b1a73af4",
       "branch": "refs/heads/wip/metro-clean-20260817-preserved",
       "baselineAncestor": false,
@@ -427,7 +432,7 @@
     },
     {
       "id": 76,
-      "path": "/Users/mac/Baci-app/.worktrees/mobile-admin-e2e-current-main.bEKqlN",
+      "path": "~/Baci-app/.worktrees/mobile-admin-e2e-current-main.bEKqlN",
       "head": "b76dc7cc831eabd1cc1f8b0533e443c1c8a9be15",
       "branch": "refs/heads/codex/mobile-admin-e2e-codegen",
       "baselineAncestor": false,
@@ -440,7 +445,7 @@
     },
     {
       "id": 79,
-      "path": "/Users/mac/Baci-app/.worktrees/mobile-native-crash-fixes-20260908",
+      "path": "~/Baci-app/.worktrees/mobile-native-crash-fixes-20260908",
       "head": "3e065198486962d14cdf1afeecdc2e1e6247cfb7",
       "branch": "refs/heads/codex/mobile-native-crash-fixes-20260908",
       "baselineAncestor": false,
@@ -462,7 +467,7 @@
     },
     {
       "id": 82,
-      "path": "/Users/mac/Baci-app/.worktrees/office-pickup-state-fix",
+      "path": "~/Baci-app/.worktrees/office-pickup-state-fix",
       "head": "d0d1cbd2fd4b5867a980644acf5e29fd7c451c0c",
       "branch": "refs/heads/codex/office-pickup-state-fix",
       "baselineAncestor": false,
@@ -475,7 +480,7 @@
     },
     {
       "id": 85,
-      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-live-rails-20260831",
+      "path": "~/Baci-app/.worktrees/ogabassey-live-rails-20260831",
       "head": "2c83782d15527e0df7b37b220a738e72079ce356",
       "branch": "refs/heads/codex/ogabassey-live-rails-20260831",
       "baselineAncestor": false,
@@ -493,7 +498,7 @@
     },
     {
       "id": 88,
-      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-tracking-links",
+      "path": "~/Baci-app/.worktrees/ogabassey-tracking-links",
       "head": "18d0b4c5aaf4da523e20d92f2aadf9cce19cd945",
       "branch": "refs/heads/codex/ogabassey-tracking-links",
       "baselineAncestor": false,
@@ -506,7 +511,7 @@
     },
     {
       "id": 91,
-      "path": "/Users/mac/Baci-app/.worktrees/paypal-integration",
+      "path": "~/Baci-app/.worktrees/paypal-integration",
       "head": "20412d3dd861671f740cb9dfb82ca33b1437115c",
       "branch": "refs/heads/feature/paypal-integration",
       "baselineAncestor": false,
@@ -520,7 +525,7 @@
     },
     {
       "id": 94,
-      "path": "/Users/mac/Baci-app/.worktrees/pr-2047-mobile-storefront-crash",
+      "path": "~/Baci-app/.worktrees/pr-2047-mobile-storefront-crash",
       "head": "770996bb81fe17d213271ed744fa8c7e57518a46",
       "branch": "refs/heads/pr-2047-mobile-storefront-crash",
       "baselineAncestor": false,
@@ -534,7 +539,7 @@
     },
     {
       "id": 97,
-      "path": "/Users/mac/Baci-app/.worktrees/pr-3281-agentic-health",
+      "path": "~/Baci-app/.worktrees/pr-3281-agentic-health",
       "head": "d9a1f7dbd4f531cc4c0b2846640f7c2d33481d80",
       "branch": "refs/heads/codex/pr-3281-agentic-health",
       "baselineAncestor": false,
@@ -556,7 +561,7 @@
     },
     {
       "id": 100,
-      "path": "/Users/mac/Baci-app/.worktrees/pr3223-review-loop",
+      "path": "~/Baci-app/.worktrees/pr3223-review-loop",
       "head": "a67acddf133469cd4cc4dc8afe8ad9165f922c91",
       "branch": "refs/heads/codex/pr3223-review-loop",
       "baselineAncestor": false,
@@ -569,7 +574,7 @@
     },
     {
       "id": 103,
-      "path": "/Users/mac/Baci-app/.worktrees/pr3277-ci-fix",
+      "path": "~/Baci-app/.worktrees/pr3277-ci-fix",
       "head": "39a43badce844d6e40a15f7ab73e9417e5aaa044",
       "branch": "refs/heads/codex/pr3277-ci-fix",
       "baselineAncestor": false,
@@ -582,7 +587,7 @@
     },
     {
       "id": 106,
-      "path": "/Users/mac/Baci-app/.worktrees/pr3309-path-direct-handoff-sparse",
+      "path": "~/Baci-app/.worktrees/pr3309-path-direct-handoff-sparse",
       "head": "5fffb3a4f4c6b041a966a3ea73641aaa1268d41b",
       "branch": "refs/heads/codex/3309-path-direct-handoff",
       "baselineAncestor": false,
@@ -595,7 +600,7 @@
     },
     {
       "id": 109,
-      "path": "/Users/mac/Baci-app/.worktrees/pr3337-clean-20260814",
+      "path": "~/Baci-app/.worktrees/pr3337-clean-20260814",
       "head": "b7d702c7b920c429a4e37fc736a22f8322f48730",
       "branch": null,
       "baselineAncestor": false,
@@ -608,7 +613,7 @@
     },
     {
       "id": 112,
-      "path": "/Users/mac/Baci-app/.worktrees/quiz-main-reconciliation-20260905",
+      "path": "~/Baci-app/.worktrees/quiz-main-reconciliation-20260905",
       "head": "ba049d9ef72ad4cf5840db178e010dc43517ee1d",
       "branch": "refs/heads/codex/quiz-main-reconciliation-20260905",
       "baselineAncestor": false,
@@ -626,7 +631,7 @@
     },
     {
       "id": 115,
-      "path": "/Users/mac/Baci-app/.worktrees/readiness-round4-web",
+      "path": "~/Baci-app/.worktrees/readiness-round4-web",
       "head": "e0e860c0ccc847d877272d4785d2e6a420efb05e",
       "branch": "refs/heads/codex/readiness-round4-web",
       "baselineAncestor": false,
@@ -639,7 +644,7 @@
     },
     {
       "id": 118,
-      "path": "/Users/mac/Baci-app/.worktrees/readiness-task9-app-focus",
+      "path": "~/Baci-app/.worktrees/readiness-task9-app-focus",
       "head": "f180f37ff052d115dd5235b7c86637388731d9e0",
       "branch": "refs/heads/codex/readiness-task9-app-focus",
       "baselineAncestor": false,
@@ -652,7 +657,7 @@
     },
     {
       "id": 121,
-      "path": "/Users/mac/Baci-app/.worktrees/release-failures",
+      "path": "~/Baci-app/.worktrees/release-failures",
       "head": "ffd5a739a8a3035bef5156816587ee5a957deb36",
       "branch": "refs/heads/codex/fix-release-failures",
       "baselineAncestor": false,
@@ -670,7 +675,7 @@
     },
     {
       "id": 124,
-      "path": "/Users/mac/Baci-app/.worktrees/review-pr-2898",
+      "path": "~/Baci-app/.worktrees/review-pr-2898",
       "head": "a02368133b905930961160999635510b13b37f16",
       "branch": null,
       "baselineAncestor": false,
@@ -683,7 +688,7 @@
     },
     {
       "id": 127,
-      "path": "/Users/mac/Baci-app/.worktrees/sec-leftover-14",
+      "path": "~/Baci-app/.worktrees/sec-leftover-14",
       "head": "b71d244849945b1f203994d20e6b45f73178c339",
       "branch": "refs/heads/fix/security-remaining-14-alerts",
       "baselineAncestor": true,
@@ -707,7 +712,7 @@
     },
     {
       "id": 130,
-      "path": "/Users/mac/Baci-app/.worktrees/shipping-legacy-client-20260908",
+      "path": "~/Baci-app/.worktrees/shipping-legacy-client-20260908",
       "head": "2ca377a749422da1ea4eaf9f01f17c6ca10e4ef7",
       "branch": "refs/heads/codex/shipping-legacy-client-20260908",
       "baselineAncestor": false,
@@ -729,7 +734,7 @@
     },
     {
       "id": 133,
-      "path": "/Users/mac/Baci-app/.worktrees/shopify-inventory-refresh",
+      "path": "~/Baci-app/.worktrees/shopify-inventory-refresh",
       "head": "ac4a4b9a1fc0f79b18baa222d50072ccea7d37fb",
       "branch": "refs/heads/codex/shopify-inventory-refresh",
       "baselineAncestor": false,
@@ -747,7 +752,7 @@
     },
     {
       "id": 136,
-      "path": "/Users/mac/Baci-app/.worktrees/social-ads-google-finalize",
+      "path": "~/Baci-app/.worktrees/social-ads-google-finalize",
       "head": "06c7ee2abdceabc56a1f8efbed5a99b0a77e2fe2",
       "branch": "refs/heads/codex/social-ads-google-finalize",
       "baselineAncestor": false,
@@ -760,7 +765,7 @@
     },
     {
       "id": 139,
-      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-b0",
+      "path": "~/Baci-app/.worktrees/storefront-ai-b0",
       "head": "d7db23042d4e661b702a9ba36b361430cee10a71",
       "branch": "refs/heads/feat/storefront-ai-b0",
       "baselineAncestor": false,
@@ -773,7 +778,7 @@
     },
     {
       "id": 142,
-      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r2-luna",
+      "path": "~/Baci-app/.worktrees/storefront-ai-r2-luna",
       "head": "71300d6de9b70b78fbdb90db53dfbe77f80e2272",
       "branch": "refs/heads/codex/storefront-ai-r2-luna",
       "baselineAncestor": false,
@@ -786,7 +791,7 @@
     },
     {
       "id": 145,
-      "path": "/Users/mac/Baci-app/.worktrees/storefront-audit-fixes",
+      "path": "~/Baci-app/.worktrees/storefront-audit-fixes",
       "head": "6ed1ef65ac8d5f9a88c4bf0a5310f1e245bbbf3f",
       "branch": "refs/heads/codex/storefront-audit-fixes",
       "baselineAncestor": false,
@@ -799,7 +804,7 @@
     },
     {
       "id": 148,
-      "path": "/Users/mac/Baci-app/.worktrees/storefront-web-alignment-integration-qa",
+      "path": "~/Baci-app/.worktrees/storefront-web-alignment-integration-qa",
       "head": "a4c2b423d3d1880a4d4a920231705d4a0d78476b",
       "branch": "refs/heads/codex/storefront-web-alignment-integration-qa",
       "baselineAncestor": false,
@@ -812,7 +817,7 @@
     },
     {
       "id": 151,
-      "path": "/Users/mac/Baci-app/.worktrees/universal-payment-design",
+      "path": "~/Baci-app/.worktrees/universal-payment-design",
       "head": "6714131b75e65ffe7cbcdaba20536c1c056a7f08",
       "branch": "refs/heads/codex/universal-payment-design",
       "baselineAncestor": false,
@@ -825,7 +830,7 @@
     },
     {
       "id": 154,
-      "path": "/Users/mac/Baci-app/.worktrees/vercel-cost-cuts-round2",
+      "path": "~/Baci-app/.worktrees/vercel-cost-cuts-round2",
       "head": "a38ca7061b3ed2ad73d19983f2fca566f0b84e8c",
       "branch": "refs/heads/codex/vercel-cost-cuts-round2",
       "baselineAncestor": false,
@@ -838,7 +843,7 @@
     },
     {
       "id": 157,
-      "path": "/Users/mac/Baci-app/.worktrees/wht-invoice-adjustments-design",
+      "path": "~/Baci-app/.worktrees/wht-invoice-adjustments-design",
       "head": "8c71477ab4463564fab7cc39df11c48ff05d607e",
       "branch": "refs/heads/codex/wht-invoice-adjustments-design",
       "baselineAncestor": false,
@@ -851,7 +856,7 @@
     },
     {
       "id": 160,
-      "path": "/Users/mac/Baci-worktrees/cursor-savings-phase1",
+      "path": "~/Baci-worktrees/cursor-savings-phase1",
       "head": "2a4a8e40bf15a169038132df19b8593a463912cc",
       "branch": "refs/heads/cursor-savings-phase1",
       "baselineAncestor": false,
@@ -865,7 +870,7 @@
     },
     {
       "id": 163,
-      "path": "/Users/mac/Baci-worktrees/image-bitmap-memory-fix",
+      "path": "~/Baci-worktrees/image-bitmap-memory-fix",
       "head": "c127b0484e47c1bc7d8661f7f402bba3423d03b5",
       "branch": "refs/heads/codex/image-bitmap-memory-fix",
       "baselineAncestor": false,
@@ -878,7 +883,7 @@
     },
     {
       "id": 166,
-      "path": "/Users/mac/Baci-worktrees/oxygen-integration",
+      "path": "~/Baci-worktrees/oxygen-integration",
       "head": "68903f4628694115857b1641aaf85f43f58a7dcf",
       "branch": "refs/heads/feat/oxygen-integration",
       "baselineAncestor": false,
@@ -891,7 +896,7 @@
     },
     {
       "id": 169,
-      "path": "/Users/mac/Baci-worktrees/piggyvest-3620-takeover",
+      "path": "~/Baci-worktrees/piggyvest-3620-takeover",
       "head": "afef44eee3c348f60e541e5aafbb6d71c12b5cdc",
       "branch": null,
       "baselineAncestor": false,
@@ -904,7 +909,7 @@
     },
     {
       "id": 172,
-      "path": "/Users/mac/Baci-worktrees/pr3186-outbox-rpc",
+      "path": "~/Baci-worktrees/pr3186-outbox-rpc",
       "head": "9634efb601be727bd621af7be3d80383b3b33b53",
       "branch": "refs/heads/codex/pr3186-outbox-rpc-fix",
       "baselineAncestor": false,
@@ -917,7 +922,7 @@
     },
     {
       "id": 175,
-      "path": "/Users/mac/Baci-worktrees/pr3322-ci-fix",
+      "path": "~/Baci-worktrees/pr3322-ci-fix",
       "head": "47c2c9ceae9424b06a0e2c2bb55ed17daccf4a31",
       "branch": "refs/heads/codex/pr3322-ci-fix",
       "baselineAncestor": false,
@@ -939,7 +944,7 @@
     },
     {
       "id": 178,
-      "path": "/Users/mac/Baci-worktrees/pr3597-refunds",
+      "path": "~/Baci-worktrees/pr3597-refunds",
       "head": "8ba03c467ba8683b18fbd9eea16b0965e948df79",
       "branch": "refs/heads/codex/pr3597-refunds",
       "baselineAncestor": true,
@@ -952,7 +957,7 @@
     },
     {
       "id": 181,
-      "path": "/Users/mac/Baci-worktrees/semantic-timeout-fix",
+      "path": "~/Baci-worktrees/semantic-timeout-fix",
       "head": null,
       "branch": null,
       "baselineAncestor": null,
@@ -965,7 +970,7 @@
     },
     {
       "id": 184,
-      "path": "/Users/mac/Baci-worktrees/terra-3305-followup-isolated",
+      "path": "~/Baci-worktrees/terra-3305-followup-isolated",
       "head": "bc3b00b42625e80c9339c91b794b4f91f1f249f1",
       "branch": "refs/heads/codex/3305-terra-followup-isolated",
       "baselineAncestor": false,
@@ -978,7 +983,7 @@
     },
     {
       "id": 187,
-      "path": "/Users/mac/Baci-worktrees/terra-3309-case-state-review",
+      "path": "~/Baci-worktrees/terra-3309-case-state-review",
       "head": "49aded50ec9e454f0d8056dd1e07768e09cd42a5",
       "branch": "refs/heads/codex/3309-case-state-review",
       "baselineAncestor": false,
@@ -991,7 +996,7 @@
     },
     {
       "id": 190,
-      "path": "/Users/mac/Baci-worktrees/terra-3309-claim-residue-recovery",
+      "path": "~/Baci-worktrees/terra-3309-claim-residue-recovery",
       "head": "78a57da4a26deffb4fb883b425b1b8fe17db7a43",
       "branch": "refs/heads/codex/3309-claim-residue-recovery",
       "baselineAncestor": false,

@@ -5,7 +5,8 @@
 This is a read-only retirement triage of 193 registered Baci worktrees captured
 on 2026-10-10, split between three GPT-6 Luna agents. Comparison baseline:
 `ae94a5075d92ebdc3625c13006a6dd4144dba4fa` (`origin/main`, fetched on the audit date).
-The findings branch itself is excluded from the inventory.
+The findings branch itself is excluded from the inventory. Paths use `~` for
+the audit machine's home directory; transient process IDs are omitted.
 
 No audited worktree, source, dependency directory, branch, or process was removed.
 The requested 90% retirement target is an aspiration, not a safety assumption.
@@ -18,8 +19,8 @@ this documentation PR does not cherry-pick code or prove runtime correctness.
 | --- | ---: |
 | Code-redundant retirement candidates | 20 |
 | Dirty/local work to preserve | 81 |
-| Potential improvement/preservation candidates | 52 |
-| Active or uncertain | 36 |
+| Potential improvement/preservation candidates | 50 |
+| Active or uncertain | 38 |
 | Missing checkouts | 4 |
 | Total audited | 193 |
 
@@ -37,26 +38,26 @@ not an unconditional removal list. See [candidate-recheck.json](./candidate-rech
 
 | ID | Worktree | Evidence |
 | ---: | --- | --- |
-| 5 | `/Users/mac/.codex/worktrees/blog-rss-xml-safety/Baci-app` | Exact PR #3617 head is MERGED; clean worktree; ignored entries were generated/type artifacts only. |
-| 6 | `/Users/mac/.codex/worktrees/checkout-3577-pre-slice` | Clean detached checkout; zero patch-unique commits and zero changed paths. |
-| 7 | `/Users/mac/.codex/worktrees/checkout-payment-switch/Baci-app` | Exact merged PR head, clean Git status; 263 sampled ignored media/report files byte-identical to primary. |
-| 21 | `/Users/mac/.codex/worktrees/shipping-migration-audit/Baci-app` | PR #3506 merged at exact HEAD; clean; ignored data limited to generated/dependency artifacts. |
-| 29 | `/Users/mac/Baci-app/.worktrees/android-soloader-fix` | The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior. |
-| 58 | `/Users/mac/Baci-app/.worktrees/fix-web-ios-production-deploys` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
-| 60 | `/Users/mac/Baci-app/.worktrees/gigl-tracking-notifications` | PR #3248 merged at this exact head; clean status and only generated/build data ignored. |
-| 79 | `/Users/mac/Baci-app/.worktrees/mobile-native-crash-fixes-20260908` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
-| 81 | `/Users/mac/Baci-app/.worktrees/negotiation-notification-fix` | PR #3463 merged at exact HEAD; clean; only generated Expo/build data ignored. |
-| 97 | `/Users/mac/Baci-app/.worktrees/pr-3281-agentic-health` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
-| 104 | `/Users/mac/Baci-app/.worktrees/pr3284-shipping-empty-quotes` | Exact PR #3284 head is MERGED; clean worktree; no meaningful ignored data observed. |
-| 111 | `/Users/mac/Baci-app/.worktrees/quiz-instant-results-release-20260830` | PR #3431 merged at exact local HEAD; clean status and no meaningful ignored data found. |
-| 120 | `/Users/mac/Baci-app/.worktrees/reconcile-cron-audit-20260821` | No patch-unique commits; two changed paths are patch-equivalent; clean, only generated/dependency data ignored. |
-| 130 | `/Users/mac/Baci-app/.worktrees/shipping-legacy-client-20260908` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
-| 131 | `/Users/mac/Baci-app/.worktrees/shopify-catalog-ci-luna` | Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior. |
-| 152 | `/Users/mac/Baci-app/.worktrees/variant-review-followups` | ancestor of baseline; clean |
-| 158 | `/Users/mac/Baci-worktrees/category-recent-carousel` | empty tree diff despite unique commit subject |
-| 170 | `/Users/mac/Baci-worktrees/posthog-followup-secondary` | empty tree diff despite unique commit subject |
-| 171 | `/Users/mac/Baci-worktrees/pr-3444-checkout-retry-resume` | PR #3462 merged at exact HEAD; clean; no meaningful ignored data observed. |
-| 175 | `/Users/mac/Baci-worktrees/pr3322-ci-fix` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 5 | `~/.codex/worktrees/blog-rss-xml-safety/Baci-app` | Exact PR #3617 head is MERGED; clean worktree; ignored entries were generated/type artifacts only. |
+| 6 | `~/.codex/worktrees/checkout-3577-pre-slice` | Clean detached checkout; zero patch-unique commits and zero changed paths. |
+| 7 | `~/.codex/worktrees/checkout-payment-switch/Baci-app` | Exact merged PR head, clean Git status; 263 sampled ignored media/report files byte-identical to primary. |
+| 21 | `~/.codex/worktrees/shipping-migration-audit/Baci-app` | PR #3506 merged at exact HEAD; clean; ignored data limited to generated/dependency artifacts. |
+| 29 | `~/Baci-app/.worktrees/android-soloader-fix` | The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior. |
+| 58 | `~/Baci-app/.worktrees/fix-web-ios-production-deploys` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 60 | `~/Baci-app/.worktrees/gigl-tracking-notifications` | PR #3248 merged at this exact head; clean status and only generated/build data ignored. |
+| 79 | `~/Baci-app/.worktrees/mobile-native-crash-fixes-20260908` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 81 | `~/Baci-app/.worktrees/negotiation-notification-fix` | PR #3463 merged at exact HEAD; clean; only generated Expo/build data ignored. |
+| 97 | `~/Baci-app/.worktrees/pr-3281-agentic-health` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 104 | `~/Baci-app/.worktrees/pr3284-shipping-empty-quotes` | Exact PR #3284 head is MERGED; clean worktree; no meaningful ignored data observed. |
+| 111 | `~/Baci-app/.worktrees/quiz-instant-results-release-20260830` | PR #3431 merged at exact local HEAD; clean status and no meaningful ignored data found. |
+| 120 | `~/Baci-app/.worktrees/reconcile-cron-audit-20260821` | No patch-unique commits; two changed paths are patch-equivalent; clean, only generated/dependency data ignored. |
+| 130 | `~/Baci-app/.worktrees/shipping-legacy-client-20260908` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 131 | `~/Baci-app/.worktrees/shopify-catalog-ci-luna` | Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior. |
+| 152 | `~/Baci-app/.worktrees/variant-review-followups` | ancestor of baseline; clean |
+| 158 | `~/Baci-worktrees/category-recent-carousel` | empty tree diff despite unique commit subject |
+| 170 | `~/Baci-worktrees/posthog-followup-secondary` | empty tree diff despite unique commit subject |
+| 171 | `~/Baci-worktrees/pr-3444-checkout-retry-resume` | PR #3462 merged at exact HEAD; clean; no meaningful ignored data observed. |
+| 175 | `~/Baci-worktrees/pr3322-ci-fix` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
 
 ### Preservation priorities
 
@@ -65,9 +66,10 @@ not an unconditional removal list. See [candidate-recheck.json](./candidate-rech
   of the checkout's full state.
 - Broad source deletions/local edits: IDs 3, 77, 94, 148, 160. Resolve sparse or
   deliberate deletion state with the owner; do not assume these are caches.
-- Security/entitlement candidates: IDs 24 and 72 have focused current-baseline
-  comparisons in shard 3. Recheck retracted the cited evidence (safeguards
-  already in baseline); do not salvage on the original claims.
+- Security/entitlement follow-ups: IDs 24 and 72 (ACTIVE_OR_UNCERTAIN since
+  the cited evidence was retracted) have focused current-baseline
+  comparisons in shard 3. Recheck found the safeguards already in baseline;
+  do not salvage on the original claims.
 - Storefront timeout/PDP/builder candidates: IDs 87, 150, 168 have behavior-level
   differences worth review; the timeout patch also changes cache identity and
   must not be transplanted blindly.

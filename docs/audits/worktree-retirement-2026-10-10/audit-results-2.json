@@ -13,7 +13,7 @@
   "rows": [
     {
       "id": 2,
-      "path": "/Users/mac/.codex/worktrees/0d77/Baci-app",
+      "path": "~/.codex/worktrees/0d77/Baci-app",
       "head": "89d61b383bd1631a2bb99444ba9a930060aeaa36",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -26,7 +26,7 @@
     },
     {
       "id": 5,
-      "path": "/Users/mac/.codex/worktrees/blog-rss-xml-safety/Baci-app",
+      "path": "~/.codex/worktrees/blog-rss-xml-safety/Baci-app",
       "head": "dd2cc20be0a9c67ea5b164aab98ab2662605b8e4",
       "class": "CLEAN_REDUNDANT",
       "ancestorBaseline": false,
@@ -39,7 +39,7 @@
     },
     {
       "id": 8,
-      "path": "/Users/mac/.codex/worktrees/checkout-reliability/Baci-app",
+      "path": "~/.codex/worktrees/checkout-reliability/Baci-app",
       "head": "ba982e3f88a672e32a4847b97ef9b3c424cab5fa",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -52,7 +52,7 @@
     },
     {
       "id": 11,
-      "path": "/Users/mac/.codex/worktrees/issue-3581/Baci-app",
+      "path": "~/.codex/worktrees/issue-3581/Baci-app",
       "head": "517e72f05e62e7678f6d1715f3f2c394f6157a8b",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -65,7 +65,7 @@
     },
     {
       "id": 14,
-      "path": "/Users/mac/.codex/worktrees/ogabassey-persistent-cart/Baci-app",
+      "path": "~/.codex/worktrees/ogabassey-persistent-cart/Baci-app",
       "head": "4737bdb040e512cd89a7c2932adca211de511276",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -77,7 +77,7 @@
     },
     {
       "id": 17,
-      "path": "/Users/mac/.codex/worktrees/ogabassey-search-summary/Baci-app",
+      "path": "~/.codex/worktrees/ogabassey-search-summary/Baci-app",
       "head": "7d8353d5a53c329abb820d497b5827bb665bb060",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -89,7 +89,7 @@
     },
     {
       "id": 20,
-      "path": "/Users/mac/.codex/worktrees/production-release-coordination/Baci-app",
+      "path": "~/.codex/worktrees/production-release-coordination/Baci-app",
       "head": "a891f5287738267c4df701ae1e02836a1a2959f9",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -102,7 +102,7 @@
     },
     {
       "id": 23,
-      "path": "/Users/mac/Baci-app/.claude/worktrees/agent-a26fe302f75651c15",
+      "path": "~/Baci-app/.claude/worktrees/agent-a26fe302f75651c15",
       "head": "0aeb6f5eaf6c45adc3c7268040ee22d7d7940434",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -115,7 +115,7 @@
     },
     {
       "id": 26,
-      "path": "/Users/mac/Baci-app/.worktrees/3309-transition-cluster-bb725742",
+      "path": "~/Baci-app/.worktrees/3309-transition-cluster-bb725742",
       "head": "59296a71cf83f5ac614b4a39ef3c76d146e96cbd",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -127,7 +127,7 @@
     },
     {
       "id": 29,
-      "path": "/Users/mac/Baci-app/.worktrees/android-soloader-fix",
+      "path": "~/Baci-app/.worktrees/android-soloader-fix",
       "head": "491ad2cea33a46c7cdc82516c9a146a4f6bcd748",
       "class": "CLEAN_REDUNDANT",
       "ancestorBaseline": false,
@@ -140,7 +140,7 @@
     },
     {
       "id": 32,
-      "path": "/Users/mac/Baci-app/.worktrees/aws-offload",
+      "path": "~/Baci-app/.worktrees/aws-offload",
       "head": "5dd21bc1ae1cc0eec4f269070b16a2bde7469a6e",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -152,7 +152,7 @@
     },
     {
       "id": 35,
-      "path": "/Users/mac/Baci-app/.worktrees/cd-3203",
+      "path": "~/Baci-app/.worktrees/cd-3203",
       "head": "822a6925ab65bb8cef778e9f50b3699cc956745d",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -164,7 +164,7 @@
     },
     {
       "id": 38,
-      "path": "/Users/mac/Baci-app/.worktrees/codeql-piggyvest-fixes",
+      "path": "~/Baci-app/.worktrees/codeql-piggyvest-fixes",
       "head": "d182440020a1c347c69645ff01ed08563ad518de",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -176,7 +176,7 @@
     },
     {
       "id": 41,
-      "path": "/Users/mac/Baci-app/.worktrees/customizable-pay-on-delivery-plan",
+      "path": "~/Baci-app/.worktrees/customizable-pay-on-delivery-plan",
       "head": "49e8c8c9490d6d881cd7b9c6bdbc3cb1ce1fd902",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -188,7 +188,7 @@
     },
     {
       "id": 44,
-      "path": "/Users/mac/Baci-app/.worktrees/dep-bump-9",
+      "path": "~/Baci-app/.worktrees/dep-bump-9",
       "head": "8050f71462914dd712d7f6ef8872898718d511aa",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -200,7 +200,7 @@
     },
     {
       "id": 47,
-      "path": "/Users/mac/Baci-app/.worktrees/expense-edit-exposure-20260824",
+      "path": "~/Baci-app/.worktrees/expense-edit-exposure-20260824",
       "head": "ed9fba16264ae1aae6c8e43755481ccbf149ce94",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -212,7 +212,7 @@
     },
     {
       "id": 50,
-      "path": "/Users/mac/Baci-app/.worktrees/expo-ota-foundation",
+      "path": "~/Baci-app/.worktrees/expo-ota-foundation",
       "head": "7f28c647729bf91be12a13321609252fdabc09a6",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -224,7 +224,7 @@
     },
     {
       "id": 53,
-      "path": "/Users/mac/Baci-app/.worktrees/expo57-patches",
+      "path": "~/Baci-app/.worktrees/expo57-patches",
       "head": "63351e259c0147b54d60314dfa4ab5b8f57428e6",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -236,7 +236,7 @@
     },
     {
       "id": 56,
-      "path": "/Users/mac/Baci-app/.worktrees/fix-payout-context-race",
+      "path": "~/Baci-app/.worktrees/fix-payout-context-race",
       "head": "2805e0eb8cd6fde0863cc15fdee6269edbe9fa2e",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -248,7 +248,7 @@
     },
     {
       "id": 59,
-      "path": "/Users/mac/Baci-app/.worktrees/flight-delivery-review-20260827",
+      "path": "~/Baci-app/.worktrees/flight-delivery-review-20260827",
       "head": "fc7a2ef5be58e37342a16b97946e18dc15425fc8",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -260,7 +260,7 @@
     },
     {
       "id": 62,
-      "path": "/Users/mac/Baci-app/.worktrees/h0-cwv-task1-prep",
+      "path": "~/Baci-app/.worktrees/h0-cwv-task1-prep",
       "head": "60fc68f0e6ff9d083bca785bf042fdf5e145f1de",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -272,7 +272,7 @@
     },
     {
       "id": 65,
-      "path": "/Users/mac/Baci-app/.worktrees/h0-gate0-prep",
+      "path": "~/Baci-app/.worktrees/h0-gate0-prep",
       "head": "9671aa6776c3833f6afcee268fbefd39bd10ea2d",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -284,7 +284,7 @@
     },
     {
       "id": 68,
-      "path": "/Users/mac/Baci-app/.worktrees/homepage-early-css-pr-20260913",
+      "path": "~/Baci-app/.worktrees/homepage-early-css-pr-20260913",
       "head": "afd2f941ee4e01535c6333db111f5b1ac87eee65",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": true,
@@ -296,7 +296,7 @@
     },
     {
       "id": 71,
-      "path": "/Users/mac/Baci-app/.worktrees/merchant-scoped-invalidation",
+      "path": "~/Baci-app/.worktrees/merchant-scoped-invalidation",
       "head": "9cc236d6c65be05ee9eaa375b30e994a516defc0",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": true,
@@ -308,7 +308,7 @@
     },
     {
       "id": 74,
-      "path": "/Users/mac/Baci-app/.worktrees/metro-current-main-20260808",
+      "path": "~/Baci-app/.worktrees/metro-current-main-20260808",
       "head": "4a8e55ef7b3e44e5431c34804de3fa61c86723a1",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -320,7 +320,7 @@
     },
     {
       "id": 77,
-      "path": "/Users/mac/Baci-app/.worktrees/mobile-admin-product-delete-stale",
+      "path": "~/Baci-app/.worktrees/mobile-admin-product-delete-stale",
       "head": "a4dd43eaa05c3e22658d7facfc7375525e2f6efa",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -333,7 +333,7 @@
     },
     {
       "id": 80,
-      "path": "/Users/mac/Baci-app/.worktrees/multimodal-messaging",
+      "path": "~/Baci-app/.worktrees/multimodal-messaging",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -345,7 +345,7 @@
     },
     {
       "id": 83,
-      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-camera-seo-review",
+      "path": "~/Baci-app/.worktrees/ogabassey-camera-seo-review",
       "head": "2a95ebf9adb5d6479428b8373dbc1bc086dea469",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -357,7 +357,7 @@
     },
     {
       "id": 86,
-      "path": "/Users/mac/Baci-app/.worktrees/ogabassey-snippet-configurations-20260905",
+      "path": "~/Baci-app/.worktrees/ogabassey-snippet-configurations-20260905",
       "head": "9c5b39af58698562693147280016479e7032c07f",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": true,
@@ -370,7 +370,7 @@
     },
     {
       "id": 89,
-      "path": "/Users/mac/Baci-app/.worktrees/openrouter-ai-offload",
+      "path": "~/Baci-app/.worktrees/openrouter-ai-offload",
       "head": "c6e27ce88ee669f3623b37e21fa0f30d6d095b6e",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -382,7 +382,7 @@
     },
     {
       "id": 92,
-      "path": "/Users/mac/Baci-app/.worktrees/paystack-manual-reconcile",
+      "path": "~/Baci-app/.worktrees/paystack-manual-reconcile",
       "head": "1f023e7c237183991364156c0c1dd8a55ad0b53a",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -394,7 +394,7 @@
     },
     {
       "id": 95,
-      "path": "/Users/mac/Baci-app/.worktrees/pr-2104-mobile-prod-deps",
+      "path": "~/Baci-app/.worktrees/pr-2104-mobile-prod-deps",
       "head": "2c60a26a91d9ed8208a13009ad5961d01253c7ec",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -407,7 +407,7 @@
     },
     {
       "id": 98,
-      "path": "/Users/mac/Baci-app/.worktrees/pr2627-posthog-upload",
+      "path": "~/Baci-app/.worktrees/pr2627-posthog-upload",
       "head": "f27e42b54828ad6efca87ca55212e95b94de50ff",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -419,7 +419,7 @@
     },
     {
       "id": 101,
-      "path": "/Users/mac/Baci-app/.worktrees/pr3269-comments",
+      "path": "~/Baci-app/.worktrees/pr3269-comments",
       "head": "685305e321bb482461cce169ec8b5348d96cc47b",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -431,7 +431,7 @@
     },
     {
       "id": 104,
-      "path": "/Users/mac/Baci-app/.worktrees/pr3284-shipping-empty-quotes",
+      "path": "~/Baci-app/.worktrees/pr3284-shipping-empty-quotes",
       "head": "01d5b31af9d4a628de7ac31b4b03a712d1816450",
       "class": "CLEAN_REDUNDANT",
       "ancestorBaseline": false,
@@ -444,7 +444,7 @@
     },
     {
       "id": 107,
-      "path": "/Users/mac/Baci-app/.worktrees/pr3309-transition-locks-sparse",
+      "path": "~/Baci-app/.worktrees/pr3309-transition-locks-sparse",
       "head": "e9d43f7e9b574bcbe3d9480548c801e374ee6fa9",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -456,7 +456,7 @@
     },
     {
       "id": 110,
-      "path": "/Users/mac/Baci-app/.worktrees/pr3338-clean-20260814",
+      "path": "~/Baci-app/.worktrees/pr3338-clean-20260814",
       "head": "c79e79af018fefa96c99128d07236a2c95f8b57c",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -468,7 +468,7 @@
     },
     {
       "id": 113,
-      "path": "/Users/mac/Baci-app/.worktrees/quiz-testing-20260909",
+      "path": "~/Baci-app/.worktrees/quiz-testing-20260909",
       "head": "4312d2a1022b055b7d53d590ee4e904fe7290f3c",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -480,7 +480,7 @@
     },
     {
       "id": 116,
-      "path": "/Users/mac/Baci-app/.worktrees/readiness-task10-invalidation",
+      "path": "~/Baci-app/.worktrees/readiness-task10-invalidation",
       "head": "1a0f666e78ff59254231f8e353fa0d28fff8f295",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -492,7 +492,7 @@
     },
     {
       "id": 119,
-      "path": "/Users/mac/Baci-app/.worktrees/rebase-3127",
+      "path": "~/Baci-app/.worktrees/rebase-3127",
       "head": "a4f31b88ff30e9eada61ac8e5faa0147333defff",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -504,7 +504,7 @@
     },
     {
       "id": 122,
-      "path": "/Users/mac/Baci-app/.worktrees/remediation-final-deferred-sparse",
+      "path": "~/Baci-app/.worktrees/remediation-final-deferred-sparse",
       "head": "497df71d343940ffee03170f3d078fc5b2805556",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -516,7 +516,7 @@
     },
     {
       "id": 125,
-      "path": "/Users/mac/Baci-app/.worktrees/rum-nav-timing",
+      "path": "~/Baci-app/.worktrees/rum-nav-timing",
       "head": "b31f35e8a7c8b8e2555dc73dfbeb5588d4c4bf6a",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -528,7 +528,7 @@
     },
     {
       "id": 128,
-      "path": "/Users/mac/Baci-app/.worktrees/semrush-crawl-depth-july04",
+      "path": "~/Baci-app/.worktrees/semrush-crawl-depth-july04",
       "head": "7037e80c2ea6c403d61a3b1befca902317ecef0c",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -540,7 +540,7 @@
     },
     {
       "id": 131,
-      "path": "/Users/mac/Baci-app/.worktrees/shopify-catalog-ci-luna",
+      "path": "~/Baci-app/.worktrees/shopify-catalog-ci-luna",
       "head": "e8772444bd129f825d379238ef7bcc8df264369a",
       "class": "CLEAN_REDUNDANT",
       "ancestorBaseline": false,
@@ -553,7 +553,7 @@
     },
     {
       "id": 134,
-      "path": "/Users/mac/Baci-app/.worktrees/shopify-mobile-e2e-luna",
+      "path": "~/Baci-app/.worktrees/shopify-mobile-e2e-luna",
       "head": "b9bb0b1a73d9b3c9dfd2847213636fbb5d0d9e7e",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -565,7 +565,7 @@
     },
     {
       "id": 137,
-      "path": "/Users/mac/Baci-app/.worktrees/social-media-audit-guard",
+      "path": "~/Baci-app/.worktrees/social-media-audit-guard",
       "head": "41b30a31c263a5e596164079dc96eeafdd80a882",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": true,
@@ -577,7 +577,7 @@
     },
     {
       "id": 140,
-      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-d0",
+      "path": "~/Baci-app/.worktrees/storefront-ai-d0",
       "head": null,
       "class": "MISSING",
       "dirty": null,
@@ -589,7 +589,7 @@
     },
     {
       "id": 143,
-      "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-r3-plan",
+      "path": "~/Baci-app/.worktrees/storefront-ai-r3-plan",
       "head": "edad4f48ccf3eb824ecf5d90dd8c5ed6a49a35fe",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -601,7 +601,7 @@
     },
     {
       "id": 146,
-      "path": "/Users/mac/Baci-app/.worktrees/storefront-edge-renderer-pilot",
+      "path": "~/Baci-app/.worktrees/storefront-edge-renderer-pilot",
       "head": "55c3ad3cbf7d4722aa3ba0a1de9435b7c22e3091",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -613,7 +613,7 @@
     },
     {
       "id": 149,
-      "path": "/Users/mac/Baci-app/.worktrees/storefront-width",
+      "path": "~/Baci-app/.worktrees/storefront-width",
       "head": "d9107c943f7991db3106c08210c83e7f02a1c4c1",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -625,7 +625,7 @@
     },
     {
       "id": 152,
-      "path": "/Users/mac/Baci-app/.worktrees/variant-review-followups",
+      "path": "~/Baci-app/.worktrees/variant-review-followups",
       "head": "2cd1fc38adbef569d9fab1439a1c0b962c58592c",
       "class": "CLEAN_REDUNDANT",
       "ancestorBaseline": true,
@@ -638,7 +638,7 @@
     },
     {
       "id": 155,
-      "path": "/Users/mac/Baci-app/.worktrees/vercel-cost-reduction-20260901",
+      "path": "~/Baci-app/.worktrees/vercel-cost-reduction-20260901",
       "head": "18d89de6080a0b4f9a82a324bca1ea8a0dec75d9",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -651,7 +651,7 @@
     },
     {
       "id": 158,
-      "path": "/Users/mac/Baci-worktrees/category-recent-carousel",
+      "path": "~/Baci-worktrees/category-recent-carousel",
       "head": "e6d619b21484c86994dd09a2b5932b8bbd92d816",
       "class": "CLEAN_REDUNDANT",
       "ancestorBaseline": false,
@@ -664,7 +664,7 @@
     },
     {
       "id": 161,
-      "path": "/Users/mac/Baci-worktrees/fix-main-red",
+      "path": "~/Baci-worktrees/fix-main-red",
       "head": "6c5dc3598eba6bd0eb0119ee0f9317abc1f35039",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -677,7 +677,7 @@
     },
     {
       "id": 164,
-      "path": "/Users/mac/Baci-worktrees/invoice-funnel-20260913",
+      "path": "~/Baci-worktrees/invoice-funnel-20260913",
       "head": "a87330a527d90a8d30f2cbac4773156ebd733876",
       "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
@@ -690,7 +690,7 @@
     },
     {
       "id": 167,
-      "path": "/Users/mac/Baci-worktrees/paystack-money-notifications",
+      "path": "~/Baci-worktrees/paystack-money-notifications",
       "head": "54110079f208e1e399742386edb918c4de016aa0",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -703,7 +703,7 @@
     },
     {
       "id": 170,
-      "path": "/Users/mac/Baci-worktrees/posthog-followup-secondary",
+      "path": "~/Baci-worktrees/posthog-followup-secondary",
       "head": "7b05a3194faa50b1054946c6c00cd90697a081af",
       "class": "CLEAN_REDUNDANT",
       "ancestorBaseline": false,
@@ -716,7 +716,7 @@
     },
     {
       "id": 173,
-      "path": "/Users/mac/Baci-worktrees/pr3203-tenant",
+      "path": "~/Baci-worktrees/pr3203-tenant",
       "head": "06f81cb6de53c9373524b26ed84600e22e021aa9",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -728,7 +728,7 @@
     },
     {
       "id": 176,
-      "path": "/Users/mac/Baci-worktrees/pr3359-review-followup",
+      "path": "~/Baci-worktrees/pr3359-review-followup",
       "head": "58b1e0b8ef528dcbaecc95babe2d5b975fe90426",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -740,7 +740,7 @@
     },
     {
       "id": 179,
-      "path": "/Users/mac/Baci-worktrees/remediation-credential",
+      "path": "~/Baci-worktrees/remediation-credential",
       "head": "843ab191059ed5894e53ef90361df134681bf8b3",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -752,7 +752,7 @@
     },
     {
       "id": 182,
-      "path": "/Users/mac/Baci-worktrees/sparse-vps-readiness-checkout",
+      "path": "~/Baci-worktrees/sparse-vps-readiness-checkout",
       "head": "2b52f514152d8665028921db6170e6db459ec1ca",
       "class": "PRESERVE_DIRTY",
       "ancestorBaseline": false,
@@ -764,7 +764,7 @@
     },
     {
       "id": 185,
-      "path": "/Users/mac/Baci-worktrees/terra-3305-storage-stale-claim",
+      "path": "~/Baci-worktrees/terra-3305-storage-stale-claim",
       "head": "7a31c64bdd81e56612f203fdd4540816465d32f4",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -776,7 +776,7 @@
     },
     {
       "id": 188,
-      "path": "/Users/mac/Baci-worktrees/terra-3309-claim-atomic",
+      "path": "~/Baci-worktrees/terra-3309-claim-atomic",
       "head": "c3a0d9041e0d43703fd20190b90c843e77eb5d59",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,
@@ -788,7 +788,7 @@
     },
     {
       "id": 191,
-      "path": "/Users/mac/Baci-worktrees/terra-3309-lock-capability",
+      "path": "~/Baci-worktrees/terra-3309-lock-capability",
       "head": "7b4de1b6e89317c3c03f3bc9670efd26eb4aa68d",
       "class": "PRESERVE_IMPROVEMENT",
       "ancestorBaseline": false,

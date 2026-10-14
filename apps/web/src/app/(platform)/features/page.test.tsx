@@ -28,6 +28,17 @@ describe('Baci capability documentation', () => {
     }
   });
 
+  it('hedges agent-protocol copy to the code-evidenced register stance', () => {
+    render(<FeaturesPage />);
+    expect(screen.getByText(/for authorized agents/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/not certification, partner approval/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Baci implements Agentic Commerce Protocol/)
+    ).not.toBeInTheDocument();
+  });
+
   it('keeps plan, provider and mobile platform limitations visible', () => {
     render(<FeaturesPage />);
     expect(

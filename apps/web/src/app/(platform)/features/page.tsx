@@ -141,7 +141,7 @@ const FEATURE_CARDS: readonly FeatureCard[] = [
     iconClassName: 'size-8 text-cyan-500',
     title: 'Agent-ready commerce: ACP and UCP',
     description:
-      'Baci implements Agentic Commerce Protocol (ACP) and Universal Commerce Protocol (UCP) discovery and transaction interfaces, including structured catalog access, carts, checkout sessions and order reads. Enabled capabilities depend on merchant readiness, authorization and payment configuration—not automatic admission to ChatGPT or Google shopping.',
+      'Work with supported Agentic Commerce Protocol (ACP) and Universal Commerce Protocol (UCP) discovery and transaction interfaces, including structured catalog access, carts, checkout sessions and order reads for authorized agents. Enabled capabilities depend on merchant readiness, authorization and payment configuration; protocol support is not certification, partner approval, or automatic admission to ChatGPT or Google shopping.',
   },
 ];
 

@@ -114,10 +114,18 @@ describe('assisted search', () => {
   it('bounds rate and fails invalid model output safely', async () => {
     mocks.limit.mockResolvedValueOnce('denied');
     expect((await POST(request(input))).status).toBe(429);
-    expect(mocks.limit).toHaveBeenCalledWith('search_assist', 'm1', {
-      maxRequests: 60,
+    // Cookie-less callers hit the anon sub-budget first; a denial there
+    // never touches the tenant bucket, preserving it for web traffic.
+    expect(mocks.limit).toHaveBeenCalledWith('search_assist_anon', 'm1', {
+      maxRequests: 15,
       windowMs: 60_000,
     });
+    expect(mocks.limit).not.toHaveBeenCalledWith(
+      'search_assist',
+      expect.anything(),
+      expect.anything()
+    );
+    expect(mocks.generate).not.toHaveBeenCalled();
     mocks.generate.mockResolvedValue({ text: '{"action":"pay"}' });
     const frames = (await (await POST(request(input))).text())
       .trim()
@@ -125,6 +133,38 @@ describe('assisted search', () => {
       .map((l) => JSON.parse(l));
     expect(frames.at(-1).event.kind).toBe('error');
     expect(frames.some((f) => f.event.kind === 'proposal')).toBe(false);
+  });
+  it('checks the tenant bucket after the anon bucket for cookie-less callers', async () => {
+    mocks.limit
+      .mockResolvedValueOnce('allowed')
+      .mockResolvedValueOnce('denied');
+    expect((await POST(request(input))).status).toBe(429);
+    expect(mocks.limit).toHaveBeenNthCalledWith(1, 'search_assist_anon', 'm1', {
+      maxRequests: 15,
+      windowMs: 60_000,
+    });
+    expect(mocks.limit).toHaveBeenNthCalledWith(2, 'search_assist', 'm1', {
+      maxRequests: 60,
+      windowMs: 60_000,
+    });
+    expect(mocks.generate).not.toHaveBeenCalled();
+  });
+  it('draws only the tenant bucket for CSRF-verified web sessions', async () => {
+    mocks.limit.mockResolvedValueOnce('denied');
+    const response = await POST(
+      request(input, 'ogabassey.com', { cookie: 'session=abc' })
+    );
+    expect(response.status).toBe(429);
+    expect(mocks.limit).toHaveBeenCalledWith('search_assist', 'm1', {
+      maxRequests: 60,
+      windowMs: 60_000,
+    });
+    expect(mocks.limit).not.toHaveBeenCalledWith(
+      'search_assist_anon',
+      expect.anything(),
+      expect.anything()
+    );
+    expect(mocks.generate).not.toHaveBeenCalled();
   });
   it('scopes the prompt to the resolved merchant currency and store', async () => {
     mocks.tenant.mockResolvedValue({

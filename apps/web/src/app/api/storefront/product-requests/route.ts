@@ -7,6 +7,14 @@ import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-c
 // Public intake uses a restricted NOINHERIT/NOBYPASSRLS role with one RPC
 // grant. The proxy adds the IP gate; the RPC enforces durable contact and
 // merchant budgets. No session authority or service client is used.
+// The body slug selects the recipient merchant (contact-form equivalent),
+// deliberately without host binding: native clients POST to the API host
+// with a body slug, so strict host matching would break them, and a host
+// check cannot stop direct POSTs to the victim host anyway. The RPC admits
+// published merchants only; abuse is bounded by fail-closed budgets
+// (50/merchant/hour, 3/contact/hour, 10/IP/hour). Distributed budget
+// exhaustion and stronger caller signals (CAPTCHA/accounts) are an
+// accepted residual pending owner sign-off, not a per-request control.
 export async function POST(request: NextRequest) {
   // Double-submit CSRF only when the request carries cookies: this route
   // exercises no session or ambient authority (it only forwards Zod-validated

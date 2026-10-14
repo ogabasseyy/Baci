@@ -207,16 +207,19 @@ export function createRemediationCaseState({
         groups.set(candidate.category, group);
       }
       // Rotate within each category so a recurring hot case cannot hold
-      // the single per-run slot forever: unseen and least-served cases
-      // (fewest recorded outcomes) go first. Outcomes are only appended
-      // after a selection, so the count doubles as selection history
-      // with no ledger schema change. The sort is stable, so ties keep
-      // the loader (highest-volume-first) order.
+      // the single per-run slot forever: unseen cases go first, then the
+      // case whose last recorded outcome is oldest. Outcomes are only
+      // appended after a selection, so the trailing timestamp doubles as
+      // selection history with no ledger schema change. Recency is used
+      // instead of the outcome count because the history is capped at
+      // MAX_OUTCOMES and saturated cases would tie forever. The sort is
+      // stable, so ties keep the loader (highest-volume-first) order.
       for (const group of groups.values()) {
         group.sort((left, right) => {
-          const leftServed = state.cases[left.caseKey]?.outcomes?.length ?? 0;
-          const rightServed = state.cases[right.caseKey]?.outcomes?.length ?? 0;
-          return leftServed - rightServed;
+          const leftAt = state.cases[left.caseKey]?.outcomes?.at(-1)?.at || '';
+          const rightAt =
+            state.cases[right.caseKey]?.outcomes?.at(-1)?.at || '';
+          return leftAt < rightAt ? -1 : leftAt > rightAt ? 1 : 0;
         });
       }
       const categories = [...groups.keys()].sort();

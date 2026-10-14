@@ -120,5 +120,37 @@ describe('remediation case ordering', () => {
       third.map((value) => value.fingerprint),
       ['hot-1', 'cold-1']
     );
+
+    // Saturate both histories past MAX_OUTCOMES: the capped lengths tie,
+    // so rotation must follow last-outcome recency instead of count.
+    for (let round = 0; round < 6; round += 1) {
+      nowMs += 60_000;
+      state.recordOutcome(third[0], {
+        detail: `hot round ${round}`,
+        type: 'prompt_written',
+      });
+      nowMs += 60_000;
+      state.recordOutcome(third[1], {
+        detail: `cold round ${round}`,
+        type: 'prompt_written',
+      });
+    }
+    const saturated = Object.values(state.snapshot().cases);
+    assert.deepEqual(
+      saturated.map((item) => item.outcomes.length),
+      [5, 5]
+    );
+
+    nowMs += 15 * 60 * 1000;
+    const recurredSaturated = [hot, cold].map((item) => ({
+      ...item,
+      lastSeen: '2026-08-01T10:49:00.000Z',
+    }));
+    const fourth = state.orderCandidates(state.reconcile(recurredSaturated));
+
+    assert.deepEqual(
+      fourth.map((value) => value.fingerprint),
+      ['hot-1', 'cold-1']
+    );
   });
 });

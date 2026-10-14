@@ -120,12 +120,26 @@ describe('PostHog remediation candidate enrichment', () => {
       });
       assert.equal(enriched.sample.release, undefined, version);
     }
+  });
 
-    const sha = await enrichDetail({
-      latest_release: { version: 'abc1234def5678' },
-      top_in_app_frame: { function: 'f', source: 'a.js' },
-    });
-    assert.equal(sha.sample.release, 'abc1234def5678');
+  it('accepts only full-length SHAs as commit-identifier releases', async () => {
+    for (const version of [
+      'abc1234def5678',
+      'd34db33fd34db33fd34db33fd34db33f',
+    ]) {
+      const dropped = await enrichDetail({
+        latest_release: { version },
+        top_in_app_frame: { function: 'f', source: 'a.js' },
+      });
+      assert.equal(dropped.sample.release, undefined, version);
+    }
+    for (const version of ['a'.repeat(40), 'b'.repeat(64)]) {
+      const kept = await enrichDetail({
+        latest_release: { version },
+        top_in_app_frame: { function: 'f', source: 'a.js' },
+      });
+      assert.equal(kept.sample.release, version, version);
+    }
   });
 
   it('keeps only the basename of absolute local frame paths', async () => {

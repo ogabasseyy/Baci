@@ -128,6 +128,18 @@ class CapabilityGateTests(unittest.TestCase):
                 self.assertFalse(gate._replacement_revision_ok(feature_tip, "f" * 40, cwd=repo))
             finally:
                 os.chdir(previous)
+            # Synthetic PR merge commit (parents: tip, feature): the baseline
+            # must be the fork point, not the already-advanced base tip.
+            git("checkout", "-q", tip)
+            git("merge", "-q", "--no-ff", "-X", "ours", "-m", "synthetic pr merge", "feature")
+            previous = os.getcwd()
+            os.chdir(repo)
+            try:
+                with patch.dict(os.environ, {}, clear=False):
+                    os.environ.pop("GITHUB_EVENT_NAME", None)
+                    self.assertEqual(gate._comparison_base(tip, cwd=repo), fork)
+            finally:
+                os.chdir(previous)
 
     def test_map_link_targets_parse_balanced_parentheses(self):
         text = "See [Public features](../../apps/web/src/app/(platform)/features/page.tsx) and [map](other.md)."
@@ -194,6 +206,24 @@ class CapabilityGateTests(unittest.TestCase):
                 os.environ.pop("BASE_SHA", None)
                 self.assertEqual(gate.main(), 0)
             suite.assert_called_once()
+
+    def test_main_operates_on_explicit_cwd(self):
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+            git("init", "-q", ".")
+            now = dt.datetime.now(dt.timezone.utc).isoformat()
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/baci-capabilities.json").write_text(json.dumps({"reviewed_at": now, "capabilities": []}))
+            git("add", ".")
+            git("commit", "-q", "-m", "one")
+            base = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            # No chdir: an empty diff against the fixture checkout must skip.
+            with patch.dict(os.environ, {"BASE_SHA": base, "GITHUB_EVENT_NAME": "pull_request"}):
+                self.assertEqual(gate.main(cwd=str(repo)), 0)
 
     def test_main_fails_when_changed_set_unknowable(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()

@@ -3,6 +3,7 @@
 Pure path logic: map citations, filename resolution, and matching. The
 policy layer (freshness, re-review, main) lives in capability_gate.py.
 """
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -102,6 +103,59 @@ def _resolve_cited_filenames(names, cwd=".", base=None):
     resolved = {path for path in paths if Path(path).name in names}
     unresolved = set(names) - {Path(path).name for path in resolved}
     return resolved, unresolved
+
+
+def _merge_base_out(base, head, cwd):
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(cwd), "merge-base", str(base), str(head)],
+            capture_output=True, text=True,
+        )
+    except Exception:
+        return None
+    if proc.returncode != 0 or not proc.stdout.strip():
+        return None
+    return proc.stdout.strip()
+
+
+def _is_ancestor(older, newer, cwd):
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(cwd), "merge-base", "--is-ancestor", str(older), str(newer)],
+            capture_output=True, text=True,
+        )
+    except Exception:
+        return False
+    return proc.returncode == 0
+
+
+def _comparison_base(base, cwd="."):
+    """The baseline the change is measured against.
+
+    Pull requests diff against the merge-base (three-dot), so the baseline
+    register must come from there too — comparing against the raw base tip
+    would fail a genuine re-review whenever main advanced the register after
+    the PR branched. Pushes compare tip-to-tip (two-dot): the base is used
+    directly. Falls back to the raw base when the merge-base is unresolvable.
+    In CI, pull_request HEAD is GitHub's synthetic merge commit whose second
+    parent is the actual PR head: the candidates from both are considered and
+    the older (ancestor-of-the-other) wins, so the baseline is the feature
+    branch's fork point rather than the already-advanced base tip.
+    """
+    if os.environ.get("GITHUB_EVENT_NAME") == "push":
+        return base
+    # Best-effort probes: callers fall back to the raw base.
+    candidates = []
+    for head in ("HEAD^2", "HEAD"):
+        rev = _merge_base_out(base, head, cwd)
+        if rev is not None:
+            candidates.append(rev)
+    if not candidates:
+        return base
+    if len(candidates) == 1:
+        return candidates[0]
+    older, newer = candidates
+    return older if _is_ancestor(older, newer, cwd) else newer
 
 
 def relevant_paths(register, cwd=".", base=None):

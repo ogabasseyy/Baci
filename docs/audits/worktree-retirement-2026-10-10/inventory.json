@@ -741,7 +741,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/baci-connector-r0",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as ID 84, distinct local dirt.",
+      "evidence": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as IDs 80 and 84, distinct local dirt.",
       "shard": 3,
       "manifest": {
         "id": 33,
@@ -1655,7 +1655,6 @@
     {
       "id": 78,
       "path": "/Users/mac/Baci-app/.worktrees/mobile-builder-v1-recovered",
-      "head": "94a805642f68fcfd71e6351bd09bc2bb63e5168a",
       "classification": "MISSING",
       "evidence": "Manifest path absent; no Git metadata or file status.",
       "shard": 3,
@@ -1779,7 +1778,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/ogabassey-device-trust",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "Same committed HEAD as ID 33, but 17 separate dirty storefront/support/IMEI files.",
+      "evidence": "Same committed HEAD as IDs 33 and 80, but 17 separate dirty storefront/support/IMEI files.",
       "shard": 3,
       "manifest": {
         "id": 84,
@@ -2889,7 +2888,6 @@
     {
       "id": 140,
       "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-d0",
-      "head": "97c44c0391ff98c4454afb107713a0d3b8f278e0",
       "classification": "MISSING",
       "evidence": "manifest path absent; locked=true",
       "shard": 2,
@@ -3121,7 +3119,6 @@
     {
       "id": 153,
       "path": "/Users/mac/Baci-app/.worktrees/vercel-active-cpu-memory-config",
-      "head": "bcdbf54cb591af2d9047afacaf75cdaaa29cccfa",
       "classification": "MISSING",
       "evidence": "Manifest path absent; no Git metadata or file status.",
       "shard": 3,

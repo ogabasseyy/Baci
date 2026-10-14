@@ -20,7 +20,7 @@ Unique commits use `git log --right-only --cherry-pick baseline...HEAD`; paths u
 | P1 | ID 15 | Open PR #3616 at exact local HEAD; search/cart assurance; four dirty cart-repricing files. |
 | P1 | ID 177 | Open PR #3597 is ahead of local HEAD; 20 dirty refund/cancellation files need reconciliation. |
 | P1 | ID 45 | 133 unique commits, 51 dirty desktop-intake files; `.env.local` filename noted, contents unread. |
-| P1 | IDs 33 and 84 | Same committed HEAD, 107 versus 17 distinct dirty files; reconcile both local edit sets. |
+| P1 | IDs 33, 80, and 84 | Same committed HEAD; 107 vs 34 vs 17 distinct dirty files; reconcile all three local edit sets. |
 | P1 | ID 3 | PR #3623 is merged at this head, but 1,047 tracked `apps/web/docs` deletions remain locally. |
 | P1 | ID 63 | Six unique CWV runner commits plus 227 dirty infra files. |
 | P2 | ID 24 | RETRACTED as salvage evidence — cited safeguards verified in baseline (see Direct Baseline Checks); re-derive novelty from remaining deltas if pursued. |

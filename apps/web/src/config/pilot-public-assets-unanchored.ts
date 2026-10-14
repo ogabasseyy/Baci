@@ -76,7 +76,11 @@ export function unanchoredCandidatePublicDirs(): string[] {
 export const PILOT_UNANCHORED_ACK_FLAG = 'BACI_IMAGE_PILOT_UNANCHORED_ACK';
 
 // Pilot intent: any non-empty BACI_IMAGE_PILOT_* var (or the gate's own
-// stash). A process with zero pilot configuration — Vercel/serverless
+// stash) — EXCEPT the unanchored ACK itself, which opts into an
+// unchecked boot and must not count as intent, or candidates-found
+// findings upgrade warn→throw and the flag defeats its own downgrade
+// (the zero-candidate branch already warns under ACK alone). A
+// process with zero pilot configuration — Vercel/serverless
 // functions, migrations, workers — has nothing to do with the pilot,
 // so an unanchorable lab-off boot there warns; a process the operator
 // DID configure for the pilot but that cannot anchor is a loud
@@ -85,7 +89,8 @@ export const PILOT_UNANCHORED_ACK_FLAG = 'BACI_IMAGE_PILOT_UNANCHORED_ACK';
 export function hasPilotIntent(): boolean {
   return Object.keys(process.env).some(
     (key) =>
-      (key.startsWith('BACI_IMAGE_PILOT') ||
+      ((key.startsWith('BACI_IMAGE_PILOT') &&
+        key !== PILOT_UNANCHORED_ACK_FLAG) ||
         (key === 'BACI_PILOT_PUBLIC_DIR' && !isPublicDirAutoStashed())) &&
       (process.env[key] ?? '') !== ''
   );

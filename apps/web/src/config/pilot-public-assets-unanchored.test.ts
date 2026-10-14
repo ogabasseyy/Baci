@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertUnanchoredPublicTrees,
+  hasPilotIntent,
   unanchoredCandidatePublicDirs,
 } from './pilot-public-assets-unanchored';
 
@@ -259,6 +260,37 @@ describe('assertUnanchoredPublicTrees', () => {
         /does not match the pinned hash/
       );
     } finally {
+      process.chdir(previousCwd);
+    }
+  });
+
+  it('ignores the unanchored ACK flag for pilot intent', () => {
+    // The ACK opts into an unchecked boot; alone it must not count
+    // as intent, or candidates-found findings upgrade warn→throw.
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    vi.stubEnv('BACI_IMAGE_PILOT_UNANCHORED_ACK', '1');
+    expect(hasPilotIntent()).toBe(false);
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    expect(hasPilotIntent()).toBe(true);
+  });
+
+  it('warns on candidate staged content under ACK-only', () => {
+    // ACK-only with a checkable tree: the operator accepted
+    // unchecked operation, so staged content warns like no-intent.
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    vi.stubEnv('BACI_IMAGE_PILOT_UNANCHORED_ACK', '1');
+    const dir = root();
+    const originals = join(dir, 'public', '__pilot', 'originals');
+    mkdirSync(originals, { recursive: true });
+    writeFileSync(join(originals, 'm1-a1.png'), 'merchant bytes');
+    const previousCwd = process.cwd();
+    process.chdir(dir);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(() => assertUnanchoredPublicTrees()).not.toThrow();
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
       process.chdir(previousCwd);
     }
   });

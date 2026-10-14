@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readSampleStoreIds } from './merchant-image-pilot-readiness-config.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const CLI = join(here, 'merchant-image-pilot-readiness.mjs');
@@ -96,18 +97,25 @@ describe('merchant-image-pilot-readiness gate', () => {
   });
 
   it('fails closed when the browser executable is missing', async () => {
-    const mounts = await writeMountsFile([
-      {
-        binding: `${MERCHANT}/hero-s0`,
+    // Full-sample inputs: coverage is judged against the committed
+    // sample, so a partial map would fail usage before reaching the
+    // browser-launch stage this test targets.
+    const sample = readSampleStoreIds();
+    const mounts = await writeMountsFile(
+      sample.map((merchantId) => ({
+        binding: `${merchantId}/hero-s0`,
         generationId: 'g',
-        merchantId: MERCHANT,
+        merchantId,
         slotId: 'mobile-hero-slide-0',
         stagedOriginal: '/__pilot/originals/x.png',
-      },
-    ]);
+      }))
+    );
+    const storeMap = sample
+      .map((id, index) => `${id}=store-${index}`)
+      .join(',');
     const { error, stdout } = await runCli([
       '--origin=http://localhost:3122',
-      `--store-map=${MERCHANT}=ogabassey`,
+      `--store-map=${storeMap}`,
       '--chrome=/nonexistent/chrome-for-tests',
       `--mounts=${mounts}`,
       '--public-dir=/nonexistent/public',

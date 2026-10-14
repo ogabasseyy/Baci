@@ -64,6 +64,7 @@ export async function browserProvenanceArg(dir, overrides = {}) {
   await writeFile(
     path,
     JSON.stringify({
+      browserName: 'chrome',
       event: 'browser-launch',
       executableVersion: '154.0.0.0',
       launchedAt: '2026-10-04T00:09:30.000Z',

@@ -635,9 +635,29 @@ describe('agentic checkout order dispatch — shared cart binding', () => {
           p_items: [
             expect.objectContaining({
               cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+              price: 500_000,
               product_id: 'product-1',
             }),
           ],
+        }),
+      })
+    );
+  });
+
+  it('forwards the resolved session principal into the bound submit', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValue({ data: BOUND_ENVELOPE, error: null });
+
+    await createAgenticCheckoutOrder(boundPayload(), dispatchClient(rpc), {
+      boundPrincipalId: 'guest-principal-9',
+    });
+
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_cart_principal_id: 'guest-principal-9',
         }),
       })
     );

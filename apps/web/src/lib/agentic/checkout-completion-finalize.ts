@@ -39,6 +39,7 @@ export async function finalizeAgenticCheckoutPayment({
   requestId,
   route,
   sessionId,
+  sharedCartPrincipalId,
   supabase,
 }: FinalizeAgenticCheckoutInput) {
   const respond = (response: unknown, status: number) =>
@@ -123,7 +124,9 @@ export async function finalizeAgenticCheckoutPayment({
     };
     let orderResult: Awaited<ReturnType<typeof createAgenticCheckoutOrder>>;
     try {
-      orderResult = await createAgenticCheckoutOrder(orderPayload, supabase);
+      orderResult = await createAgenticCheckoutOrder(orderPayload, supabase, {
+        boundPrincipalId: sharedCartPrincipalId ?? null,
+      });
     } catch (error) {
       await releaseFinalizationClaimSafely({
         finalizationClaim,

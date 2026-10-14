@@ -182,6 +182,7 @@ DECLARE
   v_hash text;
   v_route_proof jsonb;
   v_snapshot jsonb;
+  v_items_derived boolean := false;
   v_save_goal uuid;
   v_save_amount numeric;
   v_save_key text;
@@ -258,15 +259,14 @@ BEGIN
     ) THEN
     RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';
   END IF;
-  -- Shopper submissions must prove the preparing principal. The orders
-  -- route verifies the cart session proof and forwards only its verified
-  -- principal; the platform-delegated agentic context is merchant-scoped
-  -- and supplies no shopper principal (delegation remains a future gate),
-  -- but a supplied principal must always match the session owner. This
-  -- check precedes the submitted-replay return so a leaked session id
-  -- cannot replay another principal's order receipt.
-  IF nullif(p_args ->> 'p_cart_principal_id', '') IS NOT NULL
-    AND (p_args ->> 'p_cart_principal_id') IS DISTINCT FROM v_session.principal_id THEN
+  -- Every submission must prove the preparing principal: the orders
+  -- route forwards only its proof-verified principal, and the
+  -- platform-delegated agentic caller forwards the session principal
+  -- from its server-side session record. Absence fails closed (a NULL
+  -- principal never matches), so omitting the field cannot skip the
+  -- owner check. This precedes the submitted-replay return so a leaked
+  -- session id cannot replay another principal's order receipt.
+  IF (p_args ->> 'p_cart_principal_id') IS DISTINCT FROM v_session.principal_id THEN
     RAISE EXCEPTION 'cart_order_unauthorized' USING ERRCODE = 'P0001';
   END IF;
   IF p_generation IS DISTINCT FROM v_session.checkout_generation THEN
@@ -319,6 +319,55 @@ BEGIN
   IF jsonb_typeof(v_items) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';
   END IF;
+  -- Platform-delegated (agentic) submits are server-side calls, not
+  -- browser echoes: their items are derived from the reviewed snapshot
+  -- so line identity, quantities and effective prices are the reviewed
+  -- ones by construction, and caller items contribute only display
+  -- fields matched by product identity. The multiset check below still
+  -- runs against the derived items, so any derivation drift fails
+  -- closed. Shopper (route-context) submits keep strict echo matching.
+  IF v_agentic_context = 'checkout' AND v_context IS DISTINCT FROM 'route' THEN
+    v_items_derived := true;
+    SELECT coalesce(jsonb_agg(derived.item ORDER BY derived.ord), '[]'::jsonb)
+    INTO v_items
+    FROM (
+      SELECT s.ord,
+        jsonb_build_object(
+          'cart_line_id', s.sl ->> 'id',
+          'product_id', s.sl ->> 'productId',
+          'variant_id', s.sl -> 'variantId',
+          'condition', s.sl -> 'condition',
+          'variant_attributes', coalesce(s.sl -> 'options', '{}'::jsonb),
+          'quantity', (s.sl ->> 'quantity')::integer,
+          'price', (s.sl ->> 'effectiveUnitPriceMinor')::numeric / 100,
+          'voucher_award_id', s.sl -> 'voucherAwardId',
+          'has_assurance', coalesce((s.sl ->> 'hasAssurance')::boolean, false),
+          'assurance_fee', CASE
+            WHEN coalesce((s.sl ->> 'hasAssurance')::boolean, false)
+            THEN round(
+              (s.sl ->> 'effectiveUnitPriceMinor')::numeric
+              * (s.sl ->> 'quantity')::numeric
+              * coalesce((s.sl ->> 'assuranceRate')::numeric, 0)
+            ) / 100
+            ELSE 0
+          END,
+          'name', caller.item ->> 'name',
+          'image_url', coalesce(caller.item ->> 'image_url', caller.item ->> 'image')
+        ) AS item
+      FROM jsonb_array_elements(coalesce(v_snapshot -> 'lines', '[]'::jsonb))
+        WITH ORDINALITY AS s(sl, ord)
+      LEFT JOIN LATERAL (
+        SELECT i.item
+        FROM jsonb_array_elements(p_args -> 'p_items') AS i(item)
+        WHERE lower(i.item ->> 'product_id') = lower(s.sl ->> 'productId')
+          AND nullif(lower(i.item ->> 'variant_id'), '')
+            IS NOT DISTINCT FROM (s.sl ->> 'variantId')
+          AND nullif(i.item ->> 'condition', '')
+            IS NOT DISTINCT FROM (s.sl ->> 'condition')
+        LIMIT 1
+      ) caller ON true
+    ) derived;
+  END IF;
   IF jsonb_array_length(v_items) = 0
     OR jsonb_array_length(v_items) <> (
       SELECT count(*) FROM public.commerce_cart_lines
@@ -362,7 +411,9 @@ BEGIN
 
   v_email := p_args ->> 'p_customer_email';
   v_name := p_args ->> 'p_customer_name';
-  v_items := p_args -> 'p_items';
+  IF NOT v_items_derived THEN
+    v_items := p_args -> 'p_items';
+  END IF;
   v_phone := p_args ->> 'p_customer_phone';
   v_ship_fee := coalesce((p_args ->> 'p_shipping_fee')::numeric, 0);
   v_discount := coalesce((p_args ->> 'p_discount_amount')::numeric, 0);

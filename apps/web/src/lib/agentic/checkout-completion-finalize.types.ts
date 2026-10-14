@@ -24,6 +24,13 @@ export interface FinalizeAgenticCheckoutInput {
     shipping_address?: unknown;
   };
   orderSessionCalc: CheckoutCalculation;
+  /**
+   * Preparing principal of the bound shared-cart checkout session,
+   * resolved by the caller from the server-side session record. The
+   * binding RPC requires it whenever the session carries a binding;
+   * unresolved bindings fail closed at submit.
+   */
+  sharedCartPrincipalId?: string | null;
   requestId: string;
   route: string;
   sessionId: string;

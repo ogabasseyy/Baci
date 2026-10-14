@@ -112,6 +112,7 @@ BEGIN
       PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
         jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
           'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+          'p_cart_principal_id','guest-a4',
           'p_items',bad,'p_checkout_idempotency_key','review-invalid'));
     EXCEPTION WHEN SQLSTATE 'P0001' THEN
       IF SQLERRM <> 'cart_checkout_stale' THEN RAISE; END IF;
@@ -158,6 +159,20 @@ BEGIN
     rejected := true;
   END;
   IF NOT rejected THEN RAISE EXCEPTION 'binding accepted a foreign principal'; END IF;
+  -- Omitting the principal entirely must fail closed as unauthorized,
+  -- never skip the owner check.
+  rejected := false;
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
+      jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
+        'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+        'p_items',jsonb_build_array(good),'p_checkout_idempotency_key','review-invalid',
+        'p_cart_id','cccccccc-4000-4000-8000-000000000000','p_cart_version',1));
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'cart_order_unauthorized' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'binding accepted an omitted principal'; END IF;
   -- Match by stable IDs rather than array order; exact fixture succeeds.
   PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
     jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
@@ -276,4 +291,45 @@ DO $$ BEGIN
     WHERE c.id = 'cccccccc-8000-4000-8000-000000000000'
       AND c.expires_at < s.expires_at
   ) THEN RAISE EXCEPTION 'accepted checkout outlives its cart'; END IF;
+END $$;
+
+-- Platform-delegated (agentic) submits derive their items from the
+-- reviewed snapshot: caller-supplied identities/prices are not echoed,
+-- so a delegated caller cannot reprice or substitute lines. The order
+-- mock must receive the reviewed line id and effective price.
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a12","cart_scope":"session","cart_id":"cccccccc-c000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999968"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE prep jsonb; BEGIN
+  prep := public.commerce_cart_prepare_checkout('cccccccc-c000-4000-8000-000000000000', 1, 'review-agentic');
+  IF NOT (prep ->> 'ok')::boolean THEN RAISE EXCEPTION 'agentic fixture prepare failed: %', prep; END IF;
+  INSERT INTO test_ctx VALUES ('agentic_session', prep -> 'snapshot' ->> 'checkoutSessionId');
+END $$;
+RESET ROLE;
+SET request.jwt.claims = '{"role":"authenticated","agentic_context":"checkout","agentic_merchant_id":"11111111-1111-4111-8111-111111111111"}';
+SET ROLE authenticated;
+DO $$ DECLARE result jsonb; BEGIN
+  SELECT public.create_storefront_order_with_cart_binding('base',
+    (SELECT value::uuid FROM test_ctx WHERE key = 'agentic_session'), 1,
+    jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
+      'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+      'p_cart_principal_id','guest-a12',
+      'p_items', jsonb_build_array(jsonb_build_object(
+        'product_id','44444444-4444-4444-8444-444444444444','quantity',1,'price',999)),
+      'p_checkout_idempotency_key','review-agentic')
+  ) INTO result;
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'agentic derived submit must succeed, got %', result; END IF;
+END $$;
+RESET ROLE;
+DO $$ DECLARE items jsonb; BEGIN
+  SELECT c.items INTO items FROM order_stub_calls c
+  WHERE c.idempotency_key = 'review-agentic';
+  IF items IS NULL OR jsonb_array_length(items) <> 1 THEN
+    RAISE EXCEPTION 'agentic submit must reach the order mock once, got %', items;
+  END IF;
+  IF (items -> 0 ->> 'cart_line_id') <> 'dddddddd-c000-4000-8000-000000000000'
+    OR (items -> 0 ->> 'price')::numeric <> (
+      SELECT price FROM products WHERE id = '44444444-4444-4444-8444-444444444444'
+    ) THEN
+    RAISE EXCEPTION 'agentic items must be derived from the reviewed snapshot, got %', items;
+  END IF;
 END $$;

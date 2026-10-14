@@ -95,7 +95,15 @@ function boundOrderFailureResult(code: string): AgenticCheckoutOrderResult {
 
 export async function createAgenticCheckoutOrder(
   orderPayload: Record<string, unknown>,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options?: {
+    /**
+     * Preparing principal of the bound checkout session, resolved from
+     * the server-side session record by the caller. The binding RPC
+     * requires it on every submit; omitting it fails closed there.
+     */
+    boundPrincipalId?: string | null;
+  }
 ): Promise<AgenticCheckoutOrderResult> {
   const parseResult = orderCreateSchema.safeParse(orderPayload);
   if (!parseResult.success) {
@@ -125,6 +133,9 @@ export async function createAgenticCheckoutOrder(
       has_assurance: hasAssurance,
       image_url: item.imageUrl ?? item.image_url ?? null,
       product_id: item.product_id || item.productId || item.id,
+      // The binding guard prices bound submits against the reviewed
+      // effective price (major units); never drop it from the mapping.
+      price: itemPrice,
       quantity: item.quantity,
       variant_attributes:
         item.variantAttributes || item.variant_attributes || {},
@@ -273,6 +284,7 @@ export async function createAgenticCheckoutOrder(
           cartId: sharedCartBinding.cart_id,
           cartVersion: sharedCartBinding.cart_version,
           generation: sharedCartBinding.checkout_generation,
+          principalId: options?.boundPrincipalId ?? null,
           sessionId: sharedCartBinding.checkout_session_id,
           variant: 'base',
         }

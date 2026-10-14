@@ -199,6 +199,7 @@ BEGIN
         'price', 15.00
       )),
       'p_expected_total', 15.00,
+      'p_cart_principal_id', 'race-sub',
       'p_checkout_idempotency_key', 'order-key-race-a',
       'p_checkout_request_hash', 'hash-race-a'
     )
@@ -235,6 +236,7 @@ BEGIN
         'price', 15.00
       )),
       'p_expected_total', 15.00,
+      'p_cart_principal_id', 'race-sub',
       'p_checkout_idempotency_key', 'order-key-race-b',
       'p_checkout_request_hash', 'hash-race-b'
     )

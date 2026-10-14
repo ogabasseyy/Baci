@@ -609,6 +609,7 @@ BEGIN
         'cart_line_id', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000003'
       )),
       'p_expected_total', 15.00,
+      'p_cart_principal_id', 'guest-a2',
       'p_checkout_idempotency_key', 'order-key-a2',
       'p_checkout_request_hash', 'hash-a2'
     )
@@ -682,6 +683,7 @@ BEGIN
         'cart_line_id', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000003'
       )),
       'p_expected_total', 15.00,
+      'p_cart_principal_id', 'guest-a2',
       'p_checkout_idempotency_key', 'order-key-a2-second',
       'p_checkout_request_hash', 'hash-a2-second'
     )
@@ -745,6 +747,7 @@ BEGIN
           'price', 15.00
         )),
         'p_expected_total', 15.00,
+        'p_cart_principal_id', 'guest-a7',
         'p_checkout_idempotency_key', 'order-key-a7',
         'p_checkout_request_hash', 'hash-a7'
       )
@@ -809,6 +812,7 @@ BEGIN
         'price', 15.00
       )),
       'p_expected_total', 15.00,
+      'p_cart_principal_id', 'guest-a4',
       'p_route_proof', jsonb_build_object('attempt', 'quiz-proof-a4')
     )
   ) INTO v_result;
@@ -869,6 +873,7 @@ BEGIN
       'p_expected_total', 15.00,
       'p_savings_goal_id', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000099',
       'p_savings_amount', 5.00,
+      'p_cart_principal_id', 'guest-a5',
       'p_savings_idempotency_key', 'save-key-a5',
       'p_checkout_idempotency_key', 'order-key-a5',
       'p_checkout_request_hash', 'hash-a5'
@@ -931,6 +936,7 @@ BEGIN
       )),
       'p_expected_total', 15.00,
       'p_discount_code_id', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000098',
+      'p_cart_principal_id', 'guest-a6',
       'p_checkout_idempotency_key', 'order-key-a6',
       'p_checkout_request_hash', 'hash-a6'
     )
@@ -1052,6 +1058,7 @@ BEGIN
         'p_customer_name', 'Buyer',
         'p_items', '[]'::jsonb,
         'p_expected_total', 15.00,
+        'p_cart_principal_id', 'guest-a9',
         'p_checkout_idempotency_key', 'order-key-a9',
         'p_checkout_request_hash', 'hash-a9'
       )
@@ -1110,6 +1117,7 @@ BEGIN
       'p_customer_name', 'Buyer',
       'p_items', jsonb_build_array(jsonb_build_object('cart_line_id','dddddddd-7001-4000-8000-000000000000','product_id','44444444-4444-4444-8444-444444444444','quantity',1,'price',15)),
       'p_expected_total', 0,
+      'p_cart_principal_id', 'guest-a7',
       'p_checkout_idempotency_key', 'order-key-a7-gen2',
       'p_checkout_request_hash', 'hash-a7-gen2'
     )
@@ -1127,6 +1135,7 @@ BEGIN
         'p_customer_name', 'Buyer',
         'p_items', '[]'::jsonb,
         'p_expected_total', 0,
+        'p_cart_principal_id', 'guest-a7',
         'p_checkout_idempotency_key', 'order-key-a7-late',
         'p_checkout_request_hash', 'hash-a7-late'
       )
@@ -1285,6 +1294,7 @@ BEGIN
       )),
       'p_expected_total', 15.00,
       'p_payment_status', 'pending',
+      'p_cart_principal_id', 'guest-a11',
       'p_checkout_idempotency_key', 'order-key-a11',
       'p_checkout_request_hash', 'hash-a11'
     )
@@ -1341,6 +1351,7 @@ BEGIN
         'p_customer_name', 'Buyer',
         'p_items', jsonb_build_array(jsonb_build_object('cart_line_id','dddddddd-c000-4000-8000-000000000000','product_id','44444444-4444-4444-8444-444444444444','quantity',1,'price',15)),
         'p_expected_total', 0,
+        'p_cart_principal_id', 'guest-a12',
         'p_checkout_idempotency_key', 'order-key-a12',
         'p_checkout_request_hash', 'hash-a12'
       )
@@ -1417,6 +1428,7 @@ BEGIN
         'price', 15.00
       )),
       'p_expected_total', 15.00,
+      'p_cart_principal_id', 'guest-a13',
       'p_checkout_idempotency_key', 'order-key-a13',
       'p_checkout_request_hash', 'hash-a13'
     )
@@ -1535,6 +1547,7 @@ BEGIN
       'p_expected_total', 15.00,
       'p_savings_goal_id', 'aaaaaaaa-aaaa-4aaa-8aaa-000000000010',
       'p_savings_amount', 5.00,
+      'p_cart_principal_id', 'guest-a15',
       'p_savings_idempotency_key', 'save-key-a15',
       'p_checkout_idempotency_key', 'order-key-a15',
       'p_checkout_request_hash', 'hash-a15'

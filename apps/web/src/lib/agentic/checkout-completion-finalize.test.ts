@@ -816,7 +816,45 @@ describe('finalizeAgenticCheckoutPayment', () => {
     expect(response.status).toBe(200);
     expect(createAgenticCheckoutOrder).toHaveBeenCalledWith(
       expect.objectContaining({ shared_cart: sharedCart }),
-      expect.anything()
+      expect.anything(),
+      { boundPrincipalId: null }
+    );
+  });
+
+  it('forwards the resolved session principal to the bound dispatch', async () => {
+    const claimChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const markerChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const finalChain = createUpdateChain({ session_id: 'agentic_session_1' });
+    const supabase = createSupabaseWithUpdateChains([
+      claimChain,
+      markerChain,
+      finalChain,
+    ]);
+    vi.mocked(createAgenticCheckoutOrder).mockResolvedValue({
+      data: { order: { id: 'order-1' } },
+      error: undefined,
+      ok: true,
+      orderId: 'order-1',
+      status: 201,
+      statusText: 'Created',
+    });
+    const sharedCart = {
+      cart_id: '223e4567-e89b-12d3-a456-426614174000',
+      cart_version: 3,
+      checkout_generation: 1,
+      checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+    };
+
+    await finalizeAgenticCheckoutPayment({
+      ...finalizeInput(supabase),
+      metadata: { agentic: { shared_cart: sharedCart } },
+      sharedCartPrincipalId: 'guest-principal-9',
+    });
+
+    expect(createAgenticCheckoutOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ shared_cart: sharedCart }),
+      expect.anything(),
+      { boundPrincipalId: 'guest-principal-9' }
     );
   });
 
@@ -851,7 +889,8 @@ describe('finalizeAgenticCheckoutPayment', () => {
 
     expect(createAgenticCheckoutOrder).toHaveBeenCalledWith(
       expect.not.objectContaining({ shared_cart: expect.anything() }),
-      expect.anything()
+      expect.anything(),
+      { boundPrincipalId: null }
     );
   });
 

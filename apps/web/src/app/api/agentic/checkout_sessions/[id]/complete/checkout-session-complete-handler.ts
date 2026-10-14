@@ -7,6 +7,7 @@ import { verifyAgenticApiKey } from '@/lib/agentic/auth';
 import { getCheckoutCompletionAuthorizationSecrets } from '@/lib/agentic/checkout-completion-authorization-response';
 import { finalizeAgenticCheckoutPayment } from '@/lib/agentic/checkout-completion-finalize';
 import { CHECKOUT_COMPLETION_IDEMPOTENCY_ROUTE } from '@/lib/agentic/checkout-completion-idempotency-route';
+import { readAgenticSharedCartBinding } from '@/lib/agentic/checkout-completion-payloads';
 import {
   getAgenticPaymentState,
   resolveExistingPaymentState,
@@ -264,6 +265,30 @@ export async function handleAgenticCheckoutSessionComplete(
       return await respond(preparedPayment.body, preparedPayment.status);
     }
 
+    // A bound shared-cart session submits with the preparing principal
+    // from its server-side checkout-session record; the binding RPC
+    // requires it and fails closed when it cannot be resolved here.
+    const sharedCartBinding = readAgenticSharedCartBinding(
+      preparedPayment.payment.metadata
+    );
+    let sharedCartPrincipalId: string | null = null;
+    if (sharedCartBinding) {
+      const { data: bindingSession } = await bootstrap
+        .from('commerce_cart_checkout_sessions')
+        .select('principal_id, merchant_id, cart_id')
+        .eq('id', sharedCartBinding.checkout_session_id)
+        .maybeSingle();
+      if (
+        bindingSession &&
+        bindingSession.merchant_id === merchant.id &&
+        bindingSession.cart_id === sharedCartBinding.cart_id &&
+        typeof bindingSession.principal_id === 'string' &&
+        bindingSession.principal_id
+      ) {
+        sharedCartPrincipalId = bindingSession.principal_id;
+      }
+    }
+
     return await finalizeAgenticCheckoutPayment({
       agentId: mutation.agentId,
       buyer,
@@ -276,6 +301,7 @@ export async function handleAgenticCheckoutSessionComplete(
       requestId: mutation.requestId,
       route: CHECKOUT_COMPLETION_IDEMPOTENCY_ROUTE,
       sessionId,
+      sharedCartPrincipalId,
       supabase,
     });
   } catch (error: unknown) {

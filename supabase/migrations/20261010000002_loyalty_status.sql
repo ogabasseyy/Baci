@@ -193,15 +193,11 @@ BEGIN
         COALESCE(v_settings.minimum_redemption_points, 0) <= 0
         OR points_cost >= v_settings.minimum_redemption_points
       )
-      -- Hide types with no fulfillment path (same allowlist as the
-      -- redemption RPC; keep the two in sync). Manual-fulfillment
-      -- types stay listed: they mint a present-the-code redemption
-      -- even though checkout never honors them online.
-      AND reward_type IN (
-        'discount', 'discount_fixed', 'discount_percentage',
-        'store_credit', 'free_shipping', 'free_product',
-        'exclusive_access'
-      )
+      -- Hide types with no fulfillment path (shared allowlist with
+      -- the redemption RPC, migration 20261009235959). Manual types
+      -- stay listed: they mint a present-the-code redemption even
+      -- though checkout never honors them online.
+      AND public.loyalty_reward_type_is_fulfillable(reward_type)
       -- Hide valued rewards without a positive value (same predicate as
       -- the redemption RPC's valued guard; keep the two in sync): a
       -- null/zero/negative store_credit, discount_fixed, or
@@ -209,19 +205,12 @@ BEGIN
       -- redeem time, so advertising it only offers a permanently
       -- unredeemable reward. Plain 'discount' without a value stays
       -- listed: it is redeemable and renders a generic label.
-      AND (
-        reward_type NOT IN (
-          'store_credit', 'discount_fixed', 'discount_percentage'
-        )
-        OR (reward_value > 0 AND (reward_type <> 'discount_percentage' OR reward_value <= 100))
-      )
+      AND public.loyalty_reward_value_is_usable(reward_type, reward_value)
       -- Hide fixed rewards whose value rounds to zero (the redemption
       -- RPC rejects them; keep in sync): a 0.10 fixed reward is
       -- affordable-looking but permanently unredeemable.
-      AND (
-        reward_type NOT IN ('discount', 'discount_fixed')
-        OR reward_value IS NULL
-        OR pg_catalog.round(reward_value) > 0
+      AND NOT public.loyalty_reward_fixed_value_is_dead(
+        reward_type, reward_value
       )
       -- Hide unhonorable store credit (same predicates as the
       -- redemption RPC; keep the two in sync): minimums are
@@ -239,8 +228,7 @@ BEGIN
       -- their minimum, so advertising them promises a threshold the
       -- merchant configured but nothing checks.
       AND (
-        reward_type NOT IN (
-          'free_shipping', 'free_product', 'exclusive_access')
+        NOT public.loyalty_redemption_is_manual(reward_type, reward_value)
         OR COALESCE(minimum_order_amount, 0) <= 0
       )
   ) AS rewards;

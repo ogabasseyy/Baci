@@ -117,14 +117,10 @@ BEGIN
     AND (stock_quantity IS NULL OR stock_quantity > 0)
     -- Non-positive costs would mint points: fail closed (mirrored in status).
     AND points_cost > 0
-    -- Reject types with no fulfillment path before any mutation (same
-    -- allowlist as status; keep in sync). Manual-fulfillment types
-    -- mint a present-the-code redemption; checkout never honors them.
-    AND reward_type IN (
-      'discount', 'discount_fixed', 'discount_percentage',
-      'store_credit', 'free_shipping', 'free_product',
-      'exclusive_access'
-    )
+    -- Reject types with no fulfillment path before any mutation
+    -- (shared allowlist, migration 20261009235959). Manual types mint
+    -- a present-the-code redemption; checkout never honors them.
+    AND public.loyalty_reward_type_is_fulfillable(reward_type)
   FOR UPDATE;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
@@ -157,17 +153,15 @@ BEGIN
   -- fulfillment (present-the-code), not a checkout discount.
   IF v_max_redemption_pct IS NOT NULL
      AND (v_max_redemption_pct <= 0 OR v_max_redemption_pct > 100)
-     AND (v_reward.reward_type IN ('discount_fixed', 'discount_percentage')
-       OR (v_reward.reward_type = 'discount'
-         AND COALESCE(v_reward.reward_value, 0) > 0)) THEN
+     AND public.loyalty_reward_is_checkout_discount(
+       v_reward.reward_type, v_reward.reward_value) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
-  -- Valued rewards need positive value (<=100%).
-  IF v_reward.reward_type IN (
-       'store_credit', 'discount_fixed', 'discount_percentage'
-     )
-     AND (v_reward.reward_value IS NULL OR v_reward.reward_value <= 0
-       OR v_reward.reward_type = 'discount_percentage' AND v_reward.reward_value > 100) THEN
+  -- Valued rewards need a positive value (percentages <= 100;
+  -- shared predicate with the status catalog, migration 20261009235959).
+  IF NOT public.loyalty_reward_value_is_usable(
+    v_reward.reward_type, v_reward.reward_value
+  ) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
   -- Minimum-gated store credit and manual-fulfillment rewards fail
@@ -176,14 +170,14 @@ BEGIN
   IF v_reward.minimum_order_amount IS NOT NULL
      AND v_reward.minimum_order_amount > 0
      AND (v_reward.reward_type = 'store_credit'
-       OR v_reward.reward_type IN (
-         'free_shipping', 'free_product', 'exclusive_access')) THEN
+       OR public.loyalty_redemption_is_manual(
+         v_reward.reward_type, v_reward.reward_value)) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
   -- Fixed values rounding to zero units: reject before deduction.
-  IF v_reward.reward_type IN ('discount', 'discount_fixed')
-     AND v_reward.reward_value IS NOT NULL
-     AND pg_catalog.round(v_reward.reward_value, 0) <= 0 THEN
+  IF public.loyalty_reward_fixed_value_is_dead(
+    v_reward.reward_type, v_reward.reward_value
+  ) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
   IF v_balance < v_reward.points_cost THEN

@@ -57,10 +57,8 @@ BEGIN
     -- cancelled is terminal so the read cannot stale). The wrapper
     -- re-verifies under lock before claiming.
     COALESCE(rr.used, false)
-      AND COALESCE(o.shipping_status, '')
-        NOT IN ('cancelled', 'canceled')
-      AND COALESCE(o.payment_status, '')
-        NOT IN ('cancelled', 'canceled'),
+      AND NOT public.loyalty_status_is_cancelled(o.shipping_status)
+      AND NOT public.loyalty_status_is_cancelled(o.payment_status),
     rr.issuance_currency,
     rw.name::text,
     rr.max_redemption_percentage
@@ -198,10 +196,8 @@ BEGIN
     INTO v_claim_order_status, v_claim_payment_status
     FROM public.orders o
     WHERE o.id = v_redemption.used_on_order_id;
-    IF COALESCE(v_claim_order_status, '')
-         NOT IN ('cancelled', 'canceled')
-       AND COALESCE(v_claim_payment_status, '')
-         NOT IN ('cancelled', 'canceled') THEN
+    IF NOT public.loyalty_status_is_cancelled(v_claim_order_status)
+       AND NOT public.loyalty_status_is_cancelled(v_claim_payment_status) THEN
       RAISE EXCEPTION 'loyalty_code_already_used';
     END IF;
   END IF;
@@ -211,9 +207,8 @@ BEGIN
   -- resolver), so a later disable or delete cannot strand a paid code.
   -- Only discount-typed codes with a positive value are
   -- checkout-applicable; other types are honored off-checkout.
-  IF v_redemption.reward_type NOT IN ('discount', 'discount_fixed', 'discount_percentage')
-     OR v_redemption.reward_value IS NULL
-     OR v_redemption.reward_value <= 0 THEN
+  IF NOT public.loyalty_reward_is_checkout_discount(
+       v_redemption.reward_type, v_redemption.reward_value) THEN
     RAISE EXCEPTION 'loyalty_code_not_applicable'; END IF;
 
   IF v_redemption.minimum_order_amount IS NOT NULL

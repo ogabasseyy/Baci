@@ -1,5 +1,6 @@
 -- Runtime regression contract for the #3165 loyalty migrations
--- (20261010000001_enroll_customer_loyalty,
+-- (20261009235959_loyalty_reward_classification,
+--  20261010000001_enroll_customer_loyalty,
 --  20261010000002_loyalty_status,
 --  20261010000003_award_purchase_points_row_lock,
 --  20261010000004_calculate_loyalty_tier_order,
@@ -26,6 +27,7 @@
 -- all running in this single transaction (rolled back at the end).
 
 \ir enroll_customer_loyalty_setup.sql
+\ir enroll_customer_loyalty_classification.sql
 \ir enroll_customer_loyalty_overflow_users.sql
 \ir enroll_customer_loyalty_enrollment.sql
 \ir enroll_customer_loyalty_award.sql
@@ -34,6 +36,7 @@
 \ir enroll_customer_loyalty_status.sql
 \ir enroll_customer_loyalty_status_ngn.sql
 \ir enroll_customer_loyalty_redemption.sql
+\ir enroll_customer_loyalty_redemption_snapshot.sql
 \ir enroll_customer_loyalty_redemption_limits.sql
 \ir enroll_customer_loyalty_redemption_idempotency.sql
 \ir enroll_customer_loyalty_checkout_bridge.sql

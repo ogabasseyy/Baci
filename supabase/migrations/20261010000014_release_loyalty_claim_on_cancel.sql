@@ -17,12 +17,10 @@ AS $$
 BEGIN
   -- Both terminal spellings count: the order update schema accepts
   -- 'cancelled' and 'canceled', and the routes treat both as terminal.
-  IF (NEW.shipping_status IN ('cancelled', 'canceled')
-      AND COALESCE(OLD.shipping_status, '')
-        NOT IN ('cancelled', 'canceled'))
-     OR (NEW.payment_status IN ('cancelled', 'canceled')
-      AND COALESCE(OLD.payment_status, '')
-        NOT IN ('cancelled', 'canceled')) THEN
+  IF (public.loyalty_status_is_cancelled(NEW.shipping_status)
+      AND NOT public.loyalty_status_is_cancelled(OLD.shipping_status))
+     OR (public.loyalty_status_is_cancelled(NEW.payment_status)
+      AND NOT public.loyalty_status_is_cancelled(OLD.payment_status)) THEN
     -- SKIP LOCKED: a checkout retry can hold a claim row while waiting
     -- on this order (redemption->order); waiting here would invert to
     -- order->redemption and deadlock. Skipped rows stay stamped to a

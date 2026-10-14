@@ -54,11 +54,7 @@ BEGIN
       = pg_catalog.upper(pg_catalog.btrim(p_code))
     AND rr.used IS NOT TRUE
     AND (rr.expires_at IS NULL OR rr.expires_at > pg_catalog.now())
-    AND (
-      rr.reward_type IN ('free_shipping', 'free_product', 'exclusive_access')
-      OR (rr.reward_type = 'discount'
-        AND COALESCE(rr.reward_value, 0) <= 0)
-    )
+    AND public.loyalty_redemption_is_manual(rr.reward_type, rr.reward_value)
   RETURNING rr.id, rr.discount_code, rr.reward_type, rr.reward_id,
     rr.reward_name, rr.reward_product_id, rr.customer_id, rr.used_at,
     rr.consume_idempotency_key
@@ -78,11 +74,7 @@ BEGIN
         = pg_catalog.upper(pg_catalog.btrim(p_code))
       AND rr.used IS TRUE
       AND rr.used_on_order_id IS NULL
-      AND (
-        rr.reward_type IN ('free_shipping', 'free_product', 'exclusive_access')
-        OR (rr.reward_type = 'discount'
-          AND COALESCE(rr.reward_value, 0) <= 0)
-      );
+      AND public.loyalty_redemption_is_manual(rr.reward_type, rr.reward_value);
     IF NOT FOUND THEN
       RETURN jsonb_build_object(
         'success', false, 'error', 'redemption_not_found'

@@ -9,13 +9,10 @@ INSERT INTO public.loyalty_rewards (
   '01aa0000-0000-4000-8000-000000000001', 'Wild percent', 100,
   'discount_percentage', 150, true
 );
-
 UPDATE public.customer_loyalty SET points_balance = 100
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
   AND customer_id = '01aa0000-0000-4000-8000-000000000012';
-
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
-
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'false'
      AND result ->> 'error' = 'reward_unavailable'
@@ -41,13 +38,11 @@ SELECT pg_temp.assert_true(
   ),
   'over-100% reward redeemed or stayed advertised'
 );
-
 -- A zero maximum-redemption cap refuses the mint before any spend:
 -- the code would otherwise be consumed at checkout for no discount.
 UPDATE public.loyalty_settings
 SET maximum_redemption_percentage = 0
 WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
-
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'false'
      AND result ->> 'error' = 'reward_unavailable'
@@ -64,7 +59,6 @@ SELECT pg_temp.assert_true(
      AND customer_id = '01aa0000-0000-4000-8000-000000000012'),
   'zero-cap redemption spent points or minted a code'
 );
-
 -- Under the same zero cap, a manual-fulfillment reward still redeems:
 -- the cap gate is scoped to checkout-discount types.
 INSERT INTO public.loyalty_rewards (
@@ -73,7 +67,6 @@ INSERT INTO public.loyalty_rewards (
   '01aa0000-0000-4000-8000-000000000001', 'Zero-cap ship', 100,
   'free_shipping', true
 );
-
 SELECT pg_temp.assert_true(
   (SELECT (result ->> 'success')::boolean
    FROM public.redeem_loyalty_reward(
@@ -85,7 +78,6 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'zero cap blocked a manual reward'
 );
-
 SELECT pg_temp.assert_true(
   EXISTS (
     SELECT 1 FROM public.reward_redemptions
@@ -224,6 +216,39 @@ SELECT pg_temp.assert_true(
     WHERE reward.value ->> 'name' = 'Minimum manual'
   ),
   'minimum-bearing manual reward redeemed or stayed advertised'
+);
+
+-- A valueless plain discount is manual too: the same minimum gate
+-- (and catalog hide) applies, or its configured threshold is never
+-- enforced anywhere.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value,
+  minimum_order_amount, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Minimum manual discount', 100,
+  'discount', NULL, 5000, true
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'reward_unavailable'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Minimum manual discount')
+   ) AS result)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM public.get_loyalty_status(
+      '01aa0000-0000-4000-8000-000000000001',
+      '01aa0000-0000-4000-8000-000000000012'
+    ) AS status(result),
+    LATERAL jsonb_array_elements(status.result -> 'rewards') AS reward
+    WHERE reward.value ->> 'name' = 'Minimum manual discount'
+  ),
+  'minimum-bearing manual discount redeemed or stayed advertised'
 );
 
 -- Fixed rewards whose value rounds to zero hide from the catalog

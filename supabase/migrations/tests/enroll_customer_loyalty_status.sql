@@ -148,10 +148,15 @@ UPDATE public.loyalty_settings SET tiers = '[{"name": "Bronze", "perks": [], "mi
 
 -- 15. The catalog projection surfaces minimum_order_amount so the UI can
 -- disclose the checkout minimum before the customer spends points.
-UPDATE public.loyalty_rewards
-SET minimum_order_amount = 2500
-WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
-  AND name = 'Free shipping';
+-- (A valued checkout discount carries it: a valueless one is manual
+-- and minimum-bearing manual rewards hide instead, per the guards.)
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value,
+  minimum_order_amount, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Checkout minimum perk', 100,
+  'discount_fixed', 1000, 2500, true
+);
 
 -- Member 011 belongs to user 101: re-auth past case 14b's 105.
 SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
@@ -163,9 +168,14 @@ SELECT pg_temp.assert_true(
      '01aa0000-0000-4000-8000-000000000011'
    ) AS result,
    LATERAL jsonb_array_elements(result -> 'rewards') AS value
-   WHERE value ->> 'name' = 'Free shipping'),
+   WHERE value ->> 'name' = 'Checkout minimum perk'),
   'status projection dropped minimum_order_amount'
 );
+
+-- Keep the shared catalog fixture set unchanged for later files.
+UPDATE public.loyalty_rewards SET enabled = false
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Checkout minimum perk';
 -- 15b. Duplicate tier names collapse to the lowest threshold
 -- (last-match-wins would oscillate Silver -> Gold -> Silver).
 UPDATE public.loyalty_settings

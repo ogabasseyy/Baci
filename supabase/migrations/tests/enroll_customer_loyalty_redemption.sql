@@ -275,17 +275,3 @@ SELECT pg_temp.assert_true(
   'redemption lost the settings-row lock'
 );
 
--- The mint snapshots the issuance minimum: Free shipping carries 2500
--- (set by the status file, which runs before this one), so the case-15
--- redemption row must carry 2500 even if the reward row later changes.
-SELECT pg_temp.assert_true(
-  EXISTS (
-    SELECT 1
-    FROM public.reward_redemptions rr
-    JOIN public.loyalty_rewards rw ON rw.id = rr.reward_id
-    WHERE rw.merchant_id = '01aa0000-0000-4000-8000-000000000001'
-      AND rw.name = 'Free shipping'
-      AND rr.minimum_order_amount = 2500
-  ),
-  'redemption did not snapshot the issuance minimum'
-);

@@ -69,76 +69,136 @@ const isAbsoluteLocalUrlPath = (pathname) => {
   return ABSOLUTE_URL_PATH_ROOTS.has(root.toLowerCase());
 };
 
+// Documented Node.js built-in module roots: the only accepted node:
+// suffixes. Anything else after the prefix is provider-controlled text.
+const NODE_BUILTIN_MODULES = new Set([
+  'assert',
+  'async_hooks',
+  'buffer',
+  'child_process',
+  'cluster',
+  'console',
+  'constants',
+  'crypto',
+  'dgram',
+  'diagnostics_channel',
+  'dns',
+  'domain',
+  'events',
+  'fs',
+  'http',
+  'http2',
+  'https',
+  'inspector',
+  'module',
+  'net',
+  'os',
+  'path',
+  'perf_hooks',
+  'process',
+  'punycode',
+  'querystring',
+  'readline',
+  'repl',
+  'sea',
+  'sqlite',
+  'stream',
+  'string_decoder',
+  'sys',
+  'test',
+  'timers',
+  'tls',
+  'trace_events',
+  'tty',
+  'url',
+  'util',
+  'v8',
+  'vm',
+  'wasi',
+  'worker_threads',
+  'zlib',
+]);
+
+const lastSegment = (value) => {
+  const segments = value.split(/[\\/]/).filter(Boolean);
+  return segments.length > 0 ? segments[segments.length - 1] : '';
+};
+
+const assembleRelativePath = (value) => {
+  const segments = value.split(/[\\/]/).filter(Boolean);
+  if (segments.includes('..')) return lastSegment(value);
+  return segments.filter((segment) => segment !== '.').join('/');
+};
+
 const framePath = (source) => {
   const text = String(source || '');
-  // Non-hierarchical URIs (data:, blob:, ...) are inline content, not
-  // paths: reject them before normalization. Drive-letter prefixes fall
-  // through to absolute-path handling, and node: internals are safe
-  // fixed-vocabulary coordinates scrubbed by the filters below.
-  if (
-    !text.includes('://') &&
-    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(text) &&
-    !/^[A-Za-z]:[\\/]/.test(text) &&
-    !text.toLowerCase().startsWith('node:')
-  ) {
-    return '';
-  }
-  let path = text;
-  let reduceToBasename = false;
-  let virtualScheme = false;
-  if (text.includes('://')) {
-    // Absolute URLs may carry userinfo credentials: keep only the path so
-    // neither credentials nor host flow into prompts and reports.
-    try {
-      const parsed = new URL(text.split(/[?#]/, 1)[0]);
-      path = parsed.pathname || '';
-      virtualScheme = VIRTUAL_SOURCE_SCHEMES.has(
-        parsed.protocol.replace(/:$/, '').toLowerCase()
-      );
-    } catch {
-      return '';
-    }
-    // Deployment URL paths are not repository structure: basename only.
-    // Virtual schemes are classified after decoding below, since an
-    // encoded root would otherwise bypass absolute-path detection.
-    reduceToBasename = !virtualScheme;
-  }
-  // Decode to a bounded fixed point so double-encoded delimiters cannot
-  // smuggle metadata past the redactor: single and double encoding
-  // resolve, while anything still changing after three rounds — or
-  // malformed at any round — fails closed.
+  // Decode to a bounded fixed point FIRST so encoded schemes, roots,
+  // delimiters, and traversal markers cannot smuggle metadata past
+  // classification: single and double encoding resolve, while anything
+  // still changing after three rounds — or malformed at any round —
+  // fails closed.
+  let decoded = text;
   try {
     for (let round = 0; round < 3; round += 1) {
-      const decoded = decodeURIComponent(path);
-      if (decoded === path) break;
-      path = decoded;
+      const next = decodeURIComponent(decoded);
+      if (next === decoded) break;
+      decoded = next;
       if (round === 2) return '';
     }
   } catch {
     return '';
   }
-  path = path.split(/[?#]/, 1)[0];
-  if (virtualScheme && isAbsoluteLocalUrlPath(path)) {
-    // Virtual schemes around absolute build paths still expose usernames
-    // and customer directories: basename only.
-    reduceToBasename = true;
-    virtualScheme = false;
+  // Query and fragment metadata are user data, never coordinates.
+  // Surrounding whitespace is trimmed so padded absolute paths and URIs
+  // cannot dodge the shape checks below.
+  const bare = decoded.split(/[?#]/, 1)[0].trim();
+  // Drive-letter and UNC paths are absolute local paths, not URIs:
+  // usernames and customer directories reduce to the basename.
+  if (/^[A-Za-z]:[\\/]/.test(bare) || bare.startsWith('\\\\')) {
+    return lastSegment(bare);
   }
-  // Absolute local paths may embed usernames and customer directories.
-  // Virtual-scheme pathnames are exempt: their leading slash is a URL
-  // artifact, not a filesystem root.
-  if (!virtualScheme && /^([A-Za-z]:[\\/]|\\\\|\/)/.test(path)) {
-    reduceToBasename = true;
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(bare)?.[1]?.toLowerCase();
+  if (scheme) {
+    if (scheme === 'node') {
+      const suffix = bare.slice(scheme.length + 1);
+      const [root, ...rest] = suffix.split('/');
+      if (!suffix || !NODE_BUILTIN_MODULES.has(root)) return '';
+      if (rest.some((segment) => segment === '..' || segment === '')) {
+        return '';
+      }
+      return `node:${suffix}`;
+    }
+    if (scheme === 'http' || scheme === 'https' || scheme === 'file') {
+      // Deployment and file URLs may carry userinfo credentials: keep
+      // only the pathname basename so neither credentials nor host flow
+      // into prompts and reports.
+      try {
+        return lastSegment(new URL(bare).pathname || '');
+      } catch {
+        return '';
+      }
+    }
+    if (VIRTUAL_SOURCE_SCHEMES.has(scheme)) {
+      let pathname = '';
+      try {
+        pathname = new URL(bare).pathname || '';
+      } catch {
+        return '';
+      }
+      // Virtual schemes around absolute build paths still expose local
+      // directories: basename only. Namespace-relative virtual paths are
+      // repository structure and preserved like relative paths.
+      if (isAbsoluteLocalUrlPath(pathname)) return lastSegment(pathname);
+      return assembleRelativePath(pathname);
+    }
+    // Blob, data, javascript, and custom schemes are inline content or
+    // opaque identifiers, never source coordinates: reject them.
+    return '';
   }
-  const segments = path.split(/[\\/]/).filter(Boolean);
-  // Traversal segments fail closed to the basename.
-  if (segments.includes('..')) reduceToBasename = true;
-  if (reduceToBasename) {
-    return segments.length > 0 ? segments[segments.length - 1] : '';
-  }
-  // Repository-relative paths are preserved so the prompt identifies the
-  // failing file; cosmetic single-dot segments are dropped.
-  return segments.filter((segment) => segment !== '.').join('/');
+  // POSIX-absolute paths reduce to the basename like other absolute
+  // shapes; the rest is repository-relative and preserved.
+  if (bare.startsWith('/')) return lastSegment(bare);
+  return assembleRelativePath(bare);
 };
 
 const frameCoordinate = (frame) => {
@@ -152,9 +212,7 @@ const frameCoordinate = (frame) => {
   // line already locate the failing code.
   const line = Number(frame.line);
   const plausibleLine =
-    Number.isSafeInteger(line) &&
-    line > 0 &&
-    line <= MAX_FRAME_LINE;
+    Number.isSafeInteger(line) && line > 0 && line <= MAX_FRAME_LINE;
   const coordinate = source + (plausibleLine ? `:${line}` : '');
   return coordinate.slice(0, 240);
 };

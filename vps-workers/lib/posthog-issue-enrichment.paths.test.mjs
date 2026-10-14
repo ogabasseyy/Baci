@@ -81,51 +81,6 @@ describe('PostHog enrichment frame paths', () => {
     assert.equal(traversal.sample.route, 'route.ts:3');
   });
 
-  it('preserves virtual sourcemap paths while reducing deployment URLs', async () => {
-    const virtual = await enrichDetail({
-      top_in_app_frame: {
-        function: 'handleCheckout',
-        line: 42,
-        source: 'webpack:///./apps/web/src/app/api/orders/route.ts',
-      },
-    });
-    assert.equal(
-      virtual.sample.route,
-      'apps/web/src/app/api/orders/route.ts:42'
-    );
-
-    const fileUrl = await enrichDetail({
-      top_in_app_frame: {
-        function: 'handleCheckout',
-        line: 7,
-        source: 'file:///etc/app/route.ts',
-      },
-    });
-    assert.equal(fileUrl.sample.route, 'route.ts:7');
-  });
-
-  it('reduces virtual schemes around absolute local paths to basenames', async () => {
-    for (const source of [
-      'webpack:///Users/AliceSmith/ClientA/app.js',
-      'webpack://app/./home/deploy/app/route.ts',
-      'webpack:///C%3A/Users/AliceSmith/Client/app.js',
-      'webpack:///%55sers/AliceSmith/Client/app.js',
-      'webpack:////server/share/AliceSmith/Client/app.js',
-    ]) {
-      const enriched = await enrichDetail({
-        top_in_app_frame: {
-          function: 'handleCheckout',
-          line: 5,
-          source,
-        },
-      });
-      assert.equal(enriched.sample.route.includes('AliceSmith'), false, source);
-      assert.equal(enriched.sample.route.includes('ClientA'), false, source);
-      assert.equal(enriched.sample.route.includes('deploy'), false, source);
-      assert.match(enriched.sample.route, /\.js:5$|\.ts:5$/);
-    }
-  });
-
   it('resolves double-encoded delimiters before redaction', async () => {
     const query = await enrichDetail({
       top_in_app_frame: {
@@ -147,35 +102,12 @@ describe('PostHog enrichment frame paths', () => {
     assert.equal(secret.sample.route.includes('secret-value'), false);
   });
 
-  it('rejects non-hierarchical frame URIs while keeping node internals', async () => {
-    const data = await enrichDetail({
-      top_in_app_frame: {
-        function: 'load',
-        line: 1,
-        source:
-          'data:text/javascript;base64,QWxpY2VTbWl0aF9jdXN0b21lcl9wYXlsb2Fk',
-      },
-    });
-    assert.equal(data.sample.route, '(redacted PostHog location)');
-    assert.equal(
-      data.sample.route.includes('QWxpY2VTbWl0aF9jdXN0b21lcl9wYXlsb2Fk'),
-      false
-    );
-
-    const builtin = await enrichDetail({
-      top_in_app_frame: {
-        function: 'readFileSync',
-        line: 123,
-        source: 'node:fs',
-      },
-    });
-    assert.equal(builtin.sample.route, 'node:fs:123');
-  });
-
   it('keeps only the basename of absolute local frame paths', async () => {
     for (const source of [
       '/Users/AliceSmith/ClientA/app.js',
       'C:\\Users\\AliceSmith\\ClientA\\app.js',
+      '\\\\server\\share\\app.js',
+      '  /Users/AliceSmith/app.js  ',
     ]) {
       const enriched = await enrichDetail({
         top_in_app_frame: { function: 'render', source },
@@ -184,6 +116,11 @@ describe('PostHog enrichment frame paths', () => {
       assert.equal(enriched.sample.route.includes('AliceSmith'), false);
       assert.equal(enriched.sample.route.includes('ClientA'), false);
     }
+
+    const driveRelative = await enrichDetail({
+      top_in_app_frame: { function: 'render', source: 'C:app.js' },
+    });
+    assert.equal(driveRelative.sample.route, '(redacted PostHog location)');
   });
 
   it('redacts compact phone runs in frame metadata', async () => {

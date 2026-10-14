@@ -55,10 +55,8 @@ export function CompareButton({
         styles.button,
         size === 'small' && styles.buttonSmall,
         {
-          backgroundColor: isInComparison
-            ? `${BRAND.primary}15`
-            : `${colors.textSecondary}10`,
-          borderColor: isInComparison ? BRAND.primary : colors.border,
+          backgroundColor: isInComparison ? `${BRAND.primary}15` : colors.card,
+          borderColor: isInComparison ? BRAND.primary : colors.text,
           opacity: pressed ? 0.7 : 1,
         },
       ]}
@@ -66,14 +64,14 @@ export function CompareButton({
       <Ionicons
         name={isInComparison ? 'checkmark-circle' : 'git-compare-outline'}
         size={iconSize}
-        color={isInComparison ? BRAND.primary : colors.textSecondary}
+        color={isInComparison ? BRAND.primary : colors.text}
       />
       {showLabel && (
         <Text
           style={[
             styles.label,
             size === 'small' && styles.labelSmall,
-            { color: isInComparison ? BRAND.primary : colors.textSecondary },
+            { color: isInComparison ? BRAND.primary : colors.text },
           ]}
         >
           {isInComparison ? 'Added' : 'Compare'}
@@ -99,7 +97,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 13,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   labelSmall: {
     fontSize: 11,

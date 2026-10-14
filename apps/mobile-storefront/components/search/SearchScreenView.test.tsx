@@ -78,7 +78,6 @@ function renderView(
     selectedBrand: 'All',
     selectedCategory: 'All',
     selectedCondition: 'All',
-    totalCount: 0,
     viewMode: 'grid',
     ...overrides,
   };
@@ -136,7 +135,6 @@ describe('SearchScreenView', () => {
       products,
       query: 'iphone',
       searchError: 'Search failed',
-      totalCount: 45,
     });
 
     expect(screen.queryByText("Couldn't load results")).toBeNull();
@@ -149,7 +147,6 @@ describe('SearchScreenView', () => {
     const base = {
       hasSearchQuery: true,
       products,
-      totalCount: 1,
     };
 
     const first = renderView({ ...base, committedQuery: 'iphone' });
@@ -171,7 +168,6 @@ describe('SearchScreenView', () => {
       committedQuery: 'iphone',
       hasSearchQuery: true,
       products,
-      totalCount: 1,
     };
 
     const first = renderView(base);
@@ -190,7 +186,6 @@ describe('SearchScreenView', () => {
       committedQuery: 'iphone',
       hasSearchQuery: true,
       products,
-      totalCount: 1,
     };
 
     const first = renderView(base);

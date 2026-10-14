@@ -116,14 +116,6 @@ const styles = StyleSheet.create({
   productRight: {
     paddingLeft: 8,
   },
-  resultsCountHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  resultsCountText: {
-    fontSize: 13,
-  },
   resultsFooter: {
     alignItems: 'center',
     justifyContent: 'center',

@@ -54,7 +54,6 @@ function renderList(
 ) {
   const props: ComponentProps<typeof SearchResultsList> = {
     colors: Colors.light,
-    committedQuery: '',
     isLoadingMore: false,
     isNextPageError: false,
     isRetrying: false,
@@ -65,7 +64,6 @@ function renderList(
     onRetryNextPage: jest.fn(),
     products: [],
     resultsKey: '["iphone","All","All","All",0,0,0]',
-    totalCount: 0,
     ...overrides,
   };
 
@@ -73,7 +71,7 @@ function renderList(
 }
 
 describe('SearchResultsList', () => {
-  it('shows a truthful loaded count and appends pages at the list end', () => {
+  it('starts with products without a count summary and still appends pages', () => {
     const onEndReached = jest.fn();
     const products = [
       { id: 'product-1', name: 'iPhone 16' },
@@ -81,40 +79,34 @@ describe('SearchResultsList', () => {
     ] as Product[];
 
     renderList({
-      committedQuery: 'iphone',
       onEndReached,
       products,
-      totalCount: 45,
     });
 
     expect(
-      screen.getByText('Showing 2 of 45 results for “iphone”')
-    ).toBeTruthy();
+      screen.queryByText('Showing 2 of 45 results for “iphone”')
+    ).toBeNull();
 
     fireEvent.press(screen.getByTestId('mock-flash-end-reached'));
     expect(onEndReached).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the total once every match is loaded', () => {
+  it('omits the summary even when every match is loaded', () => {
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderList({
-      committedQuery: 'iphone 16',
       products,
-      totalCount: 1,
     });
 
-    expect(screen.getByText('1 result for “iphone 16”')).toBeTruthy();
+    expect(screen.queryByText('1 result for “iphone 16”')).toBeNull();
   });
 
   it('shows a loading footer while more results append', () => {
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderList({
-      committedQuery: 'iphone',
       isLoadingMore: true,
       products,
-      totalCount: 45,
     });
 
     expect(screen.getByText('Loading more…')).toBeTruthy();
@@ -126,13 +118,11 @@ describe('SearchResultsList', () => {
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderList({
-      committedQuery: 'iphone',
       isNextPageError: true,
       listError: 'Search failed',
       onRetry,
       onRetryNextPage,
       products,
-      totalCount: 45,
     });
 
     expect(screen.getByTestId('mock-flash-item-product-1')).toBeTruthy();
@@ -149,12 +139,10 @@ describe('SearchResultsList', () => {
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderList({
-      committedQuery: 'iphone',
       isNextPageError: false,
       isRetrying: true,
       listError: 'Search failed',
       products,
-      totalCount: 45,
     });
 
     expect(screen.getByText('Retrying…')).toBeTruthy();
@@ -169,13 +157,11 @@ describe('SearchResultsList', () => {
     const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
 
     renderList({
-      committedQuery: 'iphone',
       isNextPageError: false,
       listError: 'Search failed',
       onRetry,
       onRetryNextPage,
       products,
-      totalCount: 45,
     });
 
     // The footer labels a refresh failure accurately instead of claiming

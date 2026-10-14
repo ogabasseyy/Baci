@@ -71,6 +71,18 @@ const isAbsoluteLocalUrlPath = (pathname) => {
 
 const framePath = (source) => {
   const text = String(source || '');
+  // Non-hierarchical URIs (data:, blob:, ...) are inline content, not
+  // paths: reject them before normalization. Drive-letter prefixes fall
+  // through to absolute-path handling, and node: internals are safe
+  // fixed-vocabulary coordinates scrubbed by the filters below.
+  if (
+    !text.includes('://') &&
+    /^[A-Za-z][A-Za-z0-9+.-]*:/.test(text) &&
+    !/^[A-Za-z]:[\\/]/.test(text) &&
+    !text.toLowerCase().startsWith('node:')
+  ) {
+    return '';
+  }
   let path = text;
   let reduceToBasename = false;
   let virtualScheme = false;

@@ -147,6 +147,31 @@ describe('PostHog enrichment frame paths', () => {
     assert.equal(secret.sample.route.includes('secret-value'), false);
   });
 
+  it('rejects non-hierarchical frame URIs while keeping node internals', async () => {
+    const data = await enrichDetail({
+      top_in_app_frame: {
+        function: 'load',
+        line: 1,
+        source:
+          'data:text/javascript;base64,QWxpY2VTbWl0aF9jdXN0b21lcl9wYXlsb2Fk',
+      },
+    });
+    assert.equal(data.sample.route, '(redacted PostHog location)');
+    assert.equal(
+      data.sample.route.includes('QWxpY2VTbWl0aF9jdXN0b21lcl9wYXlsb2Fk'),
+      false
+    );
+
+    const builtin = await enrichDetail({
+      top_in_app_frame: {
+        function: 'readFileSync',
+        line: 123,
+        source: 'node:fs',
+      },
+    });
+    assert.equal(builtin.sample.route, 'node:fs:123');
+  });
+
   it('keeps only the basename of absolute local frame paths', async () => {
     for (const source of [
       '/Users/AliceSmith/ClientA/app.js',

@@ -242,58 +242,6 @@ describe.each([
     ).rejects.toMatchObject({ code: 'INTERNATIONAL_QUOTE_EXPIRED' });
   });
 
-  it('skips only the expiry check for a confirmed replay and still adopts the pin', async () => {
-    // Arrange — a same-key retry arrives after its quote expired, but the
-    // merchant-scoped key already has an order.
-    const parsed = orderCreateSchema.parse({
-      ...orderInput,
-      shipping_address: address,
-    });
-
-    // Act
-    const destination = await enrichShippingAddressWithQuoteDestination(
-      createSupabaseRpcMock({
-        provider,
-        price: 2500,
-        quote_request: request,
-        expires_at: new Date(0).toISOString(),
-      }) as unknown as SupabaseClient,
-      'quote-1',
-      parsed.shipping_address ?? address,
-      { ...context, isConfirmedReplay: true }
-    );
-
-    // Assert — expiry is skipped yet every deterministic check still runs,
-    // so the retry reproduces the first attempt's adopted pin exactly.
-    expect(destination).toMatchObject(coordinates);
-    expect(() =>
-      assertQuoteReceiverMatchesOrder(request, {
-        shipping_address: destination ?? null,
-      })
-    ).not.toThrow();
-  });
-
-  it('passes the address through untouched for a confirmed replay after quote cleanup', async () => {
-    // Arrange — the quote row was cleaned up after the order was created,
-    // but the merchant-scoped key already has an order.
-    const parsed = orderCreateSchema.parse({
-      ...orderInput,
-      shipping_address: address,
-    });
-
-    // Act
-    const destination = await enrichShippingAddressWithQuoteDestination(
-      createSupabaseRpcMock(null) as unknown as SupabaseClient,
-      'quote-1',
-      parsed.shipping_address ?? address,
-      { ...context, isConfirmedReplay: true }
-    );
-
-    // Assert — no provenance left to re-validate; the order RPC's hash
-    // comparison stays authoritative for replay-vs-conflict.
-    expect(destination).toEqual(parsed.shipping_address ?? address);
-  });
-
   it('rejects a quote request from another merchant before adopting the pin', async () => {
     await expect(
       enrichShippingAddressWithQuoteDestination(

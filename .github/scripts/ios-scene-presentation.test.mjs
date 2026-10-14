@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { test } from 'node:test';
+import YAML from 'yaml';
 
 const root = resolve(import.meta.dirname, '../..');
 const native = (name, path) => readFileSync(join(root, 'node_modules', name, 'ios', path), 'utf8');
@@ -21,6 +22,22 @@ function declaration(source, marker) {
 }
 
 const helper = () => declaration(native('expo-modules-core', 'Utilities/Utilities.swift'), 'nonisolated public static func keyWindow()');
+
+test('native presentation gate watches both apps source-compilation inputs', () => {
+  const workflow = YAML.parse(readFileSync(join(root, '.github/workflows/ios-runtime-scheduler-pr.yml'), 'utf8'));
+  const filters = YAML.parse(readFileSync(join(root, '.github/filters/ci.yml'), 'utf8'));
+  for (const path of [
+    'apps/mobile-admin/app.config.ts',
+    'apps/mobile-admin/ios/Podfile.properties.json',
+    'apps/mobile-storefront/app.config.ts',
+    'apps/mobile-storefront/ios/Podfile.properties.json',
+  ]) {
+    assert.ok(workflow.on.pull_request.paths.includes(path), `native gate must watch ${path}`);
+  }
+  for (const path of ['apps/mobile-admin/app.config.ts', 'apps/mobile-admin/ios/Podfile.properties.json']) {
+    assert.ok(filters.mobile_storefront.includes(path), `storefront contracts must watch ${path}`);
+  }
+});
 
 test('scene-aware presenters retain legacy windows only when no scene exists', { skip: process.platform !== 'darwin' }, () => {
   const folder = mkdtempSync(join(tmpdir(), 'baci-window-fallback-'));

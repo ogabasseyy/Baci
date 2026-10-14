@@ -31,10 +31,11 @@ Only 21/193 (10.9%) currently qualify as code-redundant. A 90%
 direct-deletion recommendation is not supported. A larger archive-first batch
 may be possible after ownership, recoverability, and ignored-data checks.
 
-20 of the 21 shortlist HEADs were unchanged and Git-clean on the parent's
-recheck at 2026-10-10T13:33:11Z; ID 47 is marked PENDING in the table below
-until a fresh HEAD/status recheck. The follow-up process snapshot found no
-references except Watchman monitoring for ID 171. This is not proof that an
+All 21 shortlist HEADs were unchanged and Git-clean on recheck: 20 at
+2026-10-10T13:33:11Z plus ID 47 on fresh recheck at 2026-10-14T11:27:42Z
+(HEAD unchanged, zero status entries, no process references).
+The follow-up process snapshot found no references except
+Watchman monitoring for ID 171. This is not proof that an
 owning chat is inactive. Ignored-file scans were bounded, so the shortlist
 remains a candidate list, not an unconditional removal list.
 See [candidate-recheck.json](./candidate-recheck.json).
@@ -47,7 +48,7 @@ See [candidate-recheck.json](./candidate-recheck.json).
 | 6 | `~/.codex/worktrees/checkout-3577-pre-slice` | Clean detached checkout; zero patch-unique commits and zero changed paths. |
 | 7 | `~/.codex/worktrees/checkout-payment-switch/Baci-app` | Exact merged PR head, clean Git status; 263 sampled ignored media/report files byte-identical to primary. |
 | 21 | `~/.codex/worktrees/shipping-migration-audit/Baci-app` | PR #3506 merged at exact HEAD; clean; ignored data limited to generated/dependency artifacts. |
-| 47 | `~/Baci-app/.worktrees/expense-edit-exposure-20260824` | **PENDING fresh HEAD/status recheck — not yet verified.** Exact head of merged PR #3389; clean and inactive. |
+| 47 | `~/Baci-app/.worktrees/expense-edit-exposure-20260824` | Exact head of merged PR #3389; HEAD unchanged and Git-clean on fresh recheck 2026-10-14, no process references. |
 | 29 | `~/Baci-app/.worktrees/android-soloader-fix` | The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior. All 3 unique paths enumerated: the two config files plus a test asserting the same enabled value. |
 | 58 | `~/Baci-app/.worktrees/fix-web-ios-production-deploys` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
 | 60 | `~/Baci-app/.worktrees/gigl-tracking-notifications` | PR #3248 merged at this exact head; clean status and only generated/build data ignored. |
@@ -173,7 +174,7 @@ correct, needed, or safe to merge.
 
 Local validation passed: all 193 IDs are represented exactly once; per-shard
 category counts and the consolidated inventory agree; local Markdown links
-resolve; all 20 candidate HEAD/status rechecks passed; missing-checkout flags
+resolve; all 21 candidate HEAD/status rechecks passed (20 on 2026-10-10, ID 47 on 2026-10-14); missing-checkout flags
 agree with their classifications; and `git diff --check` passed. CodeRabbit
 completed its documentation review with one minor JSON consistency issue,
 corrected after verifying the two absent paths. Application checks were not run

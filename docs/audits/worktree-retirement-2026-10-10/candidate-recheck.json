@@ -47,6 +47,16 @@
       "processes": []
     },
     {
+      "id": 47,
+      "path": "~/Baci-app/.worktrees/expense-edit-exposure-20260824",
+      "head": "ed9fba16264ae1aae6c8e43755481ccbf149ce94",
+      "headUnchanged": true,
+      "statusExit": 0,
+      "statusEntries": 0,
+      "processes": [],
+      "recheckedAt": "2026-10-14T11:27:42Z"
+    },
+    {
       "id": 58,
       "path": "~/Baci-app/.worktrees/fix-web-ios-production-deploys",
       "head": "dc79abd88c6b7fa2fa909ba145afd223a989fd70",

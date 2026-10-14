@@ -209,8 +209,7 @@
       "uniquePaths": 8,
       "pr": "3389:MERGED:ed9fba16264ae1aae6c8e43755481ccbf149ce94",
       "activity": 0,
-      "notes": "Exact head of merged PR #3389; clean, inactive; 4 unique commits / 8 paths are patch-distinct counts that do not establish missing behavior. No preservation reason recorded.",
-      "recheckPending": true
+      "notes": "Exact head of merged PR #3389; clean, inactive; 4 unique commits / 8 paths are patch-distinct counts that do not establish missing behavior. No preservation reason recorded."
     },
     {
       "id": 50,

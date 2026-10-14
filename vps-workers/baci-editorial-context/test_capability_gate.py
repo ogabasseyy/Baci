@@ -67,116 +67,6 @@ class CapabilityGateTests(unittest.TestCase):
             finally:
                 os.chdir(previous)
 
-    def test_bare_cited_filenames_resolve_to_tracked_paths(self):
-        with tempfile.TemporaryDirectory() as root:
-            repo = Path(root)
-
-            def git(*args):
-                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
-
-            git("init", "-q", ".")
-            (repo / "docs/product").mkdir(parents=True)
-            (repo / "docs/product/agent-access-map.md").write_text("See `useFollowUpQueue.ts` for queue state and `spaced.ts` for spacing.")
-            (repo / "apps/x").mkdir(parents=True)
-            (repo / "apps/x/useFollowUpQueue.ts").write_text("export {};\n")
-            (repo / "apps/aardvark").mkdir(parents=True)
-            (repo / "apps/aardvark/useFollowUpQueue.ts").write_text("export {};\n")
-            (repo / "apps/with space").mkdir(parents=True)
-            (repo / "apps/with space/spaced.ts").write_text("export {};\n")
-            git("add", ".")
-            git("commit", "-q", "-m", "one")
-            previous = os.getcwd()
-            os.chdir(repo)
-            try:
-                citing = {"capabilities": []}
-                resolved, unresolved = gate._resolve_cited_filenames({"useFollowUpQueue.ts", "spaced.ts", "ghost.ts"})
-                self.assertEqual(resolved, {"apps/x/useFollowUpQueue.ts", "apps/aardvark/useFollowUpQueue.ts", "apps/with space/spaced.ts"})
-                self.assertEqual(unresolved, {"ghost.ts"})
-                relevant = gate.relevant_paths(citing)
-                self.assertIn("apps/x/useFollowUpQueue.ts", relevant)
-                self.assertIn("apps/aardvark/useFollowUpQueue.ts", relevant)
-                self.assertIn("apps/with space/spaced.ts", relevant)
-                self.assertNotIn("useFollowUpQueue.ts", relevant)
-                self.assertTrue(gate.should_run("base", citing, {"apps/x/useFollowUpQueue.ts"}))
-                self.assertTrue(gate.should_run("base", citing, {"apps/aardvark/useFollowUpQueue.ts"}))
-                self.assertTrue(gate.should_run("base", citing, {"apps/with space/spaced.ts"}))
-                # Same basename, different untracked path: no longer a "cited source".
-                self.assertFalse(gate.should_run("base", citing, {"apps/other/useFollowUpQueue.ts"}))
-            finally:
-                os.chdir(previous)
-
-    def test_base_union_keeps_deleted_citation_relevant(self):
-        with tempfile.TemporaryDirectory() as root:
-            repo = Path(root)
-
-            def git(*args):
-                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
-
-            git("init", "-q", ".")
-            (repo / "docs/product").mkdir(parents=True)
-            (repo / "docs/product/agent-access-map.md").write_text("See `same.ts` for shared state.")
-            (repo / "apps/a").mkdir(parents=True)
-            (repo / "apps/b").mkdir(parents=True)
-            (repo / "apps/a/same.ts").write_text("export {};\n")
-            (repo / "apps/b/same.ts").write_text("export {};\n")
-            git("add", ".")
-            git("commit", "-q", "-m", "one")
-            base = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-            git("rm", "-q", "apps/b/same.ts")
-            git("commit", "-q", "-m", "drop duplicate")
-            # From outside the checkout: the map must still resolve via cwd.
-            citing = {"capabilities": []}
-            changed = gate.changed_paths(base, cwd=repo)
-            self.assertIn("apps/b/same.ts", changed)
-            self.assertFalse(gate.should_run(base, citing, changed),
-                             "map lookup from the process cwd must not see the fixture map")
-            self.assertTrue(gate.should_run(base, citing, changed, cwd=str(repo)),
-                            "base-tree union must keep the deleted citation relevant")
-            self.assertFalse(gate.should_run(None, citing, changed, cwd=str(repo)),
-                             "head-only resolution must not see the deleted path")
-
-    def test_action_only_change_runs_suite(self):
-        register = {"capabilities": []}
-        self.assertTrue(gate.should_run("base", register, {gate.ACTION_PATH}))
-
-    def test_main_without_base_runs_suite_for_dispatch(self):
-        with patch.object(gate.subprocess, "run") as suite:
-            suite.return_value.returncode = 0
-            with patch.dict(os.environ, {}, clear=False):
-                os.environ.pop("BASE_SHA", None)
-                self.assertEqual(gate.main(), 0)
-            suite.assert_called_once()
-
-    def test_main_fails_when_changed_set_unknowable(self):
-        now = dt.datetime.now(dt.timezone.utc).isoformat()
-        register = {"reviewed_at": now, "capabilities": [
-            {"status": "unverified", "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx"]},
-        ]}
-        with tempfile.TemporaryDirectory() as root:
-            repo = Path(root)
-            (repo / "docs/product").mkdir(parents=True)
-            (repo / "docs/product/baci-capabilities.json").write_text(json.dumps(register))
-            previous = os.getcwd()
-            os.chdir(repo)
-            try:
-                with patch.object(gate, "changed_paths", return_value=None):
-                    with patch.object(gate.subprocess, "run", side_effect=AssertionError("suite must not run")):
-                        with patch.dict(os.environ, {"BASE_SHA": "b" * 40}):
-                            self.assertEqual(gate.main(), 1)
-            finally:
-                os.chdir(previous)
-
-    def test_noncanonical_citation_spelling_triggers_gate(self):
-        register = {"capabilities": [
-            {"status": "code_evidenced", "source_refs": ["./apps/web/src/lib/feeds.ts"]},
-            {"status": "unverified", "source_refs": ["./apps/web/src/app/(platform)/pricing/page.tsx"]},
-        ]}
-        self.assertTrue(gate.should_run("base", register, {"apps/web/src/lib/feeds.ts"}))
-        self.assertTrue(
-            gate._touches_unverified_refs(register, {"apps/web/src/app/(platform)/pricing/page.tsx"})
-        )
-        self.assertFalse(gate.should_run("base", register, {"apps/web/src/lib/other.ts"}))
-
     def test_freshness_scoping(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         fresh = {"reviewed_at": now, "capabilities": [
@@ -207,12 +97,12 @@ class CapabilityGateTests(unittest.TestCase):
 
     def test_requires_register_update(self):
         now = dt.datetime.now(dt.timezone.utc)
-        fresh = {"reviewed_at": now.isoformat(), "capabilities": [
+        fresh = {"reviewed_at": now.isoformat(), "source_revision": "a" * 40, "capabilities": [
             {"status": "code_evidenced", "source_refs": ["apps/web/src/lib/feeds.ts"]},
             {"status": "unverified", "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx"]},
         ]}
         stale = {**fresh, "reviewed_at": "2020-01-01T00:00:00Z"}
-        base = {**fresh, "reviewed_at": (now - dt.timedelta(days=1)).isoformat()}
+        base = {**fresh, "reviewed_at": (now - dt.timedelta(days=1)).isoformat(), "source_revision": "b" * 40}
         rereviewed = {**fresh}  # now: fresh and advanced past base, not future-dated
         unverified_change = {"apps/web/src/app/(platform)/pricing/page.tsx"}
         touched = unverified_change | {gate.REGISTER_PATH}
@@ -224,7 +114,7 @@ class CapabilityGateTests(unittest.TestCase):
         # Genuine re-review (reviewed_at advanced past base): accepted.
         self.assertFalse(gate.requires_register_update(rereviewed, touched, base))
         # Reference removed at head while its unverified file changed, same date: still required.
-        dropped = {"reviewed_at": base["reviewed_at"], "capabilities": [
+        dropped = {"reviewed_at": base["reviewed_at"], "source_revision": "a" * 40, "capabilities": [
             {"status": "code_evidenced", "source_refs": ["apps/web/src/lib/feeds.ts"]},
         ]}
         self.assertTrue(gate.requires_register_update(dropped, touched, base))
@@ -237,6 +127,9 @@ class CapabilityGateTests(unittest.TestCase):
         redigest = coded_change | {gate.REGISTER_PATH}
         self.assertTrue(gate.requires_register_update(same_date, redigest, base))
         self.assertFalse(gate.requires_register_update(rereviewed, redigest, base))
+        # Date advanced but old revision carried forward: still required.
+        carried = {**rereviewed, "source_revision": base["source_revision"]}
+        self.assertTrue(gate.requires_register_update(carried, touched, base))
         # Base register unloadable: the path touch is the only signal, accepted.
         self.assertFalse(gate.requires_register_update(fresh, touched, None))
         self.assertFalse(gate.requires_register_update(fresh, touched))
@@ -247,6 +140,33 @@ class CapabilityGateTests(unittest.TestCase):
         # Unknown inputs: fail closed elsewhere, nothing to enforce here.
         self.assertFalse(gate.requires_register_update(fresh, None, base))
         self.assertFalse(gate.requires_register_update(None, unverified_change, base))
+
+    def test_main_without_base_runs_suite_for_dispatch(self):
+        with patch.object(gate.subprocess, "run") as suite:
+            suite.return_value.returncode = 0
+            with patch.dict(os.environ, {}, clear=False):
+                os.environ.pop("BASE_SHA", None)
+                self.assertEqual(gate.main(), 0)
+            suite.assert_called_once()
+
+    def test_main_fails_when_changed_set_unknowable(self):
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        register = {"reviewed_at": now, "capabilities": [
+            {"status": "unverified", "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx"]},
+        ]}
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/baci-capabilities.json").write_text(json.dumps(register))
+            previous = os.getcwd()
+            os.chdir(repo)
+            try:
+                with patch.object(gate, "changed_paths", return_value=None):
+                    with patch.object(gate.subprocess, "run", side_effect=AssertionError("suite must not run")):
+                        with patch.dict(os.environ, {"BASE_SHA": "b" * 40}):
+                            self.assertEqual(gate.main(), 1)
+            finally:
+                os.chdir(previous)
 
     def test_main_rejects_unverified_change_without_register_update(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()

@@ -145,9 +145,11 @@ def requires_register_update(register, changed, base_register=None):
     stale "not established by this audit" claim reaching writers with every
     check green. The same change must re-review the register in the same PR:
     a path touch alone (whitespace-only edit) does not count — reviewed_at
-    must advance past the base revision's. When the base register cannot be
-    loaded, the path touch is the only available signal and is accepted.
-    Unknown inputs fail closed elsewhere; here there is nothing to enforce.
+    must advance past the base revision's, and source_revision must move to
+    the newly reviewed tree instead of carrying the old binding forward.
+    When the base register cannot be loaded, the path touch is the only
+    available signal and is accepted. Unknown inputs fail closed elsewhere;
+    here there is nothing to enforce.
     """
     if changed is None or register is None:
         return False
@@ -166,9 +168,16 @@ def requires_register_update(register, changed, base_register=None):
     if base_register is None:
         return False
     try:
-        return _reviewed_moment(register) <= _reviewed_moment(base_register)
+        advanced = _reviewed_moment(register) > _reviewed_moment(base_register)
     except (KeyError, TypeError, ValueError):
         return True
+    if not advanced:
+        return True
+    old_rev = base_register.get("source_revision")
+    new_rev = register.get("source_revision")
+    if not isinstance(new_rev, str) or not isinstance(old_rev, str):
+        return True
+    return new_rev == old_rev
 
 
 def should_run(base, register, changed, cwd="."):

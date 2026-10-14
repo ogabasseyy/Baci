@@ -24,7 +24,10 @@ import {
 
 export { VtuPersistenceError };
 
-import { resolveKudaFallbackCreditCorrection } from '@/lib/vtu-fallback-credit-correction';
+import {
+  applyKudaFallbackCreditCorrection,
+  refreshSnapshotMoneyColumns,
+} from '@/lib/vtu-fallback-credit-correction';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
@@ -36,8 +39,10 @@ import {
 import {
   RetryableVtuError,
   throwIfVtuRefundUnconfirmed,
+  throwUnlessRefundSkippedWithoutCollection,
 } from '@/lib/vtu-refund-guard';
 import {
+  persistVtuWalletDebitConfirmation,
   recoverStrandedPreVendVtuRow,
   shouldSkipRefundWithoutCollectionEvidence,
   writeVtuProviderSubmissionMarkerOrRestore,
@@ -1806,34 +1811,16 @@ async function readCurrentVtuTransactionRow({
     status?: unknown;
     transaction_id?: unknown;
   };
-  // Money columns refresh alongside status: a concurrent worker may
-  // have persisted corrected fallback credits with the terminal
-  // status, and settling from this snapshot's stale Monnify values
-  // would let the wrong amounts win the ledger first. Absent values
-  // keep the snapshot's own.
-  const refreshedCashback =
-    snapshot.customer_cashback === undefined ||
-    snapshot.customer_cashback === null
-      ? Number.NaN
-      : Number(snapshot.customer_cashback);
-  const refreshedCommission =
-    snapshot.merchant_commission === undefined ||
-    snapshot.merchant_commission === null
-      ? Number.NaN
-      : Number(snapshot.merchant_commission);
+  const refreshedMoney = refreshSnapshotMoneyColumns(snapshot, row);
 
   return {
     ...row,
-    customer_cashback: Number.isFinite(refreshedCashback)
-      ? refreshedCashback
-      : row.customer_cashback,
+    customer_cashback: refreshedMoney.customer_cashback,
     error_message:
       typeof snapshot.error_message === 'string'
         ? snapshot.error_message
         : null,
-    merchant_commission: Number.isFinite(refreshedCommission)
-      ? refreshedCommission
-      : row.merchant_commission,
+    merchant_commission: refreshedMoney.merchant_commission,
     metadata: readMetadataRecord(snapshot.metadata),
     status: normalizeDbVtuStatus(snapshot.status),
     transaction_id:
@@ -1973,25 +1960,12 @@ async function reconcileProcessingVtuTransaction({
       if (reconciledUnits) {
         successMetadata.units = reconciledUnits;
       }
-      // Kuda-fallback credit correction (mirrors the inline vend
-      // path): a fallback row recovered here still carries
-      // Monnify-derived commission/cashback columns, and settling
-      // those would misallocate real wallet funds. Self-gating: null
-      // for non-fallback rows. Covers flagged AND claimed fallback
-      // rows — both settle through this branch.
-      const fallbackCreditCorrection = resolveKudaFallbackCreditCorrection({
+      // Covers flagged AND claimed fallback rows — both settle
+      // through this branch.
+      const fallbackCreditCorrection = applyKudaFallbackCreditCorrection({
         metadata: successMetadata,
         row: currentRow,
       });
-      if (fallbackCreditCorrection) {
-        successMetadata.originalMerchantCommission =
-          fallbackCreditCorrection.originalMerchantCommission;
-        successMetadata.commissionProvider = 'kuda';
-        currentRow.customer_cashback =
-          fallbackCreditCorrection.customerCashback;
-        currentRow.merchant_commission =
-          fallbackCreditCorrection.merchantCommission;
-      }
       const successPersistError = await updateVtuPurchaseResultWithRetry({
         payload: {
           ...(fallbackCreditCorrection && {
@@ -2356,19 +2330,15 @@ export async function fulfillPendingVtuTransaction({
       row,
       supabase,
     });
-    if (
-      refundMetadata[VTU_REFUND_SKIPPED_KEY] !==
-      VTU_REFUND_SKIPPED_NO_COLLECTION
-    ) {
-      throwIfVtuRefundUnconfirmed({
-        row,
-        refundIssued: refund.refundIssued,
-        refundedAmount: refund.refundedAmount,
-        failedMessage: row.error_message ?? undefined,
-        failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
-        message: `Unable to confirm VTU refund before returning failed purchase for ${row.id}`,
-      });
-    }
+    throwUnlessRefundSkippedWithoutCollection({
+      row,
+      refundIssued: refund.refundIssued,
+      refundedAmount: refund.refundedAmount,
+      refundMetadata,
+      failedMessage: row.error_message ?? undefined,
+      failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
+      message: `Unable to confirm VTU refund before returning failed purchase for ${row.id}`,
+    });
     if (refund.metadataChanged) {
       const { error: refundMetadataUpdateError } = await supabase
         .from('vtu_transactions')
@@ -2627,52 +2597,11 @@ export async function fulfillPendingVtuTransaction({
       );
     }
 
-    // Wallet debit succeeded — persist walletDebited=true via the same
-    // fail-closed retry pattern as the rest of vtu-fulfillment so a
-    // future retry sees the flag and skips the RPC (RPC is idempotent
-    // anyway, but the metadata flag avoids an extra round-trip).
-    const debitedMetadata = { ...preDebitMetadata, walletDebited: true };
-    const { data: debitedRow, error: walletDebitedPersistError } =
-      await supabase
-        .from('vtu_transactions')
-        .update({ metadata: debitedMetadata })
-        .eq('id', row.id)
-        .select('updated_at')
-        .maybeSingle();
-    if (walletDebitedPersistError) {
-      // Fail closed: the wallet was debited via the (idempotent) RPC
-      // but the row still says walletDebited=false. Restore to marked
-      // pending so the retry re-drives (the RPC short-circuits on the
-      // existing ledger row, the metadata write is retried, then it
-      // vends) instead of stranding a reference-less processing row
-      // the reconciliation claim declines.
-      console.error('Failed to persist VTU walletDebited metadata:', {
-        error: walletDebitedPersistError.message,
-        metadata: getSafeMetadataDiagnostics(debitedMetadata),
-        transactionId: row.id,
-      });
-      await restoreInterruptedPreVendVtuRow({
-        // Fixed user-safe template: the raw DB error stays in the
-        // server log above — error_message is customer-visible history.
-        userSafeMessage:
-          'VTU wallet debit confirmation failed; the purchase will resume automatically.',
-        row,
-        supabase,
-      });
-      throwVtuPersistenceError(
-        `Failed to persist walletDebited for ${row.id}: ${walletDebitedPersistError.message}`
-      );
-    }
-    // Refresh the CAS token (Codex R65 6ru4mQ): this write advanced
-    // updated_at via trigger — the marker-failure restore below CASes
-    // on row.updated_at and would zero-match with the stale token,
-    // stranding the charged row until the 5-minute stale path.
-    if (typeof debitedRow?.updated_at === 'string') {
-      row.updated_at = debitedRow.updated_at;
-    }
-    // Mutate the row's metadata so downstream code (refund-on-Kuda-fail
-    // branch) sees walletDebited=true.
-    row.metadata = debitedMetadata;
+    await persistVtuWalletDebitConfirmation({
+      preDebitMetadata,
+      row,
+      supabase,
+    });
   }
 
   // Submission marker (see vtu-fulfillment-recovery): persist BEFORE
@@ -2844,20 +2773,15 @@ export async function fulfillPendingVtuTransaction({
     transaction_id: result.transactionId ?? row.transaction_id,
   };
   const fallbackCreditCorrection = result.success
-    ? resolveKudaFallbackCreditCorrection({ metadata: updatedMetadata, row })
+    ? applyKudaFallbackCreditCorrection({ metadata: updatedMetadata, row })
     : null;
   if (fallbackCreditCorrection) {
-    updatedMetadata.originalMerchantCommission =
-      fallbackCreditCorrection.originalMerchantCommission;
-    updatedMetadata.commissionProvider = 'kuda';
     purchaseUpdatePayload.customer_cashback =
       fallbackCreditCorrection.customerCashback;
     purchaseUpdatePayload.merchant_commission =
       fallbackCreditCorrection.merchantCommission;
     purchaseUpdatePayload.platform_commission =
       fallbackCreditCorrection.platformCommission;
-    row.customer_cashback = fallbackCreditCorrection.customerCashback;
-    row.merchant_commission = fallbackCreditCorrection.merchantCommission;
   }
   const purchaseUpdateError = await updateVtuPurchaseResultWithRetry({
     payload: purchaseUpdatePayload,

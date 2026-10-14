@@ -194,12 +194,15 @@ function createPendingTransactionSupabaseMock({
   updatePayloads = [],
 }: PendingTransactionMockOptions): SupabaseStub {
   let purchaseUpdateAttempt = 0;
-  // Fulfill persists the submission marker exactly once per pass, but
-  // later metadata-only writes spread row.metadata (marker included),
-  // so shape alone cannot tell them apart: only the FIRST
-  // marker-shaped write takes the submissionMarker slot. Later ones
-  // fall through to finalMetadata, preserving tests that script a
-  // failure for a post-vend metadata write.
+  // The first marker-shaped write always takes the submissionMarker
+  // slot (unscripted → success: the normal pre-vend marker). Later
+  // ones take it only while a scripted error stands AND the write is
+  // non-terminal: the marker write retries (R79: 3 attempts), so
+  // failing only the first would let the retry succeed and the test
+  // would vend instead of restoring. Terminal (post-vend)
+  // marker-shaped writes and unscripted runs fall through to
+  // finalMetadata, preserving tests that script a failure for a
+  // post-vend metadata write.
   let submissionMarkerWriteSeen = false;
   const claimMaybeSingle = vi.fn().mockResolvedValue({
     data: claimData,
@@ -350,12 +353,18 @@ function createPendingTransactionSupabaseMock({
                 transactionRow,
                 updateErrors
               );
-              if (
-                !submissionMarkerWriteSeen &&
-                isSubmissionMarkerShaped(payloadRecord)
-              ) {
+              if (isSubmissionMarkerShaped(payloadRecord)) {
+                const terminalWrite =
+                  payloadRecord.status === 'successful' ||
+                  payloadRecord.status === 'failed';
+                if (
+                  !submissionMarkerWriteSeen ||
+                  (updateErrors.submissionMarker !== undefined &&
+                    !terminalWrite)
+                ) {
+                  updateError = updateErrors.submissionMarker;
+                }
                 submissionMarkerWriteSeen = true;
-                updateError = updateErrors.submissionMarker;
               }
               if (
                 (payloadRecord.status === 'successful' ||

@@ -221,6 +221,31 @@ describe('useWallet', () => {
     });
   });
 
+  it('exposes the error flag live for post-await gate reads', async () => {
+    // Codex R81 P2: the readiness gate invokes this AFTER the
+    // settlement-gate await, when the render-time snapshot is stale.
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ balance: 700 }),
+    });
+
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+    );
+    expect(result.current.getWalletError()).toBe(false);
+
+    await waitFor(() => {
+      expect(result.current.getWalletError()).toBe(true);
+    });
+
+    result.current.refreshWallet();
+
+    await waitFor(() => {
+      expect(result.current.getWalletError()).toBe(false);
+    });
+  });
+
   it('should abort fetch on unmount', async () => {
     let capturedSignal: AbortSignal | undefined;
     mockFetch.mockImplementationOnce((url: string, options?: RequestInit) => {

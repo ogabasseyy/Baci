@@ -1,3 +1,9 @@
+import {
+  DEFAULT_FETCH_TIMEOUT_MESSAGE,
+  DEFAULT_FETCH_TIMEOUT_MS,
+  isAbortError,
+  withDeadline,
+} from '@baci/shared/lib';
 import { fetchWithCsrf } from '@/lib/api-client';
 import {
   getCheckoutErrorMessage,
@@ -60,17 +66,54 @@ export const submitUtilityCheckout = async ({
       expectedUserId,
       payload,
     });
-    const response = await fetchWithCsrf('/api/vtu/checkout/wallet-only', {
-      method: 'POST',
-      headers: {
-        'Idempotency-Key': getWalletIdempotencyKey(
-          buildVtuWalletPayloadSignature(walletPayload)
-        ),
-      },
-      body: JSON.stringify(walletPayload),
-    });
-
-    const rawResponse = await response.text();
+    // One shared deadline for headers + body (Codex R70/R72,
+    // R81 P2): fetchWithCsrf resolves on headers, so a stalled
+    // body would otherwise hold loading/submitting forever even
+    // after the debit landed. The CSRF-refresh retry inside
+    // fetchWithCsrf shares the same signal, so it is bounded too.
+    const deadlineMs = Date.now() + DEFAULT_FETCH_TIMEOUT_MS;
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      DEFAULT_FETCH_TIMEOUT_MS
+    );
+    let response: Response;
+    let rawResponse: string;
+    try {
+      response = await fetchWithCsrf('/api/vtu/checkout/wallet-only', {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': getWalletIdempotencyKey(
+            buildVtuWalletPayloadSignature(walletPayload)
+          ),
+        },
+        body: JSON.stringify(walletPayload),
+        signal: controller.signal,
+      });
+      rawResponse = await withDeadline(
+        response.text(),
+        deadlineMs,
+        DEFAULT_FETCH_TIMEOUT_MESSAGE
+      ).catch((error: unknown) => {
+        // Release the connection: the race alone leaves the locked
+        // body read pending, piling up abandoned downloads.
+        controller.abort();
+        throw error;
+      });
+    } catch (error) {
+      // Real fetch aborts reject with a DOMException, not an
+      // Error — match by name on both so the timeout message
+      // (and key retention) holds on every runtime.
+      const aborted =
+        isAbortError(error) ||
+        (error instanceof DOMException && error.name === 'AbortError');
+      if (aborted) {
+        throw new Error(DEFAULT_FETCH_TIMEOUT_MESSAGE);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     let parsedData: unknown;
     try {
       parsedData = JSON.parse(rawResponse);

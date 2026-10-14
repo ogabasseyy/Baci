@@ -14,6 +14,12 @@ import {
   type UtilityIdempotencyAttempt,
 } from './use-utility-idempotency-key';
 import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
+import {
+  type AirtimeDataSubmit,
+  type BillSubmit,
+  buildAirtimeDataPayload,
+  buildBillPayload,
+} from './utility-purchase-payloads';
 import { buildUtilityCheckoutWalletPayload } from './utility-checkout-wallet-payload';
 import { buildVtuWalletPayloadSignature } from './utility-vtu-payload-signature';
 import type { UtilityTabId } from './UtilityTabs';
@@ -31,32 +37,12 @@ interface UseUtilityPurchaseParams {
   isWalletRefreshPending: () => boolean;
   /** Live balance reader (R78 6sN80p): gate-time read, not pre-await snapshot. */
   getWalletBalance: () => number;
+  /** Live error reader (R81 P2): gate-time read, not pre-await snapshot. */
+  getWalletError: () => boolean;
   refreshWallet: () => void;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   user: CustomerUser | null;
-  walletError: boolean;
   walletLoading: boolean;
-}
-
-interface AirtimeDataSubmit {
-  phoneNumber: string;
-  amount: number;
-  networkProvider: string;
-  dataPlanCode?: string;
-}
-
-interface BillSubmit {
-  amount: number;
-  billItemIdentifier: string;
-  billerCode?: string;
-  customerAddress?: string;
-  customerIdentifier: string;
-  billerName: string;
-  productCode?: string;
-  provider?: 'kuda' | 'monnify';
-  requireValidationRef?: boolean;
-  type: string;
-  validationReference?: string;
 }
 
 export type UtilityPurchaseStep = 'details' | 'processing' | 'success';
@@ -68,6 +54,8 @@ interface UseUtilityPurchaseReturn {
   setStep: Dispatch<SetStateAction<UtilityPurchaseStep>>;
   settleBackfilledAttempt: () => void;
   step: UtilityPurchaseStep;
+  /** True from submit click until the purchase settles (covers the pre-loading settle await). */
+  submitting: boolean;
   successAmount: number;
   transactionRef: string;
   transactionVoucherPin: string | null;
@@ -86,10 +74,10 @@ export function useUtilityPurchase({
   onInsufficientWalletBalance,
   isWalletRefreshPending,
   getWalletBalance,
+  getWalletError,
   refreshWallet,
   setWalletBalance,
   user,
-  walletError,
   walletLoading,
 }: UseUtilityPurchaseParams): UseUtilityPurchaseReturn {
   const [loading, setLoading] = useState(false);
@@ -158,7 +146,7 @@ export function useUtilityPurchase({
         refreshWallet,
         user,
         getWalletBalance,
-        walletError,
+        getWalletError,
         walletLoading,
         walletRefreshPending: isWalletRefreshPending(),
       })
@@ -242,13 +230,20 @@ export function useUtilityPurchase({
     setLoading(false);
   };
 
+  // Render-visible twin of submittingRef (Codex R81 P2): the
+  // settle await precedes loading state, so tabs (and any other
+  // UI lock) must key off state set here — a ref alone never
+  // re-renders the tab bar during the wait.
+  const [submitting, setSubmitting] = useState(false);
   // In-flight guard (R67 6rwGM2): the settle await precedes loading
   // state, so a sync-flipping ref must block repeat clicks.
   const handlePurchase = (payload: UtilityCheckoutPayload) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
+    setSubmitting(true);
     void handlePurchaseInner(payload).finally(() => {
       submittingRef.current = false;
+      setSubmitting(false);
     });
   };
 
@@ -259,31 +254,11 @@ export function useUtilityPurchase({
   };
 
   const handleAirtimeDataSubmit = (data: AirtimeDataSubmit) => {
-    handlePurchase({
-      type: activeTab,
-      phoneNumber: data.phoneNumber,
-      amount: data.amount,
-      networkProvider: data.networkProvider,
-      dataPlanCode: data.dataPlanCode,
-    });
+    handlePurchase(buildAirtimeDataPayload(data, activeTab));
   };
 
   const handleBillSubmit = (data: BillSubmit) => {
-    handlePurchase({
-      type: data.type,
-      amount: data.amount,
-      billItemIdentifier: data.billItemIdentifier,
-      billerCode: data.billerCode,
-      ...(data.customerAddress
-        ? { customerAddress: data.customerAddress }
-        : {}),
-      customerIdentifier: data.customerIdentifier,
-      billerName: data.billerName,
-      productCode: data.productCode,
-      provider: data.provider,
-      requireValidationRef: data.requireValidationRef,
-      validationReference: data.validationReference,
-    });
+    handlePurchase(buildBillPayload(data));
   };
 
   return {
@@ -293,6 +268,7 @@ export function useUtilityPurchase({
     setStep,
     settleBackfilledAttempt,
     step,
+    submitting,
     successAmount,
     transactionRef,
     transactionVoucherPin,

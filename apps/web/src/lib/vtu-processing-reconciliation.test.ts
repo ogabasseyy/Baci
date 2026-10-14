@@ -91,7 +91,7 @@ describe('reconcileProcessingVtuTransactions', () => {
       head: true,
     });
     expect(countQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null)'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,metadata->>merchantWalletCredited.not.is.true),and(customer_cashback.gt.0,customer_id.not.is.null,metadata->>customerWalletCredited.not.is.true)))'
     );
     expect(countQuery.in).toHaveBeenCalledWith('type', [
       'airtime',
@@ -107,7 +107,7 @@ describe('reconcileProcessingVtuTransactions', () => {
     expect(countQuery.limit).toHaveBeenCalledWith(1);
     expect(dataQuery.select).toHaveBeenCalledWith('id');
     expect(dataQuery.or).toHaveBeenCalledWith(
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null)'
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,metadata->>merchantWalletCredited.not.is.true),and(customer_cashback.gt.0,customer_id.not.is.null,metadata->>customerWalletCredited.not.is.true)))'
     );
     expect(dataQuery.lte).toHaveBeenCalledWith(
       'created_at',
@@ -176,12 +176,46 @@ describe('reconcileProcessingVtuTransactions', () => {
     });
 
     const expectedFilter =
-      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null)';
+      'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,metadata->>merchantWalletCredited.not.is.true),and(customer_cashback.gt.0,customer_id.not.is.null,metadata->>customerWalletCredited.not.is.true)))';
     expect(countQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(dataQuery.or).toHaveBeenCalledWith(expectedFilter);
     expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({
       supabase,
       transactionId: 'tx-retry',
+    });
+    expect(result.successful).toBe(1);
+  });
+
+  it('selects successful rows with unsettled wallet credits for re-drive', async () => {
+    // Codex R81 P1: a credit RPC failing after the vend lands leaves
+    // the row successful with merchant/customerWalletCredited unset —
+    // clients discard the key on success, so only the cron can retry
+    // the missing commission/cashback. Fulfill routes successful rows
+    // to the settle-only path (no re-vend; ledger guards skip landed
+    // credits), so re-driving is safe.
+    const countQuery = createProcessingQuery({ count: 1 });
+    const dataQuery = createProcessingQuery({ data: [{ id: 'tx-credits' }] });
+    const supabase = createSupabase({ countQuery, dataQuery });
+    fulfillPendingVtuTransactionMock.mockResolvedValueOnce({
+      status: 'successful',
+    });
+
+    const result = await reconcileProcessingVtuTransactions({
+      deadlineMs: Date.now() + 3_600_000,
+      limit: 1,
+      now: new Date('2026-05-07T21:14:00.000Z'),
+      supabase: supabase as never,
+    });
+
+    const orCalls = dataQuery.or.mock.calls as unknown as [string][];
+    const filter = orCalls[0]?.[0] as string;
+    expect(filter).toContain(
+      'and(status.eq.successful,or(and(merchant_commission.gt.0,metadata->>merchantWalletCredited.not.is.true),and(customer_cashback.gt.0,customer_id.not.is.null,metadata->>customerWalletCredited.not.is.true)))'
+    );
+    expect(countQuery.or).toHaveBeenCalledWith(filter);
+    expect(fulfillPendingVtuTransactionMock).toHaveBeenCalledWith({
+      supabase,
+      transactionId: 'tx-credits',
     });
     expect(result.successful).toBe(1);
   });

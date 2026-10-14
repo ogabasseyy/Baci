@@ -29,9 +29,16 @@ const RECONCILABLE_VTU_TYPES = [
 // card-only rows (no marker) whose refundCardOnly failed, leaving
 // history refund_pending with no background path retrying the credit.
 // Plain pending rows (mapping-less orphans, PK-race leftovers) and
-// already-refunded failures stay excluded.
+// already-refunded failures stay excluded. Successful rows with
+// unsettled wallet credits (Codex R81 P1): a credit RPC failing
+// after the vend lands leaves merchant/customerWalletCredited unset
+// while clients discard the key on success — only this cron can
+// retry the missing commission/cashback. Fulfill routes successful
+// rows to the settle-only path (no re-vend; ledger guards skip
+// landed credits), so re-driving is safe. Absent flags match too
+// (IS NOT TRUE): legacy rows heal on one guarded pass.
 const RECONCILABLE_STATUS_FILTER =
-  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null)';
+  'status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,metadata->>merchantWalletCredited.not.is.true),and(customer_cashback.gt.0,customer_id.not.is.null,metadata->>customerWalletCredited.not.is.true)))';
 const DEFAULT_RECONCILIATION_LIMIT = 25;
 const MAX_RECONCILIATION_LIMIT = 50;
 const MIN_PROCESSING_AGE_MS = 45_000;

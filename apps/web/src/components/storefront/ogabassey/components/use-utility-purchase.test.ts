@@ -55,7 +55,7 @@ function baseParams(overrides: Record<string, unknown> = {}) {
     setWalletBalance: vi.fn(),
     user,
     getWalletBalance: () => 5000,
-    walletError: false,
+    getWalletError: () => false,
     walletLoading: false,
     ...overrides,
   };
@@ -411,7 +411,7 @@ describe('useUtilityPurchase', () => {
     const refreshWallet = vi.fn();
     const { result } = renderHook(() =>
       useUtilityPurchase(
-        baseParams({ refreshWallet, walletError: true, getWalletBalance: () => 0 })
+        baseParams({ refreshWallet, getWalletError: () => true, getWalletBalance: () => 0 })
       )
     );
 

@@ -18,7 +18,7 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     refreshWallet: vi.fn(),
     user,
     getWalletBalance: () => 5000,
-    walletError: false,
+    getWalletError: () => false,
     walletLoading: false,
     walletRefreshPending: false,
     ...overrides,
@@ -68,6 +68,22 @@ describe('checkUtilityPurchaseReadiness', () => {
     expect(checkUtilityPurchaseReadiness(input)).toBe(false);
     balance = 5000;
     expect(checkUtilityPurchaseReadiness(input)).toBe(true);
+  });
+
+  it('re-reads the error flag on every evaluation instead of snapshotting it', () => {
+    // Codex R81 P2: a refresh failing during the settlement-gate
+    // await must block when the gate resumes, even though the
+    // pre-await snapshot still reads healthy. A snapshot would
+    // submit here.
+    let failed = false;
+    const input = baseInput({ getWalletError: () => failed });
+
+    expect(checkUtilityPurchaseReadiness(input)).toBe(true);
+    failed = true;
+    expect(checkUtilityPurchaseReadiness(input)).toBe(false);
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Wallet unavailable' })
+    );
   });
 
   it('blocks while a wallet refresh is pending even when loading is false', () => {
@@ -129,7 +145,7 @@ describe('checkUtilityPurchaseReadiness', () => {
     const refreshWallet = vi.fn();
     expect(
       checkUtilityPurchaseReadiness(
-        baseInput({ walletError: true, refreshWallet })
+        baseInput({ getWalletError: () => true, refreshWallet })
       )
     ).toBe(false);
     expect(mockToast).toHaveBeenCalledWith(

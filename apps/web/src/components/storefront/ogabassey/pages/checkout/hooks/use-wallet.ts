@@ -27,6 +27,15 @@ interface UseWalletReturn {
    * including post-fetch and post-purchase updates.
    */
   getWalletBalance: () => number;
+  /**
+   * Live error reader (Codex R81 P2): a refresh failing during the
+   * settlement-gate await must block at gate time, when the
+   * render-time walletError snapshot is stale. Published
+   * synchronously by the error setter (not render-phase like the
+   * balance mirror — error has no external writers, so no lag
+   * window is acceptable here).
+   */
+  getWalletError: () => boolean;
   walletLoading: boolean;
   /**
    * True when the last balance fetch failed (network error or non-OK
@@ -88,6 +97,14 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   // fetch completions AND direct setWalletBalance calls (post-
   // purchase optimistic updates), which no fetch-side hook could see.
   const walletBalanceRef = useRef(walletBalance);
+  // Live error mirror (Codex R81 P2): published synchronously by
+  // setWalletErrorLive at every write site, so a failure landing
+  // mid-await reads true even before React commits the render.
+  const walletErrorRef = useRef(false);
+  const setWalletErrorLive = (value: boolean) => {
+    walletErrorRef.current = value;
+    setWalletError(value);
+  };
 
   // Clear the previous identity's wallet + funding account SYNCHRONOUSLY
   // (render-phase) when the customer or storefront changes, so consumers
@@ -100,7 +117,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   if (identity !== fetchedIdentity) {
     setFetchedIdentity(identity);
     setWalletBalance(0);
-    setWalletError(false);
+    setWalletErrorLive(false);
     setPayWithWallet(false);
     setFundingAccount(null);
     setRequiresFundingAccountConsent(false);
@@ -124,14 +141,14 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
       }
 
       setWalletLoading(true);
-      setWalletError(false);
+      setWalletErrorLive(false);
       fetch(`/api/storefront/customer/wallet?merchant=${merchantSlug}`, {
         signal: abortController.signal,
       })
         .then(async (response) => {
           if (isSuperseded()) return;
           if (!response.ok) {
-            setWalletError(true);
+            setWalletErrorLive(true);
             return;
           }
           const data = await response.json();
@@ -160,7 +177,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
             error.name !== 'AbortError'
           ) {
             console.error('Failed to fetch wallet balance:', error);
-            setWalletError(true);
+            setWalletErrorLive(true);
           }
         })
         .finally(() => {
@@ -179,6 +196,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   return {
     walletBalance,
     getWalletBalance: () => walletBalanceRef.current,
+    getWalletError: () => walletErrorRef.current,
     walletLoading,
     walletError,
     payWithWallet,

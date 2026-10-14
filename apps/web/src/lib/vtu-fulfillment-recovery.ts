@@ -6,6 +6,7 @@ import {
   isUnsubmittedPreparedVtuRow,
 } from '@/lib/vtu-flagged-recovery';
 import type { VtuTransactionRow } from '@/lib/vtu-fulfillment';
+import { getSafeMetadataDiagnostics } from '@/lib/vtu-metadata-fields';
 import { throwVtuPersistenceError } from '@/lib/vtu-persistence-error';
 import {
   isStrandedPreVendVtuRow,
@@ -145,6 +146,67 @@ export async function writeVtuProviderSubmissionMarkerOrRestore({
       `Failed to persist provider-submission marker for ${row.id}: ${submissionMarkerError.message}`
     );
   }
+}
+
+/**
+ * Persists walletDebited=true after the debit RPC succeeds, so a
+ * future retry sees the flag and skips the RPC (it is idempotent
+ * anyway, but the flag avoids a round-trip). Fail closed like the
+ * rest of fulfillment: without the flag the row is
+ * indistinguishable from a never-debited strand, so restore to
+ * marked pending and throw (the retry re-drives: the RPC
+ * short-circuits on the existing ledger row, the write is retried,
+ * then it vends) instead of stranding a reference-less processing
+ * row the reconciliation claim declines. Refreshes the row's CAS
+ * token and metadata in place for downstream restores.
+ *
+ * Extracted from `fulfillPendingVtuTransaction` per the 300-line
+ * Boy Scout Rule (Codex R81 P1).
+ */
+export async function persistVtuWalletDebitConfirmation({
+  preDebitMetadata,
+  row,
+  supabase,
+}: {
+  preDebitMetadata: Record<string, unknown>;
+  row: VtuTransactionRow;
+  supabase: SupabaseClient;
+}): Promise<void> {
+  const debitedMetadata = { ...preDebitMetadata, walletDebited: true };
+  const { data: debitedRow, error: walletDebitedPersistError } = await supabase
+    .from('vtu_transactions')
+    .update({ metadata: debitedMetadata })
+    .eq('id', row.id)
+    .select('updated_at')
+    .maybeSingle();
+  if (walletDebitedPersistError) {
+    console.error('Failed to persist VTU walletDebited metadata:', {
+      error: walletDebitedPersistError.message,
+      metadata: getSafeMetadataDiagnostics(debitedMetadata),
+      transactionId: row.id,
+    });
+    await restoreInterruptedPreVendVtuRow({
+      // Fixed user-safe template: the raw DB error stays in the
+      // server log above — error_message is customer-visible history.
+      userSafeMessage:
+        'VTU wallet debit confirmation failed; the purchase will resume automatically.',
+      row,
+      supabase,
+    });
+    throwVtuPersistenceError(
+      `Failed to persist walletDebited for ${row.id}: ${walletDebitedPersistError.message}`
+    );
+  }
+  // Refresh the CAS token (Codex R65 6ru4mQ): this write advanced
+  // updated_at via trigger — the marker-failure restore below CASes
+  // on row.updated_at and would zero-match with the stale token,
+  // stranding the charged row until the 5-minute stale path.
+  if (typeof debitedRow?.updated_at === 'string') {
+    row.updated_at = debitedRow.updated_at;
+  }
+  // Mutate the row's metadata so downstream code (refund-on-Kuda-fail
+  // branch) sees walletDebited=true.
+  row.metadata = debitedMetadata;
 }
 
 /**

@@ -11,6 +11,10 @@
  * Extracted from vtu-fulfillment.ts per the Boy Scout Rule — that
  * module is over the 300-line budget, so touched logic lives here.
  */
+import {
+  VTU_REFUND_SKIPPED_KEY,
+  VTU_REFUND_SKIPPED_NO_COLLECTION,
+} from '@/lib/vtu-refund-collection-evidence';
 
 /** Minimal row shape the guard needs (structural; no import cycle). */
 export interface VtuRefundGuardRow {
@@ -72,6 +76,47 @@ export function throwIfVtuRefundUnconfirmed({
       failedMetadata,
       refundedAmount,
       transactionId: row.id,
+    });
+  }
+}
+
+/**
+ * Refund confirmation for legacy card-only rows: skips the throw
+ * when the row was deliberately skipped for lack of collection
+ * evidence (those rows never collected, so there is nothing to
+ * confirm), and delegates to `throwIfVtuRefundUnconfirmed`
+ * otherwise.
+ *
+ * Extracted from vtu-fulfillment.ts per the 300-line Boy Scout Rule
+ * (Codex R81 P1).
+ */
+export function throwUnlessRefundSkippedWithoutCollection({
+  failedMessage,
+  failedMetadata,
+  message,
+  refundIssued,
+  refundedAmount,
+  refundMetadata,
+  row,
+}: {
+  failedMessage?: string;
+  failedMetadata: Record<string, unknown>;
+  message: string;
+  refundIssued: boolean;
+  refundedAmount: number;
+  refundMetadata: Record<string, unknown>;
+  row: VtuRefundGuardRow;
+}): void {
+  if (
+    refundMetadata[VTU_REFUND_SKIPPED_KEY] !== VTU_REFUND_SKIPPED_NO_COLLECTION
+  ) {
+    throwIfVtuRefundUnconfirmed({
+      failedMessage,
+      failedMetadata,
+      message,
+      refundIssued,
+      refundedAmount,
+      row,
     });
   }
 }

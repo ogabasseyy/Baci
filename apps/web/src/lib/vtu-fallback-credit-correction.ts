@@ -146,3 +146,74 @@ export function resolveKudaFallbackCreditCorrection({
     platformCommission: roundMoney(kudaTotalCommission - kudaMerchantEarning),
   };
 }
+
+/** Mutable money columns the correction overwrites (structural subset). */
+export interface FallbackCreditTargetRow extends FallbackCreditCorrectionRow {
+  customer_cashback: number | null;
+  merchant_commission: number | null;
+}
+
+/**
+ * Resolves the Kuda-fallback correction and applies it to the row +
+ * metadata in place: a fallback row still carries Monnify-derived
+ * commission/cashback columns, and settling those would misallocate
+ * real wallet funds. Self-gating (null for non-fallback rows).
+ * Returns the correction for the caller's persist payload, or null.
+ *
+ * Extracted from vtu-fulfillment.ts per the 300-line Boy Scout Rule
+ * (Codex R81 P1); shared by the reconcile and fresh-vend paths.
+ */
+export function applyKudaFallbackCreditCorrection({
+  metadata,
+  row,
+}: {
+  metadata: Record<string, unknown>;
+  row: FallbackCreditTargetRow;
+}): VtuFallbackCreditCorrection | null {
+  const correction = resolveKudaFallbackCreditCorrection({ metadata, row });
+  if (!correction) {
+    return null;
+  }
+  metadata.originalMerchantCommission = correction.originalMerchantCommission;
+  metadata.commissionProvider = 'kuda';
+  row.customer_cashback = correction.customerCashback;
+  row.merchant_commission = correction.merchantCommission;
+  return correction;
+}
+
+/**
+ * Refreshes money columns from a re-read snapshot: a concurrent
+ * worker may have persisted corrected fallback credits with the
+ * terminal status, and settling from stale Monnify values would let
+ * the wrong amounts win the ledger first. Absent values keep the
+ * row's own.
+ *
+ * Extracted from vtu-fulfillment.ts per the 300-line Boy Scout Rule
+ * (Codex R81 P1).
+ */
+export function refreshSnapshotMoneyColumns(
+  snapshot: { customer_cashback?: unknown; merchant_commission?: unknown },
+  row: Pick<
+    FallbackCreditTargetRow,
+    'customer_cashback' | 'merchant_commission'
+  >
+): Pick<FallbackCreditTargetRow, 'customer_cashback' | 'merchant_commission'> {
+  const refreshedCashback =
+    snapshot.customer_cashback === undefined ||
+    snapshot.customer_cashback === null
+      ? Number.NaN
+      : Number(snapshot.customer_cashback);
+  const refreshedCommission =
+    snapshot.merchant_commission === undefined ||
+    snapshot.merchant_commission === null
+      ? Number.NaN
+      : Number(snapshot.merchant_commission);
+  return {
+    customer_cashback: Number.isFinite(refreshedCashback)
+      ? refreshedCashback
+      : row.customer_cashback,
+    merchant_commission: Number.isFinite(refreshedCommission)
+      ? refreshedCommission
+      : row.merchant_commission,
+  };
+}

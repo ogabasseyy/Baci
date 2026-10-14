@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { utilityModalTestHarness as harness } from './utility-modal-test-support';
+import {
+  forgetPendingVtuPurchase,
+  notePendingVtuReference,
+  rememberPendingVtuPurchase,
+} from './utility-pending-idempotency';
 import { UtilityModal } from './UtilityModal';
 
 function submitAirtimePurchase() {
@@ -27,6 +32,7 @@ describe('UtilityModal checkout routing', () => {
       setWalletBalance,
       walletBalance: 500,
       getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletLoading: false,
     });
 
@@ -86,6 +92,7 @@ describe('UtilityModal checkout routing', () => {
       setWalletBalance: vi.fn(),
       walletBalance: 500,
       getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletDvaEnabled: true,
       walletLoading: false,
       walletTransactions: [],
@@ -114,6 +121,7 @@ describe('UtilityModal checkout routing', () => {
       setWalletBalance: vi.fn(),
       walletBalance: 500,
       getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletDvaEnabled: true,
       walletLoading: false,
       walletTransactions: [],
@@ -145,6 +153,7 @@ describe('UtilityModal checkout routing', () => {
       setWalletBalance: vi.fn(),
       walletBalance: 500,
       getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletDvaEnabled: true,
       walletLoading: false,
       walletTransactions: [],
@@ -236,6 +245,7 @@ describe('UtilityModal checkout routing', () => {
       setWalletBalance: vi.fn(),
       walletBalance: 500,
       getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletLoading: false,
     });
 
@@ -260,6 +270,7 @@ describe('UtilityModal checkout routing', () => {
       setWalletBalance: vi.fn(),
       walletBalance: 500,
       getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletLoading: false,
     });
     harness.checkoutFetch.mockResolvedValue(
@@ -287,6 +298,7 @@ describe('UtilityModal checkout routing', () => {
       setWalletBalance: vi.fn(),
       walletBalance: 500,
       getWalletBalance: () => 500,
+      getWalletError: () => false,
       walletLoading: false,
     });
     // Never resolves: the request stays in flight for the assertion.
@@ -301,6 +313,50 @@ describe('UtilityModal checkout routing', () => {
     });
     for (const name of ['Airtime', 'TV', 'Power', 'Betting']) {
       expect(screen.getByRole('tab', { name })).toBeDisabled();
+    }
+  });
+
+  it('locks the utility tabs while a submit waits on the settlement gate', async () => {
+    // Codex R81 P2: loading flips only AFTER the retained-settlement
+    // await, so tabs used to stay enabled during the wait — a switch
+    // there charged the original utility while the success view and
+    // backfill followed the new tab.
+    rememberPendingVtuPurchase('held-settle-scope', 'held-settle-key');
+    notePendingVtuReference('held-settle-scope', 'REF-HELD');
+    let releaseHistory!: (response: Response) => void;
+    const historyGate = new Promise<Response>((resolve) => {
+      releaseHistory = resolve;
+    });
+    const historyFetch = vi.fn(() => historyGate);
+    vi.stubGlobal('fetch', historyFetch);
+    try {
+      render(<UtilityModal isOpen={true} onClose={harness.onClose} />);
+      await waitFor(() => {
+        expect(historyFetch).toHaveBeenCalledWith(
+          expect.stringContaining('/api/vtu/history'),
+          expect.anything()
+        );
+      });
+
+      fireEvent.click(screen.getByText('Mock Submit'));
+
+      await waitFor(() => {
+        expect(screen.getByRole('tab', { name: 'Data' })).toBeDisabled();
+      });
+      // Still gated: the checkout must not have dispatched yet.
+      expect(harness.checkoutFetch).not.toHaveBeenCalled();
+
+      releaseHistory({
+        ok: true,
+        status: 200,
+        json: async () => ({ transactions: [] }),
+      } as Response);
+      await waitFor(() => {
+        expect(screen.getByText('Success!')).toBeInTheDocument();
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      forgetPendingVtuPurchase('held-settle-scope');
     }
   });
 

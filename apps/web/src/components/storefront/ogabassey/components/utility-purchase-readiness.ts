@@ -19,7 +19,13 @@ interface CheckUtilityPurchaseReadinessInput {
    * closure still holds the old number.
    */
   getWalletBalance: () => number;
-  walletError: boolean;
+  /**
+   * Live error reader (Codex R81 P2), invoked at gate time — NOT
+   * the render-time snapshot. A refresh failing during the
+   * settlement-gate await must block even though the pre-await
+   * snapshot still reads healthy.
+   */
+  getWalletError: () => boolean;
   walletLoading: boolean;
   walletRefreshPending: boolean;
 }
@@ -42,7 +48,7 @@ export function checkUtilityPurchaseReadiness({
   refreshWallet,
   user,
   getWalletBalance,
-  walletError,
+  getWalletError,
   walletLoading,
   walletRefreshPending,
 }: CheckUtilityPurchaseReadinessInput): boolean {
@@ -94,7 +100,9 @@ export function checkUtilityPurchaseReadiness({
     return false;
   }
 
-  if (walletError) {
+  // Read the error live: a refresh failing during the
+  // settlement-gate await lands after the pre-await snapshot.
+  if (getWalletError()) {
     toast({
       title: 'Wallet unavailable',
       description: "We couldn't load your wallet balance. Trying again now.",

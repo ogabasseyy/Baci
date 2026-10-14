@@ -245,4 +245,56 @@ describe('submitUtilityCheckout', () => {
       message: 'Payment checkout returned an invalid response',
     });
   });
+
+  it('times out a stalled checkout request without rotating the key', async () => {
+    // Codex R81 P2: unbounded headers used to hold loading forever
+    // even after the debit landed. The timeout error carries no
+    // status, so the caller keeps the key and the retry replays.
+    vi.useFakeTimers();
+    try {
+      mockFetchWithCsrf.mockImplementation(
+        (_url: string, init?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(new DOMException('Aborted', 'AbortError'));
+            });
+          })
+      );
+
+      const pending = submitUtilityCheckout(baseRequest);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await pending;
+
+      expect(result).toEqual({
+        kind: 'error',
+        message: 'Request timed out. Please try again.',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 10_000);
+
+  it('times out a stalled checkout body without rotating the key', async () => {
+    // Headers arrived but the body never does: same shared
+    // deadline, same key-retaining timeout error.
+    vi.useFakeTimers();
+    try {
+      mockFetchWithCsrf.mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => new Promise<string>(() => {}),
+      } as Response);
+
+      const pending = submitUtilityCheckout(baseRequest);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await pending;
+
+      expect(result).toEqual({
+        kind: 'error',
+        message: 'Request timed out. Please try again.',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 10_000);
 });

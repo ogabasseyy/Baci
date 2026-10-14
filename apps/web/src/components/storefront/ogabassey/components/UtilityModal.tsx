@@ -42,6 +42,7 @@ export const UtilityModal = ({
   const {
     fundingAccount,
     getWalletBalance,
+    getWalletError,
     isWalletRefreshPending,
     refreshWallet,
     requiresFundingAccountConsent,
@@ -50,7 +51,6 @@ export const UtilityModal = ({
     setWalletBalance,
     walletBalance,
     walletDvaEnabled,
-    walletError,
     walletLoading,
     walletTransactions,
   } = useWallet({
@@ -84,6 +84,7 @@ export const UtilityModal = ({
     setStep,
     settleBackfilledAttempt,
     step,
+    submitting,
     successAmount,
     transactionRef,
     transactionVoucherPin,
@@ -99,10 +100,10 @@ export const UtilityModal = ({
     onInsufficientWalletBalance: openForInsufficientBalance,
     isWalletRefreshPending,
     getWalletBalance,
+    getWalletError,
     refreshWallet,
     setWalletBalance,
     user,
-    walletError,
     walletLoading,
   });
 
@@ -192,13 +193,15 @@ export const UtilityModal = ({
           // Lock tabs in flight AND on the result views: loading flips
           // false while step is still 'processing', and a switch there
           // unmounts the settlement poll (key never settles, wallet never
-          // refetches, late token/refund never surfaces).
-          disabled={loading || step !== 'details'}
+          // refetches, late token/refund never surfaces). `submitting`
+          // covers the pre-loading settle await, when loading is still
+          // false but the original tab's charge is already committed.
+          disabled={loading || submitting || step !== 'details'}
           onSelect={(tab) => {
             // Belt-and-braces with `disabled` (native disabled is not
             // enforced on programmatic/assisted activation paths): a
             // switch off the result views must never unmount the poll.
-            if (step !== 'details') {
+            if (step !== 'details' || submitting) {
               return;
             }
             setActiveTab(tab);

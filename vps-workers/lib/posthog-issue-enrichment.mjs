@@ -139,9 +139,14 @@ const framePath = (source) => {
   // Surrounding whitespace is trimmed so padded absolute paths and URIs
   // cannot dodge the shape checks below.
   const bare = decoded.split(/[?#]/, 1)[0].trim();
-  // Drive-letter and UNC paths are absolute local paths, not URIs:
-  // usernames and customer directories reduce to the basename.
-  if (/^[A-Za-z]:[\\/]/.test(bare) || bare.startsWith('\\\\')) {
+  // Drive-letter, UNC, and home-relative paths are absolute local
+  // paths, not URIs: usernames and customer directories reduce to the
+  // basename.
+  if (
+    /^[A-Za-z]:[\\/]/.test(bare) ||
+    bare.startsWith('\\\\') ||
+    /^~([^/\\]*[/\\]|$)/.test(bare)
+  ) {
     return lastSegment(bare);
   }
   const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(bare)?.[1]?.toLowerCase();

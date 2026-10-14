@@ -108,6 +108,7 @@ describe('PostHog enrichment frame paths', () => {
       'C:\\Users\\AliceSmith\\ClientA\\app.js',
       '\\\\server\\share\\app.js',
       '  /Users/AliceSmith/app.js  ',
+      '~/Users/AliceSmith/ClientA/app.js',
     ]) {
       const enriched = await enrichDetail({
         top_in_app_frame: { function: 'render', source },
@@ -116,6 +117,15 @@ describe('PostHog enrichment frame paths', () => {
       assert.equal(enriched.sample.route.includes('AliceSmith'), false);
       assert.equal(enriched.sample.route.includes('ClientA'), false);
     }
+
+    const tildeUser = await enrichDetail({
+      top_in_app_frame: {
+        function: 'render',
+        source: '~deploy/app/route.ts',
+      },
+    });
+    assert.equal(tildeUser.sample.route, 'route.ts');
+    assert.equal(tildeUser.sample.route.includes('deploy'), false);
 
     const driveRelative = await enrichDetail({
       top_in_app_frame: { function: 'render', source: 'C:app.js' },

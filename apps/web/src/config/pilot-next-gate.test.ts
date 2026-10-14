@@ -131,6 +131,27 @@ describe('applyPilotPublicGate', () => {
     ).toThrow(/unapproved filler/);
   });
 
+  it('refuses filler drift at build under NODE_ENV=production with the lab flag', () => {
+    // A real `next build` runs with NODE_ENV=production, which
+    // deployment-gates isPilotLabEnabled() off without ALLOW_PROD:
+    // severity keyed off the helper would silently warn drift on a
+    // lab-intended build. The gate keys off the raw flag instead,
+    // so drift still refuses (via the non-lab triage message, since
+    // labEnabled stays deployment-gated).
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    const fillers = join(configDir, 'public', '__pilot', 'fillers');
+    mkdirSync(join(configDir, 'public', '__pilot', 'originals'), {
+      recursive: true,
+    });
+    mkdirSync(fillers, { recursive: true });
+    writeFileSync(join(fillers, 'grid-filler-600x400-a.png'), 'merchant bytes');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(() =>
+      applyPilotPublicGate(configDir, PHASE_PRODUCTION_BUILD)
+    ).toThrow(/does not match the pinned hash/);
+  });
+
   it('warns on filler drift at build when the lab is disabled', () => {
     // Synthetic fixtures must not brick unrelated storefront
     // deploys: a pipeline recompression is not tamper, and staged

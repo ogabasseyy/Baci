@@ -4,7 +4,7 @@ import {
   PHASE_PRODUCTION_BUILD,
   PHASE_PRODUCTION_SERVER,
 } from 'next/constants';
-import { isPilotLabEnabled } from './pilot-lab-enabled';
+import { PILOT_LAB_FLAG } from './pilot-lab-enabled';
 import { assertPilotPublicAssets } from './pilot-public-assets';
 import {
   canonicalDir,
@@ -67,7 +67,13 @@ export function applyPilotPublicGate(
     assertPilotPublicAssets(
       pilotPublicDir,
       undefined,
-      isPilotLabEnabled() ? 'throw' : 'warn',
+      // Raw lab flag, NOT isPilotLabEnabled(): a real `next build`
+      // runs with NODE_ENV=production, which deployment-gates the
+      // helper off without ALLOW_PROD — keying severity off it
+      // would silently warn filler drift on lab-intended builds.
+      // labEnabled above stays deployment-gated: staged content
+      // must refuse a build whose runtime cannot serve the lab.
+      process.env[PILOT_LAB_FLAG] === '1' ? 'throw' : 'warn',
       'throw'
     );
   }

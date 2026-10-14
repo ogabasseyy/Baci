@@ -84,6 +84,7 @@ describe('bill stale success replay', () => {
         walletIsLoading: false,
         isWalletRefetching: () => false,
         isWalletSettled: () => true,
+        getWalletError: () => null,
         // Mirrors the production hook: recall-first, remember only
         // when no entry exists (a blind re-remember would wipe the
         // note/completion the stale guard needs).

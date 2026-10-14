@@ -28,7 +28,13 @@ interface UtilityWalletReadinessPayment {
    * refreshed verdict instead.
    */
   getWalletBalance: () => number;
-  walletError: Error | null;
+  /**
+   * Live wallet-error reader (Codex R80), invoked at gate time —
+   * NOT the render-time snapshot. A refetch failing during the
+   * settlement-gate await leaves stale data (settled) with no fetch
+   * running; only the cache knows the latest request failed.
+   */
+  getWalletError: () => Error | null;
   walletIsLoading: boolean;
   /**
    * Live wallet-fetch reader (Codex R75 6r486a), invoked at gate
@@ -98,21 +104,20 @@ export function ensureUtilityWalletReady({
   // A refetch in flight means fresh data is seconds away — never
   // submit against the balance it is about to replace. Merely stale
   // data with no fetch running still stands (the server stays
-  // authoritative); blocking on that would brick purchases. But an
-  // UNSETTLED wallet (disabled query, no cached data yet) has no
-  // balance at all — its zero read must wait, never open funding.
-  if (
-    payment.walletIsLoading ||
-    payment.isWalletRefetching() ||
-    !payment.isWalletSettled()
-  ) {
+  // authoritative); blocking on that would brick purchases.
+  if (payment.walletIsLoading || payment.isWalletRefetching()) {
     Alert.alert(
       'Checking wallet balance',
       'Please wait a moment and try again.'
     );
     return false;
   }
-  if (payment.walletError) {
+  // Live failure (Codex R80 P2), checked BEFORE settled: a refetch
+  // failing mid-await leaves stale data behind, so settled is true
+  // while the latest request failed — submitting on it would spend
+  // a balance the server just refused to confirm. Offer a refetch,
+  // not funding: the money may already be there.
+  if (payment.getWalletError()) {
     Alert.alert('Wallet unavailable', "We couldn't load your wallet balance.", [
       {
         text: 'Try Again',
@@ -120,6 +125,17 @@ export function ensureUtilityWalletReady({
       },
       { text: 'Cancel', style: 'cancel' },
     ]);
+    return false;
+  }
+  // UNSETTLED wallet (disabled query, no cached data yet) has no
+  // balance at all — its zero read must wait, never open funding.
+  // Runs after the error branch so an errored wallet offers Try
+  // Again instead of a dead-end wait.
+  if (!payment.isWalletSettled()) {
+    Alert.alert(
+      'Checking wallet balance',
+      'Please wait a moment and try again.'
+    );
     return false;
   }
   // Read the balance at gate time, not from the pre-await snapshot.

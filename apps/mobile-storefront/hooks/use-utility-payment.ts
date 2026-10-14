@@ -126,6 +126,10 @@ export function useUtilityPayment() {
     // the readiness gate invokes this after the settlement-gate
     // await, when a mid-await refetch has refreshed the cache.
     getWalletBalance: wallet.getWalletBalance,
+    // Live reader, not the render-time snapshot (Codex R80 P2): a
+    // refetch failing mid-await leaves stale data that reads
+    // settled — only the cache knows the refresh failed.
+    getWalletError: wallet.getWalletError,
     walletError,
     walletIsLoading: wallet.isLoading,
     // Live reader, not the render-time snapshot (Codex R75 6r486a):

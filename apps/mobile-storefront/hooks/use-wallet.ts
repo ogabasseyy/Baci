@@ -3,6 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CONFIG } from '@/lib/config';
+import {
+  createLiveWalletQuery,
+  walletIdentitiesAgree,
+} from '@/lib/live-wallet-query';
 import { supabase } from '@/lib/supabase';
 import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { createWalletFundingAccount } from '@/lib/wallet-funding-account';
@@ -41,47 +45,6 @@ function resolveWalletCachePolicy(
   return {
     gcTime: WALLET_STRICT_GC_TIME_MS,
     staleTime: WALLET_STRICT_STALE_TIME_MS,
-  };
-}
-
-/**
- * Both identities present but disagreeing (customer row linked to a
- * different auth user) means a switch is mid-flight: the query
- * stays held until they agree.
- */
-function walletIdentitiesAgree(
-  customer: { id?: string | null; user_id?: string | null } | null | undefined,
-  userId: string | null | undefined
-): boolean {
-  return !customer?.id || !userId || (customer.user_id ?? userId) === userId;
-}
-
-/**
- * Live wallet-query locator (Muse R2): resolves the query key from
- * the CURRENT auth-store identity, not the render that created the
- * hook. The gate readers below run AFTER the settlement-gate await,
- * when an account switch may have moved the identity (and key) on
- * from the render-time one — reading the stale key would return the
- * previous owner's cached balance. Null key = query cannot run.
- */
-function resolveLiveWalletQuery(): {
-  key: ReturnType<typeof walletKeys.data> | null;
-  identityAgreed: boolean;
-} {
-  const { customer, merchantId, user } = useAuthStore.getState();
-  const identityAgreed = walletIdentitiesAgree(customer, user?.id);
-  const ownerId = resolveWalletReadOwnerId(customer?.id, user?.id);
-  const liveMerchantId = merchantId || CONFIG.MERCHANT_ID;
-  if (!ownerId || !liveMerchantId) {
-    return { key: null, identityAgreed };
-  }
-  return {
-    key: walletKeys.data({
-      merchantId: liveMerchantId,
-      ownerId,
-      userId: user?.id ?? undefined,
-    }),
-    identityAgreed,
   };
 }
 
@@ -266,50 +229,21 @@ export function useWallet(options: UseWalletOptions = {}) {
     };
   }, [activeMerchantId, customer?.id, user?.id, queryClient, walletOwnerId]);
 
+  // Live gate readers (R75/R78/R80): bound to the CURRENT store
+  // identity, not this render's — see lib/live-wallet-query.
+  const liveWalletQuery = createLiveWalletQuery(queryClient);
+
   return {
     data,
     error,
     fetchStatus,
-    // Live reader (Codex R78 6sN80p, Muse R2): purchase closures
-    // capture the render-time balance before the settlement-gate
-    // await; a refetch completing mid-await leaves that snapshot
-    // stale while fresh data sits in the cache. Read the cache
-    // imperatively — under the LIVE key, since a mid-await account
-    // switch moves the identity (and key) on from this render's.
-    getWalletBalance: () => {
-      const { key } = resolveLiveWalletQuery();
-      return (
-        (key
-          ? queryClient.getQueryData<typeof data>(key)?.wallet.balance
-          : undefined) ?? 0
-      );
-    },
+    getWalletBalance: liveWalletQuery.getBalance,
+    getWalletError: liveWalletQuery.getError,
     isError,
-    // Live reader (Codex R75 6r486a, Muse R2): readiness gates call
-    // this AFTER the settlement-gate await, when the render-time
-    // isRefetching snapshot is stale. Reads the cache imperatively
-    // under the LIVE key, so a refetch starting mid-await — even
-    // under a switched identity — still blocks. exact: owner-scoped.
-    isFetchingNow: () => {
-      const { key } = resolveLiveWalletQuery();
-      return key
-        ? queryClient.isFetching({ queryKey: key, exact: true }) > 0
-        : false;
-    },
-    // Live reader (Muse R2): true only when the CURRENT identity's
-    // query is enabled (owner resolved, identities agreed) and the
-    // cache holds its data. A disabled query is not loading, not
-    // refetching, and error-free — without this the gate would read
-    // its missing data as a zero balance and open funding.
-    isWalletSettled: () => {
-      const { key, identityAgreed: liveAgreed } = resolveLiveWalletQuery();
-      if (!liveAgreed || !key) {
-        return false;
-      }
-      return (queryClient.getQueryState(key)?.dataUpdatedAt ?? 0) > 0;
-    },
+    isFetchingNow: liveWalletQuery.isFetching,
     isLoading,
     isRefetching,
+    isWalletSettled: liveWalletQuery.isSettled,
     refetch,
   };
 }

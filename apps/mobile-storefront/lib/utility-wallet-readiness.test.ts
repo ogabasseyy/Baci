@@ -24,7 +24,7 @@ function paymentState(
     isAuthenticated: true,
     refetchWallet: jest.fn(),
     getWalletBalance: () => 5000,
-    walletError: null,
+    getWalletError: () => null,
     walletIsLoading: false,
     isWalletRefetching: () => false,
     isWalletSettled: () => true,
@@ -199,7 +199,7 @@ describe('ensureUtilityWalletReady', () => {
       payment: paymentState({
         refetchWallet,
         getWalletBalance: () => 0,
-        walletError: new Error('wallet unavailable'),
+        getWalletError: () => new Error('wallet unavailable'),
       }),
     });
 
@@ -282,6 +282,39 @@ describe('ensureUtilityWalletReady', () => {
       'Checking wallet balance',
       expect.any(String)
     );
+  });
+
+  it('offers a refetch when the live wallet request failed mid-gate', () => {
+    // Codex R80 P2: a refetch failing during the settlement-gate
+    // await leaves stale data (settled, not refetching) while a
+    // render-time error snapshot would still be null — the gate
+    // must read the failure live instead of submitting on stale.
+    const refetchWallet = jest.fn();
+    const ready = ensureUtilityWalletReady({
+      amount: 1000,
+      payment: paymentState({
+        refetchWallet,
+        getWalletBalance: () => 5000,
+        getWalletError: () => new Error('wallet refresh failed'),
+        walletIsLoading: false,
+        isWalletRefetching: () => false,
+        isWalletSettled: () => true,
+      }),
+    });
+
+    expect(ready).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Wallet unavailable',
+      expect.any(String),
+      expect.arrayContaining([expect.objectContaining({ text: 'Try Again' })])
+    );
+    const buttons = (Alert.alert as jest.Mock).mock.calls[0][2] as Array<{
+      text: string;
+      onPress?: () => void;
+    }>;
+    buttons.find((button) => button.text === 'Try Again')?.onPress?.();
+    expect(refetchWallet).toHaveBeenCalledTimes(1);
+    expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
   });
 
   it('waits for the submitting user id instead of failing post-dispatch', () => {

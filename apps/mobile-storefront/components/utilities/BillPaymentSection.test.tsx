@@ -28,6 +28,7 @@ function createPaymentState(): PaymentState {
     walletIsLoading: false,
     isWalletRefetching: () => false,
     isWalletSettled: () => true,
+    getWalletError: () => null,
     getWalletIdempotencyKey: jest.fn(() => 'test-key'),
     scopePendingVtuDescriptor: (d: string) => d,
     captureSubmittingOwner: () => 'test-owner',

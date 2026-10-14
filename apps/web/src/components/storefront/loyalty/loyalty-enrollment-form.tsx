@@ -73,7 +73,10 @@ export function LoyaltyEnrollmentForm({
   onReceiptDismiss,
 }: LoyaltyEnrollmentFormProps) {
   const { toast } = useToast();
-  const { enrolled, enroll, data } = useLoyalty(merchantId, customerId);
+  const { enrolled, enroll, data, refetch } = useLoyalty(
+    merchantId,
+    customerId
+  );
   const [referralCode, setReferralCode] = useState('');
   const [enrolling, setEnrolling] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -92,6 +95,19 @@ export function LoyaltyEnrollmentForm({
       setShowSuccess,
       setEnrolling,
     });
+  };
+
+  // Dismissal must clear THIS component's receipt too: when the
+  // post-enroll refresh failed, enrolled is still false, so the parent
+  // keeps rendering the form — clearing only the parent's flag would
+  // leave showSuccess set and "View my rewards" would look dead.
+  // Clear locally and retry the status load so a recovered fetch
+  // flips enrolled and the parent swaps to the rewards view.
+  const handleReceiptDismiss = () => {
+    setShowSuccess(false);
+    setEnrollmentData(null);
+    void refetch();
+    onReceiptDismiss?.();
   };
 
   // The receipt renders before the enrolled branch below: the enroll
@@ -127,7 +143,7 @@ export function LoyaltyEnrollmentForm({
               </div>
             )}
             {onReceiptDismiss && (
-              <Button onClick={onReceiptDismiss} className="w-full mt-4">
+              <Button onClick={handleReceiptDismiss} className="w-full mt-4">
                 View my rewards
               </Button>
             )}

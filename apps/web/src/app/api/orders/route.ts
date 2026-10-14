@@ -22,16 +22,15 @@ import {
 import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-checkout-response';
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
-import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { prepareLoyaltyCheckout } from '@/lib/checkout/prepare-loyalty-checkout';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
-import { resolveLoyaltyCheckoutCode } from '@/lib/checkout/resolve-loyalty-checkout-code';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
@@ -90,7 +89,6 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
-import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -1585,139 +1583,28 @@ export async function POST(request: NextRequest) {
     // merchant shipping-rate fee verification below.
     let canonicalOrderSubtotal: number | null = null;
 
-    // Resolve + validate the discount code server-side, then compute the amount
-    // from the CANONICAL subtotal (never the client cart total). Eligibility /
-    // targeting is enforced authoritatively + replay-safely in the wrapper RPC.
+    // Discount/loyalty economics (code resolution, cap conversion, and
+    // amount computation) live in prepareLoyaltyCheckout; exactly one of
+    // discountCodeId / loyaltyRedemptionId is set when a code applies.
     let discountCodeId: string | null = null;
     let loyaltyRedemptionId: string | null = null;
-    let loyaltyMaxRedemptionPercentage: number | null = null;
     let discountCodeAmount = 0;
     if (requestedDiscountCode) {
-      if (hasVoucherItem) {
-        return NextResponse.json(
-          {
-            code: 'DISCOUNT_CODE_VOUCHER_COMBINATION_UNSUPPORTED',
-            error: 'Failed to create order',
-          },
-          { status: 400 }
-        );
+      const preparedCheckout = await prepareLoyaltyCheckout({
+        supabase,
+        merchantId: merchant_id,
+        requestedDiscountCode,
+        hasVoucherItem,
+        requestedSavingsRedemption,
+        items: orderItemsPayload,
+      });
+      if (!preparedCheckout.ok) {
+        return preparedCheckout.response;
       }
-      if (requestedSavingsRedemption) {
-        return NextResponse.json(
-          {
-            code: 'DISCOUNT_CODE_SAVINGS_COMBINATION_UNSUPPORTED',
-            error: 'Failed to create order',
-          },
-          { status: 400 }
-        );
-      }
-
-      // include_inactive=true: resolve even a deactivated code so a retry can
-      // reach the replay-aware wrapper; the wrapper decides replay vs a fresh
-      // `code_inactive` rejection.
-      const { data: discountRows, error: discountLookupError } =
-        await supabase.rpc('get_storefront_discount_code', {
-          p_merchant_id: merchant_id,
-          p_code: requestedDiscountCode,
-          p_include_inactive: true,
-        });
-      if (discountLookupError) {
-        // Don't mask a server/DB failure as an invalid-code 400.
-        logger.error({
-          message: 'Discount code lookup failed',
-          error: discountLookupError,
-          merchantId: merchant_id,
-        });
-        return NextResponse.json(
-          { error: 'Internal server error' },
-          { status: 500 }
-        );
-      }
-      const parsedDiscountArray = storefrontDiscountCodeRowSchema
-        .array()
-        .safeParse(discountRows);
-      const parsedDiscountSingle = parsedDiscountArray.success
-        ? null
-        : storefrontDiscountCodeRowSchema.safeParse(discountRows);
-      const discountRow = parsedDiscountArray.success
-        ? (parsedDiscountArray.data[0] ?? null)
-        : parsedDiscountSingle?.success
-          ? parsedDiscountSingle.data
-          : null;
-      // Normalized code economics — exactly one of discountCodeId /
-      // loyaltyRedemptionId is set below.
-      let codeDiscountType: 'fixed' | 'percentage';
-      let codeDiscountValue: number;
-      let codeMaximumDiscountAmount: number | null;
-      if (discountRow) {
-        discountCodeId = discountRow.id;
-        codeDiscountType =
-          discountRow.discount_type === 'fixed_amount' ? 'fixed' : 'percentage';
-        codeDiscountValue = Number(discountRow.discount_value);
-        codeMaximumDiscountAmount = discountRow.maximum_discount_amount;
-      } else {
-        const loyaltyResolution = await resolveLoyaltyCheckoutCode({
-          supabase,
-          merchantId: merchant_id,
-          code: requestedDiscountCode,
-        });
-        if (!loyaltyResolution.ok) {
-          return loyaltyResolution.response;
-        }
-        loyaltyRedemptionId = loyaltyResolution.redemptionId;
-        codeDiscountType = loyaltyResolution.discountType;
-        codeDiscountValue = loyaltyResolution.discountValue;
-        loyaltyMaxRedemptionPercentage =
-          loyaltyResolution.maxRedemptionPercentage;
-        codeMaximumDiscountAmount = null;
-      }
-
-      try {
-        canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
-          items: orderItemsPayload,
-          merchantId: merchant_id,
-          supabase,
-        });
-      } catch (subtotalError) {
-        if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
-          return NextResponse.json(
-            { error: 'Failed to create order', details: 'invalid_items' },
-            { status: 400 }
-          );
-        }
-        logger.error({
-          error: subtotalError,
-          merchantId: merchant_id,
-          message: 'Discount canonical subtotal recompute failed',
-        });
-        return NextResponse.json(
-          { error: 'Internal server error' },
-          { status: 500 }
-        );
-      }
-      if (canonicalOrderSubtotal == null) {
-        return NextResponse.json(
-          { error: 'Failed to create order', details: 'invalid_items' },
-          { status: 400 }
-        );
-      }
-
-      // The loyalty cap is a percentage of the subtotal (snapshotted
-      // at mint); convert now that the canonical subtotal is known.
-      if (loyaltyMaxRedemptionPercentage != null) {
-        codeMaximumDiscountAmount = Math.round(
-          (canonicalOrderSubtotal * loyaltyMaxRedemptionPercentage) / 100
-        );
-      }
-
-      discountCodeAmount = computeDiscountAmountForSubtotal(
-        {
-          discount_type: codeDiscountType,
-          discount_value: codeDiscountValue,
-          maximum_discount_amount: codeMaximumDiscountAmount,
-        },
-        canonicalOrderSubtotal
-      );
+      canonicalOrderSubtotal = preparedCheckout.canonicalOrderSubtotal;
+      discountCodeId = preparedCheckout.discountCodeId;
+      loyaltyRedemptionId = preparedCheckout.loyaltyRedemptionId;
+      discountCodeAmount = preparedCheckout.discountCodeAmount;
     }
 
     // === MERCHANT SHIPPING RATE ENFORCEMENT (money path) ===

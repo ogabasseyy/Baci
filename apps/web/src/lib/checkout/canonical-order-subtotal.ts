@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
 
-type CanonicalSubtotalItem = {
+export type CanonicalSubtotalItem = {
   product_id?: string;
   variant_id?: string | null;
   quantity: number;

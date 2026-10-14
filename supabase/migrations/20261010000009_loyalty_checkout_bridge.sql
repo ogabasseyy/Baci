@@ -173,10 +173,22 @@ BEGIN
   ) AS created;
   IF v_order.id IS NULL THEN RAISE EXCEPTION 'loyalty_order_creation_failed'; END IF;
 
-  -- REPLAY: the order already existed; the first call already enforced policy and
-  -- claimed the code. Return as-is WITHOUT re-checking or re-marking, so a
-  -- legitimate retry is never rejected once the code is consumed.
-  IF v_order.idempotency_replayed THEN
+  -- REPLAY: the order already existed; the first call already enforced
+  -- policy and claimed the code, so a legitimate retry returns as-is
+  -- WITHOUT re-checking or re-marking — but only while that claim is
+  -- still live. A payment-only cancellation (mark_abandoned_orders)
+  -- neither blocks the underlying RPC's replay (it reopens the order
+  -- as unpaid) nor keeps the claim: the release trigger frees the
+  -- code, so returning success here would leave the reopened order's
+  -- discount in place while another order claims the same code. A
+  -- replay whose claim was released (or whose order is cancelled)
+  -- falls through to the FRESH claim below and re-earns the code
+  -- under full policy.
+  IF v_order.idempotency_replayed
+     AND v_redemption.used
+     AND v_redemption.used_on_order_id = v_order.id
+     AND NOT public.loyalty_status_is_cancelled(v_order.payment_status)
+     AND NOT public.loyalty_status_is_cancelled(v_order.shipping_status) THEN
     RETURN QUERY SELECT
       v_order.id, v_order.order_number, v_order.tracking_token, v_order.subtotal,
       v_order.shipping_fee, v_order.discount_amount, v_order.tax_amount, v_order.total,

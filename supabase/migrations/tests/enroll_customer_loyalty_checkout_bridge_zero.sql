@@ -15,3 +15,14 @@ SELECT pg_temp.assert_true(
    ) AS def),
   'order wrapper claims zero-discount loyalty codes'
 );
+
+-- The replay fast path requires a live claim on the replayed order:
+-- a released claim (payment-only cancellation frees the code while
+-- the underlying RPC reopens the order) must fall through to the
+-- fresh-claim policy instead of returning the discounted order.
+SELECT pg_temp.assert_true(
+  pg_catalog.pg_get_functiondef(
+    'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure
+  ) LIKE '%idempotency_replayed%AND v_redemption.used%used_on_order_id = v_order.id%loyalty_status_is_cancelled%',
+  'replay fast path does not verify the claim is still live'
+);

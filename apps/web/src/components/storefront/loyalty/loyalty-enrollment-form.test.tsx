@@ -11,8 +11,10 @@ const enroll = vi.fn(async () => {
   return { success: true, points_balance: 250, referral_code: 'REF-1' };
 });
 
+const refetch = vi.fn(async () => undefined);
+
 vi.mock('@/hooks/use-loyalty', () => ({
-  useLoyalty: () => ({ enrolled: enrolledNow, enroll, data: null }),
+  useLoyalty: () => ({ enrolled: enrolledNow, enroll, data: null, refetch }),
 }));
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -68,5 +70,42 @@ describe('LoyaltyEnrollmentForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'View my rewards' }));
 
     expect(onReceiptDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the local receipt and retries the load on dismiss', async () => {
+    // Failed-refresh world: enrolled stays false after enrolling, so
+    // the parent keeps rendering this form. Dismissal must still
+    // clear the receipt locally (back to the join form) and refetch.
+    enrolledNow = false;
+    refetch.mockClear();
+    const enrollNoFlip = vi.fn(async () => ({
+      success: true,
+      points_balance: 250,
+      referral_code: 'REF-1',
+    }));
+    enroll.mockImplementationOnce(enrollNoFlip);
+
+    render(
+      <LoyaltyEnrollmentForm
+        merchantId="m"
+        customerId="c"
+        onReceiptDismiss={vi.fn()}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Join Loyalty Program' })
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Welcome to the Club!')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'View my rewards' }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText('Welcome to the Club!')
+      ).not.toBeInTheDocument();
+    });
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

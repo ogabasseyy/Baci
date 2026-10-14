@@ -83,8 +83,12 @@ AS $$
       AND (p_reward_type <> 'discount_percentage' OR p_reward_value <= 100))
 $$;
 
--- A fixed-family value that rounds to zero currency units: minting
--- or advertising it would promise a discount worth nothing.
+-- A checkout-bound fixed value that rounds to zero currency units:
+-- minting or advertising it would promise a discount worth nothing.
+-- Plain discounts with a non-positive value are manual-fulfillment
+-- (present-the-code; see loyalty_redemption_is_manual) and are NOT
+-- dead: the dead check covers discount_fixed and plain discounts
+-- carrying a positive (checkout-bound) value only.
 CREATE OR REPLACE FUNCTION public.loyalty_reward_fixed_value_is_dead(
   p_reward_type text,
   p_reward_value numeric
@@ -95,6 +99,7 @@ SET search_path = ''
 AS $$
   SELECT COALESCE(p_reward_type IN ('discount', 'discount_fixed'), false)
     AND p_reward_value IS NOT NULL
+    AND (p_reward_type <> 'discount' OR p_reward_value > 0)
     AND pg_catalog.round(p_reward_value) <= 0
 $$;
 

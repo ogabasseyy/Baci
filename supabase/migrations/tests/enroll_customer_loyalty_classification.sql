@@ -54,10 +54,15 @@ SELECT pg_temp.assert_true(
   'valued usability classification drifted'
 );
 
--- Dead fixed values: fixed-family values rounding to zero units.
+-- Dead fixed values: checkout-bound values rounding to zero units.
+-- A plain discount with a non-positive value is manual-fulfillment
+-- (present-the-code), not dead; a positive plain-discount value is
+-- checkout-bound and dies when it rounds to zero.
 SELECT pg_temp.assert_true(
   public.loyalty_reward_fixed_value_is_dead('discount_fixed', 0.10)
-    AND public.loyalty_reward_fixed_value_is_dead('discount', 0)
+    AND public.loyalty_reward_fixed_value_is_dead('discount', 0.10)
+    AND NOT public.loyalty_reward_fixed_value_is_dead('discount', 0)
+    AND NOT public.loyalty_reward_fixed_value_is_dead('discount', -5)
     AND NOT public.loyalty_reward_fixed_value_is_dead('discount', 0.6)
     AND NOT public.loyalty_reward_fixed_value_is_dead('discount', NULL)
     AND NOT public.loyalty_reward_fixed_value_is_dead('discount_percentage', 0),

@@ -45,6 +45,14 @@ def _tree(root, ci=CI, pins=None, payload=b"enforcement"):
     return checker, target
 
 
+def _workflow_text():
+    repo = Path(__file__).resolve().parents[2]
+    workflow = repo / ".github/workflows/capability-gate-contract.yml"
+    if not workflow.exists():
+        raise unittest.SkipTest("contract workflow unavailable")
+    return workflow.read_text()
+
+
 class ContractCheckTests(unittest.TestCase):
     def test_intact_tree_passes(self):
         with tempfile.TemporaryDirectory() as root:
@@ -133,23 +141,16 @@ class ContractCheckTests(unittest.TestCase):
             self.assertIn("missing", failures[0])
 
     def test_workflow_must_keep_base_owned_execution(self):
-        repo = Path(__file__).resolve().parents[2]
-        workflow = repo / ".github/workflows/capability-gate-contract.yml"
-        if not workflow.exists():
-            self.skipTest("contract workflow unavailable")
-        self.assertEqual(check.workflow_failures(workflow.read_text()), [])
-        dropped = workflow.read_text().replace(
+        text = _workflow_text()
+        self.assertEqual(check.workflow_failures(text), [])
+        dropped = text.replace(
             "            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_text_checks.py | tar -x -C /tmp/cg-check\n", ""
         )
-        self.assertNotEqual(dropped, workflow.read_text())
+        self.assertNotEqual(dropped, text)
         self.assertTrue(check.workflow_failures(dropped))
 
     def test_extra_run_step_fails(self):
-        repo = Path(__file__).resolve().parents[2]
-        workflow = repo / ".github/workflows/capability-gate-contract.yml"
-        if not workflow.exists():
-            self.skipTest("contract workflow unavailable")
-        text = workflow.read_text()
+        text = _workflow_text()
         extra = text.replace(
             '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n',
             '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n      - name: Extra\n        run: |\n          echo hijack\n',
@@ -158,7 +159,7 @@ class ContractCheckTests(unittest.TestCase):
         self.assertNotEqual(extra, text)
         failures = check.workflow_failures(extra)
         self.assertTrue(failures)
-        self.assertIn("exactly one run step", failures[0])
+        self.assertIn("exactly its two steps", failures[0])
 
     def test_pin_set_covers_enforcement_core(self):
         # A comment-swallowed dict entry once silently unpinned the gate:
@@ -193,11 +194,7 @@ class ContractCheckTests(unittest.TestCase):
             self.assertEqual(failures, [])
 
     def test_markers_only_as_comments_fail(self):
-        repo = Path(__file__).resolve().parents[2]
-        workflow = repo / ".github/workflows/capability-gate-contract.yml"
-        if not workflow.exists():
-            self.skipTest("contract workflow unavailable")
-        text = workflow.read_text()
+        text = _workflow_text()
         # Comment every line containing a marker.
         commented = "\n".join(
             ("# " + line if ("git archive FETCH_HEAD" in line or 'python3 "$CHECKER"' in line) else line)
@@ -218,11 +215,7 @@ class ContractCheckTests(unittest.TestCase):
             self.assertIn("declaration dropped", failures[0])
 
     def test_contract_trigger_removal_fails(self):
-        repo = Path(__file__).resolve().parents[2]
-        workflow = repo / ".github/workflows/capability-gate-contract.yml"
-        if not workflow.exists():
-            self.skipTest("contract workflow unavailable")
-        text = workflow.read_text()
+        text = _workflow_text()
         dropped = text.replace("  pull_request_target:\n", "", 1)
         self.assertNotEqual(dropped, text)
         self.assertTrue(check.workflow_failures(dropped))
@@ -230,11 +223,7 @@ class ContractCheckTests(unittest.TestCase):
     def test_echoed_markers_fail(self):
         # Executable echoes of the marker strings still change the run
         # block, so the exact-sequence match must reject them.
-        repo = Path(__file__).resolve().parents[2]
-        workflow = repo / ".github/workflows/capability-gate-contract.yml"
-        if not workflow.exists():
-            self.skipTest("contract workflow unavailable")
-        text = workflow.read_text()
+        text = _workflow_text()
         echoed = text.replace(
             '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n',
             '          echo \'git archive FETCH_HEAD\'\n          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n',
@@ -242,6 +231,45 @@ class ContractCheckTests(unittest.TestCase):
         )
         self.assertNotEqual(echoed, text)
         self.assertTrue(check.workflow_failures(echoed))
+
+    def test_commented_checker_pin_fails(self):
+        text = _workflow_text()
+        commented = text.replace(
+            "  PINNED_CHECKER_SHA256:", "  # PINNED_CHECKER_SHA256:", 1
+        )
+        self.assertNotEqual(commented, text)
+        self.assertIsNone(check.declared_checker_pin(commented))
+        self.assertTrue(check.workflow_failures(commented))
+
+    def test_extra_uses_step_and_permissions_fail(self):
+        text = _workflow_text()
+        extra = text.replace(
+            '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n',
+            '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n      - uses: evil/action@v1\n',
+            1,
+        )
+        failures = check.workflow_failures(extra)
+        self.assertTrue(failures)
+        self.assertIn("exactly its two steps", failures[0])
+        with_perms = text.replace(
+            "    name: Capability Gate Contract\n",
+            "    name: Capability Gate Contract\n    permissions:\n      contents: write\n",
+            1,
+        )
+        failures = check.workflow_failures(with_perms)
+        self.assertTrue(failures)
+        self.assertIn("must not override permissions", failures[0])
+
+    def test_inline_run_step_fails(self):
+        text = _workflow_text()
+        inline = text.replace(
+            '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n',
+            '          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"\n        run: echo hi\n',
+            1,
+        )
+        failures = check.workflow_failures(inline)
+        self.assertTrue(failures)
+        self.assertIn("exactly one run step", failures[0])
 
     def test_head_pins_match_declared(self):
         # Forgetting a pin refresh after an enforcement edit fails the suite

@@ -76,10 +76,11 @@ export async function register() {
       // non-anchor error) must propagate, never degrade — the
       // candidates path below runs ONLY for the coded anchor failure
       // with the lab off. There the helper checks every candidate root
-      // it can find and refuses on DETECTED staged content; only a
-      // found-nothing boot degrades to a loud warning. No second
-      // unconditional cwd re-check: a tree the candidates deliberately
-      // excluded must not brick an unrelated boot.
+      // it can find and refuses on DETECTED staged content; a boot
+      // that checked nothing degrades to a loud warning ONLY under
+      // the explicit BACI_IMAGE_PILOT_UNANCHORED_ACK=1 opt-in. No
+      // second unconditional cwd re-check: a tree the candidates
+      // deliberately excluded must not brick an unrelated boot.
       if (
         isPilotLabEnabled() ||
         !(error instanceof Error) ||
@@ -141,8 +142,10 @@ export async function register() {
       // (accepted, pinned by the plant-after-boot test): files planted
       // under __pilot AFTER boot are statically servable until the next
       // lab page render re-runs the per-request binding check — and
-      // after a degraded (runtime-less) boot, until restart, since no
-      // lab page can render to re-check. Staging requires local
+      // after a degraded (runtime-less) boot, every render ATTEMPT
+      // still re-checks against the empty binding set and refuses
+      // loudly on staged content. The plant stays statically servable
+      // until restart, but never silently. Staging requires local
       // filesystem write; anyone with that access is inside the trust
       // boundary already, but treat unexpected __pilot content as a
       // re-stage-and-restart event, never a live edit.

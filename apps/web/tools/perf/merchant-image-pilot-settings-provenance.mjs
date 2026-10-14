@@ -2,6 +2,7 @@
 // Extracted from settings-helpers.mjs so each module stays under the
 // repository's 300-line ceiling. No I/O, no subprocesses.
 import { createHash } from 'node:crypto';
+import { CLOCK_SKEW_MS } from './merchant-image-pilot-runner-finish.mjs';
 
 // Runner-produced cache-reset provenance artifact. The gate accepts a
 // PATH to this JSON — never a bare caller string, which would let any
@@ -81,7 +82,11 @@ export function verifyCacheProvenance(text, pages, sourceLabel) {
   }
   const earliest = Math.min(...starts);
   const resetAt = Date.parse(artifact.resetAt);
-  if (resetAt > earliest) {
+  // Same ordering tolerance finish applies: resetAt (prepare's clock)
+  // and startedDateTime (browser clock) disagree by small skew, so a
+  // capture finish certifies must pass here too — otherwise finish
+  // success would guarantee a gate failure downstream.
+  if (resetAt > earliest + CLOCK_SKEW_MS) {
     return {
       error: 'cache-provenance reset postdates the measured run',
       ok: false,

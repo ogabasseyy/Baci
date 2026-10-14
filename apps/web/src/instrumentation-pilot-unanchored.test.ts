@@ -45,12 +45,28 @@ function withStagedTree(publicDir: string) {
 }
 
 describe('instrumentation unanchored boot', () => {
-  it('warns and completes with lab off and no checkable tree', async () => {
+  it('refuses a nothing-checkable boot without the explicit ack', async () => {
     // Bare sandbox cwd (no public/, no next.config) and a vitest
-    // worker argv with no adjacent public/: nothing checkable, so boot
-    // warns loudly and completes instead of bricking on the anchor
-    // failure itself — even with unrelated junk (outside any public/
-    // tree) sitting in the cwd.
+    // worker argv with no adjacent public/: the gate checked nothing,
+    // so boot refuses instead of serving an unseen tree unverified.
+    const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-bare-'));
+    const previousCwd = process.cwd();
+    process.chdir(sandbox);
+    try {
+      stubUnanchoredBoot();
+      await expect(register()).rejects.toThrow(/refusing an unchecked boot/);
+      expect(registerOTelMock).not.toHaveBeenCalled();
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(sandbox, { force: true, recursive: true });
+    }
+  });
+
+  it('warns and completes with lab off, no checkable tree, and the ack', async () => {
+    // Same bare sandbox, but the operator explicitly acknowledged the
+    // unchecked residual: boot warns loudly and completes instead of
+    // bricking on the anchor failure itself — even with unrelated
+    // junk (outside any public/ tree) sitting in the cwd.
     const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-bare-'));
     mkdirSync(join(sandbox, 'data'), { recursive: true });
     writeFileSync(join(sandbox, 'data', 'evil.png'), 'not a public tree');
@@ -58,6 +74,7 @@ describe('instrumentation unanchored boot', () => {
     process.chdir(sandbox);
     try {
       stubUnanchoredBoot();
+      vi.stubEnv('BACI_IMAGE_PILOT_UNANCHORED_ACK', '1');
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       try {
         await expect(register()).resolves.toBe(undefined);

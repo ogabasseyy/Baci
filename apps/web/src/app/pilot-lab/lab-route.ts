@@ -97,7 +97,19 @@ async function statFingerprint(path: string): Promise<string> {
 export async function getLabConfig(): Promise<PilotLabConfig> {
   if (!isPilotLabEnabled())
     throw new Error('merchant image pilot: refusing to load outside lab mode');
-  const config = getFrozenLabRuntime();
+  const publicDir = resolveRoutePublicDir();
+  let config: PilotLabConfig;
+  try {
+    config = getFrozenLabRuntime();
+  } catch (error) {
+    // Degraded (runtime-less) boot still re-checks: with no binding
+    // set the tree must be empty of staged content, so a plant after
+    // such a boot fails LOUD here (naming re-stage-and-restart)
+    // instead of serving statically in silence until restart. A
+    // fillers-only tree passes this and rethrows the runtime error.
+    await assertNoUnexpectedStagedFiles([], join(publicDir, '__pilot'));
+    throw error;
+  }
   // Frozen config, live bytes: re-verify on the request path (not just
   // startup) so mid-measurement drift fails closed instead of skewing
   // the comparison. Steady-state cost is N+4 lstats per GET with no
@@ -105,7 +117,6 @@ export async function getLabConfig(): Promise<PilotLabConfig> {
   // known stage root covers the empty-allowlist branch. Filler
   // paths ride along so the binding check enumerates fillers/ too:
   // the byte verifier hashes pinned paths but never lists the dir.
-  const publicDir = resolveRoutePublicDir();
   await verifyStagedBytesAndFillers(
     config.stagedPaths,
     pinnedFillerEntries(publicDir)

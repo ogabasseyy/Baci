@@ -147,6 +147,13 @@ export async function verifyStagedBytesAndFillers(
   }
 }
 
+// Drift-pass read concurrency: each entry buffers its full file, so an
+// unbounded Promise.all over the staged set could hold the whole
+// MAX_STAGED_BYTES budget (plus chunk-concat copies) at once. Four
+// workers keep fail-closed semantics with bounded RSS on small lab
+// boxes; steady state never reaches here (stat fingerprint fast path).
+const VERIFY_CONCURRENCY = 4;
+
 async function verifyUncached(
   unique: { path: string; sha256: string }[],
   sizes: ({ ctimeMs: number; mtimeMs: number; size: number } | null)[],
@@ -154,37 +161,57 @@ async function verifyUncached(
   key: string,
   fingerprint: string | null
 ): Promise<void> {
-  const bad = (
-    await Promise.all(
-      unique.map(async (entry, index) => {
-        const stated = sizes[index];
-        if (stated === null) {
-          return {
-            detail: links.has(index) ? 'link rejected' : 'missing',
-            path: entry.path,
-          };
-        }
-        // Read bounded by the statted size: a file that grew between
-        // the stat and the read (or a swapped-in giant) must fail on
-        // size instead of buffering fully past the byte budget. A grown
-        // file's hash cannot match anyway, so truncation is drift.
-        const bounded = await readUpToBytes(entry.path, stated.size).catch(
-          () => null
-        );
-        if (bounded === null) {
-          return { detail: 'missing', path: entry.path };
-        }
-        if (bounded.truncated) {
-          return { detail: 'size drift', path: entry.path };
-        }
-        const bytes = bounded.bytes;
-        if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) {
-          return { detail: 'hash drift', path: entry.path };
-        }
-        return null;
-      })
-    )
-  ).filter(
+  const checkOne = async (
+    entry: { path: string; sha256: string },
+    index: number
+  ): Promise<{ detail: string; path: string } | null> => {
+    const stated = sizes[index];
+    if (stated === null) {
+      return {
+        detail: links.has(index) ? 'link rejected' : 'missing',
+        path: entry.path,
+      };
+    }
+    // Read bounded by the statted size: a file that grew between
+    // the stat and the read (or a swapped-in giant) must fail on
+    // size instead of buffering fully past the byte budget. A grown
+    // file's hash cannot match anyway, so truncation is drift.
+    const bounded = await readUpToBytes(entry.path, stated.size).catch(
+      () => null
+    );
+    if (bounded === null) {
+      return { detail: 'missing', path: entry.path };
+    }
+    if (bounded.truncated) {
+      return { detail: 'size drift', path: entry.path };
+    }
+    const bytes = bounded.bytes;
+    if (createHash('sha256').update(bytes).digest('hex') !== entry.sha256) {
+      return { detail: 'hash drift', path: entry.path };
+    }
+    return null;
+  };
+  // Ordered results: workers share an index cursor, each slot written
+  // exactly once, so the first-bad entry in the thrown message matches
+  // the old Promise.all order.
+  const results: ({ detail: string; path: string } | null)[] = Array.from(
+    { length: unique.length },
+    () => null
+  );
+  let cursor = 0;
+  const workers = Array.from(
+    { length: Math.min(VERIFY_CONCURRENCY, unique.length) },
+    async () => {
+      while (cursor < unique.length) {
+        const index = cursor;
+        cursor += 1;
+        const entry = unique[index] as { path: string; sha256: string };
+        results[index] = await checkOne(entry, index);
+      }
+    }
+  );
+  await Promise.all(workers);
+  const bad = results.filter(
     (entry): entry is { detail: string; path: string } => entry !== null
   );
   if (bad.length > 0) {

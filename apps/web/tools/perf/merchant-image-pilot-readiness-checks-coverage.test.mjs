@@ -19,7 +19,14 @@ describe('merchant-image-pilot-readiness coverage and cross-arm', () => {
     };
     const hidden = {
       binding: 'merchant/hero-s0',
-      img: { complete: false, currentSrc: '', naturalWidth: 0 },
+      // Undecoded but source-selected: a display:none image still selects
+      // (and fetches) its currentSrc, which collection captures — the
+      // network fetch below is that selection, not an extra tier.
+      img: {
+        complete: false,
+        currentSrc: 'https://lab/__pilot/abc/x.avif',
+        naturalWidth: 0,
+      },
       rect: { height: 0, width: 0, x: 0, y: 0 },
       slotId: 'mobile-hero-slide-0',
       status: null,

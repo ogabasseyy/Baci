@@ -66,6 +66,30 @@ describe('checkBindingInput', () => {
     expect(failures.join('\n')).toMatch(/exceeds the .* byte input limit/);
   });
 
+  it('refuses a FIFO swapped in for the snapshot without hanging', async () => {
+    // mkfifo exists only on POSIX. A blocking open would hang preflight
+    // (no enclosing deadline) instead of failing: O_NONBLOCK keeps the
+    // open instant and the descriptor fstat refuses the non-file.
+    if (process.platform === 'win32') {
+      return;
+    }
+    const { execFileSync } = await import('node:child_process');
+    const root = await mkdtemp(join(tmpdir(), 'pilot-offline-fifo-'));
+    await mkdir(join(root, 'snapshots'), { recursive: true });
+    execFileSync('mkfifo', [join(root, 'snapshots', 'logo-a.png')]);
+    const checks = [];
+    const failures = [];
+    const inputBytes = await checkBindingInput({
+      checks,
+      failures,
+      name: `${MERCHANT}/logo-a`,
+      options: { inputRoot: root },
+      record: recordFor({ sha256: 'd'.repeat(64) }),
+    });
+    expect(inputBytes).toBeNull();
+    expect(failures.join('\n')).toMatch(/not a regular file/);
+  });
+
   it('fails closed on missing or tampered snapshots', async () => {
     const bytes = Buffer.from('frozen-input-bytes');
     const root = await inputRootWith({ 'snapshots/logo-a.png': bytes });

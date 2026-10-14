@@ -187,7 +187,8 @@ describe('merchant-image-pilot-readiness surfaces', () => {
         options
       )
     ).toEqual(['no-avif run has no retained AVIF candidates']);
-    // AVIF bytes still fetched: unsupported format was requested.
+    // AVIF bytes still fetched: unsupported format was requested — and
+    // since no slot selected it, network purity flags the extra tier too.
     expect(
       surfaceProblems(
         {
@@ -201,6 +202,7 @@ describe('merchant-image-pilot-readiness surfaces', () => {
       )
     ).toEqual([
       'no-avif run fetched AVIF bytes: https://lab/__pilot/abc/x.avif',
+      'pilot requested an image outside the approved tier set: /__pilot/abc/x.avif',
     ]);
     // No WebP fetched: nothing proves the fallback painted.
     expect(surfaceProblems({ ...base, imageUrls: [] }, options)).toEqual([

@@ -11,11 +11,12 @@ describe('merchant-image-pilot-readiness helpers', () => {
   });
 
   it('rejects pilot requests for staged originals', () => {
-    expect(pilotImageUrlsOk(['https://lab/__pilot/abc/x.avif'], ['abc'])).toBe(
+    const tiers = ['/__pilot/abc/x.avif'];
+    expect(pilotImageUrlsOk(['https://lab/__pilot/abc/x.avif'], tiers)).toBe(
       true
     );
     expect(
-      pilotImageUrlsOk(['https://lab/__pilot/originals/x.png'], ['abc'])
+      pilotImageUrlsOk(['https://lab/__pilot/originals/x.png'], tiers)
     ).toBe(false);
   });
 

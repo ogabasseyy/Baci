@@ -1,7 +1,7 @@
 import { HeroMobileCarousel } from '@/components/storefront/ogabassey/components/hero-mobile-carousel';
 import type { PilotLabArm } from './lab-arm';
 import type { PilotLabConfig } from './lab-config';
-import { labHeroSlides, labHeroSlot } from './lab-fixtures';
+import { labHeroSlides, labHeroSlot } from './lab-fixtures-hero';
 import { PilotLabFlightPreload } from './lab-flight-preload';
 import { LabHeroMobileCarousel } from './lab-hero-clone';
 import type { PilotBindingStatus } from './lab-index';

@@ -2,6 +2,7 @@
 // The input stage returns the verified snapshot bytes (falsy = the binding
 // stops, mirroring the original loop's `continue`); downstream stages reuse
 // the verified buffer instead of re-reading the file.
+import { constants } from 'node:fs';
 import { open, realpath } from 'node:fs/promises';
 import { resolve, sep } from 'node:path';
 import { MAX_INPUT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
@@ -56,7 +57,15 @@ export async function checkBindingInput({
   let inputBytes;
   let handle;
   try {
-    handle = await open(realPath, 'r');
+    // No-follow, nonblocking open: a plain open would hang on a FIFO
+    // swapped in for the snapshot (preflight has no enclosing
+    // deadline) and would follow a symlink planted after the
+    // realpath confinement above. The descriptor fstat below then
+    // requires a regular file before any byte is read.
+    handle = await open(
+      realPath,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    );
   } catch {
     fail(
       checks,
@@ -67,6 +76,16 @@ export async function checkBindingInput({
     return null;
   }
   try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) {
+      fail(
+        checks,
+        failures,
+        `${name}:input`,
+        `input snapshot is not a regular file: ${record.sourcePath}`
+      );
+      return null;
+    }
     const chunks = [];
     let total = 0;
     while (total <= MAX_INPUT_BYTES) {

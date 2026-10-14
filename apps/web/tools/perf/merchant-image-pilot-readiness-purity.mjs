@@ -35,7 +35,14 @@ const BROWSER_ICON_PATHNAMES = new Set([
   '/favicon.ico',
 ]);
 
-export function pilotImageUrlViolation(urls, generationIds) {
+export function pilotImageUrlViolation(urls, allowedTierPathnames) {
+  // Exact tier allowlist, not a generation prefix: a mismatched preload
+  // fetching one tier while the rendered image selects another would
+  // pass a prefix check while its extra bytes and connection contention
+  // corrupt the control/pilot comparison. The caller builds the set
+  // from the decoded selected/slot currentSrc values (collection
+  // captures currentSrc unconditionally, including hidden imgs).
+  const allowed = new Set(allowedTierPathnames);
   return urls.find((url) => {
     const pathname = servedPathname(url);
     if (
@@ -44,7 +51,28 @@ export function pilotImageUrlViolation(urls, generationIds) {
     ) {
       return false;
     }
-    return !generationIds.some((id) => pathname.startsWith(`/__pilot/${id}/`));
+    return !allowed.has(pathname);
+  });
+}
+
+// Multiplicity twin: the same tier fetched twice doubles its bytes and
+// contention. Fillers/icons are exempt (frozen sets shared across cards;
+// a duplicate there is browser behavior noise, not measurement skew).
+export function duplicateImageUrlViolation(urls) {
+  const seen = new Set();
+  return urls.find((url) => {
+    const pathname = servedPathname(url);
+    if (
+      PILOT_FILLER_PATHNAMES.has(pathname) ||
+      BROWSER_ICON_PATHNAMES.has(pathname)
+    ) {
+      return false;
+    }
+    if (seen.has(pathname)) {
+      return true;
+    }
+    seen.add(pathname);
+    return false;
   });
 }
 
@@ -60,8 +88,8 @@ export function controlImageUrlViolation(urls, stagedOriginals) {
   });
 }
 
-export function pilotImageUrlsOk(urls, generationIds) {
-  return pilotImageUrlViolation(urls, generationIds) === undefined;
+export function pilotImageUrlsOk(urls, allowedTierPathnames) {
+  return pilotImageUrlViolation(urls, allowedTierPathnames) === undefined;
 }
 
 export function controlImageUrlsOk(urls, stagedOriginals) {

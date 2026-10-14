@@ -34,7 +34,10 @@ const PROVENANCE_WINDOW_MS = 3_600_000;
 // Same-machine clock/granularity slack for the run-window bounds. The
 // capture-vs-navigation bound takes none: it mirrors the gate's strict
 // capturedAt check exactly, so finish refuses what the gate would fail.
-const CLOCK_SKEW_MS = 5_000;
+// Exported for the settings gate, which must apply the SAME reset
+// tolerance: a capture finish certifies must never be guaranteed to
+// fail downstream.
+export const CLOCK_SKEW_MS = 5_000;
 
 export function required(value, flag) {
   if (value === undefined || value === '') {

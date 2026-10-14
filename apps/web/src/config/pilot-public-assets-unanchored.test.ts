@@ -98,7 +98,26 @@ describe('unanchoredCandidatePublicDirs', () => {
 });
 
 describe('assertUnanchoredPublicTrees', () => {
-  it('warns distinctively when nothing is checkable', () => {
+  it('refuses an unchecked boot without the explicit ack', () => {
+    // Zero candidates means the gate checked NOTHING: a custom server
+    // rooted elsewhere would serve its real tree unverified, so only
+    // an explicit operator acknowledgement degrades this to a warning.
+    const dir = root();
+    const previousCwd = process.cwd();
+    const previousArgv1 = process.argv[1];
+    process.chdir(dir);
+    process.argv[1] = join(dir, 'nowhere', 'runner.js');
+    try {
+      expect(() => assertUnanchoredPublicTrees()).toThrow(
+        /refusing an unchecked boot/
+      );
+    } finally {
+      process.argv[1] = previousArgv1;
+      process.chdir(previousCwd);
+    }
+  });
+  it('warns distinctively when nothing is checkable but acked', () => {
+    vi.stubEnv('BACI_IMAGE_PILOT_UNANCHORED_ACK', '1');
     const dir = root();
     const previousCwd = process.cwd();
     const previousArgv1 = process.argv[1];
@@ -109,6 +128,7 @@ describe('assertUnanchoredPublicTrees', () => {
       expect(() => assertUnanchoredPublicTrees()).not.toThrow();
       expect(warn).toHaveBeenCalledOnce();
       expect(warn.mock.calls[0][0]).toMatch(/found no checkable app tree/);
+      expect(warn.mock.calls[0][0]).toMatch(/UNANCHORED_ACK=1/);
     } finally {
       warn.mockRestore();
       process.argv[1] = previousArgv1;

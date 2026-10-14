@@ -81,6 +81,15 @@ describe('merchant-image-pilot-settings provenance', () => {
       resetAt: '2026-10-04T00:11:00.000Z',
     });
     expect(verifyCacheProvenance(postdated, pages).error).toMatch(/postdates/);
+    // Same ordering tolerance finish applies (shared CLOCK_SKEW_MS):
+    // a reset 1s after the navigation start passes here exactly as
+    // finish certifies it — otherwise finish success would guarantee
+    // a gate failure downstream.
+    const skewed = JSON.stringify({
+      ...JSON.parse(valid),
+      resetAt: '2026-10-04T00:10:01.000Z',
+    });
+    expect(verifyCacheProvenance(skewed, pages).ok).toBe(true);
     // Undated HAR pages cannot bind the reset to the run.
     expect(
       verifyCacheProvenance(valid, [{ _meta: { runId: 'run-navigation-1' } }])

@@ -295,6 +295,6 @@ export function LabHeroMobileCarousel({
   );
 }
 
-export { labHeroSlides, labHeroSlot } from './lab-fixtures';
+export { labHeroSlides, labHeroSlot } from './lab-fixtures-hero';
 
 export { TRANSPARENT_PIXEL_SRC };

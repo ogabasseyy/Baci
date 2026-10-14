@@ -13,6 +13,7 @@ import {
 import { noAvifSurfaceProblems } from './merchant-image-pilot-readiness-noavif.mjs';
 import {
   controlImageUrlViolation,
+  duplicateImageUrlViolation,
   pilotImageUrlViolation,
   servedPathname,
 } from './merchant-image-pilot-readiness-purity.mjs';
@@ -115,20 +116,34 @@ export function surfaceProblems(
     }
   }
   // Network-level purity (both arms, hidden primaries included — hidden
-  // images still fetch): every fetched image must come from the approved
-  // mount identities or the frozen filler/icon sets. Per-image verdicts
-  // pin the bound slots, but only this catches an EXTRA unmarked fetch —
-  // a stale generation, a foreign original, pilot bytes on control.
+  // images still fetch): every fetched image must be a decoded-selected
+  // tier (pilot), an approved staged original (control), or the frozen
+  // filler/icon sets. Per-image verdicts pin the bound slots, but only
+  // this catches an EXTRA unmarked fetch — a stale generation, an
+  // unselected tier, a foreign original, pilot bytes on control — or a
+  // tier fetched twice.
   if (arm === 'pilot') {
-    const violation = pilotImageUrlViolation(
-      collected.imageUrls,
-      expectedMounts.map((mount) => mount.generationId)
-    );
+    // The allowed tier set is the decoded selection, not the generation
+    // prefix: per-slot verdicts pin each slot's currentSrc to its mount
+    // generation, and this pins every network fetch to a selected tier.
+    const allowedTiers = [
+      g.selectedImg?.currentSrc,
+      ...(g.slots ?? []).map((slot) => slot.img?.currentSrc),
+    ]
+      .filter((src) => typeof src === 'string' && src.length > 0)
+      .map((src) => servedPathname(src));
+    const violation = pilotImageUrlViolation(collected.imageUrls, allowedTiers);
     if (violation !== undefined) {
       problems.push(
         violation.includes('/originals/')
           ? 'pilot requested a selected original'
-          : `pilot requested an image outside the approved generation: ${servedPathname(violation).slice(0, 200)}`
+          : `pilot requested an image outside the approved tier set: ${servedPathname(violation).slice(0, 200)}`
+      );
+    }
+    const duplicate = duplicateImageUrlViolation(collected.imageUrls);
+    if (duplicate !== undefined) {
+      problems.push(
+        `pilot requested an image twice: ${servedPathname(duplicate).slice(0, 200)}`
       );
     }
   }
@@ -140,6 +155,12 @@ export function surfaceProblems(
     if (violation !== undefined) {
       problems.push(
         `control requested an image outside the approved staged set: ${servedPathname(violation).slice(0, 200)}`
+      );
+    }
+    const duplicate = duplicateImageUrlViolation(collected.imageUrls);
+    if (duplicate !== undefined) {
+      problems.push(
+        `control requested an image twice: ${servedPathname(duplicate).slice(0, 200)}`
       );
     }
   }

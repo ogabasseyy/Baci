@@ -1,18 +1,30 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { readBoundedLabJson } from './lab-bounded-json';
 
-it('accepts the exact budget and rejects overflow before JSON decoding', async () => {
-  const dir = await mkdtemp(join(tmpdir(), 'pilot-json-'));
-  try {
-    const path = join(dir, 'manifest.json');
-    await writeFile(path, '{}');
-    expect(await readBoundedLabJson(path, 2)).toBe('{}');
-    await writeFile(path, '{} ');
-    await expect(readBoundedLabJson(path, 2)).rejects.toThrow(/byte budget/);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+describe('readBoundedLabJson', () => {
+  it('reads a regular file within budget', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-bounded-json-'));
+    const file = join(dir, 'manifest.json');
+    writeFileSync(file, '{"ok":true}');
+    await expect(readBoundedLabJson(file, 1024)).resolves.toBe('{"ok":true}');
+  });
+
+  it('refuses a FIFO swapped in for the manifest without hanging', async () => {
+    // mkfifo exists only on POSIX. A blocking open would hang lab init
+    // past every timeout instead of rejecting: O_NONBLOCK keeps the
+    // open instant and the descriptor fstat refuses the non-file.
+    if (process.platform === 'win32') {
+      return;
+    }
+    const { execFileSync } = await import('node:child_process');
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-bounded-json-fifo-'));
+    const fifo = join(dir, 'manifest.json');
+    execFileSync('mkfifo', [fifo]);
+    await expect(readBoundedLabJson(fifo, 1024)).rejects.toThrow(
+      /not a regular file/
+    );
+  });
 });

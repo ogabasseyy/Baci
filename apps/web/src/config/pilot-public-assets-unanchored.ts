@@ -63,11 +63,28 @@ export function unanchoredCandidatePublicDirs(): string[] {
 // the residual: with zero candidates nothing was checkable, and with
 // candidates a custom server rooted anywhere else is still unseen.
 // Never throws for the anchor failure itself — lab-off boots proceed.
+// Explicit opt-in for passing a boot the gate could not check at all:
+// without it a custom server rooted elsewhere serves its real
+// public/__pilot tree completely unverified in non-lab mode. Strict
+// '1', matching the lab-flag convention; detected staged content
+// refuses regardless of this flag.
+export const PILOT_UNANCHORED_ACK_FLAG = 'BACI_IMAGE_PILOT_UNANCHORED_ACK';
+
 export function assertUnanchoredPublicTrees(): void {
   const candidates = unanchoredCandidatePublicDirs();
   if (candidates.length === 0) {
+    // Fail closed by default: this boot checked NOTHING, so only an
+    // explicit operator acknowledgement may degrade it to a warning —
+    // a custom server rooted elsewhere must not pass silently. (The
+    // candidates-found branch below DID check the plausible trees, so
+    // its narrower residual keeps the plain warning.)
+    if (process.env[PILOT_UNANCHORED_ACK_FLAG] !== '1') {
+      throw new Error(
+        'merchant image pilot: startup gate cannot anchor the public tree and found no checkable app tree (bare cwd, no server-adjacent public/); refusing an unchecked boot — set BACI_PILOT_PUBLIC_DIR to the served tree, or BACI_IMAGE_PILOT_UNANCHORED_ACK=1 to acknowledge the unchecked residual'
+      );
+    }
     console.warn(
-      'merchant image pilot: startup gate cannot anchor the public tree and found no checkable app tree (bare cwd, no server-adjacent public/); continuing unchecked — staged content elsewhere would be served unverified. Set BACI_PILOT_PUBLIC_DIR to silence this.'
+      'merchant image pilot: startup gate cannot anchor the public tree and found no checkable app tree (bare cwd, no server-adjacent public/); continuing unchecked under BACI_IMAGE_PILOT_UNANCHORED_ACK=1 — staged content elsewhere would be served unverified.'
     );
   } else {
     console.warn(

@@ -20,9 +20,18 @@ import {
 // bound, deterministically reproducing a file that grows between the
 // budget stat and the read. readCalls counts staged reads so the
 // in-flight sharing test can prove concurrent requests hash once.
-const { grownPaths, readCalls } = vi.hoisted(() => ({
+// readGate tracks concurrent reads for the bounded-concurrency test:
+// when armed, reads block until the gate releases.
+const { grownPaths, readCalls, readGate } = vi.hoisted(() => ({
   grownPaths: new Set<string>(),
   readCalls: { count: 0 },
+  readGate: {
+    current: 0,
+    gate: null as Promise<void> | null,
+    max: 0,
+    release: () => {},
+    releaseAt: 0,
+  },
 }));
 
 vi.mock(
@@ -36,10 +45,22 @@ vi.mock(
       ...actual,
       readUpToBytes: async (path: string, maxBytes: number) => {
         readCalls.count += 1;
-        if (grownPaths.has(path)) {
-          return { bytes: Buffer.alloc(0), truncated: true };
+        readGate.current += 1;
+        readGate.max = Math.max(readGate.max, readGate.current);
+        try {
+          if (readGate.gate && readGate.current >= readGate.releaseAt) {
+            readGate.release();
+          }
+          if (readGate.gate) {
+            await readGate.gate;
+          }
+          if (grownPaths.has(path)) {
+            return { bytes: Buffer.alloc(0), truncated: true };
+          }
+          return actual.readUpToBytes(path, maxBytes);
+        } finally {
+          readGate.current -= 1;
         }
-        return actual.readUpToBytes(path, maxBytes);
       },
     };
   }
@@ -81,6 +102,38 @@ describe('verifyStagedBytes', () => {
       Promise.all([verifyStagedBytes(entries), verifyStagedBytes(entries)])
     ).resolves.toEqual([undefined, undefined]);
     expect(readCalls.count).toBe(2);
+  });
+
+  it('bounds drift-pass reads to four concurrent buffers', async () => {
+    // Ten staged files, each buffering fully: the worker pool caps
+    // simultaneous in-flight reads at 4 instead of holding the whole
+    // set at once. The gate releases only once 4 reads overlap, so
+    // max === 4 proves both the bound and that the pool actually
+    // parallelizes (a sequential loop would deadlock the gate).
+    const dir = await mkdtemp(join(tmpdir(), 'pilot-staged-bound-'));
+    const entries = [];
+    for (let index = 0; index < 10; index += 1) {
+      const file = join(dir, `tier-${index}.avif`);
+      const bytes = Buffer.from(`bytes-${index}`);
+      await writeFile(file, bytes);
+      entries.push({
+        path: file,
+        sha256: createHash('sha256').update(bytes).digest('hex'),
+      });
+    }
+    let release!: () => void;
+    readGate.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    readGate.release = release;
+    readGate.releaseAt = 4;
+    readGate.max = 0;
+    try {
+      await expect(verifyStagedBytes(entries)).resolves.toBeUndefined();
+      expect(readGate.max).toBe(4);
+    } finally {
+      readGate.gate = null;
+    }
   });
 
   it('counts duplicated references once against the budgets', async () => {

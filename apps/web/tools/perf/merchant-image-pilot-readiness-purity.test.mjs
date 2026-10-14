@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { surfaceProblems } from './merchant-image-pilot-readiness-checks.mjs';
 import {
   controlImageUrlsOk,
+  duplicateImageUrlViolation,
   pilotImageUrlsOk,
 } from './merchant-image-pilot-readiness-purity.mjs';
 
@@ -24,31 +25,63 @@ function blockStrings(source, start, end) {
 }
 
 describe('merchant-image-pilot-readiness network purity', () => {
-  it('admits only approved generations, fillers, and icons on pilot', () => {
-    const generations = ['abc'];
-    expect(
-      pilotImageUrlsOk(['https://lab/__pilot/abc/x.avif'], generations)
-    ).toBe(true);
+  it('admits only selected tiers, fillers, and icons on pilot', () => {
+    const tiers = ['/__pilot/abc/x.avif'];
+    expect(pilotImageUrlsOk(['https://lab/__pilot/abc/x.avif'], tiers)).toBe(
+      true
+    );
     // An unmarked generation batch passes the old not-originals rule but
     // must fail the allowlist.
+    expect(pilotImageUrlsOk(['https://lab/__pilot/stale/x.avif'], tiers)).toBe(
+      false
+    );
     expect(
-      pilotImageUrlsOk(['https://lab/__pilot/stale/x.avif'], generations)
+      pilotImageUrlsOk(['https://lab/__pilot/originals/x.png'], tiers)
     ).toBe(false);
+    // Same generation, unselected tier: a mismatched preload fetching
+    // one tier while the render selects another must fail — the extra
+    // bytes and contention corrupt the comparison.
     expect(
-      pilotImageUrlsOk(['https://lab/__pilot/originals/x.png'], generations)
+      pilotImageUrlsOk(['https://lab/__pilot/abc/other.avif'], tiers)
     ).toBe(false);
     expect(
       pilotImageUrlsOk(
         ['https://lab/__pilot/fillers/grid-filler-600x400-a.png'],
-        generations
+        tiers
       )
     ).toBe(true);
-    expect(pilotImageUrlsOk(['https://lab/favicon.ico'], generations)).toBe(
-      true
+    expect(pilotImageUrlsOk(['https://lab/favicon.ico'], tiers)).toBe(true);
+    expect(pilotImageUrlsOk(['https://cdn.example.com/x.png'], tiers)).toBe(
+      false
     );
+  });
+
+  it('flags a tier fetched twice on either arm', () => {
+    const tiers = ['/__pilot/abc/x.avif'];
     expect(
-      pilotImageUrlsOk(['https://cdn.example.com/x.png'], generations)
-    ).toBe(false);
+      pilotImageUrlsOk(
+        ['https://lab/__pilot/abc/x.avif', 'https://lab/__pilot/abc/x.avif'],
+        tiers
+      )
+    ).toBe(true);
+    // Multiplicity is a separate verdict, not the allowlist's: the
+    // duplicate check flags it while the URL set still passes.
+    expect(
+      duplicateImageUrlViolation([
+        'https://lab/__pilot/abc/x.avif',
+        'https://lab/__pilot/abc/x.avif',
+      ])
+    ).toBe('https://lab/__pilot/abc/x.avif');
+    expect(duplicateImageUrlViolation(['https://lab/__pilot/abc/x.avif'])).toBe(
+      undefined
+    );
+    // Fillers/icons are exempt: frozen sets shared across cards.
+    expect(
+      duplicateImageUrlViolation([
+        'https://lab/__pilot/fillers/grid-filler-600x400-a.png',
+        'https://lab/__pilot/fillers/grid-filler-600x400-a.png',
+      ])
+    ).toBe(undefined);
   });
 
   it('admits only staged originals, fillers, and icons on control', () => {
@@ -115,7 +148,7 @@ describe('merchant-image-pilot-readiness network purity', () => {
     // Hidden primary: geometry verdicts vacate, but network purity still
     // catches the extra unmarked generation fetch.
     expect(surfaceProblems(collected, options)).toEqual([
-      'pilot requested an image outside the approved generation: /__pilot/stale/hero.avif',
+      'pilot requested an image outside the approved tier set: /__pilot/stale/hero.avif',
     ]);
     expect(
       surfaceProblems(

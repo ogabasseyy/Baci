@@ -94,6 +94,20 @@ describe('getLabConfig', () => {
     );
   });
 
+  it('names planted content after a degraded runtime-less boot', async () => {
+    // Degraded boot publishes no runtime, so no lab page can render to
+    // re-check — but the request path must still fail LOUD on staged
+    // content (empty binding set) instead of serving it statically in
+    // silence behind a bare runtime error.
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    await stageRouteFiles(lab);
+    await expect(getRequestLabConfig()).rejects.toThrow(/empty binding set/);
+  });
+
   it('fails closed on unstaged bytes, then serves once staged', async () => {
     const lab = await setupRouteFiles();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');

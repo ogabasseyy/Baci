@@ -108,6 +108,54 @@ describe('collectSurface', () => {
     );
   });
 
+  it('flags 200 non-image bodies served to image requests', async () => {
+    // A filler or sibling <img> answered 200 with an HTML fallback
+    // renders a broken card while looking green: below 400 (no failed
+    // request) and not an image URL. Only exact-200 image requests
+    // flag — documents, redirects, and 304s legitimately lack image
+    // bodies, and real images still land in imageUrls.
+    stubBrowser({ selectedImg: fakeImg(), slotImg: null });
+    const page = fakePage();
+    const collected = await collectSurface(
+      page,
+      'https://lab/pilot-lab/store/omnimart',
+      'grid'
+    );
+    const imageRequest = { request: () => ({ resourceType: () => 'image' }) };
+    const documentRequest = {
+      request: () => ({ resourceType: () => 'document' }),
+    };
+    page.listeners.response({
+      ...imageRequest,
+      headers: () => ({ 'content-type': 'text/html' }),
+      status: () => 200,
+      url: () => 'https://lab/__pilot/fillers/grid-filler-600x400-a.png',
+    });
+    page.listeners.response({
+      ...documentRequest,
+      headers: () => ({ 'content-type': 'text/html' }),
+      status: () => 200,
+      url: () => 'https://lab/pilot-lab/store/omnimart',
+    });
+    page.listeners.response({
+      ...imageRequest,
+      headers: () => ({}),
+      status: () => 304,
+      url: () => 'https://lab/__pilot/abc/y.avif',
+    });
+    page.listeners.response({
+      ...imageRequest,
+      headers: () => ({ 'content-type': 'image/avif' }),
+      status: () => 200,
+      url: () => 'https://lab/__pilot/abc/x.avif',
+    });
+    expect(collected.failedRequests).toHaveLength(1);
+    expect(collected.failedRequests[0]).toMatch(
+      /non-image 200 .*grid-filler-600x400-a\.png/
+    );
+    expect(collected.imageUrls).toEqual(['https://lab/__pilot/abc/x.avif']);
+  });
+
   it('disables AVIF before navigating without changing hydration markup', async () => {
     stubBrowser({ selectedImg: fakeImg(), slotImg: null });
     const order = [];

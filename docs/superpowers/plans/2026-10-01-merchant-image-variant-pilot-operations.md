@@ -64,6 +64,11 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # it somewhere unexpected, unset the flag there. When measurement ends,
 # unset BACI_IMAGE_PILOT_LAB and delete the staged tree (recovery line
 # below) so no later boot can serve it.
+# Residual window (accepted): files planted under public/__pilot AFTER
+# boot are statically servable until the next lab page render re-runs
+# the binding check — and after a degraded boot (failed lab init),
+# until restart. Never live-edit the staged tree; unexpected content
+# means re-stage and restart.
 #
 # Recovery when a non-lab build/boot refuses a staged tree: the gate is
 # fatal on staged-merchant shapes (image files under originals/,

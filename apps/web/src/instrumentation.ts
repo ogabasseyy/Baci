@@ -68,23 +68,23 @@ export async function register() {
     } catch (error) {
       // Unanchored boot (no config stash, no standalone path): lab mode
       // demands a verified tree and stays fatal. With the lab off, an
-      // unrelated boot must not brick — but a provably-wrong cwd must
-      // not pass a lookalike either. The probe below returns the cwd
-      // tree only when the cwd is plausibly the served app root
-      // (public/ or next.config.* present); otherwise it refuses, since
-      // the real tree is unseen and may hold staged content. Detected
-      // staged content still refuses in the check below; the residual
-      // (a custom server rooted elsewhere from an app-root cwd) warns.
+      // unrelated boot must not brick on the anchor failure itself —
+      // but it must not pass a served tree unseen either. The helper
+      // checks every candidate root it can find (plausible cwd tree
+      // plus the tree beside the server entry script) and refuses on
+      // DETECTED staged content; only a found-nothing boot degrades to
+      // a loud warning naming the residual.
       if (isPilotLabEnabled()) {
         throw error;
       }
-      const { cwdPublicDirIfAppRoot } = await import(
-        '@/config/pilot-public-assets-triage'
+      const { assertUnanchoredPublicTrees } = await import(
+        '@/config/pilot-public-assets-unanchored'
       );
-      pilotPublicDir = cwdPublicDirIfAppRoot();
-      console.warn(
-        'merchant image pilot: startup gate cannot anchor the public tree (no config stash, no standalone path); checked cwd/public only — a custom server rooted elsewhere would be unseen'
-      );
+      assertUnanchoredPublicTrees();
+      // Lab is off here, so the binding sections below never run; the
+      // shared check re-verifies the (already clean or trivially
+      // absent) cwd tree for a uniform post-condition.
+      pilotPublicDir = join(process.cwd(), 'public');
     }
     assertPilotPublicAssets(pilotPublicDir);
     if (isPilotLabEnabled()) {
@@ -130,7 +130,15 @@ export async function register() {
       // page validates them. A successful init with a drifting tree
       // refuses boot with the re-stage fix; a failed init was already
       // refused above when staged content exists, so reaching here with
-      // no runtime means a fillers-only or absent tree.
+      // no runtime means a fillers-only or absent tree. Residual window
+      // (accepted, pinned by the plant-after-boot test): files planted
+      // under __pilot AFTER boot are statically servable until the next
+      // lab page render re-runs the per-request binding check — and
+      // after a degraded (runtime-less) boot, until restart, since no
+      // lab page can render to re-check. Staging requires local
+      // filesystem write; anyone with that access is inside the trust
+      // boundary already, but treat unexpected __pilot content as a
+      // re-stage-and-restart event, never a live edit.
       if (runtime) {
         const { assertNoUnexpectedStagedFiles } = await import(
           '@/lib/merchant-image-variant-pilot/lab-config-stage-guard'

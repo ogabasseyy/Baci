@@ -71,6 +71,27 @@ describe('getLabConfig', () => {
     );
   });
 
+  it('fails closed when a file is planted after boot', async () => {
+    // Next serves public/__pilot statically without invoking lab
+    // handlers, so a file planted after boot is servable until the
+    // next lab page render — at which point the per-request binding
+    // check must refuse instead of serving it alongside bound bytes.
+    const lab = await setupRouteFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('BACI_IMAGE_PILOT_INPUT_ROOT', lab.inputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_OUTPUT_ROOT', lab.outputRoot);
+    vi.stubEnv('BACI_IMAGE_PILOT_PUBLIC_DIR', lab.publicDir);
+    await stageRouteFiles(lab);
+    await initializeLabRuntime();
+    const first = await getRequestLabConfig();
+    expect(first.stagedPaths.length).toBeGreaterThan(0);
+    const generationDir = dirname(first.stagedPaths[0]?.path as string);
+    await writeFile(join(generationDir, 'planted.png'), 'planted bytes');
+    await expect(getRequestLabConfig()).rejects.toThrow(
+      /has no inventory binding/
+    );
+  });
+
   it('fails closed on unstaged bytes, then serves once staged', async () => {
     const lab = await setupRouteFiles();
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');

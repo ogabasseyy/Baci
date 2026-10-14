@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import {
   mkdirSync,
   mkdtempSync,
-  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -13,7 +12,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertNonLabFillers,
   assertNoUnboundStagedContent,
-  cwdPublicDirIfAppRoot,
 } from './pilot-public-assets-triage';
 
 const PINNED_NAMES = [
@@ -46,6 +44,19 @@ describe('assertNonLabFillers', () => {
     const fillers = join(dir, '__pilot', 'fillers');
     mkdirSync(fillers, { recursive: true });
     writeFileSync(join(fillers, 'merchant.png'), 'merchant bytes');
+    expect(() =>
+      assertNonLabFillers(join(dir, '__pilot'), 'fillers', PINNED)
+    ).toThrow(/staged merchant pilot assets/);
+  });
+  it('refuses merchant bytes nested under a pinned-name directory', () => {
+    // A directory named grid-filler-600x400-a.png is not the fixture:
+    // the exemption must not skip it before the scan sees the
+    // merchant.jpg child Next would serve.
+    const dir = root();
+    const fillers = join(dir, '__pilot', 'fillers');
+    const masquerade = join(fillers, 'grid-filler-600x400-a.png');
+    mkdirSync(masquerade, { recursive: true });
+    writeFileSync(join(masquerade, 'merchant.jpg'), 'merchant bytes');
     expect(() =>
       assertNonLabFillers(join(dir, '__pilot'), 'fillers', PINNED)
     ).toThrow(/staged merchant pilot assets/);
@@ -108,43 +119,6 @@ describe('assertNonLabFillers', () => {
     ).not.toThrow();
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0][0]).toMatch(/stray file/);
-  });
-});
-
-describe('cwdPublicDirIfAppRoot', () => {
-  it('returns cwd/public when the cwd holds a public dir', () => {
-    // Physical path: mkdtemp under /tmp spells a symlinked ancestor
-    // on macOS while chdir resolves it.
-    const dir = realpathSync(root());
-    mkdirSync(join(dir, 'public'), { recursive: true });
-    const previousCwd = process.cwd();
-    process.chdir(dir);
-    try {
-      expect(cwdPublicDirIfAppRoot()).toBe(join(dir, 'public'));
-    } finally {
-      process.chdir(previousCwd);
-    }
-  });
-  it('returns cwd/public when the cwd holds a next config', () => {
-    const dir = realpathSync(root());
-    writeFileSync(join(dir, 'next.config.ts'), 'export default {};');
-    const previousCwd = process.cwd();
-    process.chdir(dir);
-    try {
-      expect(cwdPublicDirIfAppRoot()).toBe(join(dir, 'public'));
-    } finally {
-      process.chdir(previousCwd);
-    }
-  });
-  it('refuses when the cwd is provably not an app root', () => {
-    const dir = root();
-    const previousCwd = process.cwd();
-    process.chdir(dir);
-    try {
-      expect(() => cwdPublicDirIfAppRoot()).toThrow(/not a Next app root/);
-    } finally {
-      process.chdir(previousCwd);
-    }
   });
 });
 

@@ -79,15 +79,24 @@ export async function sha256File(path) {
 
 // Read flags for guarded bytes: O_RDONLY plus O_NOFOLLOW so a symlink
 // swapped in after the caller's lstat refuses at open time (ELOOP)
-// instead of serving the link target's bytes. Pinned by the flags
-// test; O_NOFOLLOW is a zero bit where the platform lacks it, so the
-// open degrades to plain 'r' there.
+// instead of serving the link target's bytes, plus O_NONBLOCK so a
+// FIFO swapped into the same window cannot hang the open past every
+// deadline before any enforcement starts. Pinned by the flags test;
+// both are zero bits where the platform lacks them, so the open
+// degrades to plain 'r' there.
 export const GUARDED_READ_FLAGS =
-  fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW;
+  fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK;
 
 export async function readUpToBytes(path, maxBytes) {
   const handle = await open(path, GUARDED_READ_FLAGS);
   try {
+    // fstat on the opened handle: the byte ceiling bounds reads, not
+    // the open wait, so anything but a regular file refuses here
+    // before the first read.
+    const opened = await handle.stat();
+    if (!opened.isFile()) {
+      throw new PilotDiskError(`disk: refusing to read non-file: ${path}`);
+    }
     const chunks = [];
     let bytesRead = 0;
     for (;;) {

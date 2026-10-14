@@ -73,6 +73,15 @@ export async function collectSurface(page, url, surface, options = {}) {
         .endsWith('.avif');
     }
   };
+  // Playwright request resource type, defensively: older drivers and
+  // test doubles may not implement response.request().
+  const isImageRequest = (response) => {
+    try {
+      return response.request().resourceType() === 'image';
+    } catch {
+      return false;
+    }
+  };
   page.on('response', (response) => {
     const responseUrl = response.url();
     const foreign = isForeign(responseUrl);
@@ -91,6 +100,13 @@ export async function collectSurface(page, url, surface, options = {}) {
     const contentType = response.headers()['content-type'] ?? '';
     if (contentType.startsWith('image/')) {
       imageUrls.push(responseUrl);
+    } else if (response.status() === 200 && isImageRequest(response)) {
+      // An <img> request answered 200 with a non-image body (HTML
+      // fallback page, error document) renders a broken card but is
+      // neither a failed request nor an image URL above — flag it so a
+      // missing filler or sibling image cannot pass hygiene silently.
+      // 200 only: redirects and 304s legitimately carry no image body.
+      failedRequests.push(`non-image 200 ${responseUrl.slice(-80)}`);
     }
   });
   // Network-level failures (DNS, reset, aborted) never produce a response.

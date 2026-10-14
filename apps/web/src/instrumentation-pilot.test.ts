@@ -22,12 +22,12 @@ vi.mock('@/lib/merchant-image-variant-pilot/lab-config-stage-guard', () => ({
   assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
 }));
 const assertNoUnboundStagedContentMock = vi.hoisted(() => vi.fn());
-const cwdPublicDirIfAppRootMock = vi.hoisted(() =>
-  vi.fn(() => '/resolved/cwd-public')
-);
 vi.mock('@/config/pilot-public-assets-triage', () => ({
   assertNoUnboundStagedContent: assertNoUnboundStagedContentMock,
-  cwdPublicDirIfAppRoot: cwdPublicDirIfAppRootMock,
+}));
+const assertUnanchoredPublicTreesMock = vi.hoisted(() => vi.fn());
+vi.mock('@/config/pilot-public-assets-unanchored', () => ({
+  assertUnanchoredPublicTrees: assertUnanchoredPublicTreesMock,
 }));
 const captureServerExceptionMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
@@ -177,41 +177,30 @@ describe('instrumentation pilot boot gate', () => {
     expect(registerOTelMock).toHaveBeenCalledOnce();
   });
 
-  it('degrades to a warned cwd check when unanchored with lab off', async () => {
-    // A lab-only feature must not brick unrelated boots: without an
-    // anchored root and with the lab off, register probes the cwd for
-    // an app root, checks that tree, and warns loudly — instead of
-    // throwing on the anchor failure.
+  it('checks candidate trees when unanchored with lab off', async () => {
+    // A lab-only feature must not brick unrelated boots on the anchor
+    // failure itself: without an anchored root and with the lab off,
+    // register checks every candidate tree it can find (fatal on
+    // DETECTED staged content) instead of throwing.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     resolvePilotPublicDirMock.mockImplementationOnce(() => {
       throw new Error('cannot anchor the public tree');
     });
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      await expect(register()).resolves.toBe(undefined);
-      expect(warnSpy).toHaveBeenCalledOnce();
-      expect(warnSpy.mock.calls[0][0]).toMatch(/cannot anchor/);
-    } finally {
-      warnSpy.mockRestore();
-    }
-    expect(cwdPublicDirIfAppRootMock).toHaveBeenCalledOnce();
-    expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
-      '/resolved/cwd-public'
-    );
+    await expect(register()).resolves.toBe(undefined);
+    expect(assertUnanchoredPublicTreesMock).toHaveBeenCalledOnce();
     expect(registerOTelMock).toHaveBeenCalledOnce();
   });
-  it('refuses an unanchored boot whose cwd is provably not the app root', async () => {
-    // The leniency above never inspects a known-wrong tree: when the
-    // cwd probe refuses, boot refuses even with the lab off.
+  it('refuses an unanchored boot with staged content in a candidate tree', async () => {
+    // The leniency above is anchor-only: detected staged content in
+    // any candidate tree still refuses boot even with the lab off.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     resolvePilotPublicDirMock.mockImplementationOnce(() => {
       throw new Error('cannot anchor the public tree');
     });
-    cwdPublicDirIfAppRootMock.mockImplementationOnce(() => {
-      throw new Error('cwd is not a Next app root');
+    assertUnanchoredPublicTreesMock.mockImplementationOnce(() => {
+      throw new Error('staged merchant pilot assets require');
     });
-    await expect(register()).rejects.toThrow(/not a Next app root/);
-    expect(assertPilotPublicAssetsMock).not.toHaveBeenCalled();
+    await expect(register()).rejects.toThrow(/staged merchant pilot assets/);
     expect(registerOTelMock).not.toHaveBeenCalled();
   });
   it('stays fatal when unanchored with lab on', async () => {
@@ -230,9 +219,10 @@ describe('instrumentation pilot boot gate', () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     await register();
     // The boot gate must inspect the same tree the build gate did: the
-    // shared resolver (config-stashed or standalone-anchored;
-    // unanchored throws), not a cwd-joined lookalike that diverges
-    // under `next start <dir>` or a standalone server run from elsewhere.
+    // shared resolver (config-stashed or standalone-anchored), not a
+    // cwd-joined lookalike that diverges under `next start <dir>` or a
+    // standalone server run from elsewhere. Unanchored boots take the
+    // candidate-tree path tested above.
     expect(resolvePilotPublicDirMock).toHaveBeenCalledOnce();
     expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
       '/resolved/public'

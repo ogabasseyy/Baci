@@ -15,10 +15,13 @@ const READ_CHUNK_BYTES = 64 * 1024;
 
 // Read flags for staged bytes: O_RDONLY plus O_NOFOLLOW so a symlink
 // swapped in after the caller's lstat refuses at open time (ELOOP)
-// instead of serving the link target's bytes. Pinned by the flags
-// test; O_NOFOLLOW is a zero bit where the platform lacks it, so the
-// open degrades to plain 'r' there.
-export const STAGED_READ_FLAGS = fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW;
+// instead of serving the link target's bytes, plus O_NONBLOCK so a
+// FIFO swapped into the same window cannot hang the open past every
+// deadline before any enforcement starts. Pinned by the flags test;
+// both are zero bits where the platform lacks them, so the open
+// degrades to plain 'r' there.
+export const STAGED_READ_FLAGS =
+  fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK;
 
 export async function readUpToBytes(
   path: string,
@@ -26,6 +29,15 @@ export async function readUpToBytes(
 ): Promise<{ bytes: Buffer; truncated: boolean }> {
   const handle = await open(path, STAGED_READ_FLAGS);
   try {
+    // fstat on the opened handle: the byte ceiling bounds reads, not
+    // the open wait, so anything but a regular file refuses here
+    // before the first read.
+    const opened = await handle.stat();
+    if (!opened.isFile()) {
+      throw new Error(
+        `merchant image pilot: refusing to read non-file staged input: ${path}`
+      );
+    }
     // Chunked probe: stream 64 KiB at a time instead of allocating
     // maxBytes + 1 upfront, so a large ceiling (per-entry staged sizes
     // up to the 256 MiB set budget) never becomes a large allocation

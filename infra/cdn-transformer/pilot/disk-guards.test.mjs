@@ -121,12 +121,31 @@ test('readUpToBytes refuses a symlink swapped in for guarded bytes', async (t) =
     GUARDED_READ_FLAGS & fsConstants.O_NOFOLLOW,
     fsConstants.O_NOFOLLOW
   );
+  assert.equal(
+    GUARDED_READ_FLAGS & fsConstants.O_NONBLOCK,
+    fsConstants.O_NONBLOCK
+  );
   const base = await mkdtemp(join(tmpdir(), 'pilot-read-link-'));
   const target = join(base, 'target.bin');
   await writeFile(target, Buffer.from('elsewhere'));
   const link = join(base, 'guarded.bin');
   await symlink(target, link);
   await assert.rejects(() => readUpToBytes(link, 1024), /ELOOP/);
+});
+
+test('readUpToBytes refuses a FIFO without hanging the open', async (t) => {
+  if (process.platform === 'win32') {
+    t.skip('mkfifo exists only on POSIX');
+    return;
+  }
+  // A blocking open would hang this test past every timeout instead
+  // of rejecting: O_NONBLOCK keeps the open instant and the fstat
+  // gate refuses the non-file before the first read.
+  const { execFileSync } = await import('node:child_process');
+  const base = await mkdtemp(join(tmpdir(), 'pilot-read-fifo-'));
+  const fifo = join(base, 'guarded.bin');
+  execFileSync('mkfifo', [fifo]);
+  await assert.rejects(() => readUpToBytes(fifo, 1024), /refusing to read/);
 });
 
 test('readUpToBytes streams multi-chunk files to the cap', async () => {

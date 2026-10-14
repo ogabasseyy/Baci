@@ -65,11 +65,9 @@ BEGIN
   IF NOT FOUND OR v_enabled IS DISTINCT FROM true THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;
-  -- A non-positive/over-100 cap mints a worthless code: refuse.
-  IF v_max_redemption_pct IS NOT NULL
-     AND (v_max_redemption_pct <= 0 OR v_max_redemption_pct > 100) THEN
-    RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
-  END IF;
+  -- (The cap is validated after the reward loads, scoped to checkout
+  -- discount types: an invalid legacy cap must not make every other
+  -- reward type unredeemable.)
   -- Lock the member row (redemptions serialize on balance).
   SELECT id, COALESCE(points_balance, 0)
   INTO v_loyalty_id, v_balance
@@ -108,7 +106,7 @@ BEGIN
   END IF;
   -- Lock the reward row.
   SELECT id, name, reward_type, reward_value, points_cost, stock_quantity,
-         usage_limit_per_customer, minimum_order_amount
+         usage_limit_per_customer, minimum_order_amount, reward_product_id
   INTO v_reward
   FROM public.loyalty_rewards
   WHERE id = p_reward_id
@@ -131,7 +129,6 @@ BEGIN
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
-
   -- Usage cap counts purchases, not checkout uses.
   IF v_reward.usage_limit_per_customer IS NOT NULL THEN
     SELECT COUNT(*) INTO v_redemption_count
@@ -143,7 +140,6 @@ BEGIN
       RETURN jsonb_build_object('success', false, 'error', 'usage_limit_reached');
     END IF;
   END IF;
-
   -- Program minimum compares cost, not balance.
   IF v_minimum IS NOT NULL AND v_minimum > 0
      AND v_reward.points_cost < v_minimum THEN
@@ -155,7 +151,14 @@ BEGIN
       'points_cost', v_reward.points_cost
     );
   END IF;
-
+  -- A non-positive/over-100 cap mints a worthless CHECKOUT code:
+  -- refuse for discount types only (manual/wallet rewards never read
+  -- the cap, and the settings schema now prevents new invalid caps).
+  IF v_max_redemption_pct IS NOT NULL
+     AND (v_max_redemption_pct <= 0 OR v_max_redemption_pct > 100)
+     AND v_reward.reward_type IN ('discount', 'discount_fixed', 'discount_percentage') THEN
+    RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
+  END IF;
   -- Valued rewards need positive value (<=100%).
   IF v_reward.reward_type IN (
        'store_credit', 'discount_fixed', 'discount_percentage'
@@ -164,7 +167,6 @@ BEGIN
        OR v_reward.reward_type = 'discount_percentage' AND v_reward.reward_value > 100) THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
-
   -- Minimum-gated store credit and manual-fulfillment rewards fail
   -- closed: neither has an order amount to enforce the minimum against
   -- (checkout for store credit, the consume endpoint for manual types).
@@ -181,7 +183,6 @@ BEGIN
      AND pg_catalog.round(v_reward.reward_value, 0) <= 0 THEN
     RETURN jsonb_build_object('success', false, 'error', 'reward_unavailable');
   END IF;
-
   IF v_balance < v_reward.points_cost THEN
     RETURN jsonb_build_object(
       'success', false,
@@ -190,7 +191,6 @@ BEGIN
       'available', v_balance
     );
   END IF;
-
   v_new_balance := v_balance - v_reward.points_cost;
   v_expires_at := pg_catalog.now() + interval '30 days';
 
@@ -223,12 +223,13 @@ BEGIN
         INSERT INTO public.reward_redemptions (
           merchant_id, customer_id, reward_id, points_spent,
           reward_type, reward_value, discount_code, expires_at,
-          minimum_order_amount, issuance_currency, max_redemption_percentage
+          minimum_order_amount, issuance_currency, max_redemption_percentage,
+          reward_name, reward_product_id
         ) VALUES (
           p_merchant_id, p_customer_id, p_reward_id, v_reward.points_cost,
           v_reward.reward_type, v_reward.reward_value, v_redemption_code, v_expires_at,
           COALESCE(v_reward.minimum_order_amount, 0), v_currency,
-          v_max_redemption_pct
+          v_max_redemption_pct, v_reward.name, v_reward.reward_product_id
         )
         RETURNING id INTO v_redemption_id;
         EXIT;
@@ -278,6 +279,7 @@ BEGIN
     'reward_type', v_reward.reward_type,
     'reward_value', v_reward.reward_value,
     'issuance_currency', v_currency,
+    'max_redemption_percentage', v_max_redemption_pct,
     'points_spent', v_reward.points_cost,
     'new_balance', v_new_balance,
     'expires_at', v_expires_at

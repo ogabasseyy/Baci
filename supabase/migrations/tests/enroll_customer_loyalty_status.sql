@@ -222,3 +222,23 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
 DELETE FROM public.reward_redemptions
 WHERE id = '01aa0000-0000-4000-8000-00000000015c';
 
+
+-- The program cap rides in the status payload so the catalog can
+-- disclose it before the customer spends points.
+UPDATE public.loyalty_settings
+SET maximum_redemption_percentage = 25
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  (SELECT (result ->> 'max_redemption_percentage')::numeric = 25
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result),
+  'status payload omitted the program redemption cap'
+);
+
+-- Restore the baseline default the bridge fixtures rely on.
+UPDATE public.loyalty_settings
+SET maximum_redemption_percentage = 50
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';

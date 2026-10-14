@@ -232,6 +232,7 @@ export async function POST(request: NextRequest) {
         reward_name: redemption.reward_name,
         reward_type: catalog.reward_type,
         discount_value: redemption.reward_value ?? undefined,
+        max_redemption_percentage: redemption.max_redemption_percentage ?? null,
         discount_type: catalog.discount_type,
         points_spent: redemption.points_spent,
         new_balance: redemption.new_balance,
@@ -242,6 +243,8 @@ export async function POST(request: NextRequest) {
             discount_type: catalog.discount_type,
             discount_value: redemption.reward_value ?? undefined,
             issuance_currency: redemption.issuance_currency ?? null,
+            max_redemption_percentage:
+              redemption.max_redemption_percentage ?? null,
           },
           merchantError ? null : (merchantRow ?? {})
         ),

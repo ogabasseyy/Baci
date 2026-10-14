@@ -29,7 +29,6 @@ const RPC_ERROR_MESSAGE: Record<string, string> = {
   customer_not_found: 'Customer not found for this merchant',
   invalid_input: 'Invalid loyalty status input',
 };
-
 const DEFAULT_THRESHOLDS: Record<string, number> = {
   bronze: 0,
   silver: 1000,
@@ -288,6 +287,7 @@ export async function GET(request: NextRequest) {
         welcome_bonus: Math.max(0, status.signup_bonus_points),
         referral_bonus_referrer: Math.max(0, status.referral_bonus_points),
         referral_bonus_referee: Math.max(0, status.referral_bonus_points),
+        max_redemption_percentage: status.max_redemption_percentage ?? null,
       },
     });
   } catch (error) {

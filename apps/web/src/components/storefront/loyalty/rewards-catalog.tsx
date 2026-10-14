@@ -1,5 +1,4 @@
 'use client';
-
 import { AlertCircle, Gift, Sparkles, Truck, Wallet } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +33,6 @@ interface RewardsCatalogProps {
    * before validating, so a failed attempt can still mutate the balance. */
   onRedeemed?: () => void;
 }
-
 // The status route never sends min_tier and the redemption RPC enforces no
 // tier gate, so redeemability here is purely "can afford it".
 interface Reward {
@@ -52,7 +50,6 @@ interface Reward {
   discount_value?: number;
   minimum_order_amount?: number;
 }
-
 const rewardIcons = {
   discount: Gift,
   free_shipping: Truck,
@@ -60,7 +57,6 @@ const rewardIcons = {
   exclusive_access: Sparkles,
   store_credit: Wallet,
 };
-
 export function RewardsCatalog({
   merchantId,
   customerId,
@@ -73,16 +69,15 @@ export function RewardsCatalog({
     loading,
     enrolled,
     pointsBalance,
+    maxRedemptionPercentage,
     availableRewards,
     redeemReward,
     refetch,
   } = useLoyalty(merchantId, customerId);
-
   const [redeeming, setRedeeming] = useState<string | null>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [redemptionResult, setRedemptionResult] =
     useState<RedemptionSuccessResult | null>(null);
-
   const handleRedeem = (reward: Reward) => {
     setRedeeming(reward.id);
     // Promise chain instead of try/finally so the React Compiler can
@@ -123,7 +118,13 @@ export function RewardsCatalog({
   const getRewardLabel = (reward: Reward): string => {
     if (reward.reward_type === 'discount') {
       if (reward.discount_type === 'percentage') {
-        return `${reward.discount_value}% Off`;
+        // A program cap below the face value binds at checkout:
+        // advertise the effective percentage, not the nominal one.
+        const effective =
+          maxRedemptionPercentage != null && maxRedemptionPercentage > 0
+            ? Math.min(reward.discount_value ?? 0, maxRedemptionPercentage)
+            : (reward.discount_value ?? 0);
+        return `${effective}% Off`;
       }
       const formattedValue = formatMerchantCurrency(
         reward.discount_value ?? 0,
@@ -246,6 +247,15 @@ export function RewardsCatalog({
                   {/* Minimums apply at online checkout, which bridges
                       discount rewards only: manual-fulfillment types must
                       not advertise a threshold they never enforce. */}
+                  {maxRedemptionPercentage != null &&
+                    maxRedemptionPercentage > 0 &&
+                    maxRedemptionPercentage < 100 &&
+                    reward.reward_type === 'discount' && (
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Discount capped at {maxRedemptionPercentage}% of the
+                        order subtotal
+                      </p>
+                    )}
                   {(reward.minimum_order_amount ?? 0) > 0 &&
                     reward.reward_type === 'discount' && (
                       <p className="text-xs text-muted-foreground mb-3">

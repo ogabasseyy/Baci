@@ -13,6 +13,14 @@ export interface RedemptionRewardSummary {
   discount_type?: string;
   discount_value?: number;
   issuance_currency?: string | null;
+  // Issuance-snapshotted cap (percent of the order subtotal the
+  // checkout discount may not exceed), disclosed before it can bite.
+  max_redemption_percentage?: number | null;
+}
+
+function withCapNote(copy: string, cap: number | null | undefined): string {
+  if (cap == null || cap <= 0 || cap >= 100) return copy;
+  return `${copy} The discount is capped at ${cap}% of your order subtotal.`;
 }
 
 export interface RedemptionMerchantCurrency {
@@ -34,17 +42,27 @@ export function getRedemptionInstructions(
         return 'Present this code to receive your discount. Contact the store for details.';
       }
       if (reward.discount_type === 'percentage') {
-        return `Apply this code at checkout to receive ${reward.discount_value}% off your order.`;
+        // The cap binds below the face value: advertise the effective
+        // percentage the checkout bridge will actually apply.
+        const cap = reward.max_redemption_percentage;
+        const effective =
+          cap != null && cap > 0
+            ? Math.min(reward.discount_value, cap)
+            : reward.discount_value;
+        return `Apply this code at checkout to receive ${effective}% off your order.`;
       }
       // The issuance snapshot wins over the merchant's current
       // currency: the value is denominated at mint, and checkout
       // rejects the code if the merchant has since moved.
       if (reward.issuance_currency) {
-        return `Apply this code at checkout to receive ${formatAmountInCurrency(
-          reward.discount_value ?? 0,
-          reward.issuance_currency,
-          { maximumFractionDigits: 0 }
-        )} off your order.`;
+        return withCapNote(
+          `Apply this code at checkout to receive ${formatAmountInCurrency(
+            reward.discount_value ?? 0,
+            reward.issuance_currency,
+            { maximumFractionDigits: 0 }
+          )} off your order.`,
+          reward.max_redemption_percentage
+        );
       }
       // Null currency means the merchant lookup failed: currency-neutral
       // copy beats a false NGN label on a non-NGN merchant's dialog.
@@ -54,14 +72,17 @@ export function getRedemptionInstructions(
       // Same formatter as the rewards catalog: fixed-value labels render
       // in the merchant's own payout currency (NGN fallback matches the
       // previous hardcoded symbol when the merchant row is simply absent).
-      return `Apply this code at checkout to receive ${formatMerchantCurrency(
-        reward.discount_value ?? 0,
-        {
-          country: merchantCurrency.country ?? null,
-          payout_currency: merchantCurrency.payout_currency ?? null,
-        },
-        { maximumFractionDigits: 0 }
-      )} off your order.`;
+      return withCapNote(
+        `Apply this code at checkout to receive ${formatMerchantCurrency(
+          reward.discount_value ?? 0,
+          {
+            country: merchantCurrency.country ?? null,
+            payout_currency: merchantCurrency.payout_currency ?? null,
+          },
+          { maximumFractionDigits: 0 }
+        )} off your order.`,
+        reward.max_redemption_percentage
+      );
     }
     case 'free_shipping':
       // Manual fulfillment: the checkout bridge accepts discount codes only.

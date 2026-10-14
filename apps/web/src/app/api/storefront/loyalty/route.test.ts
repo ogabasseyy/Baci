@@ -75,6 +75,7 @@ describe('GET /api/storefront/loyalty', () => {
         },
       ],
       settings: {
+        max_redemption_percentage: null,
         points_per_naira: 0.01,
         naira_per_point: 100,
         welcome_bonus: 50,

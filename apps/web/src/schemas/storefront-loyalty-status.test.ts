@@ -40,6 +40,7 @@ describe('storefrontLoyaltyStatusResultSchema', () => {
       ],
       signup_bonus_points: 50,
       referral_bonus_points: 100,
+      max_redemption_percentage: 25,
       points_per_currency: 1,
       points_currency_unit: 100,
       rewards: [

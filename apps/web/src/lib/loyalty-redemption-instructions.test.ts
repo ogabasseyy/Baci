@@ -15,6 +15,37 @@ describe('getRedemptionInstructions', () => {
     ).toBe('Apply this code at checkout to receive 10% off your order.');
   });
 
+  it('discloses the capped effective percentage', () => {
+    expect(
+      getRedemptionInstructions(
+        {
+          reward_type: 'discount',
+          discount_type: 'percentage',
+          discount_value: 50,
+          max_redemption_percentage: 25,
+        },
+        null
+      )
+    ).toBe('Apply this code at checkout to receive 25% off your order.');
+  });
+
+  it('appends the subtotal cap note to fixed discounts', () => {
+    expect(
+      getRedemptionInstructions(
+        {
+          reward_type: 'discount',
+          discount_type: 'fixed',
+          discount_value: 2000,
+          issuance_currency: 'NGN',
+          max_redemption_percentage: 25,
+        },
+        null
+      )
+    ).toBe(
+      'Apply this code at checkout to receive ₦2,000 off your order. The discount is capped at 25% of your order subtotal.'
+    );
+  });
+
   it('renders fixed discounts in the merchant payout currency', () => {
     expect(
       getRedemptionInstructions(

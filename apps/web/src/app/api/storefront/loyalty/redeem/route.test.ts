@@ -48,6 +48,7 @@ describe('POST /api/storefront/loyalty/redeem', () => {
         reward_name: 'Ten percent off',
         reward_type: 'discount',
         discount_value: 10,
+        max_redemption_percentage: null,
         discount_type: 'percentage',
         points_spent: 100,
         new_balance: 1400,

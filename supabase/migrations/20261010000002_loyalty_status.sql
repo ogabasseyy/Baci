@@ -82,13 +82,11 @@ AS $$
     AND expired_lot.expires_at IS NOT NULL
     AND expired_lot.expires_at < pg_catalog.now()
 $$;
-
 -- Helper with no ownership check: only the SECURITY DEFINER loyalty RPCs
 -- may call it (definer's rights), never direct session callers.
 REVOKE ALL ON FUNCTION public.calculate_unspent_expired_points(uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.calculate_unspent_expired_points(uuid, uuid)
   TO service_role;
-
 CREATE OR REPLACE FUNCTION public.get_loyalty_status(
   p_merchant_id uuid,
   p_customer_id uuid
@@ -108,14 +106,12 @@ BEGIN
   IF p_merchant_id IS NULL OR p_customer_id IS NULL THEN
     RETURN jsonb_build_object('success', false, 'error', 'invalid_input');
   END IF;
-
   SELECT signup_bonus_points, referral_bonus_points,
          points_per_currency, points_currency_unit, tiers,
-         minimum_redemption_points, enabled
+         minimum_redemption_points, enabled, maximum_redemption_percentage
   INTO v_settings
   FROM public.loyalty_settings
   WHERE merchant_id = p_merchant_id;
-
   IF NOT FOUND THEN
     RETURN jsonb_build_object('success', false, 'error', 'program_unavailable');
   END IF;
@@ -268,6 +264,7 @@ BEGIN
       'referral_bonus_points', COALESCE(v_settings.referral_bonus_points, 0),
       'points_per_currency', v_settings.points_per_currency,
       'points_currency_unit', v_settings.points_currency_unit,
+      'max_redemption_percentage', v_settings.maximum_redemption_percentage,
       'rewards', v_rewards,
       'transactions', v_transactions
     );
@@ -289,6 +286,7 @@ BEGIN
     'referral_bonus_points', COALESCE(v_settings.referral_bonus_points, 0),
     'points_per_currency', v_settings.points_per_currency,
     'points_currency_unit', v_settings.points_currency_unit,
+    'max_redemption_percentage', v_settings.maximum_redemption_percentage,
     'rewards', v_rewards,
     'transactions', v_transactions
   );

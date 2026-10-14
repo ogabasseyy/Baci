@@ -152,3 +152,27 @@ SELECT pg_temp.assert_true(
    ) AS result),
   'checkout-claimed code replayed through the manual path'
 );
+
+-- Consume returns the issuance identity after the reward is deleted.
+INSERT INTO public.reward_redemptions (
+  merchant_id, customer_id, reward_id, points_spent, reward_type,
+  discount_code, used, expires_at, reward_name, reward_product_id
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000012',
+  '01aa0000-0000-4000-8000-000000000501', 50, 'free_product',
+  'RDM-CASE9', false, pg_catalog.now() + interval '30 days',
+  'Snapshot gift', '00000000-0000-4000-8000-00000000beef'
+);
+
+DELETE FROM public.loyalty_rewards
+WHERE id = '01aa0000-0000-4000-8000-000000000501';
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'reward_name' = 'Snapshot gift'
+     AND result ->> 'reward_product_id'
+       = '00000000-0000-4000-8000-00000000beef'
+   FROM public.consume_loyalty_redemption(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-CASE9') AS result),
+  'deleted-reward consume lost the issuance snapshot'
+);

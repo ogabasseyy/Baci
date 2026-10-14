@@ -96,7 +96,7 @@ BEGIN
         AND COALESCE(rr.reward_value, 0) <= 0)
     )
   RETURNING rr.id, rr.discount_code, rr.reward_type, rr.reward_id,
-    rr.customer_id, rr.used_at
+    rr.reward_name, rr.reward_product_id, rr.customer_id, rr.used_at
   INTO v_row;
 
   IF NOT FOUND THEN
@@ -104,7 +104,7 @@ BEGIN
     -- order stamp) replays its receipt so staff can still fulfill;
     -- checkout-claimed codes (order stamp present) stay not-found.
     SELECT rr.id, rr.discount_code, rr.reward_type, rr.reward_id,
-      rr.customer_id, rr.used_at
+      rr.reward_name, rr.reward_product_id, rr.customer_id, rr.used_at
     INTO v_row
     FROM public.reward_redemptions AS rr
     WHERE rr.merchant_id = p_merchant_id
@@ -129,10 +129,16 @@ BEGIN
   -- afterward, so say WHICH reward (and product, for free_product)
   -- the presented code was for. The reward row may since be deleted
   -- (reward_id SET NULL), leaving the type as the only identity.
-  SELECT lr.name, lr.reward_product_id
-  INTO v_reward_name, v_reward_product_id
-  FROM public.loyalty_rewards AS lr
-  WHERE lr.id = v_row.reward_id;
+  -- Prefer the issuance snapshots (minted onto the redemption);
+  -- pre-snapshot rows fall back to the live reward row.
+  v_reward_name := v_row.reward_name;
+  v_reward_product_id := v_row.reward_product_id;
+  IF v_reward_name IS NULL AND v_row.reward_id IS NOT NULL THEN
+    SELECT lr.name, lr.reward_product_id
+    INTO v_reward_name, v_reward_product_id
+    FROM public.loyalty_rewards AS lr
+    WHERE lr.id = v_row.reward_id;
+  END IF;
 
   RETURN jsonb_build_object(
     'success', true,

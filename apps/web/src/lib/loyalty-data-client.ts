@@ -29,6 +29,7 @@ export interface PointsTransaction {
 }
 
 export interface LoyaltySettings {
+  max_redemption_percentage?: number | null;
   points_per_naira: number;
   naira_per_point: number;
   welcome_bonus: number;

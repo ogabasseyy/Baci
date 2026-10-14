@@ -1,5 +1,4 @@
 'use client';
-
 import { useEffect, useRef, useState } from 'react';
 import { buildCsrfHeaders } from '@/lib/csrf';
 import { type LoyaltyData, loadLoyaltyData } from '@/lib/loyalty-data-client';
@@ -127,7 +126,7 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     // attempt's key so the RPC replays instead of re-spending. The key
     // clears only on success (a 4xx validation failure keeps it: fixing
     // the cause and retrying replays nothing since failures never store).
-    const idempotencyKey = redemptionIdempotencyKeys.forReward(
+    const idempotencyKey = await redemptionIdempotencyKeys.forReward(
       merchantId,
       customerId,
       rewardId
@@ -287,6 +286,7 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     tier: data?.tier ?? 'bronze',
     nextTier: data?.next_tier,
     pointsToNextTier: data?.points_to_next_tier ?? 0,
+    maxRedemptionPercentage: data?.settings?.max_redemption_percentage ?? null,
     availableRewards: data?.available_rewards ?? [],
     redeemableRewards: data?.redeemable_rewards ?? [],
     recentTransactions: data?.recent_transactions ?? [],

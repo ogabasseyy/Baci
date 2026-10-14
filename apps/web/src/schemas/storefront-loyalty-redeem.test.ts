@@ -35,7 +35,11 @@ describe('storefrontLoyaltyRedeemResultSchema', () => {
       points_spent: 200,
       new_balance: 1300,
       expires_at: '2026-11-09T00:00:00.000Z',
+      max_redemption_percentage: 25,
     });
     expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.max_redemption_percentage).toBe(25);
+    }
   });
 });

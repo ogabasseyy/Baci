@@ -48,6 +48,7 @@ export const storefrontLoyaltyStatusResultSchema = z.object({
   tiers: z.array(loyaltyTierSchema),
   signup_bonus_points: z.number(),
   referral_bonus_points: z.number(),
+  max_redemption_percentage: z.number().nullable().optional(),
   points_per_currency: z.number().nullable(),
   points_currency_unit: z.number().nullable(),
   rewards: z.array(loyaltyStatusRewardSchema),

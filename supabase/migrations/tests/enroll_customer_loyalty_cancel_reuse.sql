@@ -120,3 +120,18 @@ SELECT pg_temp.assert_true(
    ) AS row),
   'US-spelled cancellation did not release the claim'
 );
+
+-- 34e. The gateway payment-completion wrapper already treats both
+-- cancellation spellings as terminal before delegating to its _v1
+-- promotion path (20260928183100), so a released claim cannot be
+-- resurrected by a late gateway payment. Definition-pinned: the
+-- terminal check must precede the _v1 delegation.
+SELECT pg_temp.assert_true(
+  (SELECT strpos(def, 'IN (''canceled'', ''cancelled'')') > 0
+     AND strpos(def, 'IN (''canceled'', ''cancelled'')')
+       < strpos(def, 'complete_order_gateway_payment_v1(')
+   FROM pg_catalog.pg_get_functiondef(
+     'public.complete_order_gateway_payment(uuid,uuid,jsonb,text,bigint)'::pg_catalog.regprocedure
+   ) AS def),
+  'gateway payment completion can reopen a canceled order'
+);

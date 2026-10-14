@@ -17,6 +17,7 @@ export const storefrontLoyaltyRedeemResultSchema = z.object({
   reward_type: z.string(),
   reward_value: z.number().nullable(),
   issuance_currency: z.string().nullable().optional(),
+  max_redemption_percentage: z.number().nullable().optional(),
   points_spent: z.number(),
   new_balance: z.number(),
   expires_at: z.string(),

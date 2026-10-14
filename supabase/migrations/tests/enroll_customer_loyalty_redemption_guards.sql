@@ -50,7 +50,7 @@ WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
 
 SELECT pg_temp.assert_true(
   (SELECT result ->> 'success' = 'false'
-     AND result ->> 'error' = 'program_unavailable'
+     AND result ->> 'error' = 'reward_unavailable'
    FROM public.redeem_loyalty_reward(
      '01aa0000-0000-4000-8000-000000000001',
      '01aa0000-0000-4000-8000-000000000012',
@@ -64,6 +64,40 @@ SELECT pg_temp.assert_true(
      AND customer_id = '01aa0000-0000-4000-8000-000000000012'),
   'zero-cap redemption spent points or minted a code'
 );
+
+-- Under the same zero cap, a manual-fulfillment reward still redeems:
+-- the cap gate is scoped to checkout-discount types.
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Zero-cap ship', 100,
+  'free_shipping', true
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT (result ->> 'success')::boolean
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Zero-cap ship')
+   ) AS result),
+  'zero cap blocked a manual reward'
+);
+
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1 FROM public.reward_redemptions
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND reward_name = 'Zero-cap ship'),
+  'mint skipped the identity snapshot'
+);
+
+-- Restore the balance the later fractional-fixed case expects.
+UPDATE public.customer_loyalty SET points_balance = 100
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000012';
 
 UPDATE public.loyalty_settings
 SET maximum_redemption_percentage = 50
@@ -187,4 +221,29 @@ SELECT pg_temp.assert_true(
     WHERE reward.value ->> 'name' = 'Fractional fixed'
   ),
   'zero-round fixed reward stayed advertised'
+);
+
+-- The effective cap rides in the redemption result so clients can
+-- disclose it before and after the spend.
+UPDATE public.customer_loyalty SET points_balance = 300
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000012';
+
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Capped fifty', 100,
+  'discount_percentage', 50, true
+);
+
+SELECT pg_temp.assert_true(
+  (SELECT (result ->> 'max_redemption_percentage')::numeric = 50
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000012',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Capped fifty')
+   ) AS result),
+  'redemption result omitted the effective cap'
 );

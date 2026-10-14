@@ -578,13 +578,14 @@
     {
       "id": 140,
       "path": "/Users/mac/Baci-app/.worktrees/storefront-ai-d0",
-      "head": "97c44c0391ff98c4454afb107713a0d3b8f278e0",
+      "head": null,
       "class": "MISSING",
       "dirty": null,
-      "uniqueCommits": 0,
-      "uniquePaths": 0,
+      "uniqueCommits": null,
+      "uniquePaths": null,
       "pr": "unknown",
-      "notes": "manifest path absent; locked=true"
+      "notes": "manifest path absent; locked=true",
+      "manifest_head": "97c44c0391ff98c4454afb107713a0d3b8f278e0"
     },
     {
       "id": 143,

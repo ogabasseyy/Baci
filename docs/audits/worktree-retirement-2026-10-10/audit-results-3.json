@@ -192,9 +192,9 @@
       "unique_commit_count": 38,
       "changed_path_count": 219,
       "git_status_entries": 107,
-      "status_detail": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as ID 84, distinct local dirt.",
+      "status_detail": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as IDs 80 and 84, distinct local dirt.",
       "classification": "PRESERVE_DIRTY",
-      "finding": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as ID 84, distinct local dirt.",
+      "finding": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as IDs 80 and 84, distinct local dirt.",
       "pr_state": null,
       "remote_branch": "not found in live branch listing"
     },
@@ -481,9 +481,9 @@
       "unique_commit_count": 38,
       "changed_path_count": 219,
       "git_status_entries": 17,
-      "status_detail": "Same committed HEAD as ID 33, but 17 separate dirty storefront/support/IMEI files.",
+      "status_detail": "Same committed HEAD as IDs 33 and 80, but 17 separate dirty storefront/support/IMEI files.",
       "classification": "PRESERVE_DIRTY",
-      "finding": "Same committed HEAD as ID 33, but 17 separate dirty storefront/support/IMEI files.",
+      "finding": "Same committed HEAD as IDs 33 and 80, but 17 separate dirty storefront/support/IMEI files.",
       "pr_state": null,
       "remote_branch": "not found in live branch listing"
     },

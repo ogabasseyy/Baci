@@ -125,7 +125,10 @@ class CapabilityGateTests(unittest.TestCase):
                 self.assertTrue(gate._replacement_revision_ok(feature_tip, fork, cwd=repo))
                 self.assertFalse(gate._replacement_revision_ok(fork, feature_tip, cwd=repo))
                 self.assertFalse(gate._replacement_revision_ok("f" * 40, fork, cwd=repo))
-                self.assertFalse(gate._replacement_revision_ok(feature_tip, "f" * 40, cwd=repo))
+                # Squash-merged old revision: continuity is unestablishable, so
+                # an explicit re-point to a resolvable tree must not deadlock.
+                self.assertTrue(gate._replacement_revision_ok(feature_tip, "f" * 40, cwd=repo))
+                self.assertFalse(gate._replacement_revision_ok("f" * 40, "e" * 40, cwd=repo))
             finally:
                 os.chdir(previous)
             # Synthetic PR merge commit (parents: tip, feature): the baseline
@@ -184,6 +187,9 @@ class CapabilityGateTests(unittest.TestCase):
         # Date advanced but old revision carried forward: still required.
         carried = {**rereviewed, "source_revision": base["source_revision"]}
         self.assertTrue(gate.requires_register_update(carried, touched, base))
+        # Register-only claim edit retaining the old metadata: still required.
+        self.assertTrue(gate.requires_register_update(same_date, {gate.REGISTER_PATH}, base))
+        self.assertFalse(gate.requires_register_update(rereviewed, {gate.REGISTER_PATH}, base))
         # New but rejected replacement revision: still required; accepted: clear.
         ghost = {**rereviewed, "source_revision": "f" * 40}
         self.assertTrue(gate.requires_register_update(ghost, touched, base, rev_acceptable=lambda new, old: False))

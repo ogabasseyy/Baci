@@ -102,6 +102,8 @@ def classify(register_path):
             or not 1 <= len(data["capabilities"]) <= 50
             or not all(_valid_row(row) for row in data["capabilities"])
             or len({row["id"] for row in data["capabilities"]}) != len(data["capabilities"])
+            or not isinstance(data.get("review_scope", ""), str)
+            or len(data.get("review_scope", "")) > 1000
         ):
             return "broken"
         if any(

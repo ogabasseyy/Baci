@@ -3,6 +3,7 @@
 Pure path logic: map citations, filename resolution, and matching. The
 policy layer (freshness, re-review, main) lives in capability_gate.py.
 """
+import hashlib
 import os
 import re
 import subprocess
@@ -156,6 +157,64 @@ def _comparison_base(base, cwd="."):
         return candidates[0]
     older, newer = candidates
     return older if _is_ancestor(older, newer, cwd) else newer
+
+
+def _touches_unverified_refs(register, changed):
+    try:
+        refs = {_canon(ref) for row in register["capabilities"] if row.get("status") == "unverified" for ref in row["source_refs"]}
+    except (KeyError, TypeError, AttributeError):
+        return True
+    return any(_matches(p, refs) for p in changed)
+
+
+def _touches_cited_refs(register, changed):
+    """Any cited source_refs, regardless of row status.
+
+    Content-bound rows are digest-enforced, but a redigest alone (new
+    source_revision, same reviewed_at) must still count as pending re-review:
+    the digest proves the content was seen, not that the claims were reviewed.
+    """
+    try:
+        refs = {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
+    except (KeyError, TypeError, AttributeError):
+        return True
+    return any(_matches(p, refs) for p in changed)
+
+
+def _changed_refs_unbound(register, changed, cwd="."):
+    """Changed cited sources must match their blobs at the bound revision.
+
+    Ancestry alone accepts an intermediate descendant that predates the
+    reviewed edit. For every cited path this diff touches, the blob at
+    source_revision must equal the checkout copy — otherwise the recorded
+    revision does not contain the reviewed change.
+    """
+    try:
+        refs = {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
+    except (KeyError, TypeError, AttributeError):
+        return ["register references unavailable"]
+    if not (refs & set(changed or ())):
+        return []
+    revision = register.get("source_revision")
+    if not isinstance(revision, str):
+        return ["source_revision missing"]
+    failures = []
+    for path in sorted(refs & set(changed)):
+        probe = subprocess.run(
+            ["git", "-C", str(cwd), "show", f"{revision}:{path}"],
+            capture_output=True,
+        )
+        if probe.returncode != 0:
+            failures.append(f"cited change absent at source_revision: {path}")
+            continue
+        try:
+            current = Path(cwd, path).read_bytes()
+        except OSError:
+            failures.append(f"cited change missing from checkout: {path}")
+            continue
+        if hashlib.sha256(probe.stdout).hexdigest() != hashlib.sha256(current).hexdigest():
+            failures.append(f"cited change not bound at source_revision: {path}")
+    return failures
 
 
 def relevant_paths(register, cwd=".", base=None):

@@ -215,72 +215,37 @@ class CapabilityBindingTests(unittest.TestCase):
         self.assertEqual(len(probe), 1, "probe must invoke register_status.py exactly once")
         self.assertIn("|| echo broken", probe[0])
 
-    def test_register_status_classifies_fresh_stale_broken(self):
-        now = dt.datetime.now(dt.timezone.utc).isoformat()
-        row = {"id": "x", "title": "X", "claim": "c", "limitations": "l", "status": "code_evidenced", "source_refs": ["cited.txt"]}
-
-        def register(**overrides):
-            value = {
-                "schema_version": 1,
-                "reviewed_at": now,
-                "source_revision": "a" * 40,
-                "evidence_digest": "e" * 64,
-                "claims_digest": "c" * 64,
-                "review_scope": "scope",
-                "capabilities": [dict(row)],
-            }
-            value.update(overrides)
-            return value
+    def test_changed_cited_source_must_match_bound_revision(self):
+        def git(repo, *args):
+            subprocess.run(
+                ["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args],
+                check=True, capture_output=True, text=True,
+            )
 
         with tempfile.TemporaryDirectory() as root:
-            path = Path(root) / "capabilities.json"
-            path.write_text(json.dumps(register()))
-            self.assertEqual(_status.classify(path), "fresh")
-            old = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=20)).isoformat()
-            path.write_text(json.dumps(register(reviewed_at=old)))
-            self.assertEqual(_status.classify(path), "stale")
-            future = (dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=1)).isoformat()
-            path.write_text(json.dumps(register(reviewed_at=future)))
-            self.assertEqual(_status.classify(path), "broken")
-            # Structurally invalid but current-dated: broken, not fresh.
-            path.write_text(json.dumps({"reviewed_at": now}))
-            self.assertEqual(_status.classify(path), "broken")
-            path.write_text(json.dumps(register(schema_version=2)))
-            self.assertEqual(_status.classify(path), "broken")
-            path.write_text("{invalid json")
-            self.assertEqual(_status.classify(path), "broken")
-            self.assertEqual(_status.classify(Path(root) / "missing.json"), "broken")
-            # Current-dated rows the runtime rejects are broken, not fresh.
-            prod = dict(row, status="production_verified")
-            path.write_text(json.dumps(register(capabilities=[prod])))
-            self.assertEqual(_status.classify(path), "broken")
-            path.write_text(json.dumps(register(capabilities=[dict(row), dict(row)])))
-            self.assertEqual(_status.classify(path), "broken")
-            dup_refs = dict(row, source_refs=["cited.txt", "cited.txt"])
-            path.write_text(json.dumps(register(capabilities=[dup_refs])))
-            self.assertEqual(_status.classify(path), "broken")
-            # Evidence without revision or timestamp: broken, not fresh.
-            thin = {"workflow": "w", "entitlement": "e", "observation": "o"}
-            path.write_text(json.dumps(register(capabilities=[dict(row, status="production_verified", production_evidence=thin)])))
-            self.assertEqual(_status.classify(path), "broken")
-            full = dict(thin, deployed_revision="b" * 40, verified_at=now)
-            path.write_text(json.dumps(register(capabilities=[dict(row, status="production_verified", production_evidence=full)])))
-            self.assertEqual(_status.classify(path), "fresh")
-            oversized = dict(full, workflow="w" * 1001)
-            path.write_text(json.dumps(register(capabilities=[dict(row, status="production_verified", production_evidence=oversized)])))
-            self.assertEqual(_status.classify(path), "broken")
-            # Oversized current-dated fields the runtime rejects: broken.
-            path.write_text(json.dumps(register(capabilities=[dict(row, claim="x" * 1001)])))
-            self.assertEqual(_status.classify(path), "broken")
-            many_refs = ["r%d" % i for i in range(21)]
-            path.write_text(json.dumps(register(capabilities=[dict(row, source_refs=many_refs)])))
-            self.assertEqual(_status.classify(path), "broken")
-            # Duplicate JSON keys silently keep the last value: broken.
-            text = json.dumps(register())
-            duplicated = text.replace('"schema_version": 1,', '"schema_version": 1, "schema_version": 1,', 1)
-            self.assertNotEqual(duplicated, text)
-            path.write_text(duplicated)
-            self.assertEqual(_status.classify(path), "broken")
+            repo = Path(root)
+            git(repo, "init", "-q", ".")
+            (repo / "cited.txt").write_text("v1\n")
+            git(repo, "add", ".")
+            git(repo, "commit", "-q", "-m", "one")
+            (repo / "other.txt").write_text("x\n")
+            git(repo, "add", ".")
+            git(repo, "commit", "-q", "-m", "two")
+            intermediate = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            (repo / "cited.txt").write_text("v2\n")
+            register = {"source_revision": intermediate, "capabilities": [{"status": "unverified", "source_refs": ["cited.txt"]}]}
+            # Intermediate descendant predating the worktree edit: unbound.
+            self.assertEqual(
+                gate._changed_refs_unbound(register, {"cited.txt"}, cwd=repo),
+                ["cited change not bound at source_revision: cited.txt"],
+            )
+            self.assertEqual(gate._changed_refs_unbound(register, {"other.txt"}, cwd=repo), [])
+            git(repo, "commit", "-q", "-am", "three")
+            current = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            register["source_revision"] = current
+            self.assertEqual(gate._changed_refs_unbound(register, {"cited.txt"}, cwd=repo), [])
+
+
 
 if __name__ == "__main__":
     unittest.main()

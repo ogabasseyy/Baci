@@ -20,15 +20,34 @@ const positiveInteger = (value, fallback) => {
 
 const safeTimestamp = (value) => {
   const timestamp = boundedString(value, 80);
-  if (
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/.test(
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(?:Z|([+-])(\d{2}):?(\d{2}))$/.exec(
       timestamp
-    )
+    );
+  if (!match) return '';
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return '';
+  // V8 rolls impossible calendar dates over instead of rejecting them, so
+  // verify the parsed components round-trip to the input in its own zone.
+  const [, year, month, day, hour, minute, second, sign, offsetHour, offsetMinute] =
+    match;
+  const offsetMs = sign
+    ? (Number(offsetHour) * 60 + Number(offsetMinute)) *
+      60_000 *
+      (sign === '+' ? 1 : -1)
+    : 0;
+  const shifted = new Date(parsed.getTime() + offsetMs);
+  if (
+    shifted.getUTCFullYear() !== Number(year) ||
+    shifted.getUTCMonth() + 1 !== Number(month) ||
+    shifted.getUTCDate() !== Number(day) ||
+    shifted.getUTCHours() !== Number(hour) ||
+    shifted.getUTCMinutes() !== Number(minute) ||
+    shifted.getUTCSeconds() !== Number(second)
   ) {
     return '';
   }
-  const parsed = new Date(timestamp);
-  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString();
+  return parsed.toISOString();
 };
 
 const activeIssue = (issue) =>
@@ -90,7 +109,11 @@ const classifyPostHogIssueName = (value) => {
   if (/\btimed? ?out\b|\bdeadline exceeded\b|\bETIMEDOUT\b/i.test(name)) {
     return 'Timeout';
   }
-  if (/network|fetch failed|ECONN|ENOTFOUND|socket hang up/i.test(name)) {
+  if (
+    /\bnetwork\b|\bfetch failed\b|\bECONN\w*|\bENOTFOUND\b|\bsocket hang up\b/i.test(
+      name
+    )
+  ) {
     return 'Network failure';
   }
   if (/\bnull\b|\bundefined\b|cannot read propert/i.test(name)) {

@@ -78,6 +78,18 @@ describe('PostHog issue-name classification', () => {
                 aggregations: { occurrences: 4 },
                 name: 'UntimedOutputError: render failed',
               },
+              {
+                id: 'substring-network',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'InternetworkError: render failed',
+              },
+              {
+                id: 'real-network',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'fetch failed: socket hang up',
+              },
             ],
           })
         ),
@@ -96,6 +108,8 @@ describe('PostHog issue-name classification', () => {
         'PostHog error tracking issue',
         'Out of memory',
         'PostHog error tracking issue',
+        'PostHog error tracking issue',
+        'Network failure',
       ]
     );
     assert.equal(

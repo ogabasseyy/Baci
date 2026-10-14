@@ -58,16 +58,52 @@ const ABSOLUTE_URL_PATH_ROOTS = new Set([
   'var',
 ]);
 
-const isAbsoluteLocalUrlPath = (pathname) => {
+// Top-level source roots recognized inside virtual-sourcemap pathnames.
+// Anything else is treated as an absolute build path and reduced: the
+// allowlist fails closed where an absolute-root blacklist cannot
+// enumerate every system layout.
+const REPOSITORY_PATH_ROOTS = new Set([
+  'api',
+  'app',
+  'apps',
+  'backend',
+  'client',
+  'cmd',
+  'components',
+  'core',
+  'crates',
+  'frontend',
+  'functions',
+  'internal',
+  'lib',
+  'libs',
+  'mobile',
+  'modules',
+  'packages',
+  'pkg',
+  'server',
+  'services',
+  'shared',
+  'source',
+  'src',
+  'test',
+  'tests',
+  'ui',
+  'web',
+]);
+
+const isRepositoryRelativeUrlPath = (pathname) => {
   // A leading double slash is a UNC marker, not namespace structure.
-  if (pathname.startsWith('//')) return true;
+  if (pathname.startsWith('//')) return false;
   const segments = pathname
     .split('/')
     .filter((segment) => segment && segment !== '.');
   if (segments.length === 0) return false;
-  const [root] = segments;
-  if (/^[A-Za-z]:$/.test(root)) return true;
-  return ABSOLUTE_URL_PATH_ROOTS.has(root.toLowerCase());
+  const root = segments[0];
+  if (/^[A-Za-z]:$/.test(root)) return false;
+  const lower = root.toLowerCase();
+  if (ABSOLUTE_URL_PATH_ROOTS.has(lower)) return false;
+  return REPOSITORY_PATH_ROOTS.has(lower);
 };
 
 const lastSegment = (value) => {
@@ -135,9 +171,11 @@ const framePath = (source) => {
         return '';
       }
       // Virtual schemes around absolute build paths still expose local
-      // directories: basename only. Namespace-relative virtual paths are
-      // repository structure and preserved like relative paths.
-      if (isAbsoluteLocalUrlPath(pathname)) return lastSegment(pathname);
+      // directories, and only recognized repository roots are preserved:
+      // anything else reduces to the basename.
+      if (!isRepositoryRelativeUrlPath(pathname)) {
+        return lastSegment(pathname);
+      }
       return assembleRelativePath(pathname);
     }
     // Blob, data, javascript, and custom schemes are inline content or

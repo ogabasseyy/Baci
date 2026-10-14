@@ -59,6 +59,15 @@ describe('PostHog enrichment frame URIs', () => {
       },
     });
     assert.equal(upperScheme.sample.route, 'src/top.js:2');
+
+    const namespaced = await enrichDetail({
+      top_in_app_frame: {
+        function: 'handleCheckout',
+        line: 3,
+        source: 'webpack:///src/app/route.ts',
+      },
+    });
+    assert.equal(namespaced.sample.route, 'src/app/route.ts:3');
   });
 
   it('reduces virtual schemes around absolute local paths to basenames', async () => {
@@ -68,6 +77,8 @@ describe('PostHog enrichment frame URIs', () => {
       'webpack:///C%3A/Users/AliceSmith/Client/app.js',
       'webpack:///%55sers/AliceSmith/Client/app.js',
       'webpack:////server/share/AliceSmith/Client/app.js',
+      'webpack:///workspace/AliceSmith/Client/app.js',
+      'webpack:///builds/merchant-123/Baci/app.js',
     ]) {
       const enriched = await enrichDetail({
         top_in_app_frame: {
@@ -79,6 +90,12 @@ describe('PostHog enrichment frame URIs', () => {
       assert.equal(enriched.sample.route.includes('AliceSmith'), false, source);
       assert.equal(enriched.sample.route.includes('ClientA'), false, source);
       assert.equal(enriched.sample.route.includes('deploy'), false, source);
+      assert.equal(
+        enriched.sample.route.includes('merchant-123'),
+        false,
+        source
+      );
+      assert.equal(enriched.sample.route.includes('Baci'), false, source);
       assert.match(enriched.sample.route, /\.js:5$|\.ts:5$/);
     }
   });

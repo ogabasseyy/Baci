@@ -135,6 +135,41 @@ describe('PostHog remediation candidates', () => {
     assert.equal(candidates[1].lastSeen, '');
   });
 
+  it('drops impossible calendar dates instead of rolling them over', async () => {
+    const candidates = await fetchPostHogRemediationCandidates({
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            hasMore: false,
+            limit: 100,
+            offset: 0,
+            results: [
+              {
+                id: 'impossible-issue',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                first_seen: '2026-02-31T10:00:00Z',
+                last_seen: '2026-02-31T10:00:00Z',
+              },
+              {
+                id: 'leap-issue',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                first_seen: '2024-02-29T10:00:00Z',
+                last_seen: '2024-02-29T10:00:00Z',
+              },
+            ],
+          })
+        ),
+    });
+
+    assert.equal(candidates[0].firstSeen, '');
+    assert.equal(candidates[0].lastSeen, '');
+    assert.equal(candidates[1].firstSeen, '2024-02-29T10:00:00.000Z');
+    assert.equal(candidates[1].lastSeen, '2024-02-29T10:00:00.000Z');
+  });
+
   it('judges fractional occurrence aggregates against the repeat threshold', async () => {
     const candidates = await fetchPostHogRemediationCandidates({
       env: environment,

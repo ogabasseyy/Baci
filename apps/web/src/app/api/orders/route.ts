@@ -1972,6 +1972,12 @@ export async function POST(request: NextRequest) {
               // merchant rates (same fee + address) on an Idempotency-Key reuse.
               // Without it the RPC would replay the ORIGINAL order instead of
               // returning checkout_idempotency_conflict.
+              // Hash the EFFECTIVE quote selection, not the raw body: a stray
+              // selected_quote_id alongside shipping_rate_id would otherwise
+              // classify this quote-less order as quoted and drop its pin
+              // from the hash, replaying the first destination on retry.
+              selected_quote_id: resolvedSelectedQuoteId,
+              shipping_provider: resolvedShippingProvider,
               shipping_rate_id: body.shipping_rate_id,
               tax_amount: orderTaxAmount,
             }

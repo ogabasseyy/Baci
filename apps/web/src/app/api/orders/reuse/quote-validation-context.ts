@@ -4,7 +4,7 @@ import type {
 } from '@/lib/shipping/international-shipment-items';
 import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import type { OrderShippingAddressForQuote } from '@/lib/shipping/order-quote-destination';
-import { shippingCoordinatePairSchema } from '@/schemas/order-shipping-address';
+import { shippingCoordinatePairSchema } from '@/schemas/shipping-coordinate-pair';
 
 type ReuseOrderQuoteValidationContext = {
   order_items: ReturnType<typeof toInternationalQuoteValidationItemsFromOrder>;

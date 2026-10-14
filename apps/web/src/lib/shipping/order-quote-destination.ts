@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { shippingCoordinatePairSchema } from '@/schemas/order-shipping-address';
+import { shippingCoordinatePairSchema } from '@/schemas/shipping-coordinate-pair';
 import {
   matchesQuoteDestination,
   type OrderShippingAddressForQuote,

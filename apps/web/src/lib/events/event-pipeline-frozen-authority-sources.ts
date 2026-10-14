@@ -38,8 +38,10 @@ export const eventPipelineFrozenRoutes = {
   // computation; it now judges the effective shipping fee.
   // Re-pinned for reviewed canonical-cart transaction binding. Existing
   // payment/notification authority is unchanged; no service grants are added.
+  // Re-pinned for the shared-cart binding invalid_item status correction
+  // (500 -> 400, a client error); payment/notification authority unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '9052f0f0596e47dea70fec0697dec29d81712a5ff98395d49a665f9b6bd245f6',
+    'e010661c6b48bbdee27712728bee78531d843a591e7ad8d0c6989dad4af4256a',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

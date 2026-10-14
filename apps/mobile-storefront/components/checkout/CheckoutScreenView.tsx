@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { Platform } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -288,6 +289,7 @@ export function CheckoutScreenView({
         crypto={crypto}
         clearCart={clearCart}
         isProcessing={isProcessing}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
     </AddressSuggestionsProvider>
   );

@@ -9,7 +9,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { asRoute } from '@/lib/routes';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
-import { CheckoutResumeStatus } from './checkout/components/CheckoutResumeStatus';
+import { CheckoutResumeGate } from './checkout/components/CheckoutResumeStatus';
 import { CheckoutScreen } from './checkout/components/CheckoutScreen';
 import { deriveCheckoutCartModel } from './checkout/derive-checkout-cart-model';
 import { deriveCheckoutScreenModel } from './checkout/derive-checkout-screen-model';
@@ -250,24 +250,19 @@ export const CheckoutPage: React.FC = () => {
 
   if (
     (checkoutCart.length === 0 && isLoadingResumedOrder) ||
-    isAutoTriggerProcessing
+    isAutoTriggerProcessing ||
+    (checkoutCart.length === 0 && resumeOrderId && resumeOrderError)
   ) {
     return (
-      <CheckoutResumeStatus
-        status={isLoadingResumedOrder ? 'loading' : 'initializing'}
-      />
-    );
-  }
-
-  // Error state for order resumption
-  if (checkoutCart.length === 0 && resumeOrderId && resumeOrderError) {
-    return (
-      <CheckoutResumeStatus
-        status="error"
-        message={resumeOrderError}
-        onRetry={() => window.location.reload()}
-        onGoHome={() => router.push(asRoute(getHref('/')))}
+      <CheckoutResumeGate
+        cartEmpty={checkoutCart.length === 0}
+        isAutoTriggerProcessing={isAutoTriggerProcessing}
+        isLoadingResumedOrder={isLoadingResumedOrder}
         onContactSupport={() => router.push(asRoute(getHref('/contact')))}
+        onGoHome={() => router.push(asRoute(getHref('/')))}
+        onRetry={() => window.location.reload()}
+        resumeOrderError={resumeOrderError}
+        resumeOrderId={resumeOrderId}
       />
     );
   }

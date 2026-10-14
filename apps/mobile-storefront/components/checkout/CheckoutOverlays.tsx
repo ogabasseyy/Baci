@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import { CheckoutLocationPickerOverlays } from './CheckoutLocationPickerOverlays';
 import { CheckoutPaymentOverlays } from './CheckoutPaymentOverlays';
 import { RedvaultOrderReview } from './redvault/RedvaultOrderReview';
@@ -15,6 +14,7 @@ export function CheckoutOverlays({
   crypto,
   clearCart,
   isProcessing,
+  removeClippedSubviews,
 }: {
   redvaultReview: Parameters<typeof RedvaultOrderReview>[0]['input'];
   closeRedvaultReview: () => void;
@@ -30,6 +30,7 @@ export function CheckoutOverlays({
   crypto: Parameters<typeof CheckoutPaymentOverlays>[0]['crypto'];
   clearCart: Parameters<typeof CheckoutPaymentOverlays>[0]['clearCart'];
   isProcessing: boolean;
+  removeClippedSubviews: boolean;
 }) {
   return (
     <>
@@ -40,7 +41,7 @@ export function CheckoutOverlays({
       <CheckoutLocationPickerOverlays
         colors={colors}
         isDark={isDark}
-        removeClippedSubviews={Platform.OS === 'android'}
+        removeClippedSubviews={removeClippedSubviews}
         shipping={shipping}
         watchedCity={watchedCity}
         watchedState={watchedState}

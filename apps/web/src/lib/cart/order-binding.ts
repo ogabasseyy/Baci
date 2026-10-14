@@ -1,13 +1,24 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export const ORDER_BINDING_VARIANTS = [
-  'base',
-  'savings',
-  'quiz_voucher',
-  'discount_code',
-] as const;
+import {
+  parseBoundOrder as parseOrder,
+  parseOrderBindingReceipt as parseReceipt,
+} from './order-binding-parsing';
+import {
+  type BoundOrder,
+  ORDER_BINDING_VARIANTS,
+  type OrderBindingErrorCode,
+  type OrderBindingReceipt,
+  type OrderBindingVariant,
+} from './order-binding-types';
 
-export type OrderBindingVariant = (typeof ORDER_BINDING_VARIANTS)[number];
+export type {
+  BoundOrder,
+  OrderBindingErrorCode,
+  OrderBindingReceipt,
+  OrderBindingVariant,
+} from './order-binding-types';
+export { ORDER_BINDING_VARIANTS };
 
 /** Direct order RPC behind each binding variant. Same dispatch, one rule. */
 export const ORDER_BINDING_RPC_NAMES: Record<OrderBindingVariant, string> = {
@@ -31,60 +42,6 @@ export function selectOrderBindingVariant(input: {
   if (input.discountCodeId) return 'discount_code';
   return 'base';
 }
-
-/**
- * Order row mirrored from the inner RPC in snake_case so route and
- * dispatch continuations read it like a direct RPC row.
- * `idempotency_replayed` tracks the binding: a replayed binding never
- * created a new order.
- */
-export interface BoundOrder {
-  id: string;
-  order_number: string;
-  tracking_token: string | null;
-  subtotal: number;
-  shipping_fee: number;
-  discount_amount: number;
-  tax_amount: number;
-  total: number;
-  customer_id: string | null;
-  customer_email: string;
-  customer_name: string;
-  customer_phone: string | null;
-  payment_status: string;
-  shipping_status: string;
-  payment_method: string;
-  shipping_address: unknown;
-  merchant_id: string;
-  tax_basis: string;
-  gift_wrapping_fee: number;
-  idempotency_replayed: boolean;
-  // Savings-variant inner columns. Present only on savings receipts;
-  // the route requires them to report the redemption instead of 409.
-  savings_redemption_success?: boolean;
-  savings_redeemed_amount?: number | null;
-  savings_goal_id?: string | null;
-  savings_redemption_id?: string | null;
-  savings_goal_status?: string | null;
-}
-
-export interface OrderBindingReceipt {
-  sessionId: string;
-  cartId: string;
-  merchantId: string;
-  checkoutGeneration: number;
-  cartVersionReviewed: number;
-  variant: OrderBindingVariant;
-}
-
-export type OrderBindingErrorCode =
-  | 'refresh_required'
-  | 'not_found'
-  | 'expired'
-  | 'unauthorized'
-  | 'invalid_item'
-  | 'order_rejected'
-  | 'temporarily_unavailable';
 
 export type SubmitCartBoundOrderResult =
   | {
@@ -127,96 +84,6 @@ const BINDING_ERROR_CODES: Record<string, OrderBindingErrorCode> = {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
-}
-
-function parseOrder(value: unknown): BoundOrder | null {
-  if (!isRecord(value)) return null;
-  if (
-    typeof value.id !== 'string' ||
-    !value.id ||
-    typeof value.order_number !== 'string' ||
-    !value.order_number ||
-    typeof value.subtotal !== 'number' ||
-    typeof value.shipping_fee !== 'number' ||
-    typeof value.discount_amount !== 'number' ||
-    typeof value.tax_amount !== 'number' ||
-    typeof value.total !== 'number' ||
-    typeof value.customer_email !== 'string' ||
-    typeof value.customer_name !== 'string' ||
-    typeof value.payment_status !== 'string' ||
-    typeof value.shipping_status !== 'string' ||
-    typeof value.payment_method !== 'string' ||
-    typeof value.merchant_id !== 'string' ||
-    typeof value.tax_basis !== 'string' ||
-    typeof value.gift_wrapping_fee !== 'number'
-  ) {
-    return null;
-  }
-  return {
-    customer_email: value.customer_email,
-    customer_id:
-      typeof value.customer_id === 'string' ? value.customer_id : null,
-    customer_name: value.customer_name,
-    customer_phone:
-      typeof value.customer_phone === 'string' ? value.customer_phone : null,
-    discount_amount: value.discount_amount,
-    gift_wrapping_fee: value.gift_wrapping_fee,
-    id: value.id,
-    idempotency_replayed: value.idempotency_replayed === true,
-    merchant_id: value.merchant_id,
-    order_number: value.order_number,
-    payment_method: value.payment_method,
-    payment_status: value.payment_status,
-    ...(typeof value.savings_redemption_success === 'boolean'
-      ? { savings_redemption_success: value.savings_redemption_success }
-      : {}),
-    ...(typeof value.savings_redeemed_amount === 'number'
-      ? { savings_redeemed_amount: value.savings_redeemed_amount }
-      : {}),
-    ...(typeof value.savings_goal_id === 'string'
-      ? { savings_goal_id: value.savings_goal_id }
-      : {}),
-    ...(typeof value.savings_redemption_id === 'string'
-      ? { savings_redemption_id: value.savings_redemption_id }
-      : {}),
-    ...(typeof value.savings_goal_status === 'string'
-      ? { savings_goal_status: value.savings_goal_status }
-      : {}),
-    shipping_address: value.shipping_address ?? null,
-    shipping_fee: value.shipping_fee,
-    shipping_status: value.shipping_status,
-    subtotal: value.subtotal,
-    tax_amount: value.tax_amount,
-    tax_basis: value.tax_basis,
-    total: value.total,
-    tracking_token:
-      typeof value.tracking_token === 'string' ? value.tracking_token : null,
-  };
-}
-
-function parseReceipt(value: unknown): OrderBindingReceipt | null {
-  if (!isRecord(value)) return null;
-  if (
-    typeof value.sessionId !== 'string' ||
-    typeof value.cartId !== 'string' ||
-    typeof value.merchantId !== 'string' ||
-    typeof value.checkout_generation !== 'number' ||
-    !Number.isInteger(value.checkout_generation) ||
-    typeof value.cartVersionReviewed !== 'number' ||
-    !Number.isInteger(value.cartVersionReviewed) ||
-    typeof value.variant !== 'string' ||
-    !(ORDER_BINDING_VARIANTS as readonly string[]).includes(value.variant)
-  ) {
-    return null;
-  }
-  return {
-    cartId: value.cartId,
-    cartVersionReviewed: value.cartVersionReviewed,
-    checkoutGeneration: value.checkout_generation,
-    merchantId: value.merchantId,
-    sessionId: value.sessionId,
-    variant: value.variant as OrderBindingVariant,
-  };
 }
 
 /**

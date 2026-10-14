@@ -2,24 +2,18 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { AGENTIC_PAYMENT_METHOD_PAY_ON_DELIVERY } from '@/config/agentic-payment-methods';
 import type { calculateCheckoutSession } from '@/lib/agentic/checkout';
 import type { AgenticCheckoutBuyer } from '@/lib/agentic/checkout-completion-response';
-import {
-  createAgenticCheckoutOrder,
-  sendAgenticOrderCreatedWebhook,
-} from '@/lib/agentic/checkout-order-dispatch';
+import { sendAgenticOrderCreatedWebhook } from '@/lib/agentic/checkout-order-dispatch';
 import { buildOrderFinalizationClaim } from '@/lib/agentic/checkout-order-finalization-claim';
 import {
   claimPayOnDeliveryFinalization,
   getMarkedPayOnDeliveryFinalizationOrderId,
   recordPayOnDeliveryOrderCreated,
 } from '@/lib/agentic/checkout-pay-on-delivery-claim';
-import {
-  compensatePayOnDeliveryFinalizationFailure,
-  releasePayOnDeliveryClaimSafely,
-} from '@/lib/agentic/checkout-pay-on-delivery-compensation';
+import { compensatePayOnDeliveryFinalizationFailure } from '@/lib/agentic/checkout-pay-on-delivery-compensation';
+import { createPayOnDeliveryOrder } from '@/lib/agentic/checkout-pay-on-delivery-create-order';
 import {
   buildPayOnDeliveryCheckoutResponse,
   buildPayOnDeliveryCompletedSessionUpdate,
-  buildPayOnDeliveryOrderPayload,
 } from '@/lib/agentic/checkout-pay-on-delivery-payloads';
 import { handlePayOnDeliverySessionCompletionFailure } from '@/lib/agentic/checkout-pay-on-delivery-session-completion-failure';
 import type { AgenticMetadata } from '@/lib/agentic/checkout-storage';
@@ -28,7 +22,6 @@ import {
   buildStoredAgenticIdempotencyResponse,
   persistAgenticIdempotencyResponse,
 } from '@/lib/agentic/idempotency-response-storage';
-import { revalidateAgenticOrderProductCaches } from '@/lib/agentic/revalidate-agentic-order-product-caches';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 
@@ -111,77 +104,20 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
     'metadata' in claim && claim.metadata ? claim.metadata : metadata;
   let orderId = getMarkedPayOnDeliveryFinalizationOrderId(finalizationMetadata);
   if (!orderId) {
-    const orderPayload = buildPayOnDeliveryOrderPayload({
+    const created = await createPayOnDeliveryOrder({
       buyer,
-      session: orderSession,
-      sessionCalc: orderSessionCalc,
-    });
-    let orderResult: Awaited<ReturnType<typeof createAgenticCheckoutOrder>>;
-    try {
-      orderResult = await createAgenticCheckoutOrder(orderPayload, supabase);
-    } catch (error) {
-      await releasePayOnDeliveryClaimSafely({
-        finalizationClaim,
-        merchantId,
-        metadata: finalizationMetadata,
-        orderError: error,
-        sessionId,
-        supabase,
-      });
-      logger.error({
-        error: sanitizeForLog(error),
-        message: 'Pay-on-delivery order creation threw',
-        sessionId: sanitizeForLog(sessionId),
-      });
-      return respond({ error: 'Order creation failed' }, 500);
-    }
-
-    if (!orderResult.ok) {
-      await releasePayOnDeliveryClaimSafely({
-        finalizationClaim,
-        merchantId,
-        metadata: finalizationMetadata,
-        orderError: orderResult.error ?? orderResult.statusText,
-        sessionId,
-        supabase,
-      });
-      logger.error({
-        error: sanitizeForLog(orderResult.error ?? orderResult.statusText),
-        message: 'Pay-on-delivery order creation failed',
-        sessionId: sanitizeForLog(sessionId),
-      });
-      return respond({ error: 'Order creation failed' }, 500);
-    }
-
-    const createdOrderId = orderResult.orderId;
-    if (!createdOrderId) {
-      await releasePayOnDeliveryClaimSafely({
-        finalizationClaim,
-        merchantId,
-        metadata: finalizationMetadata,
-        orderError: 'Missing order id',
-        sessionId,
-        supabase,
-      });
-      logger.error({
-        message: 'Pay-on-delivery order creation response omitted order id',
-        sessionId: sanitizeForLog(sessionId),
-      });
-      return respond({ error: 'Order creation failed' }, 500);
-    }
-    orderId = createdOrderId;
-    await revalidateAgenticOrderProductCaches({
+      finalizationClaim,
+      finalizationMetadata,
       merchantId,
-      productIds: orderSessionCalc.lineItems.map(
-        (lineItem) => lineItem.item.product_id
-      ),
+      orderSession,
+      orderSessionCalc,
       sessionId,
-      slugLookupFailureMessage:
-        'Failed to look up product slugs for PDP cache revalidation after agentic pay-on-delivery order creation',
-      outerFailureMessage:
-        'Failed to revalidate product caches after agentic pay-on-delivery order creation',
       supabase,
     });
+    if (!created.ok) {
+      return respond({ error: 'Order creation failed' }, 500);
+    }
+    orderId = created.orderId;
     const marker = await recordPayOnDeliveryOrderCreated({
       finalizationClaim,
       merchantId,

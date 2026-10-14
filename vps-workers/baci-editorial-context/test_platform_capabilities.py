@@ -188,8 +188,15 @@ class CapabilityContextTests(unittest.TestCase):
         self.assertGreaterEqual(len(tools), 4, f"map gateway row must name its tools: {row[:120]}")
         manifest = manifest_path.read_text()
         self.assertIn(f"CONNECTOR_MANIFEST_VERSION = '{version}'", manifest)
+        manifest_tools = set(re.findall(r"name:\s*'([a-z]+\.[a-z]+)'", manifest))
+        self.assertGreaterEqual(len(manifest_tools), 1)
         for tool in sorted(tools):
-            self.assertIn(f"name: '{tool}'", manifest, f"map-advertised tool {tool} missing from the manifest")
+            self.assertIn(tool, manifest_tools, f"map-advertised tool {tool} missing from the manifest")
+        self.assertEqual(
+            tools, manifest_tools,
+            f"map advertises {sorted(tools)} but the manifest exposes {sorted(manifest_tools)}; "
+            "a new tool silently breaks the map's exact-count claim",
+        )
 
     def test_missing_or_malformed_evidence_digest_fails_closed(self):
         for bad in (None, "xyz", "e" * 63):

@@ -43,10 +43,14 @@ export function OrderDetailsItemsCard({
         const imageUrl = item.display_image_url ?? item.image_url;
         const isLastItem = index === items.length - 1;
 
+        // The row is a View with separate press targets: nesting the
+        // copy control inside the select pressable would stack two
+        // buttons (a focus/voice-control hazard on web) and
+        // double-trigger without stopPropagation, which native
+        // responder events do not guarantee.
         return (
-          <Pressable
+          <View
             key={item.id}
-            onPress={() => onSelectItem(item)}
             style={[
               styles.itemRow,
               !isLastItem && {
@@ -55,125 +59,133 @@ export function OrderDetailsItemsCard({
               },
             ]}
           >
-            <View
-              style={[
-                styles.itemImagePlaceholder,
-                { backgroundColor: colors.backgroundLight },
-              ]}
+            <Pressable
+              onPress={() => onSelectItem(item)}
+              style={styles.itemRowPressable}
             >
-              {imageUrl ? (
-                <SafeImage
-                  source={{ uri: imageUrl }}
-                  style={styles.itemImage}
-                />
-              ) : (
-                <Ionicons
-                  color={colors.textMuted}
-                  name="image-outline"
-                  size={24}
-                />
-              )}
-            </View>
-            <View style={styles.itemDetails}>
-              <Text
-                numberOfLines={2}
-                style={[styles.itemName, { color: colors.text }]}
+              <View
+                style={[
+                  styles.itemImagePlaceholder,
+                  { backgroundColor: colors.backgroundLight },
+                ]}
               >
-                {item.name}
-              </Text>
-              {conditionLabel ? (
-                <Text style={[styles.itemCondition, { color: colors.primary }]}>
-                  Condition: {conditionLabel}
-                </Text>
-              ) : null}
-              {(() => {
-                // The stored snapshot outlives the catalog row: when the
-                // offer was deleted after purchase, offer_id no longer
-                // resolves but the snapshotted grade/notes remain the
-                // creation-time truth, so render them without a ref.
-                const offerParts = [
-                  item.offer_grade ? `Grade ${item.offer_grade}` : null,
-                  item.offer_condition_notes ?? null,
-                ].filter(Boolean);
-                return offerParts.length > 0 ? (
-                  <Text
-                    style={[
-                      styles.itemVariant,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    Offer: {offerParts.join(' · ')}
-                  </Text>
-                ) : null;
-              })()}
-              {item.offer_id ? (
-                // Truncated for scannability: an 8-char prefix can collide
-                // across offers, so the full id stays one tap away via
-                // copy (and in the accessibility label for screen readers).
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Copy full offer reference ${String(item.offer_id)}`}
-                  onPress={(event) => {
-                    // Web targets bubble presses to the row handler; native
-                    // does not, so the optional call is a no-op there.
-                    event?.stopPropagation?.();
-                    // Clipboard writes can reject (permissions, web denial):
-                    // surface a failure instead of failing silent on a ref
-                    // the truncated label never confirms.
-                    copyOfferRef(String(item.offer_id)).catch(() => {
-                      Alert.alert(
-                        'Copy failed',
-                        'Could not copy the offer reference. Please try again.'
-                      );
-                    });
-                  }}
-                  style={styles.offerRefRow}
-                >
-                  <Text
-                    style={[
-                      styles.itemVariant,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    ref {String(item.offer_id).slice(0, 8)}
-                  </Text>
-                  <Ionicons
-                    color={colors.textSecondary}
-                    name="copy-outline"
-                    size={12}
+                {imageUrl ? (
+                  <SafeImage
+                    source={{ uri: imageUrl }}
+                    style={styles.itemImage}
                   />
-                </Pressable>
-              ) : null}
-              {item.variant_name ? (
+                ) : (
+                  <Ionicons
+                    color={colors.textMuted}
+                    name="image-outline"
+                    size={24}
+                  />
+                )}
+              </View>
+              <View style={styles.itemDetails}>
+                <Text
+                  numberOfLines={2}
+                  style={[styles.itemName, { color: colors.text }]}
+                >
+                  {item.name}
+                </Text>
+                {conditionLabel ? (
+                  <Text
+                    style={[styles.itemCondition, { color: colors.primary }]}
+                  >
+                    Condition: {conditionLabel}
+                  </Text>
+                ) : null}
+                {(() => {
+                  // The stored snapshot outlives the catalog row: when the
+                  // offer was deleted after purchase, offer_id no longer
+                  // resolves but the snapshotted grade/notes remain the
+                  // creation-time truth, so render them without a ref.
+                  const offerParts = [
+                    item.offer_grade ? `Grade ${item.offer_grade}` : null,
+                    item.offer_condition_notes ?? null,
+                  ].filter(Boolean);
+                  return offerParts.length > 0 ? (
+                    <Text
+                      style={[
+                        styles.itemVariant,
+                        { color: colors.textSecondary },
+                      ]}
+                    >
+                      Offer: {offerParts.join(' · ')}
+                    </Text>
+                  ) : null;
+                })()}
+                {item.variant_name ? (
+                  <Text
+                    style={[
+                      styles.itemVariant,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
+                    {item.variant_name}
+                  </Text>
+                ) : null}
+                {item.product_id ? (
+                  <Text style={[styles.itemRef, { color: colors.textMuted }]}>
+                    SKU:{' '}
+                    {item.product_id.length > 8
+                      ? `${item.product_id.slice(0, 8)}...`
+                      : item.product_id}
+                  </Text>
+                ) : null}
+                <View style={styles.itemPriceRow}>
+                  <Text
+                    style={[styles.itemQty, { color: colors.textSecondary }]}
+                  >
+                    x{item.quantity}
+                  </Text>
+                  <Text style={[styles.itemPrice, { color: colors.text }]}>
+                    {formatPrice(item.price)}
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                color={colors.textMuted}
+                name="chevron-forward"
+                size={20}
+              />
+            </Pressable>
+            {item.offer_id ? (
+              // Truncated for scannability: an 8-char prefix can collide
+              // across offers, so the full id stays one tap away via
+              // copy (and in the accessibility label for screen
+              // readers). A sibling of the select pressable, so no
+              // stopPropagation is needed.
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Copy full offer reference ${String(item.offer_id)}`}
+                onPress={() => {
+                  // Clipboard writes can reject (permissions, web
+                  // denial): surface a failure instead of failing
+                  // silent on a ref the truncated label never confirms.
+                  copyOfferRef(String(item.offer_id)).catch(() => {
+                    Alert.alert(
+                      'Copy failed',
+                      'Could not copy the offer reference. Please try again.'
+                    );
+                  });
+                }}
+                style={[styles.offerRefRow, { marginTop: 0 }]}
+              >
                 <Text
                   style={[styles.itemVariant, { color: colors.textSecondary }]}
                 >
-                  {item.variant_name}
+                  ref {String(item.offer_id).slice(0, 8)}
                 </Text>
-              ) : null}
-              {item.product_id ? (
-                <Text style={[styles.itemRef, { color: colors.textMuted }]}>
-                  SKU:{' '}
-                  {item.product_id.length > 8
-                    ? `${item.product_id.slice(0, 8)}...`
-                    : item.product_id}
-                </Text>
-              ) : null}
-              <View style={styles.itemPriceRow}>
-                <Text style={[styles.itemQty, { color: colors.textSecondary }]}>
-                  x{item.quantity}
-                </Text>
-                <Text style={[styles.itemPrice, { color: colors.text }]}>
-                  {formatPrice(item.price)}
-                </Text>
-              </View>
-            </View>
-            <Ionicons
-              color={colors.textMuted}
-              name="chevron-forward"
-              size={20}
-            />
-          </Pressable>
+                <Ionicons
+                  color={colors.textSecondary}
+                  name="copy-outline"
+                  size={12}
+                />
+              </Pressable>
+            ) : null}
+          </View>
         );
       })}
     </View>

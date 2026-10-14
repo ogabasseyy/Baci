@@ -21,6 +21,7 @@ DECLARE
   v_definition text;
   v_updated text;
   v_before text;
+  v_sibling_def text;
 BEGIN
   SELECT function_definition.oid
   INTO v_function_oid
@@ -42,6 +43,37 @@ BEGIN
   IF v_function_oid IS NULL THEN
     RAISE EXCEPTION 'storefront_order_function_not_found';
   END IF;
+
+  -- Fail closed when a sibling entrypoint neither carries the offer
+  -- staging nor delegates p_items untouched to the patched function.
+  -- Only one candidate is patched (LIMIT 1 above), so a
+  -- non-delegating sibling would otherwise drop offer_id silently on
+  -- its path. The replay suite pins the same invariant in
+  -- storefront_order_offer_both_entrypoints.sql; this pins it at
+  -- deploy time against the live definitions, on first apply and on
+  -- reruns alike.
+  FOR v_sibling_def IN
+    SELECT pg_catalog.pg_get_functiondef(function_definition.oid)
+    FROM pg_catalog.pg_proc AS function_definition
+    JOIN pg_catalog.pg_namespace AS function_schema
+      ON function_schema.oid = function_definition.pronamespace
+    WHERE function_schema.nspname = 'private'
+      AND function_definition.proname IN (
+        'create_storefront_order',
+        'create_storefront_order_unchecked'
+      )
+      AND function_definition.pronargs = 24
+      AND function_definition.oid <> v_function_oid
+  LOOP
+    IF strpos(lower(v_sibling_def), 'offer_id') = 0
+      AND (
+        strpos(v_sibling_def, 'create_storefront_order_unchecked(') = 0
+        OR v_sibling_def ~* 'insert\s+into[^;]*order_items'
+      )
+    THEN
+      RAISE EXCEPTION 'storefront_order_offer_sibling_not_delegating';
+    END IF;
+  END LOOP;
 
   SELECT pg_catalog.pg_get_functiondef(v_function_oid) INTO v_definition;
 

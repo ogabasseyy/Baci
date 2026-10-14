@@ -13,6 +13,11 @@
  * An undefined merge result (neither side chose, e.g. legacy persisted
  * lines) is opt-out by contract: fee math, the toggle display/flip, and
  * persistence all treat it as falsy, so it can never charge silently.
+ * A merchant that explicitly disabled shipping insurance never defaults
+ * lines on: the line-item toggles hide when the setting is off, so a
+ * default-on line would charge a fee the shopper cannot see or remove.
+ * Callers without access to the live setting omit it and keep the
+ * slug-scoped default.
  */
 export function resolveAddedLineAssurance(
   incoming: boolean | undefined,
@@ -21,6 +26,7 @@ export function resolveAddedLineAssurance(
     smartCartProEnabled: boolean;
     merchantSlug: string | null | undefined;
     hasQuizVoucher?: boolean;
+    shippingInsuranceEnabled?: boolean;
   }
 ): boolean | undefined {
   if (policy.hasQuizVoucher && incoming === undefined) return false;
@@ -31,12 +37,14 @@ export function resolveAddedLineAssurance(
 function resolveAssuranceDefault(policy: {
   smartCartProEnabled: boolean;
   merchantSlug: string | null | undefined;
+  shippingInsuranceEnabled?: boolean;
 }): boolean {
   // Slugs arrive from URL route params and build config, neither of which
   // guarantees lowercase; compare case-insensitively so a casing variant
   // cannot silently disable the intended default.
   return (
     policy.smartCartProEnabled &&
-    policy.merchantSlug?.toLowerCase() === 'ogabassey'
+    policy.merchantSlug?.toLowerCase() === 'ogabassey' &&
+    policy.shippingInsuranceEnabled !== false
   );
 }

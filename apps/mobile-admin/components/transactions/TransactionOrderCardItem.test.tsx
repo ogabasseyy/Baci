@@ -95,16 +95,17 @@ describe('TransactionOrderCardItem', () => {
     total: 500000,
   };
 
-  function renderItem() {
+  function renderItem(onOpenEditor = vi.fn()) {
     render(
       <TransactionOrderCardItem
         colors={colors}
         formatCurrency={(amount) => `₦${amount.toLocaleString('en-NG')}`}
         item={item}
-        onOpenEditor={vi.fn()}
+        onOpenEditor={onOpenEditor}
         order={order}
       />
     );
+    return onOpenEditor;
   }
 
   beforeEach(() => {
@@ -137,5 +138,21 @@ describe('TransactionOrderCardItem', () => {
         expect.stringContaining('Could not copy')
       );
     });
+  });
+
+  it('does not open the editor when the sibling copy control is pressed', async () => {
+    const onOpenEditor = renderItem();
+
+    fireEvent.click(screen.getByText('Offer 55555555'));
+
+    await vi.waitFor(() => {
+      expect(mocks.setStringAsync).toHaveBeenCalledWith(
+        '55555555-5555-4555-8555-555555555555'
+      );
+    });
+    // The copy control is a sibling of the row pressable (not nested),
+    // so the copy press must never double-trigger the editor — on web
+    // targets where presses bubble or on native.
+    expect(onOpenEditor).not.toHaveBeenCalled();
   });
 });

@@ -45,17 +45,18 @@ describe('resolveAddedLineAssurance', () => {
       resolveAddedLineAssurance(undefined, undefined, fixture.policy)
     ).toBe(fixture.expected);
   });
-  it.each(['Ogabassey', 'OGABASSEY', 'oGaBaSsEy'])(
-    'matches the Ogabassey default case-insensitively: %s',
-    (merchantSlug) => {
-      expect(
-        resolveAddedLineAssurance(undefined, undefined, {
-          smartCartProEnabled: true,
-          merchantSlug,
-        })
-      ).toBe(true);
-    }
-  );
+  it.each([
+    'Ogabassey',
+    'OGABASSEY',
+    'oGaBaSsEy',
+  ])('matches the Ogabassey default case-insensitively: %s', (merchantSlug) => {
+    expect(
+      resolveAddedLineAssurance(undefined, undefined, {
+        smartCartProEnabled: true,
+        merchantSlug,
+      })
+    ).toBe(true);
+  });
   it.each([
     { incoming: undefined, existing: undefined, expected: false },
     {
@@ -76,5 +77,37 @@ describe('resolveAddedLineAssurance', () => {
         hasQuizVoucher: true,
       })
     ).toBe(expected);
+  });
+  it.each([
+    { incoming: undefined, existing: undefined, expected: false },
+    { incoming: true, existing: undefined, expected: true },
+    { incoming: false, existing: undefined, expected: false },
+    {
+      incoming: undefined,
+      existing: { hasAssurance: true },
+      expected: true,
+    },
+  ])('never defaults new lines on when insurance is disabled: %o', ({
+    incoming,
+    existing,
+    expected,
+  }) => {
+    expect(
+      resolveAddedLineAssurance(incoming, existing, {
+        ...policy,
+        shippingInsuranceEnabled: false,
+      })
+    ).toBe(expected);
+  });
+  it.each([
+    true,
+    undefined,
+  ])('keeps the default when insurance is enabled or unknown: %s', (shippingInsuranceEnabled) => {
+    expect(
+      resolveAddedLineAssurance(undefined, undefined, {
+        ...policy,
+        shippingInsuranceEnabled,
+      })
+    ).toBe(true);
   });
 });

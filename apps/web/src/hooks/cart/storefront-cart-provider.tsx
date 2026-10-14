@@ -1,32 +1,28 @@
 'use client';
 
-import {
-  resolveAddedLineAssurance,
-  resolveDefaultVariantSelection,
-} from '@baci/shared/lib';
+import { resolveDefaultVariantSelection } from '@baci/shared/lib';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
 import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { CartContext } from './cart-context';
+import { applyStorefrontCartLineAdd } from './cart-line-add';
 import {
-  capAddedSimpleLineQuantity,
   capUpdatedSimpleLineQuantity,
   resolveSimpleLineAddCaps,
 } from './cart-stock-caps';
 import {
   DEFAULT_ASSURANCE_RATE,
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
-  generateCartItemId,
   getMerchantSlugFromStorage,
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
 } from './cart-storage';
 import type { AddToCartOptions, CartContextType, CartItem } from './cart-types';
-import { findMergingCartLineIndex } from './find-merging-cart-line';
 import { getMerchantCartState } from './merchant-cart-storage';
 import {
   applyValidationResults,
@@ -76,6 +72,11 @@ export function StorefrontCartProvider({
   const [showUpsell, setShowUpsell] = useState(false);
   const upsellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidatedCartHashRef = useRef('');
+  // Merchant context is the same source the line items use for the
+  // shipping-insurance toggle, so the add-time default can never charge
+  // a fee the toggle hides. Null outside a merchant provider (tests,
+  // non-shell usages), where the slug-scoped default is preserved.
+  const merchantContext = useMerchantSafe();
 
   // Re-sync the slug + cart when the merchant slug prop changes (after the
   // initial hydration). Adjusting during render avoids the stale frame a
@@ -397,100 +398,40 @@ export function StorefrontCartProvider({
       return;
     }
 
+    // The add-time assurance default must match the toggle the line
+    // items render: they hide it unless the merchant context matches
+    // the cart merchant and shipping insurance is enabled, so a
+    // definite slug mismatch forces the default off rather than
+    // charging a fee with no removal control.
+    const contextMerchant = merchantContext?.merchant;
+    const shippingInsuranceEnabled =
+      contextMerchant?.slug != null &&
+      merchantSlugRef.current != null &&
+      contextMerchant.slug !== merchantSlugRef.current
+        ? false
+        : contextMerchant?.feature_settings?.shipping_insurance_enabled;
+
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
-      const cartItemId = generateCartItemId(
-        productForCart.id,
-        normalizedOptions
-      );
-      const existingIndex = findMergingCartLineIndex(
+      const result = applyStorefrontCartLineAdd({
         previousCart,
         product,
-        normalizedOptions
-      );
-      let result: CartItem[];
-      if (existingIndex >= 0) {
-        const nextCart = [...previousCart];
-        const existingItem = nextCart[existingIndex];
-        // The merged line may only take remaining pool headroom outside
-        // its siblings.
-        const capped = capAddedSimpleLineQuantity({
-          caps: addCaps,
-          cart: previousCart,
-          productId: productForCart.id,
-          excludeIndex: existingIndex,
-          quantity: existingItem.quantity + quantity,
-        });
-        if ('keepPrevious' in capped) {
-          return previousCart;
-        }
-        nextCart[existingIndex] = {
-          ...existingItem,
-          quantity: capped.quantity,
-          cartItemId: existingItem.cartItemId || cartItemId,
-          hasAssurance: resolveAddedLineAssurance(
-            normalizedOptions?.hasAssurance,
-            existingItem,
-            {
-              smartCartProEnabled: enableSmartCartPro,
-              merchantSlug: merchantSlugRef.current,
-              hasQuizVoucher: Boolean(
-                normalizedOptions?.quizAwardId ||
-                  normalizedOptions?.quizVoucherToken
-              ),
-            }
+        productForCart,
+        normalizedOptions,
+        quantity,
+        caps: addCaps,
+        assurance: {
+          smartCartProEnabled: enableSmartCartPro,
+          merchantSlug: merchantSlugRef.current,
+          hasQuizVoucher: Boolean(
+            normalizedOptions?.quizAwardId ||
+              normalizedOptions?.quizVoucherToken
           ),
-        };
-        result = nextCart;
-      } else {
-        // The new line may only take remaining pool headroom.
-        const capped = capAddedSimpleLineQuantity({
-          caps: addCaps,
-          cart: previousCart,
-          productId: productForCart.id,
-          quantity,
-        });
-        if ('keepPrevious' in capped) {
-          return previousCart;
-        }
-        result = [
-          ...previousCart,
-          {
-            ...productForCart,
-            cartItemId,
-            quantity: capped.quantity,
-            variantId: normalizedOptions?.variantId,
-            variantAttributes: normalizedOptions?.variantAttributes,
-            selectedColor: normalizedOptions?.color,
-            selectedColorValue: normalizedOptions?.colorValue,
-            secondaryColor: normalizedOptions?.secondaryColor,
-            secondaryColorValue: normalizedOptions?.secondaryColorValue,
-            selectedStorage: normalizedOptions?.storage,
-            condition: normalizedOptions?.condition as
-              | 'new'
-              | 'used'
-              | 'open_box'
-              | 'refurbished'
-              | undefined,
-            offerId: normalizedOptions?.offerId,
-            quizAwardId: normalizedOptions?.quizAwardId,
-            quizVoucherToken: normalizedOptions?.quizVoucherToken,
-            negotiationStatus: 'none',
-            hasAssurance: resolveAddedLineAssurance(
-              normalizedOptions?.hasAssurance,
-              undefined,
-              {
-                smartCartProEnabled: enableSmartCartPro,
-                merchantSlug: merchantSlugRef.current,
-                hasQuizVoucher: Boolean(
-                  normalizedOptions?.quizAwardId ||
-                    normalizedOptions?.quizVoucherToken
-                ),
-              }
-            ),
-            assuranceRate: DEFAULT_ASSURANCE_RATE,
-          },
-        ];
+          shippingInsuranceEnabled,
+        },
+      });
+      if (result === previousCart) {
+        return previousCart;
       }
 
       // Adding/merging a line changes the cart composition, so an active

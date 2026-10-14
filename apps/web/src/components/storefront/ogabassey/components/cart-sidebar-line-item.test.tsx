@@ -171,4 +171,24 @@ describe('CartSidebarLineItem', () => {
 
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
+
+  it('keeps the removal control for an assured line when insurance is off', () => {
+    // The merchant disabled the setting after the line was assured (or
+    // the line restored from storage): the fee still charges, so the
+    // toggle must stay visible as a removal control.
+    const { onToggleAssurance } = setup(
+      makeItem({ hasAssurance: true }),
+      { merchantSlug: 'ogabassey', shippingInsuranceEnabled: false }
+    );
+
+    expect(screen.getByRole('checkbox')).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(onToggleAssurance).toHaveBeenCalledWith('line-1');
+  });
+
+  it('hides assurance for an unassured line when insurance is off', () => {
+    setup(makeItem(), { shippingInsuranceEnabled: false });
+
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
 });

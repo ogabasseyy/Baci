@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MerchantContext } from '@/hooks/merchant/merchant-context';
+import type { MerchantContextType } from '@/hooks/merchant/types';
 import { useCart } from './cart-context';
 import { StorefrontCartProvider } from './storefront-cart-provider';
 
@@ -209,5 +211,55 @@ describe('StorefrontCartProvider', () => {
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
     act(() => result.current.addToCart(mockProduct, 1, options));
     expect(result.current.cart[0].hasAssurance).toBe(false);
+  });
+
+  it.each([
+    {
+      label: 'disabled setting',
+      merchant: {
+        slug: 'ogabassey',
+        feature_settings: { shipping_insurance_enabled: false },
+      },
+      expected: false,
+    },
+    {
+      label: 'mismatched context merchant',
+      merchant: {
+        slug: 'another-store',
+        feature_settings: { shipping_insurance_enabled: true },
+      },
+      expected: false,
+    },
+    {
+      label: 'enabled setting',
+      merchant: {
+        slug: 'ogabassey',
+        feature_settings: { shipping_insurance_enabled: true },
+      },
+      expected: true,
+    },
+  ])('gates the default on the visible insurance setting ($label)', async ({
+    merchant,
+    expected,
+  }) => {
+    const merchantValue = {
+      merchant,
+      loading: false,
+    } as unknown as MerchantContextType;
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <MerchantContext.Provider value={merchantValue}>
+        <StorefrontCartProvider merchantSlug="ogabassey" enableSmartCartPro>
+          {children}
+        </StorefrontCartProvider>
+      </MerchantContext.Provider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => result.current.addToCart(mockProduct));
+    // The line-item toggles hide when the setting is off or the
+    // context merchant mismatches, so the default must stay off
+    // there too: no fee without a visible removal control.
+    expect(result.current.cart[0].hasAssurance).toBe(expected);
+    expect(result.current.cartTotal).toBe(expected ? 105 : 100);
   });
 });

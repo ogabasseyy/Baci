@@ -46,3 +46,59 @@ ALTER TABLE private.customer_checkout_shipping_recovery_previews
   DROP CONSTRAINT IF EXISTS customer_checkout_shipping_recovery_previews_merchant_id_fkey,
   ADD CONSTRAINT customer_checkout_shipping_recovery_previews_merchant_id_fkey
     FOREIGN KEY (merchant_id) REFERENCES public.merchants(id) ON DELETE CASCADE;
+-- ---------------------------------------------------------------------------
+-- Retention sweep: unconfirmed previews hold customer PII (original destination
+-- plus the signed replacement quote) with an expiry of at most five minutes.
+-- Confirmed rows stay as audit evidence; abandoned rows are purged past a
+-- short grace window so expiry actually bounds PII retention. Follows the
+-- mcp-guest-cart sweep pattern: bounded batch, service-role only, pg_cron
+-- schedule guarded on the cron schema existing (no-op in a from-scratch
+-- replay), re-runnable by unscheduling the prior job of the same name first.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(
+  p_limit integer DEFAULT 1000,
+  p_retention interval DEFAULT interval '1 day'
+) RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_deleted bigint;
+BEGIN
+  WITH doomed AS (
+    SELECT id
+    FROM private.customer_checkout_shipping_recovery_previews
+    WHERE confirmed_at IS NULL
+      AND expires_at < pg_catalog.clock_timestamp() - p_retention
+    ORDER BY expires_at
+    LIMIT GREATEST(COALESCE(p_limit, 1000), 1)
+    FOR UPDATE SKIP LOCKED
+  )
+  DELETE FROM private.customer_checkout_shipping_recovery_previews t
+  USING doomed
+  WHERE t.id = doomed.id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  RETURN v_deleted;
+END;
+$$;
+COMMENT ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval) IS
+  'Recovery preview retention: purges unconfirmed PII-bearing rows past expiry plus a grace window; confirmed audit rows are kept. Service-role only, run by the pg_cron schedule below.';
+ALTER FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval) OWNER TO postgres;
+REVOKE EXECUTE ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval)
+  TO service_role;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_namespace WHERE nspname = 'cron'
+  ) THEN
+    IF EXISTS (
+      SELECT 1 FROM cron.job
+      WHERE jobname = 'customer-checkout-shipping-recovery-cleanup'
+    ) THEN
+      PERFORM cron.unschedule('customer-checkout-shipping-recovery-cleanup');
+    END IF;
+    PERFORM cron.schedule(
+      'customer-checkout-shipping-recovery-cleanup',
+      '7 * * * *',
+      $cron$SELECT public.cleanup_customer_checkout_shipping_recovery_previews(1000)$cron$
+    );
+  END IF;
+END $$;

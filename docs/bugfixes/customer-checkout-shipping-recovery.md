@@ -58,7 +58,8 @@ idempotent for the same already-confirmed destination and selected quote.
 
 The private preview record retains actor, original destination, signed replacement
 inputs, creation/expiry and confirmation time as audit evidence. It has no client
-table grants or RLS policies. Private helpers are not executable by clients;
+table grants or RLS policies. An hourly pg_cron sweep purges unconfirmed rows
+past expiry plus a one-day grace window; confirmed rows are kept as audit. Private helpers are not executable by clients;
 public recovery functions are granted only to authenticated users and authorize
 each invocation. No service-role client fallback was introduced.
 

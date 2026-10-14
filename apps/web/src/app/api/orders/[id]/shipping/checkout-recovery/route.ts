@@ -257,14 +257,21 @@ export async function POST(
       error:
         'The fresh quote differs from the shipping fee already paid. This recovery cannot change the paid amount.',
     });
-  const staged = await prepareCheckoutShippingRecovery(supabase, {
-    orderId: id,
-    merchantId: access.merchantId,
-    fingerprint,
-    paidShippingFee,
-    quote,
-    quoteRequest: built.request,
-  });
+  let staged: { data: unknown; error: { message?: string } | null };
+  try {
+    staged = await prepareCheckoutShippingRecovery(supabase, {
+      orderId: id,
+      merchantId: access.merchantId,
+      fingerprint,
+      paidShippingFee,
+      quote,
+      quoteRequest: built.request,
+    });
+  } catch {
+    return failure({
+      message: 'invalid_checkout_shipping_recovery_proof_context',
+    });
+  }
   if (staged.error) return failure(staged.error);
   if (
     typeof staged.data !== 'string' ||

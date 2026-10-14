@@ -225,6 +225,18 @@ describe('paid checkout shipping recovery route', () => {
     };
     expect(quoted.items.map((item) => item.quantity)).toEqual([1]);
   });
+  it('maps staging rejections to a structured JSON error', async () => {
+    mocks.rpc.mockImplementation(async (name: string) => {
+      if (name === 'get_customer_checkout_shipping_recovery_context')
+        return { data: context, error: null };
+      throw new Error('rate rpc failed');
+    });
+    const response = await request();
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Unable to recover this shipping quote. Please try again.',
+    });
+  });
   it('rejects recovery when no shippable units remain', async () => {
     mocks.rpc.mockResolvedValueOnce({
       data: {

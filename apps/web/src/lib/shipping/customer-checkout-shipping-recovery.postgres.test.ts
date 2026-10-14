@@ -132,6 +132,21 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       );
       expect(output.trim().split('\n').at(-1)?.trim()).toBe('2');
     });
+    it('purges only expired unconfirmed previews on retention sweep', () => {
+      const staleId = '80000000-0000-4000-8000-000000000001';
+      const auditId = '80000000-0000-4000-8000-000000000002';
+      const output = database.query(`BEGIN;
+      INSERT INTO private.customer_checkout_shipping_recovery_previews
+        (id, order_id, merchant_id, actor_id, fingerprint, original_address, quote, expires_at, confirmed_at)
+      VALUES
+        ('${staleId}', '${orderId}', '${merchantId}', '${ownerId}', 'sweep', '{}', '{}', now() - interval '2 days', NULL),
+        ('${auditId}', '${orderId}', '${merchantId}', '${ownerId}', 'sweep', '{}', '{}', now() - interval '2 days', now() - interval '1 day');
+      SELECT public.cleanup_customer_checkout_shipping_recovery_previews() AS deleted;
+      SELECT (SELECT count(*) FROM private.customer_checkout_shipping_recovery_previews WHERE id = '${staleId}') AS stale_remaining,
+        (SELECT count(*) FROM private.customer_checkout_shipping_recovery_previews WHERE id = '${auditId}') AS audit_remaining;
+      ROLLBACK;`);
+      expect(output.trim().split('\n').at(-1)?.trim()).toBe('0|1');
+    });
     it('rejects altered proofs and quote payloads', () => {
       const value = quote();
       const hash = fingerprint();

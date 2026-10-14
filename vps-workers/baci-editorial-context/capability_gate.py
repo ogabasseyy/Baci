@@ -176,7 +176,11 @@ def requires_register_update(register, changed, base_register=None, rev_acceptab
     # still pending re-review.
     registers = [register] if base_register is None else [register, base_register]
     touched = any(_touches_cited_refs(item, changed) for item in registers)
-    register_touched = REGISTER_PATH in changed
+    # The access map carries its own audit provenance (reviewed date +
+    # source revision): a map-only edit that keeps the old metadata presents
+    # rewritten claims as previously audited, so it re-reviews like the
+    # register itself.
+    register_touched = REGISTER_PATH in changed or MAP_PATH in changed
     if not touched and not register_touched:
         return False
     # A register-only edit (claims, limitations, statuses, refs) with the old

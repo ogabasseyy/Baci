@@ -147,6 +147,19 @@ jobs:
         self.assertTrue(failures)
         self.assertIn("must not pin a ref", failures[0])
 
+    def test_pre_gate_run_step_fails(self):
+        # A PR-controlled script before the gate could overwrite the
+        # checked-out gate code, which then runs while the contract's
+        # separate checkout still sees pristine files.
+        ci = CI.replace(
+            "      - name: Test capability register binding\n",
+            "      - name: Early script\n        run: echo hi\n      - name: Test capability register binding\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("precede", failures[0])
+
     def test_fake_comment_cannot_satisfy(self):
         ci = """on:
   push:

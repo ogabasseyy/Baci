@@ -150,25 +150,35 @@ describe('instrumentation unanchored boot', () => {
     }
   });
 
-  it('refuses staged content in the cwd candidate with lab off', async () => {
+  it('warns on staged content in the cwd candidate with lab off', async () => {
+    // Runtime severity: a dirty candidate warns-and-continues — a
+    // migration or worker running near a staged tree must not brick.
     const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-staged-'));
     withStagedTree(join(sandbox, 'public'));
     const previousCwd = process.cwd();
     process.chdir(sandbox);
     try {
       stubUnanchoredBoot();
-      await expect(register()).rejects.toThrow(/staged merchant pilot assets/);
-      expect(registerOTelMock).not.toHaveBeenCalled();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await expect(register()).resolves.toBe(undefined);
+        expect(
+          warnSpy.mock.calls.map((call) => String(call[0])).join('\n')
+        ).toMatch(/staged merchant pilot assets/);
+      } finally {
+        warnSpy.mockRestore();
+      }
+      expect(registerOTelMock).toHaveBeenCalledOnce();
     } finally {
       process.chdir(previousCwd);
       rmSync(sandbox, { force: true, recursive: true });
     }
   });
 
-  it('refuses staged content beside the server entry script', async () => {
+  it('warns on staged content beside the server entry script', async () => {
     // Bare cwd, but argv[1] sits next to a staged app tree (the custom
     // `node /app/server.js` shape): the server-adjacent candidate is
-    // checked and refuses.
+    // checked, warns, and boot completes.
     const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-bare-'));
     const appRoot = mkdtempSync(join(tmpdir(), 'pilot-unanchored-app-'));
     withStagedTree(join(appRoot, 'public'));
@@ -178,8 +188,16 @@ describe('instrumentation unanchored boot', () => {
     process.argv[1] = join(appRoot, 'server.js');
     try {
       stubUnanchoredBoot();
-      await expect(register()).rejects.toThrow(/staged merchant pilot assets/);
-      expect(registerOTelMock).not.toHaveBeenCalled();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await expect(register()).resolves.toBe(undefined);
+        expect(
+          warnSpy.mock.calls.map((call) => String(call[0])).join('\n')
+        ).toMatch(/staged merchant pilot assets/);
+      } finally {
+        warnSpy.mockRestore();
+      }
+      expect(registerOTelMock).toHaveBeenCalledOnce();
     } finally {
       process.argv[1] = previousArgv1;
       process.chdir(previousCwd);

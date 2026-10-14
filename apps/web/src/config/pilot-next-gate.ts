@@ -8,16 +8,17 @@ import { assertPilotPublicAssets } from './pilot-public-assets';
 // block it replaces.
 export function applyPilotPublicGate(configDir: string): string {
   const pilotPublicDir = path.join(configDir, 'public');
-  // Strict filler drift: a merchant image renamed to a pinned filler
-  // name must fail the build, not ship silently. Runtime boots stay
-  // warn-only (a deployed box must not brick on a recompressed
-  // fixture), so this severity lives only on the build path.
-  assertPilotPublicAssets(pilotPublicDir, undefined, 'throw');
+  // Strict severities: the build is the enforcement point, so both
+  // drift and content findings refuse here. Runtime boots keep drift
+  // fatal (post-build tamper) but downgrade content findings to
+  // warn-and-continue, so a leftover staged tree never bricks prod.
+  assertPilotPublicAssets(pilotPublicDir, undefined, 'throw', 'throw');
   // The boot gate (instrumentation.ts) must inspect this same tree but
   // has no config-relative anchor at runtime: stash the config-anchored
   // root in this process's environment, where the boot gate reads it.
-  // Unconditional overwrite — the config knows the truth, a stale
-  // preset never does.
-  process.env.BACI_PILOT_PUBLIC_DIR = pilotPublicDir;
+  // Set-if-unset: an explicit operator/CI preset names a different
+  // tree on purpose (documented alongside BACI_PILOT_PUBLIC_DIR), so
+  // the config must not silently overwrite it.
+  process.env.BACI_PILOT_PUBLIC_DIR ??= pilotPublicDir;
   return pilotPublicDir;
 }

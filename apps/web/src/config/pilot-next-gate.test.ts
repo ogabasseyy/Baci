@@ -47,4 +47,16 @@ describe('applyPilotPublicGate', () => {
       /does not match the pinned hash/
     );
   });
+
+  it('preserves an explicit operator BACI_PILOT_PUBLIC_DIR preset', () => {
+    // Set-if-unset: an operator/CI preset names a different tree on
+    // purpose, so the config-time stash must not overwrite it. The
+    // gate still checks (and returns) the config-anchored tree.
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '/operator/tree/public');
+    const publicDir = applyPilotPublicGate(configDir);
+    expect(publicDir).toBe(join(configDir, 'public'));
+    expect(process.env.BACI_PILOT_PUBLIC_DIR).toBe('/operator/tree/public');
+  });
 });

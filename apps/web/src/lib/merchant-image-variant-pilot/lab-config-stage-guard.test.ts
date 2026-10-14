@@ -122,6 +122,41 @@ describe('assertNoUnexpectedStagedFiles', () => {
     ).resolves.toBe(undefined);
   });
 
+  it('refuses root-level and non-hex plants after a clean first scan', async () => {
+    // The per-request guard must enumerate the stage root itself, not
+    // just the known subdirs: a root file or a new non-hex directory
+    // planted after boot would otherwise never be visited while Next
+    // serves public/__pilot/... statically. The fingerprint carries
+    // the root listing so the plant invalidates the fast path.
+    const pilotStage = await stageTree();
+    await seedExpected(pilotStage);
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+    await writeFile(join(pilotStage, 'evil.png'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/staged entry "evil\.png" has no inventory binding/);
+    await rm(join(pilotStage, 'evil.png'));
+    await mkdir(join(pilotStage, 'misc'), { recursive: true });
+    await writeFile(join(pilotStage, 'misc', 'evil.png'), 'evil');
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).rejects.toThrow(/staged entry "misc" has no inventory binding/);
+    await rm(join(pilotStage, 'misc'), { recursive: true });
+    await expect(
+      assertNoUnexpectedStagedFiles(staged(pilotStage))
+    ).resolves.toBe(undefined);
+  });
+
+  it('refuses root-level files with an empty binding set', async () => {
+    const pilotStage = await stageTree();
+    await writeFile(join(pilotStage, 'evil.png'), 'evil');
+    await expect(assertNoUnexpectedStagedFiles([], pilotStage)).rejects.toThrow(
+      /staged file "evil\.png" with an empty binding set/
+    );
+  });
+
   it('re-scans the same tree after drift but skips when clean', async () => {
     // The drift gate skips repeat walks while the tree is unchanged
     // (per-request verification stays on stats, not listings), but a

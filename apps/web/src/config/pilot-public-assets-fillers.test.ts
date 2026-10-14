@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { assertPilotPublicAssets } from './pilot-public-assets';
 
 const roots: string[] = [];
@@ -46,25 +46,32 @@ describe('lab filler validation', () => {
       /missing pinned fillers.*grid-filler-600x400-b\.png/
     );
   });
-  it('tolerates any filler content when lab is disabled', () => {
-    // Filler policing is lab-only: non-lab builds/boots refuse staged
-    // merchant trees only. A packaging artifact (.DS_Store), a
-    // recompressed filler, or a partial set must never take down an
-    // unrelated production boot — the same function boot calls must
-    // pass here. Lab mode keeps the exact pinned set.
+  it('tolerates stray and partial filler sets when lab is disabled', () => {
+    // A packaging artifact (.DS_Store) or a partial set must never
+    // take down an unrelated production boot — in either severity.
+    // Drifted PINNED bytes are the exception: those refuse (covered
+    // in pilot-public-assets.test.ts). Lab mode keeps the exact
+    // pinned set.
     const dir = root();
     cpSync(
       join(process.cwd(), 'public/__pilot/fillers'),
       join(dir, '__pilot/fillers'),
       { recursive: true }
     );
-    writeFileSync(
-      join(dir, '__pilot/fillers/grid-filler-600x400-a.png'),
-      'recompressed bytes'
-    );
     writeFileSync(join(dir, '__pilot/fillers/.DS_Store'), 'packaging junk');
     rmSync(join(dir, '__pilot/fillers/grid-filler-600x400-c.png'));
-    expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
+    const warnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      expect(() => assertPilotPublicAssets(dir, false)).not.toThrow();
+      expect(() =>
+        assertPilotPublicAssets(dir, false, 'throw', 'throw')
+      ).not.toThrow();
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
     expect(() => assertPilotPublicAssets(dir, true)).toThrow(
       /unapproved filler/
     );

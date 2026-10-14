@@ -1,6 +1,6 @@
 import 'server-only';
 import { lstat, readdir, realpath } from 'node:fs/promises';
-import { join, relative, sep } from 'node:path';
+import { basename, join, relative, sep } from 'node:path';
 import { HEX64_PATTERN } from './lab-config-stage-reconcile';
 
 // Startup/request twin of reconcileStagedTree (which only runs at
@@ -170,23 +170,39 @@ export async function assertNoUnexpectedStagedFiles(
   if (fillerPaths.length > 0) {
     await checkDir(join(realStage, 'fillers'), 'fillers');
   }
-  // Unreferenced generation dirs: current generations are the only
-  // ones with inventory bindings, so any other 64-hex directory —
-  // restored after staging, planted outright, or stale from a crashed
-  // stage — refuses instead of serving unbound files. A hex-named
-  // symlink refuses too: only real staged files build currentGenDirs,
-  // so a link name can never appear there.
+  // Stage-root enumeration: the only legal top-level entries are the
+  // managed dirs (originals/, fillers/) and current generation dirs.
+  // A root-level file or a non-hex directory would otherwise never be
+  // enumerated — checkDir only visits the known subdirs — while Next
+  // serves public/__pilot/... statically without invoking a lab
+  // handler. Unreferenced 64-hex dirs refuse with their own message
+  // (restored, planted, or stale from a crashed stage); anything else
+  // refuses as unbound. Allowed names must be real directories (the
+  // Dirent check is lstat-based, so a squatting file or symlink
+  // refuses too).
+  const allowedTopNames = new Set([
+    'fillers',
+    'originals',
+    ...[...currentGenDirs].map((dir) => basename(dir)),
+  ]);
   const topEntries = await readdir(realStage, { withFileTypes: true }).catch(
     () => null
   );
   if (topEntries) {
     for (const entry of topEntries) {
-      if (!HEX64_PATTERN.test(entry.name)) {
-        continue;
-      }
-      if (!currentGenDirs.has(join(realStage, entry.name))) {
+      if (!allowedTopNames.has(entry.name)) {
+        if (HEX64_PATTERN.test(entry.name)) {
+          throw new Error(
+            `merchant image pilot: unreferenced generation directory "${entry.name}" — re-stage to reconcile`
+          );
+        }
         throw new Error(
-          `merchant image pilot: unreferenced generation directory "${entry.name}" — re-stage to reconcile`
+          `merchant image pilot: staged entry "${entry.name}" has no inventory binding — re-stage to reconcile`
+        );
+      }
+      if (!entry.isDirectory()) {
+        throw new Error(
+          `merchant image pilot: staged entry "${entry.name}" is not a directory — re-stage to reconcile`
         );
       }
     }
@@ -218,16 +234,24 @@ async function stageFingerprint(
       stat ? `${dir}:${stat.mtimeMs}:${stat.ctimeMs}` : `${dir}:missing`
     );
   }
+  // Root listing names, not just the root stat: a plant outside the
+  // known subdirs must invalidate the fast path even on filesystems
+  // with coarse stat granularity.
+  const topNames = await readdir(realStage).catch(() => null);
+  parts.push(
+    topNames ? `root:${[...topNames].sort().join(',')}` : 'root:missing'
+  );
   return parts.join('\n');
 }
 
 // Empty-allowlist twin of the enumeration above: with zero staged
-// paths, any content under a generation directory or originals/ is
-// unbound by definition. Name-based presence only (no traversal into
-// entries, so a symlinked name cannot redirect the check); fillers and
-// non-managed names are the boot shape guard's business, not this
-// binding check's. An unreadable root passes — there is nothing to
-// serve from it.
+// paths, any servable content is unbound by definition. Name-based
+// presence only (no traversal into entries, so a symlinked name
+// cannot redirect the check); fillers/ is the boot shape guard's
+// business (pinned fixtures this check cannot verify), but root-level
+// files, squatting non-directories, and non-empty non-hex dirs refuse
+// like the bound path. An unreadable root passes — there is nothing
+// to serve from it.
 async function assertEmptyAllowlistTree(stageRoot: string): Promise<void> {
   const topEntries = await readdir(stageRoot, { withFileTypes: true }).catch(
     () => null
@@ -236,7 +260,23 @@ async function assertEmptyAllowlistTree(stageRoot: string): Promise<void> {
     return;
   }
   for (const entry of topEntries) {
+    if (entry.name === 'fillers') {
+      continue;
+    }
+    if (!entry.isDirectory()) {
+      throw new Error(
+        `merchant image pilot: staged file "${entry.name}" with an empty binding set — re-stage to reconcile`
+      );
+    }
     if (entry.name !== 'originals' && !HEX64_PATTERN.test(entry.name)) {
+      const extra = await readdir(join(stageRoot, entry.name)).catch(
+        () => null
+      );
+      if (extra && extra.length > 0) {
+        throw new Error(
+          `merchant image pilot: staged directory "${entry.name}" with an empty binding set — re-stage to reconcile`
+        );
+      }
       continue;
     }
     const children = await readdir(join(stageRoot, entry.name)).catch(

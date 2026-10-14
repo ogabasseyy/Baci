@@ -30,6 +30,10 @@ import {
 
 export { PilotSheetError };
 
+// Explicit DPR rows per rung (spec: inspect at actual CSS slot size
+// for DPR 1/2/3); shared with the embed budget row count.
+const DPR_LEVELS = [1, 2, 3];
+
 async function findGenerationFor(outputRoot, record) {
   // Bind the sheet to the generation the current recipe+encoder would
   // produce: stale generations from earlier recipes may coexist in the
@@ -174,9 +178,10 @@ export async function buildQualitySheet({
       (tier) => tier.delivery === 'generated-over-source'
     ).length;
     // Charge every rendered data-URI occurrence, not each unique file:
-    // the original embeds once per rung row (base64-inflated) and each
-    // tier embeds with its own row, so unique-byte accounting would let
-    // the constructed HTML exceed the ceiling it claims to enforce.
+    // the original embeds once per DPR row (three per rung,
+    // base64-inflated) and each tier embeds once per DPR row too, so
+    // unique-byte accounting would let the constructed HTML exceed the
+    // ceiling it claims to enforce.
     const base64Length = (bytes) => 4 * Math.ceil(bytes / 3);
     const rungRows = new Set(manifest.tiers.map((tier) => tier.requestedWidth))
       .size;
@@ -184,12 +189,15 @@ export async function buildQualitySheet({
       `data:${originalContentType(manifest.source.format, record.assetId)};base64,`
         .length;
     let recordBytes =
-      (originalPrefix + base64Length(snapshot.bytes.length)) * rungRows;
+      (originalPrefix + base64Length(snapshot.bytes.length)) *
+      rungRows *
+      DPR_LEVELS.length;
     for (const tier of manifest.tiers) {
       const file = files.get(tier.path);
       recordBytes +=
-        `data:${tier.contentType};base64,`.length +
-        base64Length(file?.length ?? 0);
+        (`data:${tier.contentType};base64,`.length +
+          base64Length(file?.length ?? 0)) *
+        DPR_LEVELS.length;
     }
     embeddedBytes += recordBytes;
     if (embeddedBytes > maxEmbeddedBytes) {
@@ -205,33 +213,31 @@ export async function buildQualitySheet({
       }
       seenTiers.get(tier.requestedWidth).push(tier);
     }
-    // The visual comparison must be size-matched: each derivative renders
-    // at its encoded width capped to three times the slot CSS width (the
-    // DPR-3 review ceiling — phones negotiate DPR 3), so the original
-    // renders at exactly that width — never at a raw requested width the
-    // derivatives cannot reach (capped rungs and narrow sources encode
-    // below their request). The caption states which ceiling bound the
-    // comparison: full DPR-3 review, or the encoded-pixel width.
+    // Size-matched per DPR: each rung renders one row per DPR level —
+    // DPR 1 at exactly the slot CSS width, DPR 2/3 at its multiples —
+    // each capped by the narrowest encoded tier. The caption states
+    // the DPR and which ceiling bound it: the multiple, or the
+    // encoded-pixel width.
     const mountNote =
       crop === null
         ? ''
         : ` · mount ${escapeHtml(crop.aspectRatio)} ${escapeHtml(crop.fit)} ${escapeHtml(crop.position)}`;
     const rows = [...seenTiers.entries()]
-      .map(([requestedWidth, tiers]) => {
-        const dprCeiling = geometry.cssWidth * 3;
-        const compareWidth = Math.min(
-          dprCeiling,
-          ...tiers.map((tier) => tier.width)
-        );
-        const ceilingNote =
-          compareWidth < dprCeiling ? 'encoded-pixel ceiling' : '3× CSS';
-        const originalStyle =
-          crop === null
-            ? `width:${compareWidth}px`
-            : `width:${compareWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
-        return `<tr><td>${requestedWidth}px tier</td>
-<td><figure><img src="${originalUri}" style="${originalStyle}" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${compareWidth}px (${ceilingNote})${mountNote}</figcaption></figure></td>
+      .flatMap(([requestedWidth, tiers]) => {
+        const encodedFloor = Math.min(...tiers.map((tier) => tier.width));
+        return DPR_LEVELS.map((dpr) => {
+          const dprWidth = geometry.cssWidth * dpr;
+          const compareWidth = Math.min(dprWidth, encodedFloor);
+          const capped =
+            compareWidth < dprWidth ? ' · encoded-pixel ceiling' : '';
+          const originalStyle =
+            crop === null
+              ? `width:${compareWidth}px`
+              : `width:${compareWidth}px;aspect-ratio:${crop.aspectRatio};object-fit:${crop.fit};object-position:${crop.position}`;
+          return `<tr><td>${requestedWidth}px tier · DPR ${dpr}</td>
+<td><figure><img src="${originalUri}" style="${originalStyle}" alt="original scaled to ${compareWidth}px"/><figcaption>original · ${snapshot.bytes.length} B · ${escapeHtml(record.width)}x${escapeHtml(record.height)} · compared at ${compareWidth}px (DPR ${dpr}${capped})${mountNote}</figcaption></figure></td>
 ${tiers.map((tier) => `<td>${tierCells(tier, files, crop, compareWidth)}</td>`).join('\n')}</tr>`;
+        });
       })
       .join('\n');
     sections.push(`<section><h2>${escapeHtml(record.assetId)} · ${escapeHtml(record.role)} · slot ${escapeHtml(record.slot)}</h2>

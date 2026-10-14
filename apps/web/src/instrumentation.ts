@@ -72,17 +72,17 @@ export async function register() {
     } catch (error) {
       // The catch discriminates by failure, not by message: lab mode
       // demands a verified tree and stays fatal on everything, and a
-      // staged-content refusal from the anchored check above (any
-      // non-anchor error) must propagate, never degrade — the
-      // candidates path below runs ONLY for the coded anchor failure
-      // with the lab off. There the helper checks every candidate root
-      // it can find and refuses on DETECTED staged content; a boot
-      // that checked nothing refuses when pilot env is configured
-      // (explicit BACI_IMAGE_PILOT_UNANCHORED_ACK=1 degrades to a
-      // warning) and warns when no pilot configuration exists at
-      // all — serverless/Vercel functions structurally cannot
-      // anchor. No second unconditional cwd re-check: a tree the
-      // candidates deliberately excluded must not brick a boot.
+      // drift refusal from the anchored check above (any non-anchor
+      // error) must propagate, never degrade — the candidates path
+      // below runs ONLY for the coded anchor failure with the lab
+      // off. There the helper checks every candidate root it can find
+      // (content findings warn, drift refuses); a boot that checked
+      // nothing refuses when pilot env is configured (explicit
+      // BACI_IMAGE_PILOT_UNANCHORED_ACK=1 degrades to a warning) and
+      // warns when no pilot configuration exists at all —
+      // serverless/Vercel functions structurally cannot anchor. No
+      // second unconditional cwd re-check: a tree the candidates
+      // deliberately excluded must not brick a boot.
       if (
         isPilotLabEnabled() ||
         !(error instanceof Error) ||

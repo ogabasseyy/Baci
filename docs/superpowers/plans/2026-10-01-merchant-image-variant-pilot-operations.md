@@ -85,32 +85,36 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # an untrusted party can fetch URLs. Never live-edit the staged tree;
 # unexpected content means re-stage and restart.
 #
-# Recovery when a non-lab build/boot refuses a staged tree: the gate is
-# fatal on staged-merchant shapes (image files under originals/,
-# generation dirs, fillers/, or the __pilot root) and confinement
-# breaks (symlinks, hardlinked or special files — Next would serve or
-# block on them); empty leftover dirs pass silently and unrelated
-# strays (.DS_Store, renamed leftovers) warn. Pinned filler bytes ARE
-# hash-checked outside lab mode: the non-lab BUILD fails on filler
-# drift (a merchant image renamed to a filler name must never ship
-# silently), while runtime boots only warn. A build refusal naming a
-# filler hash means the fixture was recompressed or replaced — restore
-# public/__pilot/fillers from version control or re-pin the fixture.
-# To clear: re-run pilot:stage with the
-# intended inventory (reconcile removes unreferenced generations), or
-# delete public/__pilot/{originals,<64-hex-dirs>} outright on a box
-# that should never have staged. A boot that refuses with 'refusing an
-# unchecked boot' found no checkable app tree at all while pilot env
-# was configured: point BACI_PILOT_PUBLIC_DIR at the served tree, or
-# export BACI_IMAGE_PILOT_UNANCHORED_ACK=1 to acknowledge the unchecked
-# residual (a custom server rooted elsewhere stays unseen either way;
-# detected staged content refuses regardless). Boots with zero pilot
-# configuration (serverless functions, migrations) warn instead of
-# refusing. The refusal is intentional fail-closed
-# (staging is gitignored operator state, yet a leftover stage must never
-# silently ship merchant bytes): confirmed by pilot-next-gate.test.ts
-# 'refuses staged data in non-lab mode', which runs the real build-gate
-# path against a staged fixture with the lab off.
+# Recovery when a non-lab build/boot reports a staged tree. BUILD is
+# the enforcement point and refuses: staged-merchant shapes (image
+# files under originals/, generation dirs, fillers/, or the __pilot
+# root), confinement breaks (symlinks, hardlinked or special files —
+# Next would serve or block on them), and pinned-filler drift (a
+# merchant image renamed to a filler name must never ship silently).
+# Empty leftover dirs pass silently and unrelated strays (.DS_Store,
+# renamed leftovers) warn. RUNTIME boots split by finding: filler
+# drift still refuses (a same-tree build already passed these bytes,
+# so drift means post-build tamper — restore public/__pilot/fillers
+# from version control or re-pin the fixture), while staged-content
+# and confinement findings warn-and-continue so a leftover stage never
+# bricks the production boot. Two runtime cases stay fatal: an
+# unverifiable tree (symlinked or unreadable __pilot root — warn would
+# serve an unchecked tree) and an unchecked boot under pilot intent
+# ('refusing an unchecked boot': no checkable app tree at all while
+# pilot env was configured). Boots with zero pilot configuration
+# (serverless functions, migrations) warn instead of refusing.
+# BACI_PILOT_PUBLIC_DIR names the served tree for the boot gate when
+# the config anchor is unavailable (standalone/VPS, custom servers):
+# the config-time stash is set-if-unset, so an explicit operator/CI
+# preset always wins. To clear a dirty tree: re-run pilot:stage with
+# the intended inventory (reconcile removes unreferenced generations),
+# or delete public/__pilot/{originals,<64-hex-dirs>} outright on a box
+# that should never have staged. The build refusal is intentional
+# fail-closed (staging is gitignored operator state, yet a leftover
+# stage must never silently ship merchant bytes): confirmed by
+# pilot-next-gate.test.ts 'refuses staged data in non-lab mode like
+# the inline gate', which runs the real build-gate path against a
+# staged fixture with the lab off.
 
 # Final validation (Task 7)
 pnpm turbo lint

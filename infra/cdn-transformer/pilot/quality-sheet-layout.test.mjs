@@ -8,8 +8,8 @@ import { publishQualitySheet } from './quality-sheet-publish.mjs';
 import { parseMountCrop } from './quality-sheet-render.mjs';
 import { setupPilot } from './quality-sheet-fixtures.mjs';
 
-test('keeps tier aspect ratio under the DPR-3 cap and warns on over-source', async () => {
-  // The hero slot has no canonical mount: this row exercises the legacy
+test('keeps tier aspect ratio in DPR rows and warns on over-source', async () => {
+  // The hero slot has no canonical mount: these rows exercise the legacy
   // intrinsic render whose height:auto style this test asserts.
   const { inputRoot, inventoryPath, outputRoot } = await setupPilot(
     undefined,

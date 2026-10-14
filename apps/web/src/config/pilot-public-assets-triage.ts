@@ -235,7 +235,12 @@ export function assertNonLabFillers(
           ? 'restore public/__pilot/fillers from version control or re-pin the fixture'
           : 'served as-is — restore it or ignore');
       if (fillerDrift === 'throw') {
-        throw new Error(message);
+        // Coded: the gate rethrows drift past its non-lab warn
+        // downgrade (see below) — a same-tree build already passed
+        // these bytes, so runtime drift means post-build tamper.
+        const error = new Error(message) as Error & { code: string };
+        error.code = 'PILOT_FILLER_DRIFT';
+        throw error;
       }
       console.warn(message);
     }

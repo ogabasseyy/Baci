@@ -136,10 +136,18 @@ function assertFillers(fillersDir: string): void {
 export function assertPilotPublicAssets(
   publicDir: string,
   labEnabled = isPilotLabEnabled(),
-  // Pinned-filler drift severity in non-lab mode: the build gate fails
+  // Pinned-filler drift severity in non-lab mode: the build gate refuses
   // (cheap, pre-deploy — a merchant image renamed to a filler name must
-  // never ship silently) while runtime boots only warn.
-  fillerDrift: 'throw' | 'warn' = 'warn'
+  // never ship silently) and runtime boots refuse too, since a
+  // same-tree build already passed these bytes — runtime drift means
+  // post-build tamper. Drift rethrows past the warn downgrade below.
+  fillerDrift: 'throw' | 'warn' = 'throw',
+  // Non-lab CONTENT findings (staged-merchant shapes, symlink escapes,
+  // stray structure) severity: refused at build/deploy checks, warned
+  // at runtime boots, so a leftover staged tree from a lab session on
+  // the same box can never brick the production storefront's boot.
+  // Only content findings downgrade; drift stays fatal (see above).
+  runtimeFindings: 'throw' | 'warn' = labEnabled ? 'throw' : 'warn'
 ): void {
   const root = join(publicDir, '__pilot');
   if (!directoryExists(root)) {
@@ -153,20 +161,38 @@ export function assertPilotPublicAssets(
     }
     return;
   }
+  // Non-lab runtime downgrade: content findings warn-and-continue (the
+  // build gate is the enforcement point). Lab mode and explicit 'throw'
+  // callers run the check directly — identical behavior to before.
+  const downgrade = (check: () => void): void => {
+    if (runtimeFindings === 'throw') {
+      check();
+      return;
+    }
+    try {
+      check();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'PILOT_FILLER_DRIFT') {
+        throw error;
+      }
+      console.warn(
+        `merchant image pilot: ${(error as Error).message}; continuing — the build gate refuses this pre-deploy, runtime only warns`
+      );
+    }
+  };
   let sawFillers = false;
   for (const name of readdirSync(root)) {
-    // Hash pinning is lab-only: non-lab builds/boots triage fillers
-    // like any other entry (confinement plus merchant-shape scan, with
-    // the pinned fixture names passing unhashed), so a packaging
-    // artifact (.DS_Store) or a recompressed filler can never take down
-    // an unrelated production boot — while a merchant file or symlink
-    // hiding under fillers/ still refuses. Nothing non-lab references
-    // filler bytes.
+    // Fillers triage runs in both modes: full hash pinning in lab;
+    // non-lab confines plus merchant-shape scans, with the pinned
+    // fixture names passing only when their bytes still match (drift
+    // refuses in both build and runtime boots). Content findings warn
+    // at runtime so a recompressed fixture or leftover file can never
+    // take down an unrelated production boot.
     if (name === 'fillers') {
       if (labEnabled) {
         assertFillers(join(root, name));
       } else {
-        assertNonLabFillers(root, name, FILLERS, fillerDrift);
+        downgrade(() => assertNonLabFillers(root, name, FILLERS, fillerDrift));
       }
       sawFillers = true;
       continue;
@@ -186,11 +212,12 @@ export function assertPilotPublicAssets(
         'staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1; use a clean public tree for non-lab builds/starts'
       );
     }
-    // Non-lab from here: fatal only on staged-merchant shapes or
-    // symlink escapes. Empty leftover dirs pass silently (nothing to
-    // serve); unrelated strays warn. A lab-only concern must never
-    // brick the production storefront's build or boot.
-    assertNonLabEntry(root, name);
+    // Non-lab from here: staged-merchant shapes and symlink
+    // escapes refuse at build/deploy ('throw') and warn at runtime —
+    // a lab-only concern must never brick the production
+    // storefront's boot. Empty leftover dirs pass silently (nothing
+    // to serve); unrelated strays warn in every mode.
+    downgrade(() => assertNonLabEntry(root, name));
   }
   // Lab mode additionally requires the fillers directory itself: the
   // grid renders all three sibling-card images, so an absent directory

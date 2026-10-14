@@ -160,9 +160,11 @@ describe('assertUnanchoredPublicTrees', () => {
       process.chdir(previousCwd);
     }
   });
-  it('refuses staged content found in a candidate tree', () => {
+  it('warns on staged content found in a candidate tree', () => {
     // Lab-off: the helper only runs when the lab flag is down (lab-on
-    // unanchored boots stay fatal in the resolver).
+    // unanchored boots stay fatal in the resolver). Runtime severity:
+    // a dirty candidate warns-and-continues rather than bricking a
+    // migration or worker that merely runs near an app dir.
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
     const dir = root();
     const originals = join(dir, 'public', '__pilot', 'originals');
@@ -172,11 +174,11 @@ describe('assertUnanchoredPublicTrees', () => {
     process.chdir(dir);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      expect(() => assertUnanchoredPublicTrees()).toThrow(
-        /staged merchant pilot assets/
-      );
-      expect(warn).toHaveBeenCalledOnce();
+      expect(() => assertUnanchoredPublicTrees()).not.toThrow();
+      expect(warn).toHaveBeenCalledTimes(2);
       expect(warn.mock.calls[0][0]).toMatch(/checked 1 candidate tree/);
+      expect(warn.mock.calls[1][0]).toMatch(/staged merchant pilot assets/);
+      expect(warn.mock.calls[1][0]).toMatch(/runtime only warns/);
     } finally {
       warn.mockRestore();
       process.chdir(previousCwd);

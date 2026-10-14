@@ -68,13 +68,23 @@ function anchorError(): Error {
   return error;
 }
 
+function driftError(): Error {
+  const error = new Error(
+    'non-lab public pilot tree filler "x" does not match the pinned hash'
+  ) as Error & { code: string };
+  error.code = 'PILOT_FILLER_DRIFT';
+  return error;
+}
+
 describe('instrumentation pilot boot gate', () => {
-  it('rejects non-lab startup with staged public assets before registering services', async () => {
+  it('rejects non-lab startup on pinned-filler drift before registering services', async () => {
+    // Drift is the non-lab runtime refusal (post-build tamper): staged
+    // content findings warn instead (see the real-runtime tests).
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     assertPilotPublicAssetsMock.mockImplementationOnce(() => {
-      throw new Error('staged merchant pilot assets');
+      throw driftError();
     });
-    await expect(register()).rejects.toThrow('staged merchant pilot assets');
+    await expect(register()).rejects.toThrow(/does not match the pinned hash/);
     expect(registerOTelMock).not.toHaveBeenCalled();
     expect(initializeLabRuntimeMock).not.toHaveBeenCalled();
   });
@@ -82,8 +92,8 @@ describe('instrumentation pilot boot gate', () => {
     // The lab must not take the storefront down: a failed lab init
     // with no unbound staged content logs loudly, skips the runtime
     // publish (lab routes fail closed), and boot completes OTel setup.
-    // The staged tree-shape assertion above and the unbound-content
-    // check below stay fatal.
+    // The drift assertion above and the unbound-content check below
+    // stay fatal.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     initializeLabRuntimeMock.mockRejectedValueOnce(
@@ -205,8 +215,8 @@ describe('instrumentation pilot boot gate', () => {
   it('checks candidate trees when unanchored with lab off', async () => {
     // A lab-only feature must not brick unrelated boots on the anchor
     // failure itself: without an anchored root and with the lab off,
-    // register checks every candidate tree it can find (fatal on
-    // DETECTED staged content) instead of throwing.
+    // register checks every candidate tree it can find (content
+    // findings warn, drift refuses) instead of throwing.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     resolvePilotPublicDirMock.mockImplementationOnce(() => {
       throw anchorError();
@@ -215,29 +225,29 @@ describe('instrumentation pilot boot gate', () => {
     expect(assertUnanchoredPublicTreesMock).toHaveBeenCalledOnce();
     expect(registerOTelMock).toHaveBeenCalledOnce();
   });
-  it('refuses an unanchored boot with staged content in a candidate tree', async () => {
-    // The leniency above is anchor-only: detected staged content in
-    // any candidate tree still refuses boot even with the lab off.
+  it('propagates a candidate-tree drift refusal with lab off', async () => {
+    // The leniency above is anchor-only: a drift refusal from the
+    // candidate check still refuses boot even with the lab off.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     resolvePilotPublicDirMock.mockImplementationOnce(() => {
       throw anchorError();
     });
     assertUnanchoredPublicTreesMock.mockImplementationOnce(() => {
-      throw new Error('staged merchant pilot assets require');
+      throw driftError();
     });
-    await expect(register()).rejects.toThrow(/staged merchant pilot assets/);
+    await expect(register()).rejects.toThrow(/does not match the pinned hash/);
     expect(registerOTelMock).not.toHaveBeenCalled();
   });
-  it('propagates an anchored staged-content refusal without degrading', async () => {
-    // The catch discriminates by failure: an UNCODED throw from the
-    // anchored check (staged content actually detected) must
-    // propagate even with the lab off — the candidates path runs only
-    // for the coded anchor failure.
+  it('propagates an anchored drift refusal without degrading', async () => {
+    // The catch discriminates by failure: a non-anchor throw from the
+    // anchored check (drift actually detected — coded, but not the
+    // anchor code) must propagate even with the lab off. The
+    // candidates path runs only for the coded anchor failure.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     assertPilotPublicAssetsMock.mockImplementationOnce(() => {
-      throw new Error('staged merchant pilot assets require');
+      throw driftError();
     });
-    await expect(register()).rejects.toThrow(/staged merchant pilot assets/);
+    await expect(register()).rejects.toThrow(/does not match the pinned hash/);
     expect(assertUnanchoredPublicTreesMock).not.toHaveBeenCalled();
     expect(registerOTelMock).not.toHaveBeenCalled();
   });

@@ -66,10 +66,11 @@ test('builds a side-by-side sheet from verified files', async () => {
 
 test('renders the original at the same capped width as the derivatives', async () => {
   // Full-size tiers (2000px source): the logo ladder tops at 384w, and a
-  // 40px slot caps the comparison at 120px (DPR-3 review) — the 384-tier
-  // row must not compare a 384px original against 120px derivatives.
-  // The hero slot has no canonical mount, so these rows exercise the
-  // legacy intrinsic render this test's capped-width assertions target.
+  // 40px slot renders one explicit row per DPR — 40/80/120px — so the
+  // 384-tier rows never compare a 384px original against small
+  // derivatives. The hero slot has no canonical mount, so these rows
+  // exercise the legacy intrinsic render this test's capped-width
+  // assertions target.
   const full = await setupPilot(
     {
       fixture: 'wide-2000x500.png',
@@ -89,12 +90,19 @@ test('renders the original at the same capped width as the derivatives', async (
     /<img src="data:image\/png[^>]*style="width:384px"/
   );
   assert.match(capped, /<img src="data:image\/png[^>]*style="width:120px"/);
-  // The caption states which ceiling bound each row: full DPR-3 review
-  // where encoded pixels reach it, the encoded width otherwise.
-  assert.match(capped, /compared at 120px \(3× CSS\)/);
-  assert.match(capped, /compared at 96px \(encoded-pixel ceiling\)/);
-  // A wide slot leaves full rungs uncapped: the 96-tier row compares at
-  // the rung's own width on both sides.
+  // Each rung renders all three DPR rows: DPR 1 at exactly the slot CSS
+  // width, DPR 2/3 at its multiples. The caption states the DPR and
+  // which ceiling bound each row: the DPR multiple where encoded
+  // pixels reach it, the encoded width otherwise.
+  assert.match(capped, /384px tier · DPR 1/);
+  assert.match(capped, /384px tier · DPR 2/);
+  assert.match(capped, /384px tier · DPR 3/);
+  assert.match(capped, /compared at 40px \(DPR 1\)/);
+  assert.match(capped, /compared at 80px \(DPR 2\)/);
+  assert.match(capped, /compared at 120px \(DPR 3\)/);
+  assert.match(capped, /compared at 96px \(DPR 3 · encoded-pixel ceiling\)/);
+  // A wide slot leaves full rungs uncapped: the 96-tier rows compare at
+  // the rung's own width on both sides, at every DPR.
   const wide = await buildQualitySheet({
     inputRoot: full.inputRoot,
     inventoryPath: full.inventoryPath,
@@ -102,6 +110,7 @@ test('renders the original at the same capped width as the derivatives', async (
     slots: { 'mobile-hero-slide-0': { cssWidth: 500 } },
   });
   assert.match(wide, /<img src="data:image\/png[^>]*style="width:96px"/);
+  assert.match(wide, /compared at 96px \(DPR 1 · encoded-pixel ceiling\)/);
   // Narrow sources encode below their request (48px source, 96w rung), so
   // the original follows the encoded width — not the request — there too.
   const narrow = await setupPilot(undefined, 'mobile-hero-slide-0');
@@ -112,7 +121,10 @@ test('renders the original at the same capped width as the derivatives', async (
     slots: { 'mobile-hero-slide-0': { cssWidth: 500 } },
   });
   assert.match(narrowSheet, /<img src="data:image\/png[^>]*style="width:48px"/);
-  assert.match(narrowSheet, /compared at 48px \(encoded-pixel ceiling\)/);
+  assert.match(
+    narrowSheet,
+    /compared at 48px \(DPR 1 · encoded-pixel ceiling\)/
+  );
   // Uncropped derivatives render at the row comparison width like the
   // original — never at intrinsic width up to the DPR cap.
   assert.doesNotMatch(capped, /max-width:/);

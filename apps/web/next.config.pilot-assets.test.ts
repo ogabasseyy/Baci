@@ -12,8 +12,13 @@ afterEach(() => {
 describe('Next build public pilot gate', () => {
   it('checks the app public tree while loading build configuration', async () => {
     await import('./next.config');
+    // Build is the enforcement point: both drift and content findings
+    // refuse here (runtime boots downgrade content findings to warn).
     expect(guard).toHaveBeenCalledWith(
-      expect.stringMatching(/apps\/web\/public$/)
+      expect.stringMatching(/apps\/web\/public$/),
+      undefined,
+      'throw',
+      'throw'
     );
   });
   it('refuses configuration when public staging is unsafe', async () => {

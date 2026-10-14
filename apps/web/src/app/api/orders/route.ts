@@ -1595,7 +1595,7 @@ export async function POST(request: NextRequest) {
         merchantId: merchant_id,
         requestedDiscountCode,
         hasVoucherItem,
-        requestedSavingsRedemption,
+        requestedSavingsRedemption: Boolean(requestedSavingsRedemption),
         items: orderItemsPayload,
       });
       if (!preparedCheckout.ok) {

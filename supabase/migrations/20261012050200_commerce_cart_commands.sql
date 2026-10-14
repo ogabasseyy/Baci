@@ -551,6 +551,13 @@ BEGIN
     IF NOT FOUND THEN
       RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
     END IF;
+    -- Voucher-backed lines are pinned to quantity one at creation and
+    -- import; quantity controls must never unpin them, or the orders
+    -- route would reject the cart at checkout.
+    IF (v_line.voucher_token IS NOT NULL OR v_line.voucher_award_id IS NOT NULL)
+      AND v_quantity <> 1 THEN
+      RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+    END IF;
     IF v_quantity = v_line.quantity THEN
       v_changed := false;
     ELSE

@@ -46,16 +46,8 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('forbidden');
     }
 
-    const rawBody = await readCartJsonBody(request);
-    if (!rawBody.ok) {
-      return cartErrorResponse('invalid_request');
-    }
-    const parsedBody = cartHandoffRedeemRequestSchema.safeParse(rawBody.body);
-    if (!parsedBody.success) {
-      return cartErrorResponse('invalid_request');
-    }
-    const body = parsedBody.data;
-
+    // Authenticate before reading the body: protected-route work and
+    // response selection must not be driven by unauthenticated payloads.
     const context = await resolveCartRequestContext(request, {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
@@ -72,6 +64,16 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse(context.error);
     }
     const principal = context.principal;
+
+    const rawBody = await readCartJsonBody(request);
+    if (!rawBody.ok) {
+      return cartErrorResponse('invalid_request');
+    }
+    const parsedBody = cartHandoffRedeemRequestSchema.safeParse(rawBody.body);
+    if (!parsedBody.success) {
+      return cartErrorResponse('invalid_request');
+    }
+    const body = parsedBody.data;
 
     if (body.choice === 'merge' && principal.scope !== 'session') {
       return cartErrorResponse('invalid_request');

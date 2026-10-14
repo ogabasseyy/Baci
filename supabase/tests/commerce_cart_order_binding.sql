@@ -1150,7 +1150,8 @@ BEGIN
 END
 $$;
 
--- 17. Trusted service callers submit without route-context claims.
+-- 17. The broad service_role key is not a binding caller: only the
+-- scoped storefront-route and agentic checkout contexts may submit.
 SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a10","cart_scope":"session","cart_id":"cccccccc-a000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999966"}';
 SET ROLE commerce_cart_shopper;
 DO $$
@@ -1170,29 +1171,37 @@ SET ROLE service_role;
 DO $$
 DECLARE
   v_session uuid;
-  v_result jsonb;
+  rejected boolean := false;
 BEGIN
   SELECT value::uuid INTO v_session FROM test_ctx WHERE key = 'a10_session';
-  SELECT public.create_storefront_order_with_cart_binding(
-    'base',
-    v_session,
-    1,
-    jsonb_build_object(
-      'p_merchant_id', '11111111-1111-4111-8111-111111111111',
-      'p_customer_email', 'buyer@example.com',
-      'p_customer_name', 'Buyer',
-      'p_items', jsonb_build_array(jsonb_build_object(
-        'cart_line_id', 'dddddddd-a000-4000-8000-000000000000',
-        'product_id', '44444444-4444-4444-8444-444444444444',
-        'quantity', 1,
-        'price', 15.00
-      )),
-      'p_expected_total', 15.00,
-      'p_checkout_idempotency_key', 'order-key-a10',
-      'p_checkout_request_hash', 'hash-a10'
-    )
-  ) INTO v_result;
-  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'service submit must succeed, got %', v_result; END IF;
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding(
+      'base',
+      v_session,
+      1,
+      jsonb_build_object(
+        'p_merchant_id', '11111111-1111-4111-8111-111111111111',
+        'p_customer_email', 'buyer@example.com',
+        'p_customer_name', 'Buyer',
+        'p_items', jsonb_build_array(jsonb_build_object(
+          'cart_line_id', 'dddddddd-a000-4000-8000-000000000000',
+          'product_id', '44444444-4444-4444-8444-444444444444',
+          'quantity', 1,
+          'price', 15.00
+        )),
+        'p_expected_total', 15.00,
+        'p_checkout_idempotency_key', 'order-key-a10',
+        'p_checkout_request_hash', 'hash-a10'
+      )
+    );
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'cart_order_unauthorized' THEN RAISE; END IF;
+    rejected := true;
+  WHEN insufficient_privilege THEN
+    -- No EXECUTE grant: the key cannot even invoke the binding.
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'service_role submit must be rejected'; END IF;
 END
 $$;
 RESET ROLE;
@@ -1201,10 +1210,10 @@ DECLARE
   v_count integer;
 BEGIN
   SELECT count(*) INTO v_count FROM public.orders WHERE checkout_idempotency_key = 'order-key-a10';
-  IF v_count <> 1 THEN RAISE EXCEPTION 'service submit must create the order'; END IF;
+  IF v_count <> 0 THEN RAISE EXCEPTION 'service submit must not create an order'; END IF;
   SELECT count(*) INTO v_count FROM public.commerce_carts
   WHERE id = 'cccccccc-a000-4000-8000-000000000000' AND state = 'completed';
-  IF v_count <> 1 THEN RAISE EXCEPTION 'service submit must close the cart'; END IF;
+  IF v_count <> 0 THEN RAISE EXCEPTION 'service submit must not close the cart'; END IF;
 END
 $$;
 

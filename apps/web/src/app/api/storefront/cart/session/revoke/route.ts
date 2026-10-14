@@ -20,9 +20,8 @@ export async function POST(request: NextRequest): Promise<Response> {
   try {
     if (!(await checkCsrfProtection(request)).valid)
       return cartErrorResponse('forbidden');
-    const body = await readCartJsonBody(request);
-    if (!body.ok || !cartRevokeRequestSchema.safeParse(body.body).success)
-      return cartErrorResponse('invalid_request');
+    // Authenticate before reading the body: protected-route work and
+    // response selection must not be driven by unauthenticated payloads.
     const context = await resolveCartRequestContext(request, {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
@@ -36,6 +35,9 @@ export async function POST(request: NextRequest): Promise<Response> {
         }),
     });
     if (!context.ok) return cartErrorResponse(context.error);
+    const body = await readCartJsonBody(request);
+    if (!body.ok || !cartRevokeRequestSchema.safeParse(body.body).success)
+      return cartErrorResponse('invalid_request');
     const result = await revokeCartDeviceGrants(context.principal);
     if (!result.ok) return cartErrorResponse(result.code);
     const response = cartJsonResponse({ revoked: true });

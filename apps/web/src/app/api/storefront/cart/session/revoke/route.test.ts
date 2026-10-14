@@ -37,6 +37,21 @@ it('requires CSRF and verified cart authority before revocation', async () => {
   expect((await POST(request())).status).toBe(403);
 });
 it('rejects malformed or caller-selected tenant/grant fields', async () => {
+  // Unauthenticated callers get the auth error before any body handling.
+  expect((await POST(request('{bad'))).status).toBe(401);
+  vi.mocked(resolveCartRequestContext).mockResolvedValue({
+    ok: true,
+    merchant: { id: 'm', slug: 'shop', customDomain: null },
+    principal: {
+      merchantId: 'm',
+      cartId: 'c',
+      grantId: 'g',
+      principalId: 'p',
+      scope: 'session' as const,
+      allowedOperations: [],
+      expiresAt: '2099-01-01T00:00:00Z',
+    },
+  });
   expect((await POST(request('{bad'))).status).toBe(400);
   expect((await POST(request('{"merchantId":"other"}'))).status).toBe(400);
   expect(revokeCartDeviceGrants).not.toHaveBeenCalled();

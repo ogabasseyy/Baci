@@ -217,6 +217,41 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- The effective mutate definition (this migration supersedes the core
+-- commands copy) must carry assurance, in-place negotiated repricing
+-- and the voucher quantity pin; subset fixtures alone cannot prove it.
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a9","cart_scope":"session","cart_id":"cccccccc-9000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999965"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; ver integer; BEGIN
+  SELECT version INTO ver FROM commerce_carts WHERE id = 'cccccccc-9000-4000-8000-000000000000';
+  result := public.commerce_cart_mutate('cccccccc-9000-4000-8000-000000000000','guard-assurance',ver,
+    '{"type":"set_assurance","lineId":"dddddddd-9000-4000-8000-000000000000","hasAssurance":true}'::jsonb);
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'effective mutate lost set_assurance: %', result; END IF;
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE id = 'dddddddd-9000-4000-8000-000000000000' AND has_assurance AND assurance_rate = 0.05) THEN
+    RAISE EXCEPTION 'effective set_assurance must persist the server-owned rate';
+  END IF;
+  SELECT version INTO ver FROM commerce_carts WHERE id = 'cccccccc-9000-4000-8000-000000000000';
+  result := public.commerce_cart_mutate('cccccccc-9000-4000-8000-000000000000','guard-reprice',ver,
+    '{"type":"set_negotiated_price","lineId":"dddddddd-9000-4000-8000-000000000000","negotiatedUnitPriceMinor":1200}'::jsonb);
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'effective mutate lost set_negotiated_price: %', result; END IF;
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE id = 'dddddddd-9000-4000-8000-000000000000' AND negotiated_unit_price_minor = 1200 AND negotiation_status = 'accepted' AND quantity = 1) THEN
+    RAISE EXCEPTION 'effective reprice must update the same line in place';
+  END IF;
+END $$;
+RESET ROLE;
+UPDATE commerce_cart_lines SET voucher_token = 'voucher-tok-9000' WHERE id = 'dddddddd-9000-4000-8000-000000000000';
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a9","cart_scope":"session","cart_id":"cccccccc-9000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999965"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; ver integer; BEGIN
+  SELECT version INTO ver FROM commerce_carts WHERE id = 'cccccccc-9000-4000-8000-000000000000';
+  result := public.commerce_cart_mutate('cccccccc-9000-4000-8000-000000000000','guard-voucher-qty',ver,
+    '{"type":"set_quantity","lineId":"dddddddd-9000-4000-8000-000000000000","quantity":2}'::jsonb);
+  IF (result ->> 'ok')::boolean OR result ->> 'code' <> 'invalid_item' THEN
+    RAISE EXCEPTION 'voucher line quantity must stay pinned to one: %', result;
+  END IF;
+END $$;
+RESET ROLE;
+
 -- A near-expiry cart must remain usable for the accepted checkout session.
 UPDATE commerce_carts SET expires_at = now() + interval '1 second' WHERE id = 'cccccccc-8000-4000-8000-000000000000';
 

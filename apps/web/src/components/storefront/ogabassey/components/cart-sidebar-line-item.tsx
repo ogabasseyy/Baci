@@ -141,7 +141,7 @@ export function CartSidebarLineItem({
                   onUpdateQuantity(item.cartItemId, item.quantity - 1)
                 }
                 className="p-1 px-2 hover:bg-gray-50 text-gray-500"
-                disabled={item.quantity <= 1}
+                disabled={item.quantity <= 1 || isQuizGift}
                 aria-label="Decrease quantity"
               >
                 <Minus size={12} />
@@ -154,6 +154,7 @@ export function CartSidebarLineItem({
                   onUpdateQuantity(item.cartItemId, item.quantity + 1)
                 }
                 className="p-1 px-2 hover:bg-gray-50 text-gray-500"
+                disabled={isQuizGift}
                 aria-label="Increase quantity"
               >
                 <Plus size={12} />

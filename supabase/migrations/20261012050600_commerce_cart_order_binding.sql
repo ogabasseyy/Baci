@@ -415,9 +415,12 @@ BEGIN
   -- coalesce keeps missing claims fail-closed instead of NULL-skipping.
   -- The server-minted agentic checkout context is a second trusted
   -- internal context alongside the storefront route context.
+  -- Only the two scoped caller contexts may submit: the storefront
+  -- route context and the server-minted agentic checkout context. The
+  -- broad service_role key is deliberately not a caller here; both
+  -- legitimate submitters use scoped clients with short-lived claims.
   IF NOT coalesce(
-    v_role = 'service_role'
-    OR (v_role = 'authenticated' AND v_context = 'route' AND v_claim_merchant IS NOT NULL)
+    (v_role = 'authenticated' AND v_context = 'route' AND v_claim_merchant IS NOT NULL)
     OR (v_role = 'authenticated' AND v_agentic_context = 'checkout' AND v_agentic_merchant IS NOT NULL),
     false
   ) THEN
@@ -439,12 +442,11 @@ BEGIN
   END IF;
 
   -- Every presented context must agree with the session merchant;
-  -- conflicting contexts fail closed. Service callers present no
-  -- context, so only the args merchant binds them.
+  -- conflicting contexts fail closed.
   IF v_session.merchant_id IS DISTINCT FROM v_merchant
-    OR (v_role <> 'service_role' AND v_context = 'route'
+    OR (v_context = 'route'
       AND v_claim_merchant IS DISTINCT FROM v_session.merchant_id)
-    OR (v_role <> 'service_role' AND v_agentic_context = 'checkout'
+    OR (v_agentic_context = 'checkout'
       AND v_agentic_merchant IS DISTINCT FROM v_session.merchant_id) THEN
     RAISE EXCEPTION 'cart_order_merchant_mismatch' USING ERRCODE = 'P0001';
   END IF;
@@ -586,11 +588,11 @@ REVOKE ALL ON FUNCTION public.commerce_cart_prepare_checkout(uuid, integer, text
 GRANT EXECUTE ON FUNCTION public.commerce_cart_prepare_checkout(uuid, integer, text)
   TO commerce_cart_shopper, service_role;
 
--- The binding is callable where the order RPCs are; the signed route
--- context (or a trusted service caller) is enforced inside.
+-- The binding is callable where the order RPCs are; the signed scoped
+-- caller context is enforced inside, and service_role is not a caller.
 REVOKE ALL ON FUNCTION public.create_storefront_order_with_cart_binding(text, uuid, integer, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_storefront_order_with_cart_binding(text, uuid, integer, jsonb)
-  TO anon, authenticated, service_role;
+  TO anon, authenticated;
 
 -- Bounded retention for checkout sessions: unsubmitted sessions go one
 -- day after expiry, submitted receipts after 90 days.

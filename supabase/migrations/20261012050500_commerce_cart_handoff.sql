@@ -542,15 +542,11 @@ BEGIN
     IF NOT v_dest_found AND NOT v_incoming_found THEN
       RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
     END IF;
-    IF v_voucher_token IS NOT NULL OR v_voucher_award IS NOT NULL THEN
-      v_expected_qty := 1;
-    ELSE
-      v_expected_qty := greatest(coalesce(v_dest_line.quantity, 0), coalesce(v_incoming_line.quantity, 0));
-    END IF;
-    IF v_quantity <> v_expected_qty THEN
-      RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
-    END IF;
-    v_keep := NULL;
+    -- Attachments are preserved from the stored source lines, never
+    -- echoed by the client: handoff preview redacts voucher credentials
+    -- and negotiated terms, so a redacted client cannot (and need not)
+    -- resubmit them. Identity alone selects the line; the server keeps
+    -- whichever side's attachments the merge rules choose.
     IF v_dest_found AND v_incoming_found
       AND (v_dest_line.voucher_token IS DISTINCT FROM v_incoming_line.voucher_token
         OR v_dest_line.voucher_award_id::text IS DISTINCT FROM v_incoming_line.voucher_award_id::text
@@ -580,45 +576,49 @@ BEGIN
             'voucherAwardId', v_incoming_line.voucher_award_id,
             'negotiatedUnitPriceMinor', v_incoming_line.negotiated_unit_price_minor,
             'negotiationStatus', v_incoming_line.negotiation_status));
+        v_voucher_token := v_dest_line.voucher_token;
+        v_voucher_award := v_dest_line.voucher_award_id::text;
+        v_negotiated := v_dest_line.negotiated_unit_price_minor;
+        v_neg_status := v_dest_line.negotiation_status;
+        v_assurance := v_dest_line.has_assurance;
+        v_assurance_rate := v_dest_line.assurance_rate;
       ELSIF v_keep = 'incoming' THEN
-        IF v_voucher_token IS DISTINCT FROM v_incoming_line.voucher_token
-          OR v_voucher_award IS DISTINCT FROM v_incoming_line.voucher_award_id::text
-          OR v_negotiated IS DISTINCT FROM v_incoming_line.negotiated_unit_price_minor
-          OR v_neg_status IS DISTINCT FROM v_incoming_line.negotiation_status THEN
-          RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
-        END IF;
+        v_voucher_token := v_incoming_line.voucher_token;
+        v_voucher_award := v_incoming_line.voucher_award_id::text;
+        v_negotiated := v_incoming_line.negotiated_unit_price_minor;
+        v_neg_status := v_incoming_line.negotiation_status;
         v_assurance := v_incoming_line.has_assurance;
         v_assurance_rate := v_incoming_line.assurance_rate;
       ELSE
-        IF v_voucher_token IS DISTINCT FROM v_dest_line.voucher_token
-          OR v_voucher_award IS DISTINCT FROM v_dest_line.voucher_award_id::text
-          OR v_negotiated IS DISTINCT FROM v_dest_line.negotiated_unit_price_minor
-          OR v_neg_status IS DISTINCT FROM v_dest_line.negotiation_status THEN
-          RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
-        END IF;
+        v_voucher_token := v_dest_line.voucher_token;
+        v_voucher_award := v_dest_line.voucher_award_id::text;
+        v_negotiated := v_dest_line.negotiated_unit_price_minor;
+        v_neg_status := v_dest_line.negotiation_status;
         v_assurance := v_dest_line.has_assurance;
         v_assurance_rate := v_dest_line.assurance_rate;
       END IF;
+    ELSIF v_dest_found THEN
+      v_voucher_token := v_dest_line.voucher_token;
+      v_voucher_award := v_dest_line.voucher_award_id::text;
+      v_negotiated := v_dest_line.negotiated_unit_price_minor;
+      v_neg_status := v_dest_line.negotiation_status;
+      v_assurance := v_dest_line.has_assurance;
+      v_assurance_rate := v_dest_line.assurance_rate;
     ELSE
-      IF v_dest_found THEN
-        IF v_voucher_token IS DISTINCT FROM v_dest_line.voucher_token
-          OR v_voucher_award IS DISTINCT FROM v_dest_line.voucher_award_id::text
-          OR v_negotiated IS DISTINCT FROM v_dest_line.negotiated_unit_price_minor
-          OR v_neg_status IS DISTINCT FROM v_dest_line.negotiation_status THEN
-          RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
-        END IF;
-        v_assurance := v_dest_line.has_assurance;
-        v_assurance_rate := v_dest_line.assurance_rate;
-      ELSE
-        IF v_voucher_token IS DISTINCT FROM v_incoming_line.voucher_token
-          OR v_voucher_award IS DISTINCT FROM v_incoming_line.voucher_award_id::text
-          OR v_negotiated IS DISTINCT FROM v_incoming_line.negotiated_unit_price_minor
-          OR v_neg_status IS DISTINCT FROM v_incoming_line.negotiation_status THEN
-          RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
-        END IF;
-        v_assurance := v_incoming_line.has_assurance;
-        v_assurance_rate := v_incoming_line.assurance_rate;
-      END IF;
+      v_voucher_token := v_incoming_line.voucher_token;
+      v_voucher_award := v_incoming_line.voucher_award_id::text;
+      v_negotiated := v_incoming_line.negotiated_unit_price_minor;
+      v_neg_status := v_incoming_line.negotiation_status;
+      v_assurance := v_incoming_line.has_assurance;
+      v_assurance_rate := v_incoming_line.assurance_rate;
+    END IF;
+    IF v_voucher_token IS NOT NULL OR v_voucher_award IS NOT NULL THEN
+      v_expected_qty := 1;
+    ELSE
+      v_expected_qty := greatest(coalesce(v_dest_line.quantity, 0), coalesce(v_incoming_line.quantity, 0));
+    END IF;
+    IF v_quantity <> v_expected_qty THEN
+      RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
     END IF;
     v_staged := v_staged || jsonb_build_object(
       'product', v_product_id, 'variant', v_variant_id, 'condition', v_condition,

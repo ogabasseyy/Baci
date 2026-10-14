@@ -29,15 +29,8 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('forbidden');
     }
 
-    const rawBody = await readCartJsonBody(request);
-    if (!rawBody.ok) {
-      return cartErrorResponse('invalid_request');
-    }
-    const parsedBody = sharedCartPrepareRequestSchema.safeParse(rawBody.body);
-    if (!parsedBody.success) {
-      return cartErrorResponse('invalid_request');
-    }
-
+    // Authenticate before reading the body: protected-route work and
+    // response selection must not be driven by unauthenticated payloads.
     const context = await resolveCartRequestContext(request, {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
@@ -52,6 +45,15 @@ export async function POST(request: NextRequest) {
     });
     if (!context.ok) {
       return cartErrorResponse(context.error);
+    }
+
+    const rawBody = await readCartJsonBody(request);
+    if (!rawBody.ok) {
+      return cartErrorResponse('invalid_request');
+    }
+    const parsedBody = sharedCartPrepareRequestSchema.safeParse(rawBody.body);
+    if (!parsedBody.success) {
+      return cartErrorResponse('invalid_request');
     }
 
     const quota = await checkCartQuota({

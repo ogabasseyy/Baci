@@ -1082,4 +1082,65 @@ END
 $$;
 RESET ROLE;
 
+-- 17. Merge preserves source attachments server-side: preview redacts
+-- voucher credentials and negotiated terms, so the client submits
+-- identity-only lines and the stored attachments must survive.
+INSERT INTO public.commerce_carts (id, merchant_id, currency, version, state, expires_at) VALUES
+  ('aaaaaaa1-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'NGN', 1, 'active', now() + interval '7 days'),
+  ('aaaaaaa2-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'NGN', 1, 'active', now() + interval '7 days');
+INSERT INTO public.commerce_cart_lines (merchant_id, cart_id, product_id, quantity, last_unit_price_minor, negotiated_unit_price_minor, negotiation_status) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'aaaaaaa1-1111-4111-8111-111111111111', '44444444-4444-4444-8444-444444444444', 1, 1500, 1200, 'accepted');
+INSERT INTO public.commerce_cart_lines (merchant_id, cart_id, product_id, quantity, last_unit_price_minor, voucher_token) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'aaaaaaa1-1111-4111-8111-111111111111', '55555555-5555-4555-8555-555555555555', 1, 32000, 'merge-voucher-token');
+INSERT INTO public.commerce_cart_lines (merchant_id, cart_id, product_id, quantity, last_unit_price_minor) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'aaaaaaa2-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333', 1, 25000);
+INSERT INTO public.commerce_cart_grants (id, merchant_id, cart_id, principal_id, expires_at) VALUES
+  ('99999999-9999-4999-8999-999999999981', '11111111-1111-4111-8111-111111111111', 'aaaaaaa1-1111-4111-8111-111111111111', 'guest-msrc', now() + interval '7 days'),
+  ('99999999-9999-4999-8999-999999999982', '11111111-1111-4111-8111-111111111111', 'aaaaaaa2-2222-4222-8222-222222222222', 'guest-mdst', now() + interval '7 days');
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-msrc","cart_scope":"session","cart_id":"aaaaaaa1-1111-4111-8111-111111111111","cart_grant_id":"99999999-9999-4999-8999-999999999981"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE v_result jsonb; BEGIN
+  SELECT public.commerce_cart_issue_handoff(
+    'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
+    'aaaaaaa3-3333-4333-8333-333333333333',
+    'aaaaaaa1-1111-4111-8111-111111111111',
+    'handoff-op-merge-redacted',
+    '{"type":"web"}'::jsonb
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'issue must succeed, got %', v_result; END IF;
+END $$;
+RESET ROLE;
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-mdst","cart_scope":"session","cart_id":"aaaaaaa2-2222-4222-8222-222222222222","cart_grant_id":"99999999-9999-4999-8999-999999999982"}';
+DO $$ DECLARE v_in integer; v_dst integer; BEGIN
+  SELECT version INTO v_in FROM public.commerce_carts WHERE id = 'aaaaaaa1-1111-4111-8111-111111111111';
+  SELECT version INTO v_dst FROM public.commerce_carts WHERE id = 'aaaaaaa2-2222-4222-8222-222222222222';
+  PERFORM set_config('test.merge_incoming_version', v_in::text, false);
+  PERFORM set_config('test.merge_dest_version', v_dst::text, false);
+END $$;
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE v_result jsonb; BEGIN
+  SELECT public.commerce_cart_redeem_handoff(
+    'cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
+    'aaaaaaa3-3333-4333-8333-333333333333',
+    'attempt-merge-redacted', 'merge', 'web',
+    'aaaaaaa2-2222-4222-8222-222222222222',
+    current_setting('test.merge_incoming_version')::integer,
+    current_setting('test.merge_dest_version')::integer,
+    '[{"item":{"productId":"44444444-4444-4444-8444-444444444444"},"quantity":1},{"item":{"productId":"55555555-5555-4555-8555-555555555555"},"quantity":1},{"item":{"productId":"33333333-3333-4333-8333-333333333333"},"quantity":1}]'::jsonb,
+    NULL
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'redacted merge must succeed, got %', v_result; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = 'aaaaaaa2-2222-4222-8222-222222222222'
+    AND product_id = '44444444-4444-4444-8444-444444444444' AND negotiated_unit_price_minor = 1200 AND negotiation_status = 'accepted') THEN
+    RAISE EXCEPTION 'merge must preserve the negotiated price server-side';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE cart_id = 'aaaaaaa2-2222-4222-8222-222222222222'
+    AND product_id = '55555555-5555-4555-8555-555555555555' AND voucher_token = 'merge-voucher-token' AND quantity = 1) THEN
+    RAISE EXCEPTION 'merge must preserve the voucher credential server-side';
+  END IF;
+END $$;
+
 ROLLBACK;

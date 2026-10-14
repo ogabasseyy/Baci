@@ -3,12 +3,15 @@ import {
   requiredConfiguration,
   safeIssueId,
 } from './posthog-error-events.mjs';
+import { redactCodexOutput } from './remediation-codex-output.mjs';
 
 const boundedString = (value, length) =>
   typeof value === 'string' ? value.trim().slice(0, length) : '';
 
+// Redaction runs before character filtering: stripping punctuation first
+// would break email and secret patterns into unmatchable fragments.
 const safeTechnicalValue = (value, length) =>
-  boundedString(value, length)
+  boundedString(redactCodexOutput(value), length)
     .replace(/[^A-Za-z0-9_$.:<>/ +()-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();

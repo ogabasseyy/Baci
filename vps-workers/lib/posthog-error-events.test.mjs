@@ -86,6 +86,18 @@ describe('PostHog remediation candidates', () => {
       fetchPostHogRemediationCandidates({ env: {} }),
       /POSTHOG_REMEDIATION_HOST/
     );
+    await assert.rejects(
+      fetchPostHogRemediationCandidates({
+        env: {
+          ...environment,
+          POSTHOG_REMEDIATION_PERSONAL_API_KEY: 'sk-generic-automation-token',
+        },
+        fetchFn: () => {
+          throw new Error('fetch must not run with a non-personal key');
+        },
+      }),
+      /must be a personal API key \(phx_\.\.\.\)/
+    );
   });
 
   it('normalizes offset-form provider timestamps instead of dropping them', async () => {

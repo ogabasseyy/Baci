@@ -60,6 +60,34 @@ describe('PostHog remediation candidate enrichment', () => {
     assert.equal(enriched.fingerprint, 'posthog-abc123');
   });
 
+  it('redacts identifiers in frame metadata before character filtering', async () => {
+    const enriched = await enrichPostHogRemediationCandidate({
+      candidate,
+      env: environment,
+      fetchFn: async () =>
+        new Response(
+          JSON.stringify({
+            latest_release: { version: '2026.10.1' },
+            top_in_app_frame: {
+              function: 'handleCheckout',
+              line: 42,
+              source:
+                'checkout.py?email=alice@example.com&token=secret-value',
+            },
+          })
+        ),
+    });
+
+    assert.match(enriched.sample.route, /handleCheckout/);
+    assert.match(enriched.sample.route, /checkout\.py/);
+    assert.equal(enriched.sample.route.includes('alice'), false);
+    assert.equal(enriched.sample.route.includes('secret-value'), false);
+    assert.equal(
+      enriched.sample.route.includes('example.com'),
+      false
+    );
+  });
+
   it('keeps the redacted route when the detail has no usable frame', async () => {
     const enriched = await enrichPostHogRemediationCandidate({
       candidate,

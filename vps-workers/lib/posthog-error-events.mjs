@@ -119,6 +119,11 @@ export function requiredConfiguration(env) {
       'POSTHOG_REMEDIATION_PERSONAL_API_KEY must be a personal API key, not a project ingestion key'
     );
   }
+  if (!/^phx_/.test(token)) {
+    throw new Error(
+      'POSTHOG_REMEDIATION_PERSONAL_API_KEY must be a personal API key (phx_...) limited to error_tracking:read'
+    );
+  }
 
   let baseUrl;
   try {

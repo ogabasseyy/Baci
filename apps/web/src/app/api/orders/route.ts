@@ -987,7 +987,6 @@ export async function POST(request: NextRequest) {
       const proof = verifySharedCartOrderProof(request, {
         cartId: shared_cart.cart_id,
         merchantId: merchant_id,
-        merchantSlug: merchant.slug,
       });
       if (!proof.ok) {
         return NextResponse.json(

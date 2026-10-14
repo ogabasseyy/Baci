@@ -189,7 +189,7 @@ function verifyCartProof(
   const session: VerifiedCartSession = {
     allowedOperations:
       payload.scope === 'session'
-        ? ['add', 'set_quantity', 'remove', 'clear', 'replace']
+        ? ['add', 'set_quantity', 'remove', 'clear', 'replace', 'set_assurance']
         : [],
     cartId: payload.cartId,
     expiresAt: new Date(payload.exp * 1000).toISOString(),

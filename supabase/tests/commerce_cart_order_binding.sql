@@ -30,14 +30,20 @@ CREATE TABLE public.products (
   status text NOT NULL,
   stock_quantity integer NOT NULL DEFAULT 0,
   stock integer NOT NULL DEFAULT 0,
-  manage_stock boolean NOT NULL DEFAULT true
+  manage_stock boolean NOT NULL DEFAULT true,
+  has_variants boolean NOT NULL DEFAULT false
 );
 CREATE TABLE public.product_variants (
   id uuid PRIMARY KEY,
   product_id uuid NOT NULL,
   merchant_id uuid NOT NULL,
   price_override numeric(10,2) NULL,
-  stock_quantity integer NOT NULL DEFAULT 0
+  stock_quantity integer NOT NULL DEFAULT 0,
+  is_active boolean NOT NULL DEFAULT true,
+  status text NOT NULL DEFAULT 'active',
+  deleted_at timestamptz NULL,
+  archived_at timestamptz NULL,
+  is_default boolean NOT NULL DEFAULT false
 );
 
 -- Minimal orders stub: the binding wrapper replays generations from this

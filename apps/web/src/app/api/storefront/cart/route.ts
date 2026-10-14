@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
     );
     setCartSessionCookie(
       response,
-      context.merchant.slug,
+      context.merchant.id,
       proof,
       CART_SESSION_PROOF_TTL_SECONDS
     );

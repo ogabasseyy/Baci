@@ -37,10 +37,12 @@ function requestWithCookie(cookieHeader: string | null): Request {
 }
 
 describe('cartSessionCookieName', () => {
-  it('namespaces the session cookie by merchant', () => {
-    expect(cartSessionCookieName(MERCHANT_A.slug)).toBe('baci-cart-ogabassey');
-    expect(cartSessionCookieName(MERCHANT_B.slug)).toBe(
-      'baci-cart-second-merchant'
+  it('namespaces the session cookie by stable merchant id', () => {
+    expect(cartSessionCookieName(MERCHANT_A.id)).toBe(
+      'baci-cart-11111111-1111-4111-8111-111111111111'
+    );
+    expect(cartSessionCookieName(MERCHANT_B.id)).toBe(
+      'baci-cart-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
     );
   });
 });
@@ -48,7 +50,9 @@ describe('cartSessionCookieName', () => {
 describe('resolveCartPrincipal', () => {
   it('resolves a principal from a valid merchant-namespaced cookie', async () => {
     const result = await resolveCartPrincipal(
-      requestWithCookie('baci-cart-ogabassey=proof-a'),
+      requestWithCookie(
+        'baci-cart-11111111-1111-4111-8111-111111111111=proof-a'
+      ),
       {
         resolveMerchant: async () => MERCHANT_A,
         verify: async () => sessionVerification(),
@@ -68,7 +72,7 @@ describe('resolveCartPrincipal', () => {
   it('reads a different cookie per merchant on one shared host', async () => {
     const seen: string[] = [];
     const request = requestWithCookie(
-      'baci-cart-ogabassey=proof-a; baci-cart-second-merchant=proof-b'
+      'baci-cart-11111111-1111-4111-8111-111111111111=proof-a; baci-cart-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa=proof-b'
     );
 
     await resolveCartPrincipal(request, {
@@ -93,7 +97,9 @@ describe('resolveCartPrincipal', () => {
 
   it('reports an invalid proof without constructing authority', async () => {
     const result = await resolveCartPrincipal(
-      requestWithCookie('baci-cart-ogabassey=forged'),
+      requestWithCookie(
+        'baci-cart-11111111-1111-4111-8111-111111111111=forged'
+      ),
       {
         resolveMerchant: async () => MERCHANT_A,
         verify: async () => ({ error: 'invalid_proof', ok: false }),
@@ -105,7 +111,7 @@ describe('resolveCartPrincipal', () => {
 
   it('reports an expired proof without constructing authority', async () => {
     const result = await resolveCartPrincipal(
-      requestWithCookie('baci-cart-ogabassey=stale'),
+      requestWithCookie('baci-cart-11111111-1111-4111-8111-111111111111=stale'),
       {
         resolveMerchant: async () => MERCHANT_A,
         verify: async () => ({ error: 'expired_proof', ok: false }),
@@ -117,7 +123,9 @@ describe('resolveCartPrincipal', () => {
 
   it('rejects a proof bound to a different merchant than the host', async () => {
     const result = await resolveCartPrincipal(
-      requestWithCookie('baci-cart-second-merchant=proof-a'),
+      requestWithCookie(
+        'baci-cart-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa=proof-a'
+      ),
       {
         resolveMerchant: async () => MERCHANT_B,
         verify: async () => sessionVerification({ merchantId: MERCHANT_A.id }),
@@ -129,7 +137,9 @@ describe('resolveCartPrincipal', () => {
 
   it('reports an unresolved merchant without reading body authority', async () => {
     const result = await resolveCartPrincipal(
-      requestWithCookie('baci-cart-ogabassey=proof-a'),
+      requestWithCookie(
+        'baci-cart-11111111-1111-4111-8111-111111111111=proof-a'
+      ),
       {
         resolveMerchant: async () => null,
         verify: async () => sessionVerification(),
@@ -161,7 +171,9 @@ describe('resolveCartPrincipal', () => {
 
   it('keeps the merchant-namespaced cookie as the default proof source', async () => {
     const result = await resolveCartPrincipal(
-      requestWithCookie('baci-cart-ogabassey=proof-a'),
+      requestWithCookie(
+        'baci-cart-11111111-1111-4111-8111-111111111111=proof-a'
+      ),
       {
         resolveMerchant: async () => MERCHANT_A,
         verify: async (proof) =>

@@ -133,7 +133,14 @@ export async function linkCartToCustomer(
       principalId: receipt.data.principalId,
       cartId: receipt.data.cartId,
       grantId: receipt.data.grantId,
-      allowedOperations: ['add', 'set_quantity', 'remove', 'clear', 'replace'],
+      allowedOperations: [
+        'add',
+        'set_quantity',
+        'remove',
+        'clear',
+        'replace',
+        'set_assurance',
+      ],
     };
     const snapshot = await getCart({
       principal: selected,

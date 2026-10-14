@@ -17,6 +17,18 @@ beforeEach(() => {
     chooseLegacy: null,
   });
 });
+it('hides the resolution-less combine while conflicts need picks', () => {
+  useNativeSharedCartStore.setState({
+    mergeConflicts: [{ productId }],
+    status: 'choice_required',
+    chooseLegacy: jest.fn().mockResolvedValue(undefined),
+  });
+  const screen = render(<SharedCartStatusPanel />);
+  expect(screen.queryByRole('button', { name: 'Combine carts' })).toBeNull();
+  expect(
+    screen.getByRole('button', { name: 'Combine with my choices' })
+  ).toBeTruthy();
+});
 it('requires a per-item offer choice before combining legacy carts', () => {
   const chooseLegacy = jest.fn().mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({

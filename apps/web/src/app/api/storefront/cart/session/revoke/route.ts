@@ -39,7 +39,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     const result = await revokeCartDeviceGrants(context.principal);
     if (!result.ok) return cartErrorResponse(result.code);
     const response = cartJsonResponse({ revoked: true });
-    setCartSessionCookie(response, context.merchant.slug, '', 0);
+    setCartSessionCookie(response, context.merchant.id, '', 0);
     return response;
   } catch {
     return cartErrorResponse('temporarily_unavailable');

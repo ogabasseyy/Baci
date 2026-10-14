@@ -120,7 +120,7 @@ describe('POST /api/storefront/cart/bootstrap', () => {
 
     const cookieProof = cookieValue(
       response.headers.get('set-cookie'),
-      'baci-cart-ogabassey'
+      'baci-cart-11111111-1111-4111-8111-111111111111'
     );
     expect(cookieProof).toBe(payload.proof);
   });

@@ -16,15 +16,12 @@ export type SharedCartOrderProofResult =
  */
 export function verifySharedCartOrderProof(
   request: Request,
-  input: { merchantId: string; merchantSlug: string; cartId: string }
+  input: { merchantId: string; cartId: string }
 ): SharedCartOrderProofResult {
   const headerProof = request.headers.get('x-cart-proof')?.trim();
   const proof =
     headerProof ||
-    readCartProofFromRequest(
-      request,
-      cartSessionCookieName(input.merchantSlug)
-    );
+    readCartProofFromRequest(request, cartSessionCookieName(input.merchantId));
   if (!proof) return { ok: false };
   const verified = verifyCartSessionProof(proof, {
     environment: getCartProofEnvironment(),

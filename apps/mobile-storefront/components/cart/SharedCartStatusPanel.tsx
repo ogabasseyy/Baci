@@ -123,7 +123,7 @@ export function SharedCartStatusPanel() {
           </Pressable>
         </>
       ) : null}
-      {!busy && state.status === 'choice_required' ? (
+      {!busy && state.status === 'choice_required' && conflicts.length === 0 ? (
         <>
           <Pressable
             accessibilityRole="button"

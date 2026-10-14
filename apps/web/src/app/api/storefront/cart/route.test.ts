@@ -159,8 +159,8 @@ afterEach(() => {
 
 const CART_URL = 'https://ogabassey.usebaci.com/api/storefront/cart';
 
-function cartCookie(proof: string, slug: string = MERCHANT.slug): string {
-  return `baci-cart-${slug}=${proof}`;
+function cartCookie(proof: string, merchantId: string = MERCHANT.id): string {
+  return `baci-cart-${merchantId}=${proof}`;
 }
 
 function getCart(init: {
@@ -300,7 +300,7 @@ describe('GET /api/storefront/cart', () => {
       { environment: 'test', secret: TEST_SECRET }
     );
     const separated = await getCart({
-      headers: { cookie: cartCookie(otherProof, OTHER_MERCHANT.slug) },
+      headers: { cookie: cartCookie(otherProof, OTHER_MERCHANT.id) },
       noMerchantHeader: true,
       url,
     });
@@ -370,7 +370,9 @@ describe('POST /api/storefront/cart', () => {
       expect(verified.session.grantId).toBe(GRANT_ID);
     }
     const setCookie = response.headers.get('set-cookie') ?? '';
-    expect(setCookie).toContain(`baci-cart-ogabassey=${payload.proof}`);
+    expect(setCookie).toContain(
+      `baci-cart-11111111-1111-4111-8111-111111111111=${payload.proof}`
+    );
     expect(setCookie).toContain(`Max-Age=${CART_SESSION_PROOF_TTL_SECONDS}`);
     expect(mocks.capturedPrincipal).toMatchObject({ scope: 'bootstrap' });
   });

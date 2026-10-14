@@ -66,7 +66,8 @@ describe('rpcPreviewHandoff', () => {
         }),
         status: 'pending',
       }) as never,
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'ch1.fixture.token'
     );
 
     expect(result.ok).toBe(true);
@@ -88,7 +89,8 @@ describe('rpcPreviewHandoff', () => {
         snapshot: rawState(),
         status: 'pending',
       }) as never,
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'ch1.fixture.token'
     );
 
     expect(result.ok).toBe(true);
@@ -108,13 +110,15 @@ describe('rpcPreviewHandoff', () => {
           ok: true,
           status,
         }) as never,
-        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+        'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        'ch1.fixture.token'
       );
       expect(result).toMatchObject({ ok: true, status });
     }
     const missing = await rpcPreviewHandoff(
       clientReturning({ code: 'not_found', ok: false }) as never,
-      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'ch1.fixture.token'
     );
     expect(missing).toEqual({ code: 'not_found', ok: false });
   });
@@ -132,7 +136,7 @@ it('bounds unrecognized preview RPC codes instead of returning arbitrary payload
         .mockResolvedValue({ data: { ok: false, code }, error: null }),
     };
     await expect(
-      rpcPreviewHandoff(client as never, 'fixture-handoff')
+      rpcPreviewHandoff(client as never, 'fixture-handoff', 'ch1.fixture.token')
     ).resolves.toEqual({ ok: false, code: 'temporarily_unavailable' });
   }
 });

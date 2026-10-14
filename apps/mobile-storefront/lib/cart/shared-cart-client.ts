@@ -187,10 +187,11 @@ export function createNativeCartClient(
   });
   return {
     config: { ...config, apiOrigin: origin },
-    previewHandoff: (handoffId: string) =>
+    previewHandoff: (handoffId: string, token: string) =>
       previewNativeHandoff(
         { ...config, apiOrigin: origin },
         handoffId,
+        token,
         fetcher
       ),
     ...session,

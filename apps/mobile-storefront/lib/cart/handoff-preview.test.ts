@@ -20,7 +20,7 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
 }));
-it('previews by public id only, binds both merchant projections, and sends no session or pairing token', async () => {
+it('previews by public id plus pairing token, binds both merchant projections, and sends no session credential', async () => {
   const fetcher = jest.fn().mockResolvedValue(
     new Response(
       JSON.stringify({
@@ -39,6 +39,7 @@ it('previews by public id only, binds both merchant projections, and sends no se
         apiOrigin: 'https://usebaci.com',
       },
       handoffId,
+      'ch1.fixture.token',
       fetcher
     )
   ).resolves.toMatchObject({ snapshot: cart });
@@ -49,7 +50,9 @@ it('previews by public id only, binds both merchant projections, and sends no se
     credentials: 'omit',
     redirect: 'error',
   });
-  expect(fetcher.mock.calls[0][1].headers).toBeUndefined();
+  expect(fetcher.mock.calls[0][1].headers).toEqual({
+    'x-handoff-token': 'ch1.fixture.token',
+  });
   fetcher.mockResolvedValue(
     new Response(
       JSON.stringify({
@@ -68,6 +71,7 @@ it('previews by public id only, binds both merchant projections, and sends no se
         apiOrigin: 'https://usebaci.com',
       },
       handoffId,
+      'ch1.fixture.token',
       fetcher
     )
   ).rejects.toThrow();

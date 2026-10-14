@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
       replayed: redeemed.replayed,
       warnings: redeemed.warnings,
     });
-    setCartSessionCookie(response, context.merchant.slug, proof, maxAge);
+    setCartSessionCookie(response, context.merchant.id, proof, maxAge);
     return response;
   } catch {
     console.error(

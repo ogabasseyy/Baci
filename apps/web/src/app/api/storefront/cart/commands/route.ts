@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
     // A non-positive lifetime would delete the cookie the body proof just
     // renewed; omit the cookie instead and let the body proof govern.
     if (maxAge > 0) {
-      setCartSessionCookie(response, context.merchant.slug, proof, maxAge);
+      setCartSessionCookie(response, context.merchant.id, proof, maxAge);
     }
     return response;
   } catch (error) {

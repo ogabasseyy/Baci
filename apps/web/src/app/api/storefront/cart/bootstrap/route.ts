@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     );
     setCartSessionCookie(
       response,
-      merchant.merchant.slug,
+      merchant.merchant.id,
       proof,
       CART_BOOTSTRAP_PROOF_TTL_SECONDS
     );

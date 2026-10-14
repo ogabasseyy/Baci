@@ -91,38 +91,52 @@ describe('readCartJsonBody', () => {
 describe('readCartProofFromRequest', () => {
   it('reads the merchant-namespaced cookie by default', () => {
     const request = new Request('https://usebaci.com/api/x', {
-      headers: { cookie: 'baci-cart-ogabassey=cp1.cookie.signature' },
+      headers: {
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.cookie.signature',
+      },
     });
 
-    expect(readCartProofFromRequest(request, 'baci-cart-ogabassey')).toBe(
-      'cp1.cookie.signature'
-    );
+    expect(
+      readCartProofFromRequest(
+        request,
+        'baci-cart-11111111-1111-4111-8111-111111111111'
+      )
+    ).toBe('cp1.cookie.signature');
   });
 
   it('prefers a native cart Bearer proof over cookies', () => {
     const request = new Request('https://usebaci.com/api/x', {
       headers: {
         authorization: 'Bearer cp1.native.signature',
-        cookie: 'baci-cart-ogabassey=cp1.cookie.signature',
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.cookie.signature',
       },
     });
 
-    expect(readCartProofFromRequest(request, 'baci-cart-ogabassey')).toBe(
-      'cp1.native.signature'
-    );
+    expect(
+      readCartProofFromRequest(
+        request,
+        'baci-cart-11111111-1111-4111-8111-111111111111'
+      )
+    ).toBe('cp1.native.signature');
   });
 
   it('ignores non-cart Bearer [REDACTED] and falls back to cookies', () => {
     const request = new Request('https://usebaci.com/api/x', {
       headers: {
         authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.supabase-jwt',
-        cookie: 'baci-cart-ogabassey=cp1.cookie.signature',
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.cookie.signature',
       },
     });
 
-    expect(readCartProofFromRequest(request, 'baci-cart-ogabassey')).toBe(
-      'cp1.cookie.signature'
-    );
+    expect(
+      readCartProofFromRequest(
+        request,
+        'baci-cart-11111111-1111-4111-8111-111111111111'
+      )
+    ).toBe('cp1.cookie.signature');
   });
 
   it('returns null when neither transport carries a cart proof', () => {
@@ -130,7 +144,12 @@ describe('readCartProofFromRequest', () => {
       headers: { authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.other' },
     });
 
-    expect(readCartProofFromRequest(request, 'baci-cart-ogabassey')).toBeNull();
+    expect(
+      readCartProofFromRequest(
+        request,
+        'baci-cart-11111111-1111-4111-8111-111111111111'
+      )
+    ).toBeNull();
   });
 });
 
@@ -146,7 +165,8 @@ describe('resolveCartRequestContext', () => {
   it('builds merchant plus principal from a trusted host and cookie', async () => {
     const request = new Request('https://ogabassey.usebaci.com/api/x', {
       headers: {
-        cookie: 'baci-cart-ogabassey=cp1.proof.signature',
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.proof.signature',
         'x-merchant-slug': 'ogabassey',
       },
     });
@@ -172,7 +192,8 @@ describe('resolveCartRequestContext', () => {
   it('rejects a proof bound to a different merchant than the host', async () => {
     const request = new Request('https://ogabassey.usebaci.com/api/x', {
       headers: {
-        cookie: 'baci-cart-ogabassey=cp1.proof.signature',
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.proof.signature',
         'x-merchant-slug': 'ogabassey',
       },
     });
@@ -191,7 +212,8 @@ describe('resolveCartRequestContext', () => {
   it('reports expired proofs distinctly from missing ones', async () => {
     const request = new Request('https://ogabassey.usebaci.com/api/x', {
       headers: {
-        cookie: 'baci-cart-ogabassey=cp1.stale.signature',
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.stale.signature',
         'x-merchant-slug': 'ogabassey',
       },
     });
@@ -209,7 +231,8 @@ describe('resolveCartRequestContext', () => {
   it('applies the route scope rule when a bootstrap proof reaches a session route', async () => {
     const request = new Request('https://ogabassey.usebaci.com/api/x', {
       headers: {
-        cookie: 'baci-cart-ogabassey=cp1.bootstrap.signature',
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.bootstrap.signature',
         'x-merchant-slug': 'ogabassey',
       },
     });
@@ -227,7 +250,8 @@ describe('resolveCartRequestContext', () => {
   it('accepts either scope when a route allows both', async () => {
     const request = new Request('https://ogabassey.usebaci.com/api/x', {
       headers: {
-        cookie: 'baci-cart-ogabassey=cp1.bootstrap.signature',
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.bootstrap.signature',
         'x-merchant-slug': 'ogabassey',
       },
     });
@@ -252,7 +276,8 @@ describe('resolveCartRequestContext', () => {
   it('fails closed when proof configuration is missing', async () => {
     const request = new Request('https://ogabassey.usebaci.com/api/x', {
       headers: {
-        cookie: 'baci-cart-ogabassey=cp1.proof.signature',
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.proof.signature',
         'x-merchant-slug': 'ogabassey',
       },
     });

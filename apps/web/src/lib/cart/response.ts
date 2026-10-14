@@ -103,11 +103,11 @@ export function cartErrorResponse(
  */
 export function setCartSessionCookie(
   response: NextResponse,
-  merchantSlug: string,
+  merchantId: string,
   proof: string,
   maxAgeSeconds: number
 ): void {
-  response.cookies.set(cartSessionCookieName(merchantSlug), proof, {
+  response.cookies.set(cartSessionCookieName(merchantId), proof, {
     httpOnly: true,
     maxAge: maxAgeSeconds,
     path: '/',

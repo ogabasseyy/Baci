@@ -466,6 +466,10 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
+  -- Account operations arrive in a later migration; purge them once present.
+  IF to_regclass('public.commerce_cart_account_operations') IS NOT NULL THEN
+    DELETE FROM public.commerce_cart_account_operations WHERE expires_at < now();
+  END IF;
   DELETE FROM public.commerce_cart_operations WHERE expires_at < now();
   DELETE FROM public.commerce_cart_creation_requests WHERE expires_at < now();
   DELETE FROM public.commerce_cart_events WHERE expires_at < now();
@@ -884,6 +888,15 @@ BEGIN
             v.id IS NOT NULL
             AND v.product_id = l.product_id
             AND v.merchant_id = p_merchant_id
+            -- Match the storefront public-variant predicate: a variant
+            -- deactivated, archived or soft-deleted after being added
+            -- is no longer reviewed as available, and the inventory
+            -- anchor is not purchasable when the product has variants.
+            AND coalesce(v.is_active, true)
+            AND v.status = 'active'
+            AND v.deleted_at IS NULL
+            AND v.archived_at IS NULL
+            AND NOT (coalesce(p.has_variants, false) AND coalesce(v.is_default, false))
           )
         )
       ) AS offer_ok,

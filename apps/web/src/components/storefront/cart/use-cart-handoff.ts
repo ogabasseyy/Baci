@@ -86,7 +86,8 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   async function loadPreview(): Promise<PreviewResponse | null> {
     try {
       const response = await fetchJson(
-        `/api/storefront/cart/handoff?handoff_id=${encodeURIComponent(handoffId)}`
+        `/api/storefront/cart/handoff?handoff_id=${encodeURIComponent(handoffId)}`,
+        { headers: { 'x-handoff-token': token } }
       );
       const payload = (await response.json()) as PreviewResponse;
       if (!response.ok) {

@@ -1,6 +1,6 @@
 import type { CartErrorCode, CartSnapshot } from '@baci/shared/cart';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isRecord } from './handoff-token';
+import { hashHandoffToken, isRecord } from './handoff-token';
 import { buildCartSnapshot } from './pricing';
 import { CartRepositoryError, parseRawMutationResult } from './repository';
 import { ERROR_CODES } from './repository-envelope';
@@ -36,15 +36,17 @@ export type PreviewHandoffResult =
   | { code: CartErrorCode; ok: false };
 
 /**
- * Loads the unauthenticated continuation preview by public handoff id.
- * The id is a random capability, never the pairing secret.
+ * Loads the continuation preview. The public handoff id locates the
+ * grant; only the pairing token hash bound to it authorizes disclosure.
  */
 export async function rpcPreviewHandoff(
   client: SupabaseClient,
-  handoffId: string
+  handoffId: string,
+  token: string
 ): Promise<PreviewHandoffResult> {
   const response = await client.rpc('commerce_cart_preview_handoff', {
     p_handoff_id: handoffId,
+    p_token_hash: hashHandoffToken(token),
   });
   if (response.error) {
     throw new CartRepositoryError(

@@ -145,7 +145,15 @@ export async function GET(request: NextRequest) {
       return cartErrorResponse('quota_exceeded');
     }
 
-    const preview = await rpcPreviewHandoff(createAnonClient(), handoffId);
+    const handoffToken = request.headers.get('x-handoff-token')?.trim();
+    if (!handoffToken?.startsWith('ch1.')) {
+      return cartErrorResponse('not_found');
+    }
+    const preview = await rpcPreviewHandoff(
+      createAnonClient(),
+      handoffId,
+      handoffToken
+    );
     if (!preview.ok) {
       return cartErrorResponse(preview.code);
     }

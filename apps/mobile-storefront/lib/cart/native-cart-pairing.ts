@@ -41,7 +41,7 @@ export async function pairNativeCart(
   )
     throw new NativeCartError('invalid_request');
   if (await deps.readPending()) throw new NativeCartError('pending_operation');
-  const preview = await deps.client.previewHandoff(link.handoffId);
+  const preview = await deps.client.previewHandoff(link.handoffId, link.token);
   deps.assertCurrent();
   if (choice !== 'connect') await deps.ensureCart();
   let context = await deps.client.context();

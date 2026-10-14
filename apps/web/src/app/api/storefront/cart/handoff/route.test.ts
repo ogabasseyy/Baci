@@ -179,7 +179,9 @@ describe('POST /api/storefront/cart/handoff', () => {
 
     const response = await postIssue({
       body: { destination: { type: 'web' }, operationId: 'handoff-op-1' },
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
 
     expect(response.status).toBe(201);
@@ -204,7 +206,9 @@ describe('POST /api/storefront/cart/handoff', () => {
   it('forbids issue for proofs without a cart', async () => {
     const response = await postIssue({
       body: { destination: { type: 'web' }, operationId: 'handoff-op-1' },
-      headers: { cookie: `baci-cart-ogabassey=${bootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${bootstrapProof()}`,
+      },
     });
 
     expect(response.status).toBe(403);
@@ -215,21 +219,27 @@ describe('POST /api/storefront/cart/handoff', () => {
   it('rejects missing CSRF and malformed bodies', async () => {
     const csrf = await postIssue({
       body: { destination: { type: 'web' }, operationId: 'handoff-op-1' },
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
       noCsrf: true,
     });
     expect(csrf.status).toBe(403);
     expect((await csrf.json()).code).toBe('forbidden');
 
     const malformed = await postIssue({
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
       rawBody: '{"destination":',
     });
     expect(malformed.status).toBe(400);
 
     const unknown = await postIssue({
       body: { destination: { type: 'sms' }, operationId: 'handoff-op-1' },
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
     expect(unknown.status).toBe(400);
   });
@@ -243,7 +253,9 @@ describe('POST /api/storefront/cart/handoff', () => {
 
     const response = await postIssue({
       body: { destination: { type: 'web' }, operationId: 'handoff-op-1' },
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
 
     expect(response.status).toBe(404);
@@ -255,7 +267,9 @@ describe('POST /api/storefront/cart/handoff', () => {
 
     const response = await postIssue({
       body: { destination: { type: 'web' }, operationId: 'handoff-op-1' },
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
 
     expect(response.status).toBe(503);
@@ -268,7 +282,9 @@ describe('POST /api/storefront/cart/handoff', () => {
 
     const response = await postIssue({
       body: { destination: { type: 'web' }, operationId: 'handoff-op-1' },
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
 
     expect(response.status).toBe(503);
@@ -285,7 +301,12 @@ describe('GET /api/storefront/cart/handoff', () => {
       handoffId === null
         ? HANDOFF_URL
         : `${HANDOFF_URL}?handoff_id=${handoffId}`;
-    return GET(new NextRequest(url, { method: 'GET' }));
+    return GET(
+      new NextRequest(url, {
+        headers: { 'x-handoff-token': 'ch1.fixture.token' },
+        method: 'GET',
+      })
+    );
   }
 
   it('previews a pending grant without consuming or authenticating', async () => {

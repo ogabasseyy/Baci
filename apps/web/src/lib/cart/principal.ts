@@ -86,7 +86,9 @@ export async function resolveCartPrincipal(
   }
 
   const readCookie = deps.readCookie ?? readCookieFromRequest;
-  const cookieName = cartSessionCookieName(merchant.slug);
+  // Namespace by merchant id, never slug: a slug rename must not
+  // orphan a live guest cart stored under the old name.
+  const cookieName = cartSessionCookieName(merchant.id);
   const proof = deps.readProof
     ? deps.readProof(request, cookieName)
     : readCookie(request, cookieName);

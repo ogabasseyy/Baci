@@ -1,7 +1,7 @@
 -- New grants support the complete command vocabulary. Existing restricted
 -- grants are intentionally left unchanged; no migration escalates a grant.
 ALTER TABLE public.commerce_cart_grants ALTER COLUMN allowed_operations
-  SET DEFAULT '{add,set_quantity,remove,clear,replace}';
+  SET DEFAULT '{add,set_quantity,remove,clear,replace,set_assurance}';
 
 -- Keep the reviewed executor private; every public mutation now checks the
 -- stored operation grant in the same transaction before reaching it.

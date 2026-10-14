@@ -200,7 +200,7 @@ DO $$
 DECLARE
   v_result jsonb;
 BEGIN
-  SELECT public.commerce_cart_preview_handoff('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa') INTO v_result;
+  SELECT public.commerce_cart_preview_handoff('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') INTO v_result;
   IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'preview must succeed, got %', v_result; END IF;
   IF (v_result ->> 'status') <> 'pending' THEN RAISE EXCEPTION 'preview must report pending, got %', v_result; END IF;
   IF (v_result -> 'merchant' ->> 'slug') <> 'ogabassey' THEN
@@ -237,7 +237,7 @@ DO $$
 DECLARE
   v_result jsonb;
 BEGIN
-  SELECT public.commerce_cart_preview_handoff('99999999-9999-4999-8999-999999999999') INTO v_result;
+  SELECT public.commerce_cart_preview_handoff('99999999-9999-4999-8999-999999999999', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') INTO v_result;
   IF (v_result ->> 'ok')::boolean OR (v_result ->> 'code') <> 'not_found' THEN
     RAISE EXCEPTION 'unknown preview must be not_found, got %', v_result;
   END IF;
@@ -1044,6 +1044,39 @@ BEGIN
   ) INTO v_result;
   IF (v_result ->> 'ok')::boolean OR (v_result ->> 'code') <> 'expired' THEN
     RAISE EXCEPTION 'redeem after source expiry must report expired, got %', v_result;
+  END IF;
+END
+$$;
+RESET ROLE;
+
+
+-- 21. Preview with a foreign token hash and replay by another principal fail closed.
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_preview_handoff(
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+  ) INTO v_result;
+  IF (v_result ->> 'ok')::boolean OR (v_result ->> 'code') <> 'not_found' THEN
+    RAISE EXCEPTION 'preview with a foreign token must report not_found, got %', v_result;
+  END IF;
+END
+$$;
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-intruder","cart_scope":"bootstrap"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_redeem_handoff(
+    'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'attempt-1', 'connect', 'web', NULL, 1, NULL, NULL, NULL
+  ) INTO v_result;
+  IF (v_result ->> 'ok')::boolean OR (v_result ->> 'code') <> 'handoff_consumed' THEN
+    RAISE EXCEPTION 'replay by another principal must report handoff_consumed, got %', v_result;
   END IF;
 END
 $$;

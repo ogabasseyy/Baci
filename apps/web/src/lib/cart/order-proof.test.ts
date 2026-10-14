@@ -39,7 +39,6 @@ describe('verifySharedCartOrderProof', () => {
       verifySharedCartOrderProof(request, {
         cartId: CART_ID,
         merchantId: MERCHANT_ID,
-        merchantSlug: 'ogabassey',
       })
     ).toEqual({ ok: true, principalId: 'guest-principal-001' });
   });
@@ -47,14 +46,13 @@ describe('verifySharedCartOrderProof', () => {
   it('accepts the merchant session cookie proof for browsers', () => {
     const request = new Request('http://localhost/api/orders', {
       headers: {
-        cookie: `${cartSessionCookieName('ogabassey')}=${proofFor(CART_ID)}`,
+        cookie: `${cartSessionCookieName(MERCHANT_ID)}=${proofFor(CART_ID)}`,
       },
     });
     expect(
       verifySharedCartOrderProof(request, {
         cartId: CART_ID,
         merchantId: MERCHANT_ID,
-        merchantSlug: 'ogabassey',
       })
     ).toEqual({ ok: true, principalId: 'guest-principal-001' });
   });
@@ -69,7 +67,6 @@ describe('verifySharedCartOrderProof', () => {
       verifySharedCartOrderProof(foreign, {
         cartId: CART_ID,
         merchantId: MERCHANT_ID,
-        merchantSlug: 'ogabassey',
       })
     ).toEqual({ ok: false });
 
@@ -80,7 +77,6 @@ describe('verifySharedCartOrderProof', () => {
       verifySharedCartOrderProof(request, {
         cartId: CART_ID,
         merchantId: '99999999-9999-4999-8999-999999999999',
-        merchantSlug: 'ogabassey',
       })
     ).toEqual({ ok: false });
   });
@@ -90,7 +86,6 @@ describe('verifySharedCartOrderProof', () => {
       verifySharedCartOrderProof(new Request('http://localhost/api/orders'), {
         cartId: CART_ID,
         merchantId: MERCHANT_ID,
-        merchantSlug: 'ogabassey',
       })
     ).toEqual({ ok: false });
 
@@ -101,7 +96,6 @@ describe('verifySharedCartOrderProof', () => {
       verifySharedCartOrderProof(forged, {
         cartId: CART_ID,
         merchantId: MERCHANT_ID,
-        merchantSlug: 'ogabassey',
       })
     ).toEqual({ ok: false });
   });

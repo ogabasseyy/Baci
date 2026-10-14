@@ -209,7 +209,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
 
     const response = await postRedeem({
       body: connectBody(),
-      headers: { cookie: `baci-cart-ogabassey=${destBootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
     });
 
     expect(response.status).toBe(200);
@@ -229,7 +231,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
       expect(verified.session.principalId).toBe('guest-fresh');
     }
     const setCookie = response.headers.get('set-cookie') ?? '';
-    expect(setCookie).toContain(`baci-cart-ogabassey=${payload.proof}`);
+    expect(setCookie).toContain(
+      `baci-cart-11111111-1111-4111-8111-111111111111=${payload.proof}`
+    );
     expect(setCookie).toContain(`Max-Age=${CART_SESSION_PROOF_TTL_SECONDS}`);
     expect(mocks.capturedPrincipal).toMatchObject({
       principalId: 'guest-fresh',
@@ -257,7 +261,7 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     await postRedeem({
       body: connectBody({ attemptId: 'attempt-web' }),
       headers: {
-        cookie: `baci-cart-ogabassey=${destBootstrapProof()}`,
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
         origin: 'https://ogabassey.usebaci.com',
       },
     });
@@ -280,7 +284,7 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     const response = await postRedeem({
       body: connectBody(),
       headers: {
-        cookie: `baci-cart-ogabassey=${destBootstrapProof()}`,
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
         origin: 'https://evil.example.com',
       },
     });
@@ -319,7 +323,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
         ],
         token: TOKEN,
       },
-      headers: { cookie: `baci-cart-ogabassey=${destSessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destSessionProof()}`,
+      },
     });
     expect(merged.status).toBe(200);
     expect((await merged.json()).cart.cartId).toBe(DEST_CART_ID);
@@ -357,7 +363,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
         handoffId: HANDOFF_ID,
         token: TOKEN,
       },
-      headers: { cookie: `baci-cart-ogabassey=${destSessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destSessionProof()}`,
+      },
     });
     expect(conflicted.status).toBe(409);
     const conflictPayload = await conflicted.json();
@@ -378,7 +386,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     };
     const kept = await postRedeem({
       body: connectBody({ attemptId: 'attempt-keep', choice: 'keep_existing' }),
-      headers: { cookie: `baci-cart-ogabassey=${destSessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destSessionProof()}`,
+      },
     });
     expect(kept.status).toBe(200);
     const keptPayload = await kept.json();
@@ -403,7 +413,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
         attemptId: 'attempt-keep-fresh',
         choice: 'keep_existing',
       }),
-      headers: { cookie: `baci-cart-ogabassey=${destBootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
     });
     expect(fresh.status).toBe(200);
     const freshPayload = await fresh.json();
@@ -424,7 +436,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
   it('rejects incoherent choices and stale cart references', async () => {
     const mergeWithoutCart = await postRedeem({
       body: connectBody({ attemptId: 'attempt-bad', choice: 'merge' }),
-      headers: { cookie: `baci-cart-ogabassey=${destBootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
     });
     expect(mergeWithoutCart.status).toBe(400);
     expect((await mergeWithoutCart.json()).code).toBe('invalid_request');
@@ -435,7 +449,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
         choice: 'merge',
         destCartId: INCOMING_CART_ID,
       }),
-      headers: { cookie: `baci-cart-ogabassey=${destSessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destSessionProof()}`,
+      },
     });
     expect(staleCart.status).toBe(400);
     expect(mocks.cartRpcCalls).toHaveLength(0);
@@ -447,7 +463,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
 
     const csrf = await postRedeem({
       body: connectBody(),
-      headers: { cookie: `baci-cart-ogabassey=${destBootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
       noCsrf: true,
     });
     expect(csrf.status).toBe(403);
@@ -460,7 +478,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     };
     const spent = await postRedeem({
       body: connectBody({ attemptId: 'attempt-spent' }),
-      headers: { cookie: `baci-cart-ogabassey=${destBootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
     });
     expect(spent.status).toBe(404);
     expect((await spent.json()).code).toBe('handoff_consumed');
@@ -473,7 +493,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     };
     const stale = await postRedeem({
       body: connectBody({ attemptId: 'attempt-stale-link' }),
-      headers: { cookie: `baci-cart-ogabassey=${destBootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
     });
     expect(stale.status).toBe(404);
     expect((await stale.json()).code).toBe('expired');
@@ -485,7 +507,9 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
 
     const response = await postRedeem({
       body: connectBody(),
-      headers: { cookie: `baci-cart-ogabassey=${destBootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
     });
 
     expect(response.status).toBe(503);

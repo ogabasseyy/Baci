@@ -180,7 +180,7 @@ function prepareBody(overrides: Record<string, unknown> = {}) {
 }
 
 function proofHeaders(proof: string = sessionProof()) {
-  return { cookie: `baci-cart-ogabassey=${proof}` };
+  return { cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${proof}` };
 }
 
 describe('POST /api/storefront/cart/checkout', () => {

@@ -149,6 +149,7 @@ describe('issueCartSessionProof', () => {
         'remove',
         'clear',
         'replace',
+        'set_assurance',
       ]);
     }
   });

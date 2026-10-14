@@ -193,7 +193,9 @@ describe('POST /api/storefront/cart/commands', () => {
 
     const response = await postCommand({
       body: addCommand('op-1'),
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
 
     expect(response.status).toBe(200);
@@ -219,12 +221,14 @@ describe('POST /api/storefront/cart/commands', () => {
     };
     const response = await postCommand({
       body: addCommand('renew-proof'),
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
     const payload = await response.json();
     expect(payload.proof).toEqual(expect.any(String));
     expect(response.headers.get('set-cookie')).toContain(
-      'baci-cart-ogabassey='
+      'baci-cart-11111111-1111-4111-8111-111111111111='
     );
     const verified = verifyCartSessionProof(payload.proof, {
       secret: TEST_SECRET,
@@ -247,7 +251,9 @@ describe('POST /api/storefront/cart/commands', () => {
 
     const response = await postCommand({
       body: addCommand('op-1'),
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
 
     expect(response.status).toBe(200);
@@ -283,7 +289,9 @@ describe('POST /api/storefront/cart/commands', () => {
 
     const response = await postCommand({
       body: addCommand('op-stale', 2),
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
 
     expect(response.status).toBe(409);
@@ -295,7 +303,9 @@ describe('POST /api/storefront/cart/commands', () => {
   it('routes bootstrap proofs and missing proofs without touching carts', async () => {
     const bootstrap = await postCommand({
       body: addCommand('op-early'),
-      headers: { cookie: `baci-cart-ogabassey=${bootstrapProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${bootstrapProof()}`,
+      },
     });
     expect(bootstrap.status).toBe(404);
     expect((await bootstrap.json()).code).toBe('not_found');
@@ -308,7 +318,9 @@ describe('POST /api/storefront/cart/commands', () => {
 
   it('rejects malformed JSON and invalid commands', async () => {
     const malformed = await postCommand({
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
       rawBody: '{"command":',
     });
     expect(malformed.status).toBe(400);
@@ -316,7 +328,9 @@ describe('POST /api/storefront/cart/commands', () => {
 
     const invalid = await postCommand({
       body: { command: { type: 'teleport' }, operationId: 'op-x' },
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
     });
     expect(invalid.status).toBe(400);
     expect((await invalid.json()).code).toBe('invalid_request');
@@ -326,7 +340,9 @@ describe('POST /api/storefront/cart/commands', () => {
   it('rejects browser requests without a CSRF token', async () => {
     const response = await postCommand({
       body: addCommand('op-csrf'),
-      headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
       noCsrf: true,
     });
 
@@ -344,7 +360,9 @@ describe('POST /api/storefront/cart/commands', () => {
     const attempt = () =>
       postCommand({
         body: addCommand('op-burst'),
-        headers: { cookie: `baci-cart-ogabassey=${sessionProof()}` },
+        headers: {
+          cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+        },
       });
 
     for (let index = 0; index < 240; index++) {

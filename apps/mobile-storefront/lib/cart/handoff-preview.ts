@@ -4,6 +4,7 @@ import type { CartFetch, NativeCartConfig } from './shared-cart-client';
 export async function previewNativeHandoff(
   config: NativeCartConfig,
   handoffId: string,
+  token: string,
   fetcher: CartFetch
 ): Promise<{ snapshot: CartSnapshot; expiresAt: string }> {
   const abort = new AbortController();
@@ -15,6 +16,7 @@ export async function previewNativeHandoff(
       `${config.apiOrigin}/api/storefront/cart/handoff?merchantSlug=${encodeURIComponent(config.merchantSlug)}&handoff_id=${handoffId}`,
       {
         credentials: 'omit',
+        headers: { 'x-handoff-token': token },
         redirect: 'error',
         cache: 'no-store',
         signal: abort.signal,

@@ -153,8 +153,9 @@ $$;
 
 -- Unauthenticated continuation preview by public handoff id. Never
 -- consumes, never reveals the token hash, reports old links honestly.
+DROP FUNCTION IF EXISTS public.commerce_cart_preview_handoff(uuid);
 CREATE OR REPLACE FUNCTION public.commerce_cart_preview_handoff(
-  p_handoff_id uuid
+  p_handoff_id uuid, p_token_hash text
 ) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = ''
 AS $$
@@ -163,10 +164,15 @@ DECLARE
   v_merchant_slug text;
   v_snapshot jsonb;
 BEGIN
-  IF p_handoff_id IS NULL THEN
+  -- The public handoff id alone never discloses a cart: the caller must
+  -- also present the pairing token (by hash) bound to this handoff.
+  IF p_handoff_id IS NULL OR nullif(p_token_hash, '') IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'code', 'not_found');
   END IF;
   SELECT * INTO v_row FROM public.commerce_cart_handoffs WHERE id = p_handoff_id;
+  IF FOUND AND v_row.handoff_hash <> p_token_hash THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'not_found');
+  END IF;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'code', 'not_found');
   END IF;
@@ -326,6 +332,24 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'code', 'handoff_consumed', 'replayed', false, 'state', null, 'currentVersion', null);
     END IF;
     v_receipt := v_row.redemption_receipt;
+    -- Replay is bound to the principal that redeemed: another caller
+    -- holding the attempt id must not receive its cart state or grant.
+    IF (v_receipt ->> 'principalId') IS DISTINCT FROM v_principal
+      OR (v_receipt ->> 'merchantId') IS DISTINCT FROM v_merchant::text THEN
+      RETURN jsonb_build_object('ok', false, 'code', 'handoff_consumed', 'replayed', false, 'state', null, 'currentVersion', null);
+    END IF;
+    IF (v_receipt ->> 'destGrantId') IS NULL
+      OR (v_receipt ->> 'destCartId') IS NULL
+      OR NOT EXISTS (
+        SELECT 1 FROM public.commerce_cart_grants g
+        WHERE g.id = (v_receipt ->> 'destGrantId')::uuid
+          AND g.merchant_id = v_merchant
+          AND g.cart_id = (v_receipt ->> 'destCartId')::uuid
+          AND g.principal_id = v_principal
+          AND g.expires_at > now() AND g.revoked_at IS NULL
+      ) THEN
+      RETURN jsonb_build_object('ok', false, 'code', 'handoff_consumed', 'replayed', false, 'state', null, 'currentVersion', null);
+    END IF;
     RETURN jsonb_build_object('ok', true, 'code', null, 'replayed', true,
       'state', v_receipt -> 'state', 'grantId', v_receipt ->> 'destGrantId',
       'choice', v_receipt ->> 'choice',
@@ -687,13 +711,13 @@ END;
 $$;
 
 ALTER FUNCTION public.commerce_cart_issue_handoff(text, uuid, uuid, text, jsonb) OWNER TO postgres;
-ALTER FUNCTION public.commerce_cart_preview_handoff(uuid) OWNER TO postgres;
+ALTER FUNCTION public.commerce_cart_preview_handoff(uuid, text) OWNER TO postgres;
 ALTER FUNCTION public.commerce_cart_redeem_handoff(text, uuid, text, text, text, uuid, integer, integer, jsonb, jsonb) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.commerce_cart_issue_handoff(text, uuid, uuid, text, jsonb) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.commerce_cart_preview_handoff(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.commerce_cart_preview_handoff(uuid, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.commerce_cart_redeem_handoff(text, uuid, text, text, text, uuid, integer, integer, jsonb, jsonb) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.commerce_cart_issue_handoff(text, uuid, uuid, text, jsonb) FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.commerce_cart_redeem_handoff(text, uuid, text, text, text, uuid, integer, integer, jsonb, jsonb) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.commerce_cart_issue_handoff(text, uuid, uuid, text, jsonb) TO commerce_cart_shopper;
 GRANT EXECUTE ON FUNCTION public.commerce_cart_redeem_handoff(text, uuid, text, text, text, uuid, integer, integer, jsonb, jsonb) TO commerce_cart_shopper;
-GRANT EXECUTE ON FUNCTION public.commerce_cart_preview_handoff(uuid) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.commerce_cart_preview_handoff(uuid, text) TO anon, authenticated, service_role;

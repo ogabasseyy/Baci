@@ -56,7 +56,7 @@ export function NativeCartPairingPanel() {
         apiOrigin: EXPO_PUBLIC_API_URL,
       });
       void client
-        .previewHandoff(current.handoffId)
+        .previewHandoff(current.handoffId, current.token)
         .then((result) => {
           if (alive)
             setPreview({

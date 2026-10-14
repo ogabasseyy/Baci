@@ -40,7 +40,7 @@ describe('PostHog remediation candidates', () => {
             offset: 0,
             results: [
               {
-                id: 'issue-987',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a018',
                 status: 'active',
                 aggregations: { occurrences: 4 },
                 first_seen: '2026-08-04T15:45:25Z',
@@ -111,14 +111,14 @@ describe('PostHog remediation candidates', () => {
             offset: 0,
             results: [
               {
-                id: 'offset-issue',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a005',
                 status: 'active',
                 aggregations: { occurrences: 4 },
                 first_seen: '2026-08-04T15:45:25+00:00',
                 last_seen: '2026-08-04T17:46:50+02:00',
               },
               {
-                id: 'bare-issue',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a002',
                 status: 'active',
                 aggregations: { occurrences: 4 },
                 first_seen: '2026-08-04T15:45:25',
@@ -146,14 +146,14 @@ describe('PostHog remediation candidates', () => {
             offset: 0,
             results: [
               {
-                id: 'impossible-issue',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a016',
                 status: 'active',
                 aggregations: { occurrences: 4 },
                 first_seen: '2026-02-31T10:00:00Z',
                 last_seen: '2026-02-31T10:00:00Z',
               },
               {
-                id: 'leap-issue',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a017',
                 status: 'active',
                 aggregations: { occurrences: 4 },
                 first_seen: '2024-02-29T10:00:00Z',
@@ -181,17 +181,17 @@ describe('PostHog remediation candidates', () => {
             offset: 0,
             results: [
               {
-                id: 'fractional',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a007',
                 status: 'active',
                 aggregations: { occurrences: 4.5 },
               },
               {
-                id: 'below-threshold',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a009',
                 status: 'active',
                 aggregations: { occurrences: 1.9 },
               },
               {
-                id: 'exact-threshold',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a008',
                 status: 'active',
                 aggregations: { occurrences: 2.0 },
               },
@@ -201,9 +201,15 @@ describe('PostHog remediation candidates', () => {
     });
 
     assert.equal(candidates.length, 2);
-    assert.equal(candidates[0].sample.issueId, 'fractional');
+    assert.equal(
+      candidates[0].sample.issueId,
+      '01961f15-9db7-4b9c-9c1a-51e2b823a007'
+    );
     assert.equal(candidates[0].occurrences, 4);
-    assert.equal(candidates[1].sample.issueId, 'exact-threshold');
+    assert.equal(
+      candidates[1].sample.issueId,
+      '01961f15-9db7-4b9c-9c1a-51e2b823a008'
+    );
     assert.equal(candidates[1].occurrences, 2);
   });
 

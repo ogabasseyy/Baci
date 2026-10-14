@@ -26,7 +26,7 @@ describe('PostHog remediation candidate pagination', () => {
               offset: 0,
               results: [
                 {
-                  id: 'one-off',
+                  id: '01961f15-9db7-4b9c-9c1a-51e2b823a001',
                   status: 'active',
                   aggregations: { occurrences: 1 },
                 },
@@ -42,7 +42,7 @@ describe('PostHog remediation candidate pagination', () => {
             offset: 23,
             results: [
               {
-                id: 'repeated',
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a004',
                 status: 'active',
                 aggregations: { occurrences: 8 },
               },
@@ -74,7 +74,7 @@ describe('PostHog remediation candidate pagination', () => {
               offset: 0,
               results: [
                 {
-                  id: 'one-off',
+                  id: '01961f15-9db7-4b9c-9c1a-51e2b823a001',
                   status: 'active',
                   aggregations: { occurrences: 1 },
                 },
@@ -99,7 +99,7 @@ describe('PostHog remediation candidate pagination', () => {
               offset: 0,
               results: [
                 {
-                  id: 'first',
+                  id: '01961f15-9db7-4b9c-9c1a-51e2b823a006',
                   status: 'active',
                   aggregations: { occurrences: 2 },
                 },

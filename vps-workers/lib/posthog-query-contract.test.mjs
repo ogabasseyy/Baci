@@ -16,10 +16,13 @@ describe('PostHog query contract', () => {
     assert.equal(posthogQuery.OCCURRENCE_WINDOW, '-7d');
     assert.equal(posthogQuery.MAX_RESPONSE_BYTES, 1_000_000);
     assert.equal(
-      posthogQuery.safeIssueId('019611e5-abc_DEF-42'),
-      '019611e5-abc_DEF-42'
+      posthogQuery.safeIssueId('01961f15-9db7-4b9c-9c1a-51e2b823a003'),
+      '01961f15-9db7-4b9c-9c1a-51e2b823a003'
     );
     assert.equal(posthogQuery.safeIssueId('alice@example.com'), '');
+    assert.equal(posthogQuery.safeIssueId('AliceSmith_customer'), '');
+    assert.equal(posthogQuery.safeIssueId('08031234567'), '');
+    assert.equal(posthogQuery.safeIssueId('posthog-issue-1'), '');
     assert.equal(posthogQuery.boundedString('  padded  ', 6), 'padded');
   });
 });

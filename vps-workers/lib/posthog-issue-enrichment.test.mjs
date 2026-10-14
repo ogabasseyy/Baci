@@ -13,7 +13,7 @@ const candidate = {
   fingerprint: 'posthog-abc123',
   occurrences: 4,
   sample: {
-    issueId: 'posthog-issue-1',
+    issueId: '01961f15-9db7-4b9c-9c1a-51e2b823a003',
     message: 'TypeError',
     route: '(redacted PostHog location)',
     source: 'posthog',
@@ -41,7 +41,7 @@ describe('PostHog remediation candidate enrichment', () => {
         assert.deepEqual(JSON.parse(options.body), {
           dateRange: { date_from: '-7d' },
           filterTestAccounts: true,
-          issueId: 'posthog-issue-1',
+          issueId: '01961f15-9db7-4b9c-9c1a-51e2b823a003',
           volumeResolution: 0,
         });
         return new Response(

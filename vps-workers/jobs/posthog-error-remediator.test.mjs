@@ -49,7 +49,7 @@ describe('PostHog error remediator', () => {
           offset: 0,
           results: [
             {
-              id: 'posthog-issue-1',
+              id: '01961f15-9db7-4b9c-9c1a-51e2b823a003',
               status: 'active',
               aggregations: { occurrences: 2 },
             },

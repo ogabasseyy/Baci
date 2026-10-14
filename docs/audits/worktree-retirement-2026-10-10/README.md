@@ -37,26 +37,26 @@ not an unconditional removal list. See [candidate-recheck.json](./candidate-rech
 
 | ID | Worktree | Evidence |
 | ---: | --- | --- |
-+| 5 | `/Users/mac/.codex/worktrees/blog-rss-xml-safety/Baci-app` | /E/x/a/c/t/ /P/R/ /#/3/6/1/7/ /h/e/a/d/ /i/s/ /M/E/R/G/E/D/;/ /c/l/e/a/n/ /w/o/r/k/t/r/e/e/;/ /i/g/n/o/r/e/d/ /e/n/t/r/i/e/s/ /w/e/r/e/ /g/e/n/e/r/a/t/e/d///t/y/p/e/ /a/r/t/i/f/a/c/t/s/ /o/n/l/y/./ |
-| 6 | `/Users/mac/.codex/worktrees/checkout-3577-pre-slice` | /C/l/e/a/n/ /d/e/t/a/c/h/e/d/ /c/h/e/c/k/o/u/t/;/ /z/e/r/o/ /p/a/t/c/h/-/u/n/i/q/u/e/ /c/o/m/m/i/t/s/ /a/n/d/ /z/e/r/o/ /c/h/a/n/g/e/d/ /p/a/t/h/s/./ |
-| 7 | `/Users/mac/.codex/worktrees/checkout-payment-switch/Baci-app` | /E/x/a/c/t/ /m/e/r/g/e/d/ /P/R/ /h/e/a/d/,/ /c/l/e/a/n/ /G/i/t/ /s/t/a/t/u/s/;/ /2/6/3/ /s/a/m/p/l/e/d/ /i/g/n/o/r/e/d/ /m/e/d/i/a///r/e/p/o/r/t/ /f/i/l/e/s/ /b/y/t/e/-/i/d/e/n/t/i/c/a/l/ /t/o/ /p/r/i/m/a/r/y/./ |
-| 21 | `/Users/mac/.codex/worktrees/shipping-migration-audit/Baci-app` | /P/R/ /#/3/5/0/6/ /m/e/r/g/e/d/ /a/t/ /e/x/a/c/t/ /H/E/A/D/;/ /c/l/e/a/n/;/ /i/g/n/o/r/e/d/ /d/a/t/a/ /l/i/m/i/t/e/d/ /t/o/ /g/e/n/e/r/a/t/e/d///d/e/p/e/n/d/e/n/c/y/ /a/r/t/i/f/a/c/t/s/./ |
-| 29 | `/Users/mac/Baci-app/.worktrees/android-soloader-fix` | /T/h/e/ /n/a/t/i/v/e/-/l/i/b/r/a/r/y/ /e/x/t/r/a/c/t/i/o/n/ /s/e/t/t/i/n/g/ /i/s/ /a/l/r/e/a/d/y/ /e/n/a/b/l/e/d/ /i/n/ /b/a/s/e/l/i/n/e/ /g/r/a/d/l/e/./p/r/o/p/e/r/t/i/e/s/ /a/n/d/ /E/x/p/o/ /p/l/u/g/i/n/ /c/o/n/f/i/g/;/ /c/l/e/a/n/ /b/r/a/n/c/h/ /a/l/t/e/r/n/a/t/i/v/e/ /a/d/d/s/ /n/o/ /u/n/i/q/u/e/ /b/e/h/a/v/i/o/r/./ |
-| 58 | `/Users/mac/Baci-app/.worktrees/fix-web-ios-production-deploys` | /E/x/a/c/t/ /m/e/r/g/e/d/ /P/R/ /h/e/a/d/,/ /c/l/e/a/n/ /G/i/t/ /s/t/a/t/u/s/,/ /b/o/u/n/d/e/d/ /i/g/n/o/r/e/d/ /m/e/d/i/a///r/e/p/o/r/t/ /s/a/m/p/l/e/ /d/u/p/l/i/c/a/t/e/s/ /p/r/i/m/a/r/y/./ |
-| 60 | `/Users/mac/Baci-app/.worktrees/gigl-tracking-notifications` | /P/R/ /#/3/2/4/8/ /m/e/r/g/e/d/ /a/t/ /t/h/i/s/ /e/x/a/c/t/ /h/e/a/d/;/ /c/l/e/a/n/ /s/t/a/t/u/s/ /a/n/d/ /o/n/l/y/ /g/e/n/e/r/a/t/e/d///b/u/i/l/d/ /d/a/t/a/ /i/g/n/o/r/e/d/./ |
-| 79 | `/Users/mac/Baci-app/.worktrees/mobile-native-crash-fixes-20260908` | /E/x/a/c/t/ /m/e/r/g/e/d/ /P/R/ /h/e/a/d/,/ /c/l/e/a/n/ /G/i/t/ /s/t/a/t/u/s/,/ /b/o/u/n/d/e/d/ /i/g/n/o/r/e/d/ /m/e/d/i/a///r/e/p/o/r/t/ /s/a/m/p/l/e/ /d/u/p/l/i/c/a/t/e/s/ /p/r/i/m/a/r/y/./ |
-| 81 | `/Users/mac/Baci-app/.worktrees/negotiation-notification-fix` | /P/R/ /#/3/4/6/3/ /m/e/r/g/e/d/ /a/t/ /e/x/a/c/t/ /H/E/A/D/;/ /c/l/e/a/n/;/ /o/n/l/y/ /g/e/n/e/r/a/t/e/d/ /E/x/p/o///b/u/i/l/d/ /d/a/t/a/ /i/g/n/o/r/e/d/./ |
-| 97 | `/Users/mac/Baci-app/.worktrees/pr-3281-agentic-health` | /E/x/a/c/t/ /m/e/r/g/e/d/ /P/R/ /h/e/a/d/,/ /c/l/e/a/n/ /G/i/t/ /s/t/a/t/u/s/,/ /b/o/u/n/d/e/d/ /i/g/n/o/r/e/d/ /m/e/d/i/a///r/e/p/o/r/t/ /s/a/m/p/l/e/ /d/u/p/l/i/c/a/t/e/s/ /p/r/i/m/a/r/y/./ |
-| 104 | `/Users/mac/Baci-app/.worktrees/pr3284-shipping-empty-quotes` | /E/x/a/c/t/ /P/R/ /#/3/2/8/4/ /h/e/a/d/ /i/s/ /M/E/R/G/E/D/;/ /c/l/e/a/n/ /w/o/r/k/t/r/e/e/;/ /n/o/ /m/e/a/n/i/n/g/f/u/l/ /i/g/n/o/r/e/d/ /d/a/t/a/ /o/b/s/e/r/v/e/d/./ |
-| 111 | `/Users/mac/Baci-app/.worktrees/quiz-instant-results-release-20260830` | /P/R/ /#/3/4/3/1/ /m/e/r/g/e/d/ /a/t/ /e/x/a/c/t/ /l/o/c/a/l/ /H/E/A/D/;/ /c/l/e/a/n/ /s/t/a/t/u/s/ /a/n/d/ /n/o/ /m/e/a/n/i/n/g/f/u/l/ /i/g/n/o/r/e/d/ /d/a/t/a/ /f/o/u/n/d/./ |
-| 120 | `/Users/mac/Baci-app/.worktrees/reconcile-cron-audit-20260821` | /N/o/ /p/a/t/c/h/-/u/n/i/q/u/e/ /c/o/m/m/i/t/s/;/ /t/w/o/ /c/h/a/n/g/e/d/ /p/a/t/h/s/ /a/r/e/ /p/a/t/c/h/-/e/q/u/i/v/a/l/e/n/t/;/ /c/l/e/a/n/,/ /o/n/l/y/ /g/e/n/e/r/a/t/e/d///d/e/p/e/n/d/e/n/c/y/ /d/a/t/a/ /i/g/n/o/r/e/d/./ |
-| 130 | `/Users/mac/Baci-app/.worktrees/shipping-legacy-client-20260908` | /E/x/a/c/t/ /m/e/r/g/e/d/ /P/R/ /h/e/a/d/,/ /c/l/e/a/n/ /G/i/t/ /s/t/a/t/u/s/,/ /b/o/u/n/d/e/d/ /i/g/n/o/r/e/d/ /m/e/d/i/a///r/e/p/o/r/t/ /s/a/m/p/l/e/ /d/u/p/l/i/c/a/t/e/s/ /p/r/i/m/a/r/y/./ |
-| 131 | `/Users/mac/Baci-app/.worktrees/shopify-catalog-ci-luna` | /B/a/s/e/l/i/n/e/ /U/C/P/ /a/d/a/p/t/e/r/ /a/l/r/e/a/d/y/ /r/e/j/e/c/t/s/ /i/n/v/a/l/i/d///u/n/p/r/i/c/e/d/ /p/r/o/d/u/c/t/s/ /a/n/d/ /t/r/i/m/s/ /i/d/e/n/t/i/t/y/ /f/i/e/l/d/s/;/ /b/r/a/n/c/h/ /f/i/x/ /i/s/ /s/u/p/e/r/s/e/d/e/d/ /b/y/ /c/u/r/r/e/n/t/ /m/a/i/n/ /b/e/h/a/v/i/o/r/./ |
-| 152 | `/Users/mac/Baci-app/.worktrees/variant-review-followups` | /a/n/c/e/s/t/o/r/ /o/f/ /b/a/s/e/l/i/n/e/;/ /c/l/e/a/n/ |
-| 158 | `/Users/mac/Baci-worktrees/category-recent-carousel` | /e/m/p/t/y/ /t/r/e/e/ /d/i/f/f/ /d/e/s/p/i/t/e/ /u/n/i/q/u/e/ /c/o/m/m/i/t/ /s/u/b/j/e/c/t/ |
-| 170 | `/Users/mac/Baci-worktrees/posthog-followup-secondary` | /e/m/p/t/y/ /t/r/e/e/ /d/i/f/f/ /d/e/s/p/i/t/e/ /u/n/i/q/u/e/ /c/o/m/m/i/t/ /s/u/b/j/e/c/t/ |
-| 171 | `/Users/mac/Baci-worktrees/pr-3444-checkout-retry-resume` | /P/R/ /#/3/4/6/2/ /m/e/r/g/e/d/ /a/t/ /e/x/a/c/t/ /H/E/A/D/;/ /c/l/e/a/n/;/ /n/o/ /m/e/a/n/i/n/g/f/u/l/ /i/g/n/o/r/e/d/ /d/a/t/a/ /o/b/s/e/r/v/e/d/./ |
-| 175 | `/Users/mac/Baci-worktrees/pr3322-ci-fix` | /E/x/a/c/t/ /m/e/r/g/e/d/ /P/R/ /h/e/a/d/,/ /c/l/e/a/n/ /G/i/t/ /s/t/a/t/u/s/,/ /b/o/u/n/d/e/d/ /i/g/n/o/r/e/d/ /m/e/d/i/a///r/e/p/o/r/t/ /s/a/m/p/l/e/ /d/u/p/l/i/c/a/t/e/s/ /p/r/i/m/a/r/y/./ |
+| 5 | `/Users/mac/.codex/worktrees/blog-rss-xml-safety/Baci-app` | Exact PR #3617 head is MERGED; clean worktree; ignored entries were generated/type artifacts only. |
+| 6 | `/Users/mac/.codex/worktrees/checkout-3577-pre-slice` | Clean detached checkout; zero patch-unique commits and zero changed paths. |
+| 7 | `/Users/mac/.codex/worktrees/checkout-payment-switch/Baci-app` | Exact merged PR head, clean Git status; 263 sampled ignored media/report files byte-identical to primary. |
+| 21 | `/Users/mac/.codex/worktrees/shipping-migration-audit/Baci-app` | PR #3506 merged at exact HEAD; clean; ignored data limited to generated/dependency artifacts. |
+| 29 | `/Users/mac/Baci-app/.worktrees/android-soloader-fix` | The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior. |
+| 58 | `/Users/mac/Baci-app/.worktrees/fix-web-ios-production-deploys` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 60 | `/Users/mac/Baci-app/.worktrees/gigl-tracking-notifications` | PR #3248 merged at this exact head; clean status and only generated/build data ignored. |
+| 79 | `/Users/mac/Baci-app/.worktrees/mobile-native-crash-fixes-20260908` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 81 | `/Users/mac/Baci-app/.worktrees/negotiation-notification-fix` | PR #3463 merged at exact HEAD; clean; only generated Expo/build data ignored. |
+| 97 | `/Users/mac/Baci-app/.worktrees/pr-3281-agentic-health` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 104 | `/Users/mac/Baci-app/.worktrees/pr3284-shipping-empty-quotes` | Exact PR #3284 head is MERGED; clean worktree; no meaningful ignored data observed. |
+| 111 | `/Users/mac/Baci-app/.worktrees/quiz-instant-results-release-20260830` | PR #3431 merged at exact local HEAD; clean status and no meaningful ignored data found. |
+| 120 | `/Users/mac/Baci-app/.worktrees/reconcile-cron-audit-20260821` | No patch-unique commits; two changed paths are patch-equivalent; clean, only generated/dependency data ignored. |
+| 130 | `/Users/mac/Baci-app/.worktrees/shipping-legacy-client-20260908` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
+| 131 | `/Users/mac/Baci-app/.worktrees/shopify-catalog-ci-luna` | Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior. |
+| 152 | `/Users/mac/Baci-app/.worktrees/variant-review-followups` | ancestor of baseline; clean |
+| 158 | `/Users/mac/Baci-worktrees/category-recent-carousel` | empty tree diff despite unique commit subject |
+| 170 | `/Users/mac/Baci-worktrees/posthog-followup-secondary` | empty tree diff despite unique commit subject |
+| 171 | `/Users/mac/Baci-worktrees/pr-3444-checkout-retry-resume` | PR #3462 merged at exact HEAD; clean; no meaningful ignored data observed. |
+| 175 | `/Users/mac/Baci-worktrees/pr3322-ci-fix` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
 
 ### Preservation priorities
 

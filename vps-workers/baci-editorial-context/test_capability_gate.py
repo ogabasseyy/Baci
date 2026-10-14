@@ -130,6 +130,10 @@ class CapabilityGateTests(unittest.TestCase):
         # Date advanced but old revision carried forward: still required.
         carried = {**rereviewed, "source_revision": base["source_revision"]}
         self.assertTrue(gate.requires_register_update(carried, touched, base))
+        # New but unresolvable revision: still required; resolvable: accepted.
+        ghost = {**rereviewed, "source_revision": "f" * 40}
+        self.assertTrue(gate.requires_register_update(ghost, touched, base, rev_resolves=lambda rev: False))
+        self.assertFalse(gate.requires_register_update(ghost, touched, base, rev_resolves=lambda rev: True))
         # Base register unloadable: the path touch is the only signal, accepted.
         self.assertFalse(gate.requires_register_update(fresh, touched, None))
         self.assertFalse(gate.requires_register_update(fresh, touched))

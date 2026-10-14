@@ -266,6 +266,18 @@ class CapabilityBindingTests(unittest.TestCase):
             full = dict(thin, deployed_revision="b" * 40, verified_at=now)
             path.write_text(json.dumps(register(capabilities=[dict(row, status="production_verified", production_evidence=full)])))
             self.assertEqual(_status.classify(path), "fresh")
+            # Oversized current-dated fields the runtime rejects: broken.
+            path.write_text(json.dumps(register(capabilities=[dict(row, claim="x" * 1001)])))
+            self.assertEqual(_status.classify(path), "broken")
+            many_refs = ["r%d" % i for i in range(21)]
+            path.write_text(json.dumps(register(capabilities=[dict(row, source_refs=many_refs)])))
+            self.assertEqual(_status.classify(path), "broken")
+            # Duplicate JSON keys silently keep the last value: broken.
+            text = json.dumps(register())
+            duplicated = text.replace('"schema_version": 1,', '"schema_version": 1, "schema_version": 1,', 1)
+            self.assertNotEqual(duplicated, text)
+            path.write_text(duplicated)
+            self.assertEqual(_status.classify(path), "broken")
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,12 +29,19 @@ EXPECTED_RUN = [
     'python3 "$CHECKER" "$PINNED_CHECKER_SHA256"',
 ]
 
-_JOB_HEADER = re.compile(r"^  [A-Za-z0-9_.\-]+:")
-_JOB_CONDITION = re.compile(r"^    (if|needs|continue-on-error):")
-_NEXT_STEP = re.compile(r"^      - ")
-_TRIGGER_KEY = re.compile(r"^  ([A-Za-z_]+):\s*(.*)$")
-_TRIGGER_SUBKEY = re.compile(r"^    ([A-Za-z_-]+):\s*(.*)$")
-_TRIGGER_ITEM = re.compile(r"^      - (.*)$")
+def _norm(line):
+    """Normalize YAML spacing without changing semantics: valid YAML permits
+    whitespace before a mapping colon (``if : false`` is the same ``if``
+    key), so structural patterns must tolerate it."""
+    return re.sub(r"\s+:", ":", line.strip())
+
+
+_JOB_HEADER = re.compile(r"^  [A-Za-z0-9_.\-]+\s*:")
+_JOB_CONDITION = re.compile(r"^    (if|needs|continue-on-error)\s*:")
+_NEXT_STEP = re.compile(r"^      -(\s|$)")
+_TRIGGER_KEY = re.compile(r"^  ([A-Za-z_]+)\s*:\s*(.*)$")
+_TRIGGER_SUBKEY = re.compile(r"^    ([A-Za-z_-]+)\s*:\s*(.*)$")
+_TRIGGER_ITEM = re.compile(r"^      -\s(.*)$")
 
 
 def trigger_failures(ci_text):
@@ -78,6 +85,11 @@ def trigger_failures(ci_text):
         for key, rest, idx in subs.get(trig, []):
             if key in ("paths", "paths-ignore", "branches-ignore"):
                 failures.append(f"ci.yml must not narrow the {trig} trigger with {key}:")
+            if key == "types":
+                # Any activity allowlist risks dropping events (e.g. types:
+                # [opened] silences synchronize); the gate must run on all
+                # of them, so the key must stay absent.
+                failures.append(f"ci.yml must not narrow the {trig} trigger with types:")
             if key == "branches":
                 branches = [rest] if rest.strip() else []
                 j = idx + 1
@@ -96,11 +108,12 @@ def ci_failures(ci_text):
     """Exact invocation block bound to an unconditional executing job."""
     lines = ci_text.splitlines()
     failures = trigger_failures(ci_text)
-    starts = [i for i, line in enumerate(lines) if line.strip() == STEP_NAME_LINE.strip()]
+    starts = [i for i, line in enumerate(lines) if _norm(line) == _norm(STEP_NAME_LINE)]
     if len(starts) != 1:
         return failures + ["ci.yml must invoke the capability gate exactly once"]
     start = starts[0]
-    if lines[start] != STEP_NAME_LINE:
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    if indent != 6 or _norm(lines[start]) != _norm(STEP_NAME_LINE):
         return failures + ["capability gate step must use the pinned indentation"]
     headers = [i for i, line in enumerate(lines) if _JOB_HEADER.match(line)]
     job_start = max([i for i in headers if i < start], default=None)
@@ -116,7 +129,10 @@ def ci_failures(ci_text):
             break
         if line.strip() and not line.strip().startswith("#"):
             code.append(line)
-    if code != [STEP_USES_LINE]:
+    if (
+        [_norm(line) for line in code] != [_norm(STEP_USES_LINE)]
+        or any(len(line) - len(line.lstrip()) != 8 for line in code)
+    ):
         return failures + ["capability gate invocation must be exactly the pinned block"]
     return failures
 
@@ -131,11 +147,11 @@ def workflow_failures(workflow_text):
     """
     code = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
     failures = []
-    if not any(re.match(r"^\s*pull_request_target:", line) for line in code):
+    if not any(re.match(r"^\s*pull_request_target\s*:", line) for line in code):
         failures.append("contract workflow must keep the pull_request_target trigger")
     if "contents: read" not in "\n".join(code):
         failures.append("contract workflow must stay read-only (contents: read)")
-    runs = [i for i, line in enumerate(code) if re.match(r"^\s*run:\s*\|\s*$", line)]
+    runs = [i for i, line in enumerate(code) if re.match(r"^\s*run\s*:\s*\|\s*$", line)]
     if len(runs) != 1:
         return failures + [f"contract workflow must have exactly one run step (found {len(runs)})"]
     indent = len(code[runs[0]]) - len(code[runs[0]].lstrip())

@@ -48,7 +48,8 @@ from capability_gate_contract_text_checks import (
 )
 
 BASE_PINS = {
-    ".github/scripts/capability_gate_contract_text_checks.py": "3236df37fe8d4be73f3c9ccba7fa45fbe82a7b0e85cbcc66bb73f6634c9edc75",
+    ".github/scripts/capability_gate_contract_text_checks.py": "b531c78e2f6fe1249f1a8f4a4e71541df7dfecc037ab189854ab99694ea35e13",
+    ".github/workflows/capability-register-freshness.yml": "55389404e8391ffeecffe9a31654c07064890374c8faa3a7d4917caea27e7204",
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # The workflow itself is asserted structurally (workflow_failures), not
     # pinned: it carries PINNED_CHECKER_SHA256, so a hash pin here would
@@ -61,7 +62,8 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
     "vps-workers/baci-editorial-context/test_capability_gate.py": "39d62daac22dadf8efd04eb815dea0f32237cee3ba689397205f68546e560e18",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "f79ab644f1dd75689495ef543181883115899c8dbfa1b7a173c81b79b276cef3",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "1764dea5fdd932c1051064b283914089adbd65ab8c4aefb27aa806cf01d92a78",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "8582a5b842bff82c8faba1d24262b1d97608e04f6b28d516c40be09a3d8bb245",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
     "vps-workers/baci-editorial-context/test_capability_register_binding.py": "243fab8b2e83d618e74226f7f3d88e3397740846ced58d3efcfd0993d3421c79",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
@@ -109,8 +111,14 @@ def pin_failures(repo_root, base_pins, declared):
         except OSError:
             failures.append(f"enforcement file missing: {rel}")
             continue
+        if rel not in declared:
+            failures.append(
+                f"pin declaration dropped for a guarded file: {rel} "
+                f"(every base pin must stay declared)"
+            )
+            continue
         if actual == base_pins[rel]:
-            if declared.get(rel, base_pins[rel]) != base_pins[rel]:
+            if declared[rel] != base_pins[rel]:
                 failures.append(
                     f"pin advanced without a file change: {rel} "
                     f"(declare the new hash only in the change that makes it)"

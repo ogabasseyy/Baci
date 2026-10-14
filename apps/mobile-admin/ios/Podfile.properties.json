@@ -7,5 +7,5 @@
   "ios.forceStaticLinking": "[]",
   "apple.extraPods": "[{\"name\":\"GoogleUtilities\",\"modular_headers\":true},{\"name\":\"RecaptchaInterop\",\"modular_headers\":true}]",
   "apple.privacyManifestAggregationEnabled": "true",
-  "EXPO_USE_PRECOMPILED_MODULES": "true"
+  "EXPO_USE_PRECOMPILED_MODULES": "false"
 }

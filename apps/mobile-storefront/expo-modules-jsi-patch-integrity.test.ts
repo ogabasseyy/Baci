@@ -31,12 +31,11 @@ const runtimeSchedulerPath = join(
 
 describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', () => {
   it('keeps the resolved Expo 57 package patched or on the upstream fix', () => {
-    // Expo 57.0.15 resolves expo-modules-jsi@57.0.5, which still needs the
-    // RuntimeScheduler constructor patch below.
+    // Expo scene support resolves the upstream factory ownership fix.
     const pkg = JSON.parse(readFileSync(jsiPackageJsonPath, 'utf8')) as {
       version?: string;
     };
-    expect(pkg.version).toBe('57.0.5');
+    expect(pkg.version).toBe('57.1.2');
   });
 
   it('applies the Double.magnitude guard and never the ambiguous abs() call', () => {
@@ -58,35 +57,11 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 abs-ambiguity archive failure', ()
     expect(source).toContain(
       'RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept'
     );
-    expect(source).toContain('RuntimeScheduler() {}');
+    expect(source).toContain('RuntimeScheduler() noexcept {}');
+    expect(source).toContain(
+      'static RuntimeScheduler *create() noexcept SWIFT_RETURNS_RETAINED'
+    );
     expect(source).not.toMatch(/SWIFT_RETURNS_RETAINED\s+RuntimeScheduler/);
-  });
-
-  it('keeps the expo-modules-jsi 57.0.5 RuntimeScheduler patch registered', () => {
-    const workspaceConfig = readFileSync(
-      join(__dirname, '../../pnpm-workspace.yaml'),
-      'utf8'
-    );
-    const lockfile = readFileSync(
-      join(__dirname, '../../pnpm-lock.yaml'),
-      'utf8'
-    );
-    const patchPath = join(
-      __dirname,
-      '../../patches/expo-modules-jsi@57.0.5.patch'
-    );
-    const patchHash = lockfile.match(
-      /^ {2}expo-modules-jsi@57\.0\.5: ([a-f0-9]{64})$/m
-    )?.[1];
-
-    expect(workspaceConfig).toContain(
-      'expo-modules-jsi@57.0.5": "patches/expo-modules-jsi@57.0.5.patch"'
-    );
-    expect(patchHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(existsSync(patchPath)).toBe(true);
-    expect(readFileSync(patchPath, 'utf8')).toContain(
-      '-  SWIFT_RETURNS_RETAINED RuntimeScheduler() {}'
-    );
   });
 
   it('keeps the storefront React Native 0.86.2 platform patch registered', () => {

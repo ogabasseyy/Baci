@@ -10,6 +10,7 @@ import {
   readFileSync,
   realpathSync,
   type Stats,
+  statSync,
 } from 'node:fs';
 import { extname, join, sep } from 'node:path';
 
@@ -232,6 +233,41 @@ export function assertNonLabFillers(
       `non-lab public pilot tree holds ${strays} stray file(s) under "${name}" (no staged-merchant shapes); continuing — remove them or ignore`
     );
   }
+}
+
+// Lenient unanchored root for lab-OFF boots only: lab mode demands a
+// verified tree (the resolver throws), but an unrelated boot must not
+// brick for a lab-only feature. Never inspect a provably-wrong tree,
+// though: when the cwd is not a Next app root (no public/ dir and no
+// next.config.*), the served tree lives elsewhere unseen — possibly
+// with staged content — so refuse with the anchoring fix. When the
+// cwd IS plausibly the app root, return it for the legacy check (which
+// still refuses staged content actually present); the caller warns
+// that the root is unanchored. statSync (following) is right for this
+// detection probe: a symlinked public/ still marks an app root.
+export function cwdPublicDirIfAppRoot(): string {
+  const cwd = process.cwd();
+  const stats = (path: string) => {
+    try {
+      return statSync(path);
+    } catch {
+      return null;
+    }
+  };
+  const looksLikeAppRoot =
+    stats(join(cwd, 'public'))?.isDirectory() ||
+    [
+      'next.config.ts',
+      'next.config.mjs',
+      'next.config.js',
+      'next.config.cjs',
+    ].some((file) => stats(join(cwd, file))?.isFile());
+  if (!looksLikeAppRoot) {
+    throw new Error(
+      'merchant image pilot: startup gate cannot anchor the public tree and the cwd is not a Next app root (no public/ dir, no next.config.*); the served tree is unseen and may hold staged content — start via next dev/start so the config stashes the root, or set BACI_PILOT_PUBLIC_DIR'
+    );
+  }
+  return join(cwd, 'public');
 }
 
 // Init-failure twin of the inventory binding check: lab runtime

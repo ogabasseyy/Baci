@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { register } from './instrumentation';
 
@@ -23,8 +22,12 @@ vi.mock('@/lib/merchant-image-variant-pilot/lab-config-stage-guard', () => ({
   assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
 }));
 const assertNoUnboundStagedContentMock = vi.hoisted(() => vi.fn());
+const cwdPublicDirIfAppRootMock = vi.hoisted(() =>
+  vi.fn(() => '/resolved/cwd-public')
+);
 vi.mock('@/config/pilot-public-assets-triage', () => ({
   assertNoUnboundStagedContent: assertNoUnboundStagedContentMock,
+  cwdPublicDirIfAppRoot: cwdPublicDirIfAppRootMock,
 }));
 const captureServerExceptionMock = vi.hoisted(() => vi.fn());
 const captureServerEventMock = vi.hoisted(() => vi.fn());
@@ -115,6 +118,32 @@ describe('instrumentation pilot boot gate', () => {
     await register();
     expect(initializeLabRuntimeMock).toHaveBeenCalledOnce();
   });
+  it('banners every production lab boot, stays silent in dev', async () => {
+    // ALLOW_PROD explicitly opts a production box into serving staged
+    // bytes unauthenticated: that must be visible on every boot, so a
+    // copied env file can never enable it silently. Dev boots (the
+    // normal lab flow) stay quiet.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('BACI_IMAGE_PILOT_ALLOW_PROD', '1');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(register()).resolves.toBe(undefined);
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toMatch(/LAB ENABLED IN PRODUCTION/);
+    } finally {
+      warnSpy.mockRestore();
+    }
+    vi.stubEnv('NODE_ENV', 'development');
+    const quietSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(register()).resolves.toBe(undefined);
+      expect(quietSpy).not.toHaveBeenCalled();
+    } finally {
+      quietSpy.mockRestore();
+    }
+  });
   it('refuses boot when the staged tree drifts from the binding set', async () => {
     // Static-namespace guard: Next serves public/__pilot without
     // invoking lab handlers, so unbound files at boot stay fatal even
@@ -150,8 +179,9 @@ describe('instrumentation pilot boot gate', () => {
 
   it('degrades to a warned cwd check when unanchored with lab off', async () => {
     // A lab-only feature must not brick unrelated boots: without an
-    // anchored root and with the lab off, register warns loudly and
-    // checks the legacy cwd tree instead of throwing.
+    // anchored root and with the lab off, register probes the cwd for
+    // an app root, checks that tree, and warns loudly — instead of
+    // throwing on the anchor failure.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     resolvePilotPublicDirMock.mockImplementationOnce(() => {
       throw new Error('cannot anchor the public tree');
@@ -164,10 +194,25 @@ describe('instrumentation pilot boot gate', () => {
     } finally {
       warnSpy.mockRestore();
     }
+    expect(cwdPublicDirIfAppRootMock).toHaveBeenCalledOnce();
     expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
-      join(process.cwd(), 'public')
+      '/resolved/cwd-public'
     );
     expect(registerOTelMock).toHaveBeenCalledOnce();
+  });
+  it('refuses an unanchored boot whose cwd is provably not the app root', async () => {
+    // The leniency above never inspects a known-wrong tree: when the
+    // cwd probe refuses, boot refuses even with the lab off.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    resolvePilotPublicDirMock.mockImplementationOnce(() => {
+      throw new Error('cannot anchor the public tree');
+    });
+    cwdPublicDirIfAppRootMock.mockImplementationOnce(() => {
+      throw new Error('cwd is not a Next app root');
+    });
+    await expect(register()).rejects.toThrow(/not a Next app root/);
+    expect(assertPilotPublicAssetsMock).not.toHaveBeenCalled();
+    expect(registerOTelMock).not.toHaveBeenCalled();
   });
   it('stays fatal when unanchored with lab on', async () => {
     // Lab mode demands a verified tree: an unanchored lab boot refuses

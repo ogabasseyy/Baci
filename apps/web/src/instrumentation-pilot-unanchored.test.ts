@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -31,10 +31,12 @@ afterEach(() => {
 });
 
 describe('instrumentation unanchored boot', () => {
-  it('warns and completes with lab off and no anchored root', async () => {
-    // Clean sandbox cwd: the degraded cwd/public check finds nothing
-    // to refuse, so boot completes with the loud anchor warning.
+  it('warns and completes with lab off and an app-root cwd', async () => {
+    // Sandbox cwd WITH a public/ dir: plausibly the served app root,
+    // so the degraded cwd check runs (finding nothing to refuse) and
+    // boot completes with the loud anchor warning.
     const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-'));
+    mkdirSync(join(sandbox, 'public'), { recursive: true });
     const previousCwd = process.cwd();
     process.chdir(sandbox);
     try {
@@ -51,6 +53,26 @@ describe('instrumentation unanchored boot', () => {
         warnSpy.mockRestore();
       }
       expect(registerOTelMock).toHaveBeenCalledOnce();
+    } finally {
+      process.chdir(previousCwd);
+      rmSync(sandbox, { force: true, recursive: true });
+    }
+  });
+
+  it('refuses with lab off when the cwd is provably not the app root', async () => {
+    // Bare sandbox cwd (no public/, no next.config.*): the served tree
+    // lives elsewhere unseen and may hold staged content, so even a
+    // lab-off boot refuses instead of passing a lookalike.
+    const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-bare-'));
+    const previousCwd = process.cwd();
+    process.chdir(sandbox);
+    try {
+      vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+      vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+      vi.stubEnv('BACI_PILOT_PUBLIC_DIR', '');
+      vi.stubEnv('__NEXT_PRIVATE_STANDALONE_CONFIG', '');
+      await expect(register()).rejects.toThrow(/not a Next app root/);
+      expect(registerOTelMock).not.toHaveBeenCalled();
     } finally {
       process.chdir(previousCwd);
       rmSync(sandbox, { force: true, recursive: true });

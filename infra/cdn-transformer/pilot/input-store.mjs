@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { constants as fsConstants } from 'node:fs';
 import { lstat, open, realpath, stat, unlink } from 'node:fs/promises';
 import { dirname, join, sep } from 'node:path';
 import { MAX_INPUT_BYTES } from './constants.mjs';
@@ -56,9 +57,21 @@ export async function readInputSnapshot(inputRoot, sourcePath, deps) {
   // Bound the read BEFORE allocating: a stat-then-read races a concurrent
   // replacement, so read at most MAX+1 bytes through an open handle. A file
   // that exceeds the cap — or grows past it mid-read — is rejected instead
-  // of exhausting the generator process.
-  const handle = await openFile(resolvedPath, 'r');
+  // of exhausting the generator process. No-follow, nonblocking open with
+  // an fstat gate on the same handle: a FIFO (or a link to one) swapped
+  // in after path validation would otherwise block this open past every
+  // job deadline before any enforcement starts.
+  const handle = await openFile(
+    resolvedPath,
+    fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK
+  );
   try {
+    const opened = await handle.stat();
+    if (!opened.isFile()) {
+      throw new PilotInputError(
+        `source path is not a file: ${sourcePath}`
+      );
+    }
     // Loop to EOF-or-cap: a single read() may return short (pipes,
     // network mounts), which would hash a truncated snapshot while the
     // cap check sees only the short count.

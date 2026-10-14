@@ -209,17 +209,18 @@ test('memory evidence combines sampled parent RSS with worker peaks', async () =
       Number.isFinite(job.sampledParentRssBytes) && job.sampledParentRssBytes > 0,
       `job ${job.assetId} reports sampled parent RSS`
     );
-    // Worker children self-report per op; the combined figure is a
-    // conservative upper bound safe to size capacity (never a bare
-    // "peak" that silently excludes the encoder).
+    // Worker children self-report per op; the combined figure is
+    // sampled evidence (never a bare "peak" that silently excludes the
+    // encoder) — and never an upper bound, since transient peaks
+    // between samples are missed.
     assert.ok(
       Number.isInteger(job.peakWorkerRssBytes) && job.peakWorkerRssBytes >= 0,
       `job ${job.assetId} reports worker RSS`
     );
     assert.equal(
-      job.peakCombinedUpperBoundBytes,
+      job.peakCombinedSampledBytes,
       job.sampledParentRssBytes + job.peakWorkerRssBytes,
-      `job ${job.assetId} combined bound sums both peaks`
+      `job ${job.assetId} combined sample sums both peaks`
     );
     assert.ok(!('peakRssBytes' in job), `job ${job.assetId} has no bare peak`);
   }

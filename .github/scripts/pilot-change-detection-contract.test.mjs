@@ -39,6 +39,10 @@ test('gate-only changes set pilot=true', async () => {
     'apps/web/src/lib/storefront-product-href.ts',
     'apps/web/src/lib/storefront-product-href.test.ts',
     'apps/web/package.json',
+    'apps/web/public/__pilot/fillers/grid-filler-600x400-a.png',
+    '.github/scripts/pilot-change-detection-contract.test.mjs',
+    'apps/web/tools/perf/server-only-empty.ts',
+    'apps/web/tools/perf/merchant-image-pilot-stage.tsconfig.json',
   ];
   for (const name of gateOnly) {
     assert.equal(detected(pattern, [name]), true, name);

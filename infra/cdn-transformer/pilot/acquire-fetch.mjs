@@ -60,6 +60,14 @@ export async function fetchBoundedBytes(
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new PilotAcquireError(`acquire: only http(s) URLs are allowed`);
   }
+  // No userinfo: the acquisition path is documented public and
+  // credential-free, and the inventory persists the URL verbatim — a
+  // password here would ride into retained evidence and review packets.
+  if (parsed.username || parsed.password) {
+    throw new PilotAcquireError(
+      `acquire: URLs with credentials are not allowed`
+    );
+  }
   // Loopback fixtures (node:http test servers) opt in explicitly; the
   // operator CLI never does, so a mistyped inventory URL fails closed.
   if (!allowPrivateHosts) {

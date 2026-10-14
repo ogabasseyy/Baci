@@ -82,6 +82,9 @@ test('loops short reads to EOF instead of hashing a truncation', async () => {
   await writeFile(join(root, 'a.png'), PNG_BYTES);
   const dribble = {
     async close() {},
+    async stat() {
+      return { isFile: () => true };
+    },
     async read(buffer, offset, length, position) {
       const { open } = await import('node:fs/promises');
       const handle = await open(join(root, 'a.png'), 'r');
@@ -100,6 +103,51 @@ test('loops short reads to EOF instead of hashing a truncation', async () => {
   assert.equal(snapshot.size, PNG_BYTES.length);
   assert.deepEqual(snapshot.bytes, PNG_BYTES);
   assert.equal(snapshot.sha256, sha256(PNG_BYTES));
+});
+
+test('refuses a FIFO swapped in for the input without hanging', async () => {
+  // mkfifo exists only on POSIX; the nofollow/nonblocking open and the
+  // fstat gate are portable. A blocking open would hang this test past
+  // every timeout instead of rejecting.
+  if (process.platform === 'win32') {
+    return;
+  }
+  const { execFileSync } = await import('node:child_process');
+  const { rm } = await import('node:fs/promises');
+  const { root } = await makeRoots();
+  await writeFile(join(root, 'a.png'), PNG_BYTES);
+  await rm(join(root, 'a.png'));
+  execFileSync('mkfifo', [join(root, 'a.png')]);
+  await assert.rejects(
+    () => readInputSnapshot(root, 'a.png'),
+    /source path is not a file/
+  );
+  await rm(join(root, 'a.png'));
+});
+
+test('refuses a handle whose fstat is not a regular file', async () => {
+  // Pins the post-open gate directly: path validation passed, but the
+  // opened handle names a swapped-in special file. Read must never run.
+  const { root } = await makeRoots();
+  await writeFile(join(root, 'a.png'), PNG_BYTES);
+  let reads = 0;
+  await assert.rejects(
+    () =>
+      readInputSnapshot(root, 'a.png', {
+        openFile: async () => ({
+          async close() {},
+          async stat() {
+            return { isFile: () => false };
+          },
+          async read() {
+            reads += 1;
+            return { bytesRead: 0 };
+          },
+        }),
+      }),
+    /source path is not a file/
+  );
+  assert.equal(reads, 0);
 });
 
 test('verifySnapshotHash detects source mutation', async () => {

@@ -57,6 +57,13 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # BACI_IMAGE_PILOT_ALLOW_PROD=1 as explicit acknowledgement. A shared
 # lab origin is operator opt-in only: never enable the lab on a
 # reachable box you would not publish the merchant catalog from.
+# ALLOW_PROD pre-flight (all must hold before exporting it): the box is
+# measurement-only, not the live storefront; the lab env (flag, roots,
+# staged tree) lives only on that box and is never copied to a shared
+# deployment; every boot prints LAB ENABLED IN PRODUCTION — if you see
+# it somewhere unexpected, unset the flag there. When measurement ends,
+# unset BACI_IMAGE_PILOT_LAB and delete the staged tree (recovery line
+# below) so no later boot can serve it.
 #
 # Recovery when a non-lab build/boot refuses a staged tree: the gate is
 # fatal on staged-merchant shapes (image files under originals/,

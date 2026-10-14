@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { acquireSnapshot } from './acquire.mjs';
+import { fetchBoundedBytes } from './acquire-fetch.mjs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import {
@@ -165,6 +166,24 @@ test('refuses loopback fetches by default without touching the network', async (
       );
       assert.equal(fetches, 0);
     }
+  );
+});
+
+test('refuses acquisition URLs carrying userinfo credentials', async () => {
+  // The inventory persists the URL verbatim: userinfo would ride into
+  // retained evidence, and http(s).get would send it to the origin.
+  // Rejected before DNS and before any socket, on a public hostname.
+  await assert.rejects(
+    () =>
+      fetchBoundedBytes('https://user:secret@example.com/image.png', {
+        allowPrivateHosts: false,
+        dnsResolve: async () => {
+          throw new Error('must not resolve');
+        },
+        maxBytes: 1024,
+        timeoutMs: 1000,
+      }),
+    /URLs with credentials are not allowed/
   );
 });
 

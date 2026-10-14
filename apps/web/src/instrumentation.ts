@@ -67,22 +67,38 @@ export async function register() {
       pilotPublicDir = resolvePilotPublicDir();
     } catch (error) {
       // Unanchored boot (no config stash, no standalone path): lab mode
-      // demands a verified tree and stays fatal, but a lab-only feature
-      // must not brick unrelated boots (serverless, custom servers,
-      // test harnesses). With the lab off, check the legacy cwd tree
-      // and warn loudly that anything outside it is unseen. Detected
-      // staged content still refuses below; only the anchor failure
-      // degrades.
+      // demands a verified tree and stays fatal. With the lab off, an
+      // unrelated boot must not brick — but a provably-wrong cwd must
+      // not pass a lookalike either. The probe below returns the cwd
+      // tree only when the cwd is plausibly the served app root
+      // (public/ or next.config.* present); otherwise it refuses, since
+      // the real tree is unseen and may hold staged content. Detected
+      // staged content still refuses in the check below; the residual
+      // (a custom server rooted elsewhere from an app-root cwd) warns.
       if (isPilotLabEnabled()) {
         throw error;
       }
-      console.warn(
-        'merchant image pilot: startup gate cannot anchor the public tree (no config stash, no standalone path); checking cwd/public only — staged content elsewhere would be served unverified'
+      const { cwdPublicDirIfAppRoot } = await import(
+        '@/config/pilot-public-assets-triage'
       );
-      pilotPublicDir = join(process.cwd(), 'public');
+      pilotPublicDir = cwdPublicDirIfAppRoot();
+      console.warn(
+        'merchant image pilot: startup gate cannot anchor the public tree (no config stash, no standalone path); checked cwd/public only — a custom server rooted elsewhere would be unseen'
+      );
     }
     assertPilotPublicAssets(pilotPublicDir);
     if (isPilotLabEnabled()) {
+      // Production-lab exposure banner: reaching here with
+      // NODE_ENV=production means BACI_IMAGE_PILOT_ALLOW_PROD=1
+      // explicitly opted this box into serving staged merchant bytes
+      // as static files (no auth, predictable /__pilot/... URLs) from
+      // a production build. Say so on every boot, so a copied env file
+      // can never enable this silently.
+      if (process.env.NODE_ENV === 'production') {
+        console.warn(
+          'merchant image pilot: LAB ENABLED IN PRODUCTION (BACI_IMAGE_PILOT_ALLOW_PROD=1) — staged merchant bytes are publicly served as static files under /__pilot with no authentication. Disable the flag and remove the staged tree when measurement ends.'
+        );
+      }
       const { initializeLabRuntime } = await import(
         '@/app/pilot-lab/lab-route'
       );

@@ -114,7 +114,7 @@ jobs:
             else
               echo 'transformer=false' >> "$GITHUB_OUTPUT"
             fi
-            if printf '%s\n' "$names" | grep -qE '^apps/web/tools/perf/merchant-image-pilot-|^apps/web/src/lib/merchant-image-variant-pilot/|^apps/web/src/app/pilot-lab/|^apps/web/src/config/pilot-|^apps/web/src/schemas/merchant-image-variant-pilot|^apps/web/src/instrumentation|^apps/web/next\.config(\.pilot-assets)?(\.test)?\.ts$|^apps/web/src/components/storefront/product-card(\.test)?\.tsx$|^apps/web/src/lib/storefront-product-href(\.test)?\.ts$|^apps/web/package\.json$|^infra/cdn-transformer/|^.github/fixtures/pilot-codec/|^.github/workflows/pilot-codec-compatibility.yml$'; then
+            if printf '%s\n' "$names" | grep -qE '^apps/web/tools/perf/merchant-image-pilot-|^apps/web/src/lib/merchant-image-variant-pilot/|^apps/web/src/app/pilot-lab/|^apps/web/src/config/pilot-|^apps/web/src/schemas/merchant-image-variant-pilot|^apps/web/src/instrumentation|^apps/web/next\.config(\.pilot-assets)?(\.test)?\.ts$|^apps/web/src/components/storefront/product-card(\.test)?\.tsx$|^apps/web/src/lib/storefront-product-href(\.test)?\.ts$|^apps/web/package\.json$|^infra/cdn-transformer/|^.github/fixtures/pilot-codec/|^.github/workflows/pilot-codec-compatibility.yml$|^.github/scripts/pilot-|^apps/web/public/__pilot/|^apps/web/tools/perf/server-only-empty\.ts$|^apps/web/tools/perf/merchant-image-pilot-stage\.tsconfig\.json$'; then
               echo 'pilot=true' >> "$GITHUB_OUTPUT"
             else
               echo 'pilot=false' >> "$GITHUB_OUTPUT"

@@ -117,14 +117,14 @@ export async function runJob({
   const deadlineMs = startedAt + JOB_TIMEOUT_MS;
   // Memory accounting: parent RSS sampled at checkpoints, plus the max
   // worker-child RSS across this job's completed ops (self-reported per
-  // op envelope; see encode-worker.mjs). Parent and worker run
-  // concurrently, so their peaks sum to a CONSERVATIVE upper bound on the
-  // combined job peak — safe to size capacity, unlike the parent sample
-  // alone. Missed: peaks between parent samples, and spikes inside one
-  // native worker call (bounded by the worker's input pixel limits).
-  // Ops that die without an envelope (timeout/crash/kill) contribute no
-  // peak, so the envelope marks the sum incomplete instead of omitting
-  // the worst inputs from capacity evidence.
+  // op envelope; see encode-worker.mjs). SAMPLED evidence, not an upper
+  // bound: a transient peak that rises and releases between two samples
+  // never appears, so the sum can sit BELOW the true combined peak.
+  // Missed: peaks between parent samples, and spikes inside one native
+  // worker call (bounded by the worker's input pixel limits). Ops that
+  // die without an envelope (timeout/crash/kill) contribute no peak, so
+  // the envelope marks the sum incomplete instead of omitting the worst
+  // inputs from capacity evidence. Size capacity above this figure.
   const startedRss = process.memoryUsage().rss;
   let sampledParentRss = startedRss;
   const sampleRss = () => {
@@ -246,7 +246,7 @@ export async function runJob({
       elapsedMs: Date.now() - startedAt,
       generationId,
       merchantId: job.merchantId,
-      peakCombinedUpperBoundBytes: sampledParentRss + peakWorkerRssBytes,
+      peakCombinedSampledBytes: sampledParentRss + peakWorkerRssBytes,
       peakWorkerRssBytes,
       sampledParentRssBytes: sampledParentRss,
       reused: committed.reused,
@@ -287,7 +287,7 @@ export async function runJob({
         0,
         500
       ),
-      peakCombinedUpperBoundBytes: sampledParentRss + peakWorkerRssBytes,
+      peakCombinedSampledBytes: sampledParentRss + peakWorkerRssBytes,
       peakWorkerRssBytes,
       sampledParentRssBytes: sampledParentRss,
       role: job.role,

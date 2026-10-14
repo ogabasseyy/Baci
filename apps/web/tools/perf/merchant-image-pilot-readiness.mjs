@@ -35,6 +35,7 @@ import {
   READINESS_CLI_OPTIONS,
   READINESS_PROFILES,
   readMountsFile,
+  readSampleStoreIds,
 } from './merchant-image-pilot-readiness-config.mjs';
 
 async function run() {
@@ -69,7 +70,11 @@ async function run() {
   let expectedMounts;
   try {
     expectedMounts = await readMountsFile(args.mounts);
-    stores = parseStoreMap(args['store-map'], expectedMounts);
+    // Coverage is judged against the committed sample, not the
+    // operator's own artifacts: agreeing partial inputs must not
+    // certify a partial run as ok.
+    const requiredSample = readSampleStoreIds();
+    stores = parseStoreMap(args['store-map'], expectedMounts, requiredSample);
   } catch (error) {
     fail('usage', error instanceof Error ? error.message : String(error));
     return { checks, failures, ok: false };

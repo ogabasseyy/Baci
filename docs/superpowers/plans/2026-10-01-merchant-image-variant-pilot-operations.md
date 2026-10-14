@@ -134,10 +134,12 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # unverifiable tree (symlinked or unreadable __pilot root), and an
 # unchecked boot under pilot intent ('refusing an unchecked boot':
 # no checkable app tree at all while pilot env was configured).
-# Unanchored candidate trees warn WITHOUT quarantine (a foreign tree
-# may belong to a live lab session — this process must not mutate
-# it); boots with zero pilot configuration (serverless functions,
-# migrations) warn instead of refusing. BACI_PILOT_PUBLIC_DIR names
+# Unanchored candidate trees never quarantine (a foreign tree may
+# belong to a live lab session — this process must not mutate
+# it): detected staged content there REFUSES with pilot intent (a
+# lab participant serving an unverified candidate must not boot)
+# and warns on boots with zero pilot configuration (serverless
+# functions, migrations). BACI_PILOT_PUBLIC_DIR names
 # the served tree for the boot gate when the config anchor is
 # unavailable (standalone/VPS, custom servers). To clear a dirty
 # tree: re-run pilot:stage with the intended inventory (reconcile

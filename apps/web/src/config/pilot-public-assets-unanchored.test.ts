@@ -190,6 +190,28 @@ describe('assertUnanchoredPublicTrees', () => {
     }
     expect(existsSync(join(originals, 'm1-a1.png'))).toBe(true);
   });
+  it('refuses staged content found in a candidate tree with pilot intent', () => {
+    // The exact case this branch exists for: a custom server whose
+    // served tree is a candidate but is not anchored, on a box the
+    // operator configured for the pilot. Refusal (no quarantine —
+    // the foreign tree must not be mutated), not warn-and-serve.
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    vi.stubEnv('BACI_IMAGE_PILOT_ORIGIN', 'https://lab.example');
+    const dir = root();
+    const originals = join(dir, 'public', '__pilot', 'originals');
+    mkdirSync(originals, { recursive: true });
+    writeFileSync(join(originals, 'm1-a1.png'), 'merchant bytes');
+    const previousCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      expect(() => assertUnanchoredPublicTrees()).toThrow(
+        /staged merchant pilot assets/
+      );
+    } finally {
+      process.chdir(previousCwd);
+    }
+    expect(existsSync(join(originals, 'm1-a1.png'))).toBe(true);
+  });
 
   it('warns on candidate filler drift without pilot intent', () => {
     // Intent-gated drift: synthetic fixtures on a box that never

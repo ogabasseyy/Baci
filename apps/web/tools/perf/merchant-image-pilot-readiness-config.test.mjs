@@ -11,6 +11,7 @@ import {
   READINESS_CLI_OPTIONS,
   READINESS_PROFILES,
   readMountsFile,
+  readSampleStoreIds,
   SETTINGS_CLI_OPTIONS,
 } from './merchant-image-pilot-readiness-config.mjs';
 
@@ -237,5 +238,28 @@ describe('merchant-image-pilot-readiness store coverage', () => {
     expect(() => parseStoreMap('m1=slug-a', mounts)).toThrow(
       /no store mapped.*m2/
     );
+  });
+
+  it('judges coverage against the required sample, not the inputs', () => {
+    // Agreeing partial inputs must not certify a partial run: the
+    // map and mounts cover each other here, but m3 is required.
+    expect(() =>
+      parseStoreMap('m1=slug-a,m2=slug-b', mounts, ['m1', 'm2', 'm3'])
+    ).toThrow(/required sampled merchants.*m3/);
+    expect(parseStoreMap('m1=slug-a,m2=slug-b', mounts, ['m1', 'm2'])).toEqual([
+      { merchantId: 'm1', slug: 'slug-a' },
+      { merchantId: 'm2', slug: 'slug-b' },
+    ]);
+  });
+
+  it('rejects required merchants missing from the mounts file', () => {
+    const partialMounts = [{ merchantId: 'm1' }];
+    expect(() =>
+      parseStoreMap('m1=slug-a,m2=slug-b', partialMounts, ['m1', 'm2'])
+    ).toThrow(/no expected mounts.*m2/);
+  });
+
+  it('reads the committed four-store sample authority', () => {
+    expect(readSampleStoreIds()).toHaveLength(4);
   });
 });

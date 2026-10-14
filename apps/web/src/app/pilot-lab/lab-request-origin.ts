@@ -11,7 +11,7 @@ const LAB_LOOPBACK_ORIGIN = 'http://localhost:3000';
 // 1. BACI_IMAGE_PILOT_ORIGIN when set to a valid http(s) origin
 //    (operator allowlist for staged/shared origins).
 // 2. The request Host, but ONLY when it parses to loopback
-//    (localhost, *.localhost, 127.0.0.1, ::1) — the lab's local runs.
+//    (localhost, *.localhost, 127.0.0.0/8, ::1) — the lab's local runs.
 // 3. The loopback default. Anything else is untrusted and ignored.
 function labAssetOriginOverride(): string | null {
   const configured = (process.env.BACI_IMAGE_PILOT_ORIGIN ?? '').trim();
@@ -29,12 +29,25 @@ function labAssetOriginOverride(): string | null {
   }
 }
 
+function isLoopbackIpv4(hostname: string): boolean {
+  // Full 127.0.0.0/8: side-by-side lab instances bind 127.0.0.2 and up.
+  // Hostnames arrive URL-normalized (decimal/short/hex forms already
+  // canonicalized to dotted quad by the WHATWG parser), so a first-
+  // octet check mirrors the transformer fetch policy's 127 judgment.
+  const v4 = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  return (
+    v4 !== null &&
+    v4[1] === '127' &&
+    v4.slice(1).every((octet) => Number(octet) <= 255)
+  );
+}
+
 function isLoopbackHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/\.+$/, '');
   return (
     normalized === 'localhost' ||
     normalized.endsWith('.localhost') ||
-    normalized === '127.0.0.1' ||
+    isLoopbackIpv4(normalized) ||
     normalized === '::1' ||
     normalized === '[::1]'
   );

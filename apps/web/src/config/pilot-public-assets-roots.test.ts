@@ -167,4 +167,17 @@ describe('assertNoUnboundStagedContent', () => {
       rmSync(dir, { force: true, recursive: true });
     }
   });
+  it('propagates a non-ENOENT listing failure instead of passing', () => {
+    // Fail closed: a __pilot path that exists but cannot list (here
+    // a file, hence ENOTDIR) must not read as "absent" — only ENOENT
+    // passes. An unreadable-but-present tree still serves by known
+    // pathname.
+    const dir = mkdtempSync(join(tmpdir(), 'pilot-public-unbound-'));
+    try {
+      writeFileSync(join(dir, '__pilot'), 'not a directory');
+      expect(() => assertNoUnboundStagedContent(dir)).toThrow(/ENOTDIR/);
+    } finally {
+      rmSync(dir, { force: true, recursive: true });
+    }
+  });
 });

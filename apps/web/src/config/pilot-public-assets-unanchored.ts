@@ -3,10 +3,11 @@
 // cannot anchor the public tree (no config stash, no standalone path)
 // and the lab is OFF, an unrelated boot must not brick on the anchor
 // failure itself — but it must not pass a served tree unseen either.
-// Resolve every candidate root we can find and refuse on DETECTED
-// staged content; only the anchor failure (with nothing found)
-// degrades to a loud warning. Lab-ON boots never reach here: they
-// demand a verified tree and stay fatal in the resolver.
+// Resolve every candidate root we can find: detected staged content
+// refuses under pilot intent (same as the anchored path) and warns
+// without it, and only the anchor failure with nothing found degrades
+// to a loud warning. Lab-ON boots never reach here: they demand a
+// verified tree and stay fatal in the resolver.
 // The residual "found nothing yet" state is explicit: a plant AFTER
 // this boot check lands unseen in the local window, and serving it
 // later would fail closed (routes + readiness pin allowlisted
@@ -58,16 +59,19 @@ export function unanchoredCandidatePublicDirs(): string[] {
   return candidates;
 }
 
-// Checks every candidate above with the shared gate (fatal on detected
-// staged content, same as the anchored path) and warns loudly about
-// the residual: with zero candidates nothing was checkable, and with
-// candidates a custom server rooted anywhere else is still unseen.
-// Never throws for the anchor failure itself — lab-off boots proceed.
-// Explicit opt-in for passing a boot the gate could not check at all:
-// without it a custom server rooted elsewhere serves its real
-// public/__pilot tree completely unverified in non-lab mode. Strict
-// '1', matching the lab-flag convention; detected staged content
-// refuses regardless of this flag.
+// Checks every candidate above with the shared gate and warns loudly
+// about the residual: with zero candidates nothing was checkable, and
+// with candidates a custom server rooted anywhere else is still
+// unseen. Never throws for the anchor failure itself — lab-off boots
+// proceed. Detected staged content in a candidate refuses when the
+// operator shows pilot intent (the box is a lab participant; same as
+// the anchored path) and warns without it (a foreign tree that may
+// belong to a live lab session elsewhere — never mutated, never
+// quarantined). Explicit opt-in for passing a boot the gate could not
+// check at all: without it a custom server rooted elsewhere serves
+// its real public/__pilot tree completely unverified in non-lab
+// mode. Strict '1', matching the lab-flag convention; detected staged
+// content refuses regardless of this flag when intent is configured.
 export const PILOT_UNANCHORED_ACK_FLAG = 'BACI_IMAGE_PILOT_UNANCHORED_ACK';
 
 // Pilot intent: any non-empty BACI_IMAGE_PILOT_* var (or the gate's own
@@ -118,16 +122,25 @@ export function assertUnanchoredPublicTrees(): void {
   // recompression, smudged checkout) warns instead of bricking an
   // unrelated migration or worker. With pilot intent the box is a
   // lab participant and drift stays fatal (post-build tamper).
-  const fillerDrift = hasPilotIntent() ? 'throw' : 'warn';
+  const intent = hasPilotIntent();
+  const fillerDrift = intent ? 'throw' : 'warn';
+  // Detected staged-merchant shapes refuse under intent (a lab
+  // participant serving an unverified candidate must not boot) and
+  // warn without it (an unrelated migration or worker that merely
+  // runs near an app dir must not brick). Strays warn in both modes
+  // (the triage downgrades them itself); nothing here quarantines.
+  const contentFindings = intent ? 'throw' : 'warn';
   for (const candidate of candidates) {
-    // Runtime severities without quarantine: drift refuses under
-    // intent, content findings warn — a dirty candidate tree
-    // warns-and-continues rather than bricking a migration or
-    // worker that merely runs near an app dir. No quarantine here:
-    // a candidate is a FOREIGN tree that may belong to a live lab
-    // session elsewhere on the box, and this process must not mutate
-    // it. The zero-candidate refusal above is unchanged: checking
-    // nothing under pilot intent stays fatal.
-    assertPilotPublicAssets(candidate, undefined, fillerDrift, 'warn', false);
+    // No quarantine here: a candidate is a FOREIGN tree that may
+    // belong to a live lab session elsewhere on the box, and this
+    // process must not mutate it. The zero-candidate refusal above
+    // is unchanged: checking nothing under pilot intent stays fatal.
+    assertPilotPublicAssets(
+      candidate,
+      undefined,
+      fillerDrift,
+      contentFindings,
+      false
+    );
   }
 }

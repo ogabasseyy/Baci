@@ -113,10 +113,15 @@ export function assertPilotPublicAssets(
   // post-build tamper. Drift rethrows past the warn downgrade below.
   fillerDrift: 'throw' | 'warn' = 'throw',
   // Non-lab CONTENT findings (staged-merchant shapes, symlink escapes,
-  // stray structure) severity: refused at build/deploy checks, warned
-  // at runtime boots, so a leftover staged tree from a lab session on
-  // the same box can never brick the production storefront's boot.
-  // Only content findings downgrade; drift stays fatal (see above).
+  // stray structure) severity: refused at build/deploy checks,
+  // quarantined-and-continued at runtime boots — EXCEPT when the
+  // quarantine itself cannot complete (read-only/immutable tree),
+  // which refuses with recovery guidance. That refusal is an
+  // explicit operator decision, not an accident: staged content on
+  // an un-movable tree means the image baked bytes past the build
+  // gate, and serving unverified merchant bytes is worse than
+  // refusing the boot. Only content findings downgrade; drift stays
+  // fatal (see above).
   runtimeFindings: 'throw' | 'warn' = labEnabled ? 'throw' : 'warn',
   // Quarantine the offending entry on a runtime content finding
   // (warn mode only): warn-and-continue alone would serve the bytes,
@@ -217,11 +222,12 @@ export function assertPilotPublicAssets(
       );
     }
     // Non-lab from here: staged-merchant shapes and symlink
-    // escapes refuse at build/deploy ('throw') and quarantine at
-    // runtime — a lab-only concern must never brick the production
-    // storefront's boot, nor serve merchant bytes. Empty leftover
-    // dirs pass silently (nothing to serve); unrelated strays warn
-    // in every mode.
+    // escapes refuse at build/deploy ('throw') and quarantine-and-
+    // continue at runtime — the boot refuses only when quarantine
+    // itself fails (read-only tree: explicit operator decision, see
+    // the runtimeFindings contract above). Empty leftover dirs pass
+    // silently (nothing to serve); unrelated strays warn in every
+    // mode.
     downgrade(name, () => assertNonLabEntry(root, name));
   }
   // Lab mode additionally requires the fillers directory itself: the

@@ -121,8 +121,12 @@ export function assertNoUnboundStagedContent(publicDir: string): void {
   let entries: string[];
   try {
     entries = readdirSync(root);
-  } catch {
-    return;
+  } catch (error) {
+    // Fail closed: files beneath a searchable-but-unreadable tree are
+    // still fetchable by known pathname, so only a genuinely absent
+    // tree passes — every other listing error propagates.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
   }
   const unbound = entries.filter((entry) => entry !== 'fillers');
   if (unbound.length > 0) {

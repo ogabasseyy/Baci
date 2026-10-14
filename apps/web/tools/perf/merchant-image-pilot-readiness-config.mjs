@@ -9,6 +9,9 @@
 // silently dropped, so a green report always proves the matrix the caller
 // meant to configure.
 import { MAX_INVENTORY_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
+import sampleStores from './merchant-image-pilot-lab-stores.json' with {
+  type: 'json',
+};
 import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
 
 export const READINESS_CLI_OPTIONS = [
@@ -73,7 +76,11 @@ export function parseArgs(argv, allowed) {
   return args;
 }
 
-export function parseStoreMap(value, expectedMounts = null) {
+export function parseStoreMap(
+  value,
+  expectedMounts = null,
+  requiredMerchantIds = null
+) {
   const stores = String(value ?? '')
     .split(',')
     .map((entry) => entry.trim())
@@ -111,6 +118,32 @@ export function parseStoreMap(value, expectedMounts = null) {
       throw new Error(
         `bad --store-map: no store mapped for merchants with expected mounts: ${uncovered.join(', ')}`
       );
+    }
+  }
+  // Coverage is judged against the committed sample authority, never the
+  // operator artifacts alone: a --mounts file and --store-map that agree
+  // with each other but omit a sampled merchant would otherwise certify
+  // a partial run as ok. Both inputs must cover every required merchant
+  // (same complete-matrix philosophy as parseProfiles below).
+  if (requiredMerchantIds !== null) {
+    const unmapped = requiredMerchantIds.filter(
+      (merchantId) => !seen.has(merchantId)
+    );
+    if (unmapped.length > 0) {
+      throw new Error(
+        `bad --store-map: required sampled merchants have no mapped store: ${unmapped.join(', ')}`
+      );
+    }
+    if (expectedMounts !== null) {
+      const mounted = new Set(expectedMounts.map((mount) => mount.merchantId));
+      const unmounted = requiredMerchantIds.filter(
+        (merchantId) => !mounted.has(merchantId)
+      );
+      if (unmounted.length > 0) {
+        throw new Error(
+          `bad --mounts: no expected mounts for required sampled merchants: ${unmounted.join(', ')}`
+        );
+      }
     }
   }
   return stores;
@@ -217,6 +250,22 @@ export async function readMountsFile(mountsPath) {
     );
   }
   return parseMountsJson(read.bytes.toString('utf8'));
+}
+
+// Committed sample authority: the merchant ids the readiness gate must
+// visit. Statically imported (not an operator path, not import.meta
+// resolution — the latter breaks under the test runner's virtual URL
+// scheme) so agreeing partial --mounts/--store-map inputs cannot
+// define their own coverage.
+export function readSampleStoreIds() {
+  if (
+    !Array.isArray(sampleStores) ||
+    sampleStores.length === 0 ||
+    sampleStores.some((store) => typeof store?.merchantId !== 'string')
+  ) {
+    throw new Error('readiness sample authority is malformed');
+  }
+  return sampleStores.map((store) => store.merchantId);
 }
 
 export function parseProfiles(value) {

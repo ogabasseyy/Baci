@@ -49,6 +49,23 @@ describe('labRequestOrigin', () => {
     );
   });
 
+  it('trusts the whole 127.0.0.0/8 loopback range', () => {
+    // Side-by-side lab instances bind 127.0.0.2 and up: the addressed
+    // origin (host AND port) echoes unchanged so rendered staged URLs
+    // point at the instance that served the page. Adjacent ranges stay
+    // untrusted.
+    expect(labRequestOrigin({ host: '127.0.0.2:3122' })).toBe(
+      'http://127.0.0.2:3122'
+    );
+    expect(labRequestOrigin({ host: '127.1.2.3' })).toBe('http://127.1.2.3');
+    expect(labRequestOrigin({ host: '127.255.255.255:4000' })).toBe(
+      'http://127.255.255.255:4000'
+    );
+    for (const host of ['128.0.0.1', '126.255.255.255:3122']) {
+      expect(labRequestOrigin({ host })).toBe('http://localhost:3000');
+    }
+  });
+
   it('never reflects non-loopback hosts', () => {
     // Attacker-controlled Host must not reach rendered image URLs, even
     // normalized: untrusted hosts fall back to loopback.

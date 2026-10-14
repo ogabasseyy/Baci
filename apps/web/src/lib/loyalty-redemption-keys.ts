@@ -116,9 +116,19 @@ async function keyForReward(
 function clearKeyForReward(
   merchantId: string,
   customerId: string,
-  rewardId: string
+  rewardId: string,
+  completedKey?: string
 ): void {
   const intent = storageKey(merchantId, customerId, rewardId);
+  // Compare-and-clear when the caller names the key it completed: two
+  // tabs can share one stored key, and the slower tab's success must
+  // not delete a newer key a retry already minted for the next
+  // redemption (clearing it would force a third key and double-spend).
+  // Callers that omit the key keep the plain clear.
+  if (completedKey !== undefined) {
+    const current = readStored(intent) ?? keysByIntent.get(intent);
+    if (current !== completedKey) return;
+  }
   keysByIntent.delete(intent);
   persistedIntents.delete(intent);
   removeStored(intent);

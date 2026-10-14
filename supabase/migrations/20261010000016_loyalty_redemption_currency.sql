@@ -10,6 +10,10 @@
 ALTER TABLE public.reward_redemptions
   ADD COLUMN IF NOT EXISTS issuance_currency text;
 
+-- Codes already outstanding are pinned at the end of this migration
+-- (after the resolver exists) so they cannot be re-denominated by a
+-- later payout-currency change.
+
 -- Canonical resolver for ISSUANCE stamps: exactly the rule
 -- private.create_storefront_order stamps orders with (a non-blank
 -- payout currency uppercased, else NGN). The country fallback the
@@ -49,3 +53,11 @@ REVOKE ALL ON FUNCTION public.merchant_resolved_currency(uuid)
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.merchant_resolved_currency(uuid)
   TO service_role;
+
+-- Backfill: the checkout bridge skips its currency guard while
+-- issuance_currency is NULL, so stamp every outstanding code with the
+-- merchant's currently resolved currency before any later change can
+-- re-denominate it. Matches what redeem stamps at mint for all types.
+UPDATE public.reward_redemptions AS rr
+SET issuance_currency = public.merchant_resolved_currency(rr.merchant_id)
+WHERE rr.issuance_currency IS NULL;

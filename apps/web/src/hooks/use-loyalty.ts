@@ -155,7 +155,8 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
       redemptionIdempotencyKeys.clearForReward(
         merchantId,
         customerId,
-        rewardId
+        rewardId,
+        idempotencyKey
       );
 
       // Refresh loyalty data after redemption (skipped if superseded)

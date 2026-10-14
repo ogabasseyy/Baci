@@ -128,6 +128,41 @@ describe('redemptionIdempotencyKeys', () => {
     redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-x');
   });
 
+  it('does not clear a newer key when a delayed success names the old one', async () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+    });
+
+    // Tab A completes with the shared key; a retry in tab B already
+    // minted and stored a replacement for the next redemption. Tab A's
+    // delayed clear of the completed key must leave the replacement.
+    const intent = 'loyalty-redeem-key:m:c:reward-race';
+    store.set(intent, 'replacement-key');
+    redemptionIdempotencyKeys.clearForReward(
+      'm',
+      'c',
+      'reward-race',
+      'completed-key'
+    );
+    expect(store.get(intent)).toBe('replacement-key');
+
+    // Clearing with the currently stored key still clears.
+    redemptionIdempotencyKeys.clearForReward(
+      'm',
+      'c',
+      'reward-race',
+      'replacement-key'
+    );
+    expect(store.has(intent)).toBe(false);
+  });
+
   it('clears the stored key on success', async () => {
     const store = new Map<string, string>();
     vi.stubGlobal('localStorage', {

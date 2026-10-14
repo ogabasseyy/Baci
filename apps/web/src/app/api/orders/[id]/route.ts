@@ -26,6 +26,7 @@ import {
 } from '@/lib/shipping/order-shipment-booking-utils';
 import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { orderUpdateSchema } from '@/schemas/orders';
+import { evaluateOrderCancelledTransition } from './evaluate-order-cancelled-transition';
 import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
 
 function isPaidStatusUpdate(value: unknown): value is 'paid' | 'bnpl_approved' {
@@ -178,47 +179,16 @@ export async function PATCH(
       );
     }
 
-    // Terminal states are terminal in both directions: once an order is
-    // cancelled, no PATCH here may move it out again. A narrower check
-    // (cancelled -> paid only) is bypassable in two steps
-    // (cancelled -> pending -> paid): after the loyalty claim is released
-    // and re-claimed elsewhere, resurrecting the first order would let
-    // two orders keep the same redeemed discount. Record late payments
-    // on a new order instead. Same-value (no-op) and unrelated-field
-    // patches stay allowed.
-    const paymentWasCancelled =
-      existingOrder.payment_status === 'cancelled' ||
-      existingOrder.payment_status === 'canceled';
-    const shippingWasCancelled =
-      existingOrder.shipping_status === 'cancelled' ||
-      existingOrder.shipping_status === 'canceled';
-    if (
-      paymentWasCancelled &&
-      payment_status !== undefined &&
-      payment_status !== existingOrder.payment_status
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'This order was cancelled for non-payment and cannot be marked paid. Create a new order for the late payment.',
-          code: 'PAYMENT_CANCELLED_TERMINAL',
-        },
-        { status: 409 }
-      );
-    }
-    if (
-      shippingWasCancelled &&
-      shipping_status !== undefined &&
-      shipping_status !== existingOrder.shipping_status
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'This order was cancelled and cannot be moved out of cancelled. Use the cancellation endpoint for cancellations.',
-          code: 'SHIPPING_CANCELLED_TERMINAL',
-        },
-        { status: 409 }
-      );
+    // Terminal states are terminal in both directions (policy lives in
+    // the extracted helper; see its header for the two-step bypass).
+    const cancelledRejection = evaluateOrderCancelledTransition({
+      existingPaymentStatus: existingOrder.payment_status,
+      existingShippingStatus: existingOrder.shipping_status,
+      requestedPaymentStatus: payment_status,
+      requestedShippingStatus: shipping_status,
+    });
+    if (cancelledRejection) {
+      return NextResponse.json(cancelledRejection, { status: 409 });
     }
 
     // Validate: Cannot move to 'processing' unless paid or is_credit_order

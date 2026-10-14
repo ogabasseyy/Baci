@@ -19,6 +19,25 @@ const loyaltyTierSchema = z.object({
   perks: z.array(z.string().max(100)).max(20).optional(),
 });
 
+// Earning/redemption rates land in numeric(10,2) / numeric(10,4)
+// columns. A positive-but-tiny value rounds to zero on write (silently
+// disabling awards or making the currency unit a divide-by-zero), and
+// an oversized one makes the upsert fail with a 500. Require positive
+// values the columns can store exactly.
+function rateSetting(max: number, scale: number) {
+  const quantum = 10 ** -scale;
+  return z
+    .number()
+    .finite()
+    .min(quantum)
+    .max(max)
+    .refine(
+      (value) => Number(value.toFixed(scale)) === value,
+      `must have at most ${scale} decimal places`
+    )
+    .nullish();
+}
+
 // POST /api/loyalty/settings payload. Every field is optional: omitted
 // (or null) fields keep the route's defaults. The cap mirrors the
 // numeric(5,2) column — at least 0.01 and at most two decimal places —
@@ -27,13 +46,13 @@ const loyaltyTierSchema = z.object({
 export const loyaltySettingsPostSchema = z.object({
   enabled: z.boolean().nullish(),
   program_name: z.string().nullish(),
-  points_per_currency: z.number().finite().nullish(),
-  points_currency_unit: z.number().finite().nullish(),
+  points_per_currency: rateSetting(99_999_999.99, 2),
+  points_currency_unit: rateSetting(99_999_999.99, 2),
   signup_bonus_points: integerSetting,
   birthday_bonus_points: integerSetting,
   review_bonus_points: integerSetting,
   referral_bonus_points: integerSetting,
-  points_to_currency_ratio: z.number().finite().nullish(),
+  points_to_currency_ratio: rateSetting(999_999.9999, 4),
   minimum_redemption_points: integerSetting,
   maximum_redemption_percentage: z
     .number()

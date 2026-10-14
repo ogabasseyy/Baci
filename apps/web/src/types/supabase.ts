@@ -13813,6 +13813,7 @@ export type Database = {
       };
       reward_redemptions: {
         Row: {
+          consume_idempotency_key: string | null;
           created_at: string | null;
           customer_id: string;
           discount_code: string | null;
@@ -13833,6 +13834,7 @@ export type Database = {
           used_on_order_id: string | null;
         };
         Insert: {
+          consume_idempotency_key?: string | null;
           created_at?: string | null;
           customer_id: string;
           discount_code?: string | null;
@@ -13853,6 +13855,7 @@ export type Database = {
           used_on_order_id?: string | null;
         };
         Update: {
+          consume_idempotency_key?: string | null;
           created_at?: string | null;
           customer_id?: string;
           discount_code?: string | null;

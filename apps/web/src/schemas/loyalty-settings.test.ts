@@ -108,6 +108,46 @@ describe('loyaltySettingsPostSchema', () => {
     ).toBe(false);
   });
 
+  it('accepts earning rates at the column-precision bounds', () => {
+    const parsed = loyaltySettingsPostSchema.safeParse({
+      points_per_currency: 0.01,
+      points_currency_unit: 99_999_999.99,
+      points_to_currency_ratio: 0.0001,
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('rejects earning rates that round to zero in numeric(10,2)/(10,4)', () => {
+    expect(
+      loyaltySettingsPostSchema.safeParse({ points_currency_unit: 0.001 })
+        .success
+    ).toBe(false);
+    expect(
+      loyaltySettingsPostSchema.safeParse({ points_per_currency: 0 }).success
+    ).toBe(false);
+    expect(
+      loyaltySettingsPostSchema.safeParse({
+        points_to_currency_ratio: 0.00001,
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects earning rates beyond the columns or with excess precision', () => {
+    expect(
+      loyaltySettingsPostSchema.safeParse({ points_currency_unit: 1e20 })
+        .success
+    ).toBe(false);
+    expect(
+      loyaltySettingsPostSchema.safeParse({ points_per_currency: 1.005 })
+        .success
+    ).toBe(false);
+    expect(
+      loyaltySettingsPostSchema.safeParse({
+        points_to_currency_ratio: 1_000_000,
+      }).success
+    ).toBe(false);
+  });
+
   it('rejects non-object bodies', () => {
     for (const body of [null, [], 'settings']) {
       expect(loyaltySettingsPostSchema.safeParse(body).success).toBe(false);

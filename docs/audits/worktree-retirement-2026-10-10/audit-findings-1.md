@@ -93,7 +93,7 @@ The comparison uses `git status --porcelain --untracked-files=normal`, non-ignor
 | 184 | `~/Baci-worktrees/terra-3305-followup-isolated` | `bc3b00b4` | no | 0/0 | 41/104 | PRESERVE_IMPROVEMENT | Remediation cleanup idempotency and workflow regressions; overlaps IDs 25/106/187/190. |
 | 187 | `~/Baci-worktrees/terra-3309-case-state-review` | `49aded50` | no | 0/0 | 25/44 | PRESERVE_IMPROVEMENT | Remediation stale-lock ownership/transition safety; overlapping history, preserve pending diff comparison. |
 | 190 | `~/Baci-worktrees/terra-3309-claim-residue-recovery` | `78a57da4` | no | 0/0 | 5/9 | PRESERVE_IMPROVEMENT | Abandoned claim/sidecar recovery tests and fixes; overlaps remediation worktrees. |
-| 194 | `/private/tmp/baci-blog-handoff-rollout` | `ae94a507` | yes | 0/0 | 0/0 | PRESERVE_DIRTY | Baseline-clean, but unique ignored `docs/connectors/muse-baci-icon.png` is absent from primary. |
+| 194 | `/private/tmp/baci-blog-handoff-rollout` | `ae94a507` | yes | 0/0 | 0/0 | PRESERVE_DIRTY | Baseline-clean, but unique ignored `docs/connectors/muse-baci-icon.png` is absent from primary. Ephemeral `/private/tmp` path: re-verify location before acting. |
 
 ## Limits and next gate
 

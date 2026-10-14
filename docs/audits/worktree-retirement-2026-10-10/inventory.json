@@ -404,8 +404,8 @@
       "id": 17,
       "path": "~/.codex/worktrees/ogabassey-search-summary/Baci-app",
       "head": "7d8353d5a53c329abb820d497b5827bb665bb060",
-      "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "3 unique commits / 14 paths vs baseline; clean worktree; PR #3613 OPEN; process activity observed.",
+      "classification": "ACTIVE_OR_UNCERTAIN",
+      "evidence": "3 unique commits / 14 paths vs baseline; clean worktree; PR #3613 OPEN; process activity observed. Active checkout: keep uncertain, not a preservation candidate.",
       "shard": 2,
       "manifest": {
         "id": 17,
@@ -561,7 +561,7 @@
       "path": "~/Baci-app/.claude/worktrees/agent-a26fe302f75651c15",
       "head": "0aeb6f5eaf6c45adc3c7268040ee22d7d7940434",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "PR #3203 is CLOSED but current worktree HEAD differs from the PR head SHA; preserve for review.",
+      "evidence": "PR #3203 is CLOSED but current worktree HEAD differs from the PR head SHA; preserve for review. Exact PR-head tree available as checkout ID 173; compare before salvaging.",
       "shard": 2,
       "manifest": {
         "id": 23,
@@ -1032,8 +1032,8 @@
       "id": 47,
       "path": "~/Baci-app/.worktrees/expense-edit-exposure-20260824",
       "head": "ed9fba16264ae1aae6c8e43755481ccbf149ce94",
-      "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "4 unique commits / 8 paths vs baseline; clean worktree; PR #3389 MERGED.",
+      "classification": "CLEAN_REDUNDANT",
+      "evidence": "Exact head of merged PR #3389; clean and inactive. 4 patch-distinct commits / 8 paths do not establish missing behavior; no preservation reason recorded.",
       "shard": 2,
       "manifest": {
         "id": 47,
@@ -3547,7 +3547,7 @@
       "path": "~/Baci-worktrees/pr3203-tenant",
       "head": "06f81cb6de53c9373524b26ed84600e22e021aa9",
       "classification": "PRESERVE_IMPROVEMENT",
-      "evidence": "6 unique commits / 24 paths vs baseline; clean worktree; PR #3203 CLOSED.",
+      "evidence": "6 unique commits / 24 paths vs baseline; clean worktree; PR #3203 CLOSED. ID 23 holds 2 divergent commits on the same branch; compare both trees before salvaging.",
       "shard": 2,
       "manifest": {
         "id": 173,

@@ -2,7 +2,7 @@
 
 **Baseline:** `ae94a5075d92ebdc3625c13006a6dd4144dba4fa` (`origin/main` at audit time, 2026-10-10). Read-only review of 64 manifest entries. No worktree, branch, or source changes; no builds, tests, installs, or fetches.
 
-**Classification counts:** 7 `CLEAN_REDUNDANT`, 17 `PRESERVE_IMPROVEMENT`, 24 `PRESERVE_DIRTY`, 15 `ACTIVE_OR_UNCERTAIN`, 1 `MISSING`. Per-worktree HEAD, status count, ancestry, unique commit/path counts, PR snapshot match, activity count, and notes are in [audit-results-2.json](./audit-results-2.json).
+**Classification counts:** 8 `CLEAN_REDUNDANT`, 15 `PRESERVE_IMPROVEMENT`, 24 `PRESERVE_DIRTY`, 16 `ACTIVE_OR_UNCERTAIN`, 1 `MISSING`. Per-worktree HEAD, status count, ancestry, unique commit/path counts, PR snapshot match, activity count, and notes are in [audit-results-2.json](./audit-results-2.json).
 
 ## Priority preservation
 
@@ -35,4 +35,4 @@ These have focused unique patches in the branch-to-forkpoint comparison and are 
 
 ## Uncertainty and limitations
 
-Complex unique histories remain `ACTIVE_OR_UNCERTAIN`: IDs 8, 11, 14, 20, 26, 44, 56, 89, 101, 107, 116, 122, 155, 161, and 164 (15 rows per `audit-results-2.json`). Commit/path counts alone do not establish value or staleness. Unique paths are measured from merge-base to branch HEAD; this does not replace focused behavior comparison for older branches. The PR snapshot is a recent-500 snapshot captured at 13:24; a missing PR match means unknown, and a branch-name match does not prove the worktree HEAD equals the PR head. Remote preservation records are local tracking-ref observations, not fresh server checks. No deletion or cleanup was performed.
+Complex unique histories remain `ACTIVE_OR_UNCERTAIN`: IDs 8, 11, 14, 17, 20, 26, 44, 56, 89, 101, 107, 116, 122, 155, 161, and 164 (16 rows per `audit-results-2.json`). ID 17 joined on process activity; ID 47 left for `CLEAN_REDUNDANT` as an exact merged head with no preservation reason. Commit/path counts alone do not establish value or staleness. Unique paths are measured from merge-base to branch HEAD; this does not replace focused behavior comparison for older branches. The PR snapshot is a recent-500 snapshot captured at 13:24; a missing PR match means unknown, and a branch-name match does not prove the worktree HEAD equals the PR head. Remote preservation records are local tracking-ref observations, not fresh server checks. No deletion or cleanup was performed.

@@ -4,10 +4,10 @@
   "prSnapshotAt": "2026-10-10T13:24:19.473Z",
   "prStateLimit": "recent-500 only; missing=unknown",
   "counts": {
-    "CLEAN_REDUNDANT": 7,
-    "PRESERVE_IMPROVEMENT": 17,
+    "CLEAN_REDUNDANT": 8,
+    "PRESERVE_IMPROVEMENT": 15,
     "PRESERVE_DIRTY": 24,
-    "ACTIVE_OR_UNCERTAIN": 15,
+    "ACTIVE_OR_UNCERTAIN": 16,
     "MISSING": 1
   },
   "rows": [
@@ -79,7 +79,7 @@
       "id": 17,
       "path": "~/.codex/worktrees/ogabassey-search-summary/Baci-app",
       "head": "7d8353d5a53c329abb820d497b5827bb665bb060",
-      "class": "PRESERVE_IMPROVEMENT",
+      "class": "ACTIVE_OR_UNCERTAIN",
       "ancestorBaseline": false,
       "dirty": 0,
       "uniqueCommits": 3,
@@ -111,7 +111,7 @@
       "uniquePaths": 17,
       "pr": "3203:CLOSED:06f81cb6de53c9373524b26ed84600e22e021aa9",
       "activity": 0,
-      "notes": "PR #3203 is CLOSED but current worktree HEAD differs from the PR head SHA; preserve for review."
+      "notes": "PR #3203 is CLOSED but current worktree HEAD differs from the PR head SHA; preserve for review. Exact PR-head tree is available as checkout ID 173; compare before salvaging."
     },
     {
       "id": 26,
@@ -202,13 +202,14 @@
       "id": 47,
       "path": "~/Baci-app/.worktrees/expense-edit-exposure-20260824",
       "head": "ed9fba16264ae1aae6c8e43755481ccbf149ce94",
-      "class": "PRESERVE_IMPROVEMENT",
+      "class": "CLEAN_REDUNDANT",
       "ancestorBaseline": false,
       "dirty": 0,
       "uniqueCommits": 4,
       "uniquePaths": 8,
       "pr": "3389:MERGED:ed9fba16264ae1aae6c8e43755481ccbf149ce94",
-      "activity": 0
+      "activity": 0,
+      "notes": "Exact head of merged PR #3389; clean, inactive; 4 unique commits / 8 paths are patch-distinct counts that do not establish missing behavior. No preservation reason recorded."
     },
     {
       "id": 50,
@@ -428,7 +429,8 @@
       "uniqueCommits": 25,
       "uniquePaths": 162,
       "pr": "3269:MERGED:685305e321bb482461cce169ec8b5348d96cc47b",
-      "activity": 0
+      "activity": 0,
+      "notes": "Exact head of merged PR #3269 and clean, but 25 unique commits / 162 paths are unreviewed for behavior absent from main; insufficient inspection keeps this uncertain."
     },
     {
       "id": 104,
@@ -725,7 +727,8 @@
       "uniqueCommits": 6,
       "uniquePaths": 24,
       "pr": "3203:CLOSED:06f81cb6de53c9373524b26ed84600e22e021aa9",
-      "activity": 0
+      "activity": 0,
+      "notes": "Exact head of closed PR #3203; ID 23 holds 2 divergent commits on the same branch. Compare both trees and check the rejection rationale before salvaging."
     },
     {
       "id": 176,

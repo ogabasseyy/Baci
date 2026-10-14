@@ -7,7 +7,9 @@ on 2026-10-10, split between three GPT-6 Luna agents. Comparison baseline:
 `ae94a5075d92ebdc3625c13006a6dd4144dba4fa` (`origin/main`, fetched on the audit date).
 The findings branch itself (ID 193) is excluded from the inventory, which
 holds IDs 1–192 and 194. Paths use `~` for
-the audit machine's home directory; transient process IDs are omitted.
+the audit machine's home directory; the single `/private/tmp` checkout
+(ID 194) is shown verbatim and must be re-verified before acting, as temp
+paths are ephemeral. Transient process IDs are omitted.
 
 No audited worktree, source, dependency directory, branch, or process was removed.
 The requested 90% retirement target is an aspiration, not a safety assumption.
@@ -18,14 +20,14 @@ this documentation PR does not cherry-pick code or prove runtime correctness.
 
 | Classification | Count |
 | --- | ---: |
-| Code-redundant retirement candidates | 20 |
+| Code-redundant retirement candidates | 21 |
 | Dirty/local work to preserve | 81 |
-| Potential improvement/preservation candidates | 50 |
-| Active or uncertain | 38 |
+| Potential improvement/preservation candidates | 48 |
+| Active or uncertain | 39 |
 | Missing checkouts | 4 |
 | Total audited | 193 |
 
-Only 20/193 (10.4%) currently qualify for the code-redundant shortlist. A 90%
+Only 21/193 (10.9%) currently qualify as code-redundant. A 90%
 direct-deletion recommendation is not supported. A larger archive-first batch
 may be possible after ownership, recoverability, and ignored-data checks.
 
@@ -34,6 +36,8 @@ All 20 shortlist HEADs were unchanged and Git-clean on the parent's recheck at
 Watchman monitoring for ID 171. This is not proof that an owning chat is inactive.
 Ignored-file scans were bounded, so the shortlist remains a candidate list,
 not an unconditional removal list. See [candidate-recheck.json](./candidate-recheck.json).
+ID 47 (exact merged head, reclassified after the recheck) joins the shortlist
+only after a fresh HEAD/status recheck.
 
 ### Code-redundant shortlist
 

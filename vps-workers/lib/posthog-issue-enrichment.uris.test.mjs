@@ -127,6 +127,15 @@ describe('PostHog enrichment frame URIs', () => {
     });
     assert.equal(arbitrary.sample.route, '(redacted PostHog location)');
     assert.equal(arbitrary.sample.route.includes('AliceSmith_customer'), false);
+
+    const traversal = await enrichDetail({
+      top_in_app_frame: {
+        function: 'load',
+        line: 1,
+        source: 'node:fs/../etc/passwd',
+      },
+    });
+    assert.equal(traversal.sample.route, '(redacted PostHog location)');
   });
 
   it('rejects unsupported hierarchical URI schemes', async () => {

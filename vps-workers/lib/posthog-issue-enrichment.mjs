@@ -1,3 +1,4 @@
+import { isBuiltin } from 'node:module';
 import { readBoundedJson } from './posthog-bounded-json.mjs';
 import { posthogQueryContract as posthogQuery } from './posthog-query-contract.mjs';
 import { requiredConfiguration } from './posthog-remediation-config.mjs';
@@ -69,56 +70,6 @@ const isAbsoluteLocalUrlPath = (pathname) => {
   return ABSOLUTE_URL_PATH_ROOTS.has(root.toLowerCase());
 };
 
-// Documented Node.js built-in module roots: the only accepted node:
-// suffixes. Anything else after the prefix is provider-controlled text.
-const NODE_BUILTIN_MODULES = new Set([
-  'assert',
-  'async_hooks',
-  'buffer',
-  'child_process',
-  'cluster',
-  'console',
-  'constants',
-  'crypto',
-  'dgram',
-  'diagnostics_channel',
-  'dns',
-  'domain',
-  'events',
-  'fs',
-  'http',
-  'http2',
-  'https',
-  'inspector',
-  'module',
-  'net',
-  'os',
-  'path',
-  'perf_hooks',
-  'process',
-  'punycode',
-  'querystring',
-  'readline',
-  'repl',
-  'sea',
-  'sqlite',
-  'stream',
-  'string_decoder',
-  'sys',
-  'test',
-  'timers',
-  'tls',
-  'trace_events',
-  'tty',
-  'url',
-  'util',
-  'v8',
-  'vm',
-  'wasi',
-  'worker_threads',
-  'zlib',
-]);
-
 const lastSegment = (value) => {
   const segments = value.split(/[\\/]/).filter(Boolean);
   return segments.length > 0 ? segments[segments.length - 1] : '';
@@ -160,13 +111,11 @@ const framePath = (source) => {
   const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(bare)?.[1]?.toLowerCase();
   if (scheme) {
     if (scheme === 'node') {
-      const suffix = bare.slice(scheme.length + 1);
-      const [root, ...rest] = suffix.split('/');
-      if (!suffix || !NODE_BUILTIN_MODULES.has(root)) return '';
-      if (rest.some((segment) => segment === '..' || segment === '')) {
-        return '';
-      }
-      return `node:${suffix}`;
+      // Only genuine builtin specifiers — including subpaths like
+      // node:test/reporters — are coordinates. The runtime predicate
+      // rejects arbitrary provider text, traversal, and empty suffixes.
+      if (!isBuiltin(bare)) return '';
+      return bare;
     }
     if (scheme === 'http' || scheme === 'https' || scheme === 'file') {
       // Deployment and file URLs may carry userinfo credentials: keep

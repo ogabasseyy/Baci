@@ -87,7 +87,7 @@ const classifyPostHogIssueName = (value) => {
   if (/out of memory|javascript heap|allocation failure/i.test(name)) {
     return 'Out of memory';
   }
-  if (/timed? ?out|deadline exceeded|ETIMEDOUT/i.test(name)) {
+  if (/\btimed? ?out\b|\bdeadline exceeded\b|\bETIMEDOUT\b/i.test(name)) {
     return 'Timeout';
   }
   if (/network|fetch failed|ECONN|ENOTFOUND|socket hang up/i.test(name)) {

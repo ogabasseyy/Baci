@@ -72,6 +72,12 @@ describe('PostHog issue-name classification', () => {
                 aggregations: { occurrences: 4 },
                 name: 'JavaScript heap out of memory',
               },
+              {
+                id: 'substring-timeout',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'UntimedOutputError: render failed',
+              },
             ],
           })
         ),
@@ -79,7 +85,18 @@ describe('PostHog issue-name classification', () => {
 
     assert.deepEqual(
       candidates.map((candidate) => candidate.sample.message),
-      ['TypeError', 'Timeout', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue', 'Out of memory']
+      [
+        'TypeError',
+        'Timeout',
+        'PostHog error tracking issue',
+        'PostHog error tracking issue',
+        'PostHog error tracking issue',
+        'PostHog error tracking issue',
+        'PostHog error tracking issue',
+        'PostHog error tracking issue',
+        'Out of memory',
+        'PostHog error tracking issue',
+      ]
     );
     assert.equal(
       JSON.stringify(candidates).includes('AliceSmithError'),

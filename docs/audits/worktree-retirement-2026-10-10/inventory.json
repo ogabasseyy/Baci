@@ -674,7 +674,7 @@
       "path": "~/Baci-app/.worktrees/android-soloader-fix",
       "head": "491ad2cea33a46c7cdc82516c9a146a4f6bcd748",
       "classification": "CLEAN_REDUNDANT",
-      "evidence": "The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior.",
+      "evidence": "The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior. All 3 unique paths enumerated: gradle.properties + expo-plugins.js carry useLegacyPackaging=true (already enabled in baseline) and expo-plugins.test.ts asserts that same enabled value.",
       "shard": 2,
       "manifest": {
         "id": 29,
@@ -1054,7 +1054,8 @@
           "url": "https://github.com/ogabasseyy/Baci/pull/3389",
           "exactAuditedHead": true
         }
-      ]
+      ],
+      "recheckPending": true
     },
     {
       "id": 48,
@@ -2727,7 +2728,7 @@
       "path": "~/Baci-app/.worktrees/shopify-catalog-ci-luna",
       "head": "e8772444bd129f825d379238ef7bcc8df264369a",
       "classification": "CLEAN_REDUNDANT",
-      "evidence": "Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior.",
+      "evidence": "Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior. All 8 unique paths enumerated: ucp-catalog-adapters.ts + test (null-rejection already in baseline), lookup/product/search route.ts (null/422 guards already in baseline) + their 3 route tests of that behavior.",
       "shard": 2,
       "manifest": {
         "id": 131,
@@ -3960,5 +3961,12 @@
       },
       "prMatches": []
     }
-  ]
+  ],
+  "counts": {
+    "CLEAN_REDUNDANT": 21,
+    "PRESERVE_DIRTY": 81,
+    "PRESERVE_IMPROVEMENT": 48,
+    "ACTIVE_OR_UNCERTAIN": 39,
+    "MISSING": 4
+  }
 }

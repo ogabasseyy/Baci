@@ -31,13 +31,13 @@ Only 21/193 (10.9%) currently qualify as code-redundant. A 90%
 direct-deletion recommendation is not supported. A larger archive-first batch
 may be possible after ownership, recoverability, and ignored-data checks.
 
-All 20 shortlist HEADs were unchanged and Git-clean on the parent's recheck at
-2026-10-10T13:33:11Z. The follow-up process snapshot found no references except
-Watchman monitoring for ID 171. This is not proof that an owning chat is inactive.
-Ignored-file scans were bounded, so the shortlist remains a candidate list,
-not an unconditional removal list. See [candidate-recheck.json](./candidate-recheck.json).
-ID 47 (exact merged head, reclassified after the recheck) joins the shortlist
-only after a fresh HEAD/status recheck.
+20 of the 21 shortlist HEADs were unchanged and Git-clean on the parent's
+recheck at 2026-10-10T13:33:11Z; ID 47 is marked PENDING in the table below
+until a fresh HEAD/status recheck. The follow-up process snapshot found no
+references except Watchman monitoring for ID 171. This is not proof that an
+owning chat is inactive. Ignored-file scans were bounded, so the shortlist
+remains a candidate list, not an unconditional removal list.
+See [candidate-recheck.json](./candidate-recheck.json).
 
 ### Code-redundant shortlist
 
@@ -47,7 +47,8 @@ only after a fresh HEAD/status recheck.
 | 6 | `~/.codex/worktrees/checkout-3577-pre-slice` | Clean detached checkout; zero patch-unique commits and zero changed paths. |
 | 7 | `~/.codex/worktrees/checkout-payment-switch/Baci-app` | Exact merged PR head, clean Git status; 263 sampled ignored media/report files byte-identical to primary. |
 | 21 | `~/.codex/worktrees/shipping-migration-audit/Baci-app` | PR #3506 merged at exact HEAD; clean; ignored data limited to generated/dependency artifacts. |
-| 29 | `~/Baci-app/.worktrees/android-soloader-fix` | The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior. |
+| 47 | `~/Baci-app/.worktrees/expense-edit-exposure-20260824` | **PENDING fresh HEAD/status recheck — not yet verified.** Exact head of merged PR #3389; clean and inactive. |
+| 29 | `~/Baci-app/.worktrees/android-soloader-fix` | The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior. All 3 unique paths enumerated: the two config files plus a test asserting the same enabled value. |
 | 58 | `~/Baci-app/.worktrees/fix-web-ios-production-deploys` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
 | 60 | `~/Baci-app/.worktrees/gigl-tracking-notifications` | PR #3248 merged at this exact head; clean status and only generated/build data ignored. |
 | 79 | `~/Baci-app/.worktrees/mobile-native-crash-fixes-20260908` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
@@ -57,7 +58,7 @@ only after a fresh HEAD/status recheck.
 | 111 | `~/Baci-app/.worktrees/quiz-instant-results-release-20260830` | PR #3431 merged at exact local HEAD; clean status and no meaningful ignored data found. |
 | 120 | `~/Baci-app/.worktrees/reconcile-cron-audit-20260821` | No patch-unique commits; two changed paths are patch-equivalent; clean, only generated/dependency data ignored. |
 | 130 | `~/Baci-app/.worktrees/shipping-legacy-client-20260908` | Exact merged PR head, clean Git status, bounded ignored media/report sample duplicates primary. |
-| 131 | `~/Baci-app/.worktrees/shopify-catalog-ci-luna` | Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior. |
+| 131 | `~/Baci-app/.worktrees/shopify-catalog-ci-luna` | Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior. All 8 unique paths enumerated: adapter + test, three route guards (null/422, all present in baseline), and three route tests of that behavior. |
 | 152 | `~/Baci-app/.worktrees/variant-review-followups` | ancestor of baseline; clean |
 | 158 | `~/Baci-worktrees/category-recent-carousel` | empty tree diff despite unique commit subject |
 | 170 | `~/Baci-worktrees/posthog-followup-secondary` | empty tree diff despite unique commit subject |
@@ -145,6 +146,24 @@ ID 161 had a Git reference that may be an audit subprocess. The primary checkout
 is dirty and must be retained independently of process-reference interpretation.
 
 ## Validation boundary
+
+### Shard schema map
+
+The three shard JSONs use different field names for the same concepts:
+
+| Concept | `audit-results-1.json` | `audit-results-2.json` | `audit-results-3.json` |
+| --- | --- | --- | --- |
+| Category counts | `categoryCounts` | `counts` | `summary` |
+| Row classification | `category` | `class` | `classification` |
+| Unique commits | `uniqueCommits` | `uniqueCommits` | `unique_commit_count` |
+| Changed paths | `changedPaths` | `uniquePaths` | `changed_path_count` |
+| Dirty/status entries | `statusCount` + `untrackedCount` | `dirty` | `git_status_entries` |
+| PR reference | `pr` object | `pr` `"num:STATE:sha"` string | `pr_state` string |
+| Free-form notes | `evidence` | `notes` | `finding` / `status_detail` |
+
+`inventory.json` carries its own top-level `counts` block; recounting its 193
+rows must reproduce those numbers, and each shard's counts must sum to its
+row count (65/64/64).
 
 This is documentation-only. Inventory coverage, identifiers, baseline and local
 Markdown references are checked; no application builds, dependency installs, or

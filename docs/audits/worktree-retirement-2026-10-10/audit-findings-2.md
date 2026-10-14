@@ -15,8 +15,8 @@
 
 ## Baseline checks
 
-- **ID 29, Android SoLoader:** The branch's `useLegacyPackaging=true` change is already present in baseline `apps/mobile-storefront/android/gradle.properties` and `apps/mobile-storefront/config/expo-plugins.js`. Clean branch; redundant.
-- **ID 131, UCP unpriced products:** Baseline `apps/web/src/lib/agentic/ucp-catalog-adapters.ts` already rejects invalid/unpriced products and trims identity fields. Clean branch; the older alternative is superseded.
+- **ID 29, Android SoLoader:** The branch's `useLegacyPackaging=true` change is already present in baseline `apps/mobile-storefront/android/gradle.properties` and `apps/mobile-storefront/config/expo-plugins.js`. All 3 unique paths enumerated (the two config files plus a test asserting the same enabled value). Clean branch; redundant.
+- **ID 131, UCP unpriced products:** Baseline `apps/web/src/lib/agentic/ucp-catalog-adapters.ts` already rejects invalid/unpriced products and trims identity fields. All 8 unique paths enumerated (adapter + test, three route null/422 guards already in baseline, three route tests). Clean branch; the older alternative is superseded.
 - **IDs 5 and 104:** Exact PR heads #3617 and #3284 are merged; worktrees are clean and no meaningful ignored local data was observed. Redundant.
 - **ID 140:** Manifest marks this worktree locked, but its path is absent. Report as missing/uncertain, never as a retirement candidate.
 - **ID 161:** PR #3481 is merged at the recorded exact head, but the supplied activity scan found a `git` process. Keep uncertain until a fresh process check confirms it is audit-only.

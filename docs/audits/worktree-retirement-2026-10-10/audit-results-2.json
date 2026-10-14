@@ -136,7 +136,7 @@
       "uniquePaths": 3,
       "pr": "unknown",
       "activity": 0,
-      "notes": "The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior."
+      "notes": "The native-library extraction setting is already enabled in baseline gradle.properties and Expo plugin config; clean branch alternative adds no unique behavior. All 3 unique paths enumerated: gradle.properties + expo-plugins.js carry useLegacyPackaging=true (already enabled in baseline) and expo-plugins.test.ts asserts that same enabled value."
     },
     {
       "id": 32,
@@ -209,7 +209,8 @@
       "uniquePaths": 8,
       "pr": "3389:MERGED:ed9fba16264ae1aae6c8e43755481ccbf149ce94",
       "activity": 0,
-      "notes": "Exact head of merged PR #3389; clean, inactive; 4 unique commits / 8 paths are patch-distinct counts that do not establish missing behavior. No preservation reason recorded."
+      "notes": "Exact head of merged PR #3389; clean, inactive; 4 unique commits / 8 paths are patch-distinct counts that do not establish missing behavior. No preservation reason recorded.",
+      "recheckPending": true
     },
     {
       "id": 50,
@@ -552,7 +553,7 @@
       "uniquePaths": 8,
       "pr": "unknown",
       "activity": 0,
-      "notes": "Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior."
+      "notes": "Baseline UCP adapter already rejects invalid/unpriced products and trims identity fields; branch fix is superseded by current main behavior. All 8 unique paths enumerated: ucp-catalog-adapters.ts + test (null-rejection already in baseline), lookup/product/search route.ts (null/422 guards already in baseline) + their 3 route tests of that behavior."
     },
     {
       "id": 134,

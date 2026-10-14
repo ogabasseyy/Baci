@@ -58,8 +58,8 @@ const ABSOLUTE_URL_PATH_ROOTS = new Set([
   'var',
 ]);
 
-// Top-level source roots recognized inside virtual-sourcemap pathnames.
-// Anything else is treated as an absolute build path and reduced: the
+// Top-level source roots recognized in frame paths. Anything else is
+// treated as an absolute build or customer path and reduced: the
 // allowlist fails closed where an absolute-root blacklist cannot
 // enumerate every system layout.
 const REPOSITORY_PATH_ROOTS = new Set([
@@ -74,6 +74,7 @@ const REPOSITORY_PATH_ROOTS = new Set([
   'crates',
   'frontend',
   'functions',
+  'infra',
   'internal',
   'lib',
   'libs',
@@ -86,17 +87,18 @@ const REPOSITORY_PATH_ROOTS = new Set([
   'shared',
   'source',
   'src',
+  'supabase',
   'test',
   'tests',
   'ui',
   'web',
 ]);
 
-const isRepositoryRelativeUrlPath = (pathname) => {
+const isRepositoryRelativePath = (value) => {
   // A leading double slash is a UNC marker, not namespace structure.
-  if (pathname.startsWith('//')) return false;
-  const segments = pathname
-    .split('/')
+  if (value.startsWith('//')) return false;
+  const segments = value
+    .split(/[\\/]/)
     .filter((segment) => segment && segment !== '.');
   if (segments.length === 0) return false;
   const root = segments[0];
@@ -178,7 +180,7 @@ const framePath = (source) => {
       // Virtual schemes around absolute build paths still expose local
       // directories, and only recognized repository roots are preserved:
       // anything else reduces to the basename.
-      if (!isRepositoryRelativeUrlPath(pathname)) {
+      if (!isRepositoryRelativePath(pathname)) {
         return lastSegment(pathname);
       }
       return assembleRelativePath(pathname);
@@ -188,8 +190,11 @@ const framePath = (source) => {
     return '';
   }
   // POSIX-absolute paths reduce to the basename like other absolute
-  // shapes; the rest is repository-relative and preserved.
+  // shapes. Relative paths are preserved only under recognized
+  // repository roots; customer directories and unknown layouts reduce
+  // to the basename instead of leaking their segments.
   if (bare.startsWith('/')) return lastSegment(bare);
+  if (!isRepositoryRelativePath(bare)) return lastSegment(bare);
   return assembleRelativePath(bare);
 };
 

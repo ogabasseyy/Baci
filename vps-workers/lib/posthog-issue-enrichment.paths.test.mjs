@@ -102,6 +102,31 @@ describe('PostHog enrichment frame paths', () => {
     assert.equal(secret.sample.route.includes('secret-value'), false);
   });
 
+  it('reduces relative paths with unrecognized roots to basenames', async () => {
+    const customer = await enrichDetail({
+      top_in_app_frame: {
+        function: 'render',
+        line: 12,
+        source: 'customers/AliceSmith/app.js',
+      },
+    });
+    assert.equal(customer.sample.route, 'app.js:12');
+    assert.equal(customer.sample.route.includes('customers'), false);
+    assert.equal(customer.sample.route.includes('AliceSmith'), false);
+
+    const repoRoot = await enrichDetail({
+      top_in_app_frame: {
+        function: 'sync',
+        line: 4,
+        source: 'supabase/functions/sync-orders/index.ts',
+      },
+    });
+    assert.equal(
+      repoRoot.sample.route,
+      'supabase/functions/sync-orders/index.ts:4'
+    );
+  });
+
   it('keeps only the basename of absolute local frame paths', async () => {
     for (const source of [
       '/Users/AliceSmith/ClientA/app.js',

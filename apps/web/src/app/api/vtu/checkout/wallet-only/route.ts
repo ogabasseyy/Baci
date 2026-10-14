@@ -14,20 +14,18 @@ import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
 
 /**
- * SERVICE-ROLE BOUNDARY (Codex R81 P1 — owner decision pending).
- * This user-facing route still runs its reads/writes on the
- * service-role client because no safe partial move exists: the
- * customer email-link flow needs cross-user reads RLS would hide,
- * and vtu_transactions / vtu_idempotency_keys have no
- * customer-facing policies (the replay lookup is keyed by the
- * unguessable key alone, which RLS cannot scope — it needs
- * SECURITY DEFINER RPCs). Tenant isolation is pinned by
- * application checks + route.test.ts (session binding, fingerprint,
- * PK-race cross-customer refusal, cross-merchant rejection). The
- * durable fix is an RLS+RPC migration epic (new policies, link +
- * replay RPCs, live-DB integration tests — unit mocks cannot
- * validate RLS); the alternative is an owner-approved narrow
- * exception with expiry per AGENTS.md.
+ * SERVICE-ROLE BOUNDARY (owner-approved narrow exception, PR #3655,
+ * expires 2027-01-14 or when the RLS+RPC migration epic lands — see
+ * AGENTS.md TEMPORARY VTU WALLET-ONLY CHECKOUT EXCEPTION). This
+ * user-facing route runs its reads/writes on the service-role client
+ * because no safe partial move exists: the customer email-link flow
+ * needs cross-user reads RLS would hide, and vtu_transactions /
+ * vtu_idempotency_keys have no customer-facing policies (the replay
+ * lookup is keyed by the unguessable key alone, which RLS cannot
+ * scope — it needs SECURITY DEFINER RPCs). Tenant isolation is
+ * pinned by application checks + route.test.ts (session binding,
+ * fingerprint, PK-race cross-customer refusal, cross-merchant
+ * rejection).
  */
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });

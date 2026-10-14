@@ -147,6 +147,25 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       ROLLBACK;`);
       expect(output.trim().split('\n').at(-1)?.trim()).toBe('0|1');
     });
+    it('redacts confirmed rows past the retention window on sweep', () => {
+      const oldId = '80000000-0000-4000-8000-000000000003';
+      const freshId = '80000000-0000-4000-8000-000000000004';
+      const output = database.query(`BEGIN;
+      INSERT INTO private.customer_checkout_shipping_recovery_previews
+        (id, order_id, merchant_id, actor_id, fingerprint, original_address, quote, expires_at, confirmed_at)
+      VALUES
+        ('${oldId}', '${orderId}', '${merchantId}', '${ownerId}', 'sweep', '{"city":"Ikeja"}', '{"price":110}', now() - interval '100 days', now() - interval '100 days'),
+        ('${freshId}', '${orderId}', '${merchantId}', '${ownerId}', 'sweep', '{"city":"Ikeja"}', '{"price":110}', now() - interval '100 days', now());
+      SELECT public.cleanup_customer_checkout_shipping_recovery_previews();
+      SELECT original_address::text || '|' || quote::text FROM private.customer_checkout_shipping_recovery_previews WHERE id IN ('${oldId}', '${freshId}') ORDER BY id;
+      ROLLBACK;`);
+      const rows = output
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line.includes('|'));
+      expect(rows).toContain('{}|{"redacted": true}');
+      expect(rows.some((line) => line.includes('Ikeja'))).toBe(true);
+    });
     it('rejects altered proofs and quote payloads', () => {
       const value = quote();
       const hash = fingerprint();

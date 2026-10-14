@@ -11,6 +11,7 @@ import {
   hasPermission,
 } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { logger } from '@/lib/logger';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
 import { selectPreferredQuote } from '@/lib/shipping/order-shipment-booking-utils';
@@ -57,6 +58,23 @@ function failure(error: { message?: string; code?: string } | null) {
       },
       { status: 409 }
     );
+  // A missing Vault signing secret is a configuration outage, not a caller
+  // error: surface it distinctly from authorization failures (42501) so
+  // operators can tell misconfiguration apart. Never leaks the secret.
+  if (message.includes('shipping_recovery_signing_unavailable')) {
+    logger.error({
+      message: 'checkout shipping recovery signing unavailable',
+      code: error?.code,
+    });
+    return NextResponse.json(
+      {
+        error:
+          'Shipping recovery signing is temporarily unavailable. Please try again later.',
+        code: 'SHIPPING_RECOVERY_SIGNING_UNAVAILABLE',
+      },
+      { status: 503 }
+    );
+  }
   if (
     message.includes('unavailable') ||
     message.includes('order_refunded') ||

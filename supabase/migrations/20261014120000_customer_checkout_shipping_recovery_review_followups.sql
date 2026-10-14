@@ -55,9 +55,11 @@ ALTER TABLE private.customer_checkout_shipping_recovery_previews
 -- schedule guarded on the cron schema existing (no-op in a from-scratch
 -- replay), re-runnable by unscheduling the prior job of the same name first.
 -- ---------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval);
 CREATE OR REPLACE FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(
   p_limit integer DEFAULT 1000,
-  p_retention interval DEFAULT interval '1 day'
+  p_retention interval DEFAULT interval '1 day',
+  p_confirmed_retention interval DEFAULT interval '90 days'
 ) RETURNS bigint LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_deleted bigint;
 BEGIN
@@ -74,15 +76,27 @@ BEGIN
   USING doomed
   WHERE t.id = doomed.id;
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  -- Confirmed rows are audit evidence, but their destination PII and quoted
+  -- economics need no permanent home: redact them past a bounded window while
+  -- keeping the audit keys (preview id, order, merchant, actor, timestamps).
+  UPDATE private.customer_checkout_shipping_recovery_previews
+    SET original_address = '{}'::jsonb, quote = '{"redacted": true}'::jsonb
+    WHERE ctid IN (SELECT ctid FROM private.customer_checkout_shipping_recovery_previews
+      WHERE confirmed_at IS NOT NULL
+        AND confirmed_at < pg_catalog.clock_timestamp() - p_confirmed_retention
+        AND (original_address <> '{}'::jsonb OR quote <> '{"redacted": true}'::jsonb)
+      ORDER BY confirmed_at
+      LIMIT GREATEST(COALESCE(p_limit, 1000), 1)
+      FOR UPDATE SKIP LOCKED);
   RETURN v_deleted;
 END;
 $$;
-COMMENT ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval) IS
-  'Recovery preview retention: purges unconfirmed PII-bearing rows past expiry plus a grace window; confirmed audit rows are kept. Service-role only, run by the pg_cron schedule below.';
-ALTER FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval) OWNER TO postgres;
-REVOKE EXECUTE ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval)
+COMMENT ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval, interval) IS
+  'Recovery preview retention: purges unconfirmed PII-bearing rows past expiry plus a grace window, and redacts destination/economics on confirmed audit rows past a bounded window. Service-role only, run by the pg_cron schedule below.';
+ALTER FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval, interval) OWNER TO postgres;
+REVOKE EXECUTE ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval, interval)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval)
+GRANT EXECUTE ON FUNCTION public.cleanup_customer_checkout_shipping_recovery_previews(integer, interval, interval)
   TO service_role;
 DO $$
 BEGIN

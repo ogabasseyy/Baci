@@ -108,6 +108,20 @@ describe('paid checkout shipping recovery route', () => {
     expect(response.status).toBe(400);
     expect(mocks.access).not.toHaveBeenCalled();
   });
+  it('maps a missing signing secret to a diagnosable 503', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: null,
+      error: {
+        message: 'shipping_recovery_signing_unavailable',
+        code: '42501',
+      },
+    });
+    const response = await request();
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'SHIPPING_RECOVERY_SIGNING_UNAVAILABLE',
+    });
+  });
   it('requires CSRF protection', async () => {
     mocks.csrf.mockResolvedValue({ valid: false });
     expect((await request()).status).toBe(403);

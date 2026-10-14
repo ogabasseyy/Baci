@@ -63,6 +63,15 @@ test('lab render closure (depth<=2) matches the pattern', async () => {
     closure.includes('apps/web/src/components/optimized-image.tsx')
   );
   assert.ok(closure.includes('apps/web/src/lib/seo-utils.ts'));
+  // Bare side-effect imports count: the lab's real storefront
+  // stylesheets reach the closure without a `from` edge, so a
+  // CSS-only PR trips the suites.
+  assert.ok(
+    closure.includes('apps/web/src/app/(storefront)/storefront-core.css')
+  );
+  assert.ok(
+    closure.includes('apps/web/src/app/(storefront)/storefront-full.css')
+  );
   const missing = closure.filter((name) => !detected(pattern, [name]));
   assert.deepEqual(missing, []);
   // Boundaries: type-only reachability stays out (LaunchCarousel is

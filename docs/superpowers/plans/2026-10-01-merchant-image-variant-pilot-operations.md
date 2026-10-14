@@ -185,6 +185,28 @@ coderabbit review --agent -t uncommitted
   navigations); other drivers' markerless segments bind with
   `firstNavigationUnverified: true` in the launch record (the Caps
   contract preserved, never silently cold). Covered by tests.
+- Lab renders verify staged bytes on the request path: steady state
+  pays an lstat-only fast path (no reads/hashes), but the first
+  request after any staged-tree drift re-reads and re-hashes the
+  drifted set (bounded 256 entries / 256 MiB, one shared pass for
+  concurrent requests). Measurement protocol: warm up with one
+  unmeasured request, then measure in steady state. Drift fails
+  loudly instead of silently contaminating — never measure through
+  a failing verification.
+- Visual acceptances bind bytes, recipe, and slot — not renderer
+  geometry: a renderer change (aspect ratio, object-fit, sizes,
+  position) without a slot rename keeps old acceptances valid, so
+  re-review after any renderer change. Cross-arm parity checks mount
+  boxes and object-fit per comparison but cannot retire a stale
+  visual verdict. A geometry fingerprint in the acceptance identity
+  is graduation work (no enforcement point exists: the server cannot
+  observe client layout at activation).
+- No rebuild or server restart between control and pilot captures:
+  captures carry no build identity yet, so a mid-measurement rebuild
+  would misattribute application changes to the image arm. Verify
+  .next/BUILD_ID is identical across both arms' runs before
+  comparing. A build-pinned comparison gate is graduation work (no
+  tool consumes both arms' capture records together today).
 - (Log further deviations here as they occur; material design deviations
   return to the owner/reviewer instead of being assumed approved.)
 

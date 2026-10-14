@@ -17,6 +17,8 @@
 //   and transformer suites are path-gated.
 // - Whole-line `import type` / `export type` edges are skipped
 //   (erased at runtime; typecheck covers them). Mixed imports stay.
+//   Bare side-effect imports (`import './x.css'`) count: stylesheets
+//   change rendering with no `from` edge.
 // - Test/spec files are never seeds and never traversed into: test
 //   changes must not force the smoke suites.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -43,7 +45,7 @@ const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs'];
 const PROBE_EXTENSIONS = [...SOURCE_EXTENSIONS, '.css', '.json'];
 const TYPE_ONLY_LINE = /^\s*(import|export)\s+type[\s{]/;
 const SPECIFIER =
-  /(?:from\s+|import\s*\(|require\s*\()\s*['"]([^'"]+)['"]/g;
+  /(?:\bfrom\s*['"]|import\s*\(\s*['"]|require\s*\(\s*['"]|import\s*['"])([^'"]+)['"]/g;
 
 function listSourceFiles(dir) {
   const out = [];

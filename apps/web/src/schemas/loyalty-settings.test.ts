@@ -45,6 +45,30 @@ describe('loyaltySettingsPostSchema', () => {
     }
   });
 
+  it('bounds integer point fields to int32 non-negative', () => {
+    const fields = [
+      'signup_bonus_points',
+      'birthday_bonus_points',
+      'review_bonus_points',
+      'referral_bonus_points',
+      'minimum_redemption_points',
+      'points_expiry_days',
+    ] as const;
+
+    for (const field of fields) {
+      for (const value of [0, 1, 500, 2 ** 31 - 1]) {
+        expect(
+          loyaltySettingsPostSchema.safeParse({ [field]: value }).success
+        ).toBe(true);
+      }
+      for (const value of [10.5, -1, 2 ** 31, 1e20, '50']) {
+        expect(
+          loyaltySettingsPostSchema.safeParse({ [field]: value }).success
+        ).toBe(false);
+      }
+    }
+  });
+
   it('rejects non-object bodies', () => {
     for (const body of [null, [], 'settings']) {
       expect(loyaltySettingsPostSchema.safeParse(body).success).toBe(false);

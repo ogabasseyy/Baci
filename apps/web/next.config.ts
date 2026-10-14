@@ -755,14 +755,29 @@ function applyPostHogConfig(config: NextConfig): NextConfig {
   });
 }
 
+// Composed once at import, exactly like the object form this replaced:
+// the exported function runs only the phase-scoped gate per call and
+// returns this same object, so repeated in-process evaluations never
+// re-wrap the PostHog config.
+const composedConfig = applyPostHogConfig(nextConfig);
+
 // Function form so the pilot gate reads Next's own phase signal:
 // PHASE_PRODUCTION_BUILD asserts, dev/start stash for the boot gate,
 // and every other phase (test, info, tooling imports that never call
 // this) skips the gate entirely. argv sniffing cannot cover
 // programmatic builds, and process.env.NEXT_PHASE is unset at config
 // time (Next assigns it late in the build, after loadConfig), so the
-// phase parameter is the only truthful signal here.
-export default function pilotNextConfig(phase: string): NextConfig {
+// phase parameter is the only truthful signal here. The second
+// function-form argument ({ defaultConfig }) is accepted and ignored:
+// this config is fully specified and never spread Next's defaults,
+// same as the object form — the parameter exists to document the
+// contract for in-repo callers (all six next.config.*.test.ts resolve
+// via a typeof-function check; no programmatic object-shape consumer
+// remains).
+export default function pilotNextConfig(
+  phase: string,
+  _context?: { defaultConfig: NextConfig }
+): NextConfig {
   applyPilotPublicGate(__dirname, phase);
-  return applyPostHogConfig(nextConfig);
+  return composedConfig;
 }

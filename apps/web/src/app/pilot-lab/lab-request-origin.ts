@@ -9,7 +9,10 @@ const LAB_LOOPBACK_ORIGIN = 'http://localhost:3000';
 // embedded in rendered image URLs (cache-poisoning/phishing input on any
 // shared deployment with the lab flag on). Resolution order:
 // 1. BACI_IMAGE_PILOT_ORIGIN when set to a valid http(s) origin
-//    (operator allowlist for staged/shared origins).
+//    (operator allowlist for staged/shared origins). A bare origin
+//    only: a path, query, or fragment rejects LOUDLY (fail-closed
+//    config error on the lab route) instead of silently serving
+//    staged URLs from the wrong root.
 // 2. The request Host, but ONLY when it parses to loopback
 //    (localhost, *.localhost, 127.0.0.0/8, ::1) — the lab's local runs.
 // 3. The loopback default. Anything else is untrusted and ignored.
@@ -18,15 +21,25 @@ function labAssetOriginOverride(): string | null {
   if (!configured) {
     return null;
   }
+  let parsed: URL;
   try {
-    const parsed = new URL(configured);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return null;
-    }
-    return parsed.origin;
+    parsed = new URL(configured);
   } catch {
     return null;
   }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return null;
+  }
+  // Validated OUTSIDE the parse try: a non-bare origin is an
+  // operator config error that must fail the lab route loudly, not
+  // fall through to loopback and serve staged URLs from a root the
+  // operator never chose.
+  if (parsed.pathname !== '/' || parsed.search !== '' || parsed.hash !== '') {
+    throw new Error(
+      `BACI_IMAGE_PILOT_ORIGIN must be a bare http(s) origin without a path, query, or fragment — got "${configured}"; staged URLs join /__pilot beneath the origin`
+    );
+  }
+  return parsed.origin;
 }
 
 function isLoopbackIpv4(hostname: string): boolean {

@@ -85,10 +85,25 @@ describe('labRequestOrigin', () => {
   });
 
   it('prefers the operator origin override when valid', () => {
-    vi.stubEnv('BACI_IMAGE_PILOT_ORIGIN', 'https://lab-assets.example/cdn');
+    vi.stubEnv('BACI_IMAGE_PILOT_ORIGIN', 'https://lab-assets.example');
     expect(labRequestOrigin({ host: 'evil.com' })).toBe(
       'https://lab-assets.example'
     );
+  });
+
+  it('rejects an origin override with a path, query, or fragment', () => {
+    // A non-bare origin must fail loudly: silently dropping the path
+    // would serve staged URLs from a root the operator never chose.
+    for (const override of [
+      'https://lab-assets.example/cdn',
+      'https://lab-assets.example/?x=1',
+      'https://lab-assets.example/#f',
+    ]) {
+      vi.stubEnv('BACI_IMAGE_PILOT_ORIGIN', override);
+      expect(() => labRequestOrigin({ host: 'evil.com' })).toThrow(
+        /must be a bare http\(s\) origin without a path/
+      );
+    }
   });
 
   it('ignores a malformed origin override', () => {

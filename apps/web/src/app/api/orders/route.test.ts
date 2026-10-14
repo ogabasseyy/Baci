@@ -4165,12 +4165,12 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     );
   });
 
-  function expiredTopshipQuote() {
+  function topshipQuote(expires_at: string) {
     return {
       provider: 'TOPSHIP',
       provider_rate_id: 'TOPSHIP_DOM_1',
       price: 2500,
-      expires_at: '2020-01-01T00:00:00.000Z',
+      expires_at,
       quote_request: {
         merchantId: MERCHANT_ID,
         sessionId: 'session-1',
@@ -4191,13 +4191,13 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     };
   }
 
-  function expiredTopshipOrderBody() {
+  function topshipOrderBody(options: { omitProvider?: boolean } = {}) {
     return {
       ...baseOrderPayload,
       subtotal: 1000,
       shipping_fee: 2500,
       selected_quote_id: '22222222-2222-4222-8222-222222222222',
-      shipping_provider: 'TOPSHIP',
+      ...(options.omitProvider ? {} : { shipping_provider: 'TOPSHIP' }),
       shipping_address: {
         address: '12 Allen Avenue, Ikeja, Lagos',
         city: 'Ikeja',
@@ -4218,7 +4218,7 @@ describe('POST /api/orders — selected shipping quote validation', () => {
       },
       {
         productRows: [{ id: 'p-1', name: 'Widget', price: 1000 }],
-        shippingQuote: expiredTopshipQuote(),
+        shippingQuote: topshipQuote('2020-01-01T00:00:00.000Z'),
       }
     );
     vi.mocked(supabaseMod.createClient).mockImplementation(
@@ -4230,7 +4230,7 @@ describe('POST /api/orders — selected shipping quote validation', () => {
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
         headers: { 'Idempotency-Key': 'topship-expired-replay-key' },
-        body: JSON.stringify(expiredTopshipOrderBody()),
+        body: JSON.stringify(topshipOrderBody()),
       })
     );
 
@@ -4250,7 +4250,7 @@ describe('POST /api/orders — selected shipping quote validation', () => {
       {},
       {
         productRows: [{ id: 'p-1', name: 'Widget', price: 1000 }],
-        shippingQuote: expiredTopshipQuote(),
+        shippingQuote: topshipQuote('2020-01-01T00:00:00.000Z'),
       }
     );
     vi.mocked(supabaseMod.createClient).mockImplementation(
@@ -4261,7 +4261,7 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        body: JSON.stringify(expiredTopshipOrderBody()),
+        body: JSON.stringify(topshipOrderBody()),
       })
     );
 
@@ -4273,6 +4273,42 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     expect(supabase.rpc).not.toHaveBeenCalledWith(
       'create_storefront_order',
       expect.anything()
+    );
+  });
+
+  it('accepts a TOPSHIP quote that omits the redundant shipping_provider', async () => {
+    // Arrange — the merchant-scoped quote row is authoritative for the
+    // provider, so a client that sends only the quote id plus fee must still
+    // validate and adopt the pin instead of 400ing on provider mismatch.
+    const supabaseMod = await import('@/lib/supabase/server');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [{ id: 'p-1', name: 'Widget', price: 1000 }],
+        shippingQuote: topshipQuote(
+          new Date(Date.now() + 3_600_000).toISOString()
+        ),
+      }
+    );
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+
+    // Act
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(topshipOrderBody({ omitProvider: true })),
+      })
+    );
+
+    // Assert
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({
+        p_selected_quote_id: '22222222-2222-4222-8222-222222222222',
+      })
     );
   });
 

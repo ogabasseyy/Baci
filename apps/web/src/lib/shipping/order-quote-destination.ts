@@ -118,7 +118,13 @@ export async function enrichShippingAddressWithQuoteDestination(
   if (!matchesQuoteDestination(shippingAddress, quoteRequest)) {
     throw new OrderQuoteDestinationMismatchError();
   }
-  validateQuoteCheckoutContext(quote, quoteRequest, context);
+  validateQuoteCheckoutContext(quote, quoteRequest, {
+    ...context,
+    // A quoted checkout may omit the redundant provider: the merchant-scoped
+    // quote row is authoritative for it. A supplied-but-different provider
+    // still fails closed inside the context check.
+    shippingProvider: context.shippingProvider ?? quote.provider,
+  });
 
   const orderPin = shippingCoordinatePairSchema.safeParse(shippingAddress);
   const quotePin = shippingCoordinatePairSchema.safeParse(

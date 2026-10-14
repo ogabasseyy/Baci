@@ -44,7 +44,7 @@ type CoordinateReading =
   | { status: 'absent' | 'invalid' }
   | { status: 'valid'; value: number };
 
-function readCoordinate(
+export function readCoordinate(
   value: unknown,
   minimum: number,
   maximum: number

@@ -75,8 +75,9 @@ describe('readReuseQuoteValidationContext', () => {
 
   it.each([
     { latitude: 6.5 },
-    { latitude: '6.5', longitude: 3.35 },
+    { latitude: '6.5' },
     { latitude: 91, longitude: 3.35 },
+    { latitude: '6.5', longitude: 'far' },
   ])('rejects malformed stored coordinate pairs rather than dropping them: %j', (pin) => {
     const context = readReuseQuoteValidationContext({
       shipping_address: {
@@ -87,6 +88,24 @@ describe('readReuseQuoteValidationContext', () => {
       },
     });
     expect(context?.shipping_address).toBeUndefined();
+  });
+
+  it.each([
+    { latitude: '6.5', longitude: '3.35' },
+    { latitude: ' 6.5 ', longitude: '3.3500' },
+  ])('coerces numeric-string stored coordinates like the booking guard: %j', (pin) => {
+    const context = readReuseQuoteValidationContext({
+      shipping_address: {
+        address: '12 Allen Avenue',
+        city: 'Ikeja',
+        state: 'Lagos',
+        ...pin,
+      },
+    });
+    expect(context?.shipping_address).toMatchObject({
+      latitude: 6.5,
+      longitude: 3.35,
+    });
   });
 
   it('preserves product shipping metadata from reusable order quote rows', () => {

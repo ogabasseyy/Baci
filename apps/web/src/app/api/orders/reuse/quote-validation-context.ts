@@ -1,3 +1,4 @@
+import { readCoordinate } from '@/lib/shipping/international-quote-order-guard';
 import type {
   InternationalShipmentOrderItem,
   ProductShippingMetadata,
@@ -33,7 +34,20 @@ function readOrderShippingAddress(
     return undefined;
   }
 
-  const pin = shippingCoordinatePairSchema.safeParse(value);
+  // Stored addresses are database JSON: coordinates may be numeric strings
+  // (the booking guard's coordinate reader accepts them, and its address
+  // type declares them unknown). Coerce with the same reader so reuse keeps
+  // pins the booking path accepts; garbage or out-of-range values still void
+  // the address, and the pair rule below still rejects partial pins.
+  const latitude = readCoordinate(value.latitude, -90, 90);
+  const longitude = readCoordinate(value.longitude, -180, 180);
+  if (latitude.status === 'invalid' || longitude.status === 'invalid') {
+    return undefined;
+  }
+  const pin = shippingCoordinatePairSchema.safeParse({
+    ...(latitude.status === 'valid' ? { latitude: latitude.value } : {}),
+    ...(longitude.status === 'valid' ? { longitude: longitude.value } : {}),
+  });
   if (!pin.success) return undefined;
 
   return {

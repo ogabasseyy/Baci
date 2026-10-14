@@ -94,7 +94,10 @@ describe('enrichShippingAddressWithQuoteDestination validation', () => {
     });
   });
 
-  it('rejects saved international quotes when checkout omits the provider', async () => {
+  it('derives the provider from the saved quote when checkout omits it', async () => {
+    // The merchant-scoped quote row is authoritative for the provider: an
+    // omitted provider validates against the quote instead of failing, while
+    // a supplied-but-different provider still fails closed (see above).
     await expect(
       enrichShippingAddressWithQuoteDestination(
         createSupabase({
@@ -104,10 +107,7 @@ describe('enrichShippingAddressWithQuoteDestination validation', () => {
         shippingAddress,
         { ...checkoutContext, shippingProvider: undefined }
       )
-    ).rejects.toMatchObject({
-      code: 'INTERNATIONAL_QUOTE_PROVIDER_MISMATCH',
-      status: 400,
-    });
+    ).resolves.toMatchObject(shippingAddress);
   });
 
   it('rejects saved international quotes when checkout omits the address', async () => {

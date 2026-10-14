@@ -43,30 +43,27 @@ const frameCoordinate = (frame) => {
   if (!frame || typeof frame !== 'object') return '';
   // Drop URL query/fragment metadata before sanitizing: arbitrary keys and
   // values are user data, not repository coordinates.
-  const source = framePath(frame.source);
-  const parts = [
-    safeTechnicalValue(source, 160),
-    safeTechnicalValue(frame.function, 120),
-  ].filter(Boolean);
-  if (parts.length === 0) return '';
+  const source = safeTechnicalValue(framePath(frame.source), 160);
+  if (!source) return '';
+  // The function label is omitted: provider frame labels are untrusted and
+  // cannot be verified against repository symbols here, while file and
+  // line already locate the failing code.
   const line = Number(frame.line);
   const coordinate =
-    parts.join(' :: ') + (Number.isSafeInteger(line) && line > 0 ? `:${line}` : '');
+    source + (Number.isSafeInteger(line) && line > 0 ? `:${line}` : '');
   return coordinate.slice(0, 240);
 };
 
 const safeReleaseVersion = (value) => {
   const version = boundedString(value, 120);
   if (!/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(version)) return '';
-  // Canonical semver/calver/tags only; a phone-shaped digit run hiding
-  // behind dots is still dropped.
-  if (
-    /^v?\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(
-      version
-    )
-  ) {
-    const digits = version.replace(/\D/g, '');
-    return digits.length >= 10 && digits.length <= 19 ? '' : version;
+  // Canonical semver core only; prerelease/build suffixes can carry
+  // arbitrary captured text, so they are truncated away.
+  const core = /^(v?\d+\.\d+(?:\.\d+)?)(?:[-+][0-9A-Za-z.-]+)?$/.exec(version);
+  if (core) {
+    // A phone-shaped digit run hiding behind dots is still dropped.
+    const digits = core[1].replace(/\D/g, '');
+    return digits.length >= 10 && digits.length <= 19 ? '' : core[1];
   }
   // Commit SHAs must contain a hex letter so pure digit runs and bare
   // names are dropped.

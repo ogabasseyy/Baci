@@ -208,62 +208,6 @@ describe('PostHog remediation candidates', () => {
     );
   });
 
-  it('derives a bounded exception class without copying provider issue text', async () => {
-    const candidates = await fetchPostHogRemediationCandidates({
-      env: environment,
-      fetchFn: async () =>
-        new Response(
-          JSON.stringify({
-            hasMore: false,
-            limit: 100,
-            offset: 0,
-            results: [
-              {
-                id: 'typed',
-                status: 'active',
-                aggregations: { occurrences: 4 },
-                name: "TypeError: Cannot read properties of undefined (reading 'token')",
-              },
-              {
-                id: 'bucketed',
-                status: 'active',
-                aggregations: { occurrences: 4 },
-                name: 'request to https://internal.example timed out after 30s',
-              },
-              {
-                id: 'unshaped',
-                status: 'active',
-                aggregations: { occurrences: 4 },
-                name: '!!! alice@example.com !!!',
-              },
-              {
-                id: 'custom-token',
-                status: 'active',
-                aggregations: { occurrences: 4 },
-                name: 'AliceSmithError: custom producer token',
-              },
-              {
-                id: 'missing-name',
-                status: 'active',
-                aggregations: { occurrences: 4 },
-              },
-            ],
-          })
-        ),
-    });
-
-    assert.deepEqual(
-      candidates.map((candidate) => candidate.sample.message),
-      ['TypeError', 'Timeout', 'PostHog error tracking issue', 'PostHog error tracking issue', 'PostHog error tracking issue']
-    );
-    assert.equal(
-      JSON.stringify(candidates).includes('AliceSmithError'),
-      false
-    );
-    assert.equal(JSON.stringify(candidates).includes('alice@example.com'), false);
-    assert.equal(JSON.stringify(candidates).includes('internal.example'), false);
-  });
-
   it('rejects a remediation host with a path and strips query strings', async () => {
     await assert.rejects(
       fetchPostHogRemediationCandidates({

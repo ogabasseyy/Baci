@@ -77,10 +77,10 @@ const classifyPostHogIssueName = (value) => {
   if (KNOWN_EXCEPTION_TYPES.has(leadingToken)) {
     return leadingToken;
   }
-  if (/\bcrash\b|fatal|application not responding|\banr\b/i.test(name)) {
+  if (/\bcrash\b|\bfatal\b|application not responding|\banr\b/i.test(name)) {
     return 'Native crash';
   }
-  if (/out of memory|heap|allocation failure/i.test(name)) {
+  if (/out of memory|\bheap\b|allocation failure/i.test(name)) {
     return 'Out of memory';
   }
   if (/timed? ?out|deadline exceeded|ETIMEDOUT/i.test(name)) {

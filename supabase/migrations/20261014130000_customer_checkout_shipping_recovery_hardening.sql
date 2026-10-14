@@ -20,10 +20,17 @@ BEGIN
   IF v_secret IS NULL OR pg_catalog.btrim(v_secret) = '' THEN
     RAISE EXCEPTION 'shipping_recovery_signing_unavailable' USING ERRCODE = '42501';
   END IF;
-  SELECT pg_catalog.jsonb_build_object('order_id', o.id, 'merchant_id', o.merchant_id,
-      'shipping_fee', o.shipping_fee, 'items', (SELECT pg_catalog.jsonb_agg(
-        pg_catalog.jsonb_build_object('id', i.id, 'item', to_jsonb(i))
-        ORDER BY i.id) FROM public.order_items i WHERE i.order_id = o.id))::text
+  -- Canonical payload below is byte-identical to the original definition:
+  -- full order and merchant rows, the selected quote, and per-item product
+  -- fields, so fingerprint values and stale-input detection are unchanged.
+  -- Only the vault-missing behavior changed (explicit raise).
+  SELECT pg_catalog.jsonb_build_object('order',pg_catalog.to_jsonb(o),
+      'merchant',pg_catalog.to_jsonb(m),
+      'quote',(SELECT pg_catalog.to_jsonb(q) FROM public.shipping_quotes q WHERE q.id=o.selected_quote_id AND q.merchant_id=o.merchant_id),
+      'items',COALESCE((SELECT pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_object('item',pg_catalog.to_jsonb(i),'product',pg_catalog.jsonb_build_object('id',p.id,'weight_value',p.weight_value,'weight_unit',p.weight_unit,'dimensions',p.dimensions,'commodity_code',p.commodity_code))
+        ORDER BY i.id) FROM public.order_items i LEFT JOIN public.products p ON p.id=i.product_id
+        WHERE i.order_id=o.id),'[]'::jsonb))::text
     INTO v_payload
     FROM public.orders o JOIN public.merchants m ON m.id = o.merchant_id
     WHERE o.id = p_order_id;
@@ -33,8 +40,7 @@ BEGIN
   IF v_payload IS NULL THEN
     RETURN NULL;
   END IF;
-  RETURN pg_catalog.encode(
-    extensions.hmac('baci:customer-checkout-shipping-recovery:v1:' || v_payload, v_secret, 'sha256'), 'hex');
+  RETURN pg_catalog.encode(extensions.hmac('baci:checkout-shipping-recovery:v1:' || v_payload, v_secret, 'sha256'), 'hex');
 END;
 $$;
 CREATE INDEX IF NOT EXISTS customer_checkout_shipping_recovery_previews_merchant_id_idx

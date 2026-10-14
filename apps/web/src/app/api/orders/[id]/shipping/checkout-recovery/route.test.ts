@@ -197,7 +197,24 @@ describe('paid checkout shipping recovery route', () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       error:
-        'Manual pins must fall within Nigeria. Search for the address to attach its country.',
+        'Destination pins must fall within Nigeria. Search for the address to attach its country.',
+    });
+    expect(mocks.quotes).not.toHaveBeenCalled();
+  });
+  it('rejects foreign coordinates paired with an explicit NG country code', async () => {
+    const response = await request({
+      action: 'preview',
+      receiver: {
+        ...receiver,
+        countryCode: 'NG',
+        latitude: 40.7128,
+        longitude: -74.006,
+      },
+    });
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error:
+        'Destination pins must fall within Nigeria. Search for the address to attach its country.',
     });
     expect(mocks.quotes).not.toHaveBeenCalled();
   });

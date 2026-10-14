@@ -22,7 +22,22 @@ describe('resolveRecoveryQuoteReceiver', () => {
     );
     expect(resolved).toEqual({
       error:
-        'Manual pins must fall within Nigeria. Search for the address to attach its country.',
+        'Destination pins must fall within Nigeria. Search for the address to attach its country.',
+    });
+  });
+  it('rejects foreign coordinates paired with an explicit NG country code', () => {
+    const resolved = resolveRecoveryQuoteReceiver(
+      {
+        ...receiver,
+        countryCode: 'NG',
+        latitude: 40.7128,
+        longitude: -74.006,
+      },
+      {}
+    );
+    expect(resolved).toEqual({
+      error:
+        'Destination pins must fall within Nigeria. Search for the address to attach its country.',
     });
   });
   it('accepts in-bounds manual pins and carries the legacy postal code', () => {

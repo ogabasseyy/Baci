@@ -36,16 +36,18 @@ export function resolveRecoveryQuoteReceiver(
   const country = receiver.countryCode?.trim().toUpperCase();
   if (country && country !== 'NG')
     return { error: 'This recovery supports Nigerian destinations only.' };
+  // The pin must fall inside Nigeria however the country was claimed: an
+  // explicit 'NG' code is caller-supplied and not Places-verified server-side,
+  // so it cannot exempt foreign coordinates from the bounding box.
   if (
-    !country &&
-    (receiver.latitude < NIGERIA_RECOVERY_BBOX.minLat ||
-      receiver.latitude > NIGERIA_RECOVERY_BBOX.maxLat ||
-      receiver.longitude < NIGERIA_RECOVERY_BBOX.minLng ||
-      receiver.longitude > NIGERIA_RECOVERY_BBOX.maxLng)
+    receiver.latitude < NIGERIA_RECOVERY_BBOX.minLat ||
+    receiver.latitude > NIGERIA_RECOVERY_BBOX.maxLat ||
+    receiver.longitude < NIGERIA_RECOVERY_BBOX.minLng ||
+    receiver.longitude > NIGERIA_RECOVERY_BBOX.maxLng
   )
     return {
       error:
-        'Manual pins must fall within Nigeria. Search for the address to attach its country.',
+        'Destination pins must fall within Nigeria. Search for the address to attach its country.',
     };
   const storedAddress =
     shippingAddress && typeof shippingAddress === 'object'

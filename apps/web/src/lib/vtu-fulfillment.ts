@@ -47,6 +47,7 @@ import {
   shouldSkipRefundWithoutCollectionEvidence,
   writeVtuProviderSubmissionMarkerOrRestore,
 } from './vtu-fulfillment-recovery';
+import { mergeVtuSettlementMetadata } from './vtu-settlement-metadata';
 
 export type { RetryableVtuErrorContext } from '@/lib/vtu-refund-guard';
 export { RetryableVtuError };
@@ -1563,6 +1564,13 @@ async function resolveSuccessfulVtuTransaction({
   supabase: SupabaseClient;
 }): Promise<FulfilledVtuResult> {
   const metadata = { ...(row.metadata ?? {}) };
+  // Deep baseline for the CAS merge below: sub-steps mutate
+  // `metadata` in place, and nested objects are shared by spread —
+  // diffing needs an unaliased snapshot.
+  const preSettlementMetadata = JSON.parse(JSON.stringify(metadata)) as Record<
+    string,
+    unknown
+  >;
   let metadataChanged = false;
   const cashbackAmount = Number(row.customer_cashback ?? 0);
   let voucherPin = normalizeVoucherPin(reconciledVoucherPin);
@@ -1614,18 +1622,14 @@ async function resolveSuccessfulVtuTransaction({
   metadataChanged = notificationSettlement.metadataChanged || metadataChanged;
 
   if (metadataChanged) {
-    const { error: metadataUpdateError } = await supabase
-      .from('vtu_transactions')
-      .update({ metadata })
-      .eq('id', row.id);
-
-    if (metadataUpdateError) {
-      console.error('Failed to persist VTU transaction metadata:', {
-        error: metadataUpdateError.message,
-        metadata: getSafeMetadataDiagnostics(metadata),
-        transactionId: row.id,
-      });
-    }
+    // CAS-merged (Codex R82 P2): a concurrent replay settling the
+    // same row must not lose its keys to this write, nor vice versa.
+    await mergeVtuSettlementMetadata({
+      baselineMetadata: preSettlementMetadata,
+      mutatedMetadata: metadata,
+      rowId: row.id,
+      supabase,
+    });
   }
 
   return {
@@ -2865,6 +2869,10 @@ export async function fulfillPendingVtuTransaction({
 
   const cashbackAmount = Number(row.customer_cashback ?? 0);
   const finalMetadata = { ...updatedMetadata };
+  // Deep baseline for the CAS merge below (see resolveSuccessful).
+  const preSettlementMetadata = JSON.parse(
+    JSON.stringify(updatedMetadata)
+  ) as Record<string, unknown>;
   const walletSettlement = await settleVtuWalletCredits({
     metadata: finalMetadata,
     row,
@@ -2894,21 +2902,14 @@ export async function fulfillPendingVtuTransaction({
     paymentPendingMetadataChanged;
 
   if (metadataChanged) {
-    const finalMetadataUpdatePayload = {
-      metadata: finalMetadata,
-    };
-    const { error: finalMetadataUpdateError } = await supabase
-      .from('vtu_transactions')
-      .update(finalMetadataUpdatePayload)
-      .eq('id', row.id);
-
-    if (finalMetadataUpdateError) {
-      console.error('Failed to persist final VTU transaction metadata:', {
-        error: finalMetadataUpdateError.message,
-        metadata: getSafeMetadataDiagnostics(finalMetadata),
-        transactionId: row.id,
-      });
-    }
+    // CAS-merged (Codex R82 P2): same concurrent-settlement race as
+    // the reconcile path above.
+    await mergeVtuSettlementMetadata({
+      baselineMetadata: preSettlementMetadata,
+      mutatedMetadata: finalMetadata,
+      rowId: row.id,
+      supabase,
+    });
   }
 
   return {

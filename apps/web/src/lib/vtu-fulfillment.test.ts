@@ -1152,8 +1152,11 @@ describe('fulfillPendingVtuTransaction', () => {
         reference: 'VTU-123',
         status: 'successful',
       });
+      // CAS-merged write (Codex R82 P2): both attempts fail, the
+      // helper gives up without throwing, and the result still
+      // returns success (flags re-select the row next cron tick).
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to persist VTU transaction metadata:',
+        'VTU settlement metadata merge gave up after two attempts:',
         expect.objectContaining({
           error: 'metadata write failed',
           transactionId: 'vtu-1',
@@ -1958,8 +1961,11 @@ describe('fulfillPendingVtuTransaction', () => {
         reference: 'VTU-123',
         status: 'successful',
       });
+      // CAS-merged write (Codex R82 P2): both attempts fail, the
+      // helper gives up without throwing, and the vend result still
+      // returns success (flags re-select the row next cron tick).
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Failed to persist final VTU transaction metadata:',
+        'VTU settlement metadata merge gave up after two attempts:',
         expect.objectContaining({
           error: 'final metadata write failed',
           transactionId: 'vtu-1',

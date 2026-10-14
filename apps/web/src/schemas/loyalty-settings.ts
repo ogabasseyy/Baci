@@ -7,6 +7,18 @@ const INT32_MAX = 2 ** 31 - 1;
 // so they are bounded here (mirrors loyalty-manual-points.ts).
 const integerSetting = z.number().int().min(0).max(INT32_MAX).nullish();
 
+// Tier entries were accepted as arbitrary records, so an over-long
+// name was persisted and later failed inside calculate_loyalty_tier
+// (its result and customer_loyalty.current_tier are varchar(50)) on
+// every enrollment/award for that merchant. Bound the object to the
+// shape the SQL readers and the settings form actually use.
+const loyaltyTierSchema = z.object({
+  name: z.string().trim().min(1).max(50),
+  minPoints: z.number().int().min(0).max(INT32_MAX),
+  multiplier: z.number().finite().min(0).max(100).optional(),
+  perks: z.array(z.string().max(100)).max(20).optional(),
+});
+
 // POST /api/loyalty/settings payload. Every field is optional: omitted
 // (or null) fields keep the route's defaults. The cap mirrors the
 // numeric(5,2) column — at least 0.01 and at most two decimal places —
@@ -33,7 +45,7 @@ export const loyaltySettingsPostSchema = z.object({
       'must have at most two decimal places'
     )
     .nullish(),
-  tiers: z.array(z.record(z.string(), z.unknown())).nullish(),
+  tiers: z.array(loyaltyTierSchema).max(50).nullish(),
   points_expiry_days: integerSetting,
 });
 

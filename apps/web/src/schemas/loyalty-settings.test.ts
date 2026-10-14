@@ -69,6 +69,45 @@ describe('loyaltySettingsPostSchema', () => {
     }
   });
 
+  it('accepts a well-formed tier entry', () => {
+    const parsed = loyaltySettingsPostSchema.safeParse({
+      tiers: [
+        {
+          name: 'Gold',
+          minPoints: 500,
+          multiplier: 1.5,
+          perks: ['Priority support'],
+        },
+      ],
+    });
+    expect(parsed.success).toBe(true);
+  });
+
+  it('rejects tier names that overflow the varchar(50) tier columns', () => {
+    const parsed = loyaltySettingsPostSchema.safeParse({
+      tiers: [{ name: 'x'.repeat(51), minPoints: 500 }],
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects malformed tier numeric fields', () => {
+    expect(
+      loyaltySettingsPostSchema.safeParse({
+        tiers: [{ name: 'Gold', minPoints: -1 }],
+      }).success
+    ).toBe(false);
+    expect(
+      loyaltySettingsPostSchema.safeParse({
+        tiers: [{ name: 'Gold', minPoints: 500, multiplier: -0.5 }],
+      }).success
+    ).toBe(false);
+    expect(
+      loyaltySettingsPostSchema.safeParse({
+        tiers: [{ name: 'Gold', minPoints: 500, multiplier: 101 }],
+      }).success
+    ).toBe(false);
+  });
+
   it('rejects non-object bodies', () => {
     for (const body of [null, [], 'settings']) {
       expect(loyaltySettingsPostSchema.safeParse(body).success).toBe(false);

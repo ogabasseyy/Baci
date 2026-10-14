@@ -42,28 +42,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from capability_gate_contract_text_checks import (
     CHECKER,
     CI_YML,
+    SUITE_DIR,
     WORKFLOW,
     ci_failures,
     workflow_failures,
 )
 
 BASE_PINS = {
-    ".github/scripts/capability_gate_contract_text_checks.py": "81b1b66f213f9224654e6c11c9a5e5af061733e2c3224b83513eeb9705e69692",
+    ".github/scripts/capability_gate_contract_text_checks.py": "5f8f52fcb2cc7a88829aad4b357c62754a6edd50e5e3fec23b35c0a77127825e",
     ".github/workflows/capability-register-freshness.yml": "55389404e8391ffeecffe9a31654c07064890374c8faa3a7d4917caea27e7204",
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # The workflow itself is asserted structurally (workflow_failures), not
     # pinned: it carries PINNED_CHECKER_SHA256, so a hash pin here would
     # deadlock against checker edits the same way a self-pin would.
-    "vps-workers/baci-editorial-context/capability_gate.py": "0f3a9a31e3cf0514e4fbf88d50d4dcdc0b27572d2ce796645334e5e8a75a332f",
+    "vps-workers/baci-editorial-context/capability_gate.py": "6e7d2ed34f03d0afe610907c95e21a836e17cb6203be9a78585140bbe7b29555",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "5e13033d55a5cf186d181c77146f2cb97791957e743abf0d65b793b29d9878fd",
     "vps-workers/baci-editorial-context/register_digests.py": "aae14e6e045e67fd2331e8ca5afd15926b96291bcb5408a2c2d2e41e07ce8767",
     "vps-workers/baci-editorial-context/platform_capabilities.py": "113a575d81f4af2e61182db47b2489d9a4ca0137d6457e76c6522a38a6ce394a",
     "vps-workers/baci-editorial-context/register_status.py": "6b3b6e87392da5662c31029db144bc86a08d4ae6e50481bb5a4a67c68621219a",
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
-    "vps-workers/baci-editorial-context/test_capability_gate.py": "39d62daac22dadf8efd04eb815dea0f32237cee3ba689397205f68546e560e18",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "7e38922883b09f384f235b664703b1696c5df4199d4e123366b36572193389e9",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "cbc9bdf706cf884c1df08e6618c19e9e939d4c66134325ab6209c26d25bcf593",
+    "vps-workers/baci-editorial-context/test_capability_gate.py": "232875d07d540508d8255fb567c8f1b66a1f7fc66c23ef3ff40061a47c299619",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "cd81b50a8b2dc11272aadd25ffc3888b04b46aee7b0d40bc020a2d5efe1acafa",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "989be656fe1cd782b7c318c097cd10a491ed7278136ccab55c2db11cdf54e678",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "90f11e3b518ad87680cb4b26965553da609b29321bff4d3cef7c50fa25ecc447",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
     "vps-workers/baci-editorial-context/test_capability_register_binding.py": "243fab8b2e83d618e74226f7f3d88e3397740846ced58d3efcfd0993d3421c79",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
@@ -137,6 +139,25 @@ def pin_failures(repo_root, base_pins, declared):
     return failures, notices
 
 
+def undeclared_suite_files(repo_root, declared):
+    """Discovery must not execute files the pins never saw.
+
+    The gate discovers every matching test module in the checkout, so a
+    newly added module runs even when no pin changed. Requiring every suite
+    Python file to be declared forces the addition itself into review.
+    """
+    root = Path(repo_root)
+    try:
+        found = sorted(path.relative_to(root).as_posix() for path in root.joinpath(SUITE_DIR).rglob("*.py"))
+    except OSError:
+        return ["suite directory unreadable"]
+    return [
+        f"undeclared suite file: {rel} (declare it in BASE_PINS in {CHECKER})"
+        for rel in found
+        if rel not in declared
+    ]
+
+
 def declared_checker_pin(workflow_text):
     """The PR-head workflow's declared checker hash, if any.
 
@@ -205,6 +226,7 @@ def main(root=None, checker_pin=None):
         failures.append(f"pin check failed: {exc}")
         pin_bad, notices = [], []
     failures.extend(pin_bad)
+    failures.extend(undeclared_suite_files(root, declared))
     if checker_pin is not None or declared_checker_pin(workflow_text) is not None:
         self_bad, self_notices = checker_file_failures(
             root, checker_pin, declared_checker_pin(workflow_text)

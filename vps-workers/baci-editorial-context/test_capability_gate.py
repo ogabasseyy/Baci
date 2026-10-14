@@ -190,6 +190,10 @@ class CapabilityGateTests(unittest.TestCase):
         # Register-only claim edit retaining the old metadata: still required.
         self.assertTrue(gate.requires_register_update(same_date, {gate.REGISTER_PATH}, base))
         self.assertFalse(gate.requires_register_update(rereviewed, {gate.REGISTER_PATH}, base))
+        # Map-only edit retaining the old metadata: still required (the map
+        # carries its own audit provenance); with a re-review: accepted.
+        self.assertTrue(gate.requires_register_update(same_date, {gate.MAP_PATH}, base))
+        self.assertFalse(gate.requires_register_update(rereviewed, {gate.MAP_PATH}, base))
         # New but rejected replacement revision: still required; accepted: clear.
         ghost = {**rereviewed, "source_revision": "f" * 40}
         self.assertTrue(gate.requires_register_update(ghost, touched, base, rev_acceptable=lambda new, old: False))

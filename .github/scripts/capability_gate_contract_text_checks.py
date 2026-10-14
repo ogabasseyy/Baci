@@ -11,6 +11,7 @@ import re
 CI_YML = ".github/workflows/ci.yml"
 CHECKER = ".github/scripts/capability_gate_contract_check.py"
 WORKFLOW = ".github/workflows/capability-gate-contract.yml"
+SUITE_DIR = "vps-workers/baci-editorial-context"
 
 STEP_NAME_LINE = "      - name: Test capability register binding"
 STEP_USES_LINE = "        uses: ./.github/actions/capability-gate"
@@ -136,6 +137,13 @@ def ci_failures(ci_text):
         stripped = line.strip()
         if stripped and not stripped.startswith("#") and re.match(r"^ref\s*:", stripped):
             return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
+    # PR-controlled scripts must not run before the gate: a preceding step
+    # could overwrite the checked-out gate code, which then runs while the
+    # contract (separate checkout) still sees pristine files.
+    for line in lines[job_start:start]:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and re.match(r"^run\s*:", stripped):
+            return failures + ["no PR-controlled steps may precede the capability gate"]
     code = []
     for line in lines[start + 1 :]:
         if _NEXT_STEP.match(line):
@@ -150,6 +158,74 @@ def ci_failures(ci_text):
     return failures
 
 
+def contract_trigger_failures(workflow_text):
+    """The guard's own triggers must stay unwidened-in-reverse.
+
+    Presence alone is not enough: types: [opened] or branches: [never]
+    under pull_request_target keeps the key while silencing synchronize
+    updates or main-targeted PRs, so later enforcement changes bypass the
+    independent guard after merge.
+    """
+    lines = workflow_text.splitlines()
+    try:
+        on = next(i for i, line in enumerate(lines) if line == "on:")
+    except StopIteration:
+        return ["contract workflow must declare triggers"]
+    end = len(lines)
+    for i in range(on + 1, len(lines)):
+        line = lines[i]
+        if line and not line[0].isspace() and not line.startswith("#"):
+            end = i
+            break
+    failures = []
+    current = None
+    subs = {}
+    for i in range(on + 1, end):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        key = _TRIGGER_KEY.match(line)
+        if key:
+            current = key.group(1)
+            subs[current] = []
+            continue
+        sub = _TRIGGER_SUBKEY.match(line)
+        if sub and current is not None:
+            subs[current].append((sub.group(1), sub.group(2), i))
+    if "pull_request_target" not in subs:
+        return ["contract workflow must keep the pull_request_target trigger"]
+    for key, rest, idx in subs["pull_request_target"]:
+        if key in ("paths", "paths-ignore", "branches-ignore"):
+            failures.append(f"contract workflow must not narrow pull_request_target with {key}:")
+        if key == "types":
+            got = [rest] if rest.strip() else []
+            j = idx + 1
+            while j < end:
+                item = _TRIGGER_ITEM.match(lines[j])
+                if not item:
+                    break
+                got.append(item.group(1))
+                j += 1
+            want = {"opened", "synchronize", "reopened", "edited"}
+            have = {part.strip().strip("'\"") for raw in got for part in raw.strip().strip("[]").split(",") if part.strip()}
+            if not want <= have:
+                failures.append("contract workflow must keep the full pull_request_target types:")
+        if key == "branches":
+            got = [rest] if rest.strip() else []
+            j = idx + 1
+            while j < end:
+                item = _TRIGGER_ITEM.match(lines[j])
+                if not item:
+                    break
+                got.append(item.group(1))
+                j += 1
+            patterns = [p.strip().strip("'\"") for raw in got for p in raw.strip().strip("[]").split(",") if p.strip()]
+            if not any(fnmatch.fnmatchcase("main", pat) for pat in patterns):
+                failures.append("contract workflow must keep an exact main match in pull_request_target branches:")
+    return failures
+
+
 def workflow_failures(workflow_text):
     """The contract workflow must keep executing base-owned logic, exactly.
 
@@ -159,7 +235,7 @@ def workflow_failures(workflow_text):
     read-only and keeps its pull_request_target trigger.
     """
     code = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
-    failures = []
+    failures = contract_trigger_failures(workflow_text)
     if not any(re.match(r"^\s*pull_request_target\s*:", line) for line in code):
         failures.append("contract workflow must keep the pull_request_target trigger")
     if "contents: read" not in "\n".join(code):
@@ -174,6 +250,16 @@ def workflow_failures(workflow_text):
         return failures + ["contract workflow must keep the gate-contract job"]
     later = [i for i in headers if i > gate]
     block = code[gate : (later[0] if later else len(code))]
+    # A disabled or failure-tolerant job skips the guard while the shell
+    # block stays byte-identical: reject job-level and step-level gates.
+    for line in block:
+        if re.match(r"^    (if|needs|continue-on-error)\s*:", line):
+            failures.append("contract workflow job must stay unconditional")
+            break
+    for line in block:
+        if re.match(r"^        (if|continue-on-error)\s*:", line):
+            failures.append("contract workflow steps must stay unconditional")
+            break
     if any(re.match(r"^\s*permissions\s*:", line) for line in block):
         failures.append("contract workflow job must not override permissions")
     steps = [line for line in block if re.match(r"^      -(\s|$)", line)]

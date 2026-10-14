@@ -47,6 +47,12 @@ export type SharedCartIntent =
       target: SharedCartLineTarget;
       hasAssurance: boolean;
     }
+  | {
+      kind: 'set_negotiated_price';
+      target: SharedCartLineTarget;
+      /** Null clears the negotiated price back to catalog. */
+      negotiatedUnitPriceMinor: number | null;
+    }
   | { kind: 'remove'; target: SharedCartLineTarget }
   | { kind: 'clear' };
 

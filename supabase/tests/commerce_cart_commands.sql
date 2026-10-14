@@ -657,4 +657,55 @@ END
 $$;
 RESET ROLE;
 
+-- 16. set_negotiated_price reprices in place and clears back to catalog.
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_id":"22222222-2222-4222-8222-222222222222","cart_grant_id":"99999999-9999-4999-8999-999999999991","cart_principal_id":"guest-a1","cart_scope":"session"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_line_id text;
+  v_line_count integer;
+  v_result jsonb;
+  v_version integer;
+BEGIN
+  SELECT id::text INTO v_line_id FROM public.commerce_cart_lines
+  WHERE cart_id = '22222222-2222-4222-8222-222222222222' LIMIT 1;
+  SELECT count(*) INTO v_line_count FROM public.commerce_cart_lines
+  WHERE cart_id = '22222222-2222-4222-8222-222222222222';
+  SELECT version INTO v_version FROM public.commerce_carts
+  WHERE id = '22222222-2222-4222-8222-222222222222';
+  v_result := public.commerce_cart_mutate(
+    '22222222-2222-4222-8222-222222222222', 'op-reprice-on', v_version,
+    jsonb_build_object('type', 'set_negotiated_price', 'lineId', v_line_id, 'negotiatedUnitPriceMinor', 2000)
+  );
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'reprice must succeed, got %', v_result; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commerce_cart_lines
+    WHERE id = v_line_id::uuid AND negotiated_unit_price_minor = 2000 AND negotiation_status = 'accepted'
+  ) THEN RAISE EXCEPTION 'reprice must persist on the same line'; END IF;
+  IF (SELECT count(*) FROM public.commerce_cart_lines WHERE cart_id = '22222222-2222-4222-8222-222222222222') <> v_line_count
+    OR NOT EXISTS (SELECT 1 FROM public.commerce_cart_lines WHERE id = v_line_id::uuid) THEN
+    RAISE EXCEPTION 'reprice must not move or recreate the line'; END IF;
+  SELECT version INTO v_version FROM public.commerce_carts
+  WHERE id = '22222222-2222-4222-8222-222222222222';
+  v_result := public.commerce_cart_mutate(
+    '22222222-2222-4222-8222-222222222222', 'op-reprice-at-catalog', v_version,
+    jsonb_build_object('type', 'set_negotiated_price', 'lineId', v_line_id, 'negotiatedUnitPriceMinor', 2500)
+  );
+  IF (v_result ->> 'ok')::boolean OR v_result ->> 'code' <> 'invalid_item' THEN
+    RAISE EXCEPTION 'reprice at catalog price must be rejected, got %', v_result; END IF;
+  SELECT version INTO v_version FROM public.commerce_carts
+  WHERE id = '22222222-2222-4222-8222-222222222222';
+  v_result := public.commerce_cart_mutate(
+    '22222222-2222-4222-8222-222222222222', 'op-reprice-clear', v_version,
+    jsonb_build_object('type', 'set_negotiated_price', 'lineId', v_line_id, 'negotiatedUnitPriceMinor', null)
+  );
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'reprice clear must succeed, got %', v_result; END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commerce_cart_lines
+    WHERE id = v_line_id::uuid AND negotiated_unit_price_minor IS NULL AND negotiation_status IS NULL
+  ) THEN RAISE EXCEPTION 'reprice clear must restore catalog pricing'; END IF;
+END
+$$;
+RESET ROLE;
+
 ROLLBACK;

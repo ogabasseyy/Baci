@@ -257,5 +257,11 @@ export function buildCommand(
   if (intent.kind === 'remove') return { lineId, type: 'remove' };
   if (intent.kind === 'set_assurance')
     return { hasAssurance: intent.hasAssurance, lineId, type: 'set_assurance' };
+  if (intent.kind === 'set_negotiated_price')
+    return {
+      lineId,
+      negotiatedUnitPriceMinor: intent.negotiatedUnitPriceMinor,
+      type: 'set_negotiated_price',
+    };
   return { lineId, quantity: intent.quantity, type: 'set_quantity' };
 }

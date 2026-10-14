@@ -36,6 +36,11 @@ const command = z.discriminatedUnion('type', [
     lineId: z.string().min(1),
     hasAssurance: z.boolean(),
   }),
+  z.object({
+    type: z.literal('set_negotiated_price'),
+    lineId: z.string().min(1),
+    negotiatedUnitPriceMinor: z.number().int().min(1).nullable(),
+  }),
   z.object({ type: z.literal('clear') }),
   z.object({ type: z.literal('replace'), lines: z.array(line).max(20) }),
 ]);

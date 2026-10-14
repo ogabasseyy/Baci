@@ -57,7 +57,10 @@ BEGIN
  END IF;
  SELECT link.cart_id INTO saved FROM public.commerce_cart_customer_carts link JOIN public.commerce_carts cart ON cart.id=link.cart_id AND cart.merchant_id=link.merchant_id
  WHERE link.merchant_id=ctx.merchant AND link.customer_id=ctx.customer AND cart.expires_at>now() AND cart.state IN ('active','checkout');
- IF nullif(p_input->>'expectedSavedCartId','')::uuid IS DISTINCT FROM saved THEN RETURN jsonb_build_object('ok',false,'code','refresh_required'); END IF;
+ -- An omitted expectation states no observation, so only a supplied
+ -- saved-cart id gates the link; keep_current may therefore acknowledge
+ -- the saved cart while still rejecting a stale observed id.
+ IF nullif(p_input->>'expectedSavedCartId','') IS NOT NULL AND nullif(p_input->>'expectedSavedCartId','')::uuid IS DISTINCT FROM saved THEN RETURN jsonb_build_object('ok',false,'code','refresh_required'); END IF;
  IF v_choice='use_saved' AND saved IS NULL THEN RETURN jsonb_build_object('ok',false,'code','not_found'); END IF;
  IF v_choice IN ('keep_current','merge') AND ctx.current_cart IS NULL THEN RETURN jsonb_build_object('ok',false,'code','not_found'); END IF;
  IF v_choice='merge' AND saved IS NOT NULL AND saved<>ctx.current_cart THEN

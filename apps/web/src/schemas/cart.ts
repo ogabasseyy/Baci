@@ -74,6 +74,11 @@ const cartCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     lineId: z.string().trim().min(1).max(64),
+    negotiatedUnitPriceMinor: z.number().int().min(1).nullable(),
+    type: z.literal('set_negotiated_price'),
+  }),
+  z.strictObject({
+    lineId: z.string().trim().min(1).max(64),
     type: z.literal('remove'),
   }),
   z.strictObject({ type: z.literal('clear') }),

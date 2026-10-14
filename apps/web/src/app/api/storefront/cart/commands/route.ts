@@ -14,6 +14,7 @@ import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import { mutateCart } from '@/lib/cart/service';
 import {
   CART_SESSION_PROOF_TTL_SECONDS,
+  CartSessionConfigError,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
@@ -87,19 +88,35 @@ export async function POST(request: NextRequest) {
         result.cart ? { cart: result.cart } : undefined
       );
     }
-    const proof = issueCartSessionProof(
-      {
-        cartId: context.principal.cartId,
-        grantId: context.principal.grantId,
-        grantExpiresAt: result.cart.expiresAt,
-        merchantId: context.merchant.id,
-        principalId: context.principal.principalId,
-        scope: 'session',
-      },
-      { environment: getCartProofEnvironment() }
-    );
+    // The mutation has already committed. A renewed proof must never
+    // outlive the grant, so if reissue crosses the grant expiry the
+    // committed cart is returned without a new proof instead of
+    // surfacing the committed change as a 503; the existing proof and
+    // cookie govern until they expire, and retries replay by
+    // operation id.
+    let proof: string | null = null;
+    try {
+      proof = issueCartSessionProof(
+        {
+          cartId: context.principal.cartId,
+          grantId: context.principal.grantId,
+          grantExpiresAt: result.cart.expiresAt,
+          merchantId: context.merchant.id,
+          principalId: context.principal.principalId,
+          scope: 'session',
+        },
+        { environment: getCartProofEnvironment() }
+      );
+    } catch (error) {
+      if (
+        error instanceof CartSessionConfigError ||
+        Date.parse(result.cart.expiresAt) > Date.now()
+      ) {
+        throw error;
+      }
+    }
     const response = cartJsonResponse({
-      proof,
+      ...(proof ? { proof } : {}),
       cart: result.cart,
       operationId: result.operationId,
       replayed: result.replayed,
@@ -111,7 +128,7 @@ export async function POST(request: NextRequest) {
     );
     // A non-positive lifetime would delete the cookie the body proof just
     // renewed; omit the cookie instead and let the body proof govern.
-    if (maxAge > 0) {
+    if (proof && maxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, maxAge);
     }
     return response;

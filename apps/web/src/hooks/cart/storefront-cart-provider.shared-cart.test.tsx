@@ -362,29 +362,21 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
     vi.mocked(fetchSharedCartProducts).mockResolvedValue(
       new Map([['prod-1', product()]])
     );
-    vi.mocked(sendSharedCartCommand)
-      .mockResolvedValueOnce({
-        ok: true,
-        replayed: false,
-        snapshot: snapshot({ lines: [], version: 4 }),
-        warnings: [],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        replayed: false,
-        snapshot: snapshot({
-          lines: [
-            cartLine({
-              id: 'line-2',
-              lineTotalMinor: 7500,
-              negotiatedUnitPriceMinor: 7500,
-              negotiationStatus: 'accepted',
-            }),
-          ],
-          version: 5,
-        }),
-        warnings: [],
-      });
+    vi.mocked(sendSharedCartCommand).mockResolvedValueOnce({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({
+        lines: [
+          cartLine({
+            lineTotalMinor: 7500,
+            negotiatedUnitPriceMinor: 7500,
+            negotiationStatus: 'accepted',
+          }),
+        ],
+        version: 4,
+      }),
+      warnings: [],
+    });
     const { result } = renderHook(() => useCart(), {
       wrapper: delegatedWrapper(),
     });
@@ -398,16 +390,13 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
       result.current.applyNegotiatedPrice?.(cartItemId, 75);
     });
 
-    await waitFor(() => expect(sendSharedCartCommand).toHaveBeenCalledTimes(2));
-    const calls = vi.mocked(sendSharedCartCommand).mock.calls;
-    expect(calls[0]?.[0]).toMatchObject({
-      command: { lineId: 'line-1', type: 'remove' },
-    });
-    expect(calls[1]?.[0]).toMatchObject({
+    // One atomic in-place reprice replaces the old remove-plus-add pair.
+    await waitFor(() => expect(sendSharedCartCommand).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(sendSharedCartCommand).mock.calls[0]?.[0]).toMatchObject({
       command: {
+        lineId: 'line-1',
         negotiatedUnitPriceMinor: 7500,
-        negotiationStatus: 'accepted',
-        type: 'add',
+        type: 'set_negotiated_price',
       },
     });
     await waitFor(() =>
@@ -436,7 +425,7 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
       ])
     );
     // Stateful responses: every reconciliation keeps both lines live so the
-    // later remove-plus-add pairs still resolve their line targets. A static
+    // later in-place reprices still resolve their line targets. A static
     // empty snapshot would strand the queue on a stale-target failure.
     const liveLines = [
       cartLine({ id: 'line-1', lineTotalMinor: 10000 }),
@@ -468,16 +457,16 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
       result.current.applyCartWideNegotiation?.(200);
     });
 
-    // Two lines × remove-plus-add.
-    await waitFor(() => expect(sendSharedCartCommand).toHaveBeenCalledTimes(4));
-    const adds = vi
+    // Two lines, one atomic in-place reprice each.
+    await waitFor(() => expect(sendSharedCartCommand).toHaveBeenCalledTimes(2));
+    const reprices = vi
       .mocked(sendSharedCartCommand)
       .mock.calls.map((call) => call[0]?.command)
-      .filter((command) => command?.type === 'add');
-    expect(adds).toHaveLength(2);
+      .filter((command) => command?.type === 'set_negotiated_price');
+    expect(reprices).toHaveLength(2);
     // ₦400 of cart repriced to ₦200: each line halves.
-    expect(adds[0]).toMatchObject({ negotiatedUnitPriceMinor: 5000 });
-    expect(adds[1]).toMatchObject({ negotiatedUnitPriceMinor: 15000 });
+    expect(reprices[0]).toMatchObject({ negotiatedUnitPriceMinor: 5000 });
+    expect(reprices[1]).toMatchObject({ negotiatedUnitPriceMinor: 15000 });
     expect(result.current.cartWideNegotiationActive).toBe(true);
   });
 

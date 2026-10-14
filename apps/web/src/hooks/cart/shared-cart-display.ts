@@ -242,6 +242,23 @@ export function applyIntent(
     // The assurance overlay already reflects the choice in the display.
     return display;
   }
+  if (intent.kind === 'set_negotiated_price') {
+    return display.map((line, lineIndex) =>
+      lineIndex === index
+        ? {
+            ...line,
+            negotiatedPrice:
+              intent.negotiatedUnitPriceMinor != null
+                ? minorToMajor(intent.negotiatedUnitPriceMinor)
+                : undefined,
+            negotiationStatus:
+              intent.negotiatedUnitPriceMinor != null
+                ? ('accepted' as const)
+                : ('none' as const),
+          }
+        : line
+    );
+  }
   // A quantity edit never claims a temp id: temp targets resolve only
   // when an add reconciles, so a claim here would strand the next edit
   // on the same line behind an unresolvable block.

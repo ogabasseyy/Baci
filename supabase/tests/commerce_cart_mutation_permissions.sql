@@ -29,6 +29,7 @@ DO $$ BEGIN IF public.commerce_cart_mutate('22222222-2222-4222-8222-222222222222
 RESET ROLE;
 DO $$ BEGIN
 IF (SELECT column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='commerce_cart_grants' AND column_name='allowed_operations') NOT LIKE '%replace%' THEN RAISE EXCEPTION 'new standard grants omit replacement'; END IF;
+IF (SELECT column_default FROM information_schema.columns WHERE table_schema='public' AND table_name='commerce_cart_grants' AND column_name='allowed_operations') NOT LIKE '%set_negotiated_price%' THEN RAISE EXCEPTION 'new standard grants omit negotiated repricing'; END IF;
 IF (SELECT allowed_operations FROM public.commerce_cart_grants LIMIT 1) <> '{}' THEN RAISE EXCEPTION 'migration escalated existing restricted grant'; END IF;
 END $$;
 ROLLBACK;

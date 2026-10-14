@@ -306,6 +306,13 @@ BEGIN
   -- price (accepted negotiation, else validated catalog price) is the
   -- single source of truth; the submitted price is in major units.
   v_snapshot := public.commerce_cart_build_checkout_snapshot(v_merchant, v_cart.id);
+  -- A reviewed line that is no longer purchasable (inactive/deleted
+  -- offer or insufficient stock) must never reach the inner order RPC:
+  -- its validated price falls back to the last cart price, so the
+  -- multiset check below cannot distinguish it from a healthy line.
+  IF coalesce((v_snapshot -> 'estimates' ->> 'unavailableCount')::integer, 0) > 0 THEN
+    RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';
+  END IF;
   v_items := p_args -> 'p_items';
   IF jsonb_typeof(v_items) IS DISTINCT FROM 'array' THEN
     RAISE EXCEPTION 'cart_checkout_stale' USING ERRCODE = 'P0001';

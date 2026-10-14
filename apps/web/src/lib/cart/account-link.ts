@@ -140,6 +140,7 @@ export async function linkCartToCustomer(
         'clear',
         'replace',
         'set_assurance',
+        'set_negotiated_price',
       ],
     };
     const snapshot = await getCart({

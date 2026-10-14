@@ -77,6 +77,12 @@ export type CartCommand =
     } & CartLineAttachments)
   | { type: 'set_quantity'; lineId: string; quantity: number }
   | { type: 'set_assurance'; lineId: string; hasAssurance: boolean }
+  | {
+      type: 'set_negotiated_price';
+      lineId: string;
+      /** Null clears the negotiated price back to catalog. */
+      negotiatedUnitPriceMinor: number | null;
+    }
   | { type: 'remove'; lineId: string }
   | { type: 'clear' }
   | { type: 'replace'; lines: CartInputLine[] };

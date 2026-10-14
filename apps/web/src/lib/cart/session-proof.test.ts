@@ -150,6 +150,7 @@ describe('issueCartSessionProof', () => {
         'clear',
         'replace',
         'set_assurance',
+        'set_negotiated_price',
       ]);
     }
   });

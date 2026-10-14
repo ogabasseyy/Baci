@@ -10,7 +10,6 @@ import type { Product } from '@/lib/products';
 import type { AddToCartOptions, SharedCartDisplayItem } from './cart-types';
 import {
   findMatchingLineIndex,
-  optionsFromLine,
   targetForLine,
 } from './shared-cart-hook-support';
 import {
@@ -148,16 +147,6 @@ export function createCartActions(context: SharedCartRuntime) {
     const generation = generationRef.current;
     const key = cartLineIdentity(cartItemToIdentity(line));
     const target = targetForLine(line);
-    const options = optionsFromLine(line);
-    tempCounterRef.current += 1;
-    const tempId = `t${tempCounterRef.current}-${Date.now().toString(36)}`;
-    const attachments =
-      price == null
-        ? undefined
-        : {
-            negotiatedUnitPriceMinor: Math.round(price * 100),
-            negotiationStatus: 'accepted' as const,
-          };
     dispatch({
       generation,
       products: { [key]: line as unknown as Product },
@@ -169,28 +158,13 @@ export function createCartActions(context: SharedCartRuntime) {
       lineKey: key,
       type: 'assurance/overlay',
     });
-    dispatch({
-      entry: {
-        intent: { kind: 'remove', target },
-        operationId: crypto.randomUUID(),
-      },
-      generation,
-      type: 'command/enqueue',
-    });
-    dispatch({
-      entry: {
-        intent: {
-          attachments,
-          kind: 'add',
-          options,
-          product: line as unknown as Product,
-          quantity: Math.min(line.quantity, SHARED_CART_MAX_QUANTITY_PER_LINE),
-          tempId,
-        },
-        operationId: crypto.randomUUID(),
-      },
-      generation,
-      type: 'command/enqueue',
+    // One atomic in-place reprice: the server line, its quantity and
+    // its identity never move, so an interrupted or rejected reprice
+    // cannot lose the item the way a remove-then-add sequence could.
+    enqueueIntent({
+      kind: 'set_negotiated_price',
+      negotiatedUnitPriceMinor: price == null ? null : Math.round(price * 100),
+      target,
     });
   }
 

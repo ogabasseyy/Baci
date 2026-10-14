@@ -22,6 +22,67 @@ DO $$ DECLARE prep jsonb; BEGIN
   END IF;
 END $$;
 RESET ROLE;
+-- A line that becomes unavailable after review (deactivated product,
+-- then insufficient stock) must be rejected by the binding itself,
+-- never reaching the inner order RPC on its fallback last price.
+DO $$ BEGIN
+  UPDATE products SET status = 'inactive' WHERE id = '44444444-4444-4444-8444-444444444444';
+END $$;
+SET request.jwt.claims = '{"role":"authenticated","storefront_order_context":"route","storefront_order_merchant_id":"11111111-1111-4111-8111-111111111111"}';
+SET ROLE authenticated;
+DO $$
+DECLARE
+  sid uuid := (SELECT value::uuid FROM test_ctx WHERE key = 'guard_session');
+  good jsonb := '{"cart_line_id":"dddddddd-4000-4000-8000-000000000000","product_id":"44444444-4444-4444-8444-444444444444","quantity":1,"price":15,"variant_attributes":{}}';
+  rejected boolean := false;
+BEGIN
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
+      jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
+        'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+        'p_items',jsonb_build_array(good),'p_checkout_idempotency_key','review-unavailable-inactive',
+        'p_cart_id','cccccccc-4000-4000-8000-000000000000','p_cart_version',1,
+        'p_cart_principal_id','guest-a4'));
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'cart_checkout_stale' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'binding accepted an inactive-product line'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  UPDATE products SET status = 'active', stock_quantity = 0, stock = 0
+  WHERE id = '44444444-4444-4444-8444-444444444444';
+END $$;
+SET request.jwt.claims = '{"role":"authenticated","storefront_order_context":"route","storefront_order_merchant_id":"11111111-1111-4111-8111-111111111111"}';
+SET ROLE authenticated;
+DO $$
+DECLARE
+  sid uuid := (SELECT value::uuid FROM test_ctx WHERE key = 'guard_session');
+  good jsonb := '{"cart_line_id":"dddddddd-4000-4000-8000-000000000000","product_id":"44444444-4444-4444-8444-444444444444","quantity":1,"price":15,"variant_attributes":{}}';
+  rejected boolean := false;
+BEGIN
+  BEGIN
+    PERFORM public.create_storefront_order_with_cart_binding('base', sid, 1,
+      jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
+        'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+        'p_items',jsonb_build_array(good),'p_checkout_idempotency_key','review-unavailable-stock',
+        'p_cart_id','cccccccc-4000-4000-8000-000000000000','p_cart_version',1,
+        'p_cart_principal_id','guest-a4'));
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'cart_checkout_stale' THEN RAISE; END IF;
+    rejected := true;
+  END;
+  IF NOT rejected THEN RAISE EXCEPTION 'binding accepted an insufficient-stock line'; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  UPDATE products SET status = 'active', stock_quantity = 10, stock = 10
+  WHERE id = '44444444-4444-4444-8444-444444444444';
+  IF (SELECT count(*) FROM order_stub_calls WHERE idempotency_key IN ('review-unavailable-inactive','review-unavailable-stock')) <> 0 THEN
+    RAISE EXCEPTION 'unavailable cart items reached order mock';
+  END IF;
+END $$;
 SET request.jwt.claims = '{"role":"authenticated","storefront_order_context":"route","storefront_order_merchant_id":"11111111-1111-4111-8111-111111111111"}';
 SET ROLE authenticated;
 DO $$

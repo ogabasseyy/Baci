@@ -30,6 +30,27 @@ beforeEach(() => {
     cart: saved,
   });
 });
+it('acknowledges the observed saved cart when keeping the current cart', async () => {
+  vi.mocked(linkAccountCart).mockResolvedValue({
+    ok: true,
+    snapshot: saved,
+    replayed: false,
+    warnings: [],
+  });
+  const { result } = renderHook(() =>
+    useCartAccountLink({ merchantSlug: 'shop', ownerSubject: 'user-a' })
+  );
+  await act(async () => {
+    await result.current.loadSavedCart();
+  });
+  await act(async () => {
+    await result.current.link('keep_current');
+  });
+  expect(vi.mocked(linkAccountCart).mock.calls[0][0]).toMatchObject({
+    choice: 'keep_current',
+    expectedSavedCartId: 'saved',
+  });
+});
 it('retries the complete original body instead of reusing its key with a different choice', async () => {
   vi.mocked(linkAccountCart)
     .mockResolvedValueOnce({

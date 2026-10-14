@@ -31,6 +31,24 @@ it('captures only trusted HTTPS handoffs and removes pairing fragments before ro
   ).toBe('/cart');
   expect(peekCartPairingLink()).not.toBeNull();
 });
+it('honours a configured non-default platform root domain', () => {
+  const custom = { ...config, platformRootDomain: 'shops.example.net' };
+  expect(
+    captureCartPairingLink(
+      `https://alpha.shops.example.net/cart#handoff=${token()}&hid=${hid}`,
+      custom
+    )
+  ).toBe('/cart');
+  expect(peekCartPairingLink()).not.toBeNull();
+  clearCartPairingLink();
+  expect(
+    captureCartPairingLink(
+      `https://alpha.usebaci.com/cart#handoff=${token()}&hid=${hid}`,
+      custom
+    )
+  ).toBe('/cart');
+  expect(peekCartPairingLink()).toBeNull();
+});
 it.each([
   'https://evil.example/cart',
   'http://shop.example.com/cart',

@@ -20,6 +20,7 @@ import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
   CART_SESSION_PROOF_TTL_SECONDS,
+  CART_SESSION_PROOF_VERSION,
   CartSessionConfigError,
   issueCartSessionProof,
   verifyCartSessionProof,
@@ -82,7 +83,21 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('invalid_request');
     }
 
+    // The destination is bound to the proof transport, not the Origin
+    // label alone: native redemption must present the device-held
+    // Bearer cart proof, and web redemption must arrive from an
+    // allowlisted merchant origin. Omitting Origin therefore cannot
+    // reclassify a browser session as a device redemption.
+    const bearerProof = request.headers
+      .get('authorization')
+      ?.match(/^\s*bearer\s+(.+?)\s*$/i)?.[1]
+      ?.trim();
+    const hasDeviceProof =
+      bearerProof?.startsWith(`${CART_SESSION_PROOF_VERSION}.`) ?? false;
     const caller = detectHandoffCaller(request.headers.get('origin'));
+    if (caller === 'native' && !hasDeviceProof) {
+      return cartErrorResponse('forbidden');
+    }
     if (
       caller === 'web' &&
       !isHandoffWebOriginAllowed(request.headers.get('origin'), {

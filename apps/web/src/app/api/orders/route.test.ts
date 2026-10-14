@@ -10408,6 +10408,19 @@ describe('POST /api/orders — shared cart binding', () => {
     );
   });
 
+  it('maps a binding invalid-variant failure to 400, not a server fault', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_order_invalid_variant' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(400);
+  });
+
   it('keeps legacy mapping for inner order rejections on the bound path', async () => {
     await setupBinding({
       create_storefront_order_with_cart_binding: {

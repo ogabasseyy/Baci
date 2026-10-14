@@ -240,6 +240,29 @@ describe('POST /api/storefront/cart/commands', () => {
     });
   });
 
+  it('returns the committed cart without a renewed proof when reissue crosses grant expiry', async () => {
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState({
+        expiresAt: new Date(Date.now() - 1000).toISOString(),
+        lines: [rawLine()],
+      }),
+    };
+    const response = await postCommand({
+      body: addCommand('expired-reissue'),
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
+    });
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.cart.version).toBe(2);
+    expect(payload.proof).toBeUndefined();
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
   it('returns replayed outcomes for response-loss retries', async () => {
     mocks.cartPayload = {
       code: null,

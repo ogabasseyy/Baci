@@ -110,32 +110,24 @@ describe('useSharedCart negotiation and totals', () => {
     return hook;
   }
 
-  it('reprices a line as a remove-plus-add pair with attachments', async () => {
-    vi.mocked(sendSharedCartCommand)
-      .mockResolvedValueOnce({
-        ok: true,
-        replayed: false,
-        snapshot: snapshot({ lines: [], version: 4 }),
-        warnings: [],
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        replayed: false,
-        snapshot: snapshot({
-          lines: [
-            cartLine({
-              id: 'line-2',
-              lineTotalMinor: 7500,
-              negotiatedUnitPriceMinor: 7500,
-              negotiationStatus: 'accepted',
-              quantity: 1,
-              unitPriceMinor: 10000,
-            }),
-          ],
-          version: 5,
-        }),
-        warnings: [],
-      });
+  it('reprices a line as one atomic in-place command', async () => {
+    vi.mocked(sendSharedCartCommand).mockResolvedValueOnce({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({
+        lines: [
+          cartLine({
+            lineTotalMinor: 7500,
+            negotiatedUnitPriceMinor: 7500,
+            negotiationStatus: 'accepted',
+            quantity: 1,
+            unitPriceMinor: 10000,
+          }),
+        ],
+        version: 4,
+      }),
+      warnings: [],
+    });
     const { result } = await linkedHook();
     const line = result.current.cart[0];
     if (!line) throw new Error('expected a line');
@@ -144,31 +136,62 @@ describe('useSharedCart negotiation and totals', () => {
       result.current.repriceLine(line, 75);
     });
 
-    // Optimistic: the old line drops, the repriced temp takes its place.
+    // Optimistic: the same server line carries the negotiated price.
     expect(result.current.cart[0]).toMatchObject({
       negotiatedPrice: 75,
       negotiationStatus: 'accepted',
+      serverLineId: 'line-1',
     });
     await waitFor(() =>
-      expect(vi.mocked(sendSharedCartCommand)).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(sendSharedCartCommand)).toHaveBeenCalledTimes(1)
     );
-    const calls = vi.mocked(sendSharedCartCommand).mock.calls;
-    expect(calls[0]?.[0]).toMatchObject({
-      command: { lineId: 'line-1', type: 'remove' },
-    });
-    expect(calls[1]?.[0]).toMatchObject({
+    expect(vi.mocked(sendSharedCartCommand).mock.calls[0]?.[0]).toMatchObject({
       command: {
-        item: { productId: 'prod-1' },
+        lineId: 'line-1',
         negotiatedUnitPriceMinor: 7500,
-        negotiationStatus: 'accepted',
-        quantity: 1,
-        type: 'add',
+        type: 'set_negotiated_price',
       },
     });
-    await waitFor(() => expect(result.current.version).toBe(5));
+    await waitFor(() => expect(result.current.version).toBe(4));
+  });
+
+  it('clears a negotiated price with the same atomic command', async () => {
+    vi.mocked(sendSharedCartCommand).mockResolvedValueOnce({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({ version: 4 }),
+      warnings: [],
+    });
+    const { result } = await linkedHook();
+    const line = result.current.cart[0];
+    if (!line) throw new Error('expected a line');
+
+    await act(async () => {
+      result.current.repriceLine(line, undefined);
+    });
+
+    await waitFor(() =>
+      expect(vi.mocked(sendSharedCartCommand)).toHaveBeenCalledTimes(1)
+    );
+    expect(vi.mocked(sendSharedCartCommand).mock.calls[0]?.[0]).toMatchObject({
+      command: {
+        lineId: 'line-1',
+        negotiatedUnitPriceMinor: null,
+        type: 'set_negotiated_price',
+      },
+    });
   });
 
   it('toggles assurance in the display and persists it as a command', async () => {
+    vi.mocked(sendSharedCartCommand).mockResolvedValue({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({
+        lines: [cartLine({ hasAssurance: true })],
+        version: 4,
+      }),
+      warnings: [],
+    });
     const { result } = await linkedHook();
     const line = result.current.cart[0];
     if (!line) throw new Error('expected a line');

@@ -95,4 +95,23 @@ SELECT set_config('request.jwt.claims',jsonb_build_object('role','commerce_cart_
 SET LOCAL ROLE commerce_cart_shopper;
 DO $$ BEGIN IF public.commerce_cart_create('retired-recreate','[]','NGN')->>'code' IS DISTINCT FROM 'unauthorized' THEN RAISE EXCEPTION 'retired device bootstrap recreated authority'; END IF; END $$;
 RESET ROLE;
+-- keep_current with a saved cart present: an omitted observation links
+-- the current cart, while a stale observed saved id still refreshes.
+INSERT INTO public.commerce_carts(id,merchant_id,expires_at) VALUES
+('22222222-2222-4222-8222-222222222225','11111111-1111-4111-8111-111111111111',now()+interval '7 days');
+INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,expires_at) VALUES
+('66666666-6666-4666-8666-666666666669','11111111-1111-4111-8111-111111111111','22222222-2222-4222-8222-222222222225','device-z',now()+interval '7 days');
+INSERT INTO public.commerce_cart_customer_carts VALUES ('11111111-1111-4111-8111-111111111111','33333333-3333-4333-8333-333333333334','22222222-2222-4222-8222-222222222222',now());
+SELECT set_config('request.jwt.claims',jsonb_build_object('role','commerce_cart_account_linker','cart_scope','session','cart_merchant_id','11111111-1111-4111-8111-111111111111','cart_principal_id','device-z','cart_id','22222222-2222-4222-8222-222222222225','cart_grant_id','66666666-6666-4666-8666-666666666669','cart_account_user_id','44444444-4444-4444-8444-444444444445','cart_customer_id','33333333-3333-4333-8333-333333333334','exp',extract(epoch from now()+interval '5 minutes')::bigint)::text,true);
+SET LOCAL ROLE commerce_cart_account_linker;
+DO $$ DECLARE result jsonb; BEGIN
+result:=public.commerce_cart_link_account('{"operationId":"keep-stale","choice":"keep_current","expectedSavedCartId":"22222222-2222-4222-8222-222222222299"}');
+IF result->>'code' IS DISTINCT FROM 'refresh_required' THEN RAISE EXCEPTION 'stale keep_current observation accepted: %',result; END IF;
+result:=public.commerce_cart_link_account('{"operationId":"keep-one","choice":"keep_current"}');
+IF result->>'ok' IS DISTINCT FROM 'true' OR result->>'cartId' IS DISTINCT FROM '22222222-2222-4222-8222-222222222225' THEN RAISE EXCEPTION 'keep_current without observed saved id failed: %',result; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+IF (SELECT cart_id FROM public.commerce_cart_customer_carts WHERE customer_id='33333333-3333-4333-8333-333333333334') <> '22222222-2222-4222-8222-222222222225' THEN RAISE EXCEPTION 'keep_current did not link the current cart'; END IF;
+END $$;
 ROLLBACK;

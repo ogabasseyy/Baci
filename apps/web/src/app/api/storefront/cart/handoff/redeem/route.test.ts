@@ -161,11 +161,17 @@ function postRedeem(init: {
   body?: unknown;
   headers?: Record<string, string>;
   noCsrf?: boolean;
+  noOrigin?: boolean;
 }) {
   const headers: Record<string, string> = {
     ...(init.noCsrf
       ? {}
       : { 'x-csrf-token': 'csrf-1', cookie: 'csrf-token=csrf-1' }),
+    // Browser redemptions always carry an Origin; default to the
+    // merchant origin when a test does not specify its transport.
+    ...(!init.noOrigin && !init.headers?.origin && !init.headers?.authorization
+      ? { origin: 'https://ogabassey.usebaci.com' }
+      : {}),
     ...init.headers,
     'x-merchant-slug': 'ogabassey',
   };
@@ -278,6 +284,20 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     });
     const nativeArgs = mocks.cartRpcCalls[1]?.args as Record<string, unknown>;
     expect(nativeArgs.p_caller).toBe('native');
+  });
+
+  it('rejects native-classified redemption without the device Bearer proof', async () => {
+    const response = await postRedeem({
+      body: connectBody(),
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
+      noOrigin: true,
+    });
+
+    expect(response.status).toBe(403);
+    expect((await response.json()).code).toBe('forbidden');
+    expect(mocks.cartRpcCalls).toHaveLength(0);
   });
 
   it('rejects web redemption from unapproved origins', async () => {

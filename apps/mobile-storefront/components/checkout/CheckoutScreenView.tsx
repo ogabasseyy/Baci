@@ -1,5 +1,4 @@
 import React, { useRef } from 'react';
-import { Platform, Text } from 'react-native';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -21,17 +20,18 @@ import { useCartCheckoutSnapshot } from '@/hooks/use-cart-checkout-snapshot';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
 import { CartCheckoutReviewNotice } from './CartCheckoutReviewNotice';
-import { CheckoutLocationPickerOverlays } from './CheckoutLocationPickerOverlays';
-import { CheckoutPaymentOverlays } from './CheckoutPaymentOverlays';
+import { CheckoutOverlays } from './CheckoutOverlays';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
 import { CheckoutSimulationBanner } from './CheckoutSimulationBanner';
 import type { CheckoutScreenViewProps } from './checkout-prize-simulation.types';
 import type { AppliedDiscount } from './DiscountCodeInput';
-import { isCheckoutAddressContinueReady } from './is-checkout-address-continue-ready';
+import { isCheckoutContinueReady } from './is-checkout-address-continue-ready';
 import { getMerchantPickupLocation } from './merchant-pickup-location';
 import { CheckoutDiscount } from './redvault/CheckoutDiscount';
-import { getRedvaultCompatibleDiscount } from './redvault/get-redvault-compatible-discount';
-import { RedvaultOrderReview } from './redvault/RedvaultOrderReview';
+import {
+  discountedCheckoutTotal,
+  getRedvaultCompatibleDiscount,
+} from './redvault/get-redvault-compatible-discount';
 import { useCheckoutAddressState } from './use-checkout-address-state';
 import { useCheckoutCryptoPayment } from './use-checkout-crypto-payment';
 import { useCheckoutCtaAnimation } from './use-checkout-cta-animation';
@@ -209,22 +209,10 @@ export function CheckoutScreenView({
           ) : null}
           <CartCheckoutReviewNotice
             status={cartReview.status}
+            review={cartReview.review}
             onRetry={cartReview.retry}
             textColor={colors.text}
           />
-          {cartReview.review?.lines.some((line) => !line.available) ? (
-            <Text accessibilityRole="alert" style={{ color: colors.text }}>
-              Some items are unavailable. Return to your cart to update them
-              before checkout.
-            </Text>
-          ) : cartReview.review?.lines.some(
-              (line) => line.priceChanged || line.negotiationInvalidated
-            ) ? (
-            <Text accessibilityRole="alert" style={{ color: colors.text }}>
-              Prices or offers changed. Review the updated items and total
-              before placing your order.
-            </Text>
-          ) : null}
           <CheckoutStepper
             step={step}
             setStep={setStep}
@@ -261,23 +249,21 @@ export function CheckoutScreenView({
           />
           <CheckoutBottomAction
             animatedCtaArrowStyle={animatedCtaArrowStyle}
-            canContinue={
-              step !== 'address'
-                ? step !== 'payment' || selectedPayment !== null
-                : isCheckoutAddressContinueReady({
-                    hasSelectedShippingQuote: Boolean(selectedQuote),
-                    hasContactIdentity: addressState.hasContactIdentity,
-                    isAddressComplete,
-                    isCurrentQuoteContext,
-                    isLoadingQuotes,
-                    isPickupStation: deliveryMethod === 'pickup_station',
-                    requiresShippingQuote,
-                  })
-            }
+            canContinue={isCheckoutContinueReady({
+              step,
+              selectedPayment,
+              hasSelectedShippingQuote: Boolean(selectedQuote),
+              hasContactIdentity: addressState.hasContactIdentity,
+              isAddressComplete,
+              isCurrentQuoteContext,
+              isLoadingQuotes,
+              isPickupStation: deliveryMethod === 'pickup_station',
+              requiresShippingQuote,
+            })}
             colors={colors}
-            displayTotal={Math.max(
-              0,
-              displayTotal - (compatibleDiscount?.discountAmount ?? 0)
+            displayTotal={discountedCheckoutTotal(
+              displayTotal,
+              compatibleDiscount
             )}
             insetsBottom={insets.bottom}
             isProcessing={isProcessing}
@@ -287,29 +273,20 @@ export function CheckoutScreenView({
             selectedPayment={selectedPayment}
             prizeSimulation={Boolean(prizeSimulation)}
             step={step}
-            total={Math.max(
-              0,
-              total - (compatibleDiscount?.discountAmount ?? 0)
-            )}
+            total={discountedCheckoutTotal(total, compatibleDiscount)}
           />
         </AppKeyboardContainer>
       </SafeAreaView>
-      <RedvaultOrderReview
-        input={redvaultReview}
-        onClose={closeRedvaultReview}
-      />
-      <CheckoutLocationPickerOverlays
+      <CheckoutOverlays
+        redvaultReview={redvaultReview}
+        closeRedvaultReview={closeRedvaultReview}
         colors={colors}
         isDark={isDark}
-        removeClippedSubviews={Platform.OS === 'android'}
         shipping={shipping}
         watchedCity={watchedCity}
         watchedState={watchedState}
-      />
-      <CheckoutPaymentOverlays
         crypto={crypto}
         clearCart={clearCart}
-        colors={colors}
         isProcessing={isProcessing}
       />
     </AddressSuggestionsProvider>

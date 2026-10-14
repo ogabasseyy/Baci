@@ -4,6 +4,12 @@ interface Config {
   merchantId: string;
   merchantSlug: string;
   merchantDomain: string;
+  /**
+   * Platform storefront root the slug subdomain lives under. Mirrors
+   * the web `NEXT_PUBLIC_ROOT_DOMAIN` configuration; defaults to the
+   * same production root when a build does not configure one.
+   */
+  platformRootDomain?: string;
 }
 export interface CartPairingLink {
   merchantId: string;
@@ -55,9 +61,11 @@ export function captureCartPairingLink(path: string, config: Config): string {
   if (!pairing) return path;
   update(null);
   try {
+    const platformRoot =
+      config.platformRootDomain?.trim().toLowerCase() || 'usebaci.com';
     const allowed = new Set([
       config.merchantDomain.toLowerCase(),
-      `${config.merchantSlug}.usebaci.com`.toLowerCase(),
+      `${config.merchantSlug}.${platformRoot}`.toLowerCase(),
     ]);
     if (
       !config.merchantId ||

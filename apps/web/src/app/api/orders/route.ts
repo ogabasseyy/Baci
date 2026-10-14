@@ -464,7 +464,9 @@ function sharedCartBindingFailureStatus(code: string): number {
     case 'unauthorized':
       return 403;
     case 'invalid_item':
-      return 500;
+      // A malformed or unknown-variant bound submission is shopper
+      // input, not a server fault (matches the cart API's 400).
+      return 400;
     default:
       return 409;
   }

@@ -608,6 +608,42 @@ BEGIN
       v_changed := true;
     END IF;
 
+  ELSIF v_type = 'set_negotiated_price' THEN
+    IF (p_command ->> 'lineId') IS NULL
+      OR (p_command ->> 'lineId') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      OR ((p_command ->> 'negotiatedUnitPriceMinor') IS NOT NULL
+        AND (p_command ->> 'negotiatedUnitPriceMinor') !~ '^[0-9]+$') THEN
+      RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+    END IF;
+    v_line_id := (p_command ->> 'lineId')::uuid;
+    SELECT * INTO v_line
+    FROM public.commerce_cart_lines
+    WHERE id = v_line_id AND merchant_id = v_merchant AND cart_id = p_cart_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+    END IF;
+    v_negotiated := (p_command ->> 'negotiatedUnitPriceMinor')::integer;
+    IF v_negotiated IS NOT NULL THEN
+      -- A negotiated price is a live-offer discount in place: the line,
+      -- its quantity and its identity never move, so a failed or
+      -- interrupted reprice cannot lose the item.
+      PERFORM public.commerce_cart_require_offer(v_merchant, v_line.product_id, v_line.variant_id);
+      IF v_negotiated < 1
+        OR v_negotiated >= public.commerce_cart_offer_price_minor(v_merchant, v_line.product_id, v_line.variant_id) THEN
+        RAISE EXCEPTION 'invalid_line' USING ERRCODE = 'P0001';
+      END IF;
+    END IF;
+    IF v_negotiated IS NOT DISTINCT FROM v_line.negotiated_unit_price_minor THEN
+      v_changed := false;
+    ELSE
+      UPDATE public.commerce_cart_lines
+      SET negotiated_unit_price_minor = v_negotiated,
+        negotiation_status = CASE WHEN v_negotiated IS NULL THEN NULL ELSE 'accepted' END,
+        updated_at = now()
+      WHERE id = v_line.id;
+      v_changed := true;
+    END IF;
+
   ELSIF v_type = 'replace' THEN
     IF jsonb_typeof(p_command -> 'lines') <> 'array'
       OR jsonb_array_length(p_command -> 'lines') > 20 THEN

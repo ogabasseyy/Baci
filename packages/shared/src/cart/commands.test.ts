@@ -172,6 +172,44 @@ describe('cart command validation boundaries', () => {
     ).toBe('invalid_item');
   });
 
+  it('validates negotiated price commands', () => {
+    expect(
+      validateCartCommand({
+        type: 'set_negotiated_price',
+        lineId: 'line-1',
+        negotiatedUnitPriceMinor: 7500,
+      })
+    ).toBeNull();
+    expect(
+      validateCartCommand({
+        type: 'set_negotiated_price',
+        lineId: 'line-1',
+        negotiatedUnitPriceMinor: null,
+      })
+    ).toBeNull();
+    expect(
+      validateCartCommand({
+        type: 'set_negotiated_price',
+        lineId: ' ',
+        negotiatedUnitPriceMinor: 7500,
+      })?.code
+    ).toBe('invalid_item');
+    expect(
+      validateCartCommand({
+        type: 'set_negotiated_price',
+        lineId: 'line-1',
+        negotiatedUnitPriceMinor: 0,
+      })?.code
+    ).toBe('invalid_item');
+    expect(
+      validateCartCommand({
+        type: 'set_negotiated_price',
+        lineId: 'line-1',
+        negotiatedUnitPriceMinor: 75.5,
+      })?.code
+    ).toBe('invalid_item');
+  });
+
   it.each([1, 10])('accepts quantity boundary %s', (quantity) => {
     expect(validateCartCommand({ type: 'add', item, quantity })).toBeNull();
     expect(

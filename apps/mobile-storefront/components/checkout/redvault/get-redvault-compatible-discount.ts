@@ -7,3 +7,11 @@ export function getRedvaultCompatibleDiscount(
 ): AppliedDiscount | null {
   return paymentMethod === 'uba_redvault' ? null : discount;
 }
+
+/** Displayed totals never drop below zero after the discount. */
+export function discountedCheckoutTotal(
+  total: number,
+  discount: AppliedDiscount | null
+): number {
+  return Math.max(0, total - (discount?.discountAmount ?? 0));
+}

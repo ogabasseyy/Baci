@@ -121,9 +121,9 @@ export function useCartAccountLink(options: Options) {
           state.current.pending = structuredClone({
             operationId: crypto.randomUUID(),
             choice,
-            ...(choice === 'use_saved' || choice === 'merge'
-              ? { expectedSavedCartId: state.current.savedCart?.cartId ?? null }
-              : {}),
+            // Every choice acknowledges the observed saved cart so a
+            // stale observation refreshes instead of silently linking.
+            expectedSavedCartId: state.current.savedCart?.cartId ?? null,
             ...(choice === 'merge' && merge ? merge : {}),
           });
           setPending(true);

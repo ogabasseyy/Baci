@@ -210,7 +210,11 @@ export function NativeCartAccountPanel() {
         accessibilityRole="button"
         disabled={pending}
         onPress={() =>
-          void run({ operationId: operationId(), choice: 'keep_current' })
+          void run({
+            operationId: operationId(),
+            choice: 'keep_current',
+            expectedSavedCartId: saved?.cartId ?? null,
+          })
         }
       >
         <Text style={{ color: colors.primary }}>

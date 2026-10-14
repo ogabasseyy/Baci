@@ -31,6 +31,30 @@ it('retries the original account choice and keeps other choices blocked until it
   expect(linkAccount.mock.calls[1][0]).toEqual(linkAccount.mock.calls[0][0]);
 });
 
+it('acknowledges the observed saved cart when keeping the current cart', async () => {
+  const linkAccount = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    accountsEnabled: true,
+    accountUserId: '44444444-4444-4444-8444-444444444444',
+    linkAccount,
+    loadSavedCart: jest.fn().mockResolvedValue(undefined),
+    savedCart: {
+      cartId: '22222222-2222-4222-8222-222222222222',
+      lines: [],
+      version: 3,
+    } as never,
+    snapshot: null,
+  });
+  const view = render(<NativeCartAccountPanel />);
+  fireEvent.press(view.getByText('Keep this cart on my account'));
+  await waitFor(() => expect(linkAccount).toHaveBeenCalledTimes(1));
+  expect(linkAccount.mock.calls[0][0]).toMatchObject({
+    choice: 'keep_current',
+    expectedSavedCartId: '22222222-2222-4222-8222-222222222222',
+  });
+});
+
 it('does not publish a previous account choice after the shopper changes', async () => {
   let finish: () => void = () => undefined;
   const linkAccount = jest.fn(

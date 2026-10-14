@@ -114,6 +114,21 @@ export function validateCartCommand(
       }
       return null;
     }
+    case 'set_negotiated_price': {
+      if (!command.lineId || command.lineId.trim().length === 0) {
+        return issue('A negotiated price change requires a line id.');
+      }
+      if (
+        command.negotiatedUnitPriceMinor !== null &&
+        (!Number.isInteger(command.negotiatedUnitPriceMinor) ||
+          command.negotiatedUnitPriceMinor <= 0)
+      ) {
+        return issue(
+          'A negotiated price must be null or a positive minor-unit integer.'
+        );
+      }
+      return null;
+    }
     case 'remove': {
       if (!command.lineId || command.lineId.trim().length === 0) {
         return issue('A removal requires a line id.');

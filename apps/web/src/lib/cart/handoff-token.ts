@@ -189,9 +189,15 @@ export function buildHandoffContinueUrl(
 }
 
 /**
- * Detects the redemption caller the same way the storefront auth
- * routes detect browser origins: an http(s) Origin header means web,
- * anything else (native fetch, curl) means native.
+ * Classifies the redemption surface from the Origin header: an
+ * http(s) Origin means web, anything else (native fetch, curl) means
+ * native. This label alone is not caller verification — the redeem
+ * route binds it to the proof transport (native redemption requires
+ * the device-held Bearer proof; web redemption requires an
+ * allowlisted merchant Origin). The trust boundary remains the
+ * signed pairing token, the verified cart proof principal, and the
+ * SQL grant checks; the destination only selects which client
+ * surface may complete the pairing.
  */
 export function detectHandoffCaller(
   origin: string | null

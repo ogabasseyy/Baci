@@ -42,7 +42,7 @@ register's `claims_digest` (printed by `register_digests.py`) from the reviewed
 repo copy into the writer environment as `BACI_CAPABILITY_REGISTER_DIGEST`.
 The pin is mandatory, not optional: the runtime recomputes the claims digest
 from the register's actual content (capabilities, `reviewed_at`,
-`source_revision`, `review_scope`) and refuses unless the pin equals that
+`source_revision`, `review_scope`, `evidence_digest`) and refuses unless the pin equals that
 recomputed value — never the stored `claims_digest` field, and never the
 `evidence_digest` field. Re-digesting a tampered register changes the
 recomputed value, so a pin recorded at review time keeps failing closed; an

@@ -67,7 +67,34 @@ def map_link_targets(text, map_dir="docs/product"):
     return targets
 
 
-def relevant_paths(register):
+def _resolve_cited_filenames(names, cwd="."):
+    """Resolve bare map-cited filenames to tracked repo paths.
+
+    A bare name (no directory) would otherwise match any same-basename path
+    via _matches — one generic citation such as `page.tsx` would make almost
+    every PR run the suite. Resolving against git ls-files keeps exact-path
+    matching wherever history is available; unresolvable names fall back to
+    the legacy basename behavior.
+    """
+    if not names:
+        return set(), set()
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(cwd), "ls-files"], capture_output=True, text=True
+        )
+    except OSError:
+        return set(), set(names)
+    if proc.returncode != 0:
+        return set(), set(names)
+    resolved, unresolved = set(), set(names)
+    for line in proc.stdout.split():
+        if Path(line).name in unresolved:
+            resolved.add(line)
+            unresolved.discard(Path(line).name)
+    return resolved, unresolved
+
+
+def relevant_paths(register, cwd="."):
     paths = {REGISTER_PATH, MAP_PATH}
     try:
         paths |= {ref for row in register["capabilities"] for ref in row["source_refs"]}
@@ -77,7 +104,9 @@ def relevant_paths(register):
     if map_file.exists():
         text = map_file.read_text()
         paths |= map_cited_paths(text)
-        paths |= map_cited_filenames(text)
+        resolved, unresolved = _resolve_cited_filenames(map_cited_filenames(text), cwd)
+        paths |= resolved
+        paths |= unresolved
         paths |= map_link_targets(text)
     return paths
 

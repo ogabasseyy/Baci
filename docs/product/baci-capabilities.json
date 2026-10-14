@@ -3,7 +3,7 @@
   "reviewed_at": "2026-10-13T09:42:57+01:00",
   "source_revision": "cad3662aa76e2ac29ab31f29a6732dd0a8c017f2",
   "evidence_digest": "2aff787193f0dd65fbd8bb1ff95fab4aa9c8772b5dc310fec20168f8e02f4c7f",
-  "claims_digest": "a0808559cc4812230c68107893064ac7c02c369181ce731a1895d4c80a01624f",
+  "claims_digest": "80379d1d0a5fa94abbcc00a0792a984b7714c71dfda50a1cde5ed574038ee9cb",
   "review_scope": "Web and mobile-admin source audit. No production workflow verification is claimed. Source references are reviewer evidence, not public URLs.",
   "capabilities": [
     {

@@ -87,6 +87,42 @@ class CapabilityGateTests(unittest.TestCase):
         self.assertTrue(gate.freshness_required(fresh, None))
         self.assertTrue(gate.freshness_required(None, bound_change))
 
+    def test_comparison_base_uses_merge_base_for_prs(self):
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+            git("init", "-q", ".")
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/baci-capabilities.json").write_text(json.dumps({"reviewed_at": "2026-10-01T00:00:00Z"}))
+            git("add", ".")
+            git("commit", "-q", "-m", "one")
+            # Branch name is only reliable once HEAD is born.
+            trunk = subprocess.run(["git", "-C", str(repo), "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True).stdout.strip()
+            fork = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            git("checkout", "-q", "-b", "feature")
+            (repo / "docs/product/baci-capabilities.json").write_text(json.dumps({"reviewed_at": "2026-10-05T00:00:00Z"}))
+            git("commit", "-q", "-am", "pr re-review")
+            git("checkout", "-q", trunk)
+            (repo / "docs/product/baci-capabilities.json").write_text(json.dumps({"reviewed_at": "2026-10-10T00:00:00Z"}))
+            git("commit", "-q", "-am", "main advances register")
+            tip = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            git("checkout", "-q", "feature")
+            previous = os.getcwd()
+            os.chdir(repo)
+            try:
+                with patch.dict(os.environ, {}, clear=False):
+                    os.environ.pop("GITHUB_EVENT_NAME", None)
+                    # PR baseline is the fork point, not the advanced tip.
+                    self.assertEqual(gate._comparison_base(tip, cwd=repo), fork)
+                    self.assertEqual(gate._base_register(gate._comparison_base(tip, cwd=repo), cwd=repo)["reviewed_at"], "2026-10-01T00:00:00Z")
+                    with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}):
+                        self.assertEqual(gate._comparison_base(tip, cwd=repo), tip)
+            finally:
+                os.chdir(previous)
+
     def test_map_link_targets_parse_balanced_parentheses(self):
         text = "See [Public features](../../apps/web/src/app/(platform)/features/page.tsx) and [map](other.md)."
         targets = gate.map_link_targets(text)

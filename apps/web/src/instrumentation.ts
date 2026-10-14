@@ -58,8 +58,11 @@ export async function register() {
     // The root resolves through the shared helper (config-stashed or
     // standalone-anchored) so boot inspects the same tree the build gate
     // did — never a silently wrong lookalike.
-    const { assertPilotPublicAssets, resolvePilotPublicDir } = await import(
+    const { assertPilotPublicAssets } = await import(
       '@/config/pilot-public-assets'
+    );
+    const { resolvePilotPublicDir } = await import(
+      '@/config/pilot-public-assets-roots'
     );
     const { isPilotLabEnabled } = await import('@/config/pilot-lab-enabled');
     let pilotPublicDir: string;

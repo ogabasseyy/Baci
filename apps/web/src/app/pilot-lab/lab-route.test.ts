@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { parseRawAcceptances, parseRawInventoryRecords } from './lab-route';
+import {
+  parseRawAcceptances,
+  parseRawInventoryRecords,
+} from './lab-route-records';
 
 const RECORD = {
   assetId: 'logo-a',

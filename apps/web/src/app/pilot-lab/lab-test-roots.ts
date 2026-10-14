@@ -14,7 +14,10 @@ import { loadLabConfig } from '@/lib/merchant-image-variant-pilot/lab-config';
 import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
 import { RECIPE_BYTE_CEILINGS } from '@/schemas/merchant-image-variant-pilot-tiers';
-import { parseRawAcceptances, parseRawInventoryRecords } from './lab-route';
+import {
+  parseRawAcceptances,
+  parseRawInventoryRecords,
+} from './lab-route-records';
 
 // Shared lab-roots builder for the pilot-lab route tests (gallery + store
 // pages). Stages a gitignored input root (inventory.json + source bytes),

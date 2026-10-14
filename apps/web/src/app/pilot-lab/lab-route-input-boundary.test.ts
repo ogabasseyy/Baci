@@ -13,11 +13,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadLabConfig } from '@/lib/merchant-image-variant-pilot/lab-config';
 import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
+import { loadLabConfigAtStartup as getLabConfig } from './lab-route';
 import {
-  loadLabConfigAtStartup as getLabConfig,
   parseRawAcceptances,
   parseRawInventoryRecords,
-} from './lab-route';
+} from './lab-route-records';
 import { seedCommittedFillers } from './lab-test-roots';
 
 const here = dirname(fileURLToPath(import.meta.url));

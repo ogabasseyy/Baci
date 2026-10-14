@@ -207,9 +207,10 @@ export async function encodeRoleLadder({
         // snapshot path below never reaches the manifest.) Budgets
         // still bind incompatible sources and sources LARGER than the
         // floor — those keep the fatal. Equality rescues too: the
-        // never-larger contract holds at equal bytes (the delivery
-        // guard takes `rung.bytes <= source.bytes` as generated), and
-        // pass-through tiers are exempt from encoder budgets.
+        // never-larger contract holds at equal bytes, and the null
+        // quality marks the tier as carrying no encode, so the
+        // delivery guard disposes it as original-passthrough (never
+        // generated — generated tiers must carry encode quality).
         const passthroughCompatible =
           DELIVERY_GUARD.passthroughFormats.includes(source.format) &&
           source.format === format;

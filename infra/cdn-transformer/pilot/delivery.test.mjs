@@ -48,6 +48,20 @@ test('efficient AVIF source passes through when the rung is larger', () => {
   assert.equal(decided.requestedWidth, 768);
 });
 
+test('null-quality rescue marker disposes as passthrough at equal bytes', () => {
+  // The encoder's budget-floor rescue is the only null-quality
+  // producer: no encode happened, so byte equality must not classify
+  // the tier as generated — generated tiers must carry encode
+  // quality, and the manifest rejects the mismatch.
+  const decided = decideTierDelivery({
+    rung: rung({ bytes: AVIF_SOURCE.bytes, quality: null }),
+    source: AVIF_SOURCE,
+  });
+  assert.equal(decided.delivery, 'original-passthrough');
+  assert.equal(decided.bytes, AVIF_SOURCE.bytes);
+  assert.equal(decided.quality, null);
+});
+
 test('beneficial PNG rung keeps the generated derivative', () => {
   const decided = decideTierDelivery({
     rung: rung({

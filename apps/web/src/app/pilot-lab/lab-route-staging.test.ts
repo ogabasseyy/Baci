@@ -19,9 +19,11 @@ import {
   loadLabConfigAtStartup as getLabConfig,
   getLabConfig as getRequestLabConfig,
   initializeLabRuntime,
+} from './lab-route';
+import {
   parseRawAcceptances,
   parseRawInventoryRecords,
-} from './lab-route';
+} from './lab-route-records';
 import { seedCommittedFillers } from './lab-test-roots';
 
 const here = dirname(fileURLToPath(import.meta.url));

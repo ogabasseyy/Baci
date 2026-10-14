@@ -80,12 +80,31 @@ function assertRung(rung) {
 export function decideTierDelivery({ rung, source }) {
   assertRung(rung);
   assertNormalizedSource(source);
-  if (rung.bytes <= source.bytes) {
-    return { ...rung, delivery: 'generated' };
-  }
   const compatible =
     DELIVERY_GUARD.passthroughFormats.includes(source.format) &&
     source.format === rung.format;
+  // Rescue marker first: a null-quality rung carries no encode (the
+  // encoder's budget-floor rescue is the only producer, and it gates
+  // on compatibility), so it must dispose as original-passthrough —
+  // never generated. Byte order cannot decide it: the strict-smaller
+  // rescue exceeds the rung here by construction, but the EQUAL-size
+  // rescue would otherwise classify as generated and then fail
+  // manifest validation (generated tiers must carry encode quality).
+  if (rung.quality === null && compatible) {
+    return {
+      ...rung,
+      actualWidth: source.orientedWidth,
+      bytes: source.bytes,
+      delivery: 'original-passthrough',
+      height: source.orientedHeight,
+      quality: null,
+      sha256: source.sha256,
+      width: source.orientedWidth,
+    };
+  }
+  if (rung.bytes <= source.bytes) {
+    return { ...rung, delivery: 'generated' };
+  }
   if (!compatible) {
     return { ...rung, delivery: 'generated-over-source' };
   }

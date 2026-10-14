@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   resolvePilotPublicDir,
   resolveRoutePublicDir,
-} from './pilot-public-assets';
+} from './pilot-public-assets-roots';
 
 describe('resolvePilotPublicDir', () => {
   const argv1 = process.argv[1];

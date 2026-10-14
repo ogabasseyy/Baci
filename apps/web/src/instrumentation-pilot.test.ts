@@ -12,6 +12,8 @@ const resolvePilotPublicDirMock = vi.hoisted(() =>
 );
 vi.mock('@/config/pilot-public-assets', () => ({
   assertPilotPublicAssets: assertPilotPublicAssetsMock,
+}));
+vi.mock('@/config/pilot-public-assets-roots', () => ({
   resolvePilotPublicDir: resolvePilotPublicDirMock,
 }));
 vi.mock('@/app/pilot-lab/lab-route', () => ({

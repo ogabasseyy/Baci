@@ -11,7 +11,11 @@ on:
     # pilot-codec-check opt-in label could never request the suite on a
     # PR outside the list. Change detection lives in the changes job
     # instead, which every trigger reaches; jobs skip fast when neither
-    # the label nor pilot paths apply.
+    # the label nor pilot paths apply. Keep this workflow NON-REQUIRED:
+    # the changes job runs on every PR by design, and its fail-closed
+    # condition runs the suites whenever detection does not succeed —
+    # a required gate would turn unrelated PRs red/heavy on GitHub API
+    # failures rather than on their own changes.
 
 permissions:
   contents: read

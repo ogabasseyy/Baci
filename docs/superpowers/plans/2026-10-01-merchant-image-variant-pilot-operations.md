@@ -51,7 +51,9 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # staged merchant bytes serve as ordinary static files under
 # public/__pilot — originals at predictable
 # /__pilot/originals/<merchantId>-<assetId>.<ext> names — bypassing
-# every lab route gate, with no authentication. Any Vercel deployment
+# every lab route gate, with no authentication. Merchant IDs/slugs and
+# asset IDs are NOT secrets: anyone who guesses or learns them fetches
+# full-resolution originals, not just the operator. Any Vercel deployment
 # (production, preview, AND development) refuses the lab flag outright;
 # standalone/VPS production additionally requires
 # BACI_IMAGE_PILOT_ALLOW_PROD=1 as explicit acknowledgement. A shared
@@ -79,7 +81,11 @@ corepack pnpm exec next start -p 3122   # only after staging succeeds
 # hash-checked outside lab mode. To clear: re-run pilot:stage with the
 # intended inventory (reconcile removes unreferenced generations), or
 # delete public/__pilot/{originals,<64-hex-dirs>} outright on a box
-# that should never have staged.
+# that should never have staged. The refusal is intentional fail-closed
+# (staging is gitignored operator state, yet a leftover stage must never
+# silently ship merchant bytes): confirmed by pilot-next-gate.test.ts
+# 'refuses staged data in non-lab mode', which runs the real build-gate
+# path against a staged fixture with the lab off.
 
 # Final validation (Task 7)
 pnpm turbo lint

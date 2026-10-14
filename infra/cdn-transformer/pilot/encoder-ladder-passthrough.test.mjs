@@ -127,8 +127,9 @@ test('encodeRoleLadder rescues an equal-sized branch-compatible source', async (
   // rung rescues instead of throwing budget-floor-exceeded. Exact
   // equality is arranged by reporting the measured floor size as the
   // verified source size — the comparison under test sees only that
-  // integer, and the delivery guard then takes the equal rung as
-  // generated (rung.bytes <= source.bytes).
+  // integer. The null quality marks no encode, so the delivery guard
+  // disposes the equal rung as original-passthrough (generated tiers
+  // must carry encode quality, which would fail manifest validation).
   const input = join(await staging(), 'tiny-source.webp');
   await writeFile(
     input,
@@ -185,8 +186,9 @@ test('encodeRoleLadder rescues an equal-sized branch-compatible source', async (
   const routed = decided.find(
     (tier) => tier.requestedWidth === 384 && tier.format === 'webp'
   );
-  assert.equal(routed.delivery, 'generated');
+  assert.equal(routed.delivery, 'original-passthrough');
   assert.equal(routed.bytes, floor.output.bytes);
+  assert.equal(routed.quality, null);
 });
 
 test('encodeRoleLadder keeps the fatal for branch-incompatible rungs', async () => {

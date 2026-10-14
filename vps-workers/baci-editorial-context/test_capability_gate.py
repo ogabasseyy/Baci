@@ -209,5 +209,16 @@ class CapabilityGateTests(unittest.TestCase):
         self.assertFalse(gate.requires_register_update(fresh, None, base))
         self.assertFalse(gate.requires_register_update(None, unverified_change, base))
 
+    def test_newer_base_register_prefers_target_tip(self):
+        fork = {"reviewed_at": "2026-10-01T00:00:00+00:00", "source_revision": "a" * 40}
+        tip = {"reviewed_at": "2026-10-10T00:00:00+00:00", "source_revision": "b" * 40}
+        # A stale branch copying the target's newer metadata must baseline
+        # against the tip, not its own older fork point.
+        self.assertIs(gate.newer_base_register(tip, fork), tip)
+        self.assertIs(gate.newer_base_register(fork, tip), tip)
+        self.assertIs(gate.newer_base_register(tip, tip), tip)
+        self.assertIs(gate.newer_base_register(None, fork), fork)
+        self.assertIs(gate.newer_base_register("unreadable", fork), fork)
+
 if __name__ == "__main__":
     unittest.main()

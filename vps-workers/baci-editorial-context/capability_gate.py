@@ -37,6 +37,7 @@ map_cited_filenames = _paths.map_cited_filenames
 map_link_targets = _paths.map_link_targets
 relevant_paths = _paths.relevant_paths
 _comparison_base = _paths._comparison_base
+newer_base_register = _paths.newer_base_register
 _resolve_cited_filenames = _paths._resolve_cited_filenames
 _canon = _paths._canon
 _matches = _paths._matches
@@ -235,7 +236,15 @@ def main(cwd="."):
         if changed is None:
             print(f"capability gate: cannot compute the changed-path set for base {base[:12]}; refusing to run blind")
             return 1
-        base_register = _base_register(_comparison_base(base, cwd), cwd) if register is not None else None
+        # Baseline against the newer of the fork-point and target-tip
+        # registers: a stale branch copying the target's newer metadata must
+        # advance past it, not just past its own fork point.
+        fork_base = _comparison_base(base, cwd)
+        base_register = None
+        if register is not None:
+            fork_register = _base_register(fork_base, cwd)
+            tip_register = _base_register(base, cwd) if base != fork_base else None
+            base_register = newer_base_register(tip_register, fork_register)
         rev_ok = lambda new, old: _replacement_revision_ok(new, old, cwd)  # noqa: E731
         if requires_register_update(register, changed, base_register, rev_ok):
             print(

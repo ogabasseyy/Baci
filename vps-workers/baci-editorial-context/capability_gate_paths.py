@@ -17,7 +17,28 @@ ACTION_PATH = ".github/actions/capability-gate/action.yml"
 FRESHNESS_WORKFLOW = ".github/workflows/capability-register-freshness.yml"
 CONTRACT_WORKFLOW = ".github/workflows/capability-gate-contract.yml"
 CONTRACT_CHECK = ".github/scripts/capability_gate_contract_check.py"
-CONTRACT_TEXT_CHECKS = ".github/scripts/capability_gate_contract_text_checks.py"
+CONTRACT_CI_CHECKS = ".github/scripts/capability_gate_contract_ci_checks.py"
+CONTRACT_WORKFLOW_CHECKS = ".github/scripts/capability_gate_contract_workflow_checks.py"
+
+def newer_base_register(tip_register, fork_register):
+    """Baseline for review advancement: the target-tip register when it is
+    strictly newer, else the fork-point register.
+
+    A stale branch can copy the target's newer metadata; comparing only
+    against the fork point would accept another change's review. Comparing
+    against the newer of the two keeps fork-point behavior for current
+    branches (tip and fork identical) while blocking inherited reviews.
+    Anything unreadable falls back to the fork register.
+    """
+    try:
+        tip_date = tip_register.get("reviewed_at", "")
+        fork_date = (fork_register or {}).get("reviewed_at", "")
+    except AttributeError:
+        return fork_register
+    if isinstance(tip_date, str) and isinstance(fork_date, str) and tip_date > fork_date:
+        return tip_register
+    return fork_register
+
 
 def map_cited_paths(text):
     paths = set()
@@ -228,7 +249,7 @@ def relevant_paths(register, cwd=".", base=None):
     # The enforcement layer itself (suite code, the composite action that
     # invokes it, and the scheduled workflow that asserts it) is always
     # relevant: a change confined to those files must still run the suite.
-    paths = {REGISTER_PATH, MAP_PATH, ACTION_PATH, FRESHNESS_WORKFLOW, CONTRACT_WORKFLOW, CONTRACT_CHECK, CONTRACT_TEXT_CHECKS}
+    paths = {REGISTER_PATH, MAP_PATH, ACTION_PATH, FRESHNESS_WORKFLOW, CONTRACT_WORKFLOW, CONTRACT_CHECK, CONTRACT_CI_CHECKS, CONTRACT_WORKFLOW_CHECKS}
     try:
         paths |= {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
     except (KeyError, TypeError, AttributeError):

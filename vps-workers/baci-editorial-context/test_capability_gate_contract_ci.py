@@ -116,6 +116,17 @@ jobs:
         self.assertTrue(failures)
         self.assertIn("paths-ignore", failures[0])
 
+    def test_ordered_negative_branch_excludes_main(self):
+        # GitHub evaluates branch patterns in order: a later !main excludes
+        # main even after an earlier * match, so any-positive matching
+        # would wrongly pass this silenced gate.
+        ci = CI.replace(
+            "  pull_request:\n", "  pull_request:\n    branches: ['*', '!main']\n", 1
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("main", failures[0])
+
     def test_types_narrowing_fails(self):
         # types: [opened] drops synchronize updates — the PR pushes most
         # likely to touch cited sources after initial review.

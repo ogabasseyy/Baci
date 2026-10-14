@@ -31,6 +31,11 @@ PINNED_CHECKER_SHA256 env in the same change (a self-hash is a fixed point,
 so the baseline lives in the base-owned workflow, which passes it as
 argv[1]). Run from the repo root: the tree under test is the working
 directory, never the script's own location.
+Bootstrap note: the guard cannot run base-owned on the PR that introduces
+it (the base lacks the workflow), so that PR's pins were verified manually
+— the committed self-consistency test plus direct and archive-extraction
+runs, with evidence quoted in review — and the push leg attested the merge.
+Every later PR is guarded base-owned from merge on.
 """
 import ast
 import hashlib
@@ -39,33 +44,33 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from capability_gate_contract_text_checks import (
+from capability_gate_contract_ci_checks import (
     CHECKER,
     CI_YML,
     SUITE_DIR,
     WORKFLOW,
     ci_failures,
-    workflow_failures,
 )
+from capability_gate_contract_workflow_checks import workflow_failures
 
 BASE_PINS = {
-    ".github/scripts/capability_gate_contract_text_checks.py": "5f8f52fcb2cc7a88829aad4b357c62754a6edd50e5e3fec23b35c0a77127825e",
-    ".github/workflows/capability-register-freshness.yml": "55389404e8391ffeecffe9a31654c07064890374c8faa3a7d4917caea27e7204",
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
-    # The workflow itself is asserted structurally (workflow_failures), not
-    # pinned: it carries PINNED_CHECKER_SHA256, so a hash pin here would
-    # deadlock against checker edits the same way a self-pin would.
-    "vps-workers/baci-editorial-context/capability_gate.py": "6e7d2ed34f03d0afe610907c95e21a836e17cb6203be9a78585140bbe7b29555",
-    "vps-workers/baci-editorial-context/capability_gate_paths.py": "5e13033d55a5cf186d181c77146f2cb97791957e743abf0d65b793b29d9878fd",
+    # No self-pin: a self-hash is a fixed point. The checker's own baseline
+    # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
+    ".github/scripts/capability_gate_contract_ci_checks.py": "449faeabfa95e4eb281c367a25cd312b7f758349ee15212737a1ba0eeca0b4ce",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "094829abdef05eee3fe0cad015cae60c89c6c7c776d5ae02e842155f5c3afd44",
+    ".github/workflows/capability-register-freshness.yml": "55389404e8391ffeecffe9a31654c07064890374c8faa3a7d4917caea27e7204",
+    "vps-workers/baci-editorial-context/capability_gate.py": "1f9ace1d783ed9022114800f4f14abfb79ab57487ae0ed382797c365fb836083",
+    "vps-workers/baci-editorial-context/capability_gate_paths.py": "f5f8e13fe3de62b4f47864d281b2b2257c8157f1163526cdcafbb033f073c405",
     "vps-workers/baci-editorial-context/register_digests.py": "aae14e6e045e67fd2331e8ca5afd15926b96291bcb5408a2c2d2e41e07ce8767",
     "vps-workers/baci-editorial-context/platform_capabilities.py": "113a575d81f4af2e61182db47b2489d9a4ca0137d6457e76c6522a38a6ce394a",
     "vps-workers/baci-editorial-context/register_status.py": "6b3b6e87392da5662c31029db144bc86a08d4ae6e50481bb5a4a67c68621219a",
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
-    "vps-workers/baci-editorial-context/test_capability_gate.py": "232875d07d540508d8255fb567c8f1b66a1f7fc66c23ef3ff40061a47c299619",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "cd81b50a8b2dc11272aadd25ffc3888b04b46aee7b0d40bc020a2d5efe1acafa",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "989be656fe1cd782b7c318c097cd10a491ed7278136ccab55c2db11cdf54e678",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "90f11e3b518ad87680cb4b26965553da609b29321bff4d3cef7c50fa25ecc447",
+    "vps-workers/baci-editorial-context/test_capability_gate.py": "41ebaf3f0f6ff5cf6e76d20fad10527b25b2e76837f4c0939224f92e735790bf",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "0220743f21e4cfe4491fe5b1bc7dae315a034304efb6c54e14ce67fe6ccfcce8",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "95507d83503745681a9a32998317b1bce39b134f7bf5068fe3d37e58f0baa7d5",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "14fd985f345e11a91756685182454d44c6d765b55d2864b080d705f05a2433fa",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
     "vps-workers/baci-editorial-context/test_capability_register_binding.py": "243fab8b2e83d618e74226f7f3d88e3397740846ced58d3efcfd0993d3421c79",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",

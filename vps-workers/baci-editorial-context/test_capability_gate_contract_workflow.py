@@ -31,7 +31,7 @@ class ContractWorkflowTests(unittest.TestCase):
         text = _workflow_text()
         self.assertEqual(check.workflow_failures(text), [])
         dropped = text.replace(
-            "            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_text_checks.py | tar -x -C /tmp/cg-check\n", ""
+            "            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py | tar -x -C /tmp/cg-check\n", ""
         )
         self.assertNotEqual(dropped, text)
         self.assertTrue(check.workflow_failures(dropped))
@@ -116,7 +116,7 @@ class ContractWorkflowTests(unittest.TestCase):
         self.assertNotEqual(disabled, text)
         failures = check.workflow_failures(disabled)
         self.assertTrue(failures)
-        self.assertIn("unconditional", failures[0])
+        self.assertIn("safe event", failures[0])
 
     def test_narrowed_contract_trigger_fails(self):
         text = _workflow_text()
@@ -129,6 +129,84 @@ class ContractWorkflowTests(unittest.TestCase):
         failures = check.workflow_failures(narrowed)
         self.assertTrue(failures)
         self.assertIn("full pull_request_target types", failures[0])
+
+    def test_misplaced_head_ref_fails(self):
+        # The required ref text kept under the checkout step's env while
+        # with.ref points at the base would validate the base tree.
+        text = _workflow_text()
+        decoy = text.replace(
+            "          ref: ${{ github.event.pull_request.head.sha }}\n",
+            "          ref: ${{ github.event.pull_request.base.sha }}\n",
+            1,
+        )
+        decoy = decoy.replace(
+            "          persist-credentials: false\n",
+            "          persist-credentials: false\n        env:\n          ref: ${{ github.event.pull_request.head.sha }}\n",
+            1,
+        )
+        failures = check.workflow_failures(decoy)
+        self.assertTrue(failures)
+        self.assertIn("pinned data-only checkout", failures[0])
+
+    def test_step_scoped_pin_fails(self):
+        # Step env never reaches the sibling run step: the baseline would
+        # arrive empty and any later checker change would self-declare.
+        text = _workflow_text()
+        moved = text.replace(
+            "  PINNED_CHECKER_SHA256:", "  # PINNED_CHECKER_SHA256:", 1
+        )
+        moved = moved.replace(
+            "          persist-credentials: false\n",
+            "          persist-credentials: false\n        env:\n          PINNED_CHECKER_SHA256: 0\n",
+            1,
+        )
+        self.assertNotEqual(moved, text)
+        failures = check.workflow_failures(moved)
+        self.assertTrue(failures)
+        self.assertIn("where it propagates", failures[0])
+
+    def test_replaced_first_step_fails(self):
+        text = _workflow_text()
+        swapped = text.replace(
+            "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n",
+            "      - uses: evil/action@v1\n",
+            1,
+        )
+        failures = check.workflow_failures(swapped)
+        self.assertTrue(failures)
+        self.assertIn("pinned data-only checkout", failures[0])
+
+    def test_permissions_decoy_fails(self):
+        text = _workflow_text()
+        deceptive = text.replace(
+            "  contents: read\n",
+            "  contents: read\n  write-all: true\n",
+            1,
+        )
+        failures = check.workflow_failures(deceptive)
+        self.assertTrue(failures)
+        self.assertIn("exactly read-only", failures[0])
+
+    def test_extra_job_fails(self):
+        text = _workflow_text()
+        evil = text + (
+            "\n  evil-job:\n    runs-on: ubuntu-24.04\n"
+            "    steps:\n      - uses: evil/action@v1\n"
+        )
+        failures = check.workflow_failures(evil)
+        self.assertTrue(failures)
+        self.assertIn("exactly its guard jobs", failures[0])
+
+    def test_swapped_job_conditions_fail(self):
+        text = _workflow_text()
+        swapped = text.replace(
+            "    if: github.event_name == 'pull_request_target'\n",
+            "    if: github.event_name == 'push'\n",
+            1,
+        )
+        failures = check.workflow_failures(swapped)
+        self.assertTrue(failures)
+        self.assertIn("safe event", failures[0])
 
     def test_inline_run_step_fails(self):
         text = _workflow_text()

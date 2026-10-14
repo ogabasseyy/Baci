@@ -13,7 +13,6 @@ describe('vtu-retry-identity', () => {
       'amount',
       'billItemIdentifier',
       'billerCode',
-      'billerName',
       'customerIdentifier',
       'dataPlanCode',
       'networkProvider',
@@ -38,7 +37,6 @@ describe('vtu-retry-identity', () => {
       amount: 500,
       billItemIdentifier: null,
       billerCode: null,
-      billerName: null,
       customerIdentifier: null,
       dataPlanCode: null,
       networkProvider: null,
@@ -91,12 +89,10 @@ describe('vtu-retry-identity', () => {
   it('trims other string fields and passes non-strings through', () => {
     const canonical = canonicalizeVtuRetryIdentity({
       amount: 500,
-      billerName: ' Ikeja Electric ',
       customerIdentifier: ' 123456 ',
       requireValidationRef: true,
       walletAmount: 0,
     });
-    expect(canonical.billerName).toBe('Ikeja Electric');
     expect(canonical.customerIdentifier).toBe('123456');
     expect(canonical.requireValidationRef).toBe(true);
     expect(canonical.walletAmount).toBe(0);
@@ -106,6 +102,7 @@ describe('vtu-retry-identity', () => {
   it('drops non-identity fields (ephemeral refs, receipt metadata, bindings)', () => {
     const canonical = canonicalizeVtuRetryIdentity({
       amount: 500,
+      billerName: 'Ikeja Electric',
       validationReference: 'VAL-1',
       customerAddress: '1 Test St',
       customerName: 'Test',
@@ -114,6 +111,28 @@ describe('vtu-retry-identity', () => {
       expectedUserId: 'user-1',
     });
 
+    // Codex R90 P2: a catalog relabel between attempts must not
+    // split the retry into a fresh key (double debit).
+    expect(canonical).not.toHaveProperty('billerName');
+    expect(
+      canonicalizeVtuRetryIdentity({
+        amount: 1000,
+        billerCode: 'IKEDC',
+        billerName: 'Ikeja Electric',
+        customerIdentifier: '43901766923',
+        productCode: 'IKEDC-PRE',
+        type: 'electricity',
+      })
+    ).toEqual(
+      canonicalizeVtuRetryIdentity({
+        amount: 1000,
+        billerCode: 'IKEDC',
+        billerName: 'Ikeja Electric Distribution Co.',
+        customerIdentifier: '43901766923',
+        productCode: 'IKEDC-PRE',
+        type: 'electricity',
+      })
+    );
     expect(canonical).not.toHaveProperty('validationReference');
     expect(canonical).not.toHaveProperty('customerAddress');
     expect(canonical).not.toHaveProperty('customerName');

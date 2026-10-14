@@ -16,13 +16,17 @@
  * `merchantSlug` (hydration drift between attempts must not split
  * retries — and the provider contact phone reaches retries via the
  * server-side current-attempt overlay, not the key). `expectedUserId`
- * is a binding, never identity.
+ * is a binding, never identity. Display-only `billerName` is out
+ * (Codex R90 P2): the stable `billerCode`/`productCode`/
+ * `billItemIdentifier` already pin the vend target, while the label
+ * can be reworded by a catalog refresh between attempts — a changed
+ * descriptor would discard the retained key and (fresh key = fresh
+ * debit, no fingerprint-dedupe) vend twice.
  */
 export const VTU_RETRY_IDENTITY_FIELDS = [
   'amount',
   'billItemIdentifier',
   'billerCode',
-  'billerName',
   'customerIdentifier',
   'dataPlanCode',
   'networkProvider',

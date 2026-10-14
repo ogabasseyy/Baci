@@ -21,6 +21,7 @@ import {
 export { resolveVtuCustomer };
 
 import { calculateCommerce } from '@/lib/supabase/client';
+import { MONNIFY_VALIDATION_FAILED_MESSAGE } from '@/lib/vtu-checkout-error-classifier';
 import { resolveVtuProvider } from '@/lib/vtu-commission-rates';
 import { buildVtuSubmissionMarkerEraMetadata } from '@/lib/vtu-flagged-recovery';
 import { resolveVtuMerchant } from '@/lib/vtu-merchant-lookup';
@@ -211,7 +212,9 @@ async function validateMonnifyBillPaymentBeforeCharge({
   );
 
   if (!verification.verified) {
-    throw new Error(`Monnify validation failed: ${verification.message}`);
+    // Fixed copy only: verification.message is the provider body and
+    // must never reach the response (Codex R90 P1).
+    throw new Error(MONNIFY_VALIDATION_FAILED_MESSAGE);
   }
 
   if (verification.requireValidationRef && !verification.validationReference) {
@@ -309,7 +312,9 @@ async function resolveMonnifyAirtimeCheckoutFields({
   );
 
   if (!verification.verified) {
-    throw new Error(`Monnify validation failed: ${verification.message}`);
+    // Fixed copy only: verification.message is the provider body and
+    // must never reach the response (Codex R90 P1).
+    throw new Error(MONNIFY_VALIDATION_FAILED_MESSAGE);
   }
 
   if (verification.requireValidationRef && !verification.validationReference) {

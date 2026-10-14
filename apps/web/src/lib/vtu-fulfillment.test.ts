@@ -1955,12 +1955,15 @@ describe('fulfillPendingVtuTransaction', () => {
   });
 
   it('throws when the purchase result cannot be persisted', async () => {
+    // Codex R90 P1: the persist-failure log must not carry the
+    // provider body — tx id + provider reference only.
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     mockPurchaseAirtime.mockResolvedValue({
-      success: true,
-      message: 'ok',
+      success: false,
+      message: 'Provider exploded: meter 9988776655 (k99)',
       transactionId: 'kuda-1',
       amount: 1000,
-      status: 'successful',
+      status: 'failed',
     });
 
     const supabase = createPendingTransactionSupabaseMock({
@@ -1994,6 +1997,14 @@ describe('fulfillPendingVtuTransaction', () => {
         transactionId: 'vtu-1',
       })
     ).rejects.toThrow('Failed to persist VTU purchase result');
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Failed to persist VTU purchase result:',
+      expect.not.objectContaining({
+        errorMessage: expect.stringContaining('9988776655'),
+      })
+    );
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('9988776655');
+    errorSpy.mockRestore();
   });
 
   it('retries provider result persistence when the first update fails', async () => {

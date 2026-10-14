@@ -2803,8 +2803,11 @@ export async function fulfillPendingVtuTransaction({
     }
 
     if (processingUpdateError) {
+      // No errorMessage field: the payload message is the provider
+      // body and must never enter logs (Codex R90 P1, same class as
+      // the overlay refresh warn). Tx id + provider reference below
+      // are the correlation keys.
       console.error('Failed to persist processing VTU purchase result:', {
-        errorMessage: processingUpdatePayload.error_message,
         error: getErrorMessage(processingUpdateError),
         metadata: getSafeMetadataDiagnostics(updatedMetadata),
         status: processingUpdatePayload.status,
@@ -2863,9 +2866,9 @@ export async function fulfillPendingVtuTransaction({
   }
 
   if (purchaseUpdateError) {
+    // No errorMessage field: same provider-body log ban as above.
     console.error('Failed to persist VTU purchase result:', {
       attempts: PURCHASE_RESULT_UPDATE_MAX_ATTEMPTS,
-      errorMessage: purchaseUpdatePayload.error_message,
       error: getErrorMessage(purchaseUpdateError),
       metadata: getSafeMetadataDiagnostics(updatedMetadata),
       persistenceRetryExhausted: true,

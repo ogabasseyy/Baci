@@ -171,19 +171,23 @@ async function tryRefreshServerValidationReference(
       customerIdentifier
     );
     if (!verification.verified || !verification.validationReference) {
+      // Fixed classification only: verification.message is the
+      // provider body and must never enter logs (Codex R90 P1).
       console.warn(
         'VTU replay reference refresh failed; reusing stored reference:',
-        { transactionId, message: verification.message }
+        { transactionId, reason: 'provider-validation-unverified' }
       );
       return undefined;
     }
     return verification.validationReference;
-  } catch (error) {
+  } catch {
+    // Fixed classification only: the thrown message can carry the
+    // provider body (HTTP/parse errors), which must never enter logs.
     console.warn(
       'VTU replay reference refresh errored; reusing stored reference:',
       {
         transactionId,
-        message: error instanceof Error ? error.message : String(error),
+        reason: 'provider-validation-refresh-error',
       }
     );
     return undefined;

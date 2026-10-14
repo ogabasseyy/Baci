@@ -1419,7 +1419,9 @@ describe('preparePendingVtuTransaction', () => {
             >[0]['input'],
             source: 'checkout',
           })
-        ).rejects.toThrow('Monnify validation failed: Invalid phone number');
+        ).rejects.toThrow(
+          'Monnify validation failed. Please verify the details and try again.'
+        );
       });
     });
   });

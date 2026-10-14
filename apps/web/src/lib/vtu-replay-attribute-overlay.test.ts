@@ -164,6 +164,51 @@ describe('overlayReplayAttributes', () => {
     ]);
   });
 
+  it('logs a fixed classification (never the provider body) when refresh fails', async () => {
+    // Codex R90 P1: verification.message is the provider body and
+    // must never enter logs; the warn carries only the fixed
+    // classification and the transaction id.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockVerifyBillCustomer.mockResolvedValue({
+      verified: false,
+      validationReference: null,
+      message: 'Provider said no: meter 1122334455 blocked (k77)',
+    });
+    const result = await overlayReplayAttributes({
+      supabase: buildSupabase(calls, monnifyRow()),
+      transactionId: 'vtu-tx-1',
+      customerPhone: undefined,
+      validationReference: undefined,
+    });
+    expect(result).toEqual({ updated: false, refreshed: false });
+    expect(warn).toHaveBeenCalledWith(
+      'VTU replay reference refresh failed; reusing stored reference:',
+      { transactionId: 'vtu-tx-1', reason: 'provider-validation-unverified' }
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('1122334455');
+    warn.mockRestore();
+  });
+
+  it('logs a fixed classification when refresh throws', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockVerifyBillCustomer.mockRejectedValue(
+      new Error('socket hangup: <html>provider gateway</html>')
+    );
+    const result = await overlayReplayAttributes({
+      supabase: buildSupabase(calls, monnifyRow()),
+      transactionId: 'vtu-tx-1',
+      customerPhone: undefined,
+      validationReference: undefined,
+    });
+    expect(result).toEqual({ updated: false, refreshed: false });
+    expect(warn).toHaveBeenCalledWith(
+      'VTU replay reference refresh errored; reusing stored reference:',
+      { transactionId: 'vtu-tx-1', reason: 'provider-validation-refresh-error' }
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('provider gateway');
+    warn.mockRestore();
+  });
+
   it('combines a request phone with a server-refreshed reference in one RPC', async () => {
     mockVerifyBillCustomer.mockResolvedValue({
       verified: true,

@@ -58,6 +58,18 @@ while IFS= read -r t; do
   fi
 done <<< "$trusted"
 
+# The loud signal must stay loud: pin the tripwire's failing exit
+# and the SAST job's advisory env. A PR that keeps the path lists
+# identical while neutering either must fail here.
+if ! grep -q 'exit 1' "$TRIP"; then
+  echo "::error::tripwire job no longer fails; the loud signal is neutered"
+  fail=1
+fi
+if ! grep -q "TRUSTED_CHANGE_ADVISORY: 'true'" "$SEC"; then
+  echo "::error::Semgrep SAST job lost TRUSTED_CHANGE_ADVISORY=true"
+  fail=1
+fi
+
 if [[ "$fail" -eq 0 ]]; then
   echo "trusted-set sync: OK ($(echo "$trusted" | wc -l) patterns, all covered)"
 fi

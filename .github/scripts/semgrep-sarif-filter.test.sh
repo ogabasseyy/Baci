@@ -162,6 +162,8 @@ t trusted-advisory-plus-drift 1 "pr-controlled-checkout-count" happy.sarif "$S${
 # --- advisory + removed checkout (hardening audits still run) ---
 t removed-checkout-trusted 1 "needs human review" happy.sarif "rm:$S" "" "true"
 t trusted-advisory-ref-removed 0 "advisory mode" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}d" "" "true" "true"
+t trusted-advisory-step-removed 0 "advisory mode" happy.sarif "$S${FS}name: Checkout repository${FS}d${RS}$S${FS}1:if: steps.prereq.outputs.should_run == 'true'${FS}d${RS}$S${FS}1:uses: actions/checkout@${FS}d${RS}$S${FS}1:with:${FS}d${RS}$S${FS}1:persist-credentials: false${FS}d${RS}$S${FS}Check out the PR head${FS}d${RS}$S${FS}working tree. PR code is only read${FS}d${RS}$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}d${RS}$S${FS}1:fetch-depth: 1${FS}d" "" "true" "true"
+t trusted-advisory-deleted-evil-helper 1 "helper-untrusted-exec" happy.sarif "rm:$S${RS}$H${FS}set -euo pipefail${FS}a${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"" "" "true" "true"
 t trusted-advisory-removed 0 "advisory mode" happy.sarif "rm:$S" "" "true" "true"
 t trusted-advisory-removed-flow 1 "pr-ref-unresolved" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}r${FS}\${{ github.event.pull_request.head.sha }}${FS}\${{ env.NOPE }}" "" "true" "true"
 t trusted-advisory-removed-evil-helper 1 "helper-untrusted-exec" happy.sarif "$S${FS}ref: \${{ github.event.pull_request.head.sha }}${FS}d${RS}$H${FS}set -euo pipefail${FS}a${FS}bash \"\${GITHUB_WORKSPACE}/evil.sh\"" "" "true" "true"

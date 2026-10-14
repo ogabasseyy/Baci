@@ -55,12 +55,12 @@ def main():
         return [d for d in drift
                 if not (advisory and d == "trusted-tree-changed")]
 
-    def run_hardening_audits(include_checkout_count=True):
-        # The no-checkout advisory path skips the count audit: a
-        # count of zero there is the benign removal being
+    def run_hardening_audits(no_checkout=False):
+        # The no-checkout advisory path skips the two checkout-count
+        # assertions: a zero count there is the benign removal being
         # downgraded, not hardening drift. Everything else still
         # runs, so helper/runner weakening cannot smuggle past.
-        if include_checkout_count:
+        if not no_checkout:
             audit_pr_checkout(ctx, drift)
         audit_trusted_checkout(ctx, drift)
         audit_resolver(ctx, drift)
@@ -69,10 +69,18 @@ def main():
         audit_container_image(ctx, drift)
         audit_invocations(ctx, drift)
         audit_script_dir(ctx, drift)
-        audit_run_hygiene(ctx, drift)
+        audit_run_hygiene(ctx, drift, expect_checkout_uses=not no_checkout)
         audit_reviewer_env_block(ctx.workflow_lines, drift)
         audit_step_commands(ctx, drift)
         audit_agent_env(ctx, drift)
+        audit_agent_runner(drift)
+        audit_installer(drift)
+        audit_helpers(ctx, drift)
+
+    def run_file_audits():
+        # Workflow-independent audits: safe when the audited
+        # workflow itself is gone, so a deletion bundled with
+        # helper/runner weakening still fails.
         audit_agent_runner(drift)
         audit_installer(drift)
         audit_helpers(ctx, drift)
@@ -114,12 +122,14 @@ def main():
         if drift:
             # Advisory early return: a checkout removal must not
             # smuggle helper/runner weakening past, so the
-            # hardening audits still run before downgrading —
-            # unless the workflow itself is gone, in which case
-            # there is no reachable workflow/helper system left
-            # to audit (a restore PR re-audits).
+            # hardening audits still run before downgrading. When
+            # the workflow itself is gone, only the
+            # workflow-independent file audits run (a deletion
+            # bundled with helper weakening must still fail).
             if ctx.workflow_lines:
-                run_hardening_audits(include_checkout_count=False)
+                run_hardening_audits(no_checkout=True)
+            else:
+                run_file_audits()
             if fatal():
                 print("::error::No PR-controlled checkout left in "
                       + AUDITED_PATH + " but hardening drift was "

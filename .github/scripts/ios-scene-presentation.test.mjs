@@ -20,7 +20,7 @@ function declaration(source, marker) {
   assert.fail(`Unclosed declaration: ${marker}`);
 }
 
-const helper = () => declaration(native('expo-modules-core', 'Utilities/Utilities.swift'), 'public static func keyWindow()');
+const helper = () => declaration(native('expo-modules-core', 'Utilities/Utilities.swift'), 'nonisolated public static func keyWindow()');
 
 test('scene-aware presenters retain legacy windows only when no scene exists', { skip: process.platform !== 'darwin' }, () => {
   const folder = mkdtempSync(join(tmpdir(), 'baci-window-fallback-'));
@@ -37,7 +37,7 @@ test('scene-aware presenters retain legacy windows only when no scene exists', {
   static var selected: UIWindow?
   static func keyWindow() -> UIWindow? { selected }
 }
-struct Utilities { @MainActor ${body} }
+struct Utilities { ${body} }
 let legacy = UIWindow()
 legacy.isKeyWindow = true
 UIApplication.shared.windows = [UIWindow(), legacy]
@@ -68,7 +68,9 @@ test('installed window helper and auth anchors compile against the actual iOS SD
     writeFileSync(join(folder, 'presenters.swift'), `import UIKit
 import AuthenticationServices
 ${scene}
-public struct Utilities { @MainActor ${helper()} }
+public struct Utilities { ${helper()} }
+// ExpoPrint's main-queue callbacks have synchronous, nonisolated signatures.
+func synchronousPrintWindowLookup() -> UIWindow? { Utilities.keyWindow() }
 @MainActor final class AppleAnchorProbe: NSObject, ASAuthorizationControllerPresentationContextProviding { ${apple} }
 ${web}
 `);

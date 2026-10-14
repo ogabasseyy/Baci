@@ -44,24 +44,26 @@ diff --git a/ios/Core/Events/EventEmitter.swift b/ios/Core/Events/EventEmitter.s
 diff --git a/ios/Utilities/Utilities.swift b/ios/Utilities/Utilities.swift
 --- a/ios/Utilities/Utilities.swift
 +++ b/ios/Utilities/Utilities.swift
-@@ -138,10 +138,26 @@
+@@ -138,10 +138,28 @@
      return convertToUrl(string: string)
    }
  
 +  /** Resolve presentation from the active scene, retaining legacy app windows. */
-+  @MainActor
-+  public static func keyWindow() -> UIWindow? {
++  nonisolated public static func keyWindow() -> UIWindow? {
++    // Presentation consumers run on the main queue, matching currentViewController.
++    return MainActor.assumeIsolated {
 +#if os(iOS) || os(tvOS)
-+    if let window = SceneGeometry.keyWindow() {
-+      return window
-+    }
-+    // mobile-admin still uses the app-delegate lifecycle on Xcode 26.
-+    // Only use legacy windows when no scene exists; never cross into another scene.
-+    guard UIApplication.shared.connectedScenes.isEmpty else { return nil }
-+    return UIApplication.shared.windows.first { $0.isKeyWindow }
++      if let window = SceneGeometry.keyWindow() {
++        return window
++      }
++      // mobile-admin still uses the app-delegate lifecycle on Xcode 26.
++      // Only use legacy windows when no scene exists; never cross into another scene.
++      guard UIApplication.shared.connectedScenes.isEmpty else { return nil }
++      return UIApplication.shared.windows.first { $0.isKeyWindow }
 +#elseif os(macOS)
-+    return NSApplication.shared.keyWindow
++      return NSApplication.shared.keyWindow
 +#endif
++    }
 +  }
 +
    nonisolated public func currentViewController() -> UIViewController? {

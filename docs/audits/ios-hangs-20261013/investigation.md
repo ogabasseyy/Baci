@@ -235,3 +235,18 @@ typechecks the installed SceneGeometry/helper/auth anchors against the real iOS
 SDK. Both run in the macOS PR/release gates. The dependency evidence JSON now
 has one consistent package/version record per package, including JSI's 88
 verified source files.
+
+The admin source build caught an actor-isolation mismatch between the new
+window helper and Print's synchronous callbacks. Print's module dispatches
+these callbacks on the main queue. The helper now uses the same nonisolated
+`MainActor.assumeIsolated` bridge as Expo's existing `currentViewController`,
+and the real-SDK regression compiles a synchronous nonisolated window lookup
+to cover this exact failure.
+
+Both admin and storefront source builds then succeeded against Xcode 27's iOS
+simulator SDK. The storefront build exceeded the MCP response limit but its
+owned Xcode process completed with `BUILD SUCCEEDED`. These are compile checks;
+the admin app's legacy lifecycle is not claimed to launch when linked to SDK 27.
+All ten lint/typecheck tasks, the two installed-Swift regressions, eleven scene
+and gradient source/config checks, nine native patch contracts and the native
+gradient composition probe passed after this correction.

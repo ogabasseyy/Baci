@@ -175,4 +175,61 @@ describe('PostHog remediation candidate enrichment', () => {
       /PostHog error-tracking issue response was invalid JSON/
     );
   });
+
+  // Provider-shaped fixture: mirrors ErrorTrackingIssueDetailSerializer in
+  // posthog/api/error_tracking/error_tracking_serializers.py — the detail
+  // response extends the list item with function, top_in_app_frame,
+  // latest_release, impact, sparkline, and breakdown. Enrichment reads only
+  // the frame coordinate and release version and ignores the rest.
+  it('reads a full provider-shaped issue detail without copying extra fields', async () => {
+    const enriched = await enrichDetail({
+      id: '01961f15-9db7-4b9c-9c1a-51e2b823a003',
+      name: "TypeError: Cannot read properties of null (reading 'id')",
+      description: 'full description stays provider-side',
+      status: 'active',
+      severity: 'high',
+      first_seen: '2026-08-04T15:45:25Z',
+      last_seen: '2026-08-04T15:46:50Z',
+      library: 'posthog-js',
+      source: 'checkout.js',
+      assignee: { id: '7', type: 'user' },
+      aggregations: { occurrences: 12, users: 5, sessions: 9 },
+      function: 'handleCheckout',
+      top_in_app_frame: {
+        function: 'handleCheckout',
+        source: 'apps/web/checkout.py',
+        line: 42,
+        column: 7,
+        in_app: true,
+      },
+      latest_release: {
+        version: '2026.10.1',
+        project: 'baci-web',
+        timestamp: '2026-10-01T00:00:00Z',
+        commit_id: 'd34db33fd34db33fd34db33fd34db33fd34db33f',
+        branch: 'main',
+        repo_name: 'baci',
+      },
+      impact: { occurrences: 12, users: 5, sessions: 9 },
+      sparkline: [1, 4, 7],
+      breakdown: {
+        date_from: '2026-08-01T00:00:00Z',
+        date_to: '2026-08-04T00:00:00Z',
+        range_limited: false,
+        occurrences: 12,
+        sample_session_ids: ['session-1'],
+        top_values: { path: [{ value: '/checkout', count: 9 }] },
+      },
+      future_provider_field: 'ignore-me',
+    });
+
+    assert.equal(enriched.sample.route, 'apps/web/checkout.py:42');
+    assert.equal(enriched.sample.release, '2026.10.1');
+    assert.equal(enriched.sample.message, 'TypeError');
+    const serialized = JSON.stringify(enriched);
+    assert.equal(serialized.includes('ignore-me'), false);
+    assert.equal(serialized.includes('session-1'), false);
+    assert.equal(serialized.includes('d34db33f'), false);
+    assert.equal(serialized.includes('full description'), false);
+  });
 });

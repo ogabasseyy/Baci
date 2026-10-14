@@ -31,7 +31,18 @@ def _valid_row(row):
     if row.get("status") not in _ROW_STATUSES:
         return False
     refs = row.get("source_refs")
-    return isinstance(refs, list) and bool(refs) and all(isinstance(ref, str) and ref.strip() for ref in refs)
+    if not isinstance(refs, list) or not refs or len(set(refs)) != len(refs):
+        return False
+    if any(not isinstance(ref, str) or not ref.strip() for ref in refs):
+        return False
+    # Mirror the runtime: production_verified rows must carry evidence.
+    if row["status"] == "production_verified":
+        evidence = row.get("production_evidence")
+        if not isinstance(evidence, dict):
+            return False
+        if any(not isinstance(evidence.get(key), str) or not evidence[key].strip() for key in ("workflow", "entitlement", "observation")):
+            return False
+    return True
 
 
 def classify(register_path):
@@ -51,6 +62,7 @@ def classify(register_path):
             or not isinstance(data.get("capabilities"), list)
             or not 1 <= len(data["capabilities"]) <= 50
             or not all(_valid_row(row) for row in data["capabilities"])
+            or len({row["id"] for row in data["capabilities"]}) != len(data["capabilities"])
         ):
             return "broken"
         age = dt.datetime.now(dt.timezone.utc) - _moment(data["reviewed_at"])

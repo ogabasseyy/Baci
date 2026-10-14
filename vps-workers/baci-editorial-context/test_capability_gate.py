@@ -135,6 +135,36 @@ class CapabilityGateTests(unittest.TestCase):
             self.assertFalse(gate.should_run(None, citing, changed, cwd=str(repo)),
                              "head-only resolution must not see the deleted path")
 
+    def test_main_fails_when_changed_set_unknowable(self):
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        register = {"reviewed_at": now, "capabilities": [
+            {"status": "unverified", "source_refs": ["apps/web/src/app/(platform)/pricing/page.tsx"]},
+        ]}
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+            (repo / "docs/product").mkdir(parents=True)
+            (repo / "docs/product/baci-capabilities.json").write_text(json.dumps(register))
+            previous = os.getcwd()
+            os.chdir(repo)
+            try:
+                with patch.object(gate, "changed_paths", return_value=None):
+                    with patch.object(gate.subprocess, "run", side_effect=AssertionError("suite must not run")):
+                        with patch.dict(os.environ, {"BASE_SHA": "b" * 40}):
+                            self.assertEqual(gate.main(), 1)
+            finally:
+                os.chdir(previous)
+
+    def test_noncanonical_citation_spelling_triggers_gate(self):
+        register = {"capabilities": [
+            {"status": "code_evidenced", "source_refs": ["./apps/web/src/lib/feeds.ts"]},
+            {"status": "unverified", "source_refs": ["./apps/web/src/app/(platform)/pricing/page.tsx"]},
+        ]}
+        self.assertTrue(gate.should_run("base", register, {"apps/web/src/lib/feeds.ts"}))
+        self.assertTrue(
+            gate._touches_unverified_refs(register, {"apps/web/src/app/(platform)/pricing/page.tsx"})
+        )
+        self.assertFalse(gate.should_run("base", register, {"apps/web/src/lib/other.ts"}))
+
     def test_freshness_scoping(self):
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         fresh = {"reviewed_at": now, "capabilities": [

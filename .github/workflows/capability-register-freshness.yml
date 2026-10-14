@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Capability register outside its 14-day evidence window"
-          existing=$(gh issue list --state open --limit 100 --json title --jq --arg t "$title" '[.[] | select(.title == $t)] | length')
+          existing=$(TITLE="$title" gh issue list --state open --limit 100 --json title --jq '[.[] | select(.title == env.TITLE)] | length')
           if [ "$existing" = "0" ]; then
             gh issue create --title "$title" --body "The scheduled capability-register freshness check failed: docs/product/baci-capabilities.json is outside its 14-day evidence window (or no longer binds to its cited evidence), so the VPS writer lane is in its fail-closed Register-unavailable fallback. Re-review the register claims against the cited sources, refresh reviewed_at/source_revision/evidence_digest/claims_digest per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
           fi
@@ -49,7 +49,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Capability register missing or invalid (not ordinary staleness)"
-          existing=$(gh issue list --state open --limit 100 --json title --jq --arg t "$title" '[.[] | select(.title == $t)] | length')
+          existing=$(TITLE="$title" gh issue list --state open --limit 100 --json title --jq '[.[] | select(.title == env.TITLE)] | length')
           if [ "$existing" = "0" ]; then
             gh issue create --title "$title" --body "The scheduled capability-register check failed and docs/product/baci-capabilities.json is missing, malformed, or carries an invalid reviewed_at (naive or future-dated): do not just refresh reviewed_at/digests, which would re-bind unreviewed claims. Restore and validate the file, re-review the claims against the cited sources per docs/product/capability-evidence-workflow.md, and confirm this check passes again."
           fi
@@ -60,7 +60,7 @@ jobs:
         run: |
           set -euo pipefail
           title="Capability binding suite failed (register still inside its evidence window)"
-          existing=$(gh issue list --state open --limit 100 --json title --jq --arg t "$title" '[.[] | select(.title == $t)] | length')
+          existing=$(TITLE="$title" gh issue list --state open --limit 100 --json title --jq '[.[] | select(.title == env.TITLE)] | length')
           if [ "$existing" = "0" ]; then
             gh issue create --title "$title" --body "The scheduled capability-register check failed while docs/product/baci-capabilities.json is still inside its 14-day evidence window, so this is NOT a staleness re-review: do not just refresh reviewed_at/digests. Triage the failing suite test (digest binding mismatch, agent-access-map path drift, or connector-manifest mismatch) and fix the underlying breakage, then confirm the check passes again."
           fi

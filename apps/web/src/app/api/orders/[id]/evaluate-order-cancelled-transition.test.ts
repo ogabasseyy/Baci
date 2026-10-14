@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CANCELLED_STATUS_SPELLINGS,
+  cancelledTerminalRejection,
   evaluateOrderCancelledTransition,
 } from './evaluate-order-cancelled-transition';
 
@@ -61,6 +62,32 @@ describe('evaluateOrderCancelledTransition', () => {
         existingShippingStatus: 'pending',
         requestedPaymentStatus: 'paid',
         requestedShippingStatus: 'processing',
+      })
+    ).toBeNull();
+  });
+});
+
+describe('cancelledTerminalRejection', () => {
+  it('rejects on either cancelled axis regardless of the request', () => {
+    expect(
+      cancelledTerminalRejection({
+        existingPaymentStatus: 'canceled',
+        existingShippingStatus: 'pending',
+      })?.code
+    ).toBe('PAYMENT_CANCELLED_TERMINAL');
+    expect(
+      cancelledTerminalRejection({
+        existingPaymentStatus: 'paid',
+        existingShippingStatus: 'cancelled',
+      })?.code
+    ).toBe('SHIPPING_CANCELLED_TERMINAL');
+  });
+
+  it('returns null when neither axis is cancelled', () => {
+    expect(
+      cancelledTerminalRejection({
+        existingPaymentStatus: 'paid',
+        existingShippingStatus: 'shipped',
       })
     ).toBeNull();
   });

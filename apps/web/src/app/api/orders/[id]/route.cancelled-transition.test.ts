@@ -237,6 +237,53 @@ describe('PATCH /api/orders/[id] cancelled-order transitions', () => {
     );
   });
 
+  it('guards an echoed status value against a raced cancellation', async () => {
+    // Fixture models the post-race world the re-read observes:
+    // payment_status is already 'cancelled' when the conditional
+    // update matches zero rows. The request only echoes the observed
+    // 'unpaid' alongside a notes edit — writing it back would reopen
+    // the order, so the predicates must attach and the race must 409.
+    const { supabase } = createCancelledTransitionHarness(
+      {
+        id: 'order-1',
+        order_number: 'BACI-001',
+        shipping_status: 'pending',
+        payment_status: 'cancelled',
+        is_credit_order: false,
+        customer_id: null,
+        selected_quote_id: null,
+        shipping_provider: null,
+        tracking_number: null,
+        shipment_id: null,
+      },
+      {
+        id: 'order-1',
+        shipping_status: 'pending',
+        shipping_provider: null,
+        tracking_number: null,
+      },
+      { failMainUpdateWithPgrst116: true }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      error: null,
+      user: createMockUser(),
+      supabase,
+    });
+
+    const response = await PATCH(
+      createPatchRequest({ payment_status: 'unpaid', notes: 'Called' }),
+      { params: Promise.resolve({ id: 'order-1' }) }
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      code: 'PAYMENT_CANCELLED_TERMINAL',
+    });
+    expect(
+      rollbackOrderStatusAfterInventoryConfirmationFailure
+    ).not.toHaveBeenCalled();
+  });
+
   it('allows metadata-only edits on cancelled orders', async () => {
     const { supabase, orderUpdateBuilder } = createCancelledTransitionHarness(
       {

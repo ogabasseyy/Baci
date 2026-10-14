@@ -21,8 +21,40 @@ export const CANCELLED_STATUS_SPELLINGS = [
   ['shipping_status', 'canceled'],
 ] as const;
 
-function isCancelledStatus(value: string | null | undefined): boolean {
+/** True when a status value spells cancellation on either axis. */
+export function isCancelledStatus(value: string | null | undefined): boolean {
   return value === 'cancelled' || value === 'canceled';
+}
+
+const PAYMENT_CANCELLED_REJECTION: CancelledTransitionRejection = {
+  error:
+    'This order was cancelled for non-payment and cannot be marked paid. Create a new order for the late payment.',
+  code: 'PAYMENT_CANCELLED_TERMINAL',
+};
+
+const SHIPPING_CANCELLED_REJECTION: CancelledTransitionRejection = {
+  error:
+    'This order was cancelled and cannot be moved out of cancelled. Use the cancellation endpoint for cancellations.',
+  code: 'SHIPPING_CANCELLED_TERMINAL',
+};
+
+/**
+ * The terminal rejection for an order already in a cancelled state,
+ * regardless of what was requested. The raced-update path uses this
+ * when the evaluator finds no requested change to reject (e.g. only a
+ * status echo raced the cancellation) but the row is cancelled now.
+ */
+export function cancelledTerminalRejection(input: {
+  existingPaymentStatus: string | null | undefined;
+  existingShippingStatus: string | null | undefined;
+}): CancelledTransitionRejection | null {
+  if (isCancelledStatus(input.existingPaymentStatus)) {
+    return PAYMENT_CANCELLED_REJECTION;
+  }
+  if (isCancelledStatus(input.existingShippingStatus)) {
+    return SHIPPING_CANCELLED_REJECTION;
+  }
+  return null;
 }
 
 export function evaluateOrderCancelledTransition(input: {
@@ -36,22 +68,14 @@ export function evaluateOrderCancelledTransition(input: {
     input.requestedPaymentStatus !== undefined &&
     input.requestedPaymentStatus !== input.existingPaymentStatus
   ) {
-    return {
-      error:
-        'This order was cancelled for non-payment and cannot be marked paid. Create a new order for the late payment.',
-      code: 'PAYMENT_CANCELLED_TERMINAL',
-    };
+    return PAYMENT_CANCELLED_REJECTION;
   }
   if (
     isCancelledStatus(input.existingShippingStatus) &&
     input.requestedShippingStatus !== undefined &&
     input.requestedShippingStatus !== input.existingShippingStatus
   ) {
-    return {
-      error:
-        'This order was cancelled and cannot be moved out of cancelled. Use the cancellation endpoint for cancellations.',
-      code: 'SHIPPING_CANCELLED_TERMINAL',
-    };
+    return SHIPPING_CANCELLED_REJECTION;
   }
   return null;
 }

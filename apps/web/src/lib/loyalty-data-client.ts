@@ -22,7 +22,21 @@ export interface LoyaltyReward {
 export interface PointsTransaction {
   id: string;
   points: number;
-  type: 'purchase' | 'bonus' | 'referral' | 'redemption' | 'adjustment';
+  // The persisted points_transactions vocabulary the status route
+  // passes through unchanged: current writers use earn (award), bonus
+  // (signup), referral, redemption, expiry (reconciliation), and
+  // adjust (manual); redeem/manual/purchase survive only on legacy
+  // rows written before those writers existed.
+  type:
+    | 'earn'
+    | 'bonus'
+    | 'referral'
+    | 'redemption'
+    | 'expiry'
+    | 'adjust'
+    | 'redeem'
+    | 'manual'
+    | 'purchase';
   description: string;
   created_at: string;
   redemption_code?: string | null;

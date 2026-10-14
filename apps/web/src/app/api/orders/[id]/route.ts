@@ -28,7 +28,9 @@ import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claim
 import { orderUpdateSchema } from '@/schemas/orders';
 import {
   CANCELLED_STATUS_SPELLINGS,
+  cancelledTerminalRejection,
   evaluateOrderCancelledTransition,
+  isCancelledStatus,
 } from './evaluate-order-cancelled-transition';
 import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
 
@@ -195,15 +197,16 @@ export async function PATCH(
     }
 
     // The terminal-state predicates ride on the UPDATEs below so a
-    // cancellation committing after this read cannot be resurrected —
-    // but only when this PATCH actually moves a status: the evaluator
-    // deliberately allows metadata-only edits on cancelled orders, and
-    // unconditional predicates would exclude those rows entirely.
-    const movesStatus =
-      (payment_status !== undefined &&
-        payment_status !== existingOrder.payment_status) ||
-      (shipping_status !== undefined &&
-        shipping_status !== existingOrder.shipping_status);
+    // cancellation committing after this read cannot be resurrected.
+    // They attach whenever the write carries a non-cancelled status
+    // value — including an echoed one: writing the observed 'unpaid'
+    // back over a just-committed cancellation would reopen the order
+    // after its loyalty claim was released. Metadata-only writes (no
+    // status fields, or only cancelled spellings the endpoint already
+    // owns) stay unpredicated so cancelled orders remain editable.
+    const writesStatusValue =
+      (payment_status !== undefined && !isCancelledStatus(payment_status)) ||
+      (shipping_status !== undefined && !isCancelledStatus(shipping_status));
 
     // A conditional update that matched zero rows (PGRST116) may mean
     // a cancellation committed between the read above and the write:
@@ -217,12 +220,18 @@ export async function PATCH(
         .eq('merchant_id', merchantId)
         .single();
       if (!freshOrder) return null;
-      return evaluateOrderCancelledTransition({
-        existingPaymentStatus: freshOrder.payment_status,
-        existingShippingStatus: freshOrder.shipping_status,
-        requestedPaymentStatus: payment_status,
-        requestedShippingStatus: shipping_status,
-      });
+      return (
+        evaluateOrderCancelledTransition({
+          existingPaymentStatus: freshOrder.payment_status,
+          existingShippingStatus: freshOrder.shipping_status,
+          requestedPaymentStatus: payment_status,
+          requestedShippingStatus: shipping_status,
+        }) ??
+        cancelledTerminalRejection({
+          existingPaymentStatus: freshOrder.payment_status,
+          existingShippingStatus: freshOrder.shipping_status,
+        })
+      );
     };
 
     // Validate: Cannot move to 'processing' unless paid or is_credit_order
@@ -353,7 +362,7 @@ export async function PATCH(
         .update({ payment_status: paidStatus })
         .eq('id', id)
         .eq('merchant_id', merchantId);
-      if (movesStatus) {
+      if (writesStatusValue) {
         for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
           paidUpdateQuery = paidUpdateQuery.neq(column, spelling);
         }
@@ -522,7 +531,7 @@ export async function PATCH(
       .update(updates)
       .eq('id', id)
       .eq('merchant_id', merchantId);
-    if (movesStatus) {
+    if (writesStatusValue) {
       for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
         updateQuery = updateQuery.neq(column, spelling);
       }

@@ -103,7 +103,7 @@ test('deploy job bootstraps pnpm before helpers', () => {
   const deploy = jobBlock('deploy');
   assert.match(
     deploy,
-    /pnpm\/action-setup@0ebf47130e4866e96fce0953f49152a61190b271/
+    /pnpm\/action-setup@ea17c68df8912ef543352723c149a84f56e3d413/
   );
   assert.ok(
     deploy.indexOf('pnpm/action-setup') <

@@ -144,6 +144,18 @@ class PublishedVersionSlotTest < Minitest::Test
     assert app_store_version_slot_ready?(app_version: '', build_number: '')
   end
 
+  def test_public_version_rejects_equal_older_and_invalid_targets
+    Spaceship::ConnectAPI::App.fixture = AppFixture.new('READY_FOR_DISTRIBUTION')
+    ['2.1.559', '2.1.558', 'invalid'].each do |target|
+      refute app_store_version_slot_ready?(app_version: target, build_number: '632')
+    end
+  end
+
+  def test_public_version_requires_a_build_number_for_its_successor
+    Spaceship::ConnectAPI::App.fixture = AppFixture.new('READY_FOR_DISTRIBUTION')
+    refute app_store_version_slot_ready?(app_version: '2.1.632', build_number: '')
+  end
+
   def test_cancellation_wind_down_still_blocks_a_public_version
     app = AppFixture.new('READY_FOR_DISTRIBUTION')
     app.reviews = [Struct.new(:state).new('CANCELING')]

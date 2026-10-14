@@ -112,6 +112,17 @@ export function appendInventoryRecord(inventoryPath, record, options = {}) {
         `acquire: inventory invalid (${unique.errors.join('; ')})`
       );
     }
+    // Pre-publish ceiling: the read path above rejects inventories
+    // over MAX_INVENTORY_BYTES, so publishing one would brick every
+    // future append (each rejects on the stuck over-ceiling read)
+    // while this call claims success. Refuse BEFORE writing, leaving
+    // the previous publish intact for the operator to trim.
+    const serialized = `${JSON.stringify(records, null, 2)}\n`;
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_INVENTORY_BYTES) {
+      throw new PilotAcquireError(
+        `acquire: inventory would exceed ${MAX_INVENTORY_BYTES} bytes`
+      );
+    }
     // Publish via temp + fsync + atomic rename so an interruption leaves the
     // old inventory or the new one, never half-written JSON.
     const tmp = join(
@@ -120,7 +131,7 @@ export function appendInventoryRecord(inventoryPath, record, options = {}) {
     );
     const handle = await open(tmp, 'w');
     try {
-      await handle.writeFile(`${JSON.stringify(records, null, 2)}\n`);
+      await handle.writeFile(serialized);
       await handle.sync();
     } finally {
       await handle.close();

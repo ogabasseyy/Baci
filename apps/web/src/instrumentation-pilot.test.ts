@@ -57,6 +57,14 @@ beforeEach(() => {
   vi.stubEnv('NEXT_OTEL_FETCH_DISABLED', '0');
 });
 
+function anchorError(): Error {
+  const error = new Error('cannot anchor the public tree') as Error & {
+    code: string;
+  };
+  error.code = 'PILOT_PUBLIC_UNANCHORED';
+  return error;
+}
+
 describe('instrumentation pilot boot gate', () => {
   it('rejects non-lab startup with staged public assets before registering services', async () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
@@ -184,7 +192,7 @@ describe('instrumentation pilot boot gate', () => {
     // DETECTED staged content) instead of throwing.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     resolvePilotPublicDirMock.mockImplementationOnce(() => {
-      throw new Error('cannot anchor the public tree');
+      throw anchorError();
     });
     await expect(register()).resolves.toBe(undefined);
     expect(assertUnanchoredPublicTreesMock).toHaveBeenCalledOnce();
@@ -195,12 +203,25 @@ describe('instrumentation pilot boot gate', () => {
     // any candidate tree still refuses boot even with the lab off.
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     resolvePilotPublicDirMock.mockImplementationOnce(() => {
-      throw new Error('cannot anchor the public tree');
+      throw anchorError();
     });
     assertUnanchoredPublicTreesMock.mockImplementationOnce(() => {
       throw new Error('staged merchant pilot assets require');
     });
     await expect(register()).rejects.toThrow(/staged merchant pilot assets/);
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
+  it('propagates an anchored staged-content refusal without degrading', async () => {
+    // The catch discriminates by failure: an UNCODED throw from the
+    // anchored check (staged content actually detected) must
+    // propagate even with the lab off — the candidates path runs only
+    // for the coded anchor failure.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    assertPilotPublicAssetsMock.mockImplementationOnce(() => {
+      throw new Error('staged merchant pilot assets require');
+    });
+    await expect(register()).rejects.toThrow(/staged merchant pilot assets/);
+    expect(assertUnanchoredPublicTreesMock).not.toHaveBeenCalled();
     expect(registerOTelMock).not.toHaveBeenCalled();
   });
   it('stays fatal when unanchored with lab on', async () => {
@@ -209,7 +230,7 @@ describe('instrumentation pilot boot gate', () => {
     vi.stubEnv('NEXT_RUNTIME', 'nodejs');
     vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
     resolvePilotPublicDirMock.mockImplementationOnce(() => {
-      throw new Error('cannot anchor the public tree');
+      throw anchorError();
     });
     await expect(register()).rejects.toThrow(/cannot anchor/);
     expect(assertPilotPublicAssetsMock).not.toHaveBeenCalled();

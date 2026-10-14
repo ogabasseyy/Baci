@@ -49,8 +49,11 @@ describe('instrumentation unanchored boot', () => {
     // Bare sandbox cwd (no public/, no next.config) and a vitest
     // worker argv with no adjacent public/: nothing checkable, so boot
     // warns loudly and completes instead of bricking on the anchor
-    // failure itself.
+    // failure itself — even with unrelated junk (outside any public/
+    // tree) sitting in the cwd.
     const sandbox = mkdtempSync(join(tmpdir(), 'pilot-unanchored-bare-'));
+    mkdirSync(join(sandbox, 'data'), { recursive: true });
+    writeFileSync(join(sandbox, 'data', 'evil.png'), 'not a public tree');
     const previousCwd = process.cwd();
     process.chdir(sandbox);
     try {

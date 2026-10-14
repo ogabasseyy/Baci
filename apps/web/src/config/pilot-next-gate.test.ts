@@ -32,4 +32,19 @@ describe('applyPilotPublicGate', () => {
       /staged merchant pilot assets require BACI_IMAGE_PILOT_LAB=1/
     );
   });
+  it('refuses a merchant image renamed to a pinned filler name', () => {
+    // Strict build-gate drift: warn-only at runtime would let a
+    // renamed merchant png ship silently, so the build fails it.
+    const configDir = mkdtempSync(join(tmpdir(), 'pilot-gate-'));
+    const fillers = join(configDir, 'public', '__pilot', 'fillers');
+    mkdirSync(join(configDir, 'public', '__pilot', 'originals'), {
+      recursive: true,
+    });
+    mkdirSync(fillers, { recursive: true });
+    writeFileSync(join(fillers, 'grid-filler-600x400-a.png'), 'merchant bytes');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+    expect(() => applyPilotPublicGate(configDir)).toThrow(
+      /does not match the pinned hash/
+    );
+  });
 });

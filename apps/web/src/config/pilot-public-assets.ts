@@ -202,7 +202,17 @@ function gateVerifiedRoot(): string | null {
   }
   if (process.env.__NEXT_PRIVATE_STANDALONE_CONFIG && process.argv[1]) {
     // resolve: argv[1] may be invoked relative; the gate needs absolute.
-    return join(dirname(resolve(process.argv[1])), 'public');
+    // realpath first: a symlinked server entry would otherwise anchor
+    // the gate to the link directory's public/ (absent → pass) while
+    // Next serves the target directory's tree. Falls back to the
+    // lexical path when nothing exists there (tests, dry runs).
+    let entry = resolve(process.argv[1]);
+    try {
+      entry = realpathSync(entry);
+    } catch {
+      // keep the lexical path
+    }
+    return join(dirname(entry), 'public');
   }
   return null;
 }
@@ -218,16 +228,25 @@ export function resolvePilotPublicDir(): string {
   // that boot must say which tree it serves.
   const anchored = gateVerifiedRoot();
   if (!anchored) {
-    throw new Error(
+    // Coded (not just messaged): the boot gate catches ONLY this
+    // failure for its unanchored-candidates path — a staged-content
+    // refusal from the check below must propagate, never degrade.
+    const error = new Error(
       'merchant image pilot: cannot anchor the public tree for the startup gate (no config-stashed root, no standalone server path); refusing to inspect an unverified cwd/public — start via next dev/start so next.config stashes the root, or set BACI_PILOT_PUBLIC_DIR'
-    );
+    ) as Error & { code: string };
+    error.code = 'PILOT_PUBLIC_UNANCHORED';
+    throw error;
   }
   return anchored;
 }
 
 export function assertPilotPublicAssets(
   publicDir: string,
-  labEnabled = isPilotLabEnabled()
+  labEnabled = isPilotLabEnabled(),
+  // Pinned-filler drift severity in non-lab mode: the build gate fails
+  // (cheap, pre-deploy — a merchant image renamed to a filler name must
+  // never ship silently) while runtime boots only warn.
+  fillerDrift: 'throw' | 'warn' = 'warn'
 ): void {
   const root = join(publicDir, '__pilot');
   if (!directoryExists(root)) {
@@ -254,7 +273,7 @@ export function assertPilotPublicAssets(
       if (labEnabled) {
         assertFillers(join(root, name));
       } else {
-        assertNonLabFillers(root, name, FILLERS);
+        assertNonLabFillers(root, name, FILLERS, fillerDrift);
       }
       sawFillers = true;
       continue;

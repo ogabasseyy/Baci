@@ -8,7 +8,11 @@ import { assertPilotPublicAssets } from './pilot-public-assets';
 // block it replaces.
 export function applyPilotPublicGate(configDir: string): string {
   const pilotPublicDir = path.join(configDir, 'public');
-  assertPilotPublicAssets(pilotPublicDir);
+  // Strict filler drift: a merchant image renamed to a pinned filler
+  // name must fail the build, not ship silently. Runtime boots stay
+  // warn-only (a deployed box must not brick on a recompressed
+  // fixture), so this severity lives only on the build path.
+  assertPilotPublicAssets(pilotPublicDir, undefined, 'throw');
   // The boot gate (instrumentation.ts) must inspect this same tree but
   // has no config-relative anchor at runtime: stash the config-anchored
   // root in this process's environment, where the boot gate reads it.

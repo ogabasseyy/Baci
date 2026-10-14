@@ -7,6 +7,13 @@
 // staged content; only the anchor failure (with nothing found)
 // degrades to a loud warning. Lab-ON boots never reach here: they
 // demand a verified tree and stay fatal in the resolver.
+// The residual "found nothing yet" state is explicit: a plant AFTER
+// this boot check lands unseen in the local window, and serving it
+// later would fail closed (routes + readiness pin allowlisted
+// hashes) — detection at boot, not remediation of every future
+// plant. Under ALLOW_PROD that local plant window is bounded only by
+// operator rollback discipline (see the operations runbook), so
+// shorten the collection window and clean up promptly.
 import { statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { assertPilotPublicAssets } from './pilot-public-assets';

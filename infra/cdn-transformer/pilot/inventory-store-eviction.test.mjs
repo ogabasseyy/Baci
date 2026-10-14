@@ -186,3 +186,42 @@ test('appendInventoryRecord syncs the inventory directory after publish', async 
   });
   assert.equal(plainCount, 1);
 });
+
+test('appendInventoryRecord refuses a publish that would exceed the ceiling', async () => {
+  const { appendInventoryRecord } = await import('./inventory-append.mjs');
+  const { MAX_INVENTORY_BYTES } = await import('./constants.mjs');
+  const sha = createHash('sha256').update('x').digest('hex');
+  // A valid record carrying a giant operator annotation would push the
+  // serialized inventory over MAX_INVENTORY_BYTES, and publishing it
+  // would brick every future append on the stuck over-ceiling read.
+  const record = {
+    assetId: 'bulk-0',
+    merchantId: MERCHANT,
+    role: 'logo',
+    schemaVersion: 1,
+    sha256: sha,
+    slot: 'bulk-slot-0',
+    sourcePath: 'snapshots/bulk-0.png',
+    url: 'https://cdn.example.com/media/bulk-0.png',
+  };
+  const dir = await mkdtemp(join(tmpdir(), 'pilot-append-ceiling-'));
+  const path = join(dir, 'inventory.json');
+  await writeFile(path, JSON.stringify([record]));
+  const before = await readFile(path, 'utf8');
+  assert.ok(Buffer.byteLength(before, 'utf8') < MAX_INVENTORY_BYTES);
+  await assert.rejects(
+    () =>
+      appendInventoryRecord(path, {
+        ...record,
+        assetId: 'bulk-1',
+        note: 'x'.repeat(MAX_INVENTORY_BYTES),
+        slot: 'bulk-slot-1',
+        sourcePath: 'snapshots/bulk-1.png',
+        url: 'https://cdn.example.com/media/bulk-1.png',
+      }),
+    new RegExp(`inventory would exceed ${MAX_INVENTORY_BYTES} bytes`)
+  );
+  // The refusal happens before any write: the previous publish is
+  // intact for the operator to trim.
+  assert.equal(await readFile(path, 'utf8'), before);
+});

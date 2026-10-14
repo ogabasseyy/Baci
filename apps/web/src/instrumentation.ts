@@ -65,28 +65,32 @@ export async function register() {
     let pilotPublicDir: string;
     try {
       pilotPublicDir = resolvePilotPublicDir();
+      assertPilotPublicAssets(pilotPublicDir);
     } catch (error) {
-      // Unanchored boot (no config stash, no standalone path): lab mode
-      // demands a verified tree and stays fatal. With the lab off, an
-      // unrelated boot must not brick on the anchor failure itself —
-      // but it must not pass a served tree unseen either. The helper
-      // checks every candidate root it can find (plausible cwd tree
-      // plus the tree beside the server entry script) and refuses on
-      // DETECTED staged content; only a found-nothing boot degrades to
-      // a loud warning naming the residual.
-      if (isPilotLabEnabled()) {
+      // The catch discriminates by failure, not by message: lab mode
+      // demands a verified tree and stays fatal on everything, and a
+      // staged-content refusal from the anchored check above (any
+      // non-anchor error) must propagate, never degrade — the
+      // candidates path below runs ONLY for the coded anchor failure
+      // with the lab off. There the helper checks every candidate root
+      // it can find and refuses on DETECTED staged content; only a
+      // found-nothing boot degrades to a loud warning. No second
+      // unconditional cwd re-check: a tree the candidates deliberately
+      // excluded must not brick an unrelated boot.
+      if (
+        isPilotLabEnabled() ||
+        !(error instanceof Error) ||
+        (error as { code?: unknown }).code !== 'PILOT_PUBLIC_UNANCHORED'
+      ) {
         throw error;
       }
       const { assertUnanchoredPublicTrees } = await import(
         '@/config/pilot-public-assets-unanchored'
       );
       assertUnanchoredPublicTrees();
-      // Lab is off here, so the binding sections below never run; the
-      // shared check re-verifies the (already clean or trivially
-      // absent) cwd tree for a uniform post-condition.
+      // Lab is off here, so the binding sections below never run.
       pilotPublicDir = join(process.cwd(), 'public');
     }
-    assertPilotPublicAssets(pilotPublicDir);
     if (isPilotLabEnabled()) {
       // Production-lab exposure banner: reaching here with
       // NODE_ENV=production means BACI_IMAGE_PILOT_ALLOW_PROD=1

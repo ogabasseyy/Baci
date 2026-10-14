@@ -91,6 +91,20 @@ describe('assertNonLabFillers', () => {
       warn.mockRestore();
     }
   });
+  it('throws on hash drift in strict (build-gate) mode', () => {
+    // Builds fail where boots only warn: a merchant image renamed to a
+    // pinned filler name must never ship silently, and failing
+    // pre-deploy is cheap with a clear re-pin fix.
+    const dir = root();
+    const fillers = join(dir, '__pilot', 'fillers');
+    mkdirSync(fillers, { recursive: true });
+    for (const name of PINNED_NAMES) {
+      writeFileSync(join(fillers, name), 'recompressed bytes');
+    }
+    expect(() =>
+      assertNonLabFillers(join(dir, '__pilot'), 'fillers', PINNED, 'throw')
+    ).toThrow(/does not match the pinned hash/);
+  });
   it('stays silent for pinned fixtures with matching hashes', () => {
     const dir = root();
     const fillers = join(dir, '__pilot', 'fillers');

@@ -175,7 +175,11 @@ export function assertNonLabEntry(root: string, name: string): void {
 export function assertNonLabFillers(
   root: string,
   name: string,
-  pinnedFillers: Readonly<Record<string, string>>
+  pinnedFillers: Readonly<Record<string, string>>,
+  // Drift severity: builds fail (cheap, pre-deploy, clear re-pin fix)
+  // while runtime boots only warn (a deployed box must not brick on a
+  // recompressed fixture).
+  fillerDrift: 'throw' | 'warn' = 'warn'
 ): void {
   assertConfinedEntry(root, name, 'non-lab public pilot tree');
   const dir = join(root, name);
@@ -225,9 +229,15 @@ export function assertNonLabFillers(
       continue;
     }
     if (digest !== expected) {
-      console.warn(
-        `non-lab public pilot tree filler "${file}" does not match the pinned hash; served as-is — restore it or ignore`
-      );
+      const message =
+        `non-lab public pilot tree filler "${file}" does not match the pinned hash; ` +
+        (fillerDrift === 'throw'
+          ? 'restore public/__pilot/fillers from version control or re-pin the fixture'
+          : 'served as-is — restore it or ignore');
+      if (fillerDrift === 'throw') {
+        throw new Error(message);
+      }
+      console.warn(message);
     }
   }
   if (strays > 0) {

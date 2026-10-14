@@ -1,4 +1,6 @@
-import { writeFile } from 'node:fs/promises';
+import { mkdtempSync } from 'node:fs';
+import { rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
@@ -56,6 +58,43 @@ describe('buildLabIndex manifests', () => {
     await writeFile(
       join(lab.generationDir, 'manifest.json'),
       `${JSON.stringify(lab.manifest)}${' '.repeat(256 * 1024)}`
+    );
+    const { index, statuses } = await buildLabIndex({
+      acceptances: [
+        {
+          assetId: 'logo-1',
+          generationId: GENERATION_ID,
+          merchantId: MERCHANT,
+          note: 'Reviewed',
+          outputHashes: lab.tiers.map((tier) => tier.sha256),
+          qualities: lab.tiers.map((tier) => tier.quality),
+          originalUrl: 'https://cdn.example.com/media/logo.png',
+          recipeId: PILOT_RECIPE_ID,
+          reviewedAt: '2026-10-01T21:00:00.000Z',
+          reviewer: 'pilot-owner',
+          schemaVersion: 1,
+          slotId: 'header-logo',
+          sourceSha256: SOURCE,
+          verdict: 'accepted',
+        },
+      ],
+      bindings: lab.bindings,
+      outputRoot: lab.outputRoot,
+    });
+    expect(statuses[0]?.status).not.toBe('accepted');
+    expect(Object.keys(index.entries)).toHaveLength(0);
+  });
+
+  it('refuses a manifest.json symlink escaping the output tree', async () => {
+    // The generation dir is realpath-confined, but a symlinked leaf
+    // would still serve an operator manifest from elsewhere if the
+    // reader followed it — even a byte-valid target must not load.
+    const outside = mkdtempSync(join(tmpdir(), 'pilot-manifest-out-'));
+    await writeFile(join(outside, 'evil.json'), JSON.stringify(lab.manifest));
+    await rm(join(lab.generationDir, 'manifest.json'));
+    await symlink(
+      join(outside, 'evil.json'),
+      join(lab.generationDir, 'manifest.json')
     );
     const { index, statuses } = await buildLabIndex({
       acceptances: [

@@ -44,7 +44,7 @@ function createPaymentState(
     canFundByBankTransfer: false,
     isAuthenticated: true,
     refetchWallet: jest.fn(() => Promise.resolve(undefined)),
-    walletBalance: 5000,
+    getWalletBalance: () => 5000,
     walletError: null,
     walletIsLoading: false,
     isWalletRefetching: () => false,
@@ -119,7 +119,7 @@ describe('createBillFormPurchaseHandler', () => {
     const handlePurchase = createValidHandler({
       onSuccess,
       payment: createPaymentState({
-        walletBalance: 1500,
+        getWalletBalance: () => 1500,
         getWalletIdempotencyKey: jest.fn(() => 'idem-key-1'),
         scopePendingVtuDescriptor: (d: string) => d,
         captureSubmittingOwner: () => 'test-owner',
@@ -159,7 +159,7 @@ describe('createBillFormPurchaseHandler', () => {
   });
 
   it('checks wallet readiness before charging and skips the charge when not ready', async () => {
-    const payment = createPaymentState({ walletBalance: 200 });
+    const payment = createPaymentState({ getWalletBalance: () => 200 });
     const handlePurchase = createValidHandler({
       payment,
       returnToHref: '/utilities/power?repeatAmount=1000' as never,
@@ -372,7 +372,7 @@ describe('createBillFormPurchaseHandler', () => {
         amount: '1000',
         numericAmount: 1000,
         payment: createPaymentState({
-          walletBalance: 1000,
+          getWalletBalance: () => 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-2'),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
@@ -406,7 +406,7 @@ describe('createBillFormPurchaseHandler', () => {
         numericAmount: 1000,
         onSuccess,
         payment: createPaymentState({
-          walletBalance: 1000,
+          getWalletBalance: () => 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-proc'),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
@@ -440,7 +440,7 @@ describe('createBillFormPurchaseHandler', () => {
         amount: '1000',
         numericAmount: 1000,
         payment: createPaymentState({
-          walletBalance: 1000,
+          getWalletBalance: () => 1000,
           getWalletIdempotencyKey: jest.fn(() => 'idem-key-3'),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
@@ -487,7 +487,7 @@ describe('createBillFormPurchaseHandler', () => {
         amount: '1000',
         numericAmount: 1000,
         payment: createPaymentState({
-          walletBalance: 1000,
+          getWalletBalance: () => 1000,
           isSubmittingOwnerCurrent: () => true,
           refetchWallet,
         }),
@@ -513,7 +513,7 @@ describe('createBillFormPurchaseHandler', () => {
         amount: '1000',
         numericAmount: 1000,
         payment: createPaymentState({
-          walletBalance: 1000,
+          getWalletBalance: () => 1000,
           isSubmittingOwnerCurrent: () => true,
           resetWalletIdempotencyKey,
           refetchWallet,
@@ -540,7 +540,7 @@ describe('createBillFormPurchaseHandler', () => {
         amount: '1000',
         numericAmount: 1000,
         payment: createPaymentState({
-          walletBalance: 1000,
+          getWalletBalance: () => 1000,
           isSubmittingOwnerCurrent: () => false,
           resetWalletIdempotencyKey,
           refetchWallet,
@@ -565,7 +565,7 @@ describe('createBillFormPurchaseHandler', () => {
         amount: '1000',
         numericAmount: 1000,
         payment: createPaymentState({
-          walletBalance: 1000,
+          getWalletBalance: () => 1000,
           isSubmittingOwnerCurrent: () => false,
           resetWalletIdempotencyKey,
         }),

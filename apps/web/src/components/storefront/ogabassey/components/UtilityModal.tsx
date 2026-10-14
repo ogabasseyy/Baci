@@ -41,6 +41,7 @@ export const UtilityModal = ({
   const user = auth?.user ?? null;
   const {
     fundingAccount,
+    getWalletBalance,
     isWalletRefreshPending,
     refreshWallet,
     requiresFundingAccountConsent,
@@ -97,10 +98,10 @@ export const UtilityModal = ({
     merchantSlug: merchant?.slug,
     onInsufficientWalletBalance: openForInsufficientBalance,
     isWalletRefreshPending,
+    getWalletBalance,
     refreshWallet,
     setWalletBalance,
     user,
-    walletBalance,
     walletError,
     walletLoading,
   });

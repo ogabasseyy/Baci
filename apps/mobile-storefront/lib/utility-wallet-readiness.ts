@@ -13,7 +13,14 @@ interface UtilityWalletReadinessPayment {
    */
   isAuthenticated: boolean;
   refetchWallet: () => void;
-  walletBalance: number;
+  /**
+   * Live wallet-balance reader (Codex R78 6sN80p), invoked at gate
+   * time — NOT a render-time snapshot. A refetch completing during
+   * the settlement-gate await refreshes the cache while the purchase
+   * closure still holds the old number; reading live admits the
+   * refreshed verdict instead.
+   */
+  getWalletBalance: () => number;
   walletError: Error | null;
   walletIsLoading: boolean;
   /**
@@ -87,10 +94,12 @@ export function ensureUtilityWalletReady({
     ]);
     return false;
   }
-  if (!isRetainedReplay && payment.walletBalance < amount) {
+  // Read the balance at gate time, not from the pre-await snapshot.
+  const walletBalance = payment.getWalletBalance();
+  if (!isRetainedReplay && walletBalance < amount) {
     promptUtilityWalletFunding({
       amount,
-      balance: payment.walletBalance,
+      balance: walletBalance,
       canFundByBankTransfer: payment.canFundByBankTransfer,
       returnToHref,
     });

@@ -459,6 +459,39 @@ describe('useWallet', () => {
     expect(result.current.walletLoading).toBe(false);
   });
 
+  it('mirrors the latest balance through getWalletBalance without a remount', async () => {
+    // Codex R78 6sN80p: readiness invokes this after the
+    // settlement-gate await through a stale closure — it must
+    // return the latest rendered balance, whether the update came
+    // from a fetch or a direct setWalletBalance call (post-purchase
+    // optimistic updates bypass the fetch path entirely).
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ balance: 500 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ balance: 3200 }),
+      });
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' })
+    );
+    await waitFor(() => expect(result.current.walletBalance).toBe(500));
+    expect(result.current.getWalletBalance()).toBe(500);
+
+    act(() => {
+      result.current.refreshWallet();
+    });
+    await waitFor(() => expect(result.current.walletBalance).toBe(3200));
+    expect(result.current.getWalletBalance()).toBe(3200);
+
+    act(() => {
+      result.current.setWalletBalance(100);
+    });
+    expect(result.current.getWalletBalance()).toBe(100);
+  });
+
   it('should refetch when merchantSlug changes', async () => {
     mockFetch.mockResolvedValue({
       ok: true,

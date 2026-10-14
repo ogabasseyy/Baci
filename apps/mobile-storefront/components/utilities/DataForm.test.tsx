@@ -130,6 +130,7 @@ describe('DataForm', () => {
     mockUseUtilityPayment.mockReturnValue({
       canFundByBankTransfer: false,
       walletBalance: 5000,
+      getWalletBalance: () => 5000,
       walletError: null,
       walletIsLoading: false,
       getWalletIdempotencyKey: jest.fn(() => 'test-key'),

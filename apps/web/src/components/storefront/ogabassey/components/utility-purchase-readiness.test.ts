@@ -17,7 +17,7 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     merchantId: 'merchant-1',
     refreshWallet: vi.fn(),
     user,
-    walletBalance: 5000,
+    getWalletBalance: () => 5000,
     walletError: false,
     walletLoading: false,
     walletRefreshPending: false,
@@ -41,7 +41,7 @@ describe('checkUtilityPurchaseReadiness', () => {
     // behind top-up.
     expect(
       checkUtilityPurchaseReadiness(
-        baseInput({ isRetainedReplay: true, walletBalance: 0 })
+        baseInput({ isRetainedReplay: true, getWalletBalance: () => 0 })
       )
     ).toBe(true);
     expect(mockToast).not.toHaveBeenCalled();
@@ -51,10 +51,23 @@ describe('checkUtilityPurchaseReadiness', () => {
     const onInsufficientWalletBalance = vi.fn();
     expect(
       checkUtilityPurchaseReadiness(
-        baseInput({ onInsufficientWalletBalance, walletBalance: 500 })
+        baseInput({ onInsufficientWalletBalance, getWalletBalance: () => 500 })
       )
     ).toBe(false);
     expect(onInsufficientWalletBalance).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-reads the balance on every evaluation instead of snapshotting it', () => {
+    // Codex R78 6sN80p: a refetch completing during the
+    // settlement-gate await refreshes the cache while the purchase
+    // closure still holds the old number — the gate must admit the
+    // refreshed verdict. A snapshot would stay blocked here.
+    let balance = 0;
+    const input = baseInput({ getWalletBalance: () => balance });
+
+    expect(checkUtilityPurchaseReadiness(input)).toBe(false);
+    balance = 5000;
+    expect(checkUtilityPurchaseReadiness(input)).toBe(true);
   });
 
   it('blocks while a wallet refresh is pending even when loading is false', () => {
@@ -104,7 +117,7 @@ describe('checkUtilityPurchaseReadiness', () => {
   it('blocks while the wallet is loading (never as insufficient funds)', () => {
     expect(
       checkUtilityPurchaseReadiness(
-        baseInput({ walletLoading: true, walletBalance: 0 })
+        baseInput({ walletLoading: true, getWalletBalance: () => 0 })
       )
     ).toBe(false);
     expect(mockToast).toHaveBeenCalledWith(
@@ -129,7 +142,7 @@ describe('checkUtilityPurchaseReadiness', () => {
     const onInsufficientWalletBalance = vi.fn();
     expect(
       checkUtilityPurchaseReadiness(
-        baseInput({ walletBalance: 400, onInsufficientWalletBalance })
+        baseInput({ getWalletBalance: () => 400, onInsufficientWalletBalance })
       )
     ).toBe(false);
     expect(mockToast).toHaveBeenCalledWith(
@@ -145,7 +158,7 @@ describe('checkUtilityPurchaseReadiness', () => {
   it('says top-up is unavailable when the store has no funding rail', () => {
     expect(
       checkUtilityPurchaseReadiness(
-        baseInput({ walletBalance: 400, canFundByBankTransfer: false })
+        baseInput({ getWalletBalance: () => 400, canFundByBankTransfer: false })
       )
     ).toBe(false);
     expect(mockToast).toHaveBeenCalledWith(

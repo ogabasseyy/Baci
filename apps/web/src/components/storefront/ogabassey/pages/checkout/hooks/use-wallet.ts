@@ -19,6 +19,14 @@ interface UseWalletOptions {
 
 interface UseWalletReturn {
   walletBalance: number;
+  /**
+   * Live balance reader (Codex R78 6sN80p): purchase handlers close
+   * over the render-time balance before the settlement-gate await,
+   * so a refetch completing mid-await would evaluate stale. Invoke
+   * at gate time instead — it returns the latest rendered balance,
+   * including post-fetch and post-purchase updates.
+   */
+  getWalletBalance: () => number;
   walletLoading: boolean;
   /**
    * True when the last balance fetch failed (network error or non-OK
@@ -73,6 +81,13 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   // settling in the microtask window before React runs the new
   // effect's cleanup must not clear state for the replacement.
   const fetchGenerationRef = useRef(0);
+  // Latest-balance mirror (Codex R78 6sN80p): assigned during render
+  // (not in an effect — passive effects can lag the microtask that
+  // resumes a settled gate), so any committed render has already
+  // published its balance before post-await code can read it. Covers
+  // fetch completions AND direct setWalletBalance calls (post-
+  // purchase optimistic updates), which no fetch-side hook could see.
+  const walletBalanceRef = useRef(walletBalance);
 
   // Clear the previous identity's wallet + funding account SYNCHRONOUSLY
   // (render-phase) when the customer or storefront changes, so consumers
@@ -92,6 +107,8 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
     setWalletDvaEnabled(false);
     setWalletTransactions([]);
   }
+  // Publish this render's balance for post-await readers (see above).
+  walletBalanceRef.current = walletBalance;
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -161,6 +178,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
 
   return {
     walletBalance,
+    getWalletBalance: () => walletBalanceRef.current,
     walletLoading,
     walletError,
     payWithWallet,

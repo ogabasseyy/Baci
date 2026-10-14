@@ -54,7 +54,7 @@ function baseParams(overrides: Record<string, unknown> = {}) {
     refreshWallet: vi.fn(),
     setWalletBalance: vi.fn(),
     user,
-    walletBalance: 5000,
+    getWalletBalance: () => 5000,
     walletError: false,
     walletLoading: false,
     ...overrides,
@@ -306,7 +306,7 @@ describe('useUtilityPurchase', () => {
     const onInsufficientWalletBalance = vi.fn();
     const { result } = renderHook(() =>
       useUtilityPurchase(
-        baseParams({ onInsufficientWalletBalance, walletBalance: 500 })
+        baseParams({ onInsufficientWalletBalance, getWalletBalance: () => 500 })
       )
     );
 
@@ -343,7 +343,7 @@ describe('useUtilityPurchase', () => {
     expect(mockSubmit).toHaveBeenCalledTimes(1);
 
     // Post-debit the wallet reads empty; the retry must still replay.
-    rerender(baseParams({ walletBalance: 0 }));
+    rerender(baseParams({ getWalletBalance: () => 0 }));
     await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
@@ -377,7 +377,7 @@ describe('useUtilityPurchase', () => {
         clearPendingVtuKeys();
       })
     );
-    rerender(baseParams({ walletBalance: 0 }));
+    rerender(baseParams({ getWalletBalance: () => 0 }));
     await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
@@ -393,7 +393,7 @@ describe('useUtilityPurchase', () => {
 
   it('waits (does not submit) while the wallet balance is still loading', async () => {
     const { result } = renderHook(() =>
-      useUtilityPurchase(baseParams({ walletLoading: true, walletBalance: 0 }))
+      useUtilityPurchase(baseParams({ walletLoading: true, getWalletBalance: () => 0 }))
     );
 
     await act(async () => {
@@ -411,7 +411,7 @@ describe('useUtilityPurchase', () => {
     const refreshWallet = vi.fn();
     const { result } = renderHook(() =>
       useUtilityPurchase(
-        baseParams({ refreshWallet, walletError: true, walletBalance: 0 })
+        baseParams({ refreshWallet, walletError: true, getWalletBalance: () => 0 })
       )
     );
 
@@ -707,7 +707,7 @@ describe('useUtilityPurchase', () => {
         baseParams({
           canFundByBankTransfer: false,
           onInsufficientWalletBalance,
-          walletBalance: 500,
+          getWalletBalance: () => 500,
         })
       )
     );

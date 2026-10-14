@@ -244,7 +244,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
             amount={numericAmount}
             canFundByBankTransfer={payment.canFundByBankTransfer}
             returnToHref={walletReturnToHref}
-            walletBalance={payment.walletBalance}
+            walletBalance={payment.getWalletBalance()}
             walletError={payment.walletError}
             walletIsLoading={payment.walletIsLoading}
           />

@@ -29,10 +29,11 @@ interface UseUtilityPurchaseParams {
   merchantSlug: string | undefined;
   onInsufficientWalletBalance?: () => void;
   isWalletRefreshPending: () => boolean;
+  /** Live balance reader (R78 6sN80p): gate-time read, not pre-await snapshot. */
+  getWalletBalance: () => number;
   refreshWallet: () => void;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   user: CustomerUser | null;
-  walletBalance: number;
   walletError: boolean;
   walletLoading: boolean;
 }
@@ -84,10 +85,10 @@ export function useUtilityPurchase({
   merchantSlug,
   onInsufficientWalletBalance,
   isWalletRefreshPending,
+  getWalletBalance,
   refreshWallet,
   setWalletBalance,
   user,
-  walletBalance,
   walletError,
   walletLoading,
 }: UseUtilityPurchaseParams): UseUtilityPurchaseReturn {
@@ -156,7 +157,7 @@ export function useUtilityPurchase({
         onInsufficientWalletBalance,
         refreshWallet,
         user,
-        walletBalance,
+        getWalletBalance,
         walletError,
         walletLoading,
         walletRefreshPending: isWalletRefreshPending(),

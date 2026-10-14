@@ -270,7 +270,7 @@ export function DataForm({
             amount={planAmount}
             canFundByBankTransfer={payment.canFundByBankTransfer}
             returnToHref={walletReturnToHref}
-            walletBalance={payment.walletBalance}
+            walletBalance={payment.getWalletBalance()}
             walletError={payment.walletError}
             walletIsLoading={payment.walletIsLoading}
           />

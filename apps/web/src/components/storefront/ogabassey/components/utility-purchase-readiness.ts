@@ -12,7 +12,13 @@ interface CheckUtilityPurchaseReadinessInput {
   onInsufficientWalletBalance?: () => void;
   refreshWallet: () => void;
   user: CustomerUser | null;
-  walletBalance: number;
+  /**
+   * Live balance reader (Codex R78 6sN80p), invoked at gate time —
+   * NOT the render-time snapshot. A refetch completing during the
+   * settlement-gate await refreshes the cache while the purchase
+   * closure still holds the old number.
+   */
+  getWalletBalance: () => number;
   walletError: boolean;
   walletLoading: boolean;
   walletRefreshPending: boolean;
@@ -35,7 +41,7 @@ export function checkUtilityPurchaseReadiness({
   onInsufficientWalletBalance,
   refreshWallet,
   user,
-  walletBalance,
+  getWalletBalance,
   walletError,
   walletLoading,
   walletRefreshPending,
@@ -105,6 +111,8 @@ export function checkUtilityPurchaseReadiness({
   // replay skips this gate only: the wallet was already debited for this
   // exact purchase, so a post-debit dip must not strand recovery behind
   // top-up. Auth/loading/error gates above still apply.
+  // Read the balance at gate time, not from the pre-await snapshot.
+  const walletBalance = getWalletBalance();
   if (!isRetainedReplay && walletBalance < amount) {
     const shortfall = amount - walletBalance;
     if (!canFundByBankTransfer) {

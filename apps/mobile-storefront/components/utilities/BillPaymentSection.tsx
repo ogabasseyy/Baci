@@ -65,7 +65,7 @@ export function BillPaymentSection({
         amount={numericAmount}
         canFundByBankTransfer={payment.canFundByBankTransfer}
         returnToHref={returnToHref}
-        walletBalance={payment.walletBalance}
+        walletBalance={payment.getWalletBalance()}
         walletError={payment.walletError}
         walletIsLoading={payment.walletIsLoading}
       />

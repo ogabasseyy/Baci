@@ -231,6 +231,13 @@ export function useWallet(options: UseWalletOptions = {}) {
     data,
     error,
     fetchStatus,
+    // Live reader (Codex R78 6sN80p): purchase closures capture the
+    // render-time balance before the settlement-gate await; a refetch
+    // completing mid-await leaves that snapshot stale while fresh
+    // data sits in the cache. Read the cache imperatively instead.
+    getWalletBalance: () =>
+      queryClient.getQueryData<typeof data>(walletQueryKey)?.wallet.balance ??
+      0,
     isError,
     // Live reader (Codex R75 6r486a): readiness gates call this AFTER
     // the settlement-gate await, when the render-time isRefetching

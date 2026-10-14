@@ -223,6 +223,7 @@ export const utilityModalTestHarness = {
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
       walletLoading: false,
     });
     this.checkoutFetch.mockResolvedValue(

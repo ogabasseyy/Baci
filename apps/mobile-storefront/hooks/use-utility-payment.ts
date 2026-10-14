@@ -70,7 +70,6 @@ export function useUtilityPayment() {
   const canFundByBankTransfer =
     isAuthenticated &&
     paymentSettings.data?.wallet_paystack_dva_enabled === true;
-  const walletBalance = wallet.data?.wallet.balance ?? 0;
   const walletError = wallet.error instanceof Error ? wallet.error : null;
 
   return {
@@ -123,7 +122,10 @@ export function useUtilityPayment() {
      * redirect this submission's completion onto another entry.
      */
     scopePendingVtuDescriptor,
-    walletBalance,
+    // Live reader (Codex R78 6sN80p), not the render-time snapshot:
+    // the readiness gate invokes this after the settlement-gate
+    // await, when a mid-await refetch has refreshed the cache.
+    getWalletBalance: wallet.getWalletBalance,
     walletError,
     walletIsLoading: wallet.isLoading,
     // Live reader, not the render-time snapshot (Codex R75 6r486a):

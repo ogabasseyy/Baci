@@ -22,7 +22,7 @@ function paymentState(
     canFundByBankTransfer: true,
     isAuthenticated: true,
     refetchWallet: jest.fn(),
-    walletBalance: 5000,
+    getWalletBalance: () => 5000,
     walletError: null,
     walletIsLoading: false,
     isWalletRefetching: () => false,
@@ -58,7 +58,7 @@ describe('ensureUtilityWalletReady', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,
       isRetainedReplay: true,
-      payment: paymentState({ walletBalance: 0 }),
+      payment: paymentState({ getWalletBalance: () => 0 }),
     });
 
     expect(ready).toBe(true);
@@ -69,7 +69,7 @@ describe('ensureUtilityWalletReady', () => {
   it('still gates fresh purchases on balance', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,
-      payment: paymentState({ walletBalance: 0 }),
+      payment: paymentState({ getWalletBalance: () => 0 }),
     });
 
     expect(ready).toBe(false);
@@ -79,7 +79,10 @@ describe('ensureUtilityWalletReady', () => {
   it('sends signed-out customers to sign in instead of the funding prompt', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,
-      payment: paymentState({ isAuthenticated: false, walletBalance: 0 }),
+      payment: paymentState({
+        isAuthenticated: false,
+        getWalletBalance: () => 0,
+      }),
     });
 
     expect(ready).toBe(false);
@@ -100,7 +103,10 @@ describe('ensureUtilityWalletReady', () => {
   it('asks loading wallets to wait instead of reporting a shortfall', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,
-      payment: paymentState({ walletBalance: 0, walletIsLoading: true }),
+      payment: paymentState({
+        getWalletBalance: () => 0,
+        walletIsLoading: true,
+      }),
     });
 
     expect(ready).toBe(false);
@@ -118,7 +124,7 @@ describe('ensureUtilityWalletReady', () => {
     const ready = ensureUtilityWalletReady({
       amount: 1000,
       payment: paymentState({
-        walletBalance: 5000,
+        getWalletBalance: () => 5000,
         walletIsLoading: false,
         isWalletRefetching: () => true,
       }),
@@ -138,7 +144,7 @@ describe('ensureUtilityWalletReady', () => {
     // must still block. A render-time boolean would stay false here.
     let refetching = false;
     const payment = paymentState({
-      walletBalance: 5000,
+      getWalletBalance: () => 5000,
       walletIsLoading: false,
       isWalletRefetching: () => refetching,
     });
@@ -152,6 +158,22 @@ describe('ensureUtilityWalletReady', () => {
     );
   });
 
+  it('re-reads the balance on every evaluation instead of snapshotting it', () => {
+    // Codex R78 6sN80p: a refetch completing during the
+    // settlement-gate await refreshes the cache while the purchase
+    // closure still holds the old number — the gate must admit the
+    // refreshed verdict. A snapshot would stay blocked here.
+    let balance = 0;
+    const payment = paymentState({
+      getWalletBalance: () => balance,
+      walletIsLoading: false,
+    });
+
+    expect(ensureUtilityWalletReady({ amount: 1000, payment })).toBe(false);
+    balance = 5000;
+    expect(ensureUtilityWalletReady({ amount: 1000, payment })).toBe(true);
+  });
+
   it('blocks retained replays while a wallet refetch is in flight', () => {
     // The R65 bypass skips the balance comparison, not the loading
     // gates: a replay must still wait for fresh balance evidence.
@@ -159,7 +181,7 @@ describe('ensureUtilityWalletReady', () => {
       amount: 1000,
       isRetainedReplay: true,
       payment: paymentState({
-        walletBalance: 0,
+        getWalletBalance: () => 0,
         walletIsLoading: false,
         isWalletRefetching: () => true,
       }),
@@ -174,7 +196,7 @@ describe('ensureUtilityWalletReady', () => {
       amount: 1000,
       payment: paymentState({
         refetchWallet,
-        walletBalance: 0,
+        getWalletBalance: () => 0,
         walletError: new Error('wallet unavailable'),
       }),
     });
@@ -200,7 +222,7 @@ describe('ensureUtilityWalletReady', () => {
       amount: 1000,
       payment: paymentState({
         canFundByBankTransfer: false,
-        walletBalance: 200,
+        getWalletBalance: () => 200,
       }),
       returnToHref,
     });

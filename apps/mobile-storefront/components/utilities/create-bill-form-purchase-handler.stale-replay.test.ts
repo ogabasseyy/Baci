@@ -79,7 +79,7 @@ describe('bill stale success replay', () => {
         canFundByBankTransfer: false,
         isAuthenticated: true,
         refetchWallet: overrides.refetchWallet ?? jest.fn(),
-        walletBalance: 5000,
+        getWalletBalance: () => 5000,
         walletError: null,
         walletIsLoading: false,
         isWalletRefetching: () => false,

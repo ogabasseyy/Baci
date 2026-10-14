@@ -26,6 +26,7 @@ describe('UtilityModal checkout routing', () => {
       setPayWithWallet: vi.fn(),
       setWalletBalance,
       walletBalance: 500,
+      getWalletBalance: () => 500,
       walletLoading: false,
     });
 
@@ -84,6 +85,7 @@ describe('UtilityModal checkout routing', () => {
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
       walletDvaEnabled: true,
       walletLoading: false,
       walletTransactions: [],
@@ -111,6 +113,7 @@ describe('UtilityModal checkout routing', () => {
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
       walletDvaEnabled: true,
       walletLoading: false,
       walletTransactions: [],
@@ -141,6 +144,7 @@ describe('UtilityModal checkout routing', () => {
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
       walletDvaEnabled: true,
       walletLoading: false,
       walletTransactions: [],
@@ -231,6 +235,7 @@ describe('UtilityModal checkout routing', () => {
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
       walletLoading: false,
     });
 
@@ -254,6 +259,7 @@ describe('UtilityModal checkout routing', () => {
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
       walletLoading: false,
     });
     harness.checkoutFetch.mockResolvedValue(
@@ -280,6 +286,7 @@ describe('UtilityModal checkout routing', () => {
       setPayWithWallet: vi.fn(),
       setWalletBalance: vi.fn(),
       walletBalance: 500,
+      getWalletBalance: () => 500,
       walletLoading: false,
     });
     // Never resolves: the request stays in flight for the assertion.

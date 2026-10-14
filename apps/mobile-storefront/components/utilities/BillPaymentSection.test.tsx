@@ -23,7 +23,7 @@ function createPaymentState(): PaymentState {
     canFundByBankTransfer: false,
     isAuthenticated: true,
     refetchWallet: jest.fn(() => Promise.resolve(undefined)),
-    walletBalance: 0,
+    getWalletBalance: () => 0,
     walletError: null,
     walletIsLoading: false,
     isWalletRefetching: () => false,

@@ -11,6 +11,7 @@ let mockWalletQuery: {
     };
   };
   error?: Error | null;
+  getWalletBalance?: () => number;
   isFetchingNow?: () => boolean;
   isLoading?: boolean;
   refetch: jest.Mock;
@@ -70,18 +71,25 @@ describe('useUtilityPayment', () => {
     };
   });
 
-  it('exposes the wallet balance, loading and error state', () => {
+  it('exposes a live wallet-balance reader plus loading and error state', () => {
+    // Codex R78 6sN80p: a refetch completing during the
+    // settlement-gate await must be visible through the same hook
+    // result — the gate reads the refreshed cache, not the snapshot.
+    let balance = 1500;
     mockWalletQuery = {
       data: { wallet: { balance: 1500 } },
       error: null,
+      getWalletBalance: () => balance,
       isLoading: false,
       refetch: jest.fn(() => Promise.resolve({})),
     };
     const { result } = renderHook(() => useUtilityPayment());
 
-    expect(result.current.walletBalance).toBe(1500);
+    expect(result.current.getWalletBalance()).toBe(1500);
     expect(result.current.walletError).toBeNull();
     expect(result.current.walletIsLoading).toBe(false);
+    balance = 3200;
+    expect(result.current.getWalletBalance()).toBe(3200);
   });
 
   it('exposes wallet query loading and error state separately from a zero balance', () => {
@@ -89,13 +97,14 @@ describe('useUtilityPayment', () => {
     mockWalletQuery = {
       data: undefined,
       error: walletError,
+      getWalletBalance: () => 0,
       isLoading: false,
       refetch: jest.fn(() => Promise.resolve({})),
     };
 
     const { result } = renderHook(() => useUtilityPayment());
 
-    expect(result.current.walletBalance).toBe(0);
+    expect(result.current.getWalletBalance()).toBe(0);
     expect(result.current.walletError).toBe(walletError);
     expect(result.current.walletIsLoading).toBe(false);
   });

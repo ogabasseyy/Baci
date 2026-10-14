@@ -391,6 +391,39 @@ describe('useWallet', () => {
     queryClient.clear();
   });
 
+  it('reads the live cached balance through getWalletBalance', async () => {
+    // Codex R78 6sN80p: readiness invokes this after the
+    // settlement-gate await; it must reflect a refetch that landed
+    // mid-await, not the render-time snapshot.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+    const walletKey = walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-1',
+      userId: 'user-1',
+    });
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.getWalletBalance()).toBe(750);
+
+    queryClient.setQueryData<WalletQueryData>(walletKey, (old) =>
+      old === undefined
+        ? old
+        : { ...old, wallet: { ...old.wallet, balance: 3200 } }
+    );
+    expect(result.current.getWalletBalance()).toBe(3200);
+
+    queryClient.removeQueries({ queryKey: walletKey });
+    expect(result.current.getWalletBalance()).toBe(0);
+
+    unmount();
+    queryClient.clear();
+  });
+
   it('reads customer wallet transactions instead of merchant wallet transactions', async () => {
     const { tableCalls, transactionFilters } = setupWalletTableMocks();
     const queryClient = createTestClient();

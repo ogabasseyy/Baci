@@ -139,6 +139,16 @@ export async function assertSnapshotMatchesSource(
       `merchant image pilot: snapshot for "${label}" decodes to ${width}x${height}, beyond the generator pixel limit`
     );
   }
+  // The generator's per-axis ceiling, mirroring snapshotFormat: a
+  // hash-matching 20,000x1 strip passes the total-pixel check above
+  // but must still refuse — certifying it would vouch for a source
+  // the encoder rejects on sight. Oriented dims, matching the
+  // manifest claims and the encoder's own recording.
+  if (width > PILOT_MAX_AXIS_PIXELS || height > PILOT_MAX_AXIS_PIXELS) {
+    throw new Error(
+      `merchant image pilot: snapshot for "${label}" decodes to ${width}x${height}, beyond the generator axis limit of ${PILOT_MAX_AXIS_PIXELS}`
+    );
+  }
   if (
     snapshot.length !== source.bytes ||
     width !== source.orientedWidth ||

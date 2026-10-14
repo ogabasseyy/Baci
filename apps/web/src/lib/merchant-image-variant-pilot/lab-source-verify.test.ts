@@ -115,6 +115,23 @@ describe('assertSnapshotMatchesSource', () => {
     ).rejects.toThrow(/48x48.*claims 48x49/);
   });
 
+  it('rejects a hash-matching source past the axis ceiling', async () => {
+    const snapshot = await sharp({
+      create: { background: '#ffffff', channels: 3, height: 1, width: 20000 },
+    })
+      .png()
+      .toBuffer();
+    const source = {
+      bytes: snapshot.length,
+      format: 'png',
+      orientedHeight: 1,
+      orientedWidth: 20000,
+    };
+    await expect(
+      assertSnapshotMatchesSource(snapshot, source, 'merchant/slot')
+    ).rejects.toThrow(/beyond the generator axis limit/);
+  });
+
   it('rejects a byte size the snapshot disproves', async () => {
     const snapshot = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
     await expect(

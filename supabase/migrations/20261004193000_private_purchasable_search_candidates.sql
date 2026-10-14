@@ -1,6 +1,12 @@
 -- Keep raw candidates outside exposed API schemas; public listings stay bounded.
 -- Preserve caller RLS: every function in this migration is SECURITY INVOKER.
 -- Do not add storefront_search_private to the PostgREST exposed schemas.
+-- The anon/authenticated schema USAGE and function EXECUTE grants cannot be
+-- tightened without breaking the public path: SECURITY INVOKER wrappers run
+-- with caller rights, so callers need EXECUTE on every helper in the chain.
+-- Revoking would 403 public search; converting the wrappers to SECURITY
+-- DEFINER would bypass RLS (the worse trade). Exposure therefore rests on
+-- the schema staying out of the PostgREST exposed-schemas deployment config.
 BEGIN;
 CREATE SCHEMA storefront_search_private;
 REVOKE ALL ON SCHEMA storefront_search_private FROM PUBLIC;

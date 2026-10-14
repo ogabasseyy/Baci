@@ -57,7 +57,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261004193000_private_purchasable_search_candidates.sql',
-    sha256: 'c0c1329b3667d233f08ebe5b11e5abb4fc12dc699d8a3e39061d8f97981cfbe7',
+    sha256: 'dd93f1a6c4903f9e45784188df823c1835e3e3bbbd098397f5e95dd82bb4efea',
   },
   {
     repositoryPath:

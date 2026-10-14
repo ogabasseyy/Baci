@@ -5,6 +5,7 @@ from its own directory — including from the base-owned /tmp extraction, so
 no repository layout is assumed. Everything here reads candidate text as
 data; nothing here executes PR code.
 """
+import fnmatch
 import re
 
 CI_YML = ".github/workflows/ci.yml"
@@ -99,8 +100,14 @@ def trigger_failures(ci_text):
                         break
                     branches.append(item.group(1))
                     j += 1
-                if not any("main" in branch for branch in branches):
-                    failures.append(f"ci.yml must keep main in the {trig} branches:")
+                patterns = []
+                for raw in branches:
+                    for part in raw.strip().strip("[]").split(","):
+                        cleaned = part.strip().strip("'\"")
+                        if cleaned:
+                            patterns.append(cleaned)
+                if not any(fnmatch.fnmatchcase("main", pat) for pat in patterns):
+                    failures.append(f"ci.yml must keep an exact main match in the {trig} branches:")
     return failures
 
 
@@ -123,6 +130,12 @@ def ci_failures(ci_text):
     job = lines[job_start : (later[0] if later else len(lines))]
     if any(_JOB_CONDITION.match(line) for line in job):
         return failures + ["capability gate job must stay unconditional (no job-level if:/needs:/continue-on-error:)"]
+    # A checkout pinned to the base SHA would diff the base against itself
+    # and skip the suite while the contract stays green.
+    for line in lines[job_start:start]:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and re.match(r"^ref\s*:", stripped):
+            return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
     code = []
     for line in lines[start + 1 :]:
         if _NEXT_STEP.match(line):
@@ -151,9 +164,26 @@ def workflow_failures(workflow_text):
         failures.append("contract workflow must keep the pull_request_target trigger")
     if "contents: read" not in "\n".join(code):
         failures.append("contract workflow must stay read-only (contents: read)")
-    runs = [i for i, line in enumerate(code) if re.match(r"^\s*run\s*:\s*\|\s*$", line)]
+    if not any(line.strip() == "ref: ${{ github.event.pull_request.head.sha }}" for line in code):
+        failures.append("contract workflow must check out the PR head (base ref would validate the base tree)")
+    if not any(re.match(r"^\s*PINNED_CHECKER_SHA256:\s*[0-9a-f]{64}\s*$", line) for line in code):
+        failures.append("contract workflow must declare its checker pin as a live entry (not a comment)")
+    headers = [i for i, line in enumerate(code) if re.match(r"^  [A-Za-z0-9_.\-]+\s*:", line)]
+    gate = next((i for i, line in enumerate(code) if re.match(r"^  gate-contract\s*:", line)), None)
+    if gate is None:
+        return failures + ["contract workflow must keep the gate-contract job"]
+    later = [i for i in headers if i > gate]
+    block = code[gate : (later[0] if later else len(code))]
+    if any(re.match(r"^\s*permissions\s*:", line) for line in block):
+        failures.append("contract workflow job must not override permissions")
+    steps = [line for line in block if re.match(r"^      -(\s|$)", line)]
+    if len(steps) != 2:
+        return failures + [f"contract workflow job must keep exactly its two steps (found {len(steps)})"]
+    runs = [i for i, line in enumerate(code) if re.match(r"^\s*run\s*:", line)]
     if len(runs) != 1:
         return failures + [f"contract workflow must have exactly one run step (found {len(runs)})"]
+    if not re.match(r"^\s*run\s*:\s*\|\s*$", code[runs[0]]):
+        return failures + ["contract workflow run step must stay a block run"]
     indent = len(code[runs[0]]) - len(code[runs[0]].lstrip())
     body = []
     for line in code[runs[0] + 1 :]:

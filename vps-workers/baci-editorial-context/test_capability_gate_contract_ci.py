@@ -126,6 +126,27 @@ jobs:
         self.assertTrue(failures)
         self.assertIn("types", failures[0])
 
+    def test_branch_substring_does_not_match_main(self):
+        # GitHub matches globs, not substrings: [domain] and [not-main]
+        # contain "main" but never match the main branch.
+        for branches in ("[domain]", "[not-main]"):
+            ci = CI.replace("  pull_request:\n", f"  pull_request:\n    branches: {branches}\n", 1)
+            failures = check.ci_failures(ci)
+            self.assertTrue(failures, branches)
+            self.assertIn("main", failures[0])
+        wildcard = CI.replace("  pull_request:\n", "  pull_request:\n    branches: ['*']\n", 1)
+        self.assertEqual(check.ci_failures(wildcard), [])
+
+    def test_pinned_checkout_ref_fails(self):
+        ci = CI.replace(
+            "      - name: Test capability register binding\n",
+            "      - uses: actions/checkout@v4\n        with:\n          ref: ${{ github.event.pull_request.base.sha }}\n      - name: Test capability register binding\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("must not pin a ref", failures[0])
+
     def test_fake_comment_cannot_satisfy(self):
         ci = """on:
   push:

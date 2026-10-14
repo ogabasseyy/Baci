@@ -132,6 +132,11 @@ export function useUtilityPayment() {
     // the readiness gate invokes this after the settlement-gate
     // await, so a refetch starting mid-await must still read true.
     isWalletRefetching: wallet.isFetchingNow,
+    // Live reader, not the render-time snapshot (Muse R2): the
+    // readiness gate invokes this after the settlement-gate await,
+    // so an identity switch settling mid-await must still read
+    // false until the new identity's query has data.
+    isWalletSettled: wallet.isWalletSettled,
     /**
      * Returns the wallet-only Idempotency-Key (UUID) for this purchase
      * descriptor, recalling a still-pending key across form remounts

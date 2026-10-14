@@ -20,12 +20,14 @@ function paymentState(
 ): Parameters<typeof ensureUtilityWalletReady>[0]['payment'] {
   return {
     canFundByBankTransfer: true,
+    captureSubmittingUserId: () => 'user-1',
     isAuthenticated: true,
     refetchWallet: jest.fn(),
     getWalletBalance: () => 5000,
     walletError: null,
     walletIsLoading: false,
     isWalletRefetching: () => false,
+    isWalletSettled: () => true,
     ...overrides,
   };
 }
@@ -234,5 +236,72 @@ describe('ensureUtilityWalletReady', () => {
       canFundByBankTransfer: false,
       returnToHref,
     });
+  });
+
+  it('asks unsettled wallets to wait instead of reporting a shortfall', () => {
+    // Muse R2 medium: a DISABLED query (identity mid-switch, owner
+    // unresolved) is not loading, not refetching, and error-free —
+    // but has no data, so the balance reads 0. A funded customer
+    // must see "checking balance", not the funding prompt, and the
+    // gate must not even read the meaningless zero.
+    const getWalletBalance = jest.fn(() => 0);
+    const ready = ensureUtilityWalletReady({
+      amount: 1000,
+      payment: paymentState({
+        getWalletBalance,
+        walletIsLoading: false,
+        isWalletRefetching: () => false,
+        isWalletSettled: () => false,
+      }),
+    });
+
+    expect(ready).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Checking wallet balance',
+      expect.any(String)
+    );
+    expect(getWalletBalance).not.toHaveBeenCalled();
+    expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
+  });
+
+  it('re-reads settled state on every evaluation instead of snapshotting it', () => {
+    // The payment object is captured BEFORE the settlement-gate
+    // await; an identity switch settling during that await must
+    // flip the verdict. A render-time boolean would stay true here.
+    let settled = true;
+    const payment = paymentState({
+      getWalletBalance: () => 5000,
+      walletIsLoading: false,
+      isWalletSettled: () => settled,
+    });
+
+    expect(ensureUtilityWalletReady({ amount: 1000, payment })).toBe(true);
+    settled = false;
+    expect(ensureUtilityWalletReady({ amount: 1000, payment })).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Checking wallet balance',
+      expect.any(String)
+    );
+  });
+
+  it('waits for the submitting user id instead of failing post-dispatch', () => {
+    // Muse R2 low: session present but the user object still
+    // hydrating — the charge's submitter binding would abort with
+    // "Account still loading" AFTER dispatch. Gate pre-submit.
+    const ready = ensureUtilityWalletReady({
+      amount: 1000,
+      payment: paymentState({
+        captureSubmittingUserId: () => undefined,
+        getWalletBalance: () => 5000,
+        isAuthenticated: true,
+      }),
+    });
+
+    expect(ready).toBe(false);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Account still loading',
+      expect.any(String)
+    );
+    expect(mockPromptUtilityWalletFunding).not.toHaveBeenCalled();
   });
 });

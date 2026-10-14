@@ -84,6 +84,7 @@ describe('airtime stale success replay', () => {
           walletError: null,
           walletIsLoading: false,
           isWalletRefetching: () => false,
+          isWalletSettled: () => true,
           // Mirrors the production hook: recall-first, remember only
           // when no entry exists (a blind re-remember would wipe the
           // note/completion the stale guard needs).
@@ -726,6 +727,7 @@ describe('airtime purchase checkout guard', () => {
           walletError: null,
           walletIsLoading: false,
           isWalletRefetching: () => false,
+          isWalletSettled: () => true,
           getWalletIdempotencyKey: jest.fn(() => 'airtime-key'),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',

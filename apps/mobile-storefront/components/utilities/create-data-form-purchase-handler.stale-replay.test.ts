@@ -77,6 +77,7 @@ describe('data stale success replay', () => {
         walletError: null,
         walletIsLoading: false,
         isWalletRefetching: () => false,
+        isWalletSettled: () => true,
         // Mirrors the production hook: recall-first, remember only
         // when no entry exists (a blind re-remember would wipe the
         // note/completion the stale guard needs).

@@ -424,6 +424,178 @@ describe('useWallet', () => {
     queryClient.clear();
   });
 
+  it('reports unsettled while the identities disagree even with cached data', async () => {
+    // Muse R2 medium: a switch mid-flight disables the query, but
+    // the new identity's key can still hold data from an earlier
+    // session — the gate must wait for agreement, not trust it.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+    const switchedKey = walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-1',
+      userId: 'user-2',
+    });
+    queryClient.setQueryData<WalletQueryData>(switchedKey, {
+      wallet: { balance: 3200, loyalty_points: 0 },
+      transactions: [],
+    });
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.isWalletSettled()).toBe(true);
+
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-1',
+          email: 'customer@example.com',
+          user_id: 'user-1',
+        },
+        user: createMockUser('user-2'),
+      });
+    });
+
+    expect(result.current.isWalletSettled()).toBe(false);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('reads the balance under the live identity after an agreed switch', async () => {
+    // Muse R2: the readers run AFTER the settlement-gate await, when
+    // a switch may have moved the identity on from this render's —
+    // the render-time key would return the previous owner's balance.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+    const switchedKey = walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-2',
+      userId: 'user-2',
+    });
+    queryClient.setQueryData<WalletQueryData>(switchedKey, {
+      wallet: { balance: 3200, loyalty_points: 0 },
+      transactions: [],
+    });
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.getWalletBalance()).toBe(750);
+
+    // Capture the render-time closures BEFORE the switch — the
+    // purchase closure a gate would invoke after its await.
+    const readers = result.current;
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-2',
+          email: 'second@example.com',
+          user_id: 'user-2',
+        },
+        user: createMockUser('user-2'),
+      });
+    });
+
+    expect(readers.getWalletBalance()).toBe(3200);
+    expect(readers.isWalletSettled()).toBe(true);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('reads fetch state under the live identity after a switch', async () => {
+    // Muse R2: a refetch starting mid-await under a switched
+    // identity must still block — the render-time key would miss it.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+    const switchedKey = walletKeys.data({
+      merchantId: 'merchant-1',
+      ownerId: 'customer-2',
+      userId: 'user-2',
+    });
+    // Fresh cache for the switched identity: the hook's own query
+    // stays quiet after the switch, so only the held fetch below
+    // drives fetch state (no timing assumptions).
+    queryClient.setQueryData<WalletQueryData>(switchedKey, {
+      wallet: { balance: 3200, loyalty_points: 0 },
+      transactions: [],
+    });
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    // Capture the render-time closure BEFORE the switch — the
+    // purchase closure a gate would invoke after its await.
+    const { isFetchingNow } = result.current;
+    act(() => {
+      useAuthStore.setState({
+        customer: {
+          id: 'customer-2',
+          email: 'second@example.com',
+          user_id: 'user-2',
+        },
+        user: createMockUser('user-2'),
+      });
+    });
+    expect(isFetchingNow()).toBe(false);
+
+    let releaseFetch!: (value: WalletQueryData) => void;
+    const pending = new Promise<WalletQueryData>((resolve) => {
+      releaseFetch = resolve;
+    });
+    let inFlight!: Promise<WalletQueryData>;
+    await act(async () => {
+      inFlight = queryClient.fetchQuery({
+        queryFn: () => pending,
+        queryKey: switchedKey,
+      });
+    });
+    expect(isFetchingNow()).toBe(true);
+
+    releaseFetch({
+      wallet: { balance: 3200, loyalty_points: 0 },
+      transactions: [],
+    });
+    await act(async () => {
+      await inFlight;
+    });
+    expect(isFetchingNow()).toBe(false);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('reports unsettled with a zero balance when no identity resolves', async () => {
+    // Muse R2 medium: owner unresolved (signed out mid-await) means
+    // the query cannot run — missing data must not read as funds.
+    setupWalletTableMocks();
+    const queryClient = createTestClient();
+
+    const { result, unmount } = renderHook(() => useWallet(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    // Capture the render-time closures BEFORE the switch — the
+    // purchase closure a gate would invoke after its await.
+    const readers = result.current;
+    act(() => {
+      useAuthStore.setState({ customer: null, user: null });
+    });
+
+    expect(readers.isWalletSettled()).toBe(false);
+    expect(readers.getWalletBalance()).toBe(0);
+    expect(readers.isFetchingNow()).toBe(false);
+
+    unmount();
+    queryClient.clear();
+  });
+
   it('reads customer wallet transactions instead of merchant wallet transactions', async () => {
     const { tableCalls, transactionFilters } = setupWalletTableMocks();
     const queryClient = createTestClient();

@@ -6,6 +6,13 @@ import { promptUtilityWalletFunding } from './utility-wallet-funding-prompt';
 interface UtilityWalletReadinessPayment {
   canFundByBankTransfer: boolean;
   /**
+   * Raw auth user id at gate time — NOT session presence. Startup can
+   * publish a session before the user object hydrates, and the
+   * charge's submitter binding aborts without it, so the gate must
+   * wait for the id instead of letting the submit fail post-dispatch.
+   */
+  captureSubmittingUserId: () => string | undefined;
+  /**
    * Raw session presence — NOT customer-record presence. Startup publishes
    * session/user with customer:null while hydration finishes in the
    * background, and the wallet still resolves by user ID, so gating on the
@@ -31,6 +38,14 @@ interface UtilityWalletReadinessPayment {
    * walletRefreshPending live read.
    */
   isWalletRefetching: () => boolean;
+  /**
+   * Live settled reader (Muse R2), invoked at gate time — NOT a
+   * render-time snapshot. A DISABLED wallet query (identity
+   * mid-switch, owner not yet resolved) reports not-loading with no
+   * data and no error, which reads as a zero balance; the gate must
+   * wait for enabled query + cached data instead of opening funding.
+   */
+  isWalletSettled: () => boolean;
 }
 
 /**
@@ -73,11 +88,24 @@ export function ensureUtilityWalletReady({
     );
     return false;
   }
+  // The charge binds its token to the submitting user id; without
+  // the id it aborts post-dispatch ("Account still loading"), so
+  // wait for hydration here instead of attempting a doomed submit.
+  if (!payment.captureSubmittingUserId()) {
+    Alert.alert('Account still loading', 'Please wait a moment and try again.');
+    return false;
+  }
   // A refetch in flight means fresh data is seconds away — never
   // submit against the balance it is about to replace. Merely stale
   // data with no fetch running still stands (the server stays
-  // authoritative); blocking on that would brick purchases.
-  if (payment.walletIsLoading || payment.isWalletRefetching()) {
+  // authoritative); blocking on that would brick purchases. But an
+  // UNSETTLED wallet (disabled query, no cached data yet) has no
+  // balance at all — its zero read must wait, never open funding.
+  if (
+    payment.walletIsLoading ||
+    payment.isWalletRefetching() ||
+    !payment.isWalletSettled()
+  ) {
     Alert.alert(
       'Checking wallet balance',
       'Please wait a moment and try again.'

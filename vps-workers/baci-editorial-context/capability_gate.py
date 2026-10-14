@@ -31,6 +31,7 @@ REGISTER_PATH = _paths.REGISTER_PATH
 MAP_PATH = _paths.MAP_PATH
 SUITE_DIR = _paths.SUITE_DIR
 ACTION_PATH = _paths.ACTION_PATH
+FRESHNESS_WORKFLOW = _paths.FRESHNESS_WORKFLOW
 map_cited_paths = _paths.map_cited_paths
 map_cited_filenames = _paths.map_cited_filenames
 map_link_targets = _paths.map_link_targets
@@ -129,7 +130,27 @@ def _revision_resolves(revision, cwd="."):
             ["git", "-C", str(cwd), "cat-file", "-e", f"{revision}^{{commit}}"],
             capture_output=True, text=True,
         )
-    except OSError:
+    except Exception:
+        return False
+    return proc.returncode == 0
+
+
+def _replacement_revision_ok(new_rev, old_rev, cwd="."):
+    """The newly bound tree must descend from the previously bound one.
+
+    Mere existence proves nothing: an older ancestor predating the reviewed
+    change also resolves. Content validation stays with the binding test's
+    provenance check; here the tripwire is continuity — rebase onto current
+    history and re-point when it fails.
+    """
+    if not _revision_resolves(new_rev, cwd):
+        return False
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(cwd), "merge-base", "--is-ancestor", str(old_rev), str(new_rev)],
+            capture_output=True, text=True,
+        )
+    except Exception:
         return False
     return proc.returncode == 0
 
@@ -170,7 +191,7 @@ def _base_register(base, cwd="."):
         return None
 
 
-def requires_register_update(register, changed, base_register=None, rev_resolves=None):
+def requires_register_update(register, changed, base_register=None, rev_acceptable=None):
     """A fresh register whose cited sources changed needs re-review.
 
     Freshness alone cannot catch this: the register is still inside its
@@ -215,8 +236,9 @@ def requires_register_update(register, changed, base_register=None, rev_resolves
     if new_rev == old_rev:
         return True
     # A merely different revision proves nothing: it must resolve to a
-    # reviewed tree, or provenance degrades and a redigest passes blind.
-    if rev_resolves is not None and not rev_resolves(new_rev):
+    # reviewed tree descending from the previous one, or provenance degrades
+    # and a redigest passes blind.
+    if rev_acceptable is not None and not rev_acceptable(new_rev, old_rev):
         return True
     return False
 
@@ -243,7 +265,7 @@ def main():
             print(f"capability gate: cannot compute the changed-path set for base {base[:12]}; refusing to run blind")
             return 1
         base_register = _base_register(_comparison_base(base), cwd=".") if register is not None else None
-        if requires_register_update(register, changed, base_register, _revision_resolves):
+        if requires_register_update(register, changed, base_register, _replacement_revision_ok):
             print(
                 "unverified capability sources changed without a register re-review; "
                 f"update {REGISTER_PATH} (reviewed_at + digests) in this change"

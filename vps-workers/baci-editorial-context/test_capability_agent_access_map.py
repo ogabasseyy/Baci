@@ -112,6 +112,10 @@ class AgentAccessMapTests(unittest.TestCase):
         register = {"capabilities": []}
         self.assertTrue(gate.should_run("base", register, {gate.ACTION_PATH}))
 
+    def test_workflow_only_change_runs_suite(self):
+        register = {"capabilities": []}
+        self.assertTrue(gate.should_run("base", register, {gate.FRESHNESS_WORKFLOW}))
+
     def test_noncanonical_citation_spelling_triggers_gate(self):
         register = {"capabilities": [
             {"status": "code_evidenced", "source_refs": ["./apps/web/src/lib/feeds.ts"]},

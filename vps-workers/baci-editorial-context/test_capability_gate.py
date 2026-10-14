@@ -105,6 +105,7 @@ class CapabilityGateTests(unittest.TestCase):
             git("checkout", "-q", "-b", "feature")
             (repo / "docs/product/baci-capabilities.json").write_text(json.dumps({"reviewed_at": "2026-10-05T00:00:00Z"}))
             git("commit", "-q", "-am", "pr re-review")
+            feature_tip = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
             git("checkout", "-q", trunk)
             (repo / "docs/product/baci-capabilities.json").write_text(json.dumps({"reviewed_at": "2026-10-10T00:00:00Z"}))
             git("commit", "-q", "-am", "main advances register")
@@ -120,6 +121,11 @@ class CapabilityGateTests(unittest.TestCase):
                     self.assertEqual(gate._base_register(gate._comparison_base(tip, cwd=repo), cwd=repo)["reviewed_at"], "2026-10-01T00:00:00Z")
                     with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "push"}):
                         self.assertEqual(gate._comparison_base(tip, cwd=repo), tip)
+                # Replacement revisions need continuity, not mere existence.
+                self.assertTrue(gate._replacement_revision_ok(feature_tip, fork, cwd=repo))
+                self.assertFalse(gate._replacement_revision_ok(fork, feature_tip, cwd=repo))
+                self.assertFalse(gate._replacement_revision_ok("f" * 40, fork, cwd=repo))
+                self.assertFalse(gate._replacement_revision_ok(feature_tip, "f" * 40, cwd=repo))
             finally:
                 os.chdir(previous)
 
@@ -166,10 +172,10 @@ class CapabilityGateTests(unittest.TestCase):
         # Date advanced but old revision carried forward: still required.
         carried = {**rereviewed, "source_revision": base["source_revision"]}
         self.assertTrue(gate.requires_register_update(carried, touched, base))
-        # New but unresolvable revision: still required; resolvable: accepted.
+        # New but rejected replacement revision: still required; accepted: clear.
         ghost = {**rereviewed, "source_revision": "f" * 40}
-        self.assertTrue(gate.requires_register_update(ghost, touched, base, rev_resolves=lambda rev: False))
-        self.assertFalse(gate.requires_register_update(ghost, touched, base, rev_resolves=lambda rev: True))
+        self.assertTrue(gate.requires_register_update(ghost, touched, base, rev_acceptable=lambda new, old: False))
+        self.assertFalse(gate.requires_register_update(ghost, touched, base, rev_acceptable=lambda new, old: True))
         # Base register unloadable: the path touch is the only signal, accepted.
         self.assertFalse(gate.requires_register_update(fresh, touched, None))
         self.assertFalse(gate.requires_register_update(fresh, touched))

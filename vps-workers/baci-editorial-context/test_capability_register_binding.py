@@ -266,6 +266,9 @@ class CapabilityBindingTests(unittest.TestCase):
             full = dict(thin, deployed_revision="b" * 40, verified_at=now)
             path.write_text(json.dumps(register(capabilities=[dict(row, status="production_verified", production_evidence=full)])))
             self.assertEqual(_status.classify(path), "fresh")
+            oversized = dict(full, workflow="w" * 1001)
+            path.write_text(json.dumps(register(capabilities=[dict(row, status="production_verified", production_evidence=oversized)])))
+            self.assertEqual(_status.classify(path), "broken")
             # Oversized current-dated fields the runtime rejects: broken.
             path.write_text(json.dumps(register(capabilities=[dict(row, claim="x" * 1001)])))
             self.assertEqual(_status.classify(path), "broken")

@@ -29,6 +29,9 @@ def _evidence_state(evidence):
         return "broken"
     if any(not isinstance(evidence.get(key), str) or not evidence[key].strip() for key in ("workflow", "entitlement", "observation")):
         return "broken"
+    # Mirror the runtime 1,000-character nested evidence limits.
+    if any(len(evidence[key]) > 1000 for key in ("workflow", "entitlement", "observation")):
+        return "broken"
     deployed = evidence.get("deployed_revision", "")
     if not isinstance(deployed, str) or not re.fullmatch(r"[a-f0-9]{40}", deployed):
         return "broken"

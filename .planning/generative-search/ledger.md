@@ -57,7 +57,7 @@ Suggestion interaction implementation:
 Product request and header follow-up:
 - Empty app search uses back arrow and cart icon. Comparison needs results and two selections; stored selections survive clearing the query. Web comparison uses the same visibility rules.
 - App/web successful zero-match states provide an explicit product/contact request form; loading/error states do not solicit requests. No cart/order/checkout mutations are introduced.
-- Product request migration applied to confirmed app project aivqthbxdshhltbwipbr. Live anonymous intake and inbox delivery passed inside a rolled-back transaction; zero fixture rows remain. The first minute worker run succeeded.
+- Product request migration applied to confirmed app project (ref redacted). Live anonymous intake and inbox delivery passed inside a rolled-back transaction; zero fixture rows remain. The first minute worker run succeeded.
 - Local SQL tests cover validation, private reads, contact/merchant rates, deduplication, replay, disabled inbox preferences and deletion without re-delivery. Live scheduled_for constraint is included in the worker and regression fixture.
 - Focused web final checks: 9 tests pass. Native request 2 and header/search regressions pass. Shared request 3 pass. Metro status remains running on port 8082. Web typecheck passed; broader gates retain unrelated failures.
 - CodeRabbit review completed. Branding fixed. Conditional price lookup suggestion not adopted because accurate variant/offer card prices also require it without filters. IP throttle remains a documented follow-up; rotating contacts can exhaust the bounded merchant intake allowance. No web deployment/native release performed.

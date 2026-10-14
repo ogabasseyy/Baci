@@ -1,6 +1,11 @@
 -- Additive public refinement contract. Existing search_products_v2 callers remain supported.
 -- Ranking is SECURITY INVOKER under product RLS. Only published active products
 -- have public offer-price projections; protected inventory/cost columns never leave SQL.
+-- Exception: get_storefront_search_price_options is intentionally SECURITY DEFINER
+-- (EXECUTE to anon/authenticated) with hand-written merchant/status/published and
+-- stock predicates, since no single RLS policy covers its cross-table projection.
+-- Re-audit its column list and predicates on any change; do not add columns
+-- assuming RLS still protects them.
 CREATE OR REPLACE FUNCTION public.get_storefront_search_price_options(p_merchant_id uuid, p_product_id uuid)
 RETURNS TABLE(variant_id uuid, offer_id uuid, condition text, effective_price numeric)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$

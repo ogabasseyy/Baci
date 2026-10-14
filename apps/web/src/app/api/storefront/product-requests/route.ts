@@ -8,11 +8,11 @@ import { submitStorefrontProductRequest } from '@/lib/storefront/server-intake-c
 // grant. The proxy adds the IP gate; the RPC enforces durable contact and
 // merchant budgets. No session authority or service client is used.
 export async function POST(request: NextRequest) {
-  // Double-submit CSRF only when the request carries cookies: CSRF exploits
-  // automatic cookie sending, so a cookie-less caller (the native app posts
-  // no cookies and holds no session) has no ambient authority to abuse.
-  // Browsers always attach cookies, so a cross-site page cannot deputize
-  // them past this gate. (Mirrors the Bearer carve-out rationale in csrf.ts.)
+  // Double-submit CSRF only when the request carries cookies: this route
+  // exercises no session or ambient authority (it only forwards Zod-validated
+  // input to the restricted storefront_intake RPC), so a cookie-less caller
+  // gains nothing past this gate. Cookie presence only decides whether a
+  // double-submit token can exist to check; it is not a browser guarantee.
   if (request.headers.get('cookie')) {
     const { valid: csrfValid, response: csrfResponse } =
       await checkCsrfProtection(request);

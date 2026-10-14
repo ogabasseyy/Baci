@@ -285,7 +285,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002090046_storefront_search_refinements.sql',
-    sha256: 'a5630e150bde08b7f0450ed847b0ec8888f359b6968bdec9bc015a7f35d1c703',
+    sha256: 'f2a1e439271d32eeb9e83dbde9f79782f00aedfdf318f28020c5edaef8a58372',
   },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,

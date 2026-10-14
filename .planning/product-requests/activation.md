@@ -21,7 +21,7 @@
 ## Database activation
 
 `supabase/migrations/20261002190000_storefront_product_requests.sql` was applied
-to the confirmed app project aivqthbxdshhltbwipbr on 2026-10-02. Storage and
+to the confirmed app project (ref redacted) on 2026-10-02. Storage and
 RPC intake are active. The active pg_cron job delivers merchant inbox
 notifications every minute. No web deployment or native release was performed.
 

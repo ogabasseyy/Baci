@@ -3,6 +3,7 @@ import {
   getCartValidationKey,
   getInvalidOfferLineKey,
   isOfferParentEligible,
+  resolveReportedLineStock,
 } from './resolve-cart-validation-offer-line';
 
 const STR_ID = '11111111-1111-4111-8111-111111111111';
@@ -206,5 +207,35 @@ describe('getInvalidOfferLineKey', () => {
         parentEligible: true,
       })
     ).toBe(`${STR_ID}::v1::offer=${OFFER_ID}`);
+  });
+});
+
+describe('resolveReportedLineStock', () => {
+  const item = { offerId: OFFER_ID };
+
+  it('reports the live offer allocation for non-variant offer lines', () => {
+    expect(
+      resolveReportedLineStock(item, { stock_quantity: 3 }, { stock: 0 })
+    ).toBe(3);
+  });
+
+  it('falls back to the parent for variant lines', () => {
+    expect(
+      resolveReportedLineStock(
+        { variantId: 'v1', offerId: OFFER_ID },
+        { stock_quantity: 3 },
+        { stock: 7 }
+      )
+    ).toBe(7);
+  });
+
+  it('falls back to the parent without an offer or finite scalar', () => {
+    expect(resolveReportedLineStock({}, undefined, { stock: 7 })).toBe(7);
+    expect(
+      resolveReportedLineStock(item, { stock_quantity: null }, { stock: 7 })
+    ).toBe(7);
+    expect(
+      resolveReportedLineStock(item, { stock_quantity: 'n/a' }, { stock: 7 })
+    ).toBe(7);
   });
 });

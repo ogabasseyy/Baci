@@ -1,4 +1,5 @@
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { getEffectiveStock, type StockLike } from '@/lib/product-stock';
 
 export function getCartValidationKey(
   id: string,
@@ -103,6 +104,35 @@ export type OfferLineResolutionInput = {
  * Returns the invalid-line key, or null when the line passes every
  * offer check (non-offer lines always pass).
  */
+export type ReportedLineStockItem = {
+  variantId?: string;
+  offerId?: string;
+};
+
+export type ReportedLineStockOffer = {
+  stock_quantity?: number | string | null;
+};
+
+/**
+ * Reported stock for one validated line. Non-variant offer lines report
+ * the live offer allocation, not the parent: the order RPC decrements
+ * product_offers.stock_quantity, so reporting parent stock would show a
+ * purchasable offer line as unavailable (or overstate its cap). Rows
+ * without a finite scalar fall back to the parent, same as the
+ * invalid-line check's skip.
+ */
+export function resolveReportedLineStock(
+  item: ReportedLineStockItem,
+  offer: ReportedLineStockOffer | undefined,
+  product: StockLike
+): number {
+  if (!item.variantId && item.offerId) {
+    const allocation = Number(offer?.stock_quantity ?? Number.NaN);
+    if (Number.isFinite(allocation)) return allocation;
+  }
+  return getEffectiveStock(product);
+}
+
 export function getInvalidOfferLineKey({
   strId,
   variantId,

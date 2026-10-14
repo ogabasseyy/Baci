@@ -109,14 +109,18 @@ describe('PostHog remediation candidate pagination', () => {
     assert.equal(requests, 10);
   });
 
-  it('refuses a body that declares itself past the byte cap', async () => {
+  it('aborts a streamed body past the byte cap without trusting headers', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"results":['));
+        controller.enqueue(new TextEncoder().encode('x'.repeat(1_000_001)));
+        controller.close();
+      },
+    });
     await assert.rejects(
       fetchPostHogRemediationCandidates({
         env: environment,
-        fetchFn: async () =>
-          new Response('{}', {
-            headers: { 'content-length': '1000001' },
-          }),
+        fetchFn: async () => new Response(stream),
       }),
       /exceeded the 1000000-byte body cap/
     );

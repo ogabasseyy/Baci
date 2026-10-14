@@ -53,6 +53,7 @@ export function createRemediationCaseStateValidator({
     'firstSeen',
     'fingerprint',
     'key',
+    'lastSelectedAt',
     'lastSeen',
     'observationMarker',
     'observedOccurrences',
@@ -119,6 +120,8 @@ export function createRemediationCaseStateValidator({
       ) &&
       (item.firstSeen === '' || isIsoDate(item.firstSeen)) &&
       (item.lastSeen === '' || isIsoDate(item.lastSeen)) &&
+      (item.lastSelectedAt === undefined ||
+        isIsoDate(item.lastSelectedAt)) &&
       isBoundedString(item.observationMarker, 120) &&
       caseStatuses.has(item.status) &&
       isNonnegativeInteger(item.totalObservations) &&

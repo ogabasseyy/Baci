@@ -1,18 +1,9 @@
-export const boundedString = (value, length) =>
+const boundedString = (value, length) =>
   typeof value === 'string' ? value.trim().slice(0, length) : '';
 
-// Occurrence counts are measured over this trailing window so the repeat
-// threshold does not depend on the server's default date_from.
-export const OCCURRENCE_WINDOW = '-7d';
-
-export const safeProjectId = (value) => {
+const safeProjectId = (value) => {
   const projectId = boundedString(value, 30);
   return /^[1-9]\d{0,28}$/.test(projectId) ? projectId : '';
-};
-
-export const safeIssueId = (value) => {
-  const issueId = boundedString(value, 120);
-  return /^[A-Za-z0-9_-]+$/.test(issueId) ? issueId : '';
 };
 
 export function requiredConfiguration(env) {

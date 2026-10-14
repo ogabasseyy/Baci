@@ -1,12 +1,20 @@
-import {
-  OCCURRENCE_WINDOW,
-  requiredConfiguration,
-  safeIssueId,
-} from './posthog-remediation-config.mjs';
+import { readBoundedJson } from './posthog-bounded-json.mjs';
+import { requiredConfiguration } from './posthog-remediation-config.mjs';
 import { redactCodexOutput } from './remediation-codex-output.mjs';
+
+// Keep in sync with posthog-error-events.mjs: list and detail queries
+// must measure the same trailing window.
+const OCCURRENCE_WINDOW = '-7d';
+const MAX_RESPONSE_BYTES = 1_000_000;
 
 const boundedString = (value, length) =>
   typeof value === 'string' ? value.trim().slice(0, length) : '';
+
+// Keep in sync with posthog-error-events.mjs.
+const safeIssueId = (value) => {
+  const issueId = boundedString(value, 120);
+  return /^[A-Za-z0-9_-]+$/.test(issueId) ? issueId : '';
+};
 
 // Redaction runs before character filtering: stripping punctuation first
 // would break email and secret patterns into unmatchable fragments.
@@ -121,12 +129,10 @@ export async function enrichPostHogRemediationCandidate({
     );
   }
 
-  let detail;
-  try {
-    detail = await response.json();
-  } catch {
-    throw new Error('PostHog error-tracking issue response was invalid JSON');
-  }
+  const detail = await readBoundedJson(response, {
+    label: 'PostHog error-tracking issue response',
+    maxBytes: MAX_RESPONSE_BYTES,
+  });
   if (!detail || typeof detail !== 'object') {
     throw new Error('PostHog error-tracking issue response was malformed');
   }

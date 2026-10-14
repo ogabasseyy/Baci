@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  OCCURRENCE_WINDOW,
-  requiredConfiguration,
-  safeIssueId,
-  safeProjectId,
-} from './posthog-remediation-config.mjs';
+import { requiredConfiguration } from './posthog-remediation-config.mjs';
 
 const environment = {
   POSTHOG_REMEDIATION_HOST: 'https://eu.posthog.com',
@@ -24,7 +19,6 @@ describe('PostHog remediation configuration', () => {
     assert.equal(String(baseUrl), 'https://eu.posthog.com/');
     assert.equal(projectId, '202711');
     assert.equal(token, 'phx_read_only_personal_key');
-    assert.equal(OCCURRENCE_WINDOW, '-7d');
   });
 
   it('rejects missing, ingestion-shaped, and non-personal credentials', () => {
@@ -58,19 +52,28 @@ describe('PostHog remediation configuration', () => {
       'not-a-url',
     ]) {
       assert.throws(
-        () => requiredConfiguration({ ...environment, POSTHOG_REMEDIATION_HOST: host }),
+        () =>
+          requiredConfiguration({
+            ...environment,
+            POSTHOG_REMEDIATION_HOST: host,
+          }),
         /HTTPS URL|must not include a path/,
         host
       );
     }
   });
 
-  it('accepts only numeric project IDs and identifier-shaped issue IDs', () => {
-    assert.equal(safeProjectId('202711'), '202711');
-    assert.equal(safeProjectId('project-1'), '');
-    assert.equal(safeProjectId(''), '');
-    assert.equal(safeIssueId('019611e5-abc_DEF-42'), '019611e5-abc_DEF-42');
-    assert.equal(safeIssueId('alice@example.com'), '');
-    assert.equal(safeIssueId(''), '');
+  it('rejects non-numeric project IDs', () => {
+    for (const projectId of ['project-1', '', '0', '0123x']) {
+      assert.throws(
+        () =>
+          requiredConfiguration({
+            ...environment,
+            POSTHOG_REMEDIATION_PROJECT_ID: projectId,
+          }),
+        /POSTHOG_REMEDIATION_PROJECT_ID are required/,
+        projectId
+      );
+    }
   });
 });

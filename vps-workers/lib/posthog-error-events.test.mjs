@@ -155,14 +155,21 @@ describe('PostHog remediation candidates', () => {
                 status: 'active',
                 aggregations: { occurrences: 1.9 },
               },
+              {
+                id: 'exact-threshold',
+                status: 'active',
+                aggregations: { occurrences: 2.0 },
+              },
             ],
           })
         ),
     });
 
-    assert.equal(candidates.length, 1);
+    assert.equal(candidates.length, 2);
     assert.equal(candidates[0].sample.issueId, 'fractional');
     assert.equal(candidates[0].occurrences, 4);
+    assert.equal(candidates[1].sample.issueId, 'exact-threshold');
+    assert.equal(candidates[1].occurrences, 2);
   });
 
   it('reports a provider response that is not JSON', async () => {

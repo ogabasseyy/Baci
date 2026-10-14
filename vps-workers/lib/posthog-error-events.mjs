@@ -1,18 +1,26 @@
 import { createHash } from 'node:crypto';
-import {
-  boundedString,
-  OCCURRENCE_WINDOW,
-  requiredConfiguration,
-  safeIssueId,
-} from './posthog-remediation-config.mjs';
+import { readBoundedJson } from './posthog-bounded-json.mjs';
+import { requiredConfiguration } from './posthog-remediation-config.mjs';
 
 const PAGE_SIZE = 100;
 const HARD_MAXIMUM_PAGES = 10;
+// Keep in sync with posthog-issue-enrichment.mjs: list and detail queries
+// must measure the same trailing window.
+const OCCURRENCE_WINDOW = '-7d';
 const MAX_RESPONSE_BYTES = 1_000_000;
+
+const boundedString = (value, length) =>
+  typeof value === 'string' ? value.trim().slice(0, length) : '';
 
 const positiveInteger = (value, fallback) => {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+// Keep in sync with posthog-issue-enrichment.mjs.
+const safeIssueId = (value) => {
+  const issueId = boundedString(value, 120);
+  return /^[A-Za-z0-9_-]+$/.test(issueId) ? issueId : '';
 };
 
 const safeTimestamp = (value) => {
@@ -177,25 +185,10 @@ export async function fetchPostHogRemediationCandidates({
       );
     }
 
-    // Refuse an obviously oversized body before parsing so a misbehaving
-    // endpoint cannot blow past the page bound in memory.
-    const contentLength = Number(response.headers.get('content-length'));
-    if (
-      Number.isSafeInteger(contentLength) &&
-      contentLength > MAX_RESPONSE_BYTES
-    ) {
-      throw new Error(
-        `PostHog error-tracking issues response exceeded the ${MAX_RESPONSE_BYTES}-byte body cap`
-      );
-    }
-    let payload;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new Error(
-        'PostHog error-tracking issues response was invalid JSON'
-      );
-    }
+    const payload = await readBoundedJson(response, {
+      label: 'PostHog error-tracking issues response',
+      maxBytes: MAX_RESPONSE_BYTES,
+    });
     if (
       !payload ||
       typeof payload !== 'object' ||

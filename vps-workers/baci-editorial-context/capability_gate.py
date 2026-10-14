@@ -122,6 +122,18 @@ def _reviewed_moment(register):
     return moment
 
 
+def _revision_resolves(revision, cwd="."):
+    """Whether revision names a commit in this checkout's history."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(cwd), "cat-file", "-e", f"{revision}^{{commit}}"],
+            capture_output=True, text=True,
+        )
+    except OSError:
+        return False
+    return proc.returncode == 0
+
+
 def _base_register(base, cwd="."):
     probe = subprocess.run(
         ["git", "-C", str(cwd), "show", f"{base}:{REGISTER_PATH}"],
@@ -135,7 +147,7 @@ def _base_register(base, cwd="."):
         return None
 
 
-def requires_register_update(register, changed, base_register=None):
+def requires_register_update(register, changed, base_register=None, rev_resolves=None):
     """A fresh register whose cited sources changed needs re-review.
 
     Freshness alone cannot catch this: the register is still inside its
@@ -177,7 +189,13 @@ def requires_register_update(register, changed, base_register=None):
     new_rev = register.get("source_revision")
     if not isinstance(new_rev, str) or not isinstance(old_rev, str):
         return True
-    return new_rev == old_rev
+    if new_rev == old_rev:
+        return True
+    # A merely different revision proves nothing: it must resolve to a
+    # reviewed tree, or provenance degrades and a redigest passes blind.
+    if rev_resolves is not None and not rev_resolves(new_rev):
+        return True
+    return False
 
 
 def should_run(base, register, changed, cwd="."):
@@ -202,7 +220,7 @@ def main():
             print(f"capability gate: cannot compute the changed-path set for base {base[:12]}; refusing to run blind")
             return 1
         base_register = _base_register(base) if register is not None else None
-        if requires_register_update(register, changed, base_register):
+        if requires_register_update(register, changed, base_register, _revision_resolves):
             print(
                 "unverified capability sources changed without a register re-review; "
                 f"update {REGISTER_PATH} (reviewed_at + digests) in this change"

@@ -53,12 +53,15 @@ def _valid_row(row):
         return False
     if any(not isinstance(row.get(key), str) or not row[key].strip() for key in ("id", "title", "claim", "limitations")):
         return False
+    # Mirror the runtime field limits: id 64, title 200, claim/limitations 1000.
+    if len(row["id"]) > 64 or len(row["title"]) > 200 or len(row["claim"]) > 1000 or len(row["limitations"]) > 1000:
+        return False
     if row.get("status") not in _ROW_STATUSES:
         return False
     refs = row.get("source_refs")
-    if not isinstance(refs, list) or not refs or len(set(refs)) != len(refs):
+    if not isinstance(refs, list) or not refs or len(refs) > 20 or len(set(refs)) != len(refs):
         return False
-    if any(not isinstance(ref, str) or not ref.strip() for ref in refs):
+    if any(not isinstance(ref, str) or not ref.strip() or len(ref) > 300 for ref in refs):
         return False
     # Mirror the runtime: production_verified rows must carry evidence, and
     # structurally invalid evidence is broken (staleness is handled by classify).
@@ -67,10 +70,21 @@ def _valid_row(row):
     return True
 
 
+def _reject_duplicate_keys(pairs):
+    obj = {}
+    for key, value in pairs:
+        if key in obj:
+            raise ValueError("duplicate key")
+        obj[key] = value
+    return obj
+
+
 def classify(register_path):
     """Return fresh, stale, or broken for the register at register_path."""
     try:
-        data = json.loads(Path(register_path).read_text())
+        # Same duplicate-key decoder as the runtime: a repeated key must not
+        # silently keep the last value and classify fresh.
+        data = json.loads(Path(register_path).read_text(), object_pairs_hook=_reject_duplicate_keys)
         if (
             not isinstance(data, dict)
             or type(data.get("schema_version")) is not int

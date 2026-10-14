@@ -741,7 +741,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/baci-connector-r0",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as IDs 80 and 84, distinct local dirt.",
+      "evidence": "38 unique OAuth/social-ads connector commits and 107 dirty source/docs files. Same committed HEAD as IDs 1, 80, and 84 (ID 1 is the active primary checkout), distinct local dirt.",
       "shard": 3,
       "manifest": {
         "id": 33,
@@ -1699,7 +1699,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/multimodal-messaging",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "38 unique commits / 219 paths vs baseline; 34 dirty entries; no PR match.",
+      "evidence": "38 unique commits / 219 paths vs baseline; 34 dirty entries; no PR match. Same committed HEAD as IDs 1, 33, and 84.",
       "shard": 2,
       "manifest": {
         "id": 80,
@@ -1778,7 +1778,7 @@
       "path": "/Users/mac/Baci-app/.worktrees/ogabassey-device-trust",
       "head": "9e9a95acd8e93e3c64dd77e93feff0fcc57d450a",
       "classification": "PRESERVE_DIRTY",
-      "evidence": "Same committed HEAD as IDs 33 and 80, but 17 separate dirty storefront/support/IMEI files.",
+      "evidence": "Same committed HEAD as IDs 1, 33, and 80, but 17 separate dirty storefront/support/IMEI files.",
       "shard": 3,
       "manifest": {
         "id": 84,

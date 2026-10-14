@@ -36,6 +36,7 @@ map_cited_paths = _paths.map_cited_paths
 map_cited_filenames = _paths.map_cited_filenames
 map_link_targets = _paths.map_link_targets
 relevant_paths = _paths.relevant_paths
+_comparison_base = _paths._comparison_base
 _resolve_cited_filenames = _paths._resolve_cited_filenames
 _canon = _paths._canon
 _matches = _paths._matches
@@ -155,29 +156,6 @@ def _replacement_revision_ok(new_rev, old_rev, cwd="."):
     return proc.returncode == 0
 
 
-def _comparison_base(base, cwd="."):
-    """The baseline the change is measured against.
-
-    Pull requests diff against the merge-base (three-dot), so the baseline
-    register must come from there too — comparing against the raw base tip
-    would fail a genuine re-review whenever main advanced the register after
-    the PR branched. Pushes compare tip-to-tip (two-dot): the base is used
-    directly. Falls back to the raw base when the merge-base is unresolvable.
-    """
-    if os.environ.get("GITHUB_EVENT_NAME") == "push":
-        return base
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(cwd), "merge-base", str(base), "HEAD"],
-            capture_output=True, text=True,
-        )
-    except Exception:
-        return base  # Best-effort probe: callers fall back to the raw base.
-    if proc.returncode != 0 or not proc.stdout.strip():
-        return base
-    return proc.stdout.strip()
-
-
 def _base_register(base, cwd="."):
     probe = subprocess.run(
         ["git", "-C", str(cwd), "show", f"{base}:{REGISTER_PATH}"],
@@ -252,26 +230,29 @@ def should_run(base, register, changed, cwd="."):
     )
 
 
-def main():
+def main(cwd="."):
+    """Run the gate against the checkout at cwd (default: process cwd)."""
+    root = str(cwd)
     base = os.environ.get("BASE_SHA", "")
     env = dict(os.environ)
     if base and set(base) != {"0"}:
         try:
-            register = json.loads(Path(REGISTER_PATH).read_text())
+            register = json.loads(Path(root, REGISTER_PATH).read_text())
         except (OSError, ValueError):
             register = None  # Broken register: run the suite for its diagnosis.
-        changed = changed_paths(base)
+        changed = changed_paths(base, cwd)
         if changed is None:
             print(f"capability gate: cannot compute the changed-path set for base {base[:12]}; refusing to run blind")
             return 1
-        base_register = _base_register(_comparison_base(base), cwd=".") if register is not None else None
-        if requires_register_update(register, changed, base_register, _replacement_revision_ok):
+        base_register = _base_register(_comparison_base(base, cwd), cwd) if register is not None else None
+        rev_ok = lambda new, old: _replacement_revision_ok(new, old, cwd)  # noqa: E731
+        if requires_register_update(register, changed, base_register, rev_ok):
             print(
-                "unverified capability sources changed without a register re-review; "
+                "capability sources changed without a register re-review; "
                 f"update {REGISTER_PATH} (reviewed_at + digests) in this change"
             )
             return 1
-        if register is not None and not should_run(base, register, changed):
+        if register is not None and not should_run(base, register, changed, cwd):
             print("capability register and cited sources untouched; skipping binding suite")
             return 0
         if not freshness_required(register, changed):
@@ -283,7 +264,7 @@ def main():
             # workflow and the runtime window.
             env.pop("BACI_REGISTER_REQUIRE_FRESH", None)
     return subprocess.run(
-        [sys.executable, "-m", "unittest", "discover", "-s", SUITE_DIR, "-p", "test_*capabilit*.py"],
+        [sys.executable, "-m", "unittest", "discover", "-s", str(Path(root, SUITE_DIR)), "-p", "test_*capabilit*.py"],
         env=env,
     ).returncode
 

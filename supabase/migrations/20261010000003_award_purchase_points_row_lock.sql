@@ -43,10 +43,13 @@ BEGIN
     );
 
     -- Get loyalty settings (project only the fields the award uses).
+    -- FOR SHARE pins the ladder through settlement like enrollment and
+    -- redemption, so tier derivation and multiplier use one snapshot.
     SELECT points_currency_unit, points_per_currency, points_expiry_days, tiers
     INTO v_settings
     FROM public.loyalty_settings
-    WHERE merchant_id = p_merchant_id AND enabled = TRUE;
+    WHERE merchant_id = p_merchant_id AND enabled = TRUE
+    FOR SHARE;
 
     IF NOT FOUND THEN
         RETURN 0; -- Loyalty program not enabled
@@ -132,6 +135,9 @@ BEGIN
                 t.ord
         ) ordered
         WHERE pg_catalog.lower(ordered.tier->>'name') = pg_catalog.lower(v_derived_tier)
+          -- Only usable rungs carry a multiplier (the calculator skips
+          -- invalid thresholds when deriving the tier name).
+          AND (ordered.tier->>'minPoints') ~ '^-?[0-9]+$'
         LIMIT 1;
     END IF;
 

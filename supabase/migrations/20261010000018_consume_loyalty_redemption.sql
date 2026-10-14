@@ -100,9 +100,28 @@ BEGIN
   INTO v_row;
 
   IF NOT FOUND THEN
-    RETURN jsonb_build_object(
-      'success', false, 'error', 'redemption_not_found'
-    );
+    -- Lost-response retry: a code already consumed MANUALLY (used, no
+    -- order stamp) replays its receipt so staff can still fulfill;
+    -- checkout-claimed codes (order stamp present) stay not-found.
+    SELECT rr.id, rr.discount_code, rr.reward_type, rr.reward_id,
+      rr.customer_id, rr.used_at
+    INTO v_row
+    FROM public.reward_redemptions AS rr
+    WHERE rr.merchant_id = p_merchant_id
+      AND pg_catalog.upper(rr.discount_code)
+        = pg_catalog.upper(pg_catalog.btrim(p_code))
+      AND rr.used IS TRUE
+      AND rr.used_on_order_id IS NULL
+      AND (
+        rr.reward_type IN ('free_shipping', 'free_product', 'exclusive_access')
+        OR (rr.reward_type = 'discount'
+          AND COALESCE(rr.reward_value, 0) <= 0)
+      );
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object(
+        'success', false, 'error', 'redemption_not_found'
+      );
+    END IF;
   END IF;
 
   -- Fulfillment identity for the caller: staff were given this path

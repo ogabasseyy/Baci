@@ -281,3 +281,26 @@ SELECT pg_temp.assert_true(
 UPDATE public.loyalty_settings
 SET tiers = DEFAULT
 WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+
+-- 5l. Invalid ladder rungs carry no multiplier: with only an invalid
+-- Bronze rung (null threshold at 10x), the calculator falls back to
+-- Bronze and the award must use 1x, not the invalid rung's rate.
+UPDATE public.customer_loyalty
+SET lifetime_points = 100, points_balance = 0, current_tier = 'Bronze'
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '02aa0000-0000-4000-8000-000000000011';
+UPDATE public.loyalty_settings
+SET tiers = '[{"name":"Bronze","minPoints":null,"multiplier":10}]'::jsonb
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true(
+  public.award_purchase_points(
+    '02aa0000-0000-4000-8000-000000000011',
+    '02aa0000-0000-4000-8000-000000000001',
+    '02aa0000-0000-4000-8000-0000000000a9',
+    10000
+  ) = 100,
+  'award used an invalid ladder rung multiplier'
+);
+UPDATE public.loyalty_settings
+SET tiers = DEFAULT
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';

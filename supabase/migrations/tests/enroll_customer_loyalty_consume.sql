@@ -53,14 +53,16 @@ SELECT pg_temp.assert_true(
   'consume did not mark the manual code used'
 );
 
--- Single use: a second consume finds nothing.
+-- Lost-response retry: a second consume of a manually consumed code
+-- replays the receipt (same identity) instead of erroring, so staff
+-- can still fulfill after a dropped response.
 SELECT pg_temp.assert_true(
-  (SELECT result ->> 'success' = 'false'
-     AND result ->> 'error' = 'redemption_not_found'
+  (SELECT result ->> 'success' = 'true'
+     AND result ->> 'discount_code' = 'RDM-CONSUME1'
    FROM public.consume_loyalty_redemption(
      '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME1'
    ) AS result),
-  'manual code consumed twice'
+  'manual consume retry did not replay the receipt'
 );
 
 -- A suspended staff session has no merchant access.
@@ -123,4 +125,30 @@ SELECT pg_temp.assert_true(
      '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME4'
    ) AS result),
   'checkout or expired code was consumed manually'
+);
+
+-- A checkout-claimed code (order stamp present) is not replayable
+-- through the manual path.
+SET ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+INSERT INTO public.reward_redemptions (
+  merchant_id, customer_id, points_spent, reward_type, reward_value,
+  discount_code, used, used_on_order_id, used_at, expires_at
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000012', 50, 'free_product', NULL,
+  'RDM-CONSUME5', true, '01aa0000-0000-4000-8000-000000000034',
+  pg_catalog.now(), pg_catalog.now() + interval '30 days'
+);
+RESET ROLE;
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false'
+     AND result ->> 'error' = 'redemption_not_found'
+   FROM public.consume_loyalty_redemption(
+     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME5'
+   ) AS result),
+  'checkout-claimed code replayed through the manual path'
 );

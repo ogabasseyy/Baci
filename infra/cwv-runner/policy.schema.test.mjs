@@ -133,7 +133,7 @@ test('freezes accounting, authority mode, supply chain, and retention', () => {
   assert.deepEqual(
     policy.workflowActions,
     fromJson(
-      '{"checkout":"actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1","uploadArtifact":"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a","downloadArtifact":"actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c","createGithubAppToken":"actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1"}'
+      '{"checkout":"actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1","uploadArtifact":"actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9","downloadArtifact":"actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333","createGithubAppToken":"actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1"}'
     )
   );
   assert.deepEqual(

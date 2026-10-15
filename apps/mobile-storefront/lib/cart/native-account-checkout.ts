@@ -188,6 +188,10 @@ export function createNativeAccountCheckout(deps: Deps) {
         result.snapshot.merchantId.toLowerCase() !== merchant
       )
         throw new NativeCartError('temporarily_unavailable', true);
+      // Preparation can renew this device's grant to cover the new
+      // checkout session; persist the returned proof or the bound order
+      // becomes unusable once the older proof expires.
+      if (result.proof) await deps.keepProof(result);
       return {
         snapshot: result.snapshot,
         replayed: result.replayed === true,

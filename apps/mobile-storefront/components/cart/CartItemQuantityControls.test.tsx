@@ -60,6 +60,13 @@ it('routes ordinary quantity controls to the exact line without editing sibling 
   ]);
   expect(props.updateQuantity).toHaveBeenCalledWith('line-1', 4);
 });
+it('does not increment an ordinary line past the shared-cart maximum', () => {
+  const view = render(
+    <CartItemQuantityControls {...props} item={{ ...item, quantity: 10 }} />
+  );
+  fireEvent.press(view.getByLabelText('Increase quantity for Phone'));
+  expect(props.handleQuantityChange).not.toHaveBeenCalled();
+});
 it('does not decrement an ordinary line below one', () => {
   const view = render(
     <CartItemQuantityControls {...props} item={{ ...item, quantity: 1 }} />

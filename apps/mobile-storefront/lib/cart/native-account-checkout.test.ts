@@ -69,6 +69,44 @@ it('keeps shopper and cart authority in separate headers and persists the rotate
   );
 });
 
+it('persists the renewed proof returned by checkout preparation', async () => {
+  const renewedProof = makeProof();
+  const deps = makeDeps();
+  deps.send.mockResolvedValue({
+    snapshot: { cartId: CART_ID, merchantId: MERCHANT_ID },
+    proof: renewedProof,
+    replayed: false,
+    sessionReused: false,
+  });
+  const checkout = createNativeAccountCheckout(deps as never);
+  const result = await checkout.prepareCheckout({
+    cartId: CART_ID,
+    expectedVersion: 2,
+    operationId: 'op-prepare',
+  });
+  expect(result.snapshot.cartId).toBe(CART_ID);
+  expect(deps.keepProof).toHaveBeenCalledWith(
+    expect.objectContaining({ proof: renewedProof })
+  );
+});
+
+it('does not touch stored proof when preparation returns none', async () => {
+  const deps = makeDeps();
+  deps.send.mockResolvedValue({
+    snapshot: { cartId: CART_ID, merchantId: MERCHANT_ID },
+    replayed: true,
+    sessionReused: true,
+  });
+  const checkout = createNativeAccountCheckout(deps as never);
+  const result = await checkout.prepareCheckout({
+    cartId: CART_ID,
+    expectedVersion: 2,
+    operationId: 'op-prepare-replay',
+  });
+  expect(result.replayed).toBe(true);
+  expect(deps.keepProof).not.toHaveBeenCalled();
+});
+
 it('refuses to link without a stored cart proof', async () => {
   const deps = makeDeps({ readProof: jest.fn().mockResolvedValue(null) });
   const checkout = createNativeAccountCheckout(deps as never);

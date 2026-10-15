@@ -10,6 +10,7 @@ interface CartQuantityInputProps {
   value: number;
   onChange: (value: number) => void;
   style?: StyleProp<TextStyle>;
+  maxValue?: number;
 }
 
 const localStyles = StyleSheet.create({
@@ -23,6 +24,7 @@ export default function CartQuantityInput({
   value,
   onChange,
   style,
+  maxValue,
 }: CartQuantityInputProps) {
   const [localValue, setLocalValue] = useState(value.toString());
   const [prevValue, setPrevValue] = useState(value);
@@ -39,7 +41,7 @@ export default function CartQuantityInput({
     if (Number.isNaN(parsed) || parsed <= 0) {
       setLocalValue(value.toString());
     } else {
-      onChange(parsed);
+      onChange(maxValue === undefined ? parsed : Math.min(parsed, maxValue));
     }
   };
 
@@ -51,7 +53,7 @@ export default function CartQuantityInput({
       accessibilityLabel="Quantity input"
       accessibilityHint="Enter quantity for this item, must be a positive integer."
       accessibilityRole="adjustable"
-      maxLength={3}
+      maxLength={maxValue === undefined ? 3 : String(maxValue).length}
       onChangeText={(text) => {
         const cleanText = text.replace(/[^0-9]/g, '');
         setLocalValue(cleanText);

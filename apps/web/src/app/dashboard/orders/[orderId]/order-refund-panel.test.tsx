@@ -268,7 +268,7 @@ describe('OrderRefundPanel', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Record manual refund' })
     );
-    fireEvent.change(screen.getByLabelText('Refund date and time'), {
+    fireEvent.change(screen.getByLabelText(/Refund date and time/), {
       target: { value: '2026-09-28T13:00' },
     });
     fireEvent.change(screen.getByLabelText('Reference'), {
@@ -288,7 +288,7 @@ describe('OrderRefundPanel', () => {
       screen.getByRole('button', { name: 'Record manual refund' })
     );
     expect(screen.getByLabelText('Reference')).toHaveValue('');
-    expect(screen.getByLabelText('Refund date and time')).toHaveValue('');
+    expect(screen.getByLabelText(/Refund date and time/)).toHaveValue('');
     expect(screen.getByLabelText('Note (optional)')).toHaveValue('');
     expect(screen.getByLabelText(/Amount/)).toHaveValue(20000);
   });

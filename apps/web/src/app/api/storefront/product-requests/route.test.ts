@@ -118,5 +118,9 @@ describe('product request intake', () => {
     const response = await POST(request(input));
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('intake key missing');
+    // The outage is still visible server-side, without credential detail.
+    expect(mocks.warn).toHaveBeenCalledWith({
+      message: 'Product request intake unavailable',
+    });
   });
 });

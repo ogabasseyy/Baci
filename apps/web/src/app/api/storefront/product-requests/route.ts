@@ -51,6 +51,9 @@ export async function POST(request: NextRequest) {
   } catch {
     // Fail closed (e.g. narrow intake key unprovisioned): never serve
     // intake on a degraded credential path, and leak nothing about why.
+    // The client gets a neutral 503; the server log records the outage
+    // without credential detail so a provisioning failure is visible.
+    logger.warn({ message: 'Product request intake unavailable' });
     return Response.json({ error: 'Intake unavailable' }, { status: 503 });
   }
   const { error } = result;

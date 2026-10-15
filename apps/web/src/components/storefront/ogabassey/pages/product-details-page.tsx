@@ -4,10 +4,9 @@ import '@/app/(storefront)/storefront-ogabassey-pdp-deferred.css';
 import { type ReactNode } from 'react';
 import type { Product } from '../types';
 import { ProductBreadcrumbs } from './product-details-page/product-breadcrumbs';
-import { ProductInteractionPanel } from './product-details-page/product-interaction-panel';
 import { ProductMediaGallery } from './product-details-page/product-media-gallery';
 import { ProductMobileActionBar } from './product-details-page/product-mobile-action-bar';
-import { ProductPurchasePanel } from './product-details-page/product-purchase-panel';
+import { ProductDetailsPurchaseSection } from './product-details-page/product-purchase-section';
 import { useProductDetailsState } from './product-details-page/use-product-details-state';
 import { DeferredProductDetailsSectionsLoader } from './product-details-page/deferred-product-details-sections-loader';
 import deferredLayoutStyles from './product-details-page/deferred-product-details-layout.module.css';
@@ -179,75 +178,40 @@ export function ProductDetailsPage(props: ProductDetailsPageProps) {
             />
           )}
 
-          {isCommerceMode ? (
-            <ProductInteractionPanel
-              availableConditions={availableConditions}
-              canPurchase={effectiveCanPurchase}
-              cartHref={cartHref}
-              currentOfferPrice={currentOffer.price}
-              deliveryEstimate={deliveryEstimate}
-              deliveryLocation={deliveryLocation}
-              effectiveAxes={effectiveAxes}
-              formatAxisLabel={formatAxisLabel}
-              getAxisOptions={getAxisOptions}
-              inputValue={inputValue}
-              isLiked={isLiked}
-              onAddToCart={validateAndAddToCart}
-              onChangeAttribute={handleAttributeSelection}
-              onChangeDeliveryLocation={setDeliveryLocation}
-              onDecrement={handleDecrement}
-              onIncrement={handleIncrement}
-              onInputBlur={handleQuantityBlur}
-              onInputChange={handleQuantityChange}
-              onInputKeyDown={handleKeyDown}
-              onSelectColor={handleColorSelection}
-              onSelectSecondaryColor={handleColorDoubleClick}
-              onSetCondition={handleSetCondition}
-              onShare={handleShare}
-              onToggleSaved={handleToggleSaved}
-              productData={productData}
-              quantityInCart={quantityInCart}
-              secondaryColor={secondaryColor}
-              selectedAttributes={selectedAttributes}
-              selectedColor={selectedColor}
-              selectedCondition={selectedCondition}
-              showColorToast={showColorToast}
-            />
-          ) : (
-            <ProductPurchasePanel
-              availableConditions={availableConditions}
-              canPurchase={effectiveCanPurchase}
-              cartHref={cartHref}
-              currentOfferPrice={currentOffer.price}
-              deliveryEstimate={deliveryEstimate}
-              deliveryLocation={deliveryLocation}
-              effectiveAxes={effectiveAxes}
-              formatAxisLabel={formatAxisLabel}
-              getAxisOptions={getAxisOptions}
-              inputValue={inputValue}
-              isLiked={isLiked}
-              onAddToCart={validateAndAddToCart}
-              onChangeAttribute={handleAttributeSelection}
-              onChangeDeliveryLocation={setDeliveryLocation}
-              onDecrement={handleDecrement}
-              onIncrement={handleIncrement}
-              onInputBlur={handleQuantityBlur}
-              onInputChange={handleQuantityChange}
-              onInputKeyDown={handleKeyDown}
-              onSelectColor={handleColorSelection}
-              onSelectSecondaryColor={handleColorDoubleClick}
-              onSetCondition={handleSetCondition}
-              onShare={handleShare}
-              onToggleSaved={handleToggleSaved}
-              productData={productData}
-              quantityInCart={quantityInCart}
-              secondaryColor={secondaryColor}
-              selectedAttributes={selectedAttributes}
-              selectedColor={selectedColor}
-              selectedCondition={selectedCondition}
-              showColorToast={showColorToast}
-            />
-          )}
+          <ProductDetailsPurchaseSection
+            availableConditions={availableConditions}
+            canPurchase={effectiveCanPurchase}
+            cartHref={cartHref}
+            currentOfferPrice={currentOffer.price}
+            deliveryEstimate={deliveryEstimate}
+            deliveryLocation={deliveryLocation}
+            effectiveAxes={effectiveAxes}
+            formatAxisLabel={formatAxisLabel}
+            getAxisOptions={getAxisOptions}
+            inputValue={inputValue}
+            isCommerceMode={isCommerceMode}
+            isLiked={isLiked}
+            onAddToCart={validateAndAddToCart}
+            onChangeAttribute={handleAttributeSelection}
+            onChangeDeliveryLocation={setDeliveryLocation}
+            onDecrement={handleDecrement}
+            onIncrement={handleIncrement}
+            onInputBlur={handleQuantityBlur}
+            onInputChange={handleQuantityChange}
+            onInputKeyDown={handleKeyDown}
+            onSelectColor={handleColorSelection}
+            onSelectSecondaryColor={handleColorDoubleClick}
+            onSetCondition={handleSetCondition}
+            onShare={handleShare}
+            onToggleSaved={handleToggleSaved}
+            productData={productData}
+            quantityInCart={quantityInCart}
+            secondaryColor={secondaryColor}
+            selectedAttributes={selectedAttributes}
+            selectedColor={selectedColor}
+            selectedCondition={selectedCondition}
+            showColorToast={showColorToast}
+          />
 
           {isCommerceMode ? null : (
             <div className="hidden lg:col-span-3 lg:block lg:border-l lg:border-store-background-text/10 lg:pl-8">

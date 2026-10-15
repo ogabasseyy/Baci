@@ -64,8 +64,11 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned a ninth time: replay restores the stored discount and
   // canonical per-line fees, and quote validation prices exact-offer
   // lines from live offers; fresh-order authority is unchanged.
+  // Re-pinned a tenth time: REDVAULT replay skips stored-discount
+  // restore and offer replay falls back to the unambiguous offerless
+  // reduced key; notification and payment authority are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '9e0b9a453fe274e1ddec0a08b57118e01e13c866357bf85ae9a91de5d294dc5d',
+    'ed47a36d72d99ca44effb09bd80a5401196a8cba434ed368a28e5f3f4adc6437',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

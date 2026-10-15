@@ -42,8 +42,11 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned for loyalty_code_currency_mismatch in clientErrorCodes
   // and the max-redemption-percentage cap conversion; notification
   // and payment authority unchanged.
+  // Re-pinned for the prepareLoyaltyCheckout extraction (issue #3165
+  // review): discount/loyalty economics moved to the checkout helper;
+  // notification and payment authority unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '4f2ddb239d33fd7dd4bfde1d8c37baa2921e81e157b4e24825ebe39b12fd51bc',
+    'f9102f8a8b294a66bee87d2e79176a5e6472e960fe50b698fe38a7f1c05f9b3a',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

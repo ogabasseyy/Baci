@@ -35,7 +35,7 @@ export function RewardsSignInPrompt({ slug }: { slug: string }) {
         <CardContent>
           <Link
             href={`/${slug}/account/login?redirect=/${slug}/pages/rewards`}
-            className="inline-flex items-center justify-center w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            className="inline-flex items-center justify-center w-full px-4 py-2 bg-store-primary text-store-primary-text rounded-md hover:opacity-90"
           >
             Sign In to Continue
           </Link>

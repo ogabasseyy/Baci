@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
+import { requestUsesSharedPlatformHost } from '@/lib/cart/merchant-resolution';
 import {
   cartSessionCookieName,
   readCookieFromRequest,
@@ -101,14 +102,19 @@ export async function POST(request: NextRequest) {
           id: merchant.merchant.id,
           slug: merchant.merchant.slug,
         },
-        proof,
+        // The proof leaves in the body only on shared platform hosts
+        // (the native/programmatic surface, which cannot rely on
+        // cookies). Storefront-host web callers receive it exclusively
+        // via the httpOnly cookie below, so response-reading script
+        // cannot lift a replayable credential and upgrade it into a
+        // session proof through the create route.
+        ...(requestUsesSharedPlatformHost(request) ? { proof } : {}),
       },
       { status: 201 }
     );
     // Never downgrade a live session cookie to a cart-less bootstrap
     // proof: a stale tab re-provisioning would make the shopper's live
-    // cart look lost in this browser. The body still returns the fresh
-    // bootstrap proof for native/programmatic callers.
+    // cart look lost in this browser.
     const existingProof = readCookieFromRequest(
       request,
       cartSessionCookieName(merchant.merchant.id)

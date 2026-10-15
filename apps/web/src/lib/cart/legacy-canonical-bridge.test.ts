@@ -49,7 +49,6 @@ function setup() {
     mutate: vi
       .fn()
       .mockResolvedValue({ ok: true, state: { ...state, version: 4 } }),
-    proof: vi.fn().mockReturnValue('cp1.valid.signature'),
     handoff: vi.fn().mockResolvedValue({
       ok: true,
       continueUrl: 'https://shop.example/cart#handoff=token',
@@ -136,6 +135,9 @@ it('uses per-line absolute quantity with caller version/key and issues canonical
     ok: true,
     continueUrl: 'https://shop.example/cart#handoff=token',
   });
+  // No reusable session proof ever leaves the broker.
+  expect(result).not.toHaveProperty('proof');
+  expect(JSON.stringify(result)).not.toContain('cp1.');
 });
 it('keeps version conflicts definitive without preparing a handoff', async () => {
   const { deps } = setup();

@@ -16,7 +16,6 @@ import { createLegacyOwnerScopedClient } from './legacy-scoped-client';
 import type { CartPrincipal } from './principal';
 import { ERROR_CODES, rpcGetCart, rpcMutateCart } from './repository';
 import { createCartScopedClient } from './scoped-client';
-import { issueCartSessionProof } from './session-proof';
 
 export class LegacyBridgeError extends Error {
   constructor(readonly code: CartErrorCode) {
@@ -50,7 +49,6 @@ const defaults = {
   read: rpcGetCart,
   mutate: rpcMutateCart,
   handoff: issueCartHandoff,
-  proof: issueCartSessionProof,
 };
 
 /** The legacy capability is the durable recovery handle; only the broker mints proofs. */
@@ -196,8 +194,7 @@ export async function operateLegacyCanonicalCart(
       expectedVersion: input.expectedVersion ?? state.version,
       operationId,
     });
-    if (!result.ok || !result.state)
-      return { ...result, proof: null, continueUrl: null };
+    if (!result.ok || !result.state) return { ...result, continueUrl: null };
     // A successful idempotent receipt may describe an earlier revision.
     // Publish the current authoritative cart before issuing its handoff.
     const latest = await cart.deps.read(cart.client, state.cartId);
@@ -250,14 +247,15 @@ export async function operateLegacyCanonicalCart(
       throw new LegacyBridgeError(issued.code ?? 'temporarily_unavailable');
     continueUrl = issued.continueUrl ?? null;
   }
+  // No session proof leaves the broker: the legacy capability holder
+  // re-opens the cart on every call, and the handoff continueUrl is
+  // the only web continuation credential. Returning a reusable proof
+  // here would hand storefront cart API access to anyone who can read
+  // this response, bypassing the broker's mediation.
   return {
     ok: true,
     code: null,
     state,
     continueUrl,
-    proof: cart.deps.proof(
-      { ...cart.principal, grantExpiresAt: cart.principal.expiresAt },
-      { environment: getCartProofEnvironment() }
-    ),
   };
 }

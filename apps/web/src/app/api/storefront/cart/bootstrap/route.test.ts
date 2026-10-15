@@ -125,10 +125,17 @@ describe('POST /api/storefront/cart/bootstrap', () => {
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     const payload = await response.json();
     expect(payload.merchant).toEqual({ id: MERCHANT_ID, slug: 'ogabassey' });
-    expect(typeof payload.proof).toBe('string');
-    expect(payload.proof.startsWith('cp1.')).toBe(true);
+    // Storefront-host web callers never receive the proof in the body:
+    // it travels exclusively in the httpOnly cookie so page script
+    // cannot lift and replay it.
+    expect(payload.proof).toBeUndefined();
 
-    const verified = verifyCartSessionProof(payload.proof, {
+    const cookieProof = cookieValue(
+      response.headers.get('set-cookie'),
+      'baci-cart-11111111-1111-4111-8111-111111111111'
+    );
+    expect(cookieProof).toMatch(/^cp1\./);
+    const verified = verifyCartSessionProof(cookieProof ?? '', {
       environment: 'test',
       secret: TEST_SECRET,
     });
@@ -138,12 +145,6 @@ describe('POST /api/storefront/cart/bootstrap', () => {
       expect(verified.session.cartId).toBeNull();
       expect(verified.session.grantId).toBeNull();
     }
-
-    const cookieProof = cookieValue(
-      response.headers.get('set-cookie'),
-      'baci-cart-11111111-1111-4111-8111-111111111111'
-    );
-    expect(cookieProof).toBe(payload.proof);
   });
 
   it('never downgrades a live session cookie to a bootstrap proof', async () => {
@@ -165,9 +166,9 @@ describe('POST /api/storefront/cart/bootstrap', () => {
     });
 
     expect(response.status).toBe(201);
-    // The body still carries a fresh bootstrap proof, but the live
-    // session cookie is left untouched.
-    expect((await response.json()).proof).toMatch(/^cp1\./);
+    // The live session cookie is left untouched, and the storefront
+    // host receives no body proof either.
+    expect((await response.json()).proof).toBeUndefined();
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
@@ -296,9 +297,12 @@ it('replaces a terminal session cookie so the next cart starts with bootstrap au
   expect(response.headers.get('set-cookie')).toContain(
     `baci-cart-${MERCHANT_ID}=cp1.`
   );
-  const body = await response.json();
+  const cookieProof = cookieValue(
+    response.headers.get('set-cookie'),
+    `baci-cart-${MERCHANT_ID}`
+  );
   expect(
-    verifyCartSessionProof(body.proof, {
+    verifyCartSessionProof(cookieProof ?? '', {
       secret: TEST_SECRET,
       environment: 'test',
     })

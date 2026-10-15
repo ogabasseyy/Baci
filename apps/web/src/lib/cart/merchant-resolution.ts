@@ -173,18 +173,8 @@ export async function resolvePublished(
  * published-store mapping plus the retired-slug alias table. Only
  * published stores resolve; client input never overrides the host.
  */
-export async function resolveCartMerchant(
-  request: Request,
-  deps: ResolveCartMerchantDeps
-): Promise<ResolveCartMerchantResult> {
-  const rootDomain = (
-    deps.rootDomain ??
-    process.env.NEXT_PUBLIC_ROOT_DOMAIN ??
-    'usebaci.com'
-  ).toLowerCase();
-  const trusted = trustedProxyIdentifier(request, rootDomain);
-  const host = requestHost(request);
-  const sharedHost =
+function isSharedPlatformHost(host: string, rootDomain: string): boolean {
+  return (
     host === rootDomain ||
     host === `www.${rootDomain}` ||
     // The native clients call the api.* origin with an explicit
@@ -198,7 +188,41 @@ export async function resolveCartMerchant(
     // validated merchant hint governs, exactly as on api.*. Real
     // storefront and custom-domain hosts never match this suffix.
     host === 'vercel.app' ||
-    host.endsWith('.vercel.app');
+    host.endsWith('.vercel.app')
+  );
+}
+
+/**
+ * True when the request arrived on a shared platform host (api.*, the
+ * root domain, local or deployment hosts) rather than a merchant
+ * storefront or custom domain. Platform-host callers are the
+ * native/programmatic surface; storefront-host callers are browser
+ * sessions whose credentials must stay inside httpOnly cookies.
+ */
+export function requestUsesSharedPlatformHost(
+  request: Request,
+  rootDomain?: string
+): boolean {
+  const resolvedRoot = (
+    rootDomain ??
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN ??
+    'usebaci.com'
+  ).toLowerCase();
+  return isSharedPlatformHost(requestHost(request), resolvedRoot);
+}
+
+export async function resolveCartMerchant(
+  request: Request,
+  deps: ResolveCartMerchantDeps
+): Promise<ResolveCartMerchantResult> {
+  const rootDomain = (
+    deps.rootDomain ??
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN ??
+    'usebaci.com'
+  ).toLowerCase();
+  const trusted = trustedProxyIdentifier(request, rootDomain);
+  const host = requestHost(request);
+  const sharedHost = isSharedPlatformHost(host, rootDomain);
   const hostIdentifier = sharedHost
     ? null
     : host.endsWith(`.${rootDomain}`)

@@ -59,6 +59,7 @@ function successBody(pin: string | null = 'PIN-1') {
         status: 'successful',
         voucher_pin: pin,
         refund_pending: false,
+        refund_skipped: false,
       },
     ],
   };
@@ -109,6 +110,7 @@ describe('fetchVoucherPin', () => {
         pin: null,
         status: null,
         refundPending: null,
+      refundSkipped: null,
       });
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally {
@@ -124,6 +126,7 @@ describe('fetchVoucherPin', () => {
       pin: null,
       status: null,
       refundPending: null,
+      refundSkipped: null,
     });
 
     fetchSpy.mockResolvedValueOnce(makeResponse({}, false, 503));
@@ -131,6 +134,7 @@ describe('fetchVoucherPin', () => {
       pin: null,
       status: null,
       refundPending: null,
+      refundSkipped: null,
     });
 
     fetchSpy.mockResolvedValueOnce(makeResponse({}, false, 429));
@@ -138,6 +142,7 @@ describe('fetchVoucherPin', () => {
       pin: null,
       status: null,
       refundPending: null,
+      refundSkipped: null,
     });
 
     fetchSpy.mockResolvedValueOnce({
@@ -151,6 +156,7 @@ describe('fetchVoucherPin', () => {
       pin: null,
       status: null,
       refundPending: null,
+      refundSkipped: null,
     });
   });
 
@@ -177,6 +183,7 @@ describe('fetchVoucherPin', () => {
       pin: 'PIN-1',
       status: 'successful',
       refundPending: false,
+      refundSkipped: false,
     });
     expect(recallPendingVtuKey('fetch-1')).toBeNull();
   });
@@ -289,6 +296,7 @@ describe('fetchVoucherPin', () => {
         pin: null,
         status: null,
         refundPending: null,
+      refundSkipped: null,
       });
     } finally {
       jest.useRealTimers();
@@ -321,6 +329,7 @@ describe('fetchVoucherPin', () => {
         pin: null,
         status: null,
         refundPending: null,
+      refundSkipped: null,
       });
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/api/vtu/history?'),
@@ -344,7 +353,7 @@ describe('fetchVoucherPin', () => {
 
     mockCurrentUserId.value = 'user-2';
     const switched = await fetchVoucherPin(input);
-    expect(switched).toEqual({ pin: null, status: null, refundPending: null });
+    expect(switched).toEqual({ pin: null, status: null, refundPending: null, refundSkipped: null });
     expect(recallPendingVtuKey('fetch-switched')).toBe('key-switched');
 
     mockCurrentUserId.value = 'user-1';
@@ -356,6 +365,7 @@ describe('fetchVoucherPin', () => {
       pin: null,
       status: null,
       refundPending: null,
+      refundSkipped: null,
     });
     expect(recallPendingVtuKey('fetch-switched')).toBe('key-switched');
   });
@@ -371,6 +381,7 @@ describe('fetchVoucherPin', () => {
       pin: null,
       status: null,
       refundPending: null,
+      refundSkipped: null,
     });
     expect(recallPendingVtuKey('fetch-missing')).toBe('key-missing');
   });

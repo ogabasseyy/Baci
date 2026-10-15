@@ -90,4 +90,20 @@ describe('vtuWalletOnlyChargeSchema', () => {
       expect('orderId' in result.data).toBe(false);
     }
   });
+
+  it('strips a body-supplied customerId instead of trusting it', () => {
+    // Muse R110 LOW: customerId is the same server-owned linkage
+    // class as orderId — no wallet-only reader consumes it today,
+    // but the parsed input must never carry it, so a future reader
+    // cannot inherit a cross-tenant association.
+    const result = vtuWalletOnlyChargeSchema.safeParse({
+      ...baseAirtime,
+      walletAmount: 1000,
+      customerId: '33333333-4444-4555-8666-777777777777',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect('customerId' in result.data).toBe(false);
+    }
+  });
 });

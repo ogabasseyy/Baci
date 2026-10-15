@@ -50,8 +50,17 @@ export interface UtilityVoucherBackfill {
   /**
    * No refund outstanding. Fail-closed (explicit false only): a
    * missing flag keeps polling rather than claiming without proof.
+   * Skipped rows never confirm (Codex R110 P2): nothing was
+   * credited, so the copy must say no charge was made, not that a
+   * refund landed.
    */
   refundConfirmed: boolean;
+  /**
+   * Refund deliberately skipped (no collection evidence — nothing
+   * was taken). Terminal like a confirmation (pollers stop), but
+   * the copy differs. Explicit true only.
+   */
+  refundSkipped: boolean;
   /** Amount credited back, when known. */
   refundedAmount: number | null;
   /** Successful observed — even when no voucher is expected. */
@@ -62,12 +71,14 @@ export const INITIAL_UTILITY_VOUCHER_BACKFILL: UtilityVoucherBackfill = {
   failed: false,
   pin: null,
   refundConfirmed: false,
+  refundSkipped: false,
   refundedAmount: null,
   successful: false,
 };
 
 interface HistoryTransactionRow {
   refund_pending?: unknown;
+  refund_skipped?: unknown;
   refunded_to_wallet?: unknown;
   request_reference?: unknown;
   status?: unknown;
@@ -98,6 +109,7 @@ export function parseUtilityVoucherBackfill(
       failed: false,
       pin: null,
       refundConfirmed: false,
+      refundSkipped: false,
       refundedAmount: null,
       successful: false,
     };
@@ -111,7 +123,10 @@ export function parseUtilityVoucherBackfill(
   return {
     failed: match.status === 'failed',
     pin: pin || null,
-    refundConfirmed: match.refund_pending === false,
+    refundConfirmed:
+      match.refund_pending === false && match.refund_skipped === false,
+    refundSkipped:
+      match.status === 'failed' && match.refund_skipped === true,
     refundedAmount,
     successful: match.status === 'successful',
   };
@@ -133,7 +148,9 @@ export function isTerminalBackfill(
   if (backfill.successful) {
     return !tokenExpected;
   }
-  return backfill.failed && backfill.refundConfirmed;
+  return (
+    backfill.failed && (backfill.refundConfirmed || backfill.refundSkipped)
+  );
 }
 
 export function sleep(ms: number): Promise<void> {

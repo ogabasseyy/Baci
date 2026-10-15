@@ -46,6 +46,7 @@ export function UtilityPurchaseSuccessView({
   const {
     pin: backfilledVoucherPin,
     refundConfirmed,
+    refundSkipped,
     status: backfilledStatus,
   } = useVtuVoucherPinBackfill({
     enabled:
@@ -104,6 +105,7 @@ export function UtilityPurchaseSuccessView({
         isAuthenticated={isAuthenticated}
         onCreateAccount={onCreateAccount}
         refundConfirmed={refundConfirmed}
+        refundSkipped={refundSkipped}
         status={status}
         voucherPin={voucherPin ?? null}
       />

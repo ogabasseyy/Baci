@@ -49,11 +49,19 @@ export interface VtuVoucherPinBackfill {
   status: VtuBackfillTerminalStatus | null;
   /**
    * Refund proof for the failure copy: true only when history shows
-   * failed with refund_pending === false. Downstream copy must gate
-   * on this — never on `failed` alone, which future callers could
-   * pass without proof.
+   * failed with refund_pending === false AND refund_skipped ===
+   * false (Codex R110 P2). Skipped rows were never charged —
+   * confirming them would print "refunded" copy for a refund that
+   * never ran. Downstream copy must gate on this — never on
+   * `failed` alone, which future callers could pass without proof.
    */
   refundConfirmed: boolean;
+  /**
+   * Refund deliberately skipped (nothing taken). Terminal like a
+   * confirmation (toTerminalStatus settles on pending === false),
+   * but the copy differs.
+   */
+  refundSkipped: boolean;
 }
 
 function toTerminalStatus(
@@ -175,6 +183,11 @@ export function useVtuVoucherPinBackfill({
   return {
     pin: data?.pin ?? null,
     status: toTerminalStatus(data),
-    refundConfirmed: data?.status === 'failed' && data?.refundPending === false,
+    refundConfirmed:
+      data?.status === 'failed' &&
+      data?.refundPending === false &&
+      data?.refundSkipped === false,
+    refundSkipped:
+      data?.status === 'failed' && data?.refundSkipped === true,
   };
 }

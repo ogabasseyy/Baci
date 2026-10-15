@@ -92,6 +92,7 @@ export interface ProjectedHistoryTransaction {
   units: string | null;
   address: string | null;
   refund_pending: boolean;
+  refund_skipped: boolean;
   refunded_to_wallet: number | null;
 }
 
@@ -152,7 +153,8 @@ export function projectHistoryTransaction({
       VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
       (value): value is true => value === true
     ) === true;
-  const { refund_pending, refunded_to_wallet } = projectHistoryRefundFields({
+  const { refund_pending, refund_skipped, refunded_to_wallet } =
+    projectHistoryRefundFields({
     metadata: transactionMetadata as Record<string, unknown> | null,
     row: {
       amount: transaction.amount,
@@ -189,6 +191,7 @@ export function projectHistoryTransaction({
     units,
     address,
     refund_pending,
+    refund_skipped,
     refunded_to_wallet,
   };
 }

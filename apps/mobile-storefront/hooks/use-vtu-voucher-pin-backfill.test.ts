@@ -161,6 +161,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
   });
 
@@ -248,6 +249,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -266,6 +268,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -298,6 +301,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: 'successful',
       refundConfirmed: false,
+      refundSkipped: false,
     });
     // ...and forgets the retained entry so an identical repeat
     // mints fresh instead of replaying the old vend.
@@ -353,6 +357,7 @@ describe('useVtuVoucherPinBackfill', () => {
             voucher_pin: null,
             status: 'failed',
             refund_pending: false,
+            refund_skipped: false,
           },
         ],
       })
@@ -369,6 +374,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: 'failed',
       refundConfirmed: true,
+      refundSkipped: false,
     });
     expect(recallPendingVtuKey('hook-fail')).toBeNull();
   });
@@ -384,6 +390,7 @@ describe('useVtuVoucherPinBackfill', () => {
             voucher_pin: null,
             status: 'failed',
             refund_pending: true,
+            refund_skipped: false,
           },
         ],
       })
@@ -401,8 +408,48 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
     expect(recallPendingVtuKey('hook-failpend')).toBe('key-hook-failpend');
+  });
+
+  it('settles a skipped failure as failed without confirming a refund', async () => {
+    // Codex R110 P2: skipped rows were never charged — terminal
+    // (pollers stop, key forgotten) but refundConfirmed stays false
+    // so the copy never claims a refund landed.
+    rememberPendingVtuPurchase('hook-skip', 'key-hook-skip');
+    notePendingVtuReference('hook-skip', 'REF-001');
+    // Once (not persistent): mockResolvedValue leaks into the next
+    // test's extra fetches, and this terminal body would wrongly
+    // settle them.
+    fetchSpy.mockResolvedValueOnce(
+      makeResponse({
+        transactions: [
+          {
+            request_reference: 'REF-001',
+            voucher_pin: null,
+            status: 'failed',
+            refund_pending: false,
+            refund_skipped: true,
+          },
+        ],
+      })
+    );
+
+    const { result } = renderHook(() => useVtuVoucherPinBackfill(BASE_INPUT), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    await jest.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 2);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(result.current).toEqual({
+      pin: null,
+      status: 'failed',
+      refundConfirmed: false,
+      refundSkipped: true,
+    });
+    expect(recallPendingVtuKey('hook-skip')).toBeNull();
   });
 
   it('publishes no observation and skips registry cleanup when the account switches mid-flight', async () => {
@@ -453,6 +500,7 @@ describe('useVtuVoucherPinBackfill', () => {
         pin: null,
         status: null,
         refundPending: null,
+        refundSkipped: null,
       });
       expect(recallPendingVtuKey('hook-switch')).toBe('key-hook-switch');
     } finally {
@@ -487,6 +535,7 @@ describe('useVtuVoucherPinBackfill', () => {
         pin: null,
         status: 'successful',
         refundConfirmed: false,
+      refundSkipped: false,
       })
     );
     expect(recallPendingVtuKey('hook-token')).toBeNull();
@@ -536,6 +585,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -556,6 +606,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
   });
 
@@ -575,6 +626,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
   });
 
@@ -605,6 +657,7 @@ describe('useVtuVoucherPinBackfill', () => {
         pin: '1234-5678',
         status: 'successful',
         refundConfirmed: false,
+      refundSkipped: false,
       })
     );
   });
@@ -645,6 +698,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
   });
 
@@ -674,6 +728,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
   });
 
@@ -693,6 +748,7 @@ describe('useVtuVoucherPinBackfill', () => {
       pin: null,
       status: null,
       refundConfirmed: false,
+      refundSkipped: false,
     });
   });
 });

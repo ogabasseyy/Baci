@@ -21,6 +21,7 @@ export interface BackfillObservation {
   pin: string | null;
   status: string | null;
   refundPending: boolean | null;
+  refundSkipped: boolean | null;
 }
 
 /**
@@ -58,6 +59,7 @@ export async function fetchVoucherPin({
     pin: null,
     status: null,
     refundPending: null,
+    refundSkipped: null,
   };
   // Bounded session lookup (Codex R101 P2): an unbounded getSession
   // stall would hold this retained-settlement pass forever — the
@@ -140,6 +142,8 @@ export async function fetchVoucherPin({
   const status = typeof match?.status === 'string' ? match.status : null;
   const refundPending =
     typeof match?.refund_pending === 'boolean' ? match.refund_pending : null;
+  const refundSkipped =
+    typeof match?.refund_skipped === 'boolean' ? match.refund_skipped : null;
   // Terminality settles the retained entry. Shown-context (the
   // backfill query displaying this result): forget, so a repeat mints
   // fresh. Background pass: successes mark stale instead (suppressed
@@ -172,5 +176,5 @@ export async function fetchVoucherPin({
   if (!sessionCurrent) {
     return BLANK;
   }
-  return { pin: pin || null, status, refundPending };
+  return { pin: pin || null, status, refundPending, refundSkipped };
 }

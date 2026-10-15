@@ -55,10 +55,9 @@ describe('UtilityModal checkout routing', () => {
       type: 'airtime',
       walletAmount: 100,
     });
-    expect(setWalletBalance).toHaveBeenCalledWith(expect.any(Function));
-    const applyBalanceUpdate = setWalletBalance.mock.calls[0]?.[0];
-    expect(typeof applyBalanceUpdate).toBe('function');
-    expect((applyBalanceUpdate as (balance: number) => number)(500)).toBe(400);
+    // Value update (500 - 100), never an updater function (Codex
+    // R109 P2: updaters must be pure).
+    expect(setWalletBalance).toHaveBeenCalledWith(400);
   });
 
   it('says top-up is unavailable when the wallet cannot cover the bill and the store has no funding rail', async () => {

@@ -7,6 +7,7 @@ export const VtuHistoryResponseSchema = z.object({
       voucher_pin: z.string().nullable().optional(),
       status: z.string().nullable().optional(),
       refund_pending: z.boolean().nullable().optional(),
+      refund_skipped: z.boolean().nullable().optional(),
     })
   ),
 });

@@ -45,13 +45,20 @@ export function UtilitySuccessView({
   });
   const resolvedPin = voucherPin ?? backfill.pin;
   const succeeded = !processing || backfill.successful || resolvedPin !== null;
-  // Failed is terminal only once the refund is confirmed: the failed
-  // status persists BEFORE the refund RPC runs, so an unconfirmed
-  // failure keeps polling and never claims the refund landed.
+  // Failed is terminal once the refund is confirmed OR deliberately
+  // skipped (Codex R110 P2): the failed status persists BEFORE the
+  // refund RPC runs, so an unconfirmed failure keeps polling and
+  // never claims the refund landed. Skipped rows were never charged
+  // — terminal, but the copy must not claim a refund.
   const failedTerminal =
-    processing && backfill.failed && backfill.refundConfirmed;
+    processing &&
+    backfill.failed &&
+    (backfill.refundConfirmed || backfill.refundSkipped);
   const failedPending =
-    processing && backfill.failed && !backfill.refundConfirmed;
+    processing &&
+    backfill.failed &&
+    !backfill.refundConfirmed &&
+    !backfill.refundSkipped;
   const resolvedProcessing = processing && !succeeded && !failedTerminal;
   // Polling copy only when the loop can actually run (known tab +
   // merchant slug); otherwise the static check-back copy applies.
@@ -75,7 +82,8 @@ export function UtilitySuccessView({
     const backfilledTerminal =
       backfill.pin !== null ||
       backfill.successful ||
-      (backfill.failed && backfill.refundConfirmed);
+      (backfill.failed &&
+        (backfill.refundConfirmed || backfill.refundSkipped));
     if (backfilledTerminal) {
       settledFiredRef.current = true;
       onSettled();
@@ -83,8 +91,9 @@ export function UtilitySuccessView({
   }, [backfill, onSettled, processing]);
 
   if (failedTerminal || failedPending) {
-    const refundCopy =
-      failedTerminal && backfill.refundedAmount !== null
+    const refundCopy = backfill.refundSkipped
+      ? 'No charge was made to your wallet.'
+      : failedTerminal && backfill.refundedAmount !== null
         ? `₦${backfill.refundedAmount.toLocaleString()} was refunded to your wallet.`
         : failedTerminal
           ? 'Any debited amount was refunded to your wallet.'

@@ -11,6 +11,10 @@ import { applyPurchaseRequirements, purchaseSchemaBase } from './vtu';
  * field, and prepare persists it as `order_id` without an ownership
  * check — a body-supplied UUID from another storefront would create
  * a cross-tenant association. Neither wallet-only client sends it.
+ * `customerId` is omitted alongside it (Muse R110 LOW): no
+ * wallet-only reader consumes it today, but it is the same class of
+ * server-owned linkage, and a future reader would reopen exactly
+ * the cross-tenant hole the `orderId` omission closes.
  */
 export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
   .extend({
@@ -25,7 +29,7 @@ export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
     // part of the fingerprint.
     expectedUserId: z.uuid().optional(),
   })
-  .omit({ orderId: true })
+  .omit({ orderId: true, customerId: true })
   .superRefine(applyPurchaseRequirements);
 
 export type VtuWalletOnlyChargeInput = z.infer<

@@ -332,9 +332,9 @@ describe('useUtilityPurchase', () => {
     expect(result.current.transactionRef).toBe('REF123');
     expect(result.current.successAmount).toBe(1000);
     expect(result.current.transactionVoucherPin).toBe('TOKEN-1');
-    // Balance is debited via a functional update (5000 - 1000).
-    const updater = setWalletBalance.mock.calls[0][0] as (n: number) => number;
-    expect(updater(5000)).toBe(4000);
+    // Balance is debited via a value update (5000 - 1000), never an
+    // updater function (Codex R109 P2: updaters must be pure).
+    expect(setWalletBalance).toHaveBeenCalledWith(4000);
   });
 
   it('blocks checkout without a network call when the wallet cannot cover the bill', async () => {

@@ -30,6 +30,12 @@ export const EXPECTED_PENDING_TAIL_SOURCES = {
       sha256:
         '2112c1db75c246c7030a570434efdecfb7bbd2b95ce1b35b8a3ad37dba811a17',
     },
+    {
+      repositoryPath:
+        'supabase/migrations/20261015232000_pair_vtu_customer_email_notification_keys.sql',
+      sha256:
+        '91c1c8b4d8934b33b39e6c61c27e0e948ad8f1dac925a8a689b30f2d7b09d597',
+    },
   ],
   identity: [
     {

@@ -122,8 +122,26 @@ describe('vtu-history-transaction-projection', () => {
     expect(projected.units).toBe('9.2');
     expect(projected.address).toBe('12 Allen Ave');
     expect(projected.refund_pending).toBe(false);
+    expect(projected.refund_skipped).toBe(false);
     // Card leg 100 + reversed wallet leg 400.
     expect(projected.refunded_to_wallet).toBe(500);
+  });
+
+  it('passes the skipped state through for no-evidence failures', () => {
+    // Codex R110 P2: skipped rows are not pending, but clients must
+    // not report them as refunded either.
+    const projected = projectHistoryTransaction({
+      paymentStatusByReference: new Map(),
+      transaction: row({
+        metadata: { refundSkipped: 'no_collection_evidence' },
+        status: 'failed',
+      }),
+      voucherPin: null,
+    });
+
+    expect(projected.refund_pending).toBe(false);
+    expect(projected.refund_skipped).toBe(true);
+    expect(projected.refunded_to_wallet).toBeNull();
   });
 
   it('parses amounts and cashback directly', () => {

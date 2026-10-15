@@ -369,6 +369,29 @@ describe('PurchaseSuccess', () => {
     ).toBeOnTheScreen();
   });
 
+  it('says no charge was made for a skipped refund, never that it refunded', () => {
+    // Codex R110 P2: skipped rows were never charged.
+    render(
+      <PurchaseSuccess
+        type="power"
+        customerIdentifier="43901766923"
+        txReference="ref-123"
+        cashback={null}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        refundSkipped={true}
+        status="failed"
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Your electricity purchase for 43901766923 failed. No charge was made to your wallet — please try again.'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/has been refunded/)).not.toBeOnTheScreen();
+  });
+
   it('shows the reference (not the slogan) while a purchase is still processing', () => {
     render(
       <PurchaseSuccess

@@ -161,6 +161,7 @@ describe('UtilitySuccessView', () => {
               request_reference: 'VTU-FAIL',
               status: 'failed',
               refund_pending: false,
+              refund_skipped: false,
               refunded_to_wallet: 1000,
             },
           ],
@@ -229,6 +230,46 @@ describe('UtilitySuccessView', () => {
       expect(await screen.findByText('Purchase failed')).toBeInTheDocument();
       expect(screen.getByText(/being processed/)).toBeInTheDocument();
       expect(screen.queryByText(/was refunded/)).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('says no charge was made for a skipped refund, never that it refunded', async () => {
+    // Codex R110 P2: skipped rows were never charged — terminal,
+    // but the copy must not claim a refund landed.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          transactions: [
+            {
+              request_reference: 'VTU-FAIL',
+              status: 'failed',
+              refund_pending: false,
+              refund_skipped: true,
+            },
+          ],
+        }),
+      }))
+    );
+    try {
+      render(
+        <UtilitySuccessView
+          activeTab="power"
+          amount={1000}
+          merchantSlug="ogabassey"
+          onClose={vi.fn()}
+          processing={true}
+          reference="VTU-FAIL"
+        />
+      );
+
+      expect(await screen.findByText('Purchase failed')).toBeInTheDocument();
+      expect(screen.getByText(/No charge was made/)).toBeInTheDocument();
+      expect(screen.queryByText(/was refunded/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/being processed/)).not.toBeInTheDocument();
     } finally {
       vi.unstubAllGlobals();
     }

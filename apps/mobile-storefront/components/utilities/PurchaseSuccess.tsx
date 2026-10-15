@@ -38,6 +38,8 @@ interface PurchaseSuccessProps {
   voucherPin?: string | null;
   /** Refund proof: failed WITHOUT this flag must not claim a refund. */
   refundConfirmed?: boolean | null;
+  /** Refund deliberately skipped (nothing taken): no-charge copy. */
+  refundSkipped?: boolean | null;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -55,11 +57,13 @@ function isTokenGeneratingType(type: string) {
 function getPurchaseMessage({
   identifier,
   refundConfirmed,
+  refundSkipped,
   status,
   type,
 }: {
   identifier: string;
   refundConfirmed: boolean | null | undefined;
+  refundSkipped: boolean | null | undefined;
   status: PurchaseStatus;
   type: string;
 }) {
@@ -78,10 +82,17 @@ function getPurchaseMessage({
       // Wallet-only flow, gated on proof: the refunded claim renders
       // ONLY with refundConfirmed. Without it (a future caller passing
       // failed from route params or a deep link) the copy stays soft.
+      // Skipped rows were never charged (Codex R110 P2): explicit
+      // no-charge copy, never the refunded claim.
       if (refundConfirmed === true) {
         return identifier
           ? `Your ${typeLabel} purchase for ${identifier} failed. Your wallet has been refunded — please try again.`
           : `Your ${typeLabel} purchase failed. Your wallet has been refunded — please try again.`;
+      }
+      if (refundSkipped === true) {
+        return identifier
+          ? `Your ${typeLabel} purchase for ${identifier} failed. No charge was made to your wallet — please try again.`
+          : `Your ${typeLabel} purchase failed. No charge was made to your wallet — please try again.`;
       }
       return identifier
         ? `Your ${typeLabel} purchase for ${identifier} failed. Please check your wallet balance and try again.`
@@ -184,6 +195,7 @@ export function PurchaseSuccess({
   status = 'successful',
   voucherPin,
   refundConfirmed,
+  refundSkipped,
 }: PurchaseSuccessProps) {
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -194,6 +206,7 @@ export function PurchaseSuccess({
   const messageText = getPurchaseMessage({
     identifier,
     refundConfirmed,
+    refundSkipped,
     status,
     type,
   });

@@ -21,6 +21,14 @@ export interface HistoryRefundProjection {
    */
   refund_pending: boolean;
   /**
+   * Failed + refund deliberately skipped (no collection evidence —
+   * nothing was taken, so no credit runs). Skipped rows are NOT
+   * pending (pollers must stop), but clients must NOT report them
+   * as refunded either: refundConfirmed requires pending === false
+   * AND skipped === false (Codex R110 P2).
+   */
+  refund_skipped: boolean;
+  /**
    * Total amount restored to the wallet, or null when unknown/none.
    * The persisted `refundAmount` is the CARD leg only (0 for
    * wallet-only); the reversed wallet leg comes from the purchase
@@ -72,6 +80,7 @@ export function projectHistoryRefundFields({
   const refundSkipped =
     shape.refundSkipped === VTU_REFUND_SKIPPED_NO_COLLECTION;
   return {
+    refund_skipped: status === 'failed' && !refundIssued && refundSkipped,
     refund_pending:
       status === 'failed' &&
       !refundIssued &&

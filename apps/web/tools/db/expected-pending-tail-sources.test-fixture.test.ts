@@ -4,6 +4,26 @@ import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.t
 describe('EXPECTED_PENDING_TAIL_SOURCES', () => {
   it('preserves the exact tail migration bindings', () => {
     expect(EXPECTED_PENDING_TAIL_SOURCES).toEqual({
+      recent: [
+        {
+          repositoryPath:
+            'supabase/migrations/20261008174300_search_mobile_admin_transaction_review_orders.sql',
+          sha256:
+            'e9245edba2df825604e770b769f0ec7e4949df83bc6aa4ec84740e33bb53c9a4',
+        },
+        {
+          repositoryPath:
+            'supabase/migrations/20261013172724_fix_shipment_booking_refund_probe_permissions.sql',
+          sha256:
+            '58736f2055f1d497d2b273d290658e34b2006cbd0d81015cf7749e668aa29b11',
+        },
+        {
+          repositoryPath:
+            'supabase/migrations/20261013194440_fix_shipping_quote_proof_canonicalization.sql',
+          sha256:
+            '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad',
+        },
+      ],
       identity: [
         {
           repositoryPath:

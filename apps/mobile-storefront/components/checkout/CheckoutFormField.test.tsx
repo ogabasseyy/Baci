@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { type FieldErrors, useForm } from 'react-hook-form';
-import { StyleSheet } from 'react-native';
+import { type FieldErrors, useForm, useWatch } from 'react-hook-form';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { BRAND } from '@/constants/Colors';
 import type { ShippingAddressInput } from '@/lib/validation';
 import { CheckoutFormField } from './CheckoutFormField';
@@ -41,20 +41,38 @@ function CheckoutFormFieldHarness({
     },
   });
 
+  const email = useWatch({ control: form.control, name: 'email' });
   return (
-    <CheckoutFormField
-      colors={mockColors}
-      control={form.control}
-      errors={errors}
-      isDark={false}
-      keyboardType="email-address"
-      label={label}
-      multiline={multiline}
-      name="email"
-      placeholder="you@example.com"
-      returnKeyType="done"
-      transformText={transformText}
-    />
+    <>
+      <Text testID="form-email">{email}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Reset email"
+        onPress={() => form.setValue('email', 'reset@example.com')}
+      >
+        <Text>Reset</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Restore email"
+        onPress={() => form.setValue('email', 'customer@example.com')}
+      >
+        <Text>Restore</Text>
+      </Pressable>
+      <CheckoutFormField
+        colors={mockColors}
+        control={form.control}
+        errors={errors}
+        isDark={false}
+        keyboardType="email-address"
+        label={label}
+        multiline={multiline}
+        name="email"
+        placeholder="you@example.com"
+        returnKeyType="done"
+        transformText={transformText}
+      />
+    </>
   );
 }
 
@@ -87,7 +105,7 @@ describe('CheckoutFormField', () => {
     expect(input.props.accessibilityHint).toBe('Enter your email address');
   });
 
-  it('applies transformText before updating the form value', () => {
+  it('normalizes the form without rewriting autofilled native text until blur', () => {
     render(
       <CheckoutFormFieldHarness transformText={(value) => value.trim()} />
     );
@@ -95,7 +113,12 @@ describe('CheckoutFormField', () => {
     const input = screen.getByPlaceholderText('you@example.com');
     fireEvent.changeText(input, ' customer@example.com ');
 
-    expect(screen.getByDisplayValue('customer@example.com')).toBeTruthy();
+    expect(screen.getByTestId('form-email')).toHaveTextContent(
+      'customer@example.com'
+    );
+    expect(input.props.value).toBe(' customer@example.com ');
+    fireEvent(input, 'blur');
+    expect(input.props.value).toBe('customer@example.com');
   });
 
   it('processes edits even when transformText returns the current value', () => {
@@ -116,7 +139,42 @@ describe('CheckoutFormField', () => {
       'TEST@EXAMPLE.COM',
       'test@example.com'
     );
+    expect(screen.getByTestId('form-email')).toHaveTextContent(
+      'test@example.com'
+    );
+    expect(screen.getByPlaceholderText('you@example.com').props.value).toBe(
+      'TEST@EXAMPLE.COM'
+    );
+    fireEvent(screen.getByPlaceholderText('you@example.com'), 'blur');
     expect(screen.getByDisplayValue('test@example.com')).toBeTruthy();
+  });
+
+  it('accepts external resets without bringing back a stale autofill draft', () => {
+    render(
+      <CheckoutFormFieldHarness transformText={(value) => value.trim()} />
+    );
+    const input = screen.getByPlaceholderText('you@example.com');
+    fireEvent.changeText(input, ' customer@example.com ');
+    expect(input.props.value).toBe(' customer@example.com ');
+    fireEvent.press(screen.getByRole('button', { name: 'Reset email' }));
+    expect(input.props.value).toBe('reset@example.com');
+    fireEvent.press(screen.getByRole('button', { name: 'Restore email' }));
+    expect(input.props.value).toBe('customer@example.com');
+  });
+
+  it('keeps deletion responsive when normalization yields an empty value', () => {
+    render(
+      <CheckoutFormFieldHarness
+        defaultEmail="customer@example.com"
+        transformText={(value) => value.trim()}
+      />
+    );
+    const input = screen.getByPlaceholderText('you@example.com');
+    fireEvent.changeText(input, ' ');
+    expect(input.props.value).toBe(' ');
+    expect(screen.getByTestId('form-email').props.children).toBe('');
+    fireEvent.changeText(input, '');
+    expect(input.props.value).toBe('');
   });
 
   it('renders validation errors with polite live-region semantics', () => {

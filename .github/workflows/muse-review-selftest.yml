@@ -22,6 +22,7 @@ on:
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
       - '.github/workflows/security.yml'
+      - '.github/workflows/semgrep-tripwire.yml'
       - '.github/workflows/dependency-review.yml'
   pull_request:
     paths:
@@ -35,6 +36,7 @@ on:
       - '.github/workflows/muse-code-review.yml'
       - '.github/workflows/muse-review-selftest.yml'
       - '.github/workflows/security.yml'
+      - '.github/workflows/semgrep-tripwire.yml'
       - '.github/workflows/dependency-review.yml'
   schedule:
     # Weekly bump signal so the pinned CLI cannot go silently stale.
@@ -78,6 +80,8 @@ jobs:
               for f in .github/scripts/muse-review/*.sh; do
                 bash -n "${f}"
               done
+              bash .github/scripts/semgrep-sarif-filter-trusted-sync.test.sh
+              bash .github/scripts/semgrep-sarif-filter-trusted-sync-negatives.test.sh
               perl -c .github/scripts/muse-review/ranges.pl
               # schema.json is data (validate it); the .jq files are programs, and
               # `jq empty` would misparse them as JSON input — they are executed
@@ -104,7 +108,7 @@ jobs:
                 exit 1
               fi
               tar -xzf "${tmpdir}/actionlint.tar.gz" -C "${tmpdir}"
-              "${tmpdir}/actionlint" .github/workflows/muse-code-review.yml .github/workflows/muse-review-selftest.yml .github/workflows/security.yml .github/workflows/dependency-review.yml
+              "${tmpdir}/actionlint" .github/workflows/muse-code-review.yml .github/workflows/muse-review-selftest.yml .github/workflows/security.yml .github/workflows/semgrep-tripwire.yml .github/workflows/dependency-review.yml
               ;;
           esac
 

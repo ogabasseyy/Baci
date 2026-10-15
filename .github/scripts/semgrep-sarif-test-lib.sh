@@ -119,7 +119,7 @@ for op in spec.split("\x1e"):
 EOF
 }
 
-# t name expect_exit expect_label sarif op [expect_remaining] [trusted_changed]
+# t name expect_exit expect_label sarif op [expect_remaining] [trusted_changed] [advisory]
 t() {
   rm -rf "$WORK/.github" "$WORK/semgrep.sarif"
   cp -r "$ROOT/.github" "$WORK/.github"
@@ -131,11 +131,12 @@ t() {
     return
   fi
   if [[ -n "${7:-}" ]]; then export TRUSTED_CHANGED="$7"; else unset TRUSTED_CHANGED; fi
+  if [[ -n "${8:-}" ]]; then export TRUSTED_CHANGE_ADVISORY="$8"; else unset TRUSTED_CHANGE_ADVISORY; fi
   # CI exports GITHUB_WORKSPACE (repo root); the filter anchors there,
   # so unset it to keep the suite reading the scratch tree it mutates.
   out="$(cd "$WORK" && env -u GITHUB_WORKSPACE python3 "$FILTER" 2>&1)"
   code="$?"
-  unset TRUSTED_CHANGED
+  unset TRUSTED_CHANGED TRUSTED_CHANGE_ADVISORY
   assert_eq "$1-exit" "$2" "$code"
   case "$out" in *"$3"*) got="yes";; *) got="no";; esac
   assert_eq "$1-label" "yes" "$got"

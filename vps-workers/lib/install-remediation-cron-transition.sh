@@ -62,6 +62,7 @@ fi
 for lock_name in \
   vercel-error-remediator \
   sentry-mobile-error-remediator \
+  posthog-error-remediator \
   remediation-codex-canary
 do
   touch "$lock_dir/$lock_name.lock"
@@ -87,8 +88,10 @@ exec 7>"$lock_dir/vercel-error-remediator.lock"
 hold_lock 7 "$lock_dir/vercel-error-remediator.lock"
 exec 8>"$lock_dir/sentry-mobile-error-remediator.lock"
 hold_lock 8 "$lock_dir/sentry-mobile-error-remediator.lock"
-exec 9>"$lock_dir/remediation-codex-canary.lock"
-hold_lock 9 "$lock_dir/remediation-codex-canary.lock"
+exec 9>"$lock_dir/posthog-error-remediator.lock"
+hold_lock 9 "$lock_dir/posthog-error-remediator.lock"
+exec 10>"$lock_dir/remediation-codex-canary.lock"
+hold_lock 10 "$lock_dir/remediation-codex-canary.lock"
 
 python3 "$staging_dir/lib/remediation-cron-transition.py" \
   "$remote_dir" "$staging_dir" "$node_bin" "$codex_image" \

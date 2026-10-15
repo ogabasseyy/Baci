@@ -33,6 +33,29 @@ minimumReleaseAgeExclude:
 trustPolicy: no-downgrade
 trustLockfile: true
 trustPolicyExclude:
+  # SDK 57 scene-support releases: verified exact package versions/gitHead in
+  # expo/expo; available native/source files match those release commits.
+  - '@expo/prebuild-config@57.0.18'
+  - '@expo/router-server@57.0.12'
+  - 'expo-modules-jsi@57.1.2'
+  - '@expo/inline-modules@0.1.8'
+  - '@expo/metro-file-map@57.0.4'
+  - '@expo/require-utils@57.0.6'
+  - '@expo/image-utils@0.11.6'
+  - 'expo-constants@57.0.21'
+  - '@expo/cli@57.0.29'
+  - '@expo/metro-config@57.0.13'
+  - '@expo/config@57.0.10'
+  - 'expo-dev-launcher@57.0.21'
+  - 'expo-dev-menu@57.0.20'
+  - '@expo/fingerprint@0.20.14'
+  - 'babel-preset-expo@57.0.15'
+  - '@expo/local-build-cache-provider@57.0.9'
+  - 'expo-modules-autolinking@57.0.15'
+  - 'expo-modules-core@57.0.21'
+  - '@expo/config-plugins@57.0.10'
+  - 'expo-asset@57.0.19'
+  - 'expo-dev-client@57.0.20'
   # Exact exceptions for deps locked before the trustPolicy override refresh.
   - '@react-native-firebase/app@23.8.8'
   - 'react-lite-youtube-embed@3.5.1'
@@ -107,8 +130,9 @@ overrides:
   "@firebase/database-types": "1.0.17"
   # Dedupe with @firebase/util — same reason.
   "@firebase/database-compat": "2.1.1"
-  # Pin smol-toml 1.7.1 for the malformed-TOML DoS advisory (knip transitive).
-  smol-toml: "1.7.1"
+  # Pin smol-toml 1.9.0 for the malformed-TOML DoS advisory plus the
+  # parseKey quadratic-time advisory (GHSA-r4xh-jqrq-34v2, knip transitive).
+  smol-toml: "1.9.0"
   picomatch: ">=4.0.4"
   yaml: ">=2.8.3"
   # Pin esbuild 0.28 for path hardening / binary integrity.
@@ -333,6 +357,26 @@ overrides:
   # Pin @a2ui/web_core 0.10.2 for CVE-2026-10032
   # (@copilotkit/a2ui-renderer transitive).
   "@a2ui/web_core": "0.10.2"
+  # Pin prosemirror-view 1.42.3 for the paste-handling XSS
+  # (CVE-2026-104847, @tiptap/pm transitive).
+  prosemirror-view: "1.42.3"
+  # Align prosemirror-model to 1.25.11 (the version view 1.42.3 resolves):
+  # without this, state/commands/tables/etc. stay on 1.25.8 and the editor
+  # graph loads two model runtimes, tripping cross-version instanceof
+  # RangeErrors when nodes pass between packages (tiptap#577).
+  prosemirror-model: "1.25.11"
+  # Pin fast-copy 3.1.0 for the deeply-nested stack-exhaustion advisory
+  # (GHSA-jggr-w7fw-pc2j, pino-pretty transitive).
+  fast-copy: "3.1.0"
+  # Pin compression 1.8.2 for CVE-2026-87776 (premature-close memory-leak
+  # DoS, @expo/cli transitive).
+  compression: "1.8.2"
+  # Pin proxy-addr 2.0.8 for CVE-2026-90711 (IPv4-mapped IPv6 trust-subnet
+  # IP spoofing, express transitive).
+  proxy-addr: "2.0.8"
+  # Pin source-map-js 1.2.2 for CVE-2026-93749 (indexed section-offset
+  # event-loop DoS, @tailwindcss/node transitive).
+  source-map-js: "1.2.2"
 patchedDependencies:
   # Backport the upstream 0.5.0 linear-time fallback decoder to CJS 0.2.2: fixes the
   # exponential-decoding DoS while keeping query-string@7 (expo-router) compatible.
@@ -352,15 +396,32 @@ patchedDependencies:
   "react-native-webview@13.16.1": "patches/react-native-webview@13.16.1.patch"
   react-native@0.86.2: patches/react-native@0.86.2.patch
   "react-native-fbsdk-next@13.4.3": "patches/react-native-fbsdk-next@13.4.3.patch"
-  # expo-modules-jsi@57.0.5: drop SWIFT_RETURNS_RETAINED on RuntimeScheduler (Xcode 26.2).
-  "expo-modules-jsi@57.0.5": "patches/expo-modules-jsi@57.0.5.patch"
-  # expo-modules-core@57.0.12: backport upstream SDK 58 NonisolatedUnsafeWeakVar
+  # expo-modules-core@57.0.21: backport upstream SDK 58 NonisolatedUnsafeWeakVar
   # fix for the EventEmitter.swift data-race error under Xcode 26 complete
   # checking (SWIFT_STRICT_CONCURRENCY is ignored in Swift 6 language mode).
-  "expo-modules-core@57.0.12": "patches/expo-modules-core@57.0.12.patch"
+  "expo-modules-core@57.0.21": "patches/expo-modules-core@57.0.21.patch"
+  # SDK 57 scene-aware native presentation backports (Expo #48319, #50368).
+  'expo-web-browser@57.0.2': patches/expo-web-browser@57.0.2.patch
+  'expo-apple-authentication@57.0.1': patches/expo-apple-authentication@57.0.1.patch
+  'expo-print@57.0.1': patches/expo-print@57.0.1.patch
   image-size@1.2.1: patches/image-size@1.2.1.patch
   "next@16.3.8": "patches/next@16.3.8.patch"
   '@supabase/auth-js@2.108.2': patches/@supabase__auth-js@2.108.2.patch
   node-forge@1.4.0: patches/node-forge@1.4.0.patch
   # Pause RecyclerView recycling while retaining exit content (screens PR 4755).
   react-native-screens@4.26.2: patches/react-native-screens@4.26.2.patch
+  # Backport the upstream 7.1.6 Set-based membership tests to 6.0.10: fixes
+  # the flat-selector quadratic CPU-exhaustion DoS (GHSA-rj75-hqrm-r3gf) while
+  # keeping @tailwindcss/typography's exact 6.0.10 dependency.
+  postcss-selector-parser@6.0.10: patches/postcss-selector-parser@6.0.10.patch
+  # Backport the upstream 12.0.1 mergeDeep prototype-pollution fix to the 10.x
+  # and 11.x lines (GHSA-7mx3-vvmw-hjmv): skip __proto__/constructor/prototype
+  # keys and use hasOwnProperty. 12.0.1 breaks the dependents' ^11 ranges.
+  '@graphql-tools/utils@10.11.0': patches/@graphql-tools__utils@10.11.0.patch
+  '@graphql-tools/utils@11.1.0': patches/@graphql-tools__utils@11.1.0.patch
+  # Backport the upstream 0.18.2 hasOwnProperty guards to 0.16.47: fixes the
+  # prototype-pollution trust bypass (GHSA-238p-pmpm-9mq7) while keeping
+  # @copilotkit/react-core's ^0.16.22 range.
+  katex@0.16.47: patches/katex@0.16.47.patch
+  # Use native Core Animation composition for the iOS gradient hang hot path.
+  expo-linear-gradient@57.0.1: patches/expo-linear-gradient@57.0.1.patch

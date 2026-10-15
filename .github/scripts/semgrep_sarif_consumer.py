@@ -166,7 +166,7 @@ def audit_script_dir(ctx, drift):
                 drift.append("script-dir-rebound")
 
 
-def audit_run_hygiene(ctx, drift):
+def audit_run_hygiene(ctx, drift, expect_checkout_uses=True):
     # The whole analyzer assumes bash: a shell: override would
     # silently invalidate every rule below. Quoted ("shell":)
     # counts: quotes do not change YAML semantics.
@@ -196,7 +196,8 @@ def audit_run_hygiene(ctx, drift):
                 drift.append("reviewer-unpinned-action")
         else:
             checkout_uses += 1
-    if checkout_uses != 2 and "reviewer-action-count" not in drift:
+    count_ok = (checkout_uses == 2) if expect_checkout_uses else (checkout_uses <= 1)
+    if not count_ok and "reviewer-action-count" not in drift:
         drift.append("reviewer-action-count")
     # (Reviewer env:-block poison scan lives in
     # semgrep_sarif_bashfunc, called from the filter entrypoint

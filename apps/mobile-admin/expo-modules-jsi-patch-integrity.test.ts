@@ -10,11 +10,11 @@ const runtimeSchedulerPath = join(
 );
 
 describe('bugfix: expo-modules-jsi Xcode 26.2 RuntimeScheduler archive failure', () => {
-  it('keeps expo-modules-jsi pinned to the patched 57.0.5 archive', () => {
+  it('keeps expo-modules-jsi on the upstream factory ownership fix', () => {
     const pkg = JSON.parse(readFileSync(jsiPackageJsonPath, 'utf8')) as {
       version?: string;
     };
-    expect(pkg.version).toBe('57.0.5');
+    expect(pkg.version).toBe('57.1.2');
   });
 
   it('does not annotate RuntimeScheduler constructors with SWIFT_RETURNS_RETAINED', () => {
@@ -25,5 +25,8 @@ describe('bugfix: expo-modules-jsi Xcode 26.2 RuntimeScheduler archive failure',
       'RuntimeScheduler(void *scheduler, ScheduleFn fn) noexcept'
     );
     expect(source).not.toMatch(/SWIFT_RETURNS_RETAINED\s+RuntimeScheduler/);
+    expect(source).toContain(
+      'static RuntimeScheduler *create() noexcept SWIFT_RETURNS_RETAINED'
+    );
   });
 });

@@ -20,6 +20,12 @@ BEGIN
   VALUES (old_grant, m, old_terminal, 'purge-fixture', now() - interval '118 days');
   INSERT INTO public.commerce_cart_lines(merchant_id, cart_id, product_id, quantity, last_unit_price_minor)
   VALUES (m, old_terminal, p, 1, 1500);
+  -- An expired creation receipt referencing the cart and its grant
+  -- must not block the purge: both receipt FKs are SET NULL, and the
+  -- receipt itself is reclaimed by the receipt cleanup, not the purge.
+  INSERT INTO public.commerce_cart_creation_requests(
+    merchant_id, principal_id, operation_id, request_digest, cart_id, grant_id, expires_at
+  ) VALUES (m, 'purge-fixture', 'purge-create-op', 'digest', old_terminal, old_grant, now() - interval '1 day');
   -- Recently completed cart and an old but still-active cart survive.
   INSERT INTO public.commerce_carts(id, merchant_id, state, created_at, updated_at, expires_at)
   VALUES (recent_terminal, m, 'completed', now() - interval '40 days', now() - interval '10 days', now() + interval '1 day');
@@ -38,6 +44,13 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1 FROM public.commerce_cart_grants WHERE cart_id = old_terminal) THEN
     RAISE EXCEPTION 'purged cart grants must cascade away';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commerce_cart_creation_requests
+    WHERE merchant_id = m AND operation_id = 'purge-create-op'
+      AND cart_id IS NULL AND grant_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'creation receipt must survive with nulled references';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.commerce_carts WHERE id = recent_terminal) THEN
     RAISE EXCEPTION 'recently terminal cart must survive the retention window';

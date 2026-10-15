@@ -1,13 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { submitCartBoundOrder } from './order-binding';
-import { verifySharedCartOrderProof } from './order-proof';
+import {
+  requestCarriesSharedCartSessionProof,
+  verifySharedCartOrderProof,
+} from './order-proof';
 import {
   getSharedCartOrderAuthority,
   submitSharedCartOrderBinding,
 } from './order-route-binding';
 
-vi.mock('./order-proof', () => ({ verifySharedCartOrderProof: vi.fn() }));
+vi.mock('./order-proof', () => ({
+  requestCarriesSharedCartSessionProof: vi.fn(() => false),
+  verifySharedCartOrderProof: vi.fn(),
+}));
 vi.mock('./order-binding', () => ({ submitCartBoundOrder: vi.fn() }));
 const binding = {
   cart_id: 'cart',
@@ -34,6 +40,17 @@ it('keeps ordinary guest checkout independent of cart proof or binding calls', a
   expect(
     await submitSharedCartOrderBinding(deps, { ...input, binding: undefined })
   ).toEqual({ bound: null, failure: null });
+  expect(submitCartBoundOrder).not.toHaveBeenCalled();
+});
+it('fails closed when shared-cart session authority omits its binding', async () => {
+  vi.mocked(requestCarriesSharedCartSessionProof).mockReturnValue(true);
+  const authority = getSharedCartOrderAuthority(request, undefined, 'merchant');
+  expect(authority.ok).toBe(false);
+  if (authority.ok) throw new Error('unbound shared authority');
+  expect(authority.response.status).toBe(401);
+  expect(await authority.response.json()).toMatchObject({
+    code: 'SHARED_CART_BINDING_REQUIRED',
+  });
   expect(submitCartBoundOrder).not.toHaveBeenCalled();
 });
 it('forwards only verified preparing-principal authority for the submitted cart and merchant', () => {

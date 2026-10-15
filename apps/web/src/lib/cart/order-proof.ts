@@ -8,6 +8,33 @@ export type SharedCartOrderProofResult =
   | { ok: false };
 
 /**
+ * True when the request carries a verified shared-cart session proof
+ * for this merchant (device header, Bearer proof, or the merchant
+ * session cookie), whether or not it names a particular cart. Used to
+ * fail closed when a shared-cart shopper submits an order without its
+ * checkout binding: such a request must never fall through to the
+ * legacy direct order RPC.
+ */
+export function requestCarriesSharedCartSessionProof(
+  request: Request,
+  merchantId: string
+): boolean {
+  const headerProof = request.headers.get('x-cart-proof')?.trim();
+  const proof =
+    headerProof ||
+    readCartProofFromRequest(request, cartSessionCookieName(merchantId));
+  if (!proof) return false;
+  const verified = verifyCartSessionProof(proof, {
+    environment: getCartProofEnvironment(),
+  });
+  return (
+    verified.ok &&
+    verified.session.merchantId === merchantId &&
+    verified.session.cartId !== null
+  );
+}
+
+/**
  * Verifies the cart session proof presented with a bound order submit.
  * Native clients send `x-cart-proof` from secure device storage; browsers
  * ride the merchant-namespaced session cookie. Only a verified proof for

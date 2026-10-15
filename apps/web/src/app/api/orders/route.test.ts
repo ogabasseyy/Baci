@@ -248,6 +248,7 @@ const mockVerifySharedCartOrderProof = vi.hoisted(() =>
   }))
 );
 vi.mock('@/lib/cart/order-proof', () => ({
+  requestCarriesSharedCartSessionProof: vi.fn(() => false),
   verifySharedCartOrderProof: mockVerifySharedCartOrderProof,
 }));
 

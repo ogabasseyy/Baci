@@ -6,7 +6,10 @@ import {
   type SubmitCartBoundOrderResult,
   submitCartBoundOrder,
 } from './order-binding';
-import { verifySharedCartOrderProof } from './order-proof';
+import {
+  requestCarriesSharedCartSessionProof,
+  verifySharedCartOrderProof,
+} from './order-proof';
 
 type OrderCartBinding = OrderCreateInput['shared_cart'];
 
@@ -18,7 +21,25 @@ export function getSharedCartOrderAuthority(
 ):
   | { ok: true; principalId: string | null }
   | { ok: false; response: NextResponse } {
-  if (!binding) return { ok: true, principalId: null };
+  if (!binding) {
+    // A request carrying shared-cart session authority must submit
+    // its reviewed checkout binding; without one it must not fall
+    // through to the legacy direct order path.
+    if (requestCarriesSharedCartSessionProof(request, merchantId)) {
+      return {
+        ok: false,
+        response: NextResponse.json(
+          {
+            code: 'SHARED_CART_BINDING_REQUIRED',
+            error:
+              'This order must be submitted from your reviewed cart. Return to your cart and submit again.',
+          },
+          { status: 401 }
+        ),
+      };
+    }
+    return { ok: true, principalId: null };
+  }
   const proof = verifySharedCartOrderProof(request, {
     cartId: binding.cart_id,
     merchantId,

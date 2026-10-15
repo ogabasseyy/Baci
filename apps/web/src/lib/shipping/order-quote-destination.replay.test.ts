@@ -50,7 +50,7 @@ describe.each([
     items: orderInput.items,
   };
 
-  it('skips only the expiry check for a confirmed replay and still adopts the pin', async () => {
+  it('skips expired quote and catalog checks for a confirmed replay while validating its pin', async () => {
     // Arrange — a same-key retry arrives after its quote expired, but the
     // merchant-scoped key already has an order.
     const parsed = orderCreateSchema.parse({
@@ -71,8 +71,9 @@ describe.each([
       { ...context, isConfirmedReplay: true }
     );
 
-    // Assert — expiry is skipped yet every deterministic check still runs,
+    // Assert — destination/pin, merchant, provider and fee checks still run,
     // so the retry reproduces the first attempt's adopted pin exactly.
+    // The order RPC enforces hash-significant items, not mutable catalog data.
     expect(destination).toMatchObject(coordinates);
     expect(() =>
       assertQuoteReceiverMatchesOrder(request, {

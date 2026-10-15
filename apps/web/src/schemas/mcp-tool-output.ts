@@ -30,6 +30,7 @@ const product = z.object({
   stock_level: z.string(),
   stock_confidence: z.enum(['high', 'low', 'none', 'unconfirmed']),
   has_variants: z.boolean().nullable().optional(),
+  has_condition_offers: z.boolean().nullable().optional(),
 });
 const conditionOffer = z.looseObject({
   condition: z.string(),

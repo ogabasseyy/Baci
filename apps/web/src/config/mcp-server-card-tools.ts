@@ -4,6 +4,10 @@ import { MCP_SEARCH_CATEGORY_GUIDANCE } from '../../mcp-server/search-category-g
 import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from '../../mcp-server/search-products-description';
 import { cartLinkInputSchema } from '../schemas/cart-link-input';
 import {
+  MCP_CATALOG_RENDER_DESCRIPTION,
+  mcpCatalogRenderInputSchema,
+} from '../schemas/mcp-catalog-render';
+import {
   MCP_DELIVERY_FEE_INFO_DESCRIPTION,
   mcpDeliveryFeeInfoInputSchema,
 } from '../schemas/mcp-delivery-fee-info';
@@ -50,6 +54,16 @@ const READ_ONLY_TOOL_ANNOTATIONS = {
 } as const;
 
 export const PUBLIC_MCP_TOOLS = [
+  {
+    name: 'render_ogabassey_catalog',
+    title: 'Show Ogabassey Product Catalog',
+    description: MCP_CATALOG_RENDER_DESCRIPTION,
+    inputSchema: z.toJSONSchema(mcpCatalogRenderInputSchema, {
+      target: 'draft-7',
+      io: 'input',
+    }),
+    annotations: READ_ONLY_TOOL_ANNOTATIONS,
+  },
   {
     name: 'search_products',
     title: 'Search Products',

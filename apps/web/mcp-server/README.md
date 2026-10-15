@@ -375,3 +375,23 @@ decreases do not propagate to an already-transferred website cart.
 Products with variants or condition offers continue through explicit website option
 selection. Checkout remains on Ogabassey; its existing save-information checkbox
 is optional and defaults to off. This feature does not place orders or charge buyers.
+
+### MCP Apps catalog rendering
+
+`search_products` and `get_product` return data without launching UI. After
+choosing products, call `render_ogabassey_catalog` with 1–20 exact product IDs
+in display order. It deduplicates IDs and re-fetches public merchant-scoped
+product details; callers cannot provide prices or arbitrary product cards.
+If any product cannot be loaded, it returns an error instead of a partial
+comparison. Option selection stays on the storefront.
+
+The catalog resource uses `text/html;profile=mcp-app` and standard
+`ui.resourceUri`/`ui.visibility` metadata. Existing ChatGPT bridge sessions
+retain their state and behavior. Other MCP Apps hosts connect through the
+SDK bridge for results, deferred tool arguments, theme, sizing, links and
+cart tool calls. Standard-only hosts maintain cart UI state while mounted;
+cross-remount persistence remains host-dependent and needs host QA.
+
+These source changes do not cancel, resubmit, or alter Platform review state.
+A release still requires normal review, merge and authorized deployment,
+followed by actual ChatGPT host verification.

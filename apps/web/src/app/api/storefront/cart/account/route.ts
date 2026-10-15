@@ -114,13 +114,10 @@ export async function POST(request: NextRequest): Promise<Response> {
         },
         { environment: getCartProofEnvironment() }
       );
-    } catch (error) {
-      // The link already committed and revoked the old grant: return
-      // the linked cart without the rotated proof rather than a 503;
-      // a retry replays the link receipt and re-attempts issuance.
-      console.error('Cart session proof issue failed after account link', {
-        message: error instanceof Error ? error.message : 'unknown',
-      });
+    } catch {
+      // Preserve the operation id on clients: retry reconciles the committed
+      // receipt and re-attempts proof issuance without linking a second time.
+      return cartErrorResponse('temporarily_unavailable');
     }
     const response = cartJsonResponse({
       cart: result.cart,

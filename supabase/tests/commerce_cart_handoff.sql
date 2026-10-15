@@ -43,6 +43,7 @@ CREATE TABLE public.product_variants (
 \ir ../migrations/20261012050200_commerce_cart_commands.sql
 \ir ../migrations/20261012050400_commerce_cart_create_grant.sql
 \ir ../migrations/20261012050500_commerce_cart_handoff.sql
+\ir ../migrations/20261015120000_commerce_cart_handoff_merchant_token.sql
 
 INSERT INTO public.merchants (id, slug, premium_features) VALUES
   ('11111111-1111-4111-8111-111111111111', 'ogabassey', '["shared_cart","shared_cart_accounts","shared_cart_realtime"]'::jsonb),

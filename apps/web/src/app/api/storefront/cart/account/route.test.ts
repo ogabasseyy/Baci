@@ -169,3 +169,43 @@ it('does not issue proof or cookie when account authority is rejected', async ()
   expect(response.headers.get('set-cookie')).toBeNull();
   expect(issueCartSessionProof).not.toHaveBeenCalled();
 });
+
+it.each<Record<string, string>>([
+  {},
+  { 'X-Cart-Session-Proof': 'cp1.device.signature' },
+])('keeps proof-issuance failure retryable for transport %j', async (headers) => {
+  const receipt = {
+    ok: true,
+    cart: { cartId: 'selected', expiresAt: '2099-01-01T00:00:00Z' },
+    grantId: 'new-grant',
+    principalId: 'rotated',
+    operationId: 'retry-link',
+    warnings: [],
+    replayed: false,
+  };
+  vi.mocked(linkCartToCustomer).mockResolvedValue(receipt as never);
+  vi.mocked(issueCartSessionProof).mockImplementationOnce(() => {
+    throw new Error('fixture signing unavailable');
+  });
+  const body = '{"operationId":"retry-link","choice":"use_saved"}';
+  const failed = await POST(request(body, headers));
+  expect(failed.status).toBe(503);
+  expect(await failed.json()).toMatchObject({
+    code: 'temporarily_unavailable',
+  });
+  expect(failed.headers.get('set-cookie')).toBeNull();
+  vi.mocked(linkCartToCustomer).mockResolvedValue({
+    ...receipt,
+    replayed: true,
+  } as never);
+  vi.mocked(issueCartSessionProof).mockReturnValue('cp1.recovered.signature');
+  const recovered = await POST(request(body, headers));
+  expect(recovered.status).toBe(200);
+  expect(await recovered.json()).toMatchObject({ replayed: true });
+  expect(recovered.headers.get('set-cookie')).toContain(
+    'cp1.recovered.signature'
+  );
+  expect(vi.mocked(linkCartToCustomer).mock.calls[1][2]).toEqual(
+    vi.mocked(linkCartToCustomer).mock.calls[0][2]
+  );
+});

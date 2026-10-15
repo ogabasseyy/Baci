@@ -93,6 +93,8 @@ describe('CheckoutRecoveryForm', () => {
   });
   it('renders all destination fields and starts with blank provenance fields without automatically requesting a quote', () => {
     const { onBlockingChange, onBusyChange } = renderForm();
+    for (const label of ['Address', 'City', 'State', 'Phone'])
+      expect(screen.getByText(label)).toBeTruthy();
     for (const field of [
       'address',
       'city',

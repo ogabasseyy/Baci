@@ -73,7 +73,7 @@ export function CheckoutRecoveryForm({
               ? 'Latitude (confirmed pin)'
               : field === 'longitude'
                 ? 'Longitude (confirmed pin)'
-                : field}
+                : field.charAt(0).toUpperCase() + field.slice(1)}
           </Text>
           <TextInput
             accessibilityLabel={`Recovery ${field}`}

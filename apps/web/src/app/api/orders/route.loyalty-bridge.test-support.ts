@@ -167,6 +167,16 @@ export async function setupLoyaltyBridge(
 export function loyaltyRequest(extra: Record<string, unknown> = {}) {
   return new NextRequest('http://localhost/api/orders', {
     method: 'POST',
+    headers: { 'Idempotency-Key': 'loyalty-bridge-test-key' },
+    body: JSON.stringify({ ...baseOrderPayload, ...extra }),
+  });
+}
+
+export function loyaltyRequestWithoutIdempotencyKey(
+  extra: Record<string, unknown> = {}
+) {
+  return new NextRequest('http://localhost/api/orders', {
+    method: 'POST',
     body: JSON.stringify({ ...baseOrderPayload, ...extra }),
   });
 }

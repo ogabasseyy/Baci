@@ -68,6 +68,84 @@ describe('redemptionIdempotencyKeys fallback coordination', () => {
     redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-solo');
   });
 
+  it('keeps waiting while another tab\u2019s claim is live, then adopts its key', async () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+    });
+    // A winning tab has claimed but not yet stored its key (e.g. it
+    // was suspended mid-mint); its claim stays live well past the old
+    // bounded wait. Minting a competing key here is exactly the
+    // double-spend the claim protocol exists to prevent.
+    store.set(
+      'loyalty-redeem-key:m:c:reward-wait:claim',
+      JSON.stringify({
+        token: '00000000-0000-4000-8000-000000000000',
+        expiresAt: Date.now() + 10_000,
+      })
+    );
+    // The winner resumes and publishes its key while we wait.
+    const publish = setTimeout(() => {
+      store.set(
+        'loyalty-redeem-key:m:c:reward-wait',
+        '44444444-4444-4444-8444-444444444444'
+      );
+    }, 150);
+
+    try {
+      const key = await redemptionIdempotencyKeys.forReward(
+        'm',
+        'c',
+        'reward-wait'
+      );
+      expect(key).toBe('44444444-4444-4444-8444-444444444444');
+      expect(store.get('loyalty-redeem-key:m:c:reward-wait')).toBe(
+        '44444444-4444-4444-8444-444444444444'
+      );
+    } finally {
+      clearTimeout(publish);
+      redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-wait');
+    }
+  });
+
+  it('mints after the observed claim expires without a key', async () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+    });
+    // The claimant crashed after staking: once its claim expires the
+    // intent must not stay blocked.
+    store.set(
+      'loyalty-redeem-key:m:c:reward-expired:claim',
+      JSON.stringify({
+        token: '00000000-0000-4000-8000-000000000000',
+        expiresAt: Date.now() + 120,
+      })
+    );
+
+    const key = await redemptionIdempotencyKeys.forReward(
+      'm',
+      'c',
+      'reward-expired'
+    );
+    expect(key).toMatch(UUID_PATTERN);
+    expect(store.get('loyalty-redeem-key:m:c:reward-expired')).toBe(key);
+
+    redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-expired');
+  });
+
   it('coordinates through the claim protocol when locks throw', async () => {
     const store = new Map<string, string>();
     vi.stubGlobal('localStorage', {

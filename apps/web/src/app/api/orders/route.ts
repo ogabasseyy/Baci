@@ -1607,6 +1607,22 @@ export async function POST(request: NextRequest) {
       discountCodeAmount = preparedCheckout.discountCodeAmount;
     }
 
+    // A loyalty code claim is single-use and only replayable through
+    // the checkout idempotency key: without one, a response lost after
+    // commit leaves the shopper retrying into loyalty_code_already_used
+    // against an order that already exists (and dropping the code can
+    // then duplicate the order). Fail closed before creating anything.
+    if (loyaltyRedemptionId && !requestIdempotencyKey) {
+      return NextResponse.json(
+        {
+          code: 'IDEMPOTENCY_KEY_REQUIRED',
+          error:
+            'An Idempotency-Key header is required to check out with a loyalty code.',
+        },
+        { status: 400 }
+      );
+    }
+
     // === MERCHANT SHIPPING RATE ENFORCEMENT (money path) ===
     // When checkout selected a merchant-configured rate (shipping_rate_id),
     // the fee is recomputed server-side from the merchant's zone/rate config,

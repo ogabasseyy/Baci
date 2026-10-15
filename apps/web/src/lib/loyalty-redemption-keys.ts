@@ -23,8 +23,12 @@ const STORAGE_PREFIX = 'loyalty-redeem-key:';
 // token wins and losers adopt the winner's minted key from storage.
 // Claims expire so a crashed claimant cannot block the intent.
 const CLAIM_POLL_INTERVAL_MS = 25;
-const CLAIM_POLL_ATTEMPTS = 20;
 const CLAIM_TTL_MS = 10_000;
+// Safety valve only: a live claim always expires within CLAIM_TTL_MS of
+// its last refresh and its owner mints promptly, so waiting out a live
+// claim terminates on its own. The deadline guards against pathological
+// re-staking loops, not against a single suspended winner.
+const CLAIM_MAX_WAIT_MS = 30_000;
 
 const keysByIntent = new Map<string, string>();
 
@@ -116,9 +120,12 @@ function delay(ms: number): Promise<void> {
 
 // Web Locks is unavailable or threw: coordinate the first mint through
 // a storage claim so concurrent tabs still converge on one key. Every
-// claimant stakes a token; after each poll the lowest live token owns
-// the mint, and once the key lands in storage every tab adopts it. A
-// claimant whose token loses simply waits for the winner's key.
+// claimant stakes a token; the lowest live token owns the mint, and
+// once the key lands in storage every tab adopts it. A tab that loses
+// keeps waiting while the winner's claim is live — minting earlier
+// would let a winner suspended after claiming (but before storing its
+// key) resume and mint a second key. Claims expire, so a crashed
+// claimant bounds the wait.
 async function coordinatedMint(intent: string): Promise<string> {
   const existing = readStored(intent);
   if (existing) return existing;
@@ -127,14 +134,24 @@ async function coordinatedMint(intent: string): Promise<string> {
   if (!prior || token < prior.token) {
     writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });
   }
-  for (let attempt = 0; attempt < CLAIM_POLL_ATTEMPTS; attempt++) {
+  const deadline = Date.now() + CLAIM_MAX_WAIT_MS;
+  for (;;) {
     const stored = readStored(intent);
     if (stored) {
       clearClaim(intent, token);
       return stored;
     }
     const claim = readClaim(intent);
-    if (!claim || claim.token === token) {
+    if (!claim) {
+      // No live claim: stake ours and confirm ownership on the next
+      // poll before minting — a simultaneous claimant's write may
+      // have landed after this read, and only the token still in the
+      // record may mint.
+      writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });
+      await delay(CLAIM_POLL_INTERVAL_MS);
+      continue;
+    }
+    if (claim.token === token) {
       const minted = mintKey(intent);
       clearClaim(intent, token);
       return minted;
@@ -142,10 +159,12 @@ async function coordinatedMint(intent: string): Promise<string> {
     if (token < claim.token) {
       writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });
     }
+    if (Date.now() >= deadline) break;
     await delay(CLAIM_POLL_INTERVAL_MS);
   }
-  // No winner published within the window (e.g. storage writes are
-  // failing): resolve locally rather than block redemption forever.
+  // Deadline reached with a claim still live (endless re-staking or a
+  // winner suspended past the safety valve): resolve locally rather
+  // than block redemption forever.
   const stored = readStored(intent);
   if (stored) return stored;
   const minted = mintKey(intent);

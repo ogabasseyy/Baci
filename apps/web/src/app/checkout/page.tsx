@@ -63,6 +63,7 @@ import { trackServerSideBeginCheckout } from '@/lib/server-side-analytics';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { createClient } from '@/lib/supabase/client';
 import type { ShippingQuote } from '@/types/shipping-quote';
+import { resolveLegacyCheckoutIdempotencyKey } from './checkout-order-idempotency';
 import { buildCheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
 import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';
 import { captureLegacyCreditDirectPopup } from './legacy-credit-direct-popup';
@@ -175,6 +176,7 @@ interface CreateCheckoutOrderInput {
   selectedShippingQuote: ShippingQuote;
   shippingSessionId: string;
   discountCode?: string | null;
+  idempotencyKey?: string | null;
 }
 
 interface CheckoutOrderResponse {
@@ -187,37 +189,46 @@ interface CheckoutOrderResponse {
 function createCheckoutOrder(
   input: CreateCheckoutOrderInput
 ): Promise<CheckoutOrderResponse> {
-  return apiPost<CheckoutOrderResponse>('/api/orders', {
-    merchant_id: input.merchantId,
-    customer_email: input.data.email,
-    customer_name: `${input.data.firstName} ${input.data.lastName}`,
-    customer_phone: input.data.phone,
-    items: input.orderItems,
-    subtotal: input.subtotal,
-    shipping_fee: input.finalShippingFee,
-    payment_method: input.selectedGateway,
-    payment_status: 'unpaid', // Order starts unpaid, changes to pending when payment initiated, then paid on confirmation
-    shipping_status: 'pending',
-    shipping_address: {
-      firstName: input.data.firstName,
-      lastName: input.data.lastName,
-      address: input.data.address,
-      city: input.data.city,
-      state: input.data.state,
+  return apiPost<CheckoutOrderResponse>(
+    '/api/orders',
+    {
+      merchant_id: input.merchantId,
+      customer_email: input.data.email,
+      customer_name: `${input.data.firstName} ${input.data.lastName}`,
+      customer_phone: input.data.phone,
+      items: input.orderItems,
+      subtotal: input.subtotal,
+      shipping_fee: input.finalShippingFee,
+      payment_method: input.selectedGateway,
+      payment_status: 'unpaid', // Order starts unpaid, changes to pending when payment initiated, then paid on confirmation
+      shipping_status: 'pending',
+      shipping_address: {
+        firstName: input.data.firstName,
+        lastName: input.data.lastName,
+        address: input.data.address,
+        city: input.data.city,
+        state: input.data.state,
+      },
+      source: 'online_store',
+      // The submit guard guarantees a selected quote. Carrier quotes reference
+      // their persisted quote row; merchant rates send their bare configured
+      // rate id and intentionally null the carrier fields.
+      ...buildCheckoutShippingSelectionPayload(
+        input.selectedShippingQuote,
+        input.shippingSessionId
+      ),
+      // Only the trusted code string is sent; the route recomputes + validates
+      // the amount server-side. No expected_total here (this legacy flow has no
+      // VAT-aware total object), so the wrapper's two-sided amount check guards.
+      ...(input.discountCode ? { discount_code: input.discountCode } : {}),
     },
-    source: 'online_store',
-    // The submit guard guarantees a selected quote. Carrier quotes reference
-    // their persisted quote row; merchant rates send their bare configured
-    // rate id and intentionally null the carrier fields.
-    ...buildCheckoutShippingSelectionPayload(
-      input.selectedShippingQuote,
-      input.shippingSessionId
-    ),
-    // Only the trusted code string is sent; the route recomputes + validates
-    // the amount server-side. No expected_total here (this legacy flow has no
-    // VAT-aware total object), so the wrapper's two-sided amount check guards.
-    ...(input.discountCode ? { discount_code: input.discountCode } : {}),
-  });
+    // Code-bearing checkouts carry the persisted idempotency key so a
+    // response lost after commit replays the original order instead of
+    // failing against the now-claimed single-use code.
+    ...(input.idempotencyKey
+      ? { headers: { 'Idempotency-Key': input.idempotencyKey } }
+      : {})
+  );
 }
 
 interface CreditDirectSignResult {
@@ -368,6 +379,28 @@ async function prepareCheckout(
     const subtotal = input.cartTotal;
     const finalShippingFee = input.shippingFee ?? DEFAULT_SHIPPING_FEE;
 
+    // Code-bearing checkouts must carry a persisted idempotency key:
+    // the loyalty wrapper only replays a committed create when the key
+    // is present, and the route rejects code checkouts without one.
+    // Resolution throws when browser storage is unavailable, failing
+    // the submit closed (error kind below) rather than risking a
+    // duplicate order against a single-use code.
+    const idempotencyKey = input.discountCode
+      ? await resolveLegacyCheckoutIdempotencyKey({
+          merchantId: input.merchantId,
+          customerEmail: input.data.email,
+          customerPhone: input.data.phone,
+          gateway: input.selectedGateway,
+          shippingFee: finalShippingFee,
+          discountCode: input.discountCode,
+          orderItems,
+          shippingSelection: buildCheckoutShippingSelectionPayload(
+            input.selectedShippingQuote,
+            input.shippingSessionId
+          ),
+        })
+      : null;
+
     const { order, paystackAuthUrl } = await createCheckoutOrder({
       merchantId: input.merchantId,
       data: input.data,
@@ -378,6 +411,7 @@ async function prepareCheckout(
       selectedShippingQuote: input.selectedShippingQuote,
       shippingSessionId: input.shippingSessionId,
       discountCode: input.discountCode,
+      idempotencyKey,
     });
 
     // Store order data for success page (fallback)

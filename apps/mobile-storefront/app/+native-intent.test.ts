@@ -1,7 +1,16 @@
 const mockCapture = jest.fn((_path: string, _config: unknown) => '/cart');
+const mockEnv: { apiUrl: string; rootDomain?: string } = {
+  apiUrl: 'https://api.usebaci.com',
+  rootDomain: undefined,
+};
 
 jest.mock('@/env', () => ({
-  EXPO_PUBLIC_API_URL: 'https://api.usebaci.com',
+  get EXPO_PUBLIC_API_URL() {
+    return mockEnv.apiUrl;
+  },
+  get EXPO_PUBLIC_ROOT_DOMAIN() {
+    return mockEnv.rootDomain;
+  },
 }));
 
 jest.mock('@/lib/config', () => ({
@@ -22,6 +31,8 @@ import { redirectSystemPath } from './+native-intent';
 describe('redirectSystemPath', () => {
   beforeEach(() => {
     mockCapture.mockClear();
+    mockEnv.apiUrl = 'https://api.usebaci.com';
+    mockEnv.rootDomain = undefined;
   });
 
   it('delegates to pairing capture with the configured merchant and platform root', () => {
@@ -40,5 +51,35 @@ describe('redirectSystemPath', () => {
       // the api.* host of that root.
       platformRootDomain: 'usebaci.com',
     });
+  });
+
+  it('prefers the explicit root domain over derivation', () => {
+    mockEnv.rootDomain = 'staging.usebaci.com';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: 'staging.usebaci.com' })
+    );
+  });
+
+  it('strips a staging API prefix when no explicit root is configured', () => {
+    mockEnv.apiUrl = 'https://api-staging.usebaci.com';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: 'usebaci.com' })
+    );
+  });
+
+  it('uses a bare root API host as the root itself', () => {
+    mockEnv.apiUrl = 'https://usebaci.com';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: 'usebaci.com' })
+    );
   });
 });

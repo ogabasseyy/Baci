@@ -201,6 +201,7 @@ describe('/api/agentic/carts/[id]', () => {
     createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           buyer: {},
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
@@ -239,6 +240,7 @@ describe('/api/agentic/carts/[id]', () => {
     createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           buyer: { email: 'buyer@example.com' },
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
@@ -401,6 +403,7 @@ describe('/api/agentic/carts/[id]', () => {
     createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
           currency: 'NGN',

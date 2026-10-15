@@ -141,6 +141,7 @@ describe('POST /api/agentic/carts/[id]/cancel', () => {
     const { updateChain } = createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
           currency: 'NGN',
@@ -170,7 +171,12 @@ describe('POST /api/agentic/carts/[id]/cancel', () => {
     mockMutation();
     createSupabaseMock({
       cartResult: {
-        data: { cart_id: 'cart_123', currency: 'NGN', status: 'converted' },
+        data: {
+          agent_id: 'openai-agent',
+          cart_id: 'cart_123',
+          currency: 'NGN',
+          status: 'converted',
+        },
         error: null,
       },
     });

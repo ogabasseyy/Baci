@@ -6,6 +6,7 @@ import {
   mapUcpCartStatus,
   mapUcpCartWriteError,
   UcpCartMigratedError,
+  ucpCartCallerMismatch,
 } from './ucp-cart-storage';
 
 describe('ucp cart storage', () => {
@@ -74,5 +75,28 @@ describe('ucp cart storage', () => {
 
     const outage = new Error('fetch failed');
     expect(mapUcpCartWriteError(outage)).toBe(outage);
+  });
+});
+
+describe('ucpCartCallerMismatch', () => {
+  it('keeps legacy null-owner carts readable but never writable', () => {
+    const legacy = { agent_id: null };
+    expect(ucpCartCallerMismatch(legacy, 'agent-b')).toBe(false);
+    expect(ucpCartCallerMismatch(legacy, 'agent-b', { mutation: true })).toBe(
+      true
+    );
+    expect(ucpCartCallerMismatch(legacy, null, { mutation: true })).toBe(true);
+  });
+
+  it('scopes recorded carts to their creating caller for reads and writes', () => {
+    const owned = { agent_id: 'agent-a' };
+    expect(ucpCartCallerMismatch(owned, 'agent-a')).toBe(false);
+    expect(ucpCartCallerMismatch(owned, 'agent-a', { mutation: true })).toBe(
+      false
+    );
+    expect(ucpCartCallerMismatch(owned, 'agent-b')).toBe(true);
+    expect(ucpCartCallerMismatch(owned, 'agent-b', { mutation: true })).toBe(
+      true
+    );
   });
 });

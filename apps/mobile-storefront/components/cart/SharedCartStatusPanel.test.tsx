@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { SharedCartStatusPanel } from './SharedCartStatusPanel';
 
@@ -49,4 +49,31 @@ it('requires a per-item offer choice before combining legacy carts', () => {
   expect(chooseLegacy).toHaveBeenCalledWith('merge', [
     { item: { productId }, keep: 'incoming' },
   ]);
+});
+it('resets offer picks when a new conflict cycle starts on a changed cart', () => {
+  const chooseLegacy = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    mergeConflicts: [{ productId }],
+    snapshot: { cartId: 'cart-1', version: 1 } as never,
+    status: 'choice_required',
+    chooseLegacy,
+  });
+  const screen = render(<SharedCartStatusPanel />);
+  fireEvent.press(screen.getByRole('button', { name: 'Keep device offer' }));
+  const combine = () =>
+    screen.getByRole('button', { name: 'Combine with my choices' });
+  expect(
+    combine().props.accessibilityState?.disabled ?? combine().props.disabled
+  ).toBeFalsy();
+
+  // A later cycle for the same item on a changed cart must not inherit
+  // the earlier pick: Combine stays disabled until re-picked.
+  act(() => {
+    useNativeSharedCartStore.setState({
+      snapshot: { cartId: 'cart-1', version: 2 } as never,
+    });
+  });
+  expect(
+    combine().props.accessibilityState?.disabled ?? combine().props.disabled
+  ).toBeTruthy();
 });

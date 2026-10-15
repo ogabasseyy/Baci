@@ -106,7 +106,9 @@ export async function POST(request: NextRequest, props: RouteProps) {
   });
   if (cartResult.error) return respond({ error: 'Database error' }, 500);
   if (!cartResult.cart) return respond({ error: 'Cart not found' }, 404);
-  if (ucpCartCallerMismatch(cartResult.cart, mutation.agentId)) {
+  if (
+    ucpCartCallerMismatch(cartResult.cart, mutation.agentId, { mutation: true })
+  ) {
     return respond({ error: 'Cart not found' }, 404);
   }
   const migratedOutcome = migratedCartRefreshOutcome(cartResult.cart);

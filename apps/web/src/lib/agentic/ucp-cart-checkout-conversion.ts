@@ -126,7 +126,9 @@ export async function convertUcpCartToCheckout({
     return respond({ error: 'Database error' }, 500);
   }
   if (!cartResult.cart) return respond({ error: 'Cart not found' }, 404);
-  if (ucpCartCallerMismatch(cartResult.cart, mutation.agentId)) {
+  if (
+    ucpCartCallerMismatch(cartResult.cart, mutation.agentId, { mutation: true })
+  ) {
     return respond({ error: 'Cart not found' }, 404);
   }
 

@@ -142,6 +142,7 @@ describe('convertUcpCartToCheckout', () => {
     const { cartUpdateChain, checkoutInsertChain, from } = createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
           checkout_session_id: null,
@@ -212,7 +213,12 @@ describe('convertUcpCartToCheckout', () => {
   it('returns 409 when the cart is canceled', async () => {
     const { from } = createSupabaseMock({
       cartResult: {
-        data: { cart_id: 'cart_123', currency: 'NGN', status: 'canceled' },
+        data: {
+          agent_id: 'openai-agent',
+          cart_id: 'cart_123',
+          currency: 'NGN',
+          status: 'canceled',
+        },
         error: null,
       },
     });
@@ -233,6 +239,7 @@ describe('convertUcpCartToCheckout', () => {
     const { checkoutDeleteChain, from } = createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
           checkout_session_id: null,
@@ -266,6 +273,7 @@ describe('convertUcpCartToCheckout', () => {
     const { checkoutInsertChain, from } = createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
           checkout_session_id: null,

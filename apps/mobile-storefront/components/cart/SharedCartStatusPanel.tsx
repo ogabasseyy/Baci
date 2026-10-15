@@ -1,5 +1,5 @@
 import type { CartItemIdentity } from '@baci/shared/cart';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -20,6 +20,12 @@ export function SharedCartStatusPanel() {
   const [picks, setPicks] = useState<Record<string, 'incoming' | 'existing'>>(
     {}
   );
+  // Offer picks belong to one conflict cycle: when the conflict set or
+  // the underlying cart changes, stale picks must not pre-arm Combine
+  // for offers the shopper has not reviewed in this cycle.
+  useEffect(() => {
+    setPicks({});
+  }, [state.mergeConflicts, state.snapshot?.cartId, state.snapshot?.version]);
   if (!state.enabled) return null;
   const busy = state.status === 'loading' || state.status === 'pending';
   if (

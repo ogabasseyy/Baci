@@ -14,6 +14,13 @@ export const MobileEnvSchema = z.object({
     emptyStringToUndefined,
     z.string().trim().url().optional().default(DEFAULT_MOBILE_API_URL)
   ),
+  // Platform root the merchant storefront subdomains live under
+  // (mirrors the web NEXT_PUBLIC_ROOT_DOMAIN); pairing links are
+  // minted on <slug>.<root>, so the allowlist needs the exact value.
+  EXPO_PUBLIC_ROOT_DOMAIN: z.preprocess(
+    emptyStringToUndefined,
+    z.string().trim().optional()
+  ),
 });
 
 export type MobileEnv = z.infer<typeof MobileEnvSchema>;
@@ -44,8 +51,18 @@ function readPublicApiUrl() {
   return process.env.EXPO_PUBLIC_API_URL;
 }
 
+function readRootDomain() {
+  return (
+    process.env.EXPO_PUBLIC_ROOT_DOMAIN ??
+    (typeof Constants.expoConfig?.extra?.rootDomain === 'string'
+      ? Constants.expoConfig.extra.rootDomain
+      : undefined)
+  );
+}
+
 const rawEnv = {
   EXPO_PUBLIC_API_URL: readPublicApiUrl() ?? readExpoExtraApiUrl(),
+  EXPO_PUBLIC_ROOT_DOMAIN: readRootDomain(),
 };
 
 let parsedEnv: MobileEnv;
@@ -62,4 +79,4 @@ try {
   );
 }
 
-export const { EXPO_PUBLIC_API_URL } = parsedEnv;
+export const { EXPO_PUBLIC_API_URL, EXPO_PUBLIC_ROOT_DOMAIN } = parsedEnv;

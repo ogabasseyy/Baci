@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, TextContent } from "@modelcontextprotocol/server";
 import type { z } from 'zod';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';

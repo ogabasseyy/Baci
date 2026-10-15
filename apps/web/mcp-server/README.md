@@ -386,12 +386,58 @@ If any product cannot be loaded, it returns an error instead of a partial
 comparison. Option selection stays on the storefront.
 
 The v5 catalog resource uses `text/html;profile=mcp-app` and standard
-`ui.resourceUri`/`ui.visibility` metadata. Existing ChatGPT bridge sessions
-retain their state and behavior. The submitted review’s v4 resource URI stays
-registered with its legacy MIME type as a compatibility alias to the same HTML. Other MCP Apps hosts connect through the
-SDK bridge for results, deferred tool arguments, theme, sizing, links and
-cart tool calls. Standard-only hosts maintain cart UI state while mounted;
-cross-remount persistence remains host-dependent and needs host QA.
+`ui.resourceUri`/`ui.visibility` metadata. Every host first connects through
+MCP Apps for results, deferred arguments, theme, sizing, links, messages and
+cart tool calls. The adapter stays separate from host-owned `window.openai`.
+ChatGPT's optional widget-state persistence and open-in-app extension remain
+available. If standard initialization fails, an existing legacy bridge is
+retained; hosts without either bridge show a safe error. Standard-only hosts
+maintain cart UI state while mounted; cross-remount persistence remains
+host-dependent and needs host QA. The submitted review's v4 URI remains
+registered with its legacy MIME type.
+
+### SDK and architecture research (2026-10-15)
+
+Verified against public npm dist-tags and the official upstream sources:
+
+| Layer | Selected version | Decision |
+| --- | --- | --- |
+| MCP Apps UI SDK | `@modelcontextprotocol/ext-apps` 2.0.3 | Current stable release; retain it. |
+| MCP server | `@modelcontextprotocol/server` 2.3.1 | Migrate from the maintained v1 line to the current stable v2 line. |
+| Node HTTP transport | `@modelcontextprotocol/node` 2.1.1 | Runtime-specific adapter for the existing Node request/response server. |
+| MCP test client | `@modelcontextprotocol/client` 2.3.1 | Development dependency; exercise the server through the wire protocol. |
+
+The v2 migration preserves tool names, published schemas, stateless Streamable
+HTTP, existing access controls, and cart behavior. Tool registrations now pass
+complete Zod objects instead of deprecated raw shapes. The existing protocol
+negotiation defaults are retained; adopting a new protocol revision is a
+separate compatibility decision, not a requirement to use v2.
+
+Additional compatibility regressions covered in this PR:
+- Display all accepted selections (up to twenty), without silently truncating at six.
+- Reject failed variant/offer lookups and show actionable catalog errors.
+- Honor the host's server-tools and fullscreen capabilities.
+- Map initial and updated safe-area insets, follow-up messages, and result metadata.
+- Surface denied/failed external links as widget alerts.
+- Keep the server-card inventory aligned with the renderer.
+
+Research sources:
+- [OpenAI UI architecture](https://developers.openai.com/plugins/build/chatgpt-ui):
+  standard bridge first, extensions only for additional capabilities, data/render
+  separation, versioned resource URIs, and external checkout by default.
+- [OpenAI UI reference](https://developers.openai.com/plugins/reference):
+  deferred tool inputs, shared metadata, and optional ChatGPT persistence.
+- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk):
+  v2 is the stable line; v1 receives maintenance through at least January 2027.
+- [Official v2 migration](https://ts.sdk.modelcontextprotocol.io/v2/migration/upgrade-to-v2):
+  split packages, Node adapter, complete schema objects, and wire-level boundaries.
+- [MCP Apps releases](https://github.com/modelcontextprotocol/ext-apps/releases):
+  2.0.3 is the current stable UI SDK.
+
+The optional OpenAI UI component library is not a transport requirement. Keep
+our existing branded components; validate accessibility and responsive behavior
+through host QA. Embedded payment-sheet checkout requires separate eligibility;
+this PR keeps the supported merchant-hosted checkout flow.
 
 These source changes do not cancel, resubmit, or alter Platform review state.
 A release still requires normal review, merge and authorized deployment,

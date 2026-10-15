@@ -79,3 +79,13 @@ it('does not render an unconfirmed price as a zero-priced product', async () => 
   }));
   expect((await render({ product_ids: ['phone'] })).isError).toBe(true);
 });
+
+it.each(['variant_lookup_failed', 'offer_lookup_failed'])('rejects unverified option data when %s', async (flag) => {
+  const render = createCatalogRenderer(async () => ({ structuredContent: {
+    products: [{ id: 'phone', name: 'Phone', price: 10, condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high' }],
+    [flag]: true,
+  } }));
+  const result = await render({ product_ids: ['phone'] });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent).toMatchObject({ status: 'unavailable', products: [], message: expect.stringContaining('Search again') });
+});

@@ -11,7 +11,7 @@ export function createSearchProductsToolConfig(_widgetUri?: string) {
     title: 'Search Products',
     annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
     description: MCP_SEARCH_PRODUCTS_DESCRIPTION,
-    inputSchema: {
+    inputSchema: z.object({
       // Optional at the transport layer so a missing intent reaches the friendly
       // invalidIntentMessage branch instead of a generic schema validation error.
       intent: mcpDiscoveryIntentSchema.describe('Supply structured intent for shopper searches. alternatives are OR; each branch is AND. Use singular canonical product types phone/laptop/tablet/charger/cable/security_camera/fragrance_diffuser. Brand means manufacturer, compatible_with means supported device model. Attributes use canonical units (storage_gb/ram_gb in GB, power_w in watts) and eq/gte/lte. Use an empty alternative for broad discovery; never invent unspecified constraints. Unknown catalog facts cannot satisfy explicit constraints.').optional(),
@@ -37,7 +37,7 @@ export function createSearchProductsToolConfig(_widgetUri?: string) {
         .optional()
         .default('relevance'),
       limit: z.number().min(1).max(20).optional().default(10),
-    },
+    }),
     _meta: {
       'openai/toolInvocation/invoking': 'Searching catalog...',
       'openai/toolInvocation/invoked': 'Search complete',

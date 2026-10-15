@@ -1,3 +1,4 @@
+import { getWidgetHost } from './widget-host';
 import { initializeMcpApp } from './mcp-app-bridge';
 import { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -18,6 +19,7 @@ export function App() {
     coverage?: string;
     message?: string;
   } | null;
+  const hostError = useOpenAiGlobal('hostError');
   const theme = useOpenAiGlobal('theme') || 'dark';
   const displayMode = useOpenAiGlobal('displayMode') || 'inline';
   const safeArea = useOpenAiGlobal('safeArea');
@@ -25,7 +27,7 @@ export function App() {
   const widgetRef = useRef<HTMLDivElement>(null);
   const resultMessage = !toolOutput
     ? 'Loading product results…'
-    : toolOutput.status === 'error'
+    : (toolOutput.status === 'error' || toolOutput.status === 'unavailable')
       ? toolOutput.message || 'Product search is temporarily unavailable.'
       : toolOutput.status === 'incomplete'
         ? toolOutput.message || 'Narrow your search to check prices accurately.'
@@ -38,7 +40,7 @@ export function App() {
     useCartHandoff();
 
   useEffect(() => {
-    window.openai?.setOpenInAppUrl?.({ href: 'https://ogabassey.com' });
+    getWidgetHost()?.setOpenInAppUrl?.({ href: 'https://ogabassey.com' });
   }, []);
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function App() {
       const padding =
         Number.parseFloat(bodyStyle.paddingTop) +
         Number.parseFloat(bodyStyle.paddingBottom);
-      window.openai?.notifyIntrinsicHeight?.(
+      getWidgetHost()?.notifyIntrinsicHeight?.(
         Math.ceil(element.getBoundingClientRect().height + (padding || 0))
       );
     };
@@ -88,12 +90,12 @@ export function App() {
         <div className="header-actions">
           {products.length > 1 &&
             displayMode !== 'fullscreen' &&
-            window.openai?.requestDisplayMode && (
+            getWidgetHost()?.requestDisplayMode && (
               <button
                 type="button"
                 className="expand-button"
                 onClick={() =>
-                  void window.openai?.requestDisplayMode?.({
+                  void getWidgetHost()?.requestDisplayMode?.({
                     mode: 'fullscreen',
                   })
                 }
@@ -127,9 +129,9 @@ export function App() {
       </header>
 
       {isSavingCart && <p role="status">Saving your guest cart…</p>}
-      {cartError && (
+      {(cartError || hostError) && (
         <p role="alert" className="cart-error">
-          {cartError}
+          {cartError || hostError}
         </p>
       )}
       {cartNotice && (
@@ -148,7 +150,7 @@ export function App() {
         <div
           className={`products-grid ${products.length === 1 ? 'products-grid--single' : ''}`}
         >
-          {products.slice(0, 6).map((product) => (
+          {products.map((product) => (
             <ProductCard
               key={product.id}
               product={product}
@@ -172,7 +174,7 @@ export function App() {
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
-          <p role={toolOutput?.status === 'error' ? 'alert' : 'status'}>
+          <p role={(toolOutput?.status === 'error' || toolOutput?.status === 'unavailable') ? 'alert' : 'status'}>
             {resultMessage}
           </p>
         </div>
@@ -194,7 +196,7 @@ export function App() {
             className="btn-negotiate-icon"
             disabled={isSavingCart || cart.length === 0}
             onClick={() => {
-              window.openai?.sendFollowUpMessage?.({
+              getWidgetHost()?.sendFollowUpMessage?.({
                 prompt:
                   'I would like to negotiate the price for my selected item.',
               });
@@ -232,8 +234,8 @@ export function App() {
           type="button"
           className="btn-browse-more"
           onClick={() => {
-            if (window.openai?.openExternal) {
-              window.openai.openExternal({ href: 'https://ogabassey.com' });
+            if (getWidgetHost()?.openExternal) {
+              getWidgetHost()?.openExternal?.({ href: 'https://ogabassey.com' });
             } else {
               window.open('https://ogabassey.com', '_blank');
             }

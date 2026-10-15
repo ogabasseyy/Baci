@@ -7,7 +7,7 @@ BEGIN
  claims:=jsonb_build_object('role','commerce_cart_shopper','exp',9999999999,'cart_scope','bootstrap','cart_merchant_id',merchant,'cart_principal_id','legacy:mcp:verified','cart_legacy_provider','mcp','cart_legacy_hash',hash);
  PERFORM set_config('request.jwt.claims',claims::text,true);
  owner_context:=public.commerce_cart_legacy_owner_context('mcp',hash);
- IF owner_context->>'ok'<>'true' OR (SELECT merchant_id FROM public.mcp_guest_carts c WHERE c.token=v_token) IS DISTINCT FROM merchant THEN RAISE EXCEPTION 'MCP ownership verification/binding failed %',owner_context; END IF;
+ IF owner_context->>'ok' IS DISTINCT FROM 'true' OR (SELECT merchant_id FROM public.mcp_guest_carts c WHERE c.token=v_token) IS DISTINCT FROM merchant THEN RAISE EXCEPTION 'MCP ownership verification/binding failed %',owner_context; END IF;
  IF owner_context->>'currency' IS DISTINCT FROM 'USD' THEN RAISE EXCEPTION 'MCP merchant currency lost'; END IF;
  UPDATE public.merchants SET payout_currency='broken',country='Côte d''Ivoire' WHERE id=merchant;
  owner_context:=public.commerce_cart_legacy_owner_context('mcp',hash);
@@ -44,7 +44,7 @@ BEGIN
  INSERT INTO public.agentic_cart_sessions(cart_id,merchant_id,agent_id,cart_items) VALUES('ucp-owned',merchant,'agent-a','[{"id":"44444444-4444-4444-8444-444444444444","quantity":1}]');
  c:=jsonb_build_object('role','commerce_cart_shopper','exp',9999999999,'cart_scope','bootstrap','cart_merchant_id',merchant,'cart_principal_id','legacy:ucp:verified','cart_legacy_provider','ucp','cart_legacy_hash',hash,'cart_legacy_agent_id','agent-b');
  PERFORM set_config('request.jwt.claims',c::text,true); ctx:=public.commerce_cart_legacy_owner_context('ucp',hash);
- IF ctx->>'ok'='true' THEN RAISE EXCEPTION 'Wrong agent verified UCP ownership'; END IF;
+ IF ctx->>'ok' IS DISTINCT FROM 'false' OR ctx->>'code' IS DISTINCT FROM 'not_found' THEN RAISE EXCEPTION 'Wrong agent verified UCP ownership'; END IF;
  c:=c||jsonb_build_object('cart_legacy_agent_id','agent-a'); PERFORM set_config('request.jwt.claims',c::text,true);
  UPDATE public.agentic_cart_sessions SET cart_items='[{"id":"44444444-4444-4444-8444-444444444444","quantity":1,"variant_id":"44444444-4444-4444-8444-444444444445"}]' WHERE cart_id='ucp-owned';
  ctx:=public.commerce_cart_legacy_owner_context('ucp',hash);

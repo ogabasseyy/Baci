@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   cartRpcCalls: [] as { args: unknown; name: string }[],
   merchantError: null as unknown,
   merchantRows: [] as unknown[],
+  handoffMerchantId: null as string | null,
   previewCalls: 0,
   previewError: null as unknown,
   previewPayload: null as unknown,
@@ -43,6 +44,9 @@ vi.mock('@/lib/supabase/anon', () => ({
       if (name === 'commerce_cart_preview_handoff') {
         mocks.previewCalls += 1;
         return { data: mocks.previewPayload, error: mocks.previewError };
+      }
+      if (name === 'commerce_cart_handoff_merchant') {
+        return { data: mocks.handoffMerchantId, error: null };
       }
       return { data: mocks.merchantRows, error: mocks.merchantError };
     }),
@@ -131,6 +135,7 @@ beforeEach(() => {
   mocks.cartRpcCalls = [];
   mocks.merchantError = null;
   mocks.merchantRows = [merchantRow()];
+  mocks.handoffMerchantId = null;
   mocks.previewCalls = 0;
   mocks.previewError = null;
   mocks.previewPayload = null;
@@ -392,6 +397,38 @@ describe('GET /api/storefront/cart/handoff', () => {
 
     expect(response.status).toBe(429);
     expect((await response.json()).code).toBe('quota_exceeded');
+    expect(mocks.previewCalls).toBe(previewCallsBefore);
+  });
+
+  it('applies the merchant quota before the preview RPC assembles anything', async () => {
+    mocks.handoffMerchantId = MERCHANT_ID;
+    mocks.previewPayload = {
+      code: null,
+      expiresAt: '2026-10-12T06:05:00.000Z',
+      merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
+      ok: true,
+      snapshot: rawState(),
+      status: 'pending',
+    };
+    const probe = new NextRequest(
+      `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+      { method: 'GET' }
+    );
+    const subject = getClientIdentifier(probe);
+    for (let index = 0; index < 120; index += 1) {
+      await checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'handoff_preview',
+        subject,
+      });
+    }
+    const previewCallsBefore = mocks.previewCalls;
+
+    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+
+    expect(response.status).toBe(429);
+    expect((await response.json()).code).toBe('quota_exceeded');
+    // The expensive preview RPC never ran for this attempt.
     expect(mocks.previewCalls).toBe(previewCallsBefore);
   });
 });

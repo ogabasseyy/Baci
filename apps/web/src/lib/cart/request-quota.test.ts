@@ -158,3 +158,43 @@ describe('incrementMemoryCounter store bound', () => {
     expect(incrementMemoryCounter(recent, 60_000).count).toBe(2);
   });
 });
+
+describe('quota degradation warning', () => {
+  it('warns while degraded, throttled to once a minute', async () => {
+    __resetCartQuotaStoreForTesting();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const now = vi.spyOn(Date, 'now');
+    try {
+      now.mockReturnValue(1_000_000);
+      await checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'bootstrap',
+        subject: 'warn-1',
+      });
+      const afterFirst = warn.mock.calls.length;
+      expect(afterFirst).toBeGreaterThanOrEqual(1);
+
+      // Still degraded a few seconds later: no second warning.
+      now.mockReturnValue(1_030_000);
+      await checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'bootstrap',
+        subject: 'warn-1',
+      });
+      expect(warn.mock.calls.length).toBe(afterFirst);
+
+      // A minute later the degradation is reported again.
+      now.mockReturnValue(1_061_000);
+      await checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'bootstrap',
+        subject: 'warn-1',
+      });
+      expect(warn.mock.calls.length).toBe(afterFirst + 1);
+    } finally {
+      warn.mockRestore();
+      now.mockRestore();
+      __resetCartQuotaStoreForTesting();
+    }
+  });
+});

@@ -382,7 +382,12 @@ describe('POST /api/storefront/cart', () => {
     expect(payload.replayed).toBe(false);
     expect(payload.cart.cartId).toBe(CART_ID);
 
-    const verified = verifyCartSessionProof(payload.proof, {
+    // Web callers receive the upgraded session proof only via the
+    // httpOnly cookie.
+    expect(payload.proof).toBeUndefined();
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    const cookieProof = setCookie.match(/baci-cart-[^=]+=([^;]+)/)?.[1] ?? '';
+    const verified = verifyCartSessionProof(cookieProof, {
       environment: 'test',
       secret: TEST_SECRET,
     });
@@ -392,9 +397,8 @@ describe('POST /api/storefront/cart', () => {
       expect(verified.session.cartId).toBe(CART_ID);
       expect(verified.session.grantId).toBe(GRANT_ID);
     }
-    const setCookie = response.headers.get('set-cookie') ?? '';
     expect(setCookie).toContain(
-      `baci-cart-11111111-1111-4111-8111-111111111111=${payload.proof}`
+      `baci-cart-11111111-1111-4111-8111-111111111111=${cookieProof}`
     );
     expect(setCookie).toContain(`Max-Age=${CART_SESSION_PROOF_TTL_SECONDS}`);
     expect(mocks.capturedPrincipal).toMatchObject({ scope: 'bootstrap' });

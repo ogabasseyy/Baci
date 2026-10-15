@@ -24,6 +24,27 @@ export function redactPreviewSnapshot(snapshot: CartSnapshot): CartSnapshot {
   };
 }
 
+/**
+ * Resolves only the merchant id for a handoff so the route can enforce
+ * the merchant-scoped preview quota before the expensive preview RPC
+ * assembles a snapshot. Returns null for unknown handoffs.
+ */
+export async function rpcHandoffMerchantId(
+  client: SupabaseClient,
+  handoffId: string
+): Promise<string | null> {
+  const response = await client.rpc('commerce_cart_handoff_merchant', {
+    p_handoff_id: handoffId,
+  });
+  if (response.error) {
+    throw new CartRepositoryError(
+      'temporarily_unavailable',
+      'Cart RPC commerce_cart_handoff_merchant failed'
+    );
+  }
+  return typeof response.data === 'string' ? response.data : null;
+}
+
 export type PreviewHandoffResult =
   | {
       ok: true;

@@ -236,7 +236,12 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     expect(payload.choice).toBe('connect');
     expect(payload.cart.cartId).toBe(INCOMING_CART_ID);
 
-    const verified = verifyCartSessionProof(payload.proof, {
+    // Web callers receive the session proof only via the httpOnly
+    // cookie; the body carries no replayable credential.
+    expect(payload.proof).toBeUndefined();
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    const cookieProof = setCookie.match(/baci-cart-[^=]+=([^;]+)/)?.[1] ?? '';
+    const verified = verifyCartSessionProof(cookieProof, {
       environment: 'test',
       secret: TEST_SECRET,
     });
@@ -246,9 +251,8 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
       expect(verified.session.grantId).toBe(NEW_GRANT_ID);
       expect(verified.session.principalId).toBe('guest-fresh');
     }
-    const setCookie = response.headers.get('set-cookie') ?? '';
     expect(setCookie).toContain(
-      `baci-cart-11111111-1111-4111-8111-111111111111=${payload.proof}`
+      `baci-cart-11111111-1111-4111-8111-111111111111=${cookieProof}`
     );
     expect(setCookie).toContain(`Max-Age=${CART_SESSION_PROOF_TTL_SECONDS}`);
     expect(mocks.capturedPrincipal).toMatchObject({
@@ -423,7 +427,12 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     expect(kept.status).toBe(200);
     const keptPayload = await kept.json();
     expect(keptPayload.cart.cartId).toBe(DEST_CART_ID);
-    const keptVerified = verifyCartSessionProof(keptPayload.proof, {
+    expect(keptPayload.proof).toBeUndefined();
+    const keptCookieProof =
+      (kept.headers.get('set-cookie') ?? '').match(
+        /baci-cart-[^=]+=([^;]+)/
+      )?.[1] ?? '';
+    const keptVerified = verifyCartSessionProof(keptCookieProof, {
       environment: 'test',
       secret: TEST_SECRET,
     });
@@ -450,7 +459,12 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     expect(fresh.status).toBe(200);
     const freshPayload = await fresh.json();
     expect(freshPayload.cart).toBeNull();
-    const freshVerified = verifyCartSessionProof(freshPayload.proof, {
+    expect(freshPayload.proof).toBeUndefined();
+    const freshCookieProof =
+      (fresh.headers.get('set-cookie') ?? '').match(
+        /baci-cart-[^=]+=([^;]+)/
+      )?.[1] ?? '';
+    const freshVerified = verifyCartSessionProof(freshCookieProof, {
       environment: 'test',
       secret: TEST_SECRET,
     });

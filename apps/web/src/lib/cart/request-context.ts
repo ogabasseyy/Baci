@@ -83,6 +83,19 @@ export async function readCartJsonBody(
   }
 }
 
+/**
+ * True when the caller authenticated with a device-held Bearer [REDACTED]
+ * (native transport). Session proofs are only echoed in response
+ * bodies for these callers; cookie-authenticated web callers receive
+ * the proof exclusively via the httpOnly cookie so a script that can
+ * read fetch responses cannot lift a replayable credential.
+ */
+export function requestUsesDeviceProof(request: Request): boolean {
+  const header = request.headers.get('authorization');
+  const bearer = header?.match(/^\s*bearer\s+(.+?)\s*$/i)?.[1]?.trim();
+  return bearer?.startsWith(`${CART_SESSION_PROOF_VERSION}.`) ?? false;
+}
+
 export function readCartProofFromRequest(
   request: Request,
   cookieName: string

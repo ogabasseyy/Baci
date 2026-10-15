@@ -420,3 +420,31 @@ DO $$ DECLARE result jsonb; BEGIN
   END IF;
 END $$;
 RESET ROLE;
+
+-- Repeated preparation cannot push a cart or grant past the absolute
+-- 7-day lifetime: this cart was created 6d23h50m ago and expires in
+-- five minutes, so a fresh prepare may extend it by minutes, not by a
+-- full new session window beyond the cap.
+INSERT INTO commerce_carts (id, merchant_id, currency, version, state, created_at, expires_at) VALUES
+  ('cccccccc-e000-4000-8000-000000000000', '11111111-1111-4111-8111-111111111111', 'NGN', 1, 'active', now() - interval '6 days 23 hours 50 minutes', now() + interval '5 minutes');
+INSERT INTO commerce_cart_lines (merchant_id, cart_id, product_id, quantity, last_unit_price_minor) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'cccccccc-e000-4000-8000-000000000000', '44444444-4444-4444-8444-444444444444', 1, 1500);
+INSERT INTO commerce_cart_grants (id, merchant_id, cart_id, principal_id, expires_at, revoked_at, created_at) VALUES
+  ('99999999-9999-4999-8999-999999999971', '11111111-1111-4111-8111-111111111111', 'cccccccc-e000-4000-8000-000000000000', 'guest-cap', now() + interval '5 minutes', NULL, now() - interval '6 days 23 hours 50 minutes');
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-cap","cart_scope":"session","cart_id":"cccccccc-e000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999971"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_prepare_checkout('cccccccc-e000-4000-8000-000000000000', 1, 'cap-prepare-1');
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'cap prepare must succeed, got %', result; END IF;
+END $$;
+RESET ROLE;
+DO $$ DECLARE v_cart_cap timestamptz; v_grant_cap timestamptz; BEGIN
+  SELECT created_at + interval '7 days' INTO v_cart_cap FROM commerce_carts WHERE id = 'cccccccc-e000-4000-8000-000000000000';
+  IF EXISTS (SELECT 1 FROM commerce_carts WHERE id = 'cccccccc-e000-4000-8000-000000000000' AND expires_at > v_cart_cap) THEN
+    RAISE EXCEPTION 'prepare must not extend the cart past its absolute lifetime';
+  END IF;
+  SELECT created_at + interval '7 days' INTO v_grant_cap FROM commerce_cart_grants WHERE id = '99999999-9999-4999-8999-999999999971';
+  IF EXISTS (SELECT 1 FROM commerce_cart_grants WHERE id = '99999999-9999-4999-8999-999999999971' AND expires_at > v_grant_cap) THEN
+    RAISE EXCEPTION 'prepare must not extend the grant past its absolute lifetime';
+  END IF;
+END $$;

@@ -113,7 +113,30 @@ export interface WindowCounterResult extends WindowCounter {
   degraded: boolean;
 }
 
-let quotaDegradationLogged = false;
+/**
+ * Degradation policy, per operation class: unauthenticated operations
+ * (FAIL_CLOSED_OPERATIONS) fail closed in production so a Redis outage
+ * cannot multiply anonymous creation/enumeration budgets per instance.
+ * Authenticated operations (command, checkout_prepare, checkout_refresh)
+ * deliberately stay on per-instance memory budgets so a Redis outage
+ * does not take checkout down with it; their multiplication is bounded
+ * by the per-instance limit and the proxy per-IP rate limit. Either
+ * way, degradation must stay operator-visible, so the warning repeats
+ * (throttled) for as long as the store is degraded.
+ */
+const QUOTA_DEGRADATION_WARN_INTERVAL_MS = 60_000;
+let lastQuotaDegradationWarnAt = 0;
+
+function warnQuotaDegraded(): void {
+  const now = Date.now();
+  if (now - lastQuotaDegradationWarnAt < QUOTA_DEGRADATION_WARN_INTERVAL_MS) {
+    return;
+  }
+  lastQuotaDegradationWarnAt = now;
+  console.warn(
+    'Cart quota store degraded: Redis unavailable, using per-instance memory counters'
+  );
+}
 
 export async function incrementWindowCounter(
   key: string,
@@ -134,16 +157,10 @@ export async function incrementWindowCounter(
       );
       return { count, degraded: false, resetTime: Date.now() + windowMs };
     } catch {
-      // Fall through to per-instance memory: callers governing
-      // unauthenticated operations fail closed on the degraded signal
-      // in production instead of silently multiplying their budgets.
-      if (!quotaDegradationLogged) {
-        quotaDegradationLogged = true;
-        console.warn(
-          'Cart quota store degraded: Redis unavailable, using per-instance memory counters'
-        );
-      }
+      warnQuotaDegraded();
     }
+  } else {
+    warnQuotaDegraded();
   }
   return { ...incrementMemoryCounter(key, windowMs), degraded: true };
 }
@@ -191,4 +208,5 @@ export function __resetCartQuotaStoreForTesting(): void {
     throw new Error('__resetCartQuotaStoreForTesting should only run in tests');
   }
   memoryCounters.clear();
+  lastQuotaDegradationWarnAt = 0;
 }

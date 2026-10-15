@@ -10,6 +10,7 @@ import {
   checkCartQuota,
   createAnonMerchantFeatureLookup,
   readCartJsonBody,
+  requestUsesDeviceProof,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
 import {
@@ -196,7 +197,7 @@ export async function POST(request: NextRequest) {
     const response = cartJsonResponse({
       cart: redeemed.cart,
       choice: redeemed.choice,
-      proof,
+      ...(requestUsesDeviceProof(request) ? { proof } : {}),
       replayed: redeemed.replayed,
       warnings: redeemed.warnings,
     });

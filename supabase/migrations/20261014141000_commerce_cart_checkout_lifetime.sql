@@ -139,16 +139,27 @@ BEGIN
     ) RETURNING * INTO v_session;
   END IF;
 
+  -- Extension is capped at the absolute cart lifetime (7 days from
+  -- creation, the lifetime carts are minted with): repeated prepares
+  -- after each session lapses must not keep a guest cart alive forever
+  -- in 30-minute increments.
   UPDATE public.commerce_carts
   SET checkout_session_id = v_session.id, updated_at = now(),
-    expires_at = greatest(expires_at, v_session.expires_at)
+    expires_at = least(
+      greatest(expires_at, v_session.expires_at),
+      v_cart.created_at + interval '7 days'
+    )
   WHERE id = p_cart_id;
 
   -- The preparing grant must cover the same lifetime: a checkout
   -- prepared near cart expiry would otherwise lose its grant (and any
-  -- proof capped at it) before the session ends.
+  -- proof capped at it) before the session ends. The same absolute
+  -- lifetime cap applies to the grant.
   UPDATE public.commerce_cart_grants
-  SET expires_at = greatest(expires_at, v_session.expires_at)
+  SET expires_at = least(
+      greatest(expires_at, v_session.expires_at),
+      created_at + interval '7 days'
+    )
   WHERE id = v_grant AND expires_at > now() AND revoked_at IS NULL;
 
   SELECT public.commerce_cart_build_checkout_snapshot(v_merchant, p_cart_id) INTO v_snapshot;

@@ -745,8 +745,21 @@ EXCEPTION
 END;
 $$;
 
+-- Cheap merchant locator for the unauthenticated preview route: the
+-- merchant-scoped preview quota must run before the expensive snapshot
+-- assembly in commerce_cart_preview_handoff. Returns only the merchant
+-- id (public in proofs and URLs), never grant or line data.
+CREATE OR REPLACE FUNCTION public.commerce_cart_handoff_merchant(
+  p_handoff_id uuid
+) RETURNS uuid
+LANGUAGE sql SECURITY DEFINER SET search_path = ''
+AS $$
+  SELECT merchant_id FROM public.commerce_cart_handoffs WHERE id = p_handoff_id;
+$$;
+
 ALTER FUNCTION public.commerce_cart_issue_handoff(text, uuid, uuid, text, jsonb) OWNER TO postgres;
 ALTER FUNCTION public.commerce_cart_preview_handoff(uuid, text) OWNER TO postgres;
+ALTER FUNCTION public.commerce_cart_handoff_merchant(uuid) OWNER TO postgres;
 ALTER FUNCTION public.commerce_cart_redeem_handoff(text, uuid, text, text, text, uuid, integer, integer, jsonb, jsonb) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.commerce_cart_issue_handoff(text, uuid, uuid, text, jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.commerce_cart_preview_handoff(uuid, text) FROM PUBLIC;
@@ -756,3 +769,5 @@ REVOKE EXECUTE ON FUNCTION public.commerce_cart_redeem_handoff(text, uuid, text,
 GRANT EXECUTE ON FUNCTION public.commerce_cart_issue_handoff(text, uuid, uuid, text, jsonb) TO commerce_cart_shopper;
 GRANT EXECUTE ON FUNCTION public.commerce_cart_redeem_handoff(text, uuid, text, text, text, uuid, integer, integer, jsonb, jsonb) TO commerce_cart_shopper;
 GRANT EXECUTE ON FUNCTION public.commerce_cart_preview_handoff(uuid, text) TO anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.commerce_cart_handoff_merchant(uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.commerce_cart_handoff_merchant(uuid) TO anon, authenticated, service_role;

@@ -234,11 +234,9 @@ describe('POST /api/storefront/cart/checkout', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    // Preparation renews the session proof (body + cookie). The renewed
-    // proof never shortens the credential already held: the incoming
-    // 24-hour proof outlives the 25-minute session, so its expiry wins.
-    expect(payload.proof).toMatch(/^cp1\./);
-    expect(proofExpSeconds(payload.proof)).toBe(proofExpSeconds(incoming));
+    // Preparation renews the session proof. Cookie-authenticated web
+    // callers receive it only via the httpOnly cookie, never the body.
+    expect(payload.proof).toBeUndefined();
     expect(response.headers.get('set-cookie')).toContain('Max-Age=');
     expect(payload.replayed).toBe(false);
     expect(payload.sessionReused).toBe(false);
@@ -262,9 +260,12 @@ describe('POST /api/storefront/cart/checkout', () => {
       new Date(Date.now() + 10 * 60 * 1000).toISOString()
     );
 
+    // Device (Bearer) callers receive the renewed proof in the body:
+    // it never shortens the credential already held, so the prepared
+    // session expiry (later than the 10-minute incoming proof) wins.
     const response = await postPrepare({
       body: prepareBody({ operationId: 'prep-op-extend' }),
-      headers: proofHeaders(incoming),
+      headers: { authorization: `Bearer ${incoming}` },
     });
     const payload = await response.json();
 

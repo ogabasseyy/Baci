@@ -236,11 +236,15 @@ describe('POST /api/storefront/cart/commands', () => {
       },
     });
     const payload = await response.json();
-    expect(payload.proof).toEqual(expect.any(String));
-    expect(response.headers.get('set-cookie')).toContain(
+    // Cookie-authenticated web callers receive the renewed proof only
+    // via the httpOnly cookie, never in the body.
+    expect(payload.proof).toBeUndefined();
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    expect(setCookie).toContain(
       'baci-cart-11111111-1111-4111-8111-111111111111='
     );
-    const verified = verifyCartSessionProof(payload.proof, {
+    const cookieProof = setCookie.match(/baci-cart-[^=]+=([^;]+)/)?.[1] ?? '';
+    const verified = verifyCartSessionProof(cookieProof, {
       secret: TEST_SECRET,
       environment: 'test',
     });

@@ -4,6 +4,7 @@ import {
   HandoffConfigError,
   type IssueHandoffResult,
   issueCartHandoff,
+  rpcHandoffMerchantId,
   rpcPreviewHandoff,
 } from '@/lib/cart/handoff';
 import {
@@ -156,6 +157,24 @@ export async function GET(request: NextRequest) {
     if (!handoffToken?.startsWith('ch1.')) {
       return cartErrorResponse('not_found');
     }
+
+    // Enforce the merchant-scoped budget before the preview RPC
+    // assembles anything: resolve the merchant with the cheap locator.
+    const merchantId = await rpcHandoffMerchantId(
+      createAnonClient(),
+      handoffId
+    );
+    if (merchantId) {
+      const quota = await checkCartQuota({
+        merchantId,
+        operation: 'handoff_preview',
+        subject: getClientIdentifier(request),
+      });
+      if (!quota.allowed) {
+        return cartErrorResponse('quota_exceeded');
+      }
+    }
+
     const preview = await rpcPreviewHandoff(
       createAnonClient(),
       handoffId,
@@ -163,17 +182,6 @@ export async function GET(request: NextRequest) {
     );
     if (!preview.ok) {
       return cartErrorResponse(preview.code);
-    }
-
-    if (preview.merchant) {
-      const quota = await checkCartQuota({
-        merchantId: preview.merchant.id,
-        operation: 'handoff_preview',
-        subject: getClientIdentifier(request),
-      });
-      if (!quota.allowed) {
-        return cartErrorResponse('quota_exceeded');
-      }
     }
 
     return cartJsonResponse({

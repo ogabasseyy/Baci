@@ -331,6 +331,96 @@ describe('StickyAddToCart', () => {
     );
   });
 
+  it('passes the selected offer id when adding an offer-driven item', async () => {
+    render(
+      <StickyAddToCart
+        product={makeProduct()}
+        selectedCondition="used"
+        selectedOfferId="offer-2"
+        selectedPrice={400000}
+        selectedStock={3}
+      />
+    );
+
+    fireEvent.scroll(window);
+
+    await waitFor(() => {
+      expect(screen.getByText('₦400000')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+    expect(mockAddToCart).toHaveBeenCalledWith(
+      expect.objectContaining({ price: 400000, stock: 3 }),
+      1,
+      { condition: 'used', offerId: 'offer-2' }
+    );
+  });
+
+  it('matches the selected offer line when two offers share a condition', async () => {
+    const baseLine = {
+      ...makeProduct(),
+      cartItemId: 'product-1::condition=used',
+      condition: 'used',
+      quantity: 1,
+    } as CartItem;
+    const offerLine = {
+      ...makeProduct(),
+      cartItemId: 'product-1::offer=offer-2',
+      condition: 'used',
+      offerId: 'offer-2',
+      price: 400000,
+      quantity: 2,
+    } as CartItem;
+    const { useCart } = await import('@/hooks/use-cart');
+    vi.mocked(useCart).mockReturnValue({
+      addToCart: mockAddToCart,
+      applyCartWideNegotiation: vi.fn(),
+      applyNegotiatedPrice: vi.fn(),
+      cart: [baseLine, offerLine],
+      cartCount: 2,
+      cartTotal: 0,
+      clearCart: vi.fn(),
+      dismissUpsell: vi.fn(),
+      hasSmartCartPro: true,
+      isCartOpen: false,
+      isHydrated: true,
+      lastAddedProduct: null,
+      merchantSlug: null,
+      removeFromCart: vi.fn(),
+      setIsCartOpen: vi.fn(),
+      setMerchantSlug: vi.fn(),
+      showUpsell: false,
+      subtotal: 0,
+      toggleAssurance: vi.fn(),
+      totalItems: 3,
+      updateQuantity: mockUpdateQuantity,
+    });
+
+    render(
+      <StickyAddToCart
+        product={makeProduct()}
+        selectedCondition="used"
+        selectedOfferId="offer-2"
+        selectedPrice={400000}
+      />
+    );
+
+    fireEvent.scroll(window);
+
+    await waitFor(() => {
+      expect(screen.getByText('2')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'plus' }));
+
+    expect(mockUpdateQuantity).toHaveBeenCalledWith(
+      'product-1::offer=offer-2',
+      3,
+      undefined
+    );
+  });
+
   it('does not mutate the cart when the current selection is unavailable', async () => {
     render(
       <StickyAddToCart

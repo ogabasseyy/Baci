@@ -813,6 +813,7 @@ export default function ProductDetailClient({
         selectedCondition={
           selectedOffer || usesVariantConditions ? selectedCondition : undefined
         }
+        selectedOfferId={selectedOffer?.id}
         selectedPrice={currentPrice}
         selectedStock={currentStock}
         selectedVariant={currentVariantSelection?.variant ?? effectiveVariant}

@@ -32,6 +32,8 @@ export interface StickyAddToCartProps {
   selectedAttributes?: Record<string, string>;
   /** Selected condition for offer-driven or conditioned variant products */
   selectedCondition?: string;
+  /** Selected condition-offer id (two offers can share one condition) */
+  selectedOfferId?: string;
   /** Selected display price for the current condition / variant */
   selectedPrice?: number;
   /** Selected stock for the current condition / variant */
@@ -63,6 +65,7 @@ export function StickyAddToCart({
   selectedVariant,
   selectedAttributes,
   selectedCondition,
+  selectedOfferId,
   selectedPrice,
   selectedStock,
   purchaseDisabled,
@@ -93,18 +96,21 @@ export function StickyAddToCart({
   // Don't render on desktop
   if (!isMobile) return null;
 
-  // Find cart item matching product and variant
+  // Find cart item matching product and variant (mirrors the PDP main
+  // matching: two offers can share one displayed condition, so match the
+  // selected offer by id and require no offer id for the base line).
   const cartItem = cart.find((item) => {
     if (selectedVariant) {
       return item.id === product.id && item.variantId === selectedVariant.id;
     }
+    if (item.id !== product.id || item.variantId) return false;
+    if (selectedOfferId) return item.offerId === selectedOfferId;
+    if (item.offerId) return false;
     const effectiveSelectedCondition =
       normalizeCanonicalProductCondition(
         selectedCondition ?? product.condition
       ) || 'new';
     return (
-      item.id === product.id &&
-      !item.variantId &&
       (normalizeCanonicalProductCondition(
         item.condition ?? product.condition
       ) || 'new') === effectiveSelectedCondition
@@ -143,7 +149,10 @@ export function StickyAddToCart({
             variantAttributes: selectedAttributes || {},
           }
         : selectedCondition
-          ? { condition: selectedCondition }
+          ? {
+              condition: selectedCondition,
+              ...(selectedOfferId ? { offerId: selectedOfferId } : null),
+            }
           : undefined
     );
 

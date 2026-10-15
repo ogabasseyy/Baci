@@ -243,6 +243,7 @@ describe('ProductDetailClient', () => {
       expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
         expect.objectContaining({
           selectedCondition: 'used',
+          selectedOfferId: 'offer-used',
           selectedPrice: 400000,
           selectedStock: 2,
           selectedVariant: null,

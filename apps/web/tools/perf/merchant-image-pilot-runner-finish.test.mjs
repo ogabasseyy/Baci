@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -192,6 +192,12 @@ describe('merchant-image-pilot-runner finish binding', () => {
     idatCrc.writeUInt32BE(
       pngCrc32(Buffer.concat([idatType, garbage]), 0, 4 + garbage.length)
     );
+    const corruptShot = join(dir, 'corrupt.png');
+    await writeFile(
+      corruptShot,
+      Buffer.concat([ihdr, idatLength, idatType, garbage, idatCrc, iend])
+    );
+    const shotMtimeMs = Math.floor((await stat(corruptShot)).mtimeMs);
     await writeFile(
       join(dir, 'har.har'),
       JSON.stringify({
@@ -200,17 +206,12 @@ describe('merchant-image-pilot-runner finish binding', () => {
           pages: [
             {
               _url: ROUTE,
-              startedDateTime: new Date().toISOString(),
+              startedDateTime: new Date(shotMtimeMs).toISOString(),
               title: 'u run 1',
             },
           ],
         },
       })
-    );
-    const corruptShot = join(dir, 'corrupt.png');
-    await writeFile(
-      corruptShot,
-      Buffer.concat([ihdr, idatLength, idatType, garbage, idatCrc, iend])
     );
     const outDir = join(dir, 'bound');
     await expect(

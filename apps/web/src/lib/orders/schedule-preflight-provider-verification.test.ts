@@ -56,6 +56,24 @@ describe('schedulePreflightProviderVerification', () => {
     );
   });
 
+  // A 40s remaining window verifies instead of deferring: initiation
+  // self-gates per leg, so admission must not demand a 76s worst
+  // case that starves verification under backlog.
+  it('admits verification in a window shorter than verify-plus-initiation', async () => {
+    const start = 1_000_000_000_000;
+    vi.spyOn(Date, 'now').mockReturnValue(start);
+    try {
+      await expect(
+        schedulePreflightProviderVerification(
+          input({ deadlineMs: start + 40_000 })
+        )
+      ).resolves.toBe(true);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(1);
+  });
+
   it('filters known refunds to the verified leg', async () => {
     const own = {
       amount: 100,

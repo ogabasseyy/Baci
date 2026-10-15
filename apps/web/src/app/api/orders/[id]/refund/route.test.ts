@@ -112,6 +112,41 @@ describe('order refund route', () => {
       events,
     });
   });
+  it('replaces an unknown summary error with the generic label', async () => {
+    // A mapper regression or a reachable legacy row must never leak
+    // worker internals through the success shape.
+    mocks.rpc.mockResolvedValue({
+      data: {
+        status: 'failed',
+        error: 'Paystack/insufficient-balance (acquirer 51)',
+      },
+      error: null,
+    });
+    const response = await GET(request(), context);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: 'failed',
+      error: 'The refund ran into a problem. Support has the details.',
+      needsPaystackCheck: false,
+    });
+  });
+  it('drops unknown top-level keys from the success shape', async () => {
+    mocks.rpc.mockResolvedValue({
+      data: {
+        status: 'failed',
+        error: null,
+        stepStatus: 'failed',
+      },
+      error: null,
+    });
+    const response = await GET(request(), context);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: 'failed',
+      error: null,
+      needsPaystackCheck: false,
+    });
+  });
   it('normalizes a missing Paystack signal to false', async () => {
     mocks.rpc.mockResolvedValue({
       data: {

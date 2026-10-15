@@ -30,6 +30,7 @@ const KNOWN_REFUND_ERRORS: Record<string, string> = {
   invalid_refund_action: 'Invalid refund request',
   refund_confirmation_required:
     'Confirm that the money already moved before recording',
+  retry_too_soon: 'Please wait a minute before retrying',
 };
 
 // HTTP status per known application error. Genuine state conflicts
@@ -54,21 +55,55 @@ const KNOWN_REFUND_STATUS: Record<string, number> = {
   payment_ledger_requires_review: 409,
   invalid_refund_action: 400,
   refund_confirmation_required: 400,
+  retry_too_soon: 429,
 };
 
 // Success payloads carry the RPC's pre-mapped summary error and the
 // structured Paystack signal the panel's requires-review guidance
 // needs. Both are derived at the data layer because direct REST
-// callers bypass this route; pass them through untouched and only
-// normalize the flag's shape here.
-function maskRefundWorkerText(data: {
-  error?: unknown;
-  needsPaystackCheck?: unknown;
-}) {
-  return {
-    ...data,
-    needsPaystackCheck: data.needsPaystackCheck === true,
-  };
+// callers bypass this route; still, validate at the boundary so a
+// mapper regression or a reachable legacy row can never leak worker
+// internals to the panel. Unknown shapes fall back to the generic
+// label and unknown top-level keys are dropped (direct REST callers
+// keep working; only this route's contract narrows).
+const REFUND_WORKER_ERROR_LABELS = new Set([
+  'Refund in progress — waiting for the remaining money to arrive.',
+  'Refund in progress — queued to resume automatically.',
+  'This refund needs review before it can continue.',
+  'The refund ran into a problem. Support has the details.',
+]);
+const REFUND_SUMMARY_KEYS = new Set([
+  'currency',
+  'amountPaid',
+  'refunded',
+  'remaining',
+  'pending',
+  'reversedInternal',
+  'status',
+  'error',
+  'needsPaystackCheck',
+  'attempts',
+  'retryRequests',
+  'history',
+  'legs',
+  'events',
+  'canRetry',
+  'canRecordManual',
+  'canManageRefunds',
+]);
+function maskRefundWorkerText(data: Record<string, unknown>) {
+  const masked: Record<string, unknown> = {};
+  for (const key of REFUND_SUMMARY_KEYS) {
+    if (key in data) masked[key] = data[key];
+  }
+  masked.needsPaystackCheck = data.needsPaystackCheck === true;
+  masked.error =
+    data.error === null || data.error === undefined
+      ? null
+      : REFUND_WORKER_ERROR_LABELS.has(data.error as string)
+        ? data.error
+        : 'The refund ran into a problem. Support has the details.';
+  return masked;
 }
 
 async function handle(
@@ -131,16 +166,28 @@ async function handle(
     // failures coded while unknown text falls back to internal_error.
     // Lowercase first: without it, uppercase letters act as
     // delimiters and a wrapper that uppercases the RAISE text would
-    // miss every match.
-    const messageTokens = (error.message ?? '')
+    // miss every match. Match only application-raised classes: a
+    // constraint or engine error that happens to echo a
+    // merchant-controlled value containing a known token (e.g. a
+    // crafted 23505 message) must not be mistaken for the
+    // application state it names.
+    const messageTokens = String(error.message ?? '')
       .toLowerCase()
       .split(/[^a-z0-9_]+/);
-    const matchedError = Object.keys(KNOWN_REFUND_ERRORS).find((known) =>
-      messageTokens.includes(known)
-    );
+    const matchedError = ['P0001', '22023', '42501', '28000', 'P0002'].includes(
+      error.code ?? ''
+    )
+      ? Object.keys(KNOWN_REFUND_ERRORS).find((known) =>
+          messageTokens.includes(known)
+        )
+      : undefined;
     const code = matchedError ?? 'internal_error';
     // A matched application error carries its own semantic status;
     // unmatched errors keep the SQLSTATE-derived transport status.
+    // An unmatched P0001 is a server bug, not a conflict: every
+    // legitimate raise from this RPC is a known token, so anything
+    // else in that class is an unlisted raise (500), never a client
+    // state the caller could resolve with a retry.
     const status =
       (matchedError ? KNOWN_REFUND_STATUS[matchedError] : undefined) ??
       (error.code === '42501'
@@ -149,11 +196,9 @@ async function handle(
           ? 401
           : error.code === 'P0002'
             ? 404
-            : error.code === 'P0001'
-              ? 409
-              : error.code === '22023'
-                ? 400
-                : 500);
+            : error.code === '22023'
+              ? 400
+              : 500);
     return NextResponse.json(
       {
         error:
@@ -165,7 +210,9 @@ async function handle(
     );
   }
   return NextResponse.json(
-    data && typeof data === 'object' ? maskRefundWorkerText(data) : data
+    data && typeof data === 'object'
+      ? maskRefundWorkerText(data as Record<string, unknown>)
+      : data
   );
 }
 

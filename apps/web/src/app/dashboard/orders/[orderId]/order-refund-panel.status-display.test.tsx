@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/api-client', () => ({ apiPost: vi.fn() }));
@@ -130,5 +130,20 @@ describe('OrderRefundPanel status display', () => {
       ],
     });
     expect(await screen.findByText(/Date unavailable/)).toBeInTheDocument();
+  });
+  it('stops polling once the refund needs review', async () => {
+    vi.useFakeTimers();
+    try {
+      loadWith({ ...summary, status: 'requires_review' });
+      await act(async () => {});
+      expect(screen.getByText('Refund')).toBeInTheDocument();
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

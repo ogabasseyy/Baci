@@ -26,7 +26,7 @@ describe('ORDER_REFUND_PENDING_REPLAY_SOURCE_ROWS', () => {
 
     expect(sources).toEqual(EXPECTED_PENDING_ORDER_REFUND_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20261015120000_sync_internal_only_refund_status.sql'
+      'supabase/migrations/20261015130000_reconcile_manual_leg_coverage.sql'
     );
   });
 

@@ -56,7 +56,13 @@ BEGIN
      SET payment_status = 'refunded', updated_at = now()
    WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
      AND o.shipping_status IN ('cancelled', 'canceled')
-     AND o.payment_status = 'paid' AND o.amount_paid > 0
+     -- Funded states that can owe a balance: paid in full, or
+     -- partially paid with the remainder covered by reversal. A
+     -- partially paid cancellation whose reversals cover
+     -- amount_paid is just as terminal and must not keep polling
+     -- a paid-family label forever.
+     AND o.payment_status IN ('paid', 'partially_paid')
+     AND o.amount_paid > 0
      AND o.amount_paid <= v_reversed_internal
      -- Mirror the cancel-time side-effect gate negated: any external
      -- funded leg keeps the label with the normal (transaction or

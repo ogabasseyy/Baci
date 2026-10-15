@@ -95,8 +95,9 @@ describe('order refund route error mapping', () => {
       'This reference was already used for a different refund',
     ],
     ['P0001', 404, 'order_not_found', 'Order not found'],
-    ['P0001', 409, 'internal_detail', 'Unable to manage refund'],
+    ['P0001', 500, 'internal_detail', 'Unable to manage refund'],
     ['unexpected', 500, 'internal_detail', 'Unable to manage refund'],
+    ['P0001', 429, 'retry_too_soon', 'Please wait a minute before retrying'],
   ])('maps database %s errors to %s without echoing raw text', async (code, status, message, expectedError) => {
     mocks.rpc.mockResolvedValue({
       data: null,
@@ -154,7 +155,26 @@ describe('order refund route error mapping', () => {
       },
     });
     const response = await POST(request({ action: 'retry' }), context);
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Unable to manage refund',
+      code: 'internal_error',
+    });
+  });
+  it('ignores known tokens echoed by non-application errors', async () => {
+    // A constraint message echoing a merchant-controlled value that
+    // contains a known token must not be mistaken for the
+    // application state it names.
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: '23505',
+        message:
+          'duplicate key value violates unique constraint "already_refunded#1_ref"',
+      },
+    });
+    const response = await POST(request({ action: 'retry' }), context);
+    expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       error: 'Unable to manage refund',
       code: 'internal_error',

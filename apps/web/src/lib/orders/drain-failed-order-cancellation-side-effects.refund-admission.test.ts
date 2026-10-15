@@ -54,7 +54,7 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
         })
       )
       .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
-    // One ms short of the 76s verification budget: the claim still
+    // One ms short of the 38s verification budget: the claim still
     // runs (it finalizes fully covered rows cheaply), and the budget
     // gates only the post-claim worker run inside the runner.
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
@@ -82,7 +82,7 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
   });
 
   it('admits a refund at exactly the verification budget boundary', async () => {
-    expect(REFUND_PREFLIGHT_ADMISSION_BUDGET_MS).toBe(76_000);
+    expect(REFUND_PREFLIGHT_ADMISSION_BUDGET_MS).toBe(38_000);
     const candidate = {
       attempts: 1,
       claimed_at: '2026-07-21T00:00:00Z',

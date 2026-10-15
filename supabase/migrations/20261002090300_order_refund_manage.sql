@@ -22,6 +22,7 @@ DECLARE
   v_step_error text;
   v_step_attempts integer;
   v_step_retry_requests integer;
+  v_step_last_retry_at timestamptz;
   v_manual jsonb;
   v_manual_partial boolean;
   v_payment_refunded numeric;
@@ -41,8 +42,13 @@ BEGIN
   IF p_action NOT IN ('status','retry','manual') THEN
     RAISE EXCEPTION 'invalid_refund_action' USING ERRCODE='22023';
   END IF;
+  -- Read first, lock later: taking FOR UPDATE before the auth
+  -- checks below would let any authenticated caller pin locks on
+  -- orders they may not touch (including foreign-tenant rows),
+  -- stalling the drain and other merchants. The plain read cannot
+  -- mutate; mutating actions re-lock after authorization.
   SELECT merchant_id,currency,amount_paid,shipping_status,cancelled_at INTO v_order
-    FROM public.orders WHERE id=p_order_id FOR UPDATE;
+    FROM public.orders WHERE id=p_order_id;
   -- Missing and foreign orders share one error: distinct not-found vs
   -- forbidden responses would let any authenticated caller probe order
   -- existence across tenants.
@@ -58,9 +64,26 @@ BEGIN
     AND public.check_staff_permission(v_actor,v_order.merchant_id,'orders','view'))) THEN
     RAISE EXCEPTION 'refund_forbidden' USING ERRCODE='42501';
   END IF;
-  SELECT status,error,attempts,retry_requests INTO v_step_status,v_step_error,v_step_attempts,v_step_retry_requests
-    FROM public.order_cancellation_side_effects
-    WHERE order_id=p_order_id AND step='refund' FOR UPDATE;
+  -- Status is a pure read: no row locks, so status polling (any
+  -- viewer, any cadence) can neither contend with the drain nor
+  -- serialize against mutations. Mutating actions re-lock both
+  -- rows now that the caller is authorized.
+  IF p_action <> 'status' THEN
+    SELECT merchant_id,currency,amount_paid,shipping_status,cancelled_at INTO v_order
+      FROM public.orders WHERE id=p_order_id FOR UPDATE;
+    SELECT status,error,attempts,retry_requests,last_retry_at
+      INTO v_step_status,v_step_error,v_step_attempts,v_step_retry_requests,v_step_last_retry_at
+      FROM public.order_cancellation_side_effects
+      WHERE order_id=p_order_id AND step='refund' FOR UPDATE;
+  ELSE
+    SELECT status,error,attempts,retry_requests,last_retry_at
+      INTO v_step_status,v_step_error,v_step_attempts,v_step_retry_requests,v_step_last_retry_at
+      FROM public.order_cancellation_side_effects
+      WHERE order_id=p_order_id AND step='refund';
+  END IF;
+  -- The mutation re-lock above re-reads the raw row: normalize
+  -- again (idempotent) so comparisons below see NGN, not NULL.
+  v_order.currency := COALESCE(NULLIF(BTRIM(v_order.currency), ''), 'NGN');
   -- Coverage counts matching money only: a foreign-currency row is an
   -- anomaly for review, and subtracting it would let the merchant
   -- record less than is owed while the order flips refunded.
@@ -221,6 +244,14 @@ BEGIN
     IF v_step_status IS DISTINCT FROM 'failed' OR v_step_error IS NULL THEN
       RAISE EXCEPTION 'failed_refund_required' USING ERRCODE='P0001';
     END IF;
+    -- Retry re-arms without a provider call, so nothing else
+    -- throttles it: enforce a minimum interval server-side or a
+    -- stuck panel (or a script) can requeue every poll, churning
+    -- the drain and the audit trail.
+    IF v_step_last_retry_at IS NOT NULL
+      AND v_step_last_retry_at > now() - interval '60 seconds' THEN
+      RAISE EXCEPTION 'retry_too_soon' USING ERRCODE='P0001';
+    END IF;
     UPDATE public.order_cancellation_side_effects SET attempts=0,
       retry_requests=retry_requests+1,last_retry_by=v_actor,last_retry_at=now(),
       claimed_at=now(),error=NULL WHERE order_id=p_order_id AND step='refund'
@@ -268,8 +299,11 @@ BEGIN
   -- exposing. Transaction-driven zeros already flipped via the
   -- trigger, so the UPDATE's own predicate scopes it to the
   -- internal-only (and legacy-drift) remainder; cancelled-only and
-  -- merchant-scoped like the trigger.
-  IF v_remaining <= 0 AND v_refunded > 0 THEN
+  -- merchant-scoped like the trigger. Mutations only: status stays
+  -- a pure read, and the internal-only sync trigger persists the
+  -- terminal label when reversals land (the retry backstop heals
+  -- legacy drift on the next re-arm).
+  IF p_action <> 'status' AND v_remaining <= 0 AND v_refunded > 0 THEN
     UPDATE public.orders o SET payment_status = 'refunded', updated_at = now()
      WHERE o.id = p_order_id AND o.merchant_id = v_order.merchant_id
        AND o.payment_status IS DISTINCT FROM 'refunded'

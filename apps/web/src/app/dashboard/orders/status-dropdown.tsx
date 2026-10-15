@@ -83,7 +83,9 @@ export function StatusDropdown({
             <span>Cancel Order</span>
           </DropdownMenuItem>
         )}
-        {(shippingStatus === 'Canceled' || shippingStatus === 'Returned') && (
+        {(shippingStatus === 'Canceled' ||
+          shippingStatus === 'Cancelled' ||
+          shippingStatus === 'Returned') && (
           <DropdownMenuItem disabled>No actions available</DropdownMenuItem>
         )}
       </DropdownMenuContent>

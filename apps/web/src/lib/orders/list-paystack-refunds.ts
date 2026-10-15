@@ -37,7 +37,9 @@ export async function listPaystackRefunds(
     throw new Error('Invalid payment reference');
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret) throw new Error('Paystack refund verification unavailable');
-  async function request(path: string): Promise<Record<string, unknown>> {
+  async function request(
+    path: string
+  ): Promise<{ payload: Record<string, unknown>; raw: string }> {
     // Recompute the cap from the absolute deadline before every
     // request: a timeout computed once would let each of the 20
     // list pages spend the full budget again, consuming the window
@@ -54,10 +56,16 @@ export async function listPaystackRefunds(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) throw new Error('Paystack refund verification failed');
-    const payload = await response.json();
+    const raw = await response.text();
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      throw new Error('Paystack refund verification failed');
+    }
     if (payload?.status !== true)
       throw new Error('Paystack refund verification failed');
-    return payload;
+    return { payload, raw };
   }
   // List Refunds filters by numeric transaction ID, not by reference: an
   // alphanumeric reference in that filter matches zero rows, blinding the
@@ -67,21 +75,25 @@ export async function listPaystackRefunds(
   const verified = await request(
     `/transaction/verify/${encodeURIComponent(reference)}`
   );
-  const verifiedId = (verified.data as { id?: unknown } | null)?.id;
+  // Read the ID off the wire text, not the parsed payload: JSON.parse
+  // rounds integers past 2^53, so parsing first would corrupt a large
+  // ID and then reject it as unsafe. Anchor on the data object with
+  // the ID as its first key (Paystack's documented shape); anything
+  // else fails closed like before.
+  const wireId = /"data"\s*:\s*\{\s*"id"\s*:\s*(?:"(\d+)"|(\d+))/.exec(
+    verified.raw
+  );
+  const wireText = wireId?.[1] ?? wireId?.[2] ?? null;
   const transactionId =
-    typeof verifiedId === 'number' &&
-    Number.isSafeInteger(verifiedId) &&
-    verifiedId > 0
-      ? String(verifiedId)
-      : typeof verifiedId === 'string' && /^[1-9][0-9]*$/.test(verifiedId)
-        ? verifiedId
-        : null;
+    wireText !== null && /^[1-9][0-9]*$/.test(wireText) ? wireText : null;
   if (transactionId === null) throw new Error('Unverified refund transaction');
   const refunds: ProviderRefund[] = [];
   for (let page = 1; page <= 20; page++) {
-    const envelope = await request(
-      `/refund?transaction=${transactionId}&perPage=100&page=${page}`
-    );
+    const envelope = (
+      await request(
+        `/refund?transaction=${transactionId}&perPage=100&page=${page}`
+      )
+    ).payload;
     if (!Array.isArray(envelope.data))
       throw new Error('Unverified refund list');
     const rows = envelope.data;

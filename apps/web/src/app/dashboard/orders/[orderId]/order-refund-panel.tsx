@@ -45,8 +45,13 @@ export function OrderRefundPanel({
   // Only a refunded order is terminal: a failed row can still
   // transition asynchronously (drain retries, provider
   // reconciliation), and the ledger-derived balance would go stale
-  // without the poll.
-  const terminal = summary?.status === 'refunded';
+  // without the poll. Requires-review is polling-terminal too: the
+  // underlying step is delivery_uncertain, which the drain never
+  // reselects, so only an out-of-band ops resolution (visible on
+  // refresh) can change it — polling would load a
+  // payments-adjacent RPC every 30s indefinitely for no update.
+  const terminal =
+    summary?.status === 'refunded' || summary?.status === 'requires_review';
   useRefundStatusPolling({
     onError: setError,
     onSummary: setSummary,

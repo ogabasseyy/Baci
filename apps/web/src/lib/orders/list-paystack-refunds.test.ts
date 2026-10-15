@@ -12,7 +12,11 @@ const refund = {
   transaction: { id: 5, reference: 'capture-1' },
 };
 function response(data: unknown, ok = true) {
-  return { ok, json: async () => ({ status: true, data }) } as Response;
+  return {
+    ok,
+    json: async () => ({ status: true, data }),
+    text: async () => JSON.stringify({ status: true, data }),
+  } as unknown as Response;
 }
 function verifiedLister(fetcher: ReturnType<typeof vi.fn>) {
   fetcher.mockResolvedValueOnce(response({ id: 5, reference: 'capture-1' }));
@@ -105,11 +109,43 @@ describe('listPaystackRefunds', () => {
       expect.anything()
     );
   });
-  it('rejects numeric IDs outside the safe integer range', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(response({ id: 2 ** 53 }))
+  it('reads oversized IDs off the wire text instead of the rounded parse', async () => {
+    // 2^53+1 cannot survive JSON.parse; the wire text carries the
+    // exact digits and the list filter must use them verbatim.
+    const raw =
+      '{"status":true,"data":{"id":9007199254740993,"reference":"capture-1"}}';
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => JSON.parse(raw),
+        text: async () => raw,
+      })
+      .mockResolvedValueOnce(
+        response([
+          { ...refund, transaction: { id: '9007199254740993' } },
+        ])
+      );
+    vi.stubGlobal('fetch', fetcher);
+    expect(await listPaystackRefunds('capture-1')).toHaveLength(1);
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('/refund?transaction=9007199254740993&'),
+      expect.anything()
     );
+  });
+  it('rejects a verify payload with a reordered data object', async () => {
+    // The wire-ID anchor requires the ID as the data object's first
+    // key; a nested ID in first position must fail closed rather
+    // than resolve the wrong transaction.
+    const raw =
+      '{"status":true,"data":{"customer":{"id":9},"id":5,"reference":"capture-1"}}';
+    const fetcher = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => JSON.parse(raw),
+      text: async () => raw,
+    });
+    vi.stubGlobal('fetch', fetcher);
     await expect(listPaystackRefunds('capture-1')).rejects.toThrow(
       'Unverified refund transaction'
     );

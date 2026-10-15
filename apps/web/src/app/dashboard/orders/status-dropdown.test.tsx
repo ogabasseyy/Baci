@@ -47,4 +47,20 @@ describe('StatusDropdown', () => {
 
     expect(onStatusUpdate).toHaveBeenCalledWith('ORD-001', 'Shipped');
   });
+
+  it('shows no actions for the Cancelled spelling', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <StatusDropdown
+        order={makeOrder({ shippingStatus: 'Cancelled' })}
+        onStatusUpdate={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /cancelled/i }));
+    expect(
+      screen.getByRole('menuitem', { name: /no actions available/i })
+    ).toBeInTheDocument();
+  });
 });

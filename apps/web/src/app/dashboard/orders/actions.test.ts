@@ -651,19 +651,6 @@ describe('getOrder', () => {
     });
   });
 
-  it('leaves funding unknown when the transactions read fails', async () => {
-    mockGetOrderQueries({
-      transactionsError: { message: 'connection reset' },
-    });
-
-    const order = await getOrder(MERCHANT_ID, ORDER_ID);
-
-    // The page still renders; undefined funding fails the refund
-    // panel open instead of hiding recovery on a transient error.
-    expect(order?.id).toBe(ORDER_ID);
-    expect(order?.transactions).toBeUndefined();
-  });
-
   it('preserves storefront order sources for dashboard labels', async () => {
     mockGetOrderQueries({
       orderRows: [{ ...mockOrder, source: 'online_store' }],

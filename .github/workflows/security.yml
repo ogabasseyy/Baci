@@ -175,12 +175,14 @@ jobs:
           )
 
           if [ ${#changed_files[@]} -eq 0 ]; then
+            echo "scanned=false" >> "$GITHUB_OUTPUT"
             echo "No security-relevant changed files. Skipping Semgrep."
             exit 0
           fi
 
-          # --error: bare scan exits 0 with findings; the gate reads the outcome.
-          semgrep scan --error --config auto --sarif --output=semgrep.sarif "${changed_files[@]}"
+          echo "scanned=true" >> "$GITHUB_OUTPUT"
+          # --strict also fails on warning-level analysis errors.
+          semgrep scan --error --strict --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
@@ -190,7 +192,7 @@ jobs:
         if: github.event_name == 'push'
         id: semgrep_push
         run: |
-          semgrep scan --error --config auto --sarif --output=semgrep.sarif \
+          semgrep scan --error --strict --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json \
             apps/web/src/app/api \
             apps/web/src/lib \
             apps/web/src/schemas \
@@ -213,10 +215,60 @@ jobs:
       - name: Run full Semgrep on scheduled and manual scans
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         id: semgrep_full
-        run: semgrep ci --sarif --output=semgrep.sarif
+        run: semgrep ci --no-suppress-errors --sarif --output=semgrep.sarif --json-output=semgrep.raw.json
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
+
+      - name: Verify complete Semgrep analysis and preserve raw SARIF
+        if: always()
+        env:
+          EMPTY_PR_SCOPE: ${{ github.event_name == 'pull_request' && steps.semgrep_pr.outputs.scanned == 'false' }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          import pathlib
+          import shutil
+          import sys
+
+          if os.environ.get("EMPTY_PR_SCOPE") == "true":
+              sys.exit(0)
+          sarif = pathlib.Path("semgrep.sarif")
+          if sarif.is_file():
+              shutil.copyfile(sarif, "semgrep.raw.sarif")
+          try:
+              report = json.loads(pathlib.Path("semgrep.raw.json").read_text())
+              if not isinstance(report, dict):
+                  raise ValueError("invalid report object")
+              errors = report.get("errors")
+              paths = report.get("paths")
+              if not isinstance(errors, list) or not isinstance(paths, dict):
+                  raise ValueError("missing analysis diagnostics")
+              scanned = paths.get("scanned")
+              if not isinstance(scanned, list) or not scanned:
+                  raise ValueError("no scanned paths")
+              if errors:
+                  print(f"::error::Semgrep reported {len(errors)} analysis errors; inspect the raw diagnostics artifact.")
+                  sys.exit(1)
+              if not sarif.is_file() or not sarif.stat().st_size:
+                  raise ValueError("missing SARIF")
+          except (OSError, ValueError, TypeError):
+              print("::error::Semgrep did not produce complete readable analysis diagnostics.")
+              sys.exit(1)
+          print(f"Verified complete Semgrep analysis for {len(scanned)} paths.")
+          PYTHON
+
+      - name: Preserve unfiltered Semgrep diagnostics
+        if: always() && (github.event_name != 'pull_request' || steps.semgrep_pr.outputs.scanned != 'false')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-raw-diagnostics
+          path: |
+            semgrep.raw.json
+            semgrep.raw.sarif
+          if-no-files-found: error
+          retention-days: 7
 
       # The filter invocation below is trust-sensitive; its rationale
       # lives in .github/sarif-filter-notes.md (300-line ceiling).

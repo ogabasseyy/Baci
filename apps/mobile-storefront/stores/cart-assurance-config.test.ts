@@ -1,41 +1,58 @@
 import { jest } from '@jest/globals';
 
-const mockConfig: { merchantSlug: string; smartCartProEnabled: boolean } = {
-  merchantSlug: 'ogabassey',
-  smartCartProEnabled: true,
-};
 jest.mock('@/lib/config', () => ({
   CONFIG: {
-    get MERCHANT_SLUG() {
-      return mockConfig.merchantSlug;
-    },
-    get ENABLE_SMART_CART_PRO() {
-      return mockConfig.smartCartProEnabled;
-    },
+    MERCHANT_SLUG: 'ogabassey',
+    ENABLE_SMART_CART_PRO: true,
+  },
+}));
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+}));
+
+const mockGetQueryData = jest.fn();
+jest.mock('@/lib/query-client', () => ({
+  get queryClient() {
+    return { getQueryData: mockGetQueryData };
   },
 }));
 
-import { nativeAssurancePolicy } from './cart-assurance-config';
-
 describe('nativeAssurancePolicy', () => {
   beforeEach(() => {
-    mockConfig.merchantSlug = 'ogabassey';
-    mockConfig.smartCartProEnabled = true;
+    jest.resetModules();
+    mockGetQueryData.mockReset();
   });
 
-  it('passes the native build configuration through', () => {
-    expect(nativeAssurancePolicy()).toEqual({
+  it('resolves the live shipping-insurance toggle from the query cache', async () => {
+    mockGetQueryData.mockReturnValue({ shipping_insurance_enabled: true });
+    const { nativeAssurancePolicy: policy } = await import(
+      './cart-assurance-config'
+    );
+    expect(policy()).toEqual({
       smartCartProEnabled: true,
       merchantSlug: 'ogabassey',
+      shippingInsuranceEnabled: true,
     });
+    expect(mockGetQueryData).toHaveBeenCalledWith(['test-payment-settings']);
   });
 
-  it('reflects non-default builds', () => {
-    mockConfig.merchantSlug = 'another-store';
-    mockConfig.smartCartProEnabled = false;
-    expect(nativeAssurancePolicy()).toEqual({
-      smartCartProEnabled: false,
-      merchantSlug: 'another-store',
+  it('fails the setting to unknown when the cache read throws', async () => {
+    mockGetQueryData.mockImplementation(() => {
+      throw new Error('QueryClient is not a constructor');
     });
+    const { nativeAssurancePolicy: policy } = await import(
+      './cart-assurance-config'
+    );
+    expect(policy().shippingInsuranceEnabled).toBeUndefined();
+  });
+
+  it('fails the setting to unknown when the query client module is unloadable', async () => {
+    jest.doMock('@/lib/query-client', () => {
+      throw new Error('QueryClient is not a constructor');
+    });
+    const { nativeAssurancePolicy: policy } = await import(
+      './cart-assurance-config'
+    );
+    expect(policy().shippingInsuranceEnabled).toBeUndefined();
   });
 });

@@ -1,5 +1,4 @@
 import { hasLinePriceDrift } from '@/services/cart-reprice-offer-lines';
-import { formatProductConditionDisplay } from '@/types/product';
 import type { CartItem } from './cart-store.types';
 
 const NGN_PRICE_FORMATTER = new Intl.NumberFormat('en-NG', {
@@ -89,32 +88,15 @@ export function applyReprice(
       return item;
     }
     changed = true;
-    // A refreshed condition restores the add-time invariant: the line and
-    // its variant-attributes stamp carry the same display value the PDP
-    // stamped (variant_name derives from the attributes, so a stale
-    // attribute would persist a live condition beside a stale label).
-    // The display formatter mirrors the add path; an unformattable live
-    // code falls back to itself so the refresh never no-ops. Attributes
-    // without a condition key are left alone: adding one would invent a
-    // label part the add never stamped.
-    const refreshedCondition = conditionDrifted
-      ? (formatProductConditionDisplay(liveCondition as string) ??
-        (liveCondition as string))
-      : undefined;
+    // The refreshed condition stores the raw live code, matching the
+    // add path (which stores the code it receives); display formatting
+    // happens at render. Formatting here would corrupt the code basis
+    // ('refurbished' displays as 'Open Box') and break the pinned
+    // reprice contract.
     return {
       ...item,
       ...(priceDrifted ? { price: livePrice as number } : null),
-      ...(conditionDrifted
-        ? { condition: refreshedCondition as string }
-        : null),
-      ...(conditionDrifted && item.variant_attributes?.condition !== undefined
-        ? {
-            variant_attributes: {
-              ...item.variant_attributes,
-              condition: refreshedCondition as string,
-            },
-          }
-        : null),
+      ...(conditionDrifted ? { condition: liveCondition as string } : null),
       negotiatedPrice: undefined,
       negotiationStatus: undefined,
     };

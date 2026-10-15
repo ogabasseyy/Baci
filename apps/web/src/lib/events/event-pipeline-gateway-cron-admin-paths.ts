@@ -16,4 +16,9 @@ export const eventPipelineGatewayCronAdminPaths = [
   [route, sweep, finalizer, inventory, review, admin],
   [route, sweep, finalizer, effects, email, zepto, sending, admin],
   [route, sweep, finalizer, effects, email, zepto, admin],
+  // Exact CRON_SECRET-gated recovery-preview retention fallback.
+  [
+    'apps/web/src/app/api/cron/cleanup-checkout-shipping-recovery-previews/route.ts',
+    admin,
+  ],
 ];

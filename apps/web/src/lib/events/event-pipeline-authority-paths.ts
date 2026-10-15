@@ -1,4 +1,6 @@
 export const eventPipelineAdminImporters = [
+  // CRON_SECRET-authenticated fallback; only the bounded recovery retention RPC.
+  'apps/web/src/app/api/cron/cleanup-checkout-shipping-recovery-previews/route.ts',
   'apps/web/src/app/api/cron/purge-jumia-self-authorization-discoveries/route.ts',
   'apps/web/src/app/api/orders/route.ts',
   'apps/web/src/app/api/payments/juicyway/webhook/route.ts',

@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingService } from '@/lib/shipping';
 import { resolveAdminGiglBookingContext } from '@/lib/shipping/admin-gigl-booking-context';
 import { assertCurrentOrderPaymentShippable } from '@/lib/shipping/assert-current-shippable-order-payment';
+import { assertDomesticQuoteItemsMatchOrder } from '@/lib/shipping/assert-domestic-quote-items-match-order';
 import {
   assertGiglCustomerCheckoutPrepaid,
   isPayOnDeliveryPaymentMethod,
@@ -15,7 +16,6 @@ import {
   findReusableOrderShipment,
   type ReusableOrderShipmentResult,
 } from '@/lib/shipping/find-reusable-order-shipment';
-import { assertQuoteItemsMatchOrder } from '@/lib/shipping/international-quote-items-match';
 import {
   assertInternationalQuoteMatchesOrder,
   assertQuoteReceiverMatchesOrder,
@@ -25,7 +25,6 @@ import {
   isShippingProviderCode,
   OrderShipmentBookingError,
   parseStoredQuoteRequest,
-  toQuoteComparableOrderItems,
 } from '@/lib/shipping/order-shipment-booking-utils';
 import { persistBookedOrderShipment } from '@/lib/shipping/persist-booked-order-shipment';
 import { isGiglInternationalProviderRate } from '@/lib/shipping/providers/gigl.international-payload';
@@ -229,11 +228,10 @@ export async function bookOrderShipment(
     );
   } else if (effectiveQuoteRequest) {
     assertQuoteReceiverMatchesOrder(effectiveQuoteRequest, orderWithEconomics);
-    assertQuoteItemsMatchOrder(
+    assertDomesticQuoteItemsMatchOrder(
       effectiveQuoteRequest,
-      toQuoteComparableOrderItems(orderWithEconomics.order_items, {
-        defaultWeight: bookingContext.defaultWeight,
-      })
+      orderWithEconomics.order_items,
+      bookingContext.defaultWeight
     );
   }
   const { receiver, sender, items } = resolveOrderShipmentParties({

@@ -10,7 +10,6 @@ import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
-  CanonicalOrderSubtotalLoadError,
   computeCanonicalOrderSubtotal,
   isCanonicalOrderSubtotalUuidError,
 } from '@/lib/checkout/canonical-order-subtotal';
@@ -26,11 +25,14 @@ import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
+import type { OrderIdempotencyPayloadInput } from '@/lib/checkout/order-idempotency';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { prepareCheckoutQuoteDestination } from '@/lib/checkout/prepare-checkout-quote-destination';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { resolveEffectiveCheckoutShippingProvider } from '@/lib/checkout/resolve-effective-checkout-shipping-provider';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
@@ -71,7 +73,6 @@ import { getClientIdentifier } from '@/lib/rate-limit';
 import { resolveImmediateOrderEmail } from '@/lib/resolve-immediate-order-email';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
 import { sanitizeLikePattern, sanitizeSearchQuery } from '@/lib/sanitize-core';
-import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import {
   getMerchantShippingRates,
   MerchantShippingRatesLoadError,
@@ -82,10 +83,6 @@ import type {
 } from '@/lib/shipping/merchant-rates/types';
 import { verifyOrderShippingRate } from '@/lib/shipping/merchant-rates/verify-order-shipping-rate';
 import { normalizeMerchantRateOrderAddress } from '@/lib/shipping/normalize-merchant-rate-order-address';
-import {
-  enrichShippingAddressWithQuoteDestination,
-  OrderQuoteDestinationMismatchError,
-} from '@/lib/shipping/order-quote-destination';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
@@ -157,19 +154,6 @@ type QuizVoucherItemCandidate = {
   voucher_token?: unknown;
 };
 type OrderCreateItem = OrderCreateInput['items'][number];
-type OrderQuoteValidationPayloadItem = {
-  price?: number | string | null;
-  product_id?: string | null;
-  quantity: number;
-};
-type OrderQuoteValidationProductRow = {
-  commodity_code?: string | null;
-  dimensions?: unknown;
-  id: string;
-  name: string | null;
-  weight_unit?: string | null;
-  weight_value?: number | string | null;
-};
 type VoucherPaymentStatusItem = {
   assurance_fee?: number | string | null;
   price: number | string;
@@ -239,59 +223,6 @@ function getVoucherOrderAmountDueBeforeGateway({
       itemsTotal + shippingFee + taxAmount + giftWrappingFee - discountAmount
     ),
     0
-  );
-}
-
-async function buildOrderQuoteValidationItems({
-  items,
-  merchantId,
-  supabase,
-}: {
-  items: OrderQuoteValidationPayloadItem[];
-  merchantId: string;
-  supabase: ReturnType<typeof createClient>;
-}) {
-  const productIds = Array.from(
-    new Set(
-      items
-        .map((item) => item.product_id)
-        .filter((id): id is string => typeof id === 'string' && id.length > 0)
-    )
-  );
-
-  if (productIds.length === 0) {
-    return items.map((item) => ({ name: null, quantity: item.quantity }));
-  }
-
-  const { data: products, error } = await supabase
-    .from('products')
-    .select('id, name, weight_value, weight_unit, dimensions, commodity_code')
-    .eq('merchant_id', merchantId)
-    .in('id', productIds)
-    .returns<OrderQuoteValidationProductRow[]>();
-
-  if (error || !products) {
-    throw new CanonicalOrderSubtotalLoadError(
-      'Unable to load products for international quote validation',
-      { cause: error ?? undefined },
-      (error as { code?: string } | null | undefined)?.code
-    );
-  }
-
-  const productMap = new Map(products.map((product) => [product.id, product]));
-  return toInternationalQuoteValidationItemsFromOrder(
-    items.map((item) => {
-      const product = item.product_id
-        ? (productMap.get(item.product_id) ?? null)
-        : null;
-      return {
-        name: product?.name ?? null,
-        price: item.price ?? null,
-        quantity: item.quantity,
-        product,
-      };
-    }),
-    { includeValue: true }
   );
 }
 
@@ -1334,71 +1265,25 @@ export async function POST(request: NextRequest) {
       ? null
       : (body.selected_quote_id ?? null);
     const resolvedTrackingNumber = body.tracking_number ?? null;
-    let quoteValidationItems:
-      | Awaited<ReturnType<typeof buildOrderQuoteValidationItems>>
-      | undefined;
-    if (resolvedSelectedQuoteId) {
-      try {
-        quoteValidationItems = await buildOrderQuoteValidationItems({
-          items: orderItemsPayload,
-          merchantId: body.merchant_id,
-          supabase,
-        });
-      } catch (quoteValidationItemsError) {
-        if (isCanonicalOrderSubtotalUuidError(quoteValidationItemsError)) {
-          logger.warn({
-            error: quoteValidationItemsError,
-            merchantId: body.merchant_id,
-            message:
-              'Storefront order received malformed identifier during quote validation',
-          });
-          return NextResponse.json(
-            { error: 'Failed to create order', details: 'invalid_items' },
-            { status: 400 }
-          );
-        }
-        logger.error({
-          error: quoteValidationItemsError,
-          merchantId: body.merchant_id,
-          message: 'Storefront order quote validation item lookup failed',
-        });
-        return NextResponse.json(
-          {
-            code: 'QUOTE_VALIDATION_FAILED',
-            error: 'Unable to validate quote',
-          },
-          { status: 500 }
-        );
-      }
+    const quotePreparation = await prepareCheckoutQuoteDestination({
+      isIdempotentLocalAirportReplay,
+      isIdempotentOrderReplay,
+      items: orderItemsPayload,
+      merchantId: body.merchant_id,
+      requestIdempotencyKey,
+      selectedQuoteId: resolvedSelectedQuoteId,
+      shippingAddress: shipping_address,
+      shippingFee: shippingFeeValue,
+      shippingProvider: resolvedShippingProvider,
+      supabase,
+    });
+    if (!quotePreparation.ok) {
+      return NextResponse.json(quotePreparation.body, {
+        status: quotePreparation.status,
+      });
     }
-    let shippingAddressForOrder: OrderCreateInput['shipping_address'];
-    try {
-      shippingAddressForOrder = await enrichShippingAddressWithQuoteDestination(
-        supabase,
-        resolvedSelectedQuoteId,
-        shipping_address,
-        {
-          items: quoteValidationItems,
-          merchantId: body.merchant_id,
-          shippingFee:
-            isIdempotentLocalAirportReplay || isIdempotentOrderReplay
-              ? undefined
-              : shippingFeeValue,
-          shippingProvider:
-            isIdempotentLocalAirportReplay || isIdempotentOrderReplay
-              ? null
-              : resolvedShippingProvider,
-        }
-      );
-    } catch (error) {
-      if (error instanceof OrderQuoteDestinationMismatchError) {
-        return NextResponse.json(
-          { error: error.message, code: error.code },
-          { status: error.status }
-        );
-      }
-      throw error;
-    }
+    let { shippingAddress: shippingAddressForOrder } = quotePreparation;
+    const { validatedQuoteProvider } = quotePreparation;
     // Capture the post-enrichment destination before Nigerian state repair so
     // the idempotency hash below stays byte-compatible with orders created
     // before this deploy (postal-code states like "100001"). Persistence and
@@ -1943,38 +1828,67 @@ export async function POST(request: NextRequest) {
       return pilotOrderRejection;
     }
 
+    const idempotencyPayload: OrderIdempotencyPayloadInput | null =
+      requestIdempotencyKey
+        ? {
+            ...body,
+            shipping_address: selectIdempotencyShippingAddress({
+              addressBeforeMerchantRateNormalization:
+                shippingAddressBeforeMerchantRateNormalization,
+              normalizedAddress: shippingAddressForOrder,
+            }),
+            // STABLE code identity, NOT the recomputed amount, so a merchant
+            // editing the code between a checkout and its retry can't trip
+            // checkout_idempotency_conflict before the wrapper's replay path.
+            discount_amount: discountCodeId ? 0 : serverDerivedDiscountAmount,
+            discount_code: requestedDiscountCode,
+            delivery_method: canonicalDeliveryMethod,
+            gift_wrapping_fee: giftWrappingFeeValue,
+            airport_type: canonicalAirportType,
+            items: orderItemsPayload,
+            shipping_fee: shippingFeeValue,
+            // Merchant-rate orders null shipping_provider + selected_quote_id, so
+            // the rate id is the only field that distinguishes two same-priced
+            // merchant rates (same fee + address) on an Idempotency-Key reuse.
+            // Without it the RPC would replay the ORIGINAL order instead of
+            // returning checkout_idempotency_conflict.
+            // Hash the EFFECTIVE quote selection, not the raw body: a stray
+            // selected_quote_id alongside shipping_rate_id would otherwise
+            // classify this quote-less order as quoted and drop its pin
+            // from the hash, replaying the first destination on retry.
+            selected_quote_id: resolvedSelectedQuoteId,
+            // Patched to the effective provider below: a quoted checkout
+            // may omit the redundant provider, in which case the validated
+            // carrier captured during enrichment is authoritative. Without
+            // it the stored order has a quote but no carrier and
+            // fulfillment rejects it.
+            shipping_provider: null,
+            shipping_rate_id: body.shipping_rate_id,
+            tax_amount: orderTaxAmount,
+          }
+        : null;
+    // When the quote row was cleaned up before a confirmed retry, the
+    // provider is unresolvable here; per-provider alternates let the
+    // replay probe the original hash instead of conflicting.
+    const { alternatePayloads, effectiveShippingProvider } =
+      resolveEffectiveCheckoutShippingProvider({
+        idempotencyPayload,
+        isMerchantRateOrder,
+        requestedShippingProvider: body.shipping_provider,
+        resolvedSelectedQuoteId,
+        resolvedShippingProvider,
+        validatedQuoteProvider,
+      });
+    if (idempotencyPayload) {
+      idempotencyPayload.shipping_provider = effectiveShippingProvider;
+    }
     const { checkoutRequestHash, isLegacyIdempotencyReplay } =
       await prepareCheckoutIdempotencyReplay({
+        alternatePayloads,
         canonicalAirportType,
         canonicalDeliveryMethod,
         merchantId: merchant_id,
-        payload: requestIdempotencyKey
-          ? {
-              ...body,
-              shipping_address: selectIdempotencyShippingAddress({
-                addressBeforeMerchantRateNormalization:
-                  shippingAddressBeforeMerchantRateNormalization,
-                normalizedAddress: shippingAddressForOrder,
-              }),
-              // STABLE code identity, NOT the recomputed amount, so a merchant
-              // editing the code between a checkout and its retry can't trip
-              // checkout_idempotency_conflict before the wrapper's replay path.
-              discount_amount: discountCodeId ? 0 : serverDerivedDiscountAmount,
-              discount_code: requestedDiscountCode,
-              delivery_method: canonicalDeliveryMethod,
-              gift_wrapping_fee: giftWrappingFeeValue,
-              airport_type: canonicalAirportType,
-              items: orderItemsPayload,
-              shipping_fee: shippingFeeValue,
-              // Merchant-rate orders null shipping_provider + selected_quote_id, so
-              // the rate id is the only field that distinguishes two same-priced
-              // merchant rates (same fee + address) on an Idempotency-Key reuse.
-              // Without it the RPC would replay the ORIGINAL order instead of
-              // returning checkout_idempotency_conflict.
-              shipping_rate_id: body.shipping_rate_id,
-              tax_amount: orderTaxAmount,
-            }
-          : null,
+        payload: idempotencyPayload,
         requestIdempotencyKey,
         supabase,
       });
@@ -2026,7 +1940,7 @@ export async function POST(request: NextRequest) {
       p_notes: notes || null,
       p_ad_tracking: orderAdTrackingPayload,
       p_selected_quote_id: resolvedSelectedQuoteId,
-      p_shipping_provider: resolvedShippingProvider,
+      p_shipping_provider: effectiveShippingProvider,
       p_tracking_number: resolvedTrackingNumber || null,
       p_user_id: resolvedUserId,
       // Server-computed tax — replaces the client-supplied value

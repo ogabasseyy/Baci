@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { shippingCoordinatePairSchema } from '@/schemas/shipping-coordinate-pair';
 import {
   matchesQuoteDestination,
   type OrderShippingAddressForQuote,
@@ -9,7 +10,11 @@ import {
   validateQuoteCheckoutContext,
 } from './order-quote-destination-checkout';
 import { OrderQuoteDestinationMismatchError } from './order-quote-destination-errors';
-import { parseStoredQuoteRequest } from './order-shipment-booking-utils';
+import {
+  isShippingProviderCode,
+  parseStoredQuoteRequest,
+} from './order-shipment-booking-utils';
+import { readCoordinate } from './read-coordinate';
 
 export type { OrderShippingAddressForQuote } from './order-quote-destination-address';
 export { normalizeAddressForQuoteMatch } from './order-quote-destination-address';
@@ -55,6 +60,7 @@ export async function enrichShippingAddressWithQuoteDestination(
   context: QuoteCheckoutContext = {}
 ): Promise<OrderShippingAddressForQuote | undefined> {
   if (!selectedQuoteId) {
+    context.onValidatedQuoteProvider?.(null);
     return shippingAddress;
   }
 
@@ -71,15 +77,24 @@ export async function enrichShippingAddressWithQuoteDestination(
     );
   }
 
-  if (
-    !quote &&
-    (context.shippingProvider || context.shippingFee !== undefined)
-  ) {
-    throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
+  if (!quote) {
+    // Cleanup may have removed the quote row before a confirmed retry
+    // arrives. Preserve the keyed replay with the caller's address as-is;
+    // the order RPC's hash comparison stays authoritative for
+    // replay-vs-conflict.
+    if (context.isConfirmedReplay) {
+      context.onValidatedQuoteProvider?.(null);
+      return shippingAddress;
+    }
+    if (context.shippingProvider || context.shippingFee !== undefined) {
+      throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_ORDER_MISMATCH');
+    }
+    context.onValidatedQuoteProvider?.(null);
+    return shippingAddress;
   }
 
-  const isGiglQuote = quote?.provider === 'GIGL';
-  if (!quote || !isGiglQuote) {
+  if (!isShippingProviderCode(quote.provider)) {
+    context.onValidatedQuoteProvider?.(null);
     return shippingAddress;
   }
 
@@ -88,7 +103,15 @@ export async function enrichShippingAddressWithQuoteDestination(
   }
 
   const expiresAt = Date.parse(quote.expires_at ?? '');
-  if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+  // Confirmed same-key retries skip expiry and catalog-derived item matching:
+  // those inputs can change after creation. Destination/pin, merchant, provider
+  // and fee checks still run; the RPC's stored hash enforces the caller's
+  // product, quantity and price instead of rewriting the existing order.
+  if (
+    !context.isConfirmedReplay &&
+    Number.isFinite(expiresAt) &&
+    expiresAt <= Date.now()
+  ) {
     throwOrderQuoteMismatch('INTERNATIONAL_QUOTE_EXPIRED');
   }
 
@@ -100,10 +123,69 @@ export async function enrichShippingAddressWithQuoteDestination(
   if (!matchesQuoteDestination(shippingAddress, quoteRequest)) {
     throw new OrderQuoteDestinationMismatchError();
   }
-  validateQuoteCheckoutContext(quote, quoteRequest, context);
+  validateQuoteCheckoutContext(quote, quoteRequest, {
+    ...context,
+    // A quoted checkout may omit the redundant provider: the merchant-scoped
+    // quote row is authoritative for it. A supplied-but-different provider
+    // still fails closed inside the context check.
+    shippingProvider: context.shippingProvider ?? quote.provider,
+  });
 
+  const orderPin = shippingCoordinatePairSchema.safeParse(shippingAddress);
+  // Stored quote receivers are database JSON: pins may be null or numeric
+  // strings. Read them with the booking guard's reader so checkout accepts
+  // what fulfillment accepts; garbage pins still fail closed below.
+  const receiverLatitude = readCoordinate(
+    quoteRequest.receiver.latitude,
+    -90,
+    90
+  );
+  const receiverLongitude = readCoordinate(
+    quoteRequest.receiver.longitude,
+    -180,
+    180
+  );
+  if (
+    receiverLatitude.status === 'invalid' ||
+    receiverLongitude.status === 'invalid'
+  ) {
+    throw new OrderQuoteDestinationMismatchError();
+  }
+  const quotePin = shippingCoordinatePairSchema.safeParse({
+    ...(receiverLatitude.status === 'valid'
+      ? { latitude: receiverLatitude.value }
+      : {}),
+    ...(receiverLongitude.status === 'valid'
+      ? { longitude: receiverLongitude.value }
+      : {}),
+  });
+  if (!orderPin.success || !quotePin.success) {
+    throw new OrderQuoteDestinationMismatchError();
+  }
+  const { latitude: orderLatitude, longitude: orderLongitude } = orderPin.data;
+  const { latitude: quoteLatitude, longitude: quoteLongitude } = quotePin.data;
+  const orderHasPin =
+    typeof orderLatitude === 'number' && typeof orderLongitude === 'number';
+  const quoteHasPin =
+    typeof quoteLatitude === 'number' && typeof quoteLongitude === 'number';
+  // A new checkout can adopt the validated, merchant-scoped quote's pin.
+  // Existing orders must keep their own destination provenance; matching text
+  // alone does not authorize adding or replacing their coordinates.
+  if (
+    (orderHasPin && !quoteHasPin) ||
+    (!orderHasPin && quoteHasPin && !context.isNewOrder) ||
+    (orderHasPin &&
+      quoteHasPin &&
+      (Math.abs(orderLatitude - quoteLatitude) > 1e-6 ||
+        Math.abs(orderLongitude - quoteLongitude) > 1e-6))
+  ) {
+    throw new OrderQuoteDestinationMismatchError();
+  }
+
+  context.onValidatedQuoteProvider?.(quote.provider);
   return {
     ...shippingAddress,
+    ...(!orderHasPin && quoteHasPin ? quotePin.data : {}),
     country: quoteRequest.receiver.country ?? shippingAddress.country,
     countryCode:
       quoteRequest.receiver.countryCode ?? shippingAddress.countryCode,

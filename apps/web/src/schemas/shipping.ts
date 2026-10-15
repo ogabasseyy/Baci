@@ -6,15 +6,20 @@
 import z, { type RefinementCtx } from 'zod';
 import { isValidUuid } from '@/lib/sanitize-core';
 
-const LatitudeSchema = z.number().finite().min(-90).max(90).optional();
-const LongitudeSchema = z.number().finite().min(-180).max(180).optional();
+export const LatitudeSchema = z.number().finite().min(-90).max(90).optional();
+export const LongitudeSchema = z
+  .number()
+  .finite()
+  .min(-180)
+  .max(180)
+  .optional();
 
 interface CoordinateFields {
   latitude?: number;
   longitude?: number;
 }
 
-function requireCoordinatePair(
+export function requireCoordinatePair(
   address: CoordinateFields,
   ctx: RefinementCtx,
   path: (string | number)[] = []

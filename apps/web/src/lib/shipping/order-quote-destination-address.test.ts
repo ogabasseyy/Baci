@@ -75,6 +75,20 @@ describe('normalizeAddressForQuoteMatch', () => {
 });
 
 describe('matchesQuoteDestination', () => {
+  it.each([
+    '12 Admiralty Way',
+    '12 Admiralty Way, Lagos, Lagos',
+  ])('matches a domestic composed quote street against order street %s', (address) => {
+    expect(
+      matchesQuoteDestination(
+        makeOrderAddress({ address }),
+        makeQuoteRequest({
+          receiver: { address: '12 Admiralty Way, Lagos, Lagos' },
+        })
+      )
+    ).toBe(true);
+  });
+
   it('matches a domestic quote against the same street/city/state', () => {
     expect(
       matchesQuoteDestination(makeOrderAddress(), makeQuoteRequest())
@@ -99,6 +113,18 @@ describe('matchesQuoteDestination', () => {
           address: '12 Admiralty Way, Block B',
         }),
         makeQuoteRequest()
+      )
+    ).toBe(false);
+  });
+
+  it.each([
+    '12 Admiralty Way, Block B, Lagos, Lagos',
+    '12 Admiralty Way, Abuja, FCT',
+  ])('rejects a composed quote with different destination text: %s', (address) => {
+    expect(
+      matchesQuoteDestination(
+        makeOrderAddress({ address: '12 Admiralty Way, Lagos, Lagos' }),
+        makeQuoteRequest({ receiver: { address } })
       )
     ).toBe(false);
   });

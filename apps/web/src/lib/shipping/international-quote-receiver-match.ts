@@ -71,7 +71,11 @@ export function matchesDomesticReceiverAddress(
   orderAddress: QuoteReceiverMatchAddress,
   quoteAddress: QuoteRequest['receiver']
 ): boolean {
-  const quoteStreet = normalizeReceiverMatchText(quoteAddress.address);
+  const quoteStreet = normalizeAddressForQuoteMatch(
+    quoteAddress.address,
+    quoteAddress.city,
+    quoteAddress.state
+  );
   const orderStreet = normalizeAddressForQuoteMatch(
     orderAddress.address,
     orderAddress.city,
@@ -83,5 +87,10 @@ export function matchesDomesticReceiverAddress(
   const normalizedOrderAddress = normalizeReceiverMatchText(
     orderAddress.address
   );
-  return normalizedOrderAddress.startsWith(`${quoteStreet},`);
+  // Preserve the legacy booking prefix fallback, including text appended after
+  // a composed quote's city/state suffix. Checkout destination validation stays
+  // exact after locality normalization; this does not relax that matcher.
+  return normalizedOrderAddress.startsWith(
+    `${normalizeReceiverMatchText(quoteAddress.address)},`
+  );
 }

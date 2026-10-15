@@ -34,6 +34,8 @@ export type OrderIdempotencyPayloadInput = {
   shipping_address?: {
     address?: string | null;
     city?: string | null;
+    latitude?: number;
+    longitude?: number;
     state?: string | null;
   } | null;
   shipping_fee?: number;
@@ -171,6 +173,15 @@ export function buildOrderIdempotencyPayload(
   input: OrderIdempotencyPayloadInput,
   options?: BuildOrderIdempotencyPayloadOptions
 ) {
+  const { latitude, longitude } = input.shipping_address ?? {};
+  const hasQuoteLessPin =
+    !normalizeText(input.selected_quote_id) &&
+    typeof latitude === 'number' &&
+    Number.isFinite(latitude) &&
+    Math.abs(latitude) <= 90 &&
+    typeof longitude === 'number' &&
+    Number.isFinite(longitude) &&
+    Math.abs(longitude) <= 180;
   return {
     // JSON.stringify preserves insertion order, so keep hash-significant keys
     // alphabetical to prevent accidental changes during maintenance.
@@ -193,6 +204,10 @@ export function buildOrderIdempotencyPayload(
     shipping_address: {
       address: normalizeText(input.shipping_address?.address),
       city: normalizeText(input.shipping_address?.city),
+      // A selected quote already binds its destination. Quote-less orders
+      // must bind their own pin; omit absent pins to preserve old hash bytes.
+      latitude: hasQuoteLessPin ? latitude : undefined,
+      longitude: hasQuoteLessPin ? longitude : undefined,
       state: normalizeText(input.shipping_address?.state),
     },
     shipping_fee: normalizeNumber(input.shipping_fee),

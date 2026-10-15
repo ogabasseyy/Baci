@@ -7,8 +7,13 @@ flags remain disabled by default, and no merchant is enrolled.
 ## Controls that already exist
 
 - Merchant-scoped enrollment flags (`shared_cart`, `shared_cart_realtime`,
-  `shared_cart_native`, `shared_cart_accounts`) via `merchantHasFeature`;
-  explicit grant only, disabled for all plans by default.
+  `shared_cart_accounts`) via `merchantHasFeature`; explicit grant only,
+  disabled for all plans by default. `shared_cart_native` is not a
+  `merchantHasFeature` gate: it is a raw `premium_features` value checked
+  only by the native enrollment module
+  (`apps/mobile-storefront/lib/cart/enrollment.ts`), so enrolling a
+  merchant for the pilot must set and verify it there, not through the
+  web gate helpers.
 - Bounded retention: `cleanup_commerce_carts()` deletes only expired
   operations/creation requests/events and flips only checkout-free
   expired carts (`checkout_session_id IS NULL`); active checkouts and

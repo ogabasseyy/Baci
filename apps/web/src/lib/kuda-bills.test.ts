@@ -236,20 +236,14 @@ describe('purchaseBill', () => {
     const timedOut = await purchaseBill('EKEDC-PREPAID', '1234567890', 5000);
     expect(timedOut).toMatchObject({ success: false, status: 'pending' });
 
-    vi.mocked(kudaRequest).mockRejectedValueOnce(
-      new TypeError('fetch failed')
-    );
+    vi.mocked(kudaRequest).mockRejectedValueOnce(new TypeError('fetch failed'));
     const dropped = await purchaseBill('EKEDC-PREPAID', '1234567890', 5000);
     expect(dropped).toMatchObject({ success: false, status: 'pending' });
 
     vi.mocked(kudaRequest).mockRejectedValueOnce(
       new KudaApiHttpError(503, 'Service Unavailable')
     );
-    const unavailable = await purchaseBill(
-      'EKEDC-PREPAID',
-      '1234567890',
-      5000
-    );
+    const unavailable = await purchaseBill('EKEDC-PREPAID', '1234567890', 5000);
     expect(unavailable).toMatchObject({ success: false, status: 'pending' });
 
     vi.mocked(kudaRequest).mockRejectedValueOnce(

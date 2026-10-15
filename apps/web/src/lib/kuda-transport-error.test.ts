@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isKudaOutcomeUnknown,
-  KudaApiHttpError,
-} from './kuda-transport-error';
+import { isKudaOutcomeUnknown, KudaApiHttpError } from './kuda-transport-error';
 
 describe('isKudaOutcomeUnknown', () => {
   it('treats only definitive 4xx rejections as known failures', () => {

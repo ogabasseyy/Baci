@@ -52,6 +52,31 @@ export function resolveAssuranceDefault(policy: {
 }
 
 /**
+ * True when a line defaults off only because the shipping-insurance
+ * setting is still unknown (and would default on once an affirmative
+ * true arrives). Callers stamp the line so a later settings load can
+ * reconcile it; an explicit incoming choice or a voucher line never
+ * defers.
+ */
+export function shouldDeferAssuranceDefault(
+  incoming: boolean | undefined,
+  policy: {
+    smartCartProEnabled: boolean;
+    merchantSlug: string | null | undefined;
+    hasQuizVoucher?: boolean;
+    shippingInsuranceEnabled?: boolean;
+  }
+): boolean {
+  return (
+    incoming === undefined &&
+    !policy.hasQuizVoucher &&
+    policy.smartCartProEnabled &&
+    policy.merchantSlug?.toLowerCase() === 'ogabassey' &&
+    policy.shippingInsuranceEnabled === undefined
+  );
+}
+
+/**
  * Resolves the effective shipping-insurance setting for an add: the live
  * merchant-context value, except a definite cart/context slug mismatch
  * forces it off — the line-item toggles hide on mismatch, so a

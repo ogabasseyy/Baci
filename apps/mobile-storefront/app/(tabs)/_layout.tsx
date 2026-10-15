@@ -7,6 +7,7 @@ import {
   TabBarIcon,
   TabBarLabel,
 } from '@/components/navigation/TabBarComponents';
+import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuthStore } from '@/stores/auth-store';
 import { useCartStore } from '@/stores/cart-store';
@@ -24,6 +25,10 @@ export function ErrorBoundary({
 
 export default function TabLayout() {
   const { colors } = useTheme();
+  // Warm the payment-settings cache at storefront launch so quick-adds
+  // resolve the live shipping-insurance toggle instead of unknown, and
+  // reconcile lines that were added while it was still loading.
+  useWarmMerchantPaymentSettings();
 
   const cartCount = useCartStore((state) => state.itemCount());
   const savedCount = useSavedStore((state) => state.items.length);

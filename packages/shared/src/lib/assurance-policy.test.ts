@@ -4,6 +4,7 @@ import {
   resolveAssuranceDefault,
   resolveAssuranceLabel,
   resolveAssuranceMerchantSetting,
+  shouldDeferAssuranceDefault,
 } from './assurance-policy';
 
 describe('resolveAddedLineAssurance', () => {
@@ -240,5 +241,58 @@ describe('resolveAssuranceLabel', () => {
     { merchantSlug: undefined, expected: 'Order Protection' },
   ])('labels $merchantSlug as $expected', ({ merchantSlug, expected }) => {
     expect(resolveAssuranceLabel(merchantSlug)).toBe(expected);
+  });
+});
+
+describe('shouldDeferAssuranceDefault', () => {
+  const eligible = {
+    smartCartProEnabled: true,
+    merchantSlug: 'ogabassey',
+    shippingInsuranceEnabled: undefined,
+  };
+  it('defers an eligible line only while the setting is unknown', () => {
+    expect(shouldDeferAssuranceDefault(undefined, eligible)).toBe(true);
+    expect(
+      shouldDeferAssuranceDefault(undefined, {
+        ...eligible,
+        shippingInsuranceEnabled: true,
+      })
+    ).toBe(false);
+    expect(
+      shouldDeferAssuranceDefault(undefined, {
+        ...eligible,
+        shippingInsuranceEnabled: false,
+      })
+    ).toBe(false);
+  });
+  it('never defers explicit choices, vouchers, or ineligible merchants', () => {
+    expect(shouldDeferAssuranceDefault(false, eligible)).toBe(false);
+    expect(shouldDeferAssuranceDefault(true, eligible)).toBe(false);
+    expect(
+      shouldDeferAssuranceDefault(undefined, {
+        ...eligible,
+        hasQuizVoucher: true,
+      })
+    ).toBe(false);
+    expect(
+      shouldDeferAssuranceDefault(undefined, {
+        ...eligible,
+        smartCartProEnabled: false,
+      })
+    ).toBe(false);
+    expect(
+      shouldDeferAssuranceDefault(undefined, {
+        ...eligible,
+        merchantSlug: 'another-store',
+      })
+    ).toBe(false);
+  });
+  it('matches slugs case-insensitively like the default', () => {
+    expect(
+      shouldDeferAssuranceDefault(undefined, {
+        ...eligible,
+        merchantSlug: 'OGABASSEY',
+      })
+    ).toBe(true);
   });
 });

@@ -94,6 +94,76 @@ describe('cart-store', () => {
     expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
   });
 
+  it('stamps lines added while unknown so the warm-up can reconcile them', () => {
+    getQueryData.mockReturnValue(undefined);
+    useCartStore.getState().addItem({
+      product_id: 'pending-phone',
+      slug: 'pending-phone',
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+    });
+    const [line] = useCartStore.getState().items;
+    expect(line.hasAssurance).toBe(false);
+    expect(line.assurancePendingSetting).toBe(true);
+  });
+
+  it('reconciles pending lines when the setting arrives affirmative', () => {
+    getQueryData.mockReturnValue(undefined);
+    useCartStore.getState().addItem({
+      product_id: 'pending-phone',
+      slug: 'pending-phone',
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+    });
+
+    useCartStore.getState().reconcilePendingAssuranceLines(true);
+
+    const [line] = useCartStore.getState().items;
+    expect(line.hasAssurance).toBe(true);
+    expect(line.assurancePendingSetting).toBeUndefined();
+  });
+
+  it('clears pending lines without flipping when the setting arrives off', () => {
+    getQueryData.mockReturnValue(undefined);
+    useCartStore.getState().addItem({
+      product_id: 'pending-phone',
+      slug: 'pending-phone',
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+    });
+
+    useCartStore.getState().reconcilePendingAssuranceLines(false);
+
+    const [line] = useCartStore.getState().items;
+    expect(line.hasAssurance).toBe(false);
+    expect(line.assurancePendingSetting).toBeUndefined();
+  });
+
+  it('lets an explicit toggle win over later reconciliation', () => {
+    getQueryData.mockReturnValue(undefined);
+    useCartStore.getState().addItem({
+      product_id: 'pending-phone',
+      slug: 'pending-phone',
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+    });
+    const [line] = useCartStore.getState().items;
+    // Explicitly opting out (false -> true -> false keeps a choice trail);
+    // simpler: toggle once to opt in, the flag must clear either way.
+    useCartStore.getState().toggleAssurance(line.id);
+    expect(
+      useCartStore.getState().items[0].assurancePendingSetting
+    ).toBeUndefined();
+
+    useCartStore.getState().reconcilePendingAssuranceLines(false);
+
+    expect(useCartStore.getState().items[0].hasAssurance).toBe(true);
+  });
+
   it('respects an explicit assurance opt-out on a new line', () => {
     useCartStore.getState().addItem({
       product_id: 'unassured-phone',

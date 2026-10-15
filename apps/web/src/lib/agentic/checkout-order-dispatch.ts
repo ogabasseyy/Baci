@@ -1,11 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgenticCheckoutBuyer } from '@/lib/agentic/checkout-completion-response';
 import {
+  type AgenticCheckoutOrderResult,
+  submitSharedCartBindingOrder,
+} from '@/lib/agentic/checkout-order-binding';
+import {
   computeAgenticOrderTax,
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
 import { sendAgenticWebhook } from '@/lib/agentic/webhooks';
-import { submitCartBoundOrder } from '@/lib/cart/order-binding';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
 import { logger } from '@/lib/logger';
@@ -51,51 +54,7 @@ const CLIENT_ORDER_ERROR_CODES = new Set([
   '22P02',
 ]);
 
-export interface AgenticCheckoutOrderResult {
-  data: Record<string, unknown>;
-  error?: string;
-  ok: boolean;
-  orderId?: string;
-  status: number;
-  statusText: string;
-}
-
-function boundOrderFailureResult(code: string): AgenticCheckoutOrderResult {
-  if (code === 'unauthorized') {
-    return {
-      data: { error: 'Shared cart binding is not permitted for this caller' },
-      error: 'Shared cart binding is not permitted for this caller',
-      ok: false,
-      orderId: undefined,
-      status: 403,
-      statusText: 'Forbidden',
-    };
-  }
-  if (code === 'invalid_item') {
-    return {
-      data: { error: 'Unable to create order' },
-      error: 'Unable to create order',
-      ok: false,
-      orderId: undefined,
-      status: 500,
-      statusText: 'Internal Server Error',
-    };
-  }
-  const error =
-    code === 'expired'
-      ? 'Shared checkout session expired; review the cart again'
-      : code === 'not_found'
-        ? 'Shared checkout session not found; start checkout again'
-        : 'Shared cart changed during checkout; refresh the cart and retry';
-  return {
-    data: { error },
-    error,
-    ok: false,
-    orderId: undefined,
-    status: 409,
-    statusText: 'Conflict',
-  };
-}
+export type { AgenticCheckoutOrderResult } from '@/lib/agentic/checkout-order-binding';
 
 export async function createAgenticCheckoutOrder(
   orderPayload: Record<string, unknown>,
@@ -283,59 +242,18 @@ export async function createAgenticCheckoutOrder(
     p_user_id: null,
   };
 
-  // Shared-cart checkouts submit through the binding RPC, which runs the
-  // same base order RPC inside the final transaction and closes the
-  // reviewed cart generation atomically. Binding-level failures return
-  // early; inner order rejections fall through to the existing mapper.
   const sharedCartBinding = body.shared_cart ?? null;
-  const bound = sharedCartBinding
-    ? await submitCartBoundOrder(
-        { client: supabase },
-        {
-          args: orderRpcArgs as Record<string, unknown>,
-          cartId: sharedCartBinding.cart_id,
-          cartVersion: sharedCartBinding.cart_version,
-          generation: sharedCartBinding.checkout_generation,
-          principalId: options?.boundPrincipalId ?? null,
-          sessionId: sharedCartBinding.checkout_session_id,
-          variant: 'base',
-        }
-      )
+  const bindingOutcome = sharedCartBinding
+    ? await submitSharedCartBindingOrder({
+        boundPrincipalId: options?.boundPrincipalId ?? null,
+        orderRpcArgs: orderRpcArgs as Record<string, unknown>,
+        sharedCart: sharedCartBinding,
+        supabase,
+      })
     : null;
-  if (
-    bound &&
-    !bound.ok &&
-    bound.code === 'order_rejected' &&
-    bound.message === 'cart_order_voucher_authority_required'
-  ) {
-    const error = 'Complete voucher checkout on the storefront website.';
-    return {
-      data: { error, code: 'voucher_checkout_requires_website' },
-      error,
-      ok: false,
-      status: 409,
-      statusText: 'Conflict',
-    };
-  }
-  if (
-    bound &&
-    !bound.ok &&
-    bound.code !== 'order_rejected' &&
-    bound.code !== 'temporarily_unavailable'
-  ) {
-    return boundOrderFailureResult(bound.code);
-  }
-  const { data: orderRows, error: orderError } = bound
-    ? {
-        data: bound.ok ? bound.order : null,
-        error: bound.ok
-          ? null
-          : // Inner rejections reuse the direct-path shape (code carries
-            // the message) so the mapper below behaves identically.
-            bound.code === 'order_rejected'
-            ? { code: bound.message, message: bound.message }
-            : { code: 'XX000', message: bound.message },
-      }
+  if (bindingOutcome?.kind === 'failure') return bindingOutcome.result;
+  const { data: orderRows, error: orderError } = bindingOutcome
+    ? { data: bindingOutcome.data, error: bindingOutcome.error }
     : await supabase.rpc('create_storefront_order', orderRpcArgs);
 
   const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;

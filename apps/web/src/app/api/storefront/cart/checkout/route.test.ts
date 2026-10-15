@@ -193,26 +193,52 @@ function proofHeaders(proof: string = sessionProof()) {
   return { cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${proof}` };
 }
 
+function proofExpSeconds(proof: string): number {
+  const payload = JSON.parse(
+    Buffer.from(proof.split('.')[1], 'base64url').toString('utf8')
+  ) as { exp: number };
+  return payload.exp;
+}
+
+function sessionProofExpiringAt(iso: string): string {
+  return issueCartSessionProof(
+    {
+      cartId: CART_ID,
+      grantId: GRANT_ID,
+      grantExpiresAt: iso,
+      merchantId: MERCHANT.id,
+      principalId: 'guest-a1',
+      scope: 'session',
+    },
+    { environment: 'test', secret: TEST_SECRET }
+  );
+}
+
 describe('POST /api/storefront/cart/checkout', () => {
   it('returns the authoritative snapshot with the session reference', async () => {
+    const sessionExpiresAt = new Date(Date.now() + 25 * 60 * 1000);
     mocks.cartPayload = {
       code: null,
       ok: true,
       replayed: false,
+      sessionExpiresAt: sessionExpiresAt.toISOString(),
       sessionReused: false,
       snapshot: rawSnapshot(),
     };
 
+    const incoming = sessionProof();
     const response = await postPrepare({
       body: prepareBody(),
-      headers: proofHeaders(),
+      headers: proofHeaders(incoming),
     });
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    // Preparation renews the session proof (body + cookie) so the
-    // checkout stays submittable for its whole session window.
+    // Preparation renews the session proof (body + cookie). The renewed
+    // proof never shortens the credential already held: the incoming
+    // 24-hour proof outlives the 25-minute session, so its expiry wins.
     expect(payload.proof).toMatch(/^cp1\./);
+    expect(proofExpSeconds(payload.proof)).toBe(proofExpSeconds(incoming));
     expect(response.headers.get('set-cookie')).toContain('Max-Age=');
     expect(payload.replayed).toBe(false);
     expect(payload.sessionReused).toBe(false);
@@ -220,6 +246,32 @@ describe('POST /api/storefront/cart/checkout', () => {
     expect(payload.snapshot.generation).toBe(1);
     expect(payload.snapshot.lines).toHaveLength(1);
     expect(payload.snapshot.estimates.subtotalMinor).toBe(25000);
+  });
+
+  it('extends a short-lived proof to the prepared session expiry', async () => {
+    const sessionExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      sessionExpiresAt: sessionExpiresAt.toISOString(),
+      sessionReused: true,
+      snapshot: rawSnapshot(),
+    };
+    const incoming = sessionProofExpiringAt(
+      new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    );
+
+    const response = await postPrepare({
+      body: prepareBody({ operationId: 'prep-op-extend' }),
+      headers: proofHeaders(incoming),
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(proofExpSeconds(payload.proof)).toBe(
+      Math.floor(sessionExpiresAt.getTime() / 1000)
+    );
   });
 
   it('surfaces reuse on a repeated preparation', async () => {

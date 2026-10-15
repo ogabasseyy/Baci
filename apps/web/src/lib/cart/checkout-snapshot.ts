@@ -59,6 +59,7 @@ export type PrepareCartCheckoutResult =
       snapshot: CartCheckoutSnapshot;
       replayed: boolean;
       sessionReused: boolean;
+      sessionExpiresAt: string;
     }
   | { ok: false; code: CartErrorCode; currentVersion: number | null };
 

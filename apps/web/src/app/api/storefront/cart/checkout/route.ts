@@ -24,9 +24,6 @@ import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { sharedCartPrepareRequestSchema } from '@/schemas/cart';
 
-/** Mirrors the 30-minute checkout session lifetime minted in SQL. */
-const CHECKOUT_SESSION_WINDOW_MS = 30 * 60 * 1000;
-
 /**
  * POST /api/storefront/cart/checkout
  *
@@ -100,20 +97,22 @@ export async function POST(request: NextRequest) {
           : { currentVersion: result.currentVersion }
       );
     }
-    // Renew the session proof for the checkout session window (the SQL
-    // mints/extends the session, cart and preparing grant to a shared
-    // 30-minute horizon) so a checkout prepared near cart expiry stays
-    // submittable for its whole session lifetime.
-    const sessionWindowExpiresAt = new Date(
-      Date.now() + CHECKOUT_SESSION_WINDOW_MS
-    ).toISOString();
+    // Renew the session proof bound to the prepared session's actual
+    // expiry, but never shorten the credential the shopper already
+    // holds: a longer-lived incoming proof stays authoritative so an
+    // abandoned checkout does not strand a still-active cart.
+    const proofExpiresAt =
+      Date.parse(result.sessionExpiresAt) >
+      Date.parse(context.principal.expiresAt)
+        ? result.sessionExpiresAt
+        : context.principal.expiresAt;
     let proof: string;
     try {
       proof = issueCartSessionProof(
         {
           cartId: context.principal.cartId,
           grantId: context.principal.grantId,
-          grantExpiresAt: sessionWindowExpiresAt,
+          grantExpiresAt: proofExpiresAt,
           merchantId: context.merchant.id,
           principalId: context.principal.principalId,
           scope: 'session',
@@ -132,7 +131,7 @@ export async function POST(request: NextRequest) {
       sessionReused: result.sessionReused,
       snapshot: result.snapshot,
     });
-    const cookieMaxAge = cartSessionCookieMaxAge(sessionWindowExpiresAt);
+    const cookieMaxAge = cartSessionCookieMaxAge(proofExpiresAt);
     if (cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
     }

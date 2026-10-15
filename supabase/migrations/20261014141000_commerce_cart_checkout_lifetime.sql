@@ -91,7 +91,9 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'code', 'expired', 'replayed', false,
         'snapshot', null, 'currentVersion', v_new_version);
     END IF;
-    RETURN pg_catalog.jsonb_set(v_existing.result, '{replayed}', 'true', true);
+    RETURN pg_catalog.jsonb_set(
+      pg_catalog.jsonb_set(v_existing.result, '{replayed}', 'true', true),
+      '{sessionExpiresAt}', pg_catalog.to_jsonb(v_session.expires_at), true);
   END IF;
 
   SELECT * INTO v_cart
@@ -152,6 +154,7 @@ BEGIN
   SELECT public.commerce_cart_build_checkout_snapshot(v_merchant, p_cart_id) INTO v_snapshot;
   v_result := jsonb_build_object('ok', true, 'code', null, 'replayed', false,
     'sessionReused', v_reused,
+    'sessionExpiresAt', v_session.expires_at,
     'snapshot', v_snapshot || jsonb_build_object(
       'checkoutSessionId', v_session.id,
       'generation', v_session.checkout_generation,

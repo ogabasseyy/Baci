@@ -77,6 +77,12 @@ export async function prepareCartCheckout(
       ok: true,
       replayed: data.replayed === true,
       sessionReused: data.sessionReused === true,
+      // Defensive fallback for a database that predates the
+      // sessionExpiresAt result field (mixed deploy window).
+      sessionExpiresAt:
+        typeof data.sessionExpiresAt === 'string'
+          ? data.sessionExpiresAt
+          : new Date(Date.now() + 30 * 60 * 1000).toISOString(),
       snapshot,
     };
   } catch (error) {

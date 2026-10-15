@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import type { Order } from '@baci/shared';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { canUseSelectedShippingProvider } from '@/lib/order-shipment';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
@@ -116,6 +116,9 @@ const props = {
   step: 'method' as const,
   visible: true,
 };
+type GiglShipping = NonNullable<
+  ComponentProps<typeof ShipmentFlowSheet>['giglShipping']
+>;
 const recoveryLabel = 'Confirm destination and refresh paid quote';
 
 describe('ShipmentFlowSheet prepaid recovery reachability', () => {
@@ -201,7 +204,25 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
       quote: null,
       state: 'idle',
       wallet: null,
-    } as never;
+      ensureFreshQuoteForConfirmation: vi
+        .fn<GiglShipping['ensureFreshQuoteForConfirmation']>()
+        .mockResolvedValue(false),
+      refreshBalance: vi
+        .fn<GiglShipping['refreshBalance']>()
+        .mockResolvedValue(null),
+      refreshFundingAccount: vi
+        .fn<GiglShipping['refreshFundingAccount']>()
+        .mockResolvedValue(null),
+      requestQuote: vi
+        .fn<GiglShipping['requestQuote']>()
+        .mockResolvedValue(null),
+      reset: vi.fn<GiglShipping['reset']>(),
+      startFunding: vi
+        .fn<GiglShipping['startFunding']>()
+        .mockResolvedValue(undefined),
+      startTransferPoll: vi.fn<GiglShipping['startTransferPoll']>(),
+      updateAddressField: vi.fn<GiglShipping['updateAddressField']>(),
+    } satisfies GiglShipping;
     const { rerender } = render(
       <ShipmentFlowSheet
         {...props}

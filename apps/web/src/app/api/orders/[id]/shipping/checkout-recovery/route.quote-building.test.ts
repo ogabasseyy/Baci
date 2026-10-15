@@ -8,6 +8,7 @@ import {
 import {
   recoveryContext as context,
   primeRecoveryMocks,
+  recoveryQuote as quote,
   recoveryQuoteId as quoteId,
   postRecovery as request,
 } from './route.test-support';
@@ -130,6 +131,81 @@ describe('paid checkout shipping recovery quote building', () => {
     expect(mocks.rpc.mock.calls.map(([name]) => name)).not.toContain(
       'confirm_customer_checkout_shipping_recovery'
     );
+  });
+  it('accepts a current GoStandard quote for a legacy standard label without changing the paid fee', async () => {
+    mocks.quotes.mockResolvedValue([
+      {
+        ...quote,
+        serviceTier: 'GoStandard',
+        providerRateId: 'GIGL_30_0_1_0_0_4',
+      },
+    ]);
+    const response = await request();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      canConfirm: true,
+      paidShippingFee: 110,
+      quote: { price: 110 },
+    });
+  });
+  it('uses verified rate identity despite obsolete tier and carrier labels', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ...context,
+        quote_preference: {
+          ...context.quote_preference,
+          service_tier: 'Legacy delivery',
+          carrier_name: 'Old carrier label',
+          provider_rate_id: 'GIGL_30_0_1',
+        },
+      },
+      error: null,
+    });
+    mocks.quotes.mockResolvedValue([
+      {
+        ...quote,
+        serviceTier: 'GoFaster',
+        providerRateId: 'GIGL_30_0_1_0_1_4',
+      },
+      {
+        ...quote,
+        serviceTier: 'GoStandard',
+        providerRateId: 'GIGL_30_0_1_0_0_4',
+      },
+    ]);
+    const response = await request();
+    expect(response.status).toBe(200);
+    const staged = mocks.rpc.mock.calls.find(
+      ([name]) => name === 'prepare_customer_checkout_shipping_recovery'
+    );
+    expect(staged?.[1].p_quote).toMatchObject({
+      service_tier: 'GoStandard',
+      price: 110,
+    });
+  });
+  it('keeps the same-price gate for a matching renamed service', async () => {
+    mocks.quotes.mockResolvedValue([
+      { ...quote, serviceTier: 'GoStandard', price: 120 },
+    ]);
+    const response = await request();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      canConfirm: false,
+      previewId: null,
+      paidShippingFee: 110,
+    });
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  });
+  it('rejects a different service even when its fee matches', async () => {
+    mocks.quotes.mockResolvedValue([
+      {
+        ...quote,
+        serviceTier: 'GoFaster',
+        providerRateId: 'GIGL_30_0_1_0_1_4',
+      },
+    ]);
+    expect((await request()).status).toBe(503);
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
   });
   it('maps staging rejections to a structured JSON error', async () => {
     mocks.rpc.mockImplementation(async (name: string) => {

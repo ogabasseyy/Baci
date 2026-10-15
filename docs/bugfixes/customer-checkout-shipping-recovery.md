@@ -182,3 +182,13 @@ city and state are verified unchanged. Changed or ambiguous destinations clear
 the postcode override explicitly, preventing the quote builder from inheriting
 old camel-case metadata. Existing atomic confirmation removes both old postcode
 aliases when the signed replacement has none, preserving the original audit.
+
+## Legacy GIG service labels
+
+Recovery accepts the known `standard`/`GoStandard` alias and verified domestic
+rate identities across recognized legacy/current formats. Malformed rate
+fields cannot use permissive parser defaults to override a saved preference.
+Unknown or different tiers remain blocked, and provider/currency/address-only
+filters plus the same-paid-fee, proof and explicit-confirmation gates remain.
+The shipping-sheet fixture now satisfies the actual hook contract without
+`as never`, so missing required fields are caught by typecheck.

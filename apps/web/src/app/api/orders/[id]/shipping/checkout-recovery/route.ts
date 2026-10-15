@@ -12,6 +12,7 @@ import {
 import { checkCsrfProtection } from '@/lib/csrf';
 import { ShippingService } from '@/lib/shipping';
 import { buildOrderGiglQuoteRequest } from '@/lib/shipping/build-order-gigl-quote-request';
+import { matchesCheckoutRecoveryQuotePreference } from '@/lib/shipping/matches-checkout-recovery-quote-preference';
 import { selectPreferredQuote } from '@/lib/shipping/order-shipment-booking-utils';
 import { prepareCheckoutShippingRecovery } from '@/lib/shipping/prepare-checkout-shipping-recovery';
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
@@ -180,10 +181,7 @@ export async function POST(
         candidate.provider === 'GIGL' &&
         candidate.currency === 'NGN' &&
         !candidate.isStationPickup &&
-        (!preference?.service_tier ||
-          candidate.serviceTier === preference.service_tier) &&
-        (!preference?.carrier_name ||
-          candidate.carrierName === preference.carrier_name)
+        matchesCheckoutRecoveryQuotePreference(candidate, preference)
     ),
     {
       serviceTier: preference?.service_tier ?? null,

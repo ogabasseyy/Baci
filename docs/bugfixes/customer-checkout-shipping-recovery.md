@@ -213,3 +213,5 @@ pre-refund quote or the complete surviving snapshot from a recovery quote.
 Both validation and shipment mapping compare package weight and dimensions,
 including duplicate product names; only surviving quantities reach the carrier.
 Mixed snapshots, changed packages and zero surviving units remain blocked.
+International quote validation retains the original quantities used by its
+quote producers; actual international shipments still omit refunded units.

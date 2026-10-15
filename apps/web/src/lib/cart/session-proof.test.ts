@@ -205,7 +205,7 @@ describe('issueCartSessionProof', () => {
     }
   });
 
-  it('verifies proofs minted before the ops claim with the full vocabulary', () => {
+  it('verifies proofs minted before the ops claim without widening their authority', () => {
     const issuedAt = Math.floor(
       new Date('2026-10-12T04:00:00Z').getTime() / 1000
     );
@@ -233,15 +233,9 @@ describe('issueCartSessionProof', () => {
 
     expect(verified.ok).toBe(true);
     if (verified.ok) {
-      expect(verified.session.allowedOperations).toEqual([
-        'add',
-        'set_quantity',
-        'remove',
-        'clear',
-        'replace',
-        'set_assurance',
-        'set_negotiated_price',
-      ]);
+      // A pre-ops proof may still identify the session for reads and
+      // revocation, but it must not acquire mutations it never encoded.
+      expect(verified.session.allowedOperations).toEqual([]);
     }
   });
 });

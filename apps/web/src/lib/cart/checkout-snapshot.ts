@@ -108,7 +108,7 @@ function parseLine(value: unknown): CartCheckoutLine | null {
     !isInteger(value.effectiveUnitPriceMinor) ||
     typeof value.priceChanged !== 'boolean' ||
     typeof value.available !== 'boolean' ||
-    typeof value.stockQty !== 'number'
+    !isInteger(value.stockQty)
   ) {
     return null;
   }

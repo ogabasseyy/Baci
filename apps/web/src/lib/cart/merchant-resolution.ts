@@ -192,12 +192,24 @@ function isSharedPlatformHost(host: string, rootDomain: string): boolean {
   );
 }
 
+function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
+  return (
+    host === rootDomain ||
+    host === `www.${rootDomain}` ||
+    host === `api.${rootDomain}` ||
+    host === `api-staging.${rootDomain}` ||
+    host === 'localhost' ||
+    host === '127.0.0.1'
+  );
+}
+
 /**
- * True when the request arrived on a shared platform host (api.*, the
- * root domain, local or deployment hosts) rather than a merchant
- * storefront or custom domain. Platform-host callers are the
- * native/programmatic surface; storefront-host callers are browser
- * sessions whose credentials must stay inside httpOnly cookies.
+ * True when a bootstrap proof may leave in the response body rather
+ * than only in the httpOnly cookie. Merchant resolution is broader:
+ * Vercel deployment hosts may select a merchant by hint so previews
+ * work, but arbitrary deployment hosts are not a credential-disclosure
+ * surface. Body proofs are limited to the production/staging API,
+ * root, and local native/programmatic hosts.
  */
 export function requestUsesSharedPlatformHost(
   request: Request,
@@ -208,7 +220,7 @@ export function requestUsesSharedPlatformHost(
     process.env.NEXT_PUBLIC_ROOT_DOMAIN ??
     'usebaci.com'
   ).toLowerCase();
-  return isSharedPlatformHost(requestHost(request), resolvedRoot);
+  return isBodyProofPlatformHost(requestHost(request), resolvedRoot);
 }
 
 export async function resolveCartMerchant(

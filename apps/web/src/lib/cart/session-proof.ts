@@ -82,8 +82,8 @@ const proofPayloadSchema = z.strictObject({
   iat: z.number().int().positive(),
   merchantId: z.uuid(),
   // Grant operations encoded at issuance; absent on proofs minted
-  // before this claim existed (they verify with the full vocabulary,
-  // matching the behavior those proofs were issued under).
+  // before this claim existed. Those legacy proofs fail closed with
+  // no mutation operations until the server re-issues them.
   ops: z.array(cartOperationSchema).max(7).optional(),
   principalId: z.string().min(1).max(128),
   scope: z.enum(['bootstrap', 'session']),
@@ -262,11 +262,10 @@ function verifyCartProof(
     // The proof carries the grant's operations from issuance, so the
     // TypeScript authority is exactly the grant's — a restricted grant
     // stays restricted at every layer, not only in SQL. Proofs minted
-    // before the ops claim existed verify with the full vocabulary.
+    // before the ops claim existed carry no mutation authority here;
+    // the server must re-issue them with the grant's verified list.
     allowedOperations:
-      payload.scope === 'session'
-        ? [...(payload.ops ?? CART_FULL_SESSION_OPERATIONS)]
-        : [],
+      payload.scope === 'session' ? [...(payload.ops ?? [])] : [],
     cartId: payload.cartId,
     expiresAt: new Date(payload.exp * 1000).toISOString(),
     grantId: payload.grantId,

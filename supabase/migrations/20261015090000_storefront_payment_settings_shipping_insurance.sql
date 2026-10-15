@@ -7,9 +7,11 @@
 -- extends the existing SECURITY DEFINER RPC (anon/customer-safe, same
 -- GRANTs) with one appended column; COALESCE keeps merchants without a
 -- settings row fail-closed. Appended at the end of the RETURNS TABLE so
--- existing positional readers are unaffected. Reruns converge: CREATE
--- OR REPLACE re-applies the same definition.
-CREATE OR REPLACE FUNCTION public.get_storefront_payment_settings(
+-- existing positional readers are unaffected. Reruns converge: DROP +
+-- CREATE re-applies the same definition (CREATE OR REPLACE cannot
+-- widen the return type from 13 to 14 columns).
+DROP FUNCTION IF EXISTS public.get_storefront_payment_settings(uuid);
+CREATE FUNCTION public.get_storefront_payment_settings(
   p_merchant_id uuid
 ) RETURNS TABLE(
   paystack_enabled boolean,

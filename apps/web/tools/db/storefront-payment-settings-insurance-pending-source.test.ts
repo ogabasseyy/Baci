@@ -7,7 +7,7 @@ describe('bugfix: payment-settings insurance migration missing from pending regi
     const repositoryPath =
       'supabase/migrations/20261015090000_storefront_payment_settings_shipping_insurance.sql';
     const sha256 =
-      '7a2f5802a4b8292b23474ab09075a23add4e65c02b3b46e7a9fc1d211ad61229';
+      '5d563615e5bc1d14623f18f69f6c714bf818da85d1e89a9d485fc774f3cce8f3';
 
     expect(EXPECTED_PENDING_SOURCES).toContainEqual({
       repositoryPath,

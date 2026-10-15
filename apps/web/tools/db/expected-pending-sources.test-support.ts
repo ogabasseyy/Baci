@@ -290,7 +290,7 @@ export const EXPECTED_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261015090000_storefront_payment_settings_shipping_insurance.sql',
-    sha256: '7a2f5802a4b8292b23474ab09075a23add4e65c02b3b46e7a9fc1d211ad61229',
+    sha256: '5d563615e5bc1d14623f18f69f6c714bf818da85d1e89a9d485fc774f3cce8f3',
   },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,

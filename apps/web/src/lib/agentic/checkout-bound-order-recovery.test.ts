@@ -82,12 +82,25 @@ describe('bound finalization recovery', () => {
     ).not.toHaveBeenCalled();
   });
   it('releases a claim after a transient lookup failure', async () => {
+    vi.clearAllMocks();
     const { input } = fixture('pending', 'pending', new Error('offline'));
     expect(await verifyBoundFinalizationOrder(input)).toEqual({
       ok: false,
       status: 500,
       error: 'Could not verify order',
     });
+    expect(releaseFinalizationClaimSafely).toHaveBeenCalledTimes(1);
+    expect(releaseFinalizationClaimSafely).toHaveBeenCalledWith(
+      expect.objectContaining({
+        finalizationClaim: input.finalizationClaim,
+        orderId: input.orderId,
+        merchantId: input.merchantId,
+        sessionId: input.sessionId,
+      })
+    );
+    expect(
+      compensateCreatedOrderAfterFinalizationFailure
+    ).not.toHaveBeenCalled();
   });
   it('preserves bound receipts while retaining unbound compensation', async () => {
     vi.clearAllMocks();

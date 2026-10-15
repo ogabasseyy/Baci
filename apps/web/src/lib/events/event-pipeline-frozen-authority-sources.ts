@@ -42,6 +42,8 @@ export const eventPipelineFrozenRoutes = {
   // (500 -> 400, a client error); payment/notification authority unchanged.
   // Re-pinned for condition-offer validation errors as client errors;
   // payment, notification and credential authority are unchanged.
+  // Re-pinned for early cart-proof checks and claimed-voucher binding replay;
+  // payment, notification and credential authority remain unchanged.
   'apps/web/src/app/api/orders/route.ts':
     'b813e7ae4aa22422d311d7cc1577abd781bafbfd5ecffdc5aa4d8ff781d699af',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind

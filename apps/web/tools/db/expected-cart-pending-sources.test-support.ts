@@ -189,4 +189,14 @@ export const EXPECTED_CART_PENDING_SOURCES = [
       'supabase/migrations/20261015151000_commerce_cart_partial_voucher_binding.sql',
     sha256: 'a5e398ad3aa10a72c12b0367f768090371f64c1ac25a10387f05f423eea43141',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015152000_commerce_cart_voucher_pair_writers.sql',
+    sha256: '6d8c0c3983a5bd66c790c784e6777ea34f532d259a87411b932508911e8ef5f9',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015153000_commerce_cart_terminal_purge.sql',
+    sha256: 'd4a8a00ff18b8a6f8d213c5ff15b663fd26c13bab33f98c98eae20b31da1673b',
+  },
 ] as const;

@@ -128,7 +128,12 @@ async function resolveLegacyFeedTarget(
 
   const verifiedHost = normalizeHost(domain?.domain ?? null);
 
-  if (!domain?.merchant_id || !verifiedHost || !isSafeHostname(verifiedHost)) {
+  if (
+    !domain?.merchant_id ||
+    !verifiedHost ||
+    verifiedHost !== host ||
+    !isSafeHostname(verifiedHost)
+  ) {
     throw new MerchantNotFoundError(host);
   }
 
@@ -163,15 +168,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const target = await resolveLegacyFeedTarget(host);
-    // SAFE: `target.redirectHost` is constrained by `isAllowedRedirectHost`
-    // inside `resolveLegacyFeedTarget` — it is either a `${slug}.<rootDomain>`
-    // for the managed flow or the exact `domain` column of an active row in
-    // the `domains` table for custom domains. Any other value throws
-    // `MerchantNotFoundError`. Request input cannot drive the authority.
-    const redirectUrl = new URL(
-      '/api/feed/google-merchant',
-      `https://${target.redirectHost}`
-    );
+    // Build from a fixed HTTPS origin, then assign only the verified hostname.
+    // The URL parser cannot reinterpret the host as a scheme, userinfo or path.
+    const redirectUrl = new URL('https://usebaci.com/api/feed/google-merchant');
+    redirectUrl.hostname = target.redirectHost;
+    if (redirectUrl.hostname !== target.redirectHost) {
+      throw new MerchantNotFoundError(host);
+    }
     redirectUrl.searchParams.set('merchant_slug', target.merchantSlug);
 
     return NextResponse.redirect(redirectUrl, 308);

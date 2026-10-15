@@ -96,3 +96,58 @@ in the clean release checkout; do not disable global hooks to make an old checko
 GitHub concurrency does not automatically serialize other workflows merely
 because they share an environment. All production entry points must participate
 in the same coordination protocol. Keep cancel-in-progress disabled across mutations.
+
+## Checkout-shipping recovery activation and rollback floor
+
+The initial eleven recovery migrations form one atomic group in the production
+migration applier: RPC creation, grants, later guards and the closed activation
+row become visible together. Before release, require either the entire group
+pending or the entire group already applied; stop and reconcile partial history.
+The recovery activation migration defaults the private release row to disabled.
+Context and preparation, and every first confirmation, enforce it inside the
+shared database assertion. Application UI state cannot enable it. Confirmed
+idempotent acknowledgments remain read-only and keep their existing actor and
+selected-quote checks. Disabling the row waits for in-flight recovery
+transactions holding its shared lock.
+
+Run the existing coordinator from clean current main with the approved flags.
+Keep recovery disabled while its migrations, worker capability smoke, app
+publication, serving alias and health checks run. Complete Android recovery QA
+against approved isolated fixtures before activation. Do not publish the mobile
+feature or call live carrier booking as a substitute for QA.
+
+The first successfully verified coordinated deployment establishes the new
+compatible rollback floor: its commit must contain the reviewed complete-original
+or complete-surviving domestic quote validation, shipment mapping, and passing
+refund/package regressions. Resolve the actual `ogabassey.com` production alias
+and verify READY, expected project and exact commit; record that immutable
+production deployment ID and commit as the compatible artifact. Keep it retained
+and available for production rollback. The pre-recovery deployment
+`32e893bf99bb8060e55e7440d3288418efa43189` is incompatible after recovery writes
+and must not be used; the activation table independently rejects that known SHA.
+
+Only after all these checks, the release operator may use the approved database
+connection to update the single operational row, with the verified values:
+
+```sql
+BEGIN;
+UPDATE private.checkout_shipping_recovery_release_activation
+SET enabled = true,
+    rollback_deployment_id = '<verified production deployment ID>',
+    rollback_commit_sha = '<verified compatible commit SHA>',
+    verified_at = now()
+WHERE singleton IS TRUE AND enabled IS FALSE
+RETURNING enabled, rollback_deployment_id, rollback_commit_sha, verified_at;
+COMMIT;
+```
+
+The placeholders must be replaced with live verified metadata. Require exactly
+one returned row, then read the row back. A missing or already-enabled row needs
+reconciliation, not an unguarded retry. This is release configuration, not order
+data; no production order, quote, funding or refund is manually edited. The
+activation row has RLS and no client or service-role table privileges.
+
+To stop new recovery writes during an incident, the operator may set only
+`enabled = false` on this singleton row and verify it. This does not undo saved
+quotes, change fees, book shipments, or make the old incompatible deployment safe
+to restore. Use only a compatible retained artifact for application rollback.

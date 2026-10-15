@@ -76,6 +76,22 @@ describe('GET /api/integrations/google-merchant-center/feed', () => {
     expect(mockResolveFeedMerchant).toHaveBeenCalledWith('merchant-1', false);
   });
 
+  it('rejects a mismatched database authority instead of redirecting to another active domain', async () => {
+    mockDomainLookup({
+      data: { merchant_id: 'merchant-1', domain: 'other-store.example' },
+      error: null,
+    });
+    const { GET } = await import('./route');
+    const response = await GET(
+      makeRequest(
+        'https://ogabassey.com/api/integrations/google-merchant-center/feed',
+        { host: 'ogabassey.com' }
+      )
+    );
+    expect(response.status).toBe(404);
+    expect(response.headers.get('location')).toBeNull();
+  });
+
   it('redirects managed subdomain requests without querying domains', async () => {
     process.env.NEXT_PUBLIC_ROOT_DOMAIN = 'usebaci.com';
     const { GET } = await import('./route');
@@ -149,8 +165,8 @@ describe('GET /api/integrations/google-merchant-center/feed', () => {
       makeRequest(
         'https://internal.baci.app/api/integrations/google-merchant-center/feed',
         {
-          host: 'internal.baci.app',
-          'x-forwarded-host': 'ogabassey.com',
+          host: 'ogabassey.com',
+          'x-forwarded-host': 'attacker.example',
           'x-forwarded-proto': 'http',
         }
       )

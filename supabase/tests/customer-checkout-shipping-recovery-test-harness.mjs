@@ -15,6 +15,7 @@ function definition(name, schema, functionName) {
 }
 export function createCustomerCheckoutShippingRecoveryTestDatabase({
   beforeFix = false,
+  activateRecovery = true,
 } = {}) {
   const database = createShippingQuoteProofTestDatabase();
   return {
@@ -65,6 +66,11 @@ export function createCustomerCheckoutShippingRecoveryTestDatabase({
           )
           .sort()) {
           database.query(readFileSync(resolve(migrations, name), 'utf8'));
+        }
+        if (activateRecovery) {
+          database.query(`UPDATE private.checkout_shipping_recovery_release_activation
+            SET enabled=true, rollback_deployment_id='dpl_syntheticCompatible',
+              rollback_commit_sha='8c8df7846777f714cfb573c44eb215059e09b7d4', verified_at=now();`);
         }
       }
     },

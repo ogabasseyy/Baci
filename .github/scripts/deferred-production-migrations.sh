@@ -48,6 +48,36 @@ atomic_migration_group_next_base() {
     20261002233000_lossless_discovery_research_revision)
       printf '%s\n' '20261003021500_authorize_discovery_research_reader'
       ;;
+    20261013213516_customer_checkout_shipping_recovery_context)
+      printf '%s\n' '20261013213522_customer_checkout_shipping_recovery_confirmation'
+      ;;
+    20261013213522_customer_checkout_shipping_recovery_confirmation)
+      printf '%s\n' '20261014080000_customer_checkout_shipping_recovery_scalar_address'
+      ;;
+    20261014080000_customer_checkout_shipping_recovery_scalar_address)
+      printf '%s\n' '20261014120000_customer_checkout_shipping_recovery_review_followups'
+      ;;
+    20261014120000_customer_checkout_shipping_recovery_review_followups)
+      printf '%s\n' '20261014130000_customer_checkout_shipping_recovery_hardening'
+      ;;
+    20261014130000_customer_checkout_shipping_recovery_hardening)
+      printf '%s\n' '20261014140000_customer_checkout_shipping_recovery_confirm_hardening'
+      ;;
+    20261014140000_customer_checkout_shipping_recovery_confirm_hardening)
+      printf '%s\n' '20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index'
+      ;;
+    20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index)
+      printf '%s\n' '20261015124602_customer_checkout_shipping_recovery_address_aliases'
+      ;;
+    20261015124602_customer_checkout_shipping_recovery_address_aliases)
+      printf '%s\n' '20261015130721_customer_checkout_shipping_recovery_delivery_boundary'
+      ;;
+    20261015130721_customer_checkout_shipping_recovery_delivery_boundary)
+      printf '%s\n' '20261015145945_customer_checkout_shipping_recovery_committed_retry'
+      ;;
+    20261015145945_customer_checkout_shipping_recovery_committed_retry)
+      printf '%s\n' '20261015215000_customer_checkout_shipping_recovery_activation_gate'
+      ;;
     *)
       return 1
       ;;

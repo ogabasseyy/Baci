@@ -165,11 +165,11 @@ jobs:
           EOF
           chmod 700 "$fetch_askpass"
           GIT_ASKPASS="$fetch_askpass" GIT_TERMINAL_PROMPT=0 \
-            git -c credential.helper= fetch --no-tags --prune origin \
+            git -c credential.helper= fetch --no-tags origin \
             "${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
+          diff_out="$(git diff --name-only --diff-filter=d "origin/${{ github.event.pull_request.base.ref }}...HEAD" -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml')"
           mapfile -t changed_files < <(
-            git diff --name-only --diff-filter=d "origin/${{ github.event.pull_request.base.ref }}...HEAD" -- \
-              '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml' |
+            printf '%s\n' "$diff_out" |
             grep -E '^(next\.config\.ts$|apps/web/src/app/api/|apps/web/src/lib/|apps/web/src/schemas/|apps/mobile-admin/(app|hooks|lib)/|apps/mobile-storefront/(app|hooks|lib|services|stores)/|packages/shared/|supabase/migrations/|\.github/workflows/)' ||
             true
           )

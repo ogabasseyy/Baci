@@ -7,6 +7,8 @@ repo_root="$(cd "$script_dir/../.." && pwd)"
 
 cd "$repo_root"
 
+node --test "$script_dir/checkout-recovery-atomic-release.test.mjs" "$script_dir/security-pr-scope.test.mjs"
+
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sql_parser.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_nested_queries.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability.test.mjs"

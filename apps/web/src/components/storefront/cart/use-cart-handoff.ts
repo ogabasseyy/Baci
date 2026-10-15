@@ -11,6 +11,7 @@ import {
   loadOrCreateAttemptId,
   type MergeConflictView,
   type PreviewResponse,
+  redactHandoffFragment,
 } from './cart-handoff-support';
 export function useCartHandoff(props: { token: string; handoffId: string }) {
   const { token, handoffId } = props;
@@ -27,15 +28,8 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const bootstrapRequired = useRef(false);
-  // Strip the pairing fragment before anything else runs: fragments never
-  // reach the server, and removing it keeps the secret out of history,
-  // session replays and any third-party script that reads the URL.
   useLayoutEffect(() => {
-    window.history.replaceState(
-      null,
-      '',
-      window.location.pathname + window.location.search
-    );
+    redactHandoffFragment();
   }, []);
 
   const loadStarted = useRef(false);

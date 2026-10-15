@@ -37,6 +37,9 @@ with tempfile.TemporaryDirectory(prefix='cart-condition-order-') as directory:
             sql += re.search(r'CREATE OR REPLACE FUNCTION public\.commerce_cart_condition_pool_is_quantity_managed\([\s\S]*?\$\$;',fixed).group()
             sql += re.search(r'CREATE OR REPLACE FUNCTION private.create_storefront_order_unchecked\([\s\S]*?\$\$;', fixed).group()
             sql += fixed[fixed.index('-- Safe projection for order-route'):]
+        if '--baseline' not in sys.argv:
+            repair=(root / 'supabase/migrations/20261015140000_commerce_cart_claim_lock_order.sql').read_text()
+            sql += repair + repair  # Reapplying is safe and preserves the required loop.
         sql += (root / 'supabase/tests/commerce_cart_condition_order_assertions.sql').read_text() + '\nROLLBACK;'
         if '--baseline' not in sys.argv:
             index_migration=(root / 'supabase/migrations/20261015130800_commerce_cart_condition_offer_index.sql').read_text()

@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { formatMinor, loadOrCreateAttemptId } from './cart-handoff-support';
+import {
+  formatMinor,
+  loadOrCreateAttemptId,
+  redactHandoffFragment,
+} from './cart-handoff-support';
 
 it('preserves the redemption attempt after a response is lost', () => {
   sessionStorage.clear();
@@ -24,4 +28,17 @@ it('keeps a stable attempt when storage access throws', () => {
   } finally {
     if (getter) Object.defineProperty(window, 'localStorage', getter);
   }
+});
+
+it('removes pairing fragments while preserving the destination path and query', () => {
+  window.history.replaceState(
+    null,
+    '',
+    '/cart/handoff?handoff_id=example#private-token'
+  );
+  redactHandoffFragment();
+  expect(window.location.pathname + window.location.search).toBe(
+    '/cart/handoff?handoff_id=example'
+  );
+  expect(window.location.hash).toBe('');
 });

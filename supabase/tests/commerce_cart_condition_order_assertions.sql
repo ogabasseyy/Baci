@@ -136,3 +136,14 @@ DO $$ DECLARE before_orders integer; before_offer integer; BEGIN
  IF (SELECT count(*) FROM orders) IS DISTINCT FROM before_orders OR (SELECT stock_quantity FROM product_offers WHERE id='44444444-4444-4444-8444-444444444444') IS DISTINCT FROM before_offer THEN RAISE EXCEPTION 'unsupported serialized condition created order or consumed aggregate stock'; END IF;
  IF EXISTS(SELECT 1 FROM public.get_order_condition_prices('11111111-1111-4111-8111-111111111111',ARRAY['33333333-3333-4333-8333-333333333333']::uuid[]) WHERE status='active' OR price IS NOT NULL) THEN RAISE EXCEPTION 'unsupported serialized condition exposed purchasable price'; END IF;
 END $$;
+
+-- The condition-aware replacement must retain the existing serialized claim
+-- lock order. CI checks the same final function, not just the historical leaf.
+DO $$ DECLARE body text; BEGIN
+ SELECT pg_catalog.pg_get_functiondef(p.oid) INTO STRICT body
+ FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+ WHERE n.nspname='private' AND p.proname='create_storefront_order_unchecked' AND p.pronargs=24;
+ IF body !~ 'FOR\s+v_item\s+IN\s+SELECT\s+oi\.id\s*,\s*oi\.product_id[^;]*?ORDER\s+BY\s+oi\.product_id\s*,\s*oi\.variant_id\s*,\s*oi\.id\s+LOOP(?:(?!END\s+LOOP).)*claim_variant_inventory_units_for_order_item_internal' THEN
+  RAISE EXCEPTION 'condition-aware claim loop lost product/variant/item lock order';
+ END IF;
+END $$;

@@ -31,6 +31,9 @@ try:
     # EVERY final cart function, including the private owner implementation.
     for match in re.finditer(r'CREATE OR REPLACE FUNCTION public\.[\s\S]*?\$\$;',f.read_text()): sql+='\n'+match.group()
    else: sql+='\n\\i '+str(f)
+ if '--baseline' not in sys.argv:
+  for name in ['20261015141000_commerce_cart_mutation_lifetime_cap.sql','20261015142000_commerce_cart_replace_attachment_identity.sql']:
+   sql+='\n'+(root/'supabase/migrations'/name).read_text()
  tests=(root/'supabase/tests/commerce_cart_verified_legacy_bridge.sql').read_text()
  if '--baseline' in sys.argv:
   tests=tests.split('-- Negotiation accepted')[0]+tests[tests.index('DO $$ DECLARE failures text;'):]

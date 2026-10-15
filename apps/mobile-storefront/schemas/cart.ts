@@ -39,7 +39,26 @@ export const nativeCartSnapshotSchema = z.object({
     )
     .max(20),
 });
+const safeConflictOffer = z.object({
+  quantity: z.number().int().min(1).max(10),
+  hasVoucher: z.boolean(),
+  hasNegotiation: z.boolean(),
+});
+export const nativeCartMergeConflictsSchema = z
+  .array(
+    z.object({
+      item: identity,
+      existing: safeConflictOffer,
+      incoming: safeConflictOffer,
+    })
+  )
+  .min(1)
+  .max(20);
+export type NativeCartMergeConflicts = z.infer<
+  typeof nativeCartMergeConflictsSchema
+>;
 export const nativeCartReplySchema = z.object({
+  conflicts: nativeCartMergeConflictsSchema.optional(),
   snapshot: nativeCheckoutSnapshotSchema.optional(),
   sessionReused: z.boolean().optional(),
   cart: nativeCartSnapshotSchema.nullable().optional(),

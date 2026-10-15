@@ -422,3 +422,118 @@ it('persists the bootstrap proof from a keep_existing redemption with no destina
     'cp1.bootstrap.signature'
   );
 });
+
+it('preserves only safe redeem conflicts and never saves proof from a rejected merge', async () => {
+  const s = setup();
+  const conflict = {
+    item: { productId: merchant },
+    existing: {
+      quantity: 1,
+      hasVoucher: true,
+      hasNegotiation: false,
+      voucherToken: 'PRIVATE',
+    },
+    incoming: {
+      quantity: 2,
+      hasVoucher: false,
+      hasNegotiation: true,
+      negotiatedUnitPriceMinor: 12,
+    },
+  };
+  s.fetcher.mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        code: 'merge_conflict',
+        conflicts: [conflict],
+        proof: 'cp1.rejected.signature',
+      }),
+      { status: 409 }
+    )
+  );
+  const error = await s.client
+    .redeem({
+      token: 'ch1.payload.signature',
+      handoffId: cart,
+      attemptId: 'attempt',
+      choice: 'merge',
+    })
+    .catch((error: unknown) => error);
+  expect(error).toMatchObject({
+    code: 'merge_conflict',
+    indeterminate: false,
+    conflicts: [
+      {
+        item: { productId: merchant },
+        existing: { quantity: 1, hasVoucher: true, hasNegotiation: false },
+        incoming: { quantity: 2, hasVoucher: false, hasNegotiation: true },
+      },
+    ],
+  });
+  expect(JSON.stringify(error)).not.toContain('PRIVATE');
+  expect(JSON.stringify(error)).not.toContain('negotiatedUnitPriceMinor');
+  expect(s.storage.set).not.toHaveBeenCalled();
+});
+
+it.each(
+  [
+    undefined,
+    [],
+    [{ item: { productId: 'invalid' }, existing: {}, incoming: {} }],
+    Array.from({ length: 21 }, () => ({
+      item: { productId: merchant },
+      existing: { quantity: 1, hasVoucher: true, hasNegotiation: false },
+      incoming: { quantity: 1, hasVoucher: false, hasNegotiation: false },
+    })),
+  ].map((conflicts) => [conflicts] as const)
+)('fails closed on an invalid conflict list without surfacing chooser data', async (conflicts) => {
+  const s = setup();
+  s.fetcher.mockResolvedValue(
+    new Response(JSON.stringify({ code: 'merge_conflict', conflicts }), {
+      status: 409,
+    })
+  );
+  await expect(
+    s.client.redeem({
+      token: 'ch1.payload.signature',
+      handoffId: cart,
+      attemptId: 'attempt',
+      choice: 'merge',
+    })
+  ).rejects.toMatchObject({
+    code: 'temporarily_unavailable',
+    indeterminate: true,
+    conflicts: undefined,
+  });
+  expect(s.storage.set).not.toHaveBeenCalled();
+});
+
+it.each([
+  401, 403,
+])('never forwards conflict data from authorization rejection %s', async (status) => {
+  const s = setup();
+  const conflicts = [
+    {
+      item: { productId: merchant },
+      existing: { quantity: 1, hasVoucher: true, hasNegotiation: false },
+      incoming: { quantity: 1, hasVoucher: false, hasNegotiation: false },
+    },
+  ];
+  s.fetcher.mockResolvedValue(
+    new Response(JSON.stringify({ code: 'unauthorized', conflicts }), {
+      status,
+    })
+  );
+  await expect(
+    s.client.redeem({
+      token: 'ch1.payload.signature',
+      handoffId: cart,
+      attemptId: 'attempt',
+      choice: 'merge',
+    })
+  ).rejects.toMatchObject({
+    code: 'unauthorized',
+    indeterminate: false,
+    conflicts: undefined,
+  });
+  expect(s.storage.set).not.toHaveBeenCalled();
+});

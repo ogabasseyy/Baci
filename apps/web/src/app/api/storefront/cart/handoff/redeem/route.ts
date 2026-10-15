@@ -191,13 +191,13 @@ export async function POST(request: NextRequest) {
         return cartErrorResponse('temporarily_unavailable');
       }
     } catch (error) {
-      // The redeem RPC already consumed the handoff and committed the
-      // destination grant: return the committed result without a proof
-      // rather than answering a failure the single-use token can never
-      // retry past.
+      // The RPC committed, but the destination authority is not installed.
+      // Preserve the client's attempt ID: this exact redemption can replay
+      // its committed receipt and retry proof issuance without consuming twice.
       console.error('Cart session proof issue failed after redeem commit', {
         message: error instanceof Error ? error.message : 'unknown',
       });
+      return cartErrorResponse('temporarily_unavailable');
     }
 
     const response = cartJsonResponse({

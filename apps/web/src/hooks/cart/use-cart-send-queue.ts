@@ -138,7 +138,10 @@ export function useCartSendQueue(
       const result = await sendSharedCartCommand(
         {
           command,
-          expectedVersion: current.confirmed.version,
+          expectedVersion:
+            pending.intent.kind === 'replace'
+              ? pending.intent.expectedVersion
+              : current.confirmed.version,
           operationId: pending.operationId,
         },
         optionsRef.current.merchantSlug
@@ -171,6 +174,27 @@ export function useCartSendQueue(
         }
       }
       if (result.code === 'version_conflict') {
+        if (pending.intent.kind === 'replace') {
+          if (result.snapshot)
+            dispatch({
+              generation,
+              snapshot: result.snapshot,
+              type: 'snapshot/polled',
+            });
+          dispatch({
+            generation,
+            operationId: pending.operationId,
+            code: 'refresh_required',
+            retryable: false,
+            type: 'command/failed',
+          });
+          finishImportOp(pending.operationId, {
+            ok: false,
+            code: 'refresh_required',
+          });
+          return;
+        }
+
         if (result.snapshot) {
           dispatch({
             generation,

@@ -66,6 +66,11 @@ export type PlannedLegacyImport =
     }
   | {
       kind: 'commands';
+      replacement?: {
+        lines: CartInputLine[];
+        operationId: string;
+        expectedVersion: number;
+      };
       adds: { line: CartInputLine; operationId: string }[];
       sets: { lineId: string; quantity: number }[];
       assurances: { lineId: string; hasAssurance: boolean }[];
@@ -225,5 +230,25 @@ export function planLegacyImport(
         });
     }
   }
+  if (
+    planned.lines.some((line) => {
+      const existing = serverByKey.get(keyOf(line));
+      return existing
+        ? attachmentKey(existing) !== attachmentKey(line)
+        : line.hasAssurance === true;
+    })
+  )
+    return {
+      adds: [],
+      assurances: [],
+      sets: [],
+      kind: 'commands',
+      warnings,
+      replacement: {
+        lines: planned.lines,
+        expectedVersion: server.version,
+        operationId: `import:replace:${cartId}:${server.version}:${fnv1aHex(JSON.stringify(planned.lines))}`,
+      },
+    };
   return { adds, assurances, kind: 'commands', sets, warnings };
 }

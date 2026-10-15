@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product } from '@/lib/products';
+import { buildImportEntries } from './build-import-entries';
 
 import { getCartFromStorage } from './cart-storage';
 
@@ -84,34 +84,11 @@ export function createCartRecovery(
       type: 'import/started',
       warnings: planned.warnings,
     });
-    const entries = [
-      ...planned.adds.map((add) => ({
-        intent: {
-          input: add.line,
-          kind: 'add' as const,
-          product: {} as Product,
-          quantity: add.line.quantity,
-          tempId: `imp-${add.operationId.slice(-8)}`,
-        },
-        operationId: add.operationId,
-      })),
-      ...planned.sets.map((set, index) => ({
-        intent: {
-          kind: 'set_quantity' as const,
-          quantity: set.quantity,
-          target: { kind: 'lineId' as const, lineId: set.lineId },
-        },
-        operationId: `import:${current.confirmed?.cartId}:set:${set.lineId}:${index}`,
-      })),
-      ...planned.assurances.map((set) => ({
-        intent: {
-          kind: 'set_assurance' as const,
-          hasAssurance: set.hasAssurance,
-          target: { kind: 'lineId' as const, lineId: set.lineId },
-        },
-        operationId: `import:${current.confirmed?.cartId}:assurance:${set.lineId}:${set.hasAssurance}`,
-      })),
-    ];
+    const entries = buildImportEntries(planned, current.confirmed.cartId);
+    if (entries.length === 0) {
+      dispatch({ generation, status: 'done', type: 'import/resolved' });
+      return;
+    }
     importOpIdsRef.current = new Set(entries.map((entry) => entry.operationId));
     dispatch({ entries, generation, type: 'import/enqueue' });
   }

@@ -178,6 +178,7 @@ export function applyIntent(
 ): SharedCartDisplayItem[] {
   if (entry.silent) return display;
   const intent = entry.intent;
+  if (intent.kind === 'replace') return display;
   if (intent.kind === 'clear') return [];
   if (intent.kind === 'add') {
     const key = cartLineIdentity(intentIdentity(intent) as CartItemIdentity);

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import * as sessionProof from '@/lib/cart/session-proof';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
   CART_SESSION_PROOF_TTL_SECONDS,
@@ -213,6 +214,71 @@ function connectBody(overrides: Record<string, unknown> = {}) {
 }
 
 describe('POST /api/storefront/cart/handoff/redeem', () => {
+  it.each([
+    'web',
+    'native',
+  ] as const)('retains replay recovery when destination proof minting fails: %s', async (caller) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-12T04:00:00Z'));
+    const destinationProof = destBootstrapProof();
+    const body = connectBody({ attemptId: 'proof-recovery-attempt' });
+    const headers: Record<string, string> =
+      caller === 'web'
+        ? { cookie: `baci-cart-${MERCHANT_ID}=${destinationProof}` }
+        : { authorization: `Bearer ${destinationProof}` };
+    mocks.cartPayload = {
+      choice: 'connect',
+      code: null,
+      currentVersion: 3,
+      grantId: NEW_GRANT_ID,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    const mint = vi.spyOn(sessionProof, 'issueCartSessionProof');
+    try {
+      mint.mockImplementationOnce(() => {
+        throw new Error('fixture signing outage');
+      });
+      const failed = await postRedeem({ body, headers });
+      expect(failed.status).toBe(503);
+      expect(await failed.json()).toMatchObject({
+        code: 'temporarily_unavailable',
+      });
+      expect(failed.headers.get('set-cookie')).toBeNull();
+      mocks.cartPayload = {
+        ...(mocks.cartPayload as Record<string, unknown>),
+        replayed: true,
+      };
+      const recovered = await postRedeem({ body, headers });
+      expect(recovered.status).toBe(200);
+      const payload = await recovered.json();
+      expect(payload.replayed).toBe(true);
+      const proof =
+        caller === 'native'
+          ? payload.proof
+          : recovered.headers
+              .get('set-cookie')
+              ?.match(/baci-cart-[^=]+=([^;]+)/)?.[1];
+      const verified = verifyCartSessionProof(proof ?? '', {
+        environment: 'test',
+        secret: TEST_SECRET,
+      });
+      expect(verified.ok).toBe(true);
+      if (verified.ok) expect(verified.session.grantId).toBe(NEW_GRANT_ID);
+      const attempts = mocks.cartRpcCalls.filter(
+        (call) => call.name === 'commerce_cart_redeem_handoff'
+      );
+      expect(attempts).toHaveLength(2);
+      for (const attempt of attempts)
+        expect(attempt.args).toMatchObject({
+          p_attempt_id: 'proof-recovery-attempt',
+        });
+    } finally {
+      mint.mockRestore();
+    }
+  });
+
   it('connects a fresh destination and issues its session proof', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-12T04:00:00Z'));

@@ -191,6 +191,8 @@ export function buildCommand(
   intent: SharedCartIntent,
   state: SharedCartState
 ): CartCommand | null {
+  if (intent.kind === 'replace')
+    return { type: 'replace', lines: intent.lines };
   if (intent.kind === 'clear') return { type: 'clear' };
   if (intent.kind === 'add') {
     if (intent.input) {

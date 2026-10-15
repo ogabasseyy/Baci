@@ -54,6 +54,7 @@ export type SharedCartIntent =
       negotiatedUnitPriceMinor: number | null;
     }
   | { kind: 'remove'; target: SharedCartLineTarget }
+  | { kind: 'replace'; lines: CartInputLine[]; expectedVersion: number }
   | { kind: 'clear' };
 
 export type SharedCartEntryState = 'queued' | 'sending' | 'failed';

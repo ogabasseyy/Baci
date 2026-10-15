@@ -279,3 +279,82 @@ it('keeps negotiated sibling quantities and coverage independent of ordinary lin
     assurances: [{ lineId: 'negotiated', hasAssurance: true }],
   });
 });
+it('atomically replaces a lone conflicting offer when the device wins even at equal quantity and coverage', () => {
+  const local = [
+    cartItem({ negotiatedPrice: 50, negotiationStatus: 'accepted' }),
+  ];
+  const server = snapshot({ version: 7 });
+  const planned = planLegacyImport(local, server, CART_ID, [
+    { item: { productId: 'prod-1' }, keep: 'incoming' },
+  ]);
+  expect(planned).toMatchObject({
+    kind: 'commands',
+    replacement: {
+      expectedVersion: 7,
+      lines: [
+        { negotiatedUnitPriceMinor: 5000, negotiationStatus: 'accepted' },
+      ],
+    },
+  });
+  expect(
+    planLegacyImport(local, server, CART_ID, [
+      { item: { productId: 'prod-1' }, keep: 'incoming' },
+    ])
+  ).toEqual(planned);
+  expect(
+    planLegacyImport(local, server, CART_ID, [
+      { item: { productId: 'prod-1' }, keep: 'existing' },
+    ])
+  ).not.toHaveProperty('replacement');
+});
+it('preserves unrelated negotiation siblings when replacing a lone voucher conflict', () => {
+  const server = snapshot({
+    lines: [
+      cartLine({ id: 'chosen' }),
+      cartLine({ id: 'regular-9', item: { productId: 'prod-9' }, quantity: 2 }),
+      cartLine({
+        id: 'negotiated-9',
+        item: { productId: 'prod-9' },
+        quantity: 4,
+        negotiatedUnitPriceMinor: 5000,
+        negotiationStatus: 'accepted',
+      }),
+    ],
+  });
+  const planned = planLegacyImport(
+    [cartItem({ quizVoucherToken: 'chosen-voucher' })],
+    server,
+    CART_ID,
+    [{ item: { productId: 'prod-1' }, keep: 'incoming' }]
+  );
+  expect(planned).toMatchObject({
+    replacement: {
+      lines: expect.arrayContaining([
+        { item: { productId: 'prod-9' }, quantity: 2 },
+        {
+          item: { productId: 'prod-9' },
+          quantity: 4,
+          negotiatedUnitPriceMinor: 5000,
+          negotiationStatus: 'accepted',
+        },
+      ]),
+    },
+  });
+});
+it('uses an atomic import when a newly added line carries selected coverage', () => {
+  const planned = planLegacyImport(
+    [cartItem({ id: 'prod-9', hasAssurance: true })],
+    snapshot({ version: 4 }),
+    CART_ID
+  );
+  expect(planned).toMatchObject({
+    kind: 'commands',
+    adds: [],
+    replacement: {
+      expectedVersion: 4,
+      lines: expect.arrayContaining([
+        { item: { productId: 'prod-9' }, quantity: 1, hasAssurance: true },
+      ]),
+    },
+  });
+});

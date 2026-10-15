@@ -119,9 +119,23 @@ export function createNativeCartClient(
           /^[a-z_]{1,64}$/.test(parsed.data.code)
             ? parsed.data.code
             : 'temporarily_unavailable';
+        if (
+          route === '/handoff/redeem' &&
+          response.status === 409 &&
+          code === 'merge_conflict' &&
+          parsed.success &&
+          !parsed.data.conflicts
+        )
+          throw new NativeCartError('temporarily_unavailable', true);
         throw new NativeCartError(
           code,
-          method === 'POST' && (response.status >= 500 || !parsed.success)
+          method === 'POST' && (response.status >= 500 || !parsed.success),
+          route === '/handoff/redeem' &&
+            response.status === 409 &&
+            code === 'merge_conflict' &&
+            parsed.success
+            ? parsed.data.conflicts
+            : undefined
         );
       }
       const reply = parsed.data;

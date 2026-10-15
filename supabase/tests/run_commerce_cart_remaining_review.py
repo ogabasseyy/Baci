@@ -37,10 +37,17 @@ try:
     if '--before-condition-writer-fix' in sys.argv: correction=correction.replace('commerce_cart_offer_price_minor(v_merchant, l.product_id, l.variant_id, l.condition)','commerce_cart_offer_price_minor(v_merchant, l.product_id, l.variant_id)')
     for match in re.finditer(r'CREATE OR REPLACE FUNCTION public\.[\s\S]*?\$\$;',correction): sql+='\n'+match.group()
    else: sql+='\n\\i '+str(f)
+ if '--baseline' not in sys.argv and '--before-lifetime-cap' not in sys.argv:
+  sql+='\n'+(root/'supabase/migrations/20261015141000_commerce_cart_mutation_lifetime_cap.sql').read_text()
+ if '--baseline' not in sys.argv and '--before-replace-attachment-fix' not in sys.argv:
+  sql+=('\n'+(root/'supabase/migrations/20261015142000_commerce_cart_replace_attachment_identity.sql').read_text())*2
  tests=(root/'supabase/tests/commerce_cart_remaining_review.sql').read_text()
  if '--baseline' in sys.argv:
   tests=tests.split('-- Negotiation accepted')[0]+tests[tests.index('DO $$ DECLARE failures text;'):]
- sql+='\n'+tests+'\nROLLBACK;'
+ sql+='\n'+tests
+ if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/tests/commerce_cart_mutation_lifetime_cap.sql').read_text()
+ if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/tests/commerce_cart_replace_attachment_identity.sql').read_text()
+ sql+='\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-sql-review.log','w'),stderr=subprocess.STDOUT,cwd=root)
  print('PASS' if r.returncode==0 else 'FAIL')
  if r.returncode: print(pathlib.Path('/tmp/cart-sql-review.log').read_text()[-2800:])

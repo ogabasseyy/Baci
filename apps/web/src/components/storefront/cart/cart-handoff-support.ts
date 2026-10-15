@@ -15,6 +15,8 @@ export interface PreviewResponse {
 
 export interface ConflictOption {
   quantity?: number;
+  hasVoucher?: boolean;
+  hasNegotiation?: boolean;
   voucherToken?: string | null;
   voucherAwardId?: string | null;
   negotiatedUnitPriceMinor?: number | null;
@@ -92,7 +94,9 @@ export function describeOption(
       `negotiated ${formatMinor(option.negotiatedUnitPriceMinor, currency)}`
     );
   }
-  if (option.voucherToken) parts.push('with voucher');
+  if (option.hasNegotiation && option.negotiatedUnitPriceMinor == null)
+    parts.push('with negotiated offer');
+  if (option.hasVoucher || option.voucherToken) parts.push('with voucher');
   if (option.negotiationStatus) parts.push(option.negotiationStatus);
   return parts.join(', ');
 }

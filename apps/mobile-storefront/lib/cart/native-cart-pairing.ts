@@ -27,6 +27,12 @@ interface Deps {
   onMergeConflicts?(items: CartItemIdentity[], reason?: string): void;
   onHandoffCommitted?(handoffId: string): void;
 }
+// The coordinator function is stable for one owner/controller lifetime. Retain
+// a rejected attempt only while its exact two-cart review remains unchanged.
+const conflictAttempts = new WeakMap<
+  Deps['redeem'],
+  { key: string; id: string }
+>();
 export async function pairNativeCart(
   deps: Deps,
   link: CartPairingLink,
@@ -74,20 +80,45 @@ export async function pairNativeCart(
     mergeLines = plan.lines;
   }
   deps.pending();
-  const result = await deps.redeem({
-    ...(mergeLines ? { lines: mergeLines, resolutions } : {}),
-    token: link.token,
-    handoffId: link.handoffId,
-    attemptId: deps.newOperationId(),
+  const attemptKey = JSON.stringify([
+    link.handoffId,
     choice,
-    expectedIncomingVersion: preview.snapshot.version,
-    ...(context.cartId
-      ? {
-          destCartId: context.cartId,
-          expectedDestVersion: deps.getSnapshot()?.version,
-        }
-      : {}),
-  });
+    context.cartId,
+    preview.snapshot.version,
+    deps.getSnapshot()?.version,
+  ]);
+  const previous = conflictAttempts.get(deps.redeem);
+  const attemptId =
+    previous?.key === attemptKey ? previous.id : deps.newOperationId();
+  let result: CartSnapshot | null;
+  try {
+    result = await deps.redeem({
+      ...(mergeLines ? { lines: mergeLines, resolutions } : {}),
+      token: link.token,
+      handoffId: link.handoffId,
+      attemptId,
+      choice,
+      expectedIncomingVersion: preview.snapshot.version,
+      ...(context.cartId
+        ? {
+            destCartId: context.cartId,
+            expectedDestVersion: deps.getSnapshot()?.version,
+          }
+        : {}),
+    });
+  } catch (error) {
+    deps.assertCurrent();
+    if (
+      error instanceof NativeCartError &&
+      error.code === 'merge_conflict' &&
+      error.conflicts?.length
+    ) {
+      conflictAttempts.set(deps.redeem, { key: attemptKey, id: attemptId });
+      deps.onMergeConflicts?.(error.conflicts.map((conflict) => conflict.item));
+    } else conflictAttempts.delete(deps.redeem);
+    throw error;
+  }
+  conflictAttempts.delete(deps.redeem);
   // A null snapshot means keep_existing committed without a
   // destination cart: nothing to adopt, the session continues on the
   // bootstrap proof the client persisted during redeem.

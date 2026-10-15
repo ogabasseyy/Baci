@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Product } from '@/lib/products';
 
-import { saveCartToStorage } from './cart-storage';
+import { getCartFromStorage, saveCartToStorage } from './cart-storage';
 
 import type { CartItem } from './cart-types';
 
@@ -785,4 +785,81 @@ it('retries an add on a new cart when checkout completed before the mutation', a
   await act(async () => result.current.addToCart(product()));
   await waitFor(() => expect(result.current.cartId).toBe(newId));
   expect(sendSharedCartCommand).toHaveBeenCalledTimes(2);
+});
+
+it('retains a device offer in storage for explicit review after replacement hits a newer remote version', async () => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+  saveCartToStorage(
+    [
+      cartItem({
+        negotiatedPrice: 50,
+        negotiationStatus: 'accepted',
+        hasAssurance: true,
+      }),
+    ],
+    SLUG
+  );
+  mockAdopted();
+  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({
+    ok: false,
+    code: 'version_conflict',
+    retryable: false,
+    snapshot: snapshot({ version: 4 }),
+  });
+  const { result } = renderHook(() =>
+    useSharedCart({
+      merchantId: MERCHANT_ID,
+      merchantSlug: SLUG,
+      sessionGeneration: 1,
+    })
+  );
+  await waitFor(() => expect(result.current.importConflicts).toHaveLength(1));
+  await act(async () =>
+    result.current.resolveImportConflicts([
+      { item: { productId: 'prod-1' }, keep: 'incoming' },
+    ])
+  );
+  await waitFor(() =>
+    expect(result.current.syncError).toBe('refresh_required')
+  );
+  expect(result.current.importStatus).toBe('failed');
+  expect(getCartFromStorage(SLUG)[0]).toMatchObject({
+    negotiatedPrice: 50,
+    negotiationStatus: 'accepted',
+    hasAssurance: true,
+  });
+  expect(sendSharedCartCommand).toHaveBeenCalledTimes(1);
+  await act(async () => result.current.retryImport());
+  expect(result.current.importConflicts[0]).toMatchObject({
+    incoming: { negotiatedUnitPriceMinor: 5000, negotiationStatus: 'accepted' },
+  });
+  expect(sendSharedCartCommand).toHaveBeenCalledTimes(1);
+});
+it('finishes an equal-quantity conflict without a mutation when the shopper keeps the server offer', async () => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+  saveCartToStorage(
+    [cartItem({ negotiatedPrice: 50, negotiationStatus: 'accepted' })],
+    SLUG
+  );
+  mockAdopted();
+  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
+  const { result } = renderHook(() =>
+    useSharedCart({
+      merchantId: MERCHANT_ID,
+      merchantSlug: SLUG,
+      sessionGeneration: 1,
+    })
+  );
+  await waitFor(() => expect(result.current.importConflicts).toHaveLength(1));
+  await act(async () =>
+    result.current.resolveImportConflicts([
+      { item: { productId: 'prod-1' }, keep: 'existing' },
+    ])
+  );
+  await waitFor(() => expect(result.current.importStatus).toBe('done'));
+  expect(sendSharedCartCommand).not.toHaveBeenCalled();
+  expect(getCartFromStorage(SLUG)[0].negotiatedPrice).toBeUndefined();
 });

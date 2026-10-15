@@ -42,3 +42,13 @@ it('removes pairing fragments while preserving the destination path and query', 
   );
   expect(window.location.hash).toBe('');
 });
+it('describes redacted server offer indicators without needing credentials or negotiation status', async () => {
+  const { describeOption } = await import('./cart-handoff-support');
+  expect(describeOption({ quantity: 1, hasVoucher: true }, 'NGN')).toContain(
+    'with voucher'
+  );
+  expect(
+    describeOption({ quantity: 1, hasNegotiation: true }, 'NGN')
+  ).toContain('with negotiated offer');
+  expect(describeOption({ quantity: 1 }, 'NGN')).toBe('1 × item');
+});

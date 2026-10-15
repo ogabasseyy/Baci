@@ -18,6 +18,9 @@ CREATE TABLE private.checkout_shipping_recovery_release_activation (
   )
 );
 ALTER TABLE private.checkout_shipping_recovery_release_activation ENABLE ROW LEVEL SECURITY;
+CREATE POLICY checkout_shipping_recovery_activation_client_deny
+  ON private.checkout_shipping_recovery_release_activation AS RESTRICTIVE
+  FOR ALL TO anon, authenticated USING (false) WITH CHECK (false);
 REVOKE ALL ON TABLE private.checkout_shipping_recovery_release_activation
   FROM PUBLIC, anon, authenticated, service_role;
 INSERT INTO private.checkout_shipping_recovery_release_activation(singleton) VALUES (true);

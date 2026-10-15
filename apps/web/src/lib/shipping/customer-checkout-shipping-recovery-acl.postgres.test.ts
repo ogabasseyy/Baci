@@ -91,6 +91,20 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
         )
       ).toThrow(/permission denied/);
     });
+    it('keeps clients denied if a later grant and permissive policy are added', () => {
+      const result = database.query(`BEGIN;
+        GRANT USAGE ON SCHEMA private TO authenticated;
+        GRANT SELECT, UPDATE ON private.checkout_shipping_recovery_release_activation TO authenticated;
+        CREATE POLICY synthetic_future_allow ON private.checkout_shipping_recovery_release_activation
+          TO authenticated USING (true) WITH CHECK (true);
+        ${recoveryActorAuth()}
+        SELECT count(*) FROM private.checkout_shipping_recovery_release_activation;
+        WITH changed AS (
+          UPDATE private.checkout_shipping_recovery_release_activation SET enabled=false RETURNING singleton
+        ) SELECT count(*) FROM changed;
+        ROLLBACK;`);
+      expect(result.trim().split('\n').slice(-2)).toEqual(['0', '0']);
+    });
     it('refuses activation without artifact evidence or with the known incompatible commit', () => {
       expect(() =>
         database.query(

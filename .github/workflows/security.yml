@@ -234,6 +234,9 @@ jobs:
 
           if os.environ.get("EMPTY_PR_SCOPE") == "true":
               sys.exit(0)
+          status_path = pathlib.Path("semgrep.analysis-status.json")
+          status = {"status": "incomplete", "reason": "missing-or-invalid-report"}
+          status_path.write_text(json.dumps(status))
           sarif = pathlib.Path("semgrep.sarif")
           if sarif.is_file():
               shutil.copyfile(sarif, "semgrep.raw.sarif")
@@ -249,6 +252,8 @@ jobs:
               if not isinstance(scanned, list) or not scanned:
                   raise ValueError("no scanned paths")
               if errors:
+                  status.update(reason="analysis-errors", error_count=len(errors))
+                  status_path.write_text(json.dumps(status))
                   print(f"::error::Semgrep reported {len(errors)} analysis errors; inspect the raw diagnostics artifact.")
                   sys.exit(1)
               if not sarif.is_file() or not sarif.stat().st_size:
@@ -256,6 +261,7 @@ jobs:
           except (OSError, ValueError, TypeError):
               print("::error::Semgrep did not produce complete readable analysis diagnostics.")
               sys.exit(1)
+          status_path.write_text(json.dumps({"status": "complete", "scanned_count": len(scanned)}))
           print(f"Verified complete Semgrep analysis for {len(scanned)} paths.")
           PYTHON
 
@@ -267,6 +273,7 @@ jobs:
           path: |
             semgrep.raw.json
             semgrep.raw.sarif
+            semgrep.analysis-status.json
           if-no-files-found: error
           retention-days: 7
 

@@ -17,6 +17,10 @@ function validate(report, { empty = false, sarif = true } = {}) {
     if (sarif) writeFileSync(join(root, 'semgrep.sarif'), '{"runs":[]}');
     const result = spawnSync('python3', ['-c', python], { cwd: root, encoding: 'utf8', env: { ...process.env, EMPTY_PR_SCOPE: String(empty) } });
     if (sarif && !empty) assert.equal(readFileSync(join(root, 'semgrep.raw.sarif'), 'utf8'), '{"runs":[]}');
+    if (!empty) {
+      const status = JSON.parse(readFileSync(join(root, 'semgrep.analysis-status.json'), 'utf8'));
+      assert.equal(status.status, result.status === 0 ? 'complete' : 'incomplete');
+    }
     return result;
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -51,4 +55,5 @@ test('all scan modes retain raw diagnostics and enforce warning errors', () => {
   assert.match(workflow, /semgrep ci --no-suppress-errors/);
   assert.match(workflow, /name: Preserve unfiltered Semgrep diagnostics\n        if: always\(\)/);
   assert.match(workflow, /if-no-files-found: error/);
+  assert.match(workflow, /            semgrep\.analysis-status\.json/);
 });

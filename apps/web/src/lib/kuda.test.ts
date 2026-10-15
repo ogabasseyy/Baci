@@ -214,6 +214,10 @@ describe('Kuda API Client', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toBe('Purchase failed');
+      // Codex R102 P1: a timeout after Kuda accepts still lands the
+      // vend — pending routes to BILL_TSQ reconciliation instead of
+      // refunding on top of delivered value.
+      expect(result.status).toBe('pending');
     });
 
     it('returns error for invalid network provider', async () => {
@@ -223,6 +227,90 @@ describe('Kuda API Client', () => {
 
       expect(result.success).toBe(false);
       expect(result.message).toContain('Invalid network provider');
+    });
+
+    it('fails outright only on definitive 4xx rejections, pending on 5xx', async () => {
+      // Codex R102 P1: a received 4xx proves Kuda rejected (safe to
+      // fail + refund); a 5xx may have landed (pending + requery).
+      const { purchaseAirtime } = await import('./kuda');
+
+      for (const status of [400, 404]) {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn().mockImplementation((url) => {
+            if (url.toString().includes('GetToken')) {
+              return Promise.resolve({
+                ok: true,
+                text: () => Promise.resolve('token'),
+              } as Response);
+            }
+            return Promise.resolve({
+              ok: false,
+              status,
+              statusText: 'Bad Request',
+            } as Response);
+          })
+        );
+        const rejected = await purchaseAirtime(
+          '08030000000',
+          100,
+          NetworkProvider.MTN
+        );
+        expect(rejected).toMatchObject({ success: false, status: 'failed' });
+      }
+
+      for (const status of [500, 503]) {
+        vi.stubGlobal(
+          'fetch',
+          vi.fn().mockImplementation((url) => {
+            if (url.toString().includes('GetToken')) {
+              return Promise.resolve({
+                ok: true,
+                text: () => Promise.resolve('token'),
+              } as Response);
+            }
+            return Promise.resolve({
+              ok: false,
+              status,
+              statusText: 'Server Error',
+            } as Response);
+          })
+        );
+        const unknown = await purchaseAirtime(
+          '08030000000',
+          100,
+          NetworkProvider.MTN
+        );
+        expect(unknown).toMatchObject({ success: false, status: 'pending' });
+      }
+      vi.unstubAllGlobals();
+    });
+
+    it('resolves connection drops as pending', async () => {
+      // Codex R102 P1: the drop may follow Kuda's acceptance.
+      const { purchaseAirtime } = await import('./kuda');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((url) => {
+          if (url.toString().includes('GetToken')) {
+            return Promise.resolve({
+              ok: true,
+              text: () => Promise.resolve('token'),
+            } as Response);
+          }
+          return Promise.reject(new TypeError('fetch failed'));
+        })
+      );
+      try {
+        const result = await purchaseAirtime(
+          '08030000000',
+          100,
+          NetworkProvider.MTN
+        );
+        expect(result).toMatchObject({ success: false, status: 'pending' });
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 
@@ -258,6 +346,34 @@ describe('Kuda API Client', () => {
       expect(payload.Data.BillItemIdentifier).toBe(dataPlanCode);
       expect(payload.Data.Amount).toBe('100000'); // 1000 Naira = 100000 Kobo
       expect(payload.Data.trackingReference).toBe(result.reference);
+    });
+
+    it('resolves connection drops as pending', async () => {
+      // Codex R102 P1: the drop may follow Kuda's acceptance.
+      const { purchaseData } = await import('./kuda');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation((url) => {
+          if (url.toString().includes('GetToken')) {
+            return Promise.resolve({
+              ok: true,
+              text: () => Promise.resolve('token'),
+            } as Response);
+          }
+          return Promise.reject(new TypeError('fetch failed'));
+        })
+      );
+      try {
+        const result = await purchaseData(
+          '08030000000',
+          'MTN-1GB-MONTHLY',
+          1000,
+          NetworkProvider.MTN
+        );
+        expect(result).toMatchObject({ success: false, status: 'pending' });
+      } finally {
+        vi.unstubAllGlobals();
+      }
     });
   });
 

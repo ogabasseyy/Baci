@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Biller, PurchaseResult } from './kuda';
 import { getBillersByCategory, purchaseBill } from './kuda-bills';
+import { KudaApiHttpError } from './kuda-transport-error';
 
 const loggerMocks = vi.hoisted(() => ({
   error: vi.fn(),
@@ -225,6 +226,39 @@ describe('purchaseBill', () => {
     });
   });
 
+  it('resolves transport throws as pending but 4xx rejections as failed', async () => {
+    // Codex R102 P1: a timeout/drop after Kuda accepts still lands
+    // the vend (pending + BILL_TSQ requery); only a definitive 4xx
+    // rejection fails outright.
+    vi.mocked(kudaRequest).mockRejectedValueOnce(
+      new Error('Kuda ADMIN_PURCHASE_BILL request timed out')
+    );
+    const timedOut = await purchaseBill('EKEDC-PREPAID', '1234567890', 5000);
+    expect(timedOut).toMatchObject({ success: false, status: 'pending' });
+
+    vi.mocked(kudaRequest).mockRejectedValueOnce(
+      new TypeError('fetch failed')
+    );
+    const dropped = await purchaseBill('EKEDC-PREPAID', '1234567890', 5000);
+    expect(dropped).toMatchObject({ success: false, status: 'pending' });
+
+    vi.mocked(kudaRequest).mockRejectedValueOnce(
+      new KudaApiHttpError(503, 'Service Unavailable')
+    );
+    const unavailable = await purchaseBill(
+      'EKEDC-PREPAID',
+      '1234567890',
+      5000
+    );
+    expect(unavailable).toMatchObject({ success: false, status: 'pending' });
+
+    vi.mocked(kudaRequest).mockRejectedValueOnce(
+      new KudaApiHttpError(400, 'Bad Request')
+    );
+    const rejected = await purchaseBill('EKEDC-PREPAID', '1234567890', 5000);
+    expect(rejected).toMatchObject({ success: false, status: 'failed' });
+  });
+
   it('logs accepted pending bill purchases below warning level', async () => {
     // Arrange
     vi.mocked(kudaRequest).mockResolvedValue({
@@ -392,8 +426,10 @@ describe('purchaseBill', () => {
     });
   });
 
-  it('catches and returns failed result when kudaRequest throws an error', async () => {
-    // Arrange
+  it('catches and returns pending result when kudaRequest throws an error', async () => {
+    // Arrange — Codex R102 P1: the drop may follow Kuda's
+    // acceptance, so transport throws resolve pending for BILL_TSQ
+    // reconciliation instead of failing + refunding on value.
     vi.mocked(kudaRequest).mockRejectedValue(
       new Error('Network connection failed')
     );
@@ -406,13 +442,13 @@ describe('purchaseBill', () => {
       success: false,
       reference: 'BACI-1234567890-abcd1234',
       message: 'Network connection failed',
-      status: 'failed',
+      status: 'pending',
       amount: 1000,
     });
   });
 
   it('handles non-Error thrown objects gracefully', async () => {
-    // Arrange
+    // Arrange — unknown outcome fails closed to pending (R102 P1).
     vi.mocked(kudaRequest).mockRejectedValue('Unknown error string');
 
     // Act
@@ -423,7 +459,7 @@ describe('purchaseBill', () => {
       success: false,
       reference: 'BACI-1234567890-abcd1234',
       message: 'Bill purchase failed',
-      status: 'failed',
+      status: 'pending',
       amount: 2000,
     });
   });

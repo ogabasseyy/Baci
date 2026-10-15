@@ -1,11 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const sessionMocks = vi.hoisted(() => ({ getSession: vi.fn() }));
-
-vi.mock('@/lib/supabase/client', () => ({
-  createClient: () => ({ auth: { getSession: sessionMocks.getSession } }),
-}));
+import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
 import {
   clearPendingVtuKeys,
   notePendingVtuReference,
@@ -21,22 +16,17 @@ import {
 } from './utility-voucher-backfill-model';
 
 describe('useUtilityVoucherBackfill', () => {
-  // Mutable polling account: tests flip this mid-poll to simulate
-  // an account switch between capture and terminal observation.
-  let currentUserId: string | null = 'user-1';
+  // Mutable polling account (Codex R102 P2): the hook reads the
+  // synchronously published live identity, so tests flip it
+  // mid-poll to simulate an account switch between capture and
+  // terminal observation.
+  function setCurrentUserId(id: string | null) {
+    publishCustomerIdentity(id === null ? null : { id }, null, 'ogabassey');
+  }
 
   beforeEach(() => {
     vi.useFakeTimers();
-    currentUserId = 'user-1';
-    sessionMocks.getSession.mockImplementation(async () => ({
-      data: {
-        session:
-          currentUserId === null
-            ? null
-            : { user: { id: currentUserId } },
-      },
-      error: null,
-    }));
+    setCurrentUserId('user-1');
   });
 
   afterEach(() => {
@@ -650,7 +640,7 @@ describe('useUtilityVoucherBackfill', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    currentUserId = 'user-2';
+    setCurrentUserId('user-2');
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
         UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
@@ -664,7 +654,7 @@ describe('useUtilityVoucherBackfill', () => {
     );
 
     // Switch-back resumes: the next poll publishes and forgets.
-    currentUserId = 'user-1';
+    setCurrentUserId('user-1');
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
         UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
@@ -702,7 +692,7 @@ describe('useUtilityVoucherBackfill', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    currentUserId = 'user-2';
+    setCurrentUserId('user-2');
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
         UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
@@ -712,7 +702,7 @@ describe('useUtilityVoucherBackfill', () => {
     expect(result.current.pin).toBeNull();
     expect(result.current.successful).toBe(false);
 
-    currentUserId = 'user-1';
+    setCurrentUserId('user-1');
     await act(async () => {
       await vi.advanceTimersByTimeAsync(
         UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS
@@ -721,36 +711,21 @@ describe('useUtilityVoucherBackfill', () => {
     expect(result.current.pin).toBe('PIN-PREVIOUS-USER');
   });
 
-  it('retains the entry when the view unmounts during the session read', async () => {
-    // Codex R68 6rwg83: the terminal result was parsed but the view
-    // unmounted while getSession() was pending — forgetting now would
-    // mint fresh on reopen and debit twice. Cancellation is
-    // rechecked after the read.
+  it('retains the entry when the view unmounts during the fetch', async () => {
+    // Codex R68 6rwg83 (identity reads are synchronous since R102,
+    // so the gate is the fetch): the view unmounted while the
+    // history request was pending — forgetting on its late success
+    // would mint fresh on reopen and debit twice. Cancellation is
+    // rechecked after the await.
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('{"hook-unmount":true}', 'key-hook-unmount');
     notePendingVtuReference('{"hook-unmount":true}', 'VTU-1');
-    const fetchMock = mockHistory(() => ({
-      transactions: [
-        {
-          request_reference: 'VTU-1',
-          status: 'successful',
-          refund_pending: false,
-        },
-      ],
-    }));
+    let releaseFetch!: (value: unknown) => void;
+    const fetchGate = new Promise((resolve) => {
+      releaseFetch = resolve;
+    });
+    const fetchMock = vi.fn(async () => fetchGate);
     vi.stubGlobal('fetch', fetchMock);
-
-    // First read captures the submitter; the re-verification hangs.
-    sessionMocks.getSession.mockClear();
-    sessionMocks.getSession.mockResolvedValueOnce({
-      data: { session: { user: { id: 'user-1' } } },
-      error: null,
-    });
-    let releaseRead!: (value: unknown) => void;
-    const readGate = new Promise((resolve) => {
-      releaseRead = resolve;
-    });
-    sessionMocks.getSession.mockReturnValueOnce(readGate);
 
     const { unmount } = renderHook(() =>
       useUtilityVoucherBackfill({ ...input, utilityTab: 'airtime' })
@@ -759,14 +734,22 @@ describe('useUtilityVoucherBackfill', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(sessionMocks.getSession).toHaveBeenCalledTimes(2);
 
     act(() => {
       unmount();
     });
-    releaseRead({
-      data: { session: { user: { id: 'user-1' } } },
-      error: null,
+    releaseFetch({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        transactions: [
+          {
+            request_reference: 'VTU-1',
+            status: 'successful',
+            refund_pending: false,
+          },
+        ],
+      }),
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
@@ -784,7 +767,7 @@ describe('useUtilityVoucherBackfill', () => {
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('{"hook-nosession":true}', 'key-hook-nosession');
     notePendingVtuReference('{"hook-nosession":true}', 'VTU-1');
-    currentUserId = null;
+    setCurrentUserId(null);
     const fetchMock = mockHistory(() => ({
       transactions: [
         {

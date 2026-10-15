@@ -2,7 +2,7 @@
 
 import { fetchJsonWithDeadline } from '@baci/shared/lib';
 import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { getLiveCustomerIdentity } from '@/contexts/customer-live-identity';
 import { forgetPendingVtuByReference } from './utility-pending-idempotency';
 import {
   backfillPollDelayMs,
@@ -53,22 +53,14 @@ export function useUtilityVoucherBackfill({
       reference,
     });
     (async () => {
-      // Mobile parity: capture the polling account so a mid-flight
-      // switch cannot forget the submitter's retained key for a
-      // result never shown to them (Muse R57). Local session read,
-      // no network; a failure degrades to null, which never forgets.
-      const supabase = createClient();
-      const readUserId = async (): Promise<string | null> => {
-        try {
-          const {
-            data: { session },
-          } = await supabase.auth.getSession();
-          return session?.user?.id ?? null;
-        } catch {
-          return null;
-        }
-      };
-      const submitterUserId = await readUserId();
+      // Polling-account capture (Codex R102 P2): the synchronously
+      // published live identity — never an awaited getSession, which
+      // can stall on a stuck auth refresh/lock and hold this loop
+      // before its first request (or after a response) forever. This
+      // fetch is same-origin (cookies carry auth), so no token read
+      // is needed — only the id. Null (no publish yet) degrades to
+      // never-forget, same as a failed read before.
+      const submitterUserId = getLiveCustomerIdentity().userId;
       for (
         let attempt = 1;
         attempt <= UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS;
@@ -131,7 +123,7 @@ export function useUtilityVoucherBackfill({
           // retained entry on first observation (the success is
           // shown, so a repeat must mint fresh), while the loop may
           // keep hunting a late token.
-          const currentUserId = await readUserId();
+          const currentUserId = getLiveCustomerIdentity().userId;
           if (
             !cancelled &&
             submitterUserId !== null &&

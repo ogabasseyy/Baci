@@ -8,6 +8,10 @@
 import crypto from 'node:crypto';
 import { logKudaResponse } from '@/lib/kuda-debug-log';
 import {
+  isKudaOutcomeUnknown,
+  KudaApiHttpError,
+} from '@/lib/kuda-transport-error';
+import {
   extractKudaTransactionId,
   extractKudaVoucherPin,
   type KudaVoucherTokenField,
@@ -536,7 +540,7 @@ export async function kudaRequest<T = unknown>(
   }
 
   if (!response.ok) {
-    throw new Error(`Kuda API request failed: ${response.statusText}`);
+    throw new KudaApiHttpError(response.status, response.statusText);
   }
 
   const raw = await response.json();
@@ -771,7 +775,10 @@ export async function purchaseAirtime(
       success: false,
       reference,
       message: error instanceof Error ? error.message : 'Purchase failed',
-      status: 'failed',
+      // Transport-unknown throws (timeout, drop, 5xx) resolve as
+      // pending so BILL_TSQ reconciliation converges the row; only
+      // definitive 4xx rejections fail outright (Codex R102 P1).
+      status: isKudaOutcomeUnknown(error) ? 'pending' : 'failed',
       amount,
       phoneNumber,
       provider: networkProvider,
@@ -831,7 +838,10 @@ export async function purchaseData(
       success: false,
       reference,
       message: error instanceof Error ? error.message : 'Purchase failed',
-      status: 'failed',
+      // Transport-unknown throws (timeout, drop, 5xx) resolve as
+      // pending so BILL_TSQ reconciliation converges the row; only
+      // definitive 4xx rejections fail outright (Codex R102 P1).
+      status: isKudaOutcomeUnknown(error) ? 'pending' : 'failed',
       amount,
       phoneNumber,
       provider: networkProvider,

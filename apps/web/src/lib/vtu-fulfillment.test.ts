@@ -1244,9 +1244,10 @@ describe('fulfillPendingVtuTransaction', () => {
         p_attempt_at: '2026-10-15T00:00:00.000Z',
       })
     );
-    // Neither lease key may be persisted: the row now belongs to the
-    // reclaiming owner, so our merge must not write our stale flag or
-    // stamp over theirs.
+    // Neither lease key nor sent-result key may be persisted: the
+    // row now belongs to the reclaiming owner, so our merge must not
+    // write our stale flag, stamp, or `sent: false` over theirs
+    // (Codex R102 P2: that would double-send their email).
     for (const payload of updatePayloads) {
       const metadata = (payload as { metadata?: Record<string, unknown> })
         .metadata;
@@ -1256,6 +1257,9 @@ describe('fulfillPendingVtuTransaction', () => {
         );
         expect(metadata).not.toHaveProperty(
           'customerTokenEmailNotificationAttemptedAt'
+        );
+        expect(metadata).not.toHaveProperty(
+          'customerTokenEmailNotificationSent'
         );
       }
     }
@@ -2709,6 +2713,70 @@ describe('fulfillPendingVtuTransaction', () => {
         status: 'processing',
         transaction_id: 'kuda-airtime-pending-1',
       })
+    );
+  });
+
+  it('persists processing without refunding when the Kuda response times out', async () => {
+    // Codex R102 P1: the timeout may follow Kuda's acceptance — the
+    // vend may have landed, so the row stays processing for BILL_TSQ
+    // reconciliation instead of failing + refunding on top of value.
+    mockPurchaseAirtime.mockResolvedValue({
+      success: false,
+      reference: 'VTU-123',
+      message: 'Kuda ADMIN_PURCHASE_BILL request timed out',
+      amount: 100,
+      phoneNumber: '08012345678',
+      provider: 'MTN',
+      status: 'pending',
+    });
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'kuda',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      reference: 'VTU-123',
+      status: 'processing',
+    });
+    expect(updatePayloads).toContainEqual(
+      expect.objectContaining({ status: 'processing' })
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'reverse_vtu_wallet_payment',
+      expect.anything()
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.anything()
     );
   });
 

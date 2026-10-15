@@ -32,6 +32,20 @@ export interface CustomerEmailClaimLease {
   generation: string;
   priorAttempted: unknown;
   priorAttemptedAt: unknown;
+  /**
+   * Pre-claim sent-result keys (Codex R102 P2): a stale clearer must
+   * also revert its `sent: false` write — otherwise the settlement
+   * merge applies it over the reclaiming owner's newer `true` and
+   * the email sends twice.
+   */
+  priorSent: Array<{ key: string; present: boolean; value: unknown }>;
+}
+
+/** Sent-result keys the clear outcome governs (primary + mirrors). */
+export function getCustomerEmailSentKeys(
+  state: CustomerEmailNotificationState
+): string[] {
+  return [state.sentKey, ...(state.sentWriteKeys ?? [])];
 }
 
 /**

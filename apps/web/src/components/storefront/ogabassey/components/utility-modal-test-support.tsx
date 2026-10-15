@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { vi } from 'vitest';
+import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
 import { toast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
 
@@ -20,6 +21,28 @@ const {
   mockUseCustomerAuth: vi.fn(),
   mockUseWallet: vi.fn(),
 }));
+
+// Live settlement identity (Codex R95 P1, R101 P2): the modal suites
+// use the REAL customer-live-identity module — every mocked auth
+// assignment also publishes, so submit/settle paths exercise
+// production comparison logic (a vi.mock of the getter cannot work:
+// hasUtilityPurchaseIdentityMoved binds the module-internal getter).
+const baseAuthMockReturnValue = mockUseCustomerAuth.mockReturnValue.bind(
+  mockUseCustomerAuth
+);
+mockUseCustomerAuth.mockReturnValue = ((
+  auth: {
+    customer?: { id?: string } | null;
+    user?: { id?: string } | null;
+  } | null
+) => {
+  publishCustomerIdentity(
+    auth?.user?.id ? { id: auth.user.id } : null,
+    auth?.customer?.id ? { id: auth.customer.id } : null,
+    'ogabassey'
+  );
+  return baseAuthMockReturnValue(auth);
+}) as typeof mockUseCustomerAuth.mockReturnValue;
 
 vi.mock('@/lib/posthog/capture-client-event', () => ({
   captureClientEvent: mockCaptureClientEvent,
@@ -152,18 +175,6 @@ vi.mock('@/hooks/use-merchant-client', () => ({
 
 vi.mock('@/contexts/customer-auth-context', () => ({
   useOptionalCustomerAuth: () => mockUseCustomerAuth(),
-}));
-
-vi.mock('@/contexts/customer-live-identity', () => ({
-  // Live settlement identity (Codex R95 P1): mirrors the mocked auth
-  // state so modal tests settle as the currently-mocked account.
-  getLiveCustomerIdentity: () => {
-    const auth = mockUseCustomerAuth();
-    return {
-      customerId: auth?.customer?.id ?? null,
-      userId: auth?.user?.id ?? null,
-    };
-  },
 }));
 
 vi.mock('@/components/storefront/ogabassey/pages/checkout/hooks/use-wallet', () => ({

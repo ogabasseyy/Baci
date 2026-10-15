@@ -27,6 +27,7 @@ import type {
 import {
   getCustomerEmailAttemptedAtKey,
   getCustomerEmailClaimLeaseGeneration,
+  getCustomerEmailSentKeys,
   isCustomerEmailClaimLeaseExpired,
 } from '@/lib/vtu-email-claim-lease';
 import {
@@ -1147,6 +1148,11 @@ async function claimCustomerEmailNotificationAttempt({
 
   const priorAttempted = metadata[state.attemptedKey];
   const priorAttemptedAt = metadata[getCustomerEmailAttemptedAtKey(state)];
+  const priorSent = getCustomerEmailSentKeys(state).map((key) => ({
+    key,
+    present: key in metadata,
+    value: metadata[key],
+  }));
 
   const { data, error } = await supabase.rpc(
     'claim_vtu_customer_email_notification_attempt',
@@ -1180,7 +1186,7 @@ async function claimCustomerEmailNotificationAttempt({
   if (!generation) {
     return null;
   }
-  return { generation, priorAttempted, priorAttemptedAt };
+  return { generation, priorAttempted, priorAttemptedAt, priorSent };
 }
 
 function revertStaleEmailClaimLease({
@@ -1193,8 +1199,10 @@ function revertStaleEmailClaimLease({
   state: CustomerEmailNotificationState;
 }) {
   // Our clear lost (reclaimed row or RPC error): restore the pre-claim
-  // lease keys so the settlement merge leaves the owner's lease
-  // untouched instead of persisting our stale generation.
+  // lease AND sent-result keys so the settlement merge leaves the
+  // owner's lease untouched instead of persisting our stale
+  // generation — and never applies our `sent: false` over their
+  // newer `true` (Codex R102 P2: that double-sends the email).
   const attemptedAtKey = getCustomerEmailAttemptedAtKey(state);
   if (lease.priorAttempted === undefined) {
     delete metadata[state.attemptedKey];
@@ -1205,6 +1213,13 @@ function revertStaleEmailClaimLease({
     delete metadata[attemptedAtKey];
   } else {
     metadata[attemptedAtKey] = lease.priorAttemptedAt;
+  }
+  for (const { key, present, value } of lease.priorSent) {
+    if (present) {
+      metadata[key] = value;
+    } else {
+      delete metadata[key];
+    }
   }
 }
 

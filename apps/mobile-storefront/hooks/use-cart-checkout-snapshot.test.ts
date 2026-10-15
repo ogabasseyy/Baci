@@ -167,3 +167,16 @@ it('does not restore a pending review after the shared cart session is disabled'
   expect(useNativeSharedCartStore.getState().checkoutReview).toBeNull();
   expect(result.current.binding).toBeNull();
 });
+
+it('prepares again when offer totals change at the same cart version', async () => {
+  const prepare = jest.fn().mockResolvedValue({ snapshot: review });
+  useNativeSharedCartStore.setState({ prepareCheckoutReview: prepare });
+  const { result } = renderHook(() => useCartCheckoutSnapshot());
+  await waitFor(() => expect(result.current.status).toBe('ready'));
+  act(() =>
+    useNativeSharedCartStore.setState({
+      snapshot: { ...cartSnapshot, totalMinor: 200 },
+    })
+  );
+  await waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
+});

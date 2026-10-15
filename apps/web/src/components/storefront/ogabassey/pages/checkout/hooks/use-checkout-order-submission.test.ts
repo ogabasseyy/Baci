@@ -393,6 +393,15 @@ describe('useCheckoutOrderSubmission', () => {
       return context;
     }
 
+    it('blocks enrolled cached carts until adoption provides an authoritative reference', async () => {
+      const context = freshContext();
+      context.cart.sharedCartEnabled = true;
+      context.cart.sharedCartRef = null;
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+    });
+
     it('prepares the shared cart and binds the submit', async () => {
       const context = freshContext();
       context.cart.sharedCartRef = SHARED_REF;

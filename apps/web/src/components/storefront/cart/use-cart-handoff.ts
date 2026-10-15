@@ -18,6 +18,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   const [destCart, setDestCart] = useState<CartSnapshot | null>(null);
   const [destChecked, setDestChecked] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [previewRetryable, setPreviewRetryable] = useState(false);
   const [conflicts, setConflicts] = useState<MergeConflictView[]>([]);
   const [resolutions, setResolutions] = useState<
     Record<string, 'incoming' | 'existing'>
@@ -59,7 +60,12 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         code?: string;
       };
       if (!response.ok) {
-        if (payload.code === 'missing_proof' && response.status === 401) {
+        if (
+          response.status === 401 &&
+          ['missing_proof', 'expired_proof', 'invalid_proof'].includes(
+            payload.code ?? ''
+          )
+        ) {
           bootstrapRequired.current = true;
         } else if (
           response.status !== 404 ||
@@ -84,6 +90,8 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   }
 
   async function loadPreview(): Promise<PreviewResponse | null> {
+    setLoadError(null);
+    setPreviewRetryable(false);
     try {
       const response = await fetchJson(
         `/api/storefront/cart/handoff?handoff_id=${encodeURIComponent(handoffId)}`,
@@ -91,6 +99,11 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       );
       const payload = (await response.json()) as PreviewResponse;
       if (!response.ok) {
+        if (response.status >= 500 || response.status === 429) {
+          setPreviewRetryable(true);
+          setLoadError('Could not load this cart link. Please try again.');
+          return null;
+        }
         setLoadError(
           'This link is no longer valid. Ask the sender for a fresh one.'
         );
@@ -104,6 +117,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       }
       return payload;
     } catch {
+      setPreviewRetryable(true);
       setLoadError('Could not load this cart link. Check your connection.');
       return null;
     }
@@ -275,6 +289,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     destCart,
     destChecked,
     loadError,
+    previewRetryable,
     conflicts,
     setConflicts,
     resolutions,

@@ -10,6 +10,8 @@ import {
 } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
+import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
+import { ucpCartMigrationRaceOutcome } from '@/lib/agentic/ucp-cart-migration-race';
 import { buildUcpCartResponse } from '@/lib/agentic/ucp-cart-response';
 import {
   buildUcpCartContinueUrl,
@@ -56,6 +58,15 @@ export async function GET(request: NextRequest, props: RouteProps) {
 
   const context = await resolveUcpCartContext(request);
   if (!context.ok) return context.response;
+
+  const canonical = await handleCanonicalUcpCart({
+    merchant: context.merchant,
+    cartId: parsedParams.data.id,
+    agentId: query.agentId,
+    action: 'read',
+  });
+  if (canonical)
+    return NextResponse.json(canonical.body, { status: canonical.status });
 
   const cartResult = await loadUcpCartSession({
     cartId: parsedParams.data.id,
@@ -168,6 +179,24 @@ export async function POST(request: NextRequest, props: RouteProps) {
     );
   }
 
+  const canonical = await handleCanonicalUcpCart({
+    merchant: context.merchant,
+    cartId: parsedParams.data.id,
+    agentId: mutation.agentId,
+    action: 'update',
+    detailsRequireHandoff:
+      parsed.data.buyer !== undefined ||
+      parsed.data.shipping_address !== undefined ||
+      parsed.data.currency !== undefined,
+    operationId: mutation.idempotencyKey,
+    expectedVersion: parsed.data.expectedVersion,
+    lines: parsed.data.line_items?.map((line) => ({
+      item: { productId: line.item.id },
+      quantity: line.quantity,
+    })),
+  });
+  if (canonical) return respond(canonical.body, canonical.status);
+
   const cartResult = await loadUcpCartSession({
     cartId: parsedParams.data.id,
     merchantId: context.merchant.id,
@@ -245,7 +274,17 @@ export async function POST(request: NextRequest, props: RouteProps) {
   const { data: updatedCart, error: updateError } = await updateQuery
     .select('cart_id')
     .maybeSingle();
-  if (updateError) return respond({ error: 'Database error' }, 500);
+  if (updateError) {
+    const migrated = await ucpCartMigrationRaceOutcome({
+      error: updateError,
+      cartId: parsedParams.data.id,
+      merchantId: context.merchant.id,
+      agentId: mutation.agentId,
+      supabase: context.supabase,
+    });
+    if (migrated) return respond(migrated.body, migrated.status);
+    return respond({ error: 'Database error' }, 500);
+  }
   if (!updatedCart) {
     logger.warn({
       cartId: parsedParams.data.id,

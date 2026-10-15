@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { fetchProductRow, transformProduct } from '@/hooks/product-utils';
 import { createNativeCartController } from '@/lib/cart/controller';
 import type { CartProductShell } from '@/lib/cart/display';
+import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
 import {
@@ -112,7 +113,22 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       retire: async () => {
         alive = false;
         if (retireDevice) {
-          await retireDevice();
+          try {
+            await retireDevice();
+          } catch (error) {
+            if (
+              !(error instanceof NativeCartError) ||
+              error.code !== 'revocation_pending'
+            )
+              throw error;
+            const pending = await deps.receipts.read(options.merchantId);
+            if (pending)
+              await deps.receipts.clear(
+                options.merchantId,
+                pending.operationId
+              );
+            throw error;
+          }
           const pending = await deps.receipts.read(options.merchantId);
           if (pending)
             await deps.receipts.clear(options.merchantId, pending.operationId);
@@ -159,6 +175,10 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
         },
         newOperationId: () => Crypto.randomUUID(),
         getLegacy: () => useCartStore.getState(),
+        repairLegacy: (items) => {
+          if (isCurrent())
+            useCartStore.setState({ items, sharedCartRef: undefined });
+        },
         loadProduct: deps.loadProduct,
         status: (status, code) => {
           if (!isCurrent()) return;

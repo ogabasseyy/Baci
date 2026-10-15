@@ -1,12 +1,18 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import { getCart } from '@/lib/cart/service';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { POST } from './route';
+
+vi.mock('@/lib/cart/scoped-client', () => ({
+  createCartScopedClient: vi.fn(() => ({})),
+}));
+vi.mock('@/lib/cart/service', () => ({ getCart: vi.fn() }));
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 const TEST_SECRET = 'test-cart-session-secret-min-32-chars!!';
@@ -55,6 +61,10 @@ const savedSecret = process.env.CART_SESSION_SECRET;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(getCart).mockResolvedValue({
+    ok: true,
+    cart: { state: 'active' },
+  } as never);
   __resetCartQuotaStoreForTesting();
   mocks.alias = null;
   mocks.merchantError = null;
@@ -262,4 +272,35 @@ describe('POST /api/storefront/cart/bootstrap', () => {
       `Max-Age=${CART_BOOTSTRAP_PROOF_TTL_SECONDS}`
     );
   });
+});
+
+it('replaces a terminal session cookie so the next cart starts with bootstrap authority', async () => {
+  const old = issueCartSessionProof(
+    {
+      merchantId: MERCHANT_ID,
+      principalId: 'guest-one',
+      cartId: '22222222-2222-4222-8222-222222222222',
+      grantId: '33333333-3333-4333-8333-333333333333',
+      scope: 'session',
+    },
+    { secret: TEST_SECRET, environment: 'test' }
+  );
+  vi.mocked(getCart).mockResolvedValue({
+    ok: true,
+    cart: { state: 'completed' },
+  } as never);
+  const response = await postBootstrap({
+    headers: { cookie: `csrf-token=csrf-1; baci-cart-${MERCHANT_ID}=${old}` },
+  });
+  expect(response.status).toBe(201);
+  expect(response.headers.get('set-cookie')).toContain(
+    `baci-cart-${MERCHANT_ID}=cp1.`
+  );
+  const body = await response.json();
+  expect(
+    verifyCartSessionProof(body.proof, {
+      secret: TEST_SECRET,
+      environment: 'test',
+    })
+  ).toMatchObject({ ok: true, session: { cartId: null } });
 });

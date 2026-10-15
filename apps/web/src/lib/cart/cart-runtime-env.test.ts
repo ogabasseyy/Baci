@@ -42,3 +42,20 @@ describe('getCartProofEnvironment', () => {
     expect(getCartProofEnvironment()).toBe('test');
   });
 });
+
+it('reads only bounded valid previous signing keys and rejects malformed configuration', async () => {
+  const { getCartPreviousSessionSecrets } = await import('./cart-runtime-env');
+  const key = 'fixture-previous-cart-signing-material-0001';
+  vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', JSON.stringify([key]));
+  expect(getCartPreviousSessionSecrets()).toEqual([key]);
+  for (const invalid of [
+    'bad-json',
+    '{}',
+    '[1]',
+    '["short"]',
+    JSON.stringify(Array(9).fill(key)),
+  ]) {
+    vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', invalid);
+    expect(getCartPreviousSessionSecrets()).toEqual([]);
+  }
+});

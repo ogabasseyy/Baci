@@ -18,11 +18,13 @@ import {
 import type { AgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
+import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
 import {
   buildCheckoutResponseFromSession,
   loadCheckoutSessionByRowId,
   resolvePolicyBaseUrl,
 } from '@/lib/agentic/ucp-cart-checkout-response';
+import { ucpCartMigrationRaceOutcome } from '@/lib/agentic/ucp-cart-migration-race';
 import { loadUcpCartSession } from '@/lib/agentic/ucp-cart-route-support';
 import {
   buildUcpCartCheckoutLinkUpdate,
@@ -110,6 +112,15 @@ export async function convertUcpCartToCheckout({
       getAgenticReplayErrorStatus(replayReservation.error)
     );
   }
+
+  const canonical = await handleCanonicalUcpCart({
+    merchant,
+    cartId,
+    agentId: mutation.agentId,
+    action: 'checkout',
+    operationId: mutation.idempotencyKey,
+  });
+  if (canonical) return respond(canonical.body, canonical.status);
 
   const cartResult = await loadUcpCartSession({
     cartId,
@@ -248,6 +259,14 @@ export async function convertUcpCartToCheckout({
       message: 'Failed to link UCP cart to checkout session',
       route: CART_TO_CHECKOUT_ROUTE,
     });
+    const migrated = await ucpCartMigrationRaceOutcome({
+      error: updateError,
+      cartId,
+      merchantId: merchant.id,
+      agentId: mutation.agentId,
+      supabase,
+    });
+    if (migrated) return respond(migrated.body, migrated.status);
     return respond({ error: 'Database error' }, 500);
   }
 

@@ -381,6 +381,70 @@ describe('agentic checkout order dispatch', () => {
     );
   });
 
+  it.each([
+    'invalid_condition_offer',
+    'condition_offer_price_changed',
+    'insufficient_condition_offer_stock',
+  ])('returns a client error for %s', async (code) => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0001', message: code },
+    });
+    const result = await createAgenticCheckoutOrder(orderPayload(), {
+      rpc,
+      from: makeFromStub(),
+    } as unknown as SupabaseClient);
+    expect(result).toMatchObject({ ok: false, status: 400, error: code });
+  });
+
+  it('rejects an inactive selected condition before order creation', async () => {
+    const rpc = vi.fn(async () => ({
+      data: [
+        {
+          product_id: 'product-1',
+          condition: 'used',
+          status: 'inactive',
+          price: null,
+        },
+      ],
+      error: null,
+    }));
+    const products = {
+      select: () => products,
+      eq: () => products,
+      in: () => products,
+      returns: async () => ({
+        data: [
+          {
+            id: 'product-1',
+            price: 100,
+            vat_rate: 7.5,
+            vat_category_code: 'S',
+          },
+        ],
+        error: null,
+      }),
+    };
+    const from = (table: string) =>
+      table === 'products'
+        ? products
+        : makeFromStub({ vatStatus: 'registered' })(table);
+    const payload = orderPayload();
+    const result = await createAgenticCheckoutOrder(
+      {
+        ...payload,
+        items: payload.items.map((item) => ({ ...item, condition: 'used' })),
+      },
+      { rpc, from } as unknown as SupabaseClient
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      status: 400,
+      error: 'invalid_condition_offer',
+    });
+    expect(rpc.mock.calls).toHaveLength(1);
+  });
+
   it('does not expose unknown order RPC error details to callers', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,

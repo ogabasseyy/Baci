@@ -218,7 +218,12 @@ export function applyIntent(
   if (intent.kind === 'add') {
     const key = cartLineIdentity(intentIdentity(intent) as CartItemIdentity);
     const index = display.findIndex(
-      (line) => identityKeyOfDisplay(line) === key
+      (line) =>
+        identityKeyOfDisplay(line) === key &&
+        (line.quizVoucherToken ?? undefined) ===
+          (intent.input?.voucherToken ?? intent.attachments?.voucherToken) &&
+        (line.quizAwardId ?? undefined) ===
+          (intent.input?.voucherAwardId ?? intent.attachments?.voucherAwardId)
     );
     if (index === -1) {
       return [...display, optimisticAddLine(intent)];
@@ -239,8 +244,11 @@ export function applyIntent(
     return display.filter((_, lineIndex) => lineIndex !== index);
   }
   if (intent.kind === 'set_assurance') {
-    // The assurance overlay already reflects the choice in the display.
-    return display;
+    return display.map((line, lineIndex) =>
+      lineIndex === index
+        ? { ...line, hasAssurance: intent.hasAssurance }
+        : line
+    );
   }
   if (intent.kind === 'set_negotiated_price') {
     return display.map((line, lineIndex) =>

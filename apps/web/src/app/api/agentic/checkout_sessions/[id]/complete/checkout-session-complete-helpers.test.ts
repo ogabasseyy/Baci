@@ -24,13 +24,20 @@ const bindingMetadata = {
 
 function clientReturning(row: unknown) {
   return {
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          maybeSingle: async () => ({ data: row }),
-        }),
-      }),
+    from: vi.fn(() => {
+      throw new Error('unscoped table read forbidden');
     }),
+    rpc: vi.fn(async () => ({
+      data:
+        row &&
+        typeof row === 'object' &&
+        'principal_id' in row &&
+        'merchant_id' in row &&
+        row.merchant_id === 'merchant-1'
+          ? row.principal_id
+          : null,
+      error: null,
+    })),
   };
 }
 
@@ -38,8 +45,9 @@ describe('resolveAgenticSharedCartPrincipalId', () => {
   it('returns null when the metadata carries no shared-cart binding', async () => {
     await expect(
       resolveAgenticSharedCartPrincipalId({
-        bootstrap: clientReturning(null) as never,
+        client: clientReturning(null) as never,
         merchantId: 'merchant-1',
+        agenticSessionId: 'api-checkout-session',
         metadata: {},
       })
     ).resolves.toBeNull();
@@ -48,12 +56,13 @@ describe('resolveAgenticSharedCartPrincipalId', () => {
   it('resolves the preparing principal from the server-side session row', async () => {
     await expect(
       resolveAgenticSharedCartPrincipalId({
-        bootstrap: clientReturning({
+        client: clientReturning({
           cart_id: 'cart-1',
           merchant_id: 'merchant-1',
           principal_id: 'guest-a1',
         }) as never,
         merchantId: 'merchant-1',
+        agenticSessionId: 'api-checkout-session',
         metadata: bindingMetadata,
       })
     ).resolves.toBe('guest-a1');
@@ -62,12 +71,13 @@ describe('resolveAgenticSharedCartPrincipalId', () => {
   it('fails closed on merchant or cart mismatches', async () => {
     await expect(
       resolveAgenticSharedCartPrincipalId({
-        bootstrap: clientReturning({
+        client: clientReturning({
           cart_id: 'cart-1',
           merchant_id: 'merchant-2',
           principal_id: 'guest-a1',
         }) as never,
         merchantId: 'merchant-1',
+        agenticSessionId: 'api-checkout-session',
         metadata: bindingMetadata,
       })
     ).resolves.toBeNull();
@@ -109,4 +119,28 @@ describe('agenticCompleteFailureResponse', () => {
       500
     );
   });
+});
+
+it('resolves a bound principal only through the session-scoped RPC', async () => {
+  const client = clientReturning({
+    merchant_id: 'merchant-1',
+    principal_id: 'guest-a1',
+  });
+  await expect(
+    resolveAgenticSharedCartPrincipalId({
+      client: client as never,
+      merchantId: 'merchant-1',
+      agenticSessionId: 'api-checkout-session',
+      metadata: bindingMetadata,
+    })
+  ).resolves.toBe('guest-a1');
+  expect(client.from).not.toHaveBeenCalled();
+  expect(client.rpc).toHaveBeenCalledWith(
+    'commerce_cart_resolve_agentic_principal',
+    {
+      p_agentic_session_id: 'api-checkout-session',
+      p_checkout_session_id: 'session-1',
+      p_cart_id: 'cart-1',
+    }
+  );
 });

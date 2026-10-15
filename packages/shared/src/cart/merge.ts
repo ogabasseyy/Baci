@@ -72,10 +72,32 @@ export function planCartMerge(
   incoming: CartSnapshot,
   resolutions: CartMergeResolution[] = []
 ): PlanCartMergeResult {
+  // A cart may lawfully hold a regular line plus attachment-specific siblings.
+  // Keep legacy one-to-one conflict choices, but do not collapse sibling lanes.
+  const siblingBases = new Set<string>();
+  for (const snapshot of [existing, incoming]) {
+    const seenBases = new Set<string>();
+    for (const line of snapshot.lines) {
+      const base = cartLineIdentity(line.item);
+      if (seenBases.has(base)) siblingBases.add(base);
+      seenBases.add(base);
+    }
+  }
+  const keyOf = (line: CartLine): string => {
+    const base = cartLineIdentity(line.item);
+    if (!siblingBases.has(base)) return base;
+    return JSON.stringify([
+      base,
+      line.voucherToken ?? null,
+      line.voucherAwardId ?? null,
+      line.negotiatedUnitPriceMinor ?? null,
+      line.negotiationStatus ?? null,
+    ]);
+  };
   for (const snapshot of [existing, incoming]) {
     const seen = new Map<string, CartLine>();
     for (const line of snapshot.lines) {
-      const key = cartLineIdentity(line.item);
+      const key = keyOf(line);
       const previous = seen.get(key);
       if (previous)
         return {
@@ -98,11 +120,11 @@ export function planCartMerge(
   }
   const existingByKey = new Map<string, CartLine>();
   for (const line of existing.lines) {
-    existingByKey.set(cartLineIdentity(line.item), line);
+    existingByKey.set(keyOf(line), line);
   }
   const incomingByKey = new Map<string, CartLine>();
   for (const line of incoming.lines) {
-    incomingByKey.set(cartLineIdentity(line.item), line);
+    incomingByKey.set(keyOf(line), line);
   }
   const resolutionByKey = new Map<string, CartMergeResolution['keep']>();
   for (const resolution of resolutions) {
@@ -124,6 +146,7 @@ export function planCartMerge(
       const attachments = attachmentsOf(source);
       lines.push({
         ...attachments,
+        ...(source.hasAssurance ? { hasAssurance: true } : null),
         item: source.item,
         quantity: hasVoucher(attachments) ? 1 : source.quantity,
       });
@@ -134,6 +157,9 @@ export function planCartMerge(
     if (attachmentsEqual(existingAttachments, incomingAttachments)) {
       lines.push({
         ...existingAttachments,
+        ...(existingLine.hasAssurance || incomingLine.hasAssurance
+          ? { hasAssurance: true }
+          : null),
         item: existingLine.item,
         quantity: hasVoucher(existingAttachments)
           ? 1
@@ -160,6 +186,9 @@ export function planCartMerge(
       keep === 'incoming' ? incomingAttachments : existingAttachments;
     lines.push({
       ...chosen,
+      ...((keep === 'incoming' ? incomingLine : existingLine).hasAssurance
+        ? { hasAssurance: true }
+        : null),
       item: existingLine.item,
       quantity: hasVoucher(chosen)
         ? 1

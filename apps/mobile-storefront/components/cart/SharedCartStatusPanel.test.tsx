@@ -77,3 +77,21 @@ it('resets offer picks when a new conflict cycle starts on a changed cart', () =
     combine().props.accessibilityState?.disabled ?? combine().props.disabled
   ).toBeTruthy();
 });
+
+it('requires new picks after a conflict attempt changes status', () => {
+  useNativeSharedCartStore.setState({
+    status: 'choice_required',
+    mergeConflicts: [{ productId }],
+    chooseLegacy: jest.fn(),
+  });
+  const screen = render(<SharedCartStatusPanel />);
+  fireEvent.press(screen.getByRole('button', { name: 'Keep device offer' }));
+  act(() => useNativeSharedCartStore.setState({ status: 'pending' }));
+  act(() => useNativeSharedCartStore.setState({ status: 'choice_required' }));
+  const combine = screen.getByRole('button', {
+    name: 'Combine with my choices',
+  });
+  expect(
+    combine.props.accessibilityState?.disabled ?? combine.props.disabled
+  ).toBeTruthy();
+});

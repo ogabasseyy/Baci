@@ -1,3 +1,5 @@
+import { GuestCartCanonicalError } from './guest-cart-errors';
+import { GuestCartBridgePendingError } from './guest-cart-errors';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   GuestCartExpiredError,
@@ -149,4 +151,36 @@ it('falls back to a generic tool error for unknown failures', () => {
     ],
     structuredContent: { success: false },
   });
+});
+
+it('returns a retained capability when broker delivery follows committed legacy creation', () => {
+  const token = 'a'.repeat(64);
+  expect(
+    mapGuestCartToolError(new GuestCartBridgePendingError(token))
+      .structuredContent
+  ).toEqual({
+    success: false,
+    cart_token: token,
+    retryable: true,
+    code: 'refresh_required',
+  });
+});
+it('returns a canonical version refresh with the same token without claiming migration', () => {
+  const response = mapGuestCartToolError(
+    new GuestCartCanonicalError(
+      'version_conflict',
+      'a'.repeat(64),
+      '11111111-1111-4111-8111-111111111111',
+      7
+    )
+  );
+  expect(response.structuredContent).toMatchObject({
+    success: false,
+    code: 'version_conflict',
+    retryable: true,
+    cart_token: 'a'.repeat(64),
+    canonical_cart_id: '11111111-1111-4111-8111-111111111111',
+    version: 7,
+  });
+  expect(response.structuredContent).not.toHaveProperty('cart_migrated');
 });

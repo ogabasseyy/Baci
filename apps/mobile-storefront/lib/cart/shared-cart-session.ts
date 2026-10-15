@@ -42,7 +42,16 @@ export function createNativeCartSession(deps: NativeCartSessionDeps) {
       try {
         return readNativeCartContext(proof, merchant);
       } catch {
-        throw new NativeCartError('invalid_proof');
+        // Only a structurally valid, tenant-matching expired proof may be
+        // retired locally. Malformed or foreign proofs still fail closed.
+        try {
+          readNativeCartContext(proof, merchant, 0);
+        } catch {
+          throw new NativeCartError('invalid_proof');
+        }
+        await storage.remove(merchant);
+        deps.assertCurrent();
+        return null;
       }
     },
     async read(expectedCartId?: string): Promise<NativeCartReply> {

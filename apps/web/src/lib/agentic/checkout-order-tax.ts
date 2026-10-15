@@ -1,4 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  loadOrderConditionPrices,
+  orderConditionPrice,
+} from '@/lib/checkout/order-condition-prices';
 
 // Codex P1 (PR #1622 round 5): agentic checkout dispatch builds its
 // payload from `calculateCheckoutSession`, which currently computes
@@ -56,6 +60,7 @@ interface AgenticTaxItem {
   // missing IDs and returns 400 before we get here). The helper
   // itself skips items with missing product_id defensively.
   product_id?: string;
+  condition?: string | null;
   variant_id?: string | null;
   quantity: number;
 }
@@ -226,6 +231,12 @@ export async function computeAgenticOrderTax({
     );
   }
 
+  const conditionPrices = await loadOrderConditionPrices(
+    items,
+    merchantId,
+    supabase
+  );
+
   const productMap = new Map((products ?? []).map((p) => [p.id, p]));
   const variantMap = new Map((variantsData ?? []).map((v) => [v.id, v]));
 
@@ -253,7 +264,11 @@ export async function computeAgenticOrderTax({
       candidateVariant && candidateVariant.product_id === item.product_id
         ? candidateVariant
         : null;
-    const priceRaw = variant?.price_override ?? product.price ?? 0;
+    const priceRaw =
+      orderConditionPrice(conditionPrices, item) ??
+      variant?.price_override ??
+      product.price ??
+      0;
     const price = Number(priceRaw);
     if (!Number.isFinite(price) || price <= 0) continue;
 

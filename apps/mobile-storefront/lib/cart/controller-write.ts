@@ -32,7 +32,7 @@ export function createNativeCartWrite(deps: NativeCartWriteDeps) {
       await deps.refresh();
       return;
     }
-    const current = await deps.ensureCart();
+    let current = await deps.ensureCart();
     deps.status('pending');
     const command = nativeWriteCommand(action, current);
     if (!command) {
@@ -61,13 +61,29 @@ export function createNativeCartWrite(deps: NativeCartWriteDeps) {
       }
       return;
     }
-    await deps.accept(
-      await deps.coordinator.command(current.cartId, {
-        operationId: deps.newOperationId(),
-        expectedVersion: current.version,
-        command,
-      })
-    );
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const nextCommand = nativeWriteCommand(action, current);
+        if (nextCommand)
+          await deps.accept(
+            await deps.coordinator.command(current.cartId, {
+              operationId: deps.newOperationId(),
+              expectedVersion: current.version,
+              command: nextCommand,
+            })
+          );
+        return;
+      } catch (error) {
+        if (
+          attempt > 0 ||
+          !(error instanceof NativeCartError) ||
+          error.code !== 'version_conflict'
+        )
+          throw error;
+        await deps.refresh();
+        current = await deps.ensureCart();
+      }
+    }
   }
 
   async function chooseLegacy(

@@ -95,3 +95,12 @@ it('never renders a mismatched product projection returned by hydration', async 
   expect(result.items[0].name).toBe('Item unavailable');
   expect(result.items[0].slug).toBe(item.product_id);
 });
+
+it('preserves explicit assurance choices when importing native items', () => {
+  expect(nativeCartInput({ ...item, hasAssurance: true }).hasAssurance).toBe(
+    true
+  );
+  expect(nativeCartInput({ ...item, hasAssurance: false }).hasAssurance).toBe(
+    false
+  );
+});

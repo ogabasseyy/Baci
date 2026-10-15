@@ -32,18 +32,19 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
   const { addToCart, cart, isHydrated } = useCart();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  // Parsed once: the continuation strips the fragment on mount, but the
-  // pairing it captured still owns this surface.
-  const [pairing] = useState(() =>
-    typeof window === 'undefined' ? null : parseHandoffPairing(window.location.hash)
-  );
+  // Both server and browser render the same initial tree; read the fragment
+  // after hydration and retain it when the continuation strips the URL.
+  const [pairing, setPairing] = useState<ReturnType<typeof parseHandoffPairing>>(null);
+  useEffect(() => {
+    setPairing(parseHandoffPairing(window.location.hash));
+  }, []);
   const processedRef = useRef(false);
   const blockedNoticeRef = useRef(false);
 
   useEffect(() => {
     // A pairing owns the surface: importing link items into the local cart
     // underneath the continuation choice would corrupt the merge decision.
-    if (pairing) return;
+    if (pairing || parseHandoffPairing(window.location.hash)) return;
     const guestTransfer = resolveGuestCartTransfer(searchParams.get('guest_cart'));
     const itemIds = guestTransfer ? guestTransfer.itemIds : searchParams.get('item_id');
     const rawQuantity = searchParams.get('qty');

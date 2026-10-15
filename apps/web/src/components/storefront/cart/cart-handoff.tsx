@@ -11,6 +11,7 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
     destCart,
     destChecked,
     loadError,
+    previewRetryable,
     conflicts,
     setConflicts,
     resolutions,
@@ -53,8 +54,19 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
         aria-label="Cart handoff"
         className="mx-auto max-w-xl px-4 py-10"
       >
-        <h1 className="text-xl font-semibold">This cart link ended</h1>
-        <p className="mt-2 text-sm">{loadError}</p>
+        <h1 className="text-xl font-semibold">
+          {previewRetryable
+            ? 'We could not load this cart link'
+            : 'This cart link ended'}
+        </h1>
+        <p role="alert" className="mt-2 text-sm">
+          {loadError}
+        </p>
+        {previewRetryable ? (
+          <Button className="mt-4" onClick={() => void loadPreview()}>
+            Try again
+          </Button>
+        ) : null}
       </section>
     );
   }

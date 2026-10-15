@@ -1,3 +1,4 @@
+import { renderToString } from 'react-dom/server';
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCart } from '@/hooks/cart';
@@ -100,4 +101,12 @@ describe('CartPageWrapper handoff', () => {
       expect(screen.queryByText(/Handoff continuation/)).not.toBeInTheDocument();
     }
   );
+});
+
+it('renders the ordinary initial tree before the browser handoff effect', () => {
+  mockSearch('');
+  mockCartReady();
+  window.history.replaceState({}, '', '/cart#handoff=secret&hid=public');
+  const html = renderToString(<CartPageWrapper merchantId="merchant-1" />);
+  expect(html).not.toContain('Handoff continuation');
 });

@@ -172,6 +172,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   __resetCartQuotaStoreForTesting();
   if (savedSecret === undefined) {
     delete process.env.CART_SESSION_SECRET;
@@ -359,6 +360,8 @@ describe('GET /api/storefront/cart', () => {
 
 describe('POST /api/storefront/cart', () => {
   it('lazily creates a cart and upgrades to a session proof', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-12T04:00:00Z'));
     mocks.cartPayload = {
       code: null,
       grantId: GRANT_ID,

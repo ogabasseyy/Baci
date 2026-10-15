@@ -740,3 +740,49 @@ describe('useSharedCart actions', () => {
     });
   });
 });
+it('does not create an assurance overlay when repricing a line', async () => {
+  const { createCartActions } = await import('./shared-cart-actions');
+  const dispatch = vi.fn();
+  const actions = createCartActions({
+    enabled: true,
+    dispatch,
+    stateRef: { current: {} },
+    generationRef: { current: 1 },
+    tempCounterRef: { current: 0 },
+  } as never);
+  actions.repriceLine(
+    {
+      ...product(),
+      cartItemId: 'line-1',
+      serverLineId: 'line-1',
+      quantity: 1,
+      hasAssurance: true,
+    } as never,
+    50
+  );
+  expect(
+    dispatch.mock.calls.some(([action]) => action.type === 'assurance/overlay')
+  ).toBe(false);
+});
+it('checks for completion before clearing a bound cart after checkout', async () => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
+  mockAdopted();
+  const { result } = renderHook(() =>
+    useSharedCart({
+      merchantId: MERCHANT_ID,
+      merchantSlug: SLUG,
+      sessionGeneration: 1,
+    })
+  );
+  await waitFor(() => expect(result.current.cart).toHaveLength(1));
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: snapshot({ state: 'completed', version: 4 }),
+    warnings: [],
+  });
+  await act(async () => result.current.clearCart());
+  await waitFor(() => expect(result.current.cart).toEqual([]));
+  expect(sendSharedCartCommand).not.toHaveBeenCalled();
+});

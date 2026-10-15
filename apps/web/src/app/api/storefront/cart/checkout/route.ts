@@ -141,6 +141,7 @@ export async function POST(request: NextRequest) {
       replayed: result.replayed,
       sessionReused: result.sessionReused,
       snapshot: result.snapshot,
+      sessionExpiresAt: result.sessionExpiresAt,
     });
     const cookieMaxAge = cartSessionCookieMaxAge(proofExpiresAt);
     if (proof && cookieMaxAge > 0) {

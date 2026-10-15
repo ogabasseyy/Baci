@@ -5,7 +5,12 @@ import {
   storeAgenticIdempotencyResponse,
 } from '@/lib/agentic/idempotency';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
+import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
 import { convertUcpCartToCheckout } from '@/lib/agentic/ucp-cart-checkout-conversion';
+
+vi.mock('@/lib/agentic/ucp-canonical-cart', () => ({
+  handleCanonicalUcpCart: vi.fn().mockResolvedValue(null),
+}));
 
 vi.mock('server-only', () => ({}));
 
@@ -95,7 +100,13 @@ function createSupabaseMock({
     throw new Error(`Unexpected table ${table}`);
   });
 
-  return { cartUpdateChain, checkoutDeleteChain, checkoutInsertChain, from };
+  return {
+    cartSelectChain,
+    cartUpdateChain,
+    checkoutDeleteChain,
+    checkoutInsertChain,
+    from,
+  };
 }
 
 function mockCalculation() {
@@ -126,6 +137,7 @@ function mockCalculation() {
 describe('convertUcpCartToCheckout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue(null);
     vi.mocked(reserveAgenticIdempotencyKey).mockResolvedValue({
       ok: true,
       state: 'reserved',
@@ -302,5 +314,74 @@ describe('convertUcpCartToCheckout', () => {
     // The retired row must not convert through the legacy path: no
     // checkout session, no cart link write.
     expect(checkoutInsertChain.insert).not.toHaveBeenCalled();
+  });
+  it('cleans the unlinked checkout and reloads canonical identity after a migration fence', async () => {
+    mockCalculation();
+    const row = {
+      agent_id: 'openai-agent',
+      cart_id: 'cart_123',
+      cart_items: [{ id: 'product-1', quantity: 1 }],
+      currency: 'NGN',
+      status: 'active',
+      shipping_address: null,
+    };
+    const { cartSelectChain, checkoutDeleteChain, from } = createSupabaseMock({
+      cartResult: { data: row, error: null },
+      cartUpdateResult: {
+        data: null,
+        error: { code: 'P0001', message: 'migrated cart is read-only' },
+      },
+    });
+    cartSelectChain.maybeSingle
+      .mockResolvedValueOnce({ data: row, error: null })
+      .mockResolvedValueOnce({
+        data: { ...row, migrated_to_cart_id: 'canonical-race' },
+        error: null,
+      });
+    const response = await convertUcpCartToCheckout({
+      cartId: 'cart_123',
+      merchant,
+      mutation,
+      requestUrl: 'http://localhost/api/agentic/carts/cart_123/checkout',
+      supabase: { from } as never,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'refresh_required',
+      cart_id: 'canonical-race',
+    });
+    expect(checkoutDeleteChain.delete).toHaveBeenCalled();
+    expect(storeAgenticIdempotencyResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 409 })
+    );
+  });
+  it('returns canonical handoff before creating any unbound legacy checkout', async () => {
+    const from = vi.fn(() => {
+      throw new Error('legacy must not be read');
+    });
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue({
+      status: 409,
+      body: {
+        code: 'checkout_requires_handoff',
+        continue_url: 'https://shop/cart#handoff=valid',
+        cart_id: 'canonical',
+      },
+    });
+    const response = await convertUcpCartToCheckout({
+      cartId: 'cart_123',
+      merchant,
+      mutation,
+      requestUrl: 'https://shop/api/agentic/carts/cart_123/checkout',
+      supabase: { from } as never,
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'checkout_requires_handoff',
+      continue_url: expect.any(String),
+    });
+    expect(handleCanonicalUcpCart).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: 'openai-agent', action: 'checkout' })
+    );
+    expect(from).not.toHaveBeenCalled();
   });
 });

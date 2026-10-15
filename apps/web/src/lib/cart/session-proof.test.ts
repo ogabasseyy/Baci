@@ -1,6 +1,9 @@
 import { Buffer } from 'node:buffer';
 import { createHmac } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+afterEach(() => vi.unstubAllEnvs());
+
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
   CART_SESSION_PROOF_TTL_SECONDS,
@@ -59,7 +62,7 @@ describe('issueCartSessionProof', () => {
 
     const verified = verifyCartSessionProof(proof, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       secret: SECRET,
     });
 
@@ -255,7 +258,7 @@ describe('verifyCartSessionProof', () => {
 
     const verified = verifyCartSessionProof(tampered, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       secret: SECRET,
     });
 
@@ -271,7 +274,7 @@ describe('verifyCartSessionProof', () => {
 
     const verified = verifyCartSessionProof(forged, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       secret: SECRET,
     });
 
@@ -281,7 +284,7 @@ describe('verifyCartSessionProof', () => {
   it('rejects a malformed proof without throwing', () => {
     const verified = verifyCartSessionProof('cp1 Zm9vYmFy.unknown', {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       secret: SECRET,
     });
 
@@ -297,7 +300,7 @@ describe('verifyCartSessionProof', () => {
 
     const verified = verifyCartSessionProof(proof, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-14T04:00:01Z'),
+      now: new Date('2026-10-19T04:00:01Z'),
       secret: SECRET,
     });
 
@@ -313,7 +316,7 @@ describe('verifyCartSessionProof', () => {
 
     const verified = verifyCartSessionProof(proof, {
       environment: 'preview',
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       secret: SECRET,
     });
 
@@ -331,7 +334,7 @@ describe('verifyCartSessionProof', () => {
     const verified = verifyCartSessionProof(proof, {
       audience: 'baci:other-service',
       environment: ENVIRONMENT,
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       secret: SECRET,
     });
 
@@ -347,7 +350,7 @@ describe('verifyCartSessionProof', () => {
 
     const duringRotation = verifyCartSessionProof(proof, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       previousSecrets: [SECRET],
       secret: ROTATED_SECRET,
     });
@@ -355,7 +358,7 @@ describe('verifyCartSessionProof', () => {
 
     const afterRemoval = verifyCartSessionProof(proof, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       secret: ROTATED_SECRET,
     });
     expect(afterRemoval).toEqual({ error: 'invalid_proof', ok: false });
@@ -370,7 +373,7 @@ describe('verifyCartSessionProof', () => {
 
     const verified = verifyCartSessionProof(expired, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-12T04:01:00Z'),
+      now: new Date('2026-10-17T04:01:00Z'),
       secret: SECRET,
     });
 
@@ -402,7 +405,7 @@ it('allows an expired signed proof only for revocation, preserving signature and
   });
   const options = {
     environment: ENVIRONMENT,
-    now: new Date('2026-10-14T00:00:00Z'),
+    now: new Date('2026-10-19T00:01:00Z'),
     secret: SECRET,
   };
   expect(verifyCartSessionProof(proof, options).ok).toBe(false);
@@ -442,13 +445,46 @@ it('rejects revocation once the proof expired beyond the grace window', async ()
     now: new Date('2026-10-12T00:00:00Z'),
     secret: SECRET,
   });
-  // Proof expired 2026-10-13; three days later it must no longer be
+  // Proof expired 2026-10-19; three days later it must no longer be
   // able to retire device access.
   expect(
     verifyCartSessionProofForRevocation(proof, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-16T00:00:01Z'),
+      now: new Date('2026-10-22T00:00:01Z'),
       secret: SECRET,
     })
   ).toEqual({ error: 'expired_proof', ok: false });
+});
+
+it('keeps an idle proof usable through the seven-day backing grant window', () => {
+  const now = new Date('2026-10-15T00:00:00Z');
+  const proof = issueCartSessionProof(
+    { ...sessionInput(), grantExpiresAt: '2026-10-22T00:00:00Z' },
+    { secret: SECRET, environment: ENVIRONMENT, now }
+  );
+  expect(
+    verifyCartSessionProof(proof, {
+      secret: SECRET,
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-17T00:00:00Z'),
+    }).ok
+  ).toBe(true);
+});
+
+it('uses configured previous keys across the runtime verifier during rotation', () => {
+  const now = new Date('2026-10-15T00:00:00Z');
+  const proof = issueCartSessionProof(sessionInput(), {
+    secret: SECRET,
+    environment: ENVIRONMENT,
+    now,
+  });
+  vi.stubEnv('CART_SESSION_SECRET', ROTATED_SECRET);
+  vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', JSON.stringify([SECRET]));
+  expect(
+    verifyCartSessionProof(proof, { environment: ENVIRONMENT, now }).ok
+  ).toBe(true);
+  vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', '[]');
+  expect(
+    verifyCartSessionProof(proof, { environment: ENVIRONMENT, now })
+  ).toMatchObject({ ok: false, error: 'invalid_proof' });
 });

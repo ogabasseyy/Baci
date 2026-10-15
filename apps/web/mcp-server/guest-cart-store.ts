@@ -1,3 +1,4 @@
+import { createGuestCanonicalBridge } from './guest-cart-canonical-bridge';
 import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
@@ -5,6 +6,8 @@ import { z } from 'zod';
 import { guestCartLineSchema } from '../src/schemas/guest-cart-line';
 import { storedCartSchema } from '../src/schemas/guest-cart-stored-cart';
 import {
+  GuestCartBridgePendingError,
+  GuestCartCanonicalError,
   GuestCartExpiredError,
   GuestCartFullError,
   GuestCartMigratedError,
@@ -21,6 +24,8 @@ export type GuestCartLine = z.infer<typeof guestCartLineSchema>;
  */
 export type GuestCartLineInput = Omit<GuestCartLine, 'quantity'> & {
   quantity: number;
+  expectedVersion?: number;
+  operationId?: string;
 };
 
 const TTL = 7 * 24 * 60 * 60 * 1000;
@@ -65,7 +70,10 @@ export class GuestCartStore {
   /** Token-free code of the latest failed write; /health degrades until a write succeeds. */
   lastStorageErrorCode: string | null = null;
 
-  constructor(private readonly supabase: SupabaseClient) {}
+  constructor(
+    private readonly supabase: SupabaseClient,
+    private readonly canonical = createGuestCanonicalBridge()
+  ) {}
 
   private async rpc<T>(name: string, params: Record<string, unknown>) {
     const { data, error } = await this.supabase.rpc(name, params);
@@ -140,6 +148,7 @@ export class GuestCartStore {
 
   /** True when the token names a live, parseable, unexpired cart. */
   async hasToken(token: string): Promise<boolean> {
+    if (this.canonical) return this.canonical.hasToken(token);
     if (!TOKEN_PATTERN.test(token)) return false;
     try {
       const cart = await this.readCart(token);
@@ -185,21 +194,46 @@ export class GuestCartStore {
     // success) so an outage cannot keep the probe green. Only the
     // token-free code is recorded, never the message.
     try {
+      if (token && this.canonical) {
+        if (normalizedLine.quantity > 0)
+          await validate([guestCartLineSchema.parse(normalizedLine)]);
+        const result = await this.canonical.update(token, normalizedLine);
+        this.lastStorageErrorCode = null;
+        return result;
+      }
       const result = token
         ? await this.updateTokenCart(token, normalizedLine, validate)
         : await this.createCart(normalizedLine);
       this.lastStorageErrorCode = null;
+      if (this.canonical) {
+        try {
+          return await this.canonical.update(result.cart_token, normalizedLine);
+        } catch (error) {
+          if (error instanceof GuestCartStorageUnavailableError)
+            this.lastStorageErrorCode = error.code ?? 'bridge_unavailable';
+          if (
+            error instanceof GuestCartCanonicalError &&
+            error.code === 'temporarily_unavailable'
+          )
+            this.lastStorageErrorCode = 'bridge_unavailable';
+          throw new GuestCartBridgePendingError(result.cart_token);
+        }
+      }
       return result;
     } catch (error) {
       if (error instanceof GuestCartStorageUnavailableError)
         this.lastStorageErrorCode = error.code ?? 'unknown';
+      else if (
+        error instanceof GuestCartCanonicalError &&
+        error.code === 'temporarily_unavailable'
+      )
+        this.lastStorageErrorCode = 'bridge_unavailable';
       throw error;
     }
   }
 
   private async createCart(line: GuestCartLineInput) {
-    const items =
-      line.quantity === 0 ? [] : [guestCartLineSchema.parse(line)];
+    const items = line.quantity === 0 ? [] : [guestCartLineSchema.parse(line)];
     const expiresAt = Date.now() + TTL;
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       const cartToken = randomBytes(32).toString('hex');
@@ -258,9 +292,7 @@ export class GuestCartStore {
         if (migratedTo) throw new GuestCartMigratedError(migratedTo);
         // Absolute quantities make a lost-response retry safe without incrementing twice.
         const items = [
-          ...cart.items.filter(
-            (item) => item.product_id !== line.product_id
-          ),
+          ...cart.items.filter((item) => item.product_id !== line.product_id),
           ...(line.quantity === 0 ? [] : [guestCartLineSchema.parse(line)]),
         ];
         if (items.length > MAX_LINES) throw new GuestCartFullError();

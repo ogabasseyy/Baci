@@ -33,15 +33,30 @@ export function attemptStorageKey(handoffId: string): string {
   return `baci-cart-handoff-attempt:${handoffId}`;
 }
 
+const attemptIds = new Map<string, string>();
+
 export function loadOrCreateAttemptId(handoffId: string): string {
   const key = attemptStorageKey(handoffId);
-  const stored = window.localStorage.getItem(key);
-  if (stored) return stored;
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (stored) {
+      attemptIds.set(key, stored);
+      return stored;
+    }
+  } catch {
+    /* Storage is optional; preserve retry identity in this tab. */
+  }
   const attemptId =
-    typeof crypto.randomUUID === 'function'
+    attemptIds.get(key) ??
+    (typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
-      : `attempt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  window.localStorage.setItem(key, attemptId);
+      : `attempt-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  attemptIds.set(key, attemptId);
+  try {
+    window.localStorage.setItem(key, attemptId);
+  } catch {
+    /* Use the tab cache. */
+  }
   return attemptId;
 }
 

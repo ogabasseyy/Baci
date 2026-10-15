@@ -74,4 +74,35 @@ export const eventPipelineCartCredentialPaths = [
     'apps/web/src/lib/agentic/jwt-signing-material.ts',
     'apps/web/src/env.ts',
   ],
+  [
+    'apps/web/src/app/api/storefront/cart/bootstrap/route.ts',
+    'apps/web/src/lib/cart/scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/app/api/storefront/cart/legacy/route.ts',
+    'apps/web/src/lib/cart/legacy-canonical-bridge.ts',
+    'apps/web/src/lib/cart/legacy-scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/agentic/ucp-canonical-cart.ts',
+    'apps/web/src/lib/cart/legacy-canonical-bridge.ts',
+    'apps/web/src/lib/cart/legacy-scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/cart/legacy-canonical-bridge.ts',
+    'apps/web/src/lib/cart/legacy-scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
+  [
+    'apps/web/src/lib/cart/legacy-scoped-client.ts',
+    'apps/web/src/lib/agentic/jwt-signing-material.ts',
+    'apps/web/src/env.ts',
+  ],
 ];

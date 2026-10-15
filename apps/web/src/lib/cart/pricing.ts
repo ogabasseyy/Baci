@@ -61,6 +61,7 @@ function priceLine(raw: RawCartLine): {
   const unitPriceMinor = hasVoucher
     ? 0
     : raw.negotiationStatus === 'accepted' &&
+        !raw.negotiationInvalidated &&
         raw.negotiatedUnitPriceMinor != null
       ? raw.negotiatedUnitPriceMinor
       : raw.unitPriceMinor;
@@ -84,7 +85,9 @@ function priceLine(raw: RawCartLine): {
     lineTotalMinor: unitPriceMinor * raw.quantity,
     negotiatedUnitPriceMinor: hasVoucher
       ? undefined
-      : (raw.negotiatedUnitPriceMinor ?? undefined),
+      : raw.negotiationInvalidated
+        ? undefined
+        : (raw.negotiatedUnitPriceMinor ?? undefined),
     negotiationStatus: hasVoucher
       ? undefined
       : toNegotiationStatus(raw.negotiationStatus),

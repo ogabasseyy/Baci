@@ -103,6 +103,14 @@ export function createCartRecovery(
         },
         operationId: `import:${current.confirmed?.cartId}:set:${set.lineId}:${index}`,
       })),
+      ...planned.assurances.map((set) => ({
+        intent: {
+          kind: 'set_assurance' as const,
+          hasAssurance: set.hasAssurance,
+          target: { kind: 'lineId' as const, lineId: set.lineId },
+        },
+        operationId: `import:${current.confirmed?.cartId}:assurance:${set.lineId}:${set.hasAssurance}`,
+      })),
     ];
     importOpIdsRef.current = new Set(entries.map((entry) => entry.operationId));
     dispatch({ entries, generation, type: 'import/enqueue' });

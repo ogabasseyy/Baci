@@ -445,3 +445,51 @@ it('recovers a temporary destination outage without discarding the handoff', asy
     fetchMock.mock.calls.some(([url]) => String(url).includes('/bootstrap'))
   ).toBe(false);
 });
+it.each([
+  'network',
+  'server',
+] as const)('retries a temporary %s preview failure without treating the link as ended', async (failure) => {
+  fetchMock.mockReset();
+  if (failure === 'network')
+    fetchMock.mockRejectedValueOnce(new Error('offline'));
+  else
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ code: 'temporarily_unavailable' }, 503)
+    );
+  render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+  expect(
+    await screen.findByRole('heading', {
+      name: 'We could not load this cart link',
+    })
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole('heading', { name: 'This cart link ended' })
+  ).not.toBeInTheDocument();
+  mockFetchSequence(
+    {
+      merchant: { slug: 'ogabassey' },
+      snapshot: snapshot(),
+      status: 'pending',
+    },
+    { code: 'missing_proof' },
+    401
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+  expect(
+    await screen.findByRole('button', { name: /connect/i })
+  ).toBeInTheDocument();
+  expect(
+    fetchMock.mock.calls.filter(([url]) => String(url).includes('/handoff?'))
+  ).toHaveLength(2);
+});
+it('keeps a definitively invalid preview terminal rather than offering a transport retry', async () => {
+  fetchMock.mockReset();
+  fetchMock.mockResolvedValue(jsonResponse({ code: 'invalid_handoff' }, 404));
+  render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+  expect(
+    await screen.findByRole('heading', { name: 'This cart link ended' })
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', { name: 'Try again' })
+  ).not.toBeInTheDocument();
+});

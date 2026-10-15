@@ -152,6 +152,11 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
     let reviewedCheckoutItemsResult: ReturnType<
       typeof buildCheckoutOrderItems
     > | null = null;
+    if (cart.sharedCartEnabled && !cart.sharedCartRef) {
+      toast({ title: 'Cart Syncing', description: 'Your cart is still connecting. Wait a moment and submit again.', variant: 'destructive' });
+      processing.isOrderInFlightRef.current = false;
+      return;
+    }
     if (cart.sharedCartRef) {
       // The binding pins the reviewed version, but the order items come
       // from the display cart: submitting with unconfirmed optimistic

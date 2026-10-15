@@ -243,6 +243,7 @@ describe('POST /api/storefront/cart/checkout', () => {
     expect(response.headers.get('set-cookie')).toContain('Max-Age=');
     expect(payload.replayed).toBe(false);
     expect(payload.sessionReused).toBe(false);
+    expect(payload.sessionExpiresAt).toBe(sessionExpiresAt.toISOString());
     expect(payload.snapshot.checkoutSessionId).toBe(SESSION_ID);
     expect(payload.snapshot.generation).toBe(1);
     expect(payload.snapshot.lines).toHaveLength(1);

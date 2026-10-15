@@ -8,10 +8,12 @@ import {
 import type { Product } from '@/lib/products';
 
 import type { AddToCartOptions, SharedCartDisplayItem } from './cart-types';
+import { fetchSharedCartSnapshot } from './shared-cart-client';
 import {
   findMatchingLineIndex,
   targetForLine,
 } from './shared-cart-hook-support';
+import { isTerminalCart } from './shared-cart-queue';
 import {
   cartItemToIdentity,
   type SharedCartIntent,
@@ -159,7 +161,29 @@ export function createCartActions(context: SharedCartRuntime) {
     });
   }
 
-  function clearCart(): void {
+  async function clearCart(): Promise<void> {
+    if (!enabled) return;
+    const generation = generationRef.current;
+    if (
+      stateRef.current.confirmed &&
+      isTerminalCart(stateRef.current.confirmed)
+    )
+      return;
+    // Checkout commits completion before cleanup runs. Refresh first so a
+    // successful order never issues a mutation against its immutable cart.
+    const fresh = await fetchSharedCartSnapshot(
+      undefined,
+      context.optionsRef.current.merchantSlug
+    );
+    if (generationRef.current !== generation) return;
+    if (fresh.ok && isTerminalCart(fresh.snapshot)) {
+      dispatch({
+        generation,
+        snapshot: fresh.snapshot,
+        type: 'snapshot/polled',
+      });
+      return;
+    }
     enqueueIntent({ kind: 'clear' });
   }
 
@@ -172,12 +196,6 @@ export function createCartActions(context: SharedCartRuntime) {
       generation,
       products: { [key]: line as unknown as Product },
       type: 'products/hydrated',
-    });
-    dispatch({
-      generation,
-      hasAssurance: line.hasAssurance ?? false,
-      lineKey: key,
-      type: 'assurance/overlay',
     });
     // One atomic in-place reprice: the server line, its quantity and
     // its identity never move, so an interrupted or rejected reprice
@@ -195,12 +213,6 @@ export function createCartActions(context: SharedCartRuntime) {
     const line = current.display.find((item) => item.cartItemId === cartItemId);
     if (!line) return;
     const hasAssurance = !(line.hasAssurance ?? false);
-    dispatch({
-      generation: generationRef.current,
-      hasAssurance,
-      lineKey: cartLineIdentity(cartItemToIdentity(line)),
-      type: 'assurance/overlay',
-    });
     // Persist the choice on the shared line so the checkout review and
     // the bound order carry the same coverage the shopper selected.
     enqueueIntent({

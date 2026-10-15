@@ -9,6 +9,7 @@ import {
 
 import { bootstrapSharedCart, createSharedCart } from './shared-cart-client';
 import type { EnsureCartResult } from './shared-cart-hook-support';
+import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -22,6 +23,7 @@ export function createCartProvisioning(context: SharedCartRuntime) {
     createOpRef,
     createRequestRef,
     createAttemptedRef,
+    retiredCartIdRef,
     bootstrappingRef,
     optionsRef,
   } = context;
@@ -29,7 +31,24 @@ export function createCartProvisioning(context: SharedCartRuntime) {
   async function ensureCart(): Promise<EnsureCartResult> {
     const generation = generationRef.current;
     const current = stateRef.current;
-    if (current.cartId && current.confirmed) return { ok: true };
+    if (
+      current.cartId &&
+      current.confirmed &&
+      !isTerminalCart(current.confirmed)
+    )
+      return { ok: true };
+    if (
+      current.confirmed &&
+      isTerminalCart(current.confirmed) &&
+      retiredCartIdRef.current !== current.cartId
+    ) {
+      retiredCartIdRef.current = current.cartId;
+      adoptOutcomeRef.current = 'none';
+      createAttemptedRef.current = false;
+      createOpRef.current = crypto.randomUUID();
+      createRequestRef.current = { operationId: createOpRef.current };
+      importOpIdsRef.current = new Set();
+    }
     // Defensive: the sender only runs once linked, so adoption has
     // settled by the time these paths are reachable.
     const unsettled = {

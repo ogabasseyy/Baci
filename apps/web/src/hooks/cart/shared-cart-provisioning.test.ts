@@ -702,3 +702,87 @@ describe('useSharedCart legacy import', () => {
     expect(result.current.syncError).toBe('not_found');
   });
 });
+it('retires a completed cart and provisions empty before the next add', async () => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: snapshot({ state: 'completed' }),
+    warnings: [],
+  });
+  vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
+  const newId = '33333333-3333-4333-8333-333333333333';
+  vi.mocked(createSharedCart).mockResolvedValue({
+    ok: true,
+    replayed: false,
+    snapshot: snapshot({ cartId: newId, version: 0, lines: [] }),
+    warnings: [],
+  });
+  vi.mocked(sendSharedCartCommand).mockResolvedValue({
+    ok: true,
+    replayed: false,
+    snapshot: snapshot({ cartId: newId, version: 1 }),
+    warnings: [],
+  });
+  const { result } = renderHook(() =>
+    useSharedCart({
+      merchantId: MERCHANT_ID,
+      merchantSlug: SLUG,
+      sessionGeneration: 1,
+    })
+  );
+  await waitFor(() => expect(result.current.isHydrated).toBe(true));
+  await waitFor(() => expect(result.current.cart).toEqual([]));
+  await act(async () => result.current.addToCart(product()));
+  await waitFor(() => expect(sendSharedCartCommand).toHaveBeenCalledTimes(1));
+  expect(bootstrapSharedCart).toHaveBeenCalledTimes(1);
+  expect(createSharedCart).toHaveBeenCalledWith(
+    { operationId: expect.any(String) },
+    SLUG
+  );
+  expect(result.current.cartId).toBe(newId);
+});
+it('retries an add on a new cart when checkout completed before the mutation', async () => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
+  mockAdopted();
+  vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
+  const newId = '33333333-3333-4333-8333-333333333333';
+  vi.mocked(createSharedCart).mockResolvedValue({
+    ok: true,
+    replayed: false,
+    snapshot: snapshot({ cartId: newId, version: 0, lines: [] }),
+    warnings: [],
+  });
+  vi.mocked(sendSharedCartCommand)
+    .mockResolvedValueOnce({
+      ok: false,
+      code: 'cart_locked',
+      retryable: false,
+      snapshot: null,
+    })
+    .mockResolvedValue({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({ cartId: newId, version: 1 }),
+      warnings: [],
+    });
+  const { result } = renderHook(() =>
+    useSharedCart({
+      merchantId: MERCHANT_ID,
+      merchantSlug: SLUG,
+      sessionGeneration: 1,
+    })
+  );
+  await waitFor(() => expect(result.current.cart).toHaveLength(1));
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: snapshot({ state: 'completed', version: 4 }),
+    warnings: [],
+  });
+  await act(async () => result.current.addToCart(product()));
+  await waitFor(() => expect(result.current.cartId).toBe(newId));
+  expect(sendSharedCartCommand).toHaveBeenCalledTimes(2);
+});

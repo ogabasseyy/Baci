@@ -1,10 +1,8 @@
 import type { CartLine, CartSnapshot } from '@baci/shared/cart';
-
 import { describe, expect, it } from 'vitest';
-
 import type { Product } from '@/lib/products';
-
 import type { CartItem } from './cart-types';
+import { displayLineToInputLine } from './shared-cart-import';
 
 import { planLegacyImport } from './shared-cart-reducer';
 
@@ -167,5 +165,34 @@ describe('planLegacyImport', () => {
     if (planned.kind !== 'create') throw new Error('expected create plan');
     expect(planned.lines).toHaveLength(20);
     expect(planned.warnings).toEqual(['too_many_lines']);
+  });
+});
+
+it('preserves selected assurance when adopting a legacy line', () => {
+  expect(
+    displayLineToInputLine(cartItem({ hasAssurance: true }))
+  ).toMatchObject({ hasAssurance: true });
+});
+it('uses a distinct adoption key when coverage changes', () => {
+  const ordinary = planLegacyImport([cartItem()], null, null);
+  const insured = planLegacyImport(
+    [cartItem({ hasAssurance: true })],
+    null,
+    null
+  );
+  expect(ordinary.kind).toBe('create');
+  expect(insured.kind).toBe('create');
+  if (ordinary.kind === 'create' && insured.kind === 'create')
+    expect(insured.operationId).not.toBe(ordinary.operationId);
+});
+it('persists imported coverage when its product already exists on the server', () => {
+  const planned = planLegacyImport(
+    [cartItem({ hasAssurance: true })],
+    snapshot({ version: 2 }),
+    CART_ID
+  );
+  expect(planned).toMatchObject({
+    kind: 'commands',
+    assurances: [{ lineId: 'line-1', hasAssurance: true }],
   });
 });

@@ -117,3 +117,18 @@ it('bootstraps to the already-stored proof without network work', async () => {
   });
   expect(deps.fetcher).not.toHaveBeenCalled();
 });
+
+it('removes a structurally valid expired proof so bootstrap can replace it', async () => {
+  const deps = makeDeps({
+    storage: {
+      getSession: jest.fn().mockResolvedValue({
+        proof: makeProof({ exp: 1 }),
+        ownerSubject: null,
+      }),
+    },
+  });
+  await expect(
+    createNativeCartSession(deps as never).context()
+  ).resolves.toBeNull();
+  expect(deps.storage.remove).toHaveBeenCalledWith(MERCHANT_ID);
+});

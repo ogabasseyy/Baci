@@ -11,27 +11,22 @@ import { sanitizeForLog } from '@/lib/sanitize-core';
  * requires it and fails closed when it cannot be resolved here.
  */
 export async function resolveAgenticSharedCartPrincipalId(input: {
-  bootstrap: SupabaseClient;
+  client: SupabaseClient;
   merchantId: string;
+  agenticSessionId: string;
   metadata: unknown;
 }): Promise<string | null> {
   const binding = readAgenticSharedCartBinding(input.metadata);
   if (!binding) return null;
-  const { data } = await input.bootstrap
-    .from('commerce_cart_checkout_sessions')
-    .select('principal_id, merchant_id, cart_id')
-    .eq('id', binding.checkout_session_id)
-    .maybeSingle();
-  if (
-    data &&
-    data.merchant_id === input.merchantId &&
-    data.cart_id === binding.cart_id &&
-    typeof data.principal_id === 'string' &&
-    data.principal_id
-  ) {
-    return data.principal_id;
-  }
-  return null;
+  const { data, error } = await input.client.rpc(
+    'commerce_cart_resolve_agentic_principal',
+    {
+      p_agentic_session_id: input.agenticSessionId,
+      p_checkout_session_id: binding.checkout_session_id,
+      p_cart_id: binding.cart_id,
+    }
+  );
+  return !error && typeof data === 'string' && data.trim() ? data : null;
 }
 
 type PayOnDeliveryFinalizeInput = Parameters<
@@ -57,7 +52,8 @@ export async function completeAgenticPayOnDelivery(
     );
   }
   const sharedCartPrincipalId = await resolveAgenticSharedCartPrincipalId({
-    bootstrap: input.bootstrap,
+    client: input.supabase,
+    agenticSessionId: input.sessionId,
     merchantId: input.merchantId,
     metadata: input.metadata,
   });

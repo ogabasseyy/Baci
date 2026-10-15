@@ -40,3 +40,27 @@ export function getCartProofEnvironment(): string {
   if (vercel) return vercel;
   return process.env.NODE_ENV?.trim() || 'development';
 }
+
+/** Optional previous signing keys for bounded, server-only rotation windows.
+ * Reading configuration does not provision or authorize a production change.
+ */
+export function getCartPreviousSessionSecrets(): string[] {
+  assertServerRuntime('CART_SESSION_PREVIOUS_SECRETS');
+  try {
+    const value: unknown = JSON.parse(
+      process.env.CART_SESSION_PREVIOUS_SECRETS ?? '[]'
+    );
+    if (
+      !Array.isArray(value) ||
+      value.length > 8 ||
+      !value.every(
+        (key): key is string =>
+          typeof key === 'string' && key.trim().length >= 32
+      )
+    )
+      return [];
+    return value.map((key) => key.trim());
+  } catch {
+    return [];
+  }
+}

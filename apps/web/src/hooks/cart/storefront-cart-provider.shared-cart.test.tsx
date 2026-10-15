@@ -649,3 +649,36 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
     delegated.unmount();
   });
 });
+it('clears parked legacy lines and fences shared responses when enrollment is rolled back', async () => {
+  window.localStorage.clear();
+  window.localStorage.setItem(
+    `baci-cart-${SLUG}-guest`,
+    JSON.stringify([{ ...product(), cartItemId: 'legacy', quantity: 2 }])
+  );
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: snapshot(),
+    warnings: [],
+  });
+  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
+  let enabled = false;
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <StorefrontCartProvider
+      merchantSlug={SLUG}
+      merchantId={MERCHANT_ID}
+      sharedCartEnabled={enabled}
+    >
+      {children}
+    </StorefrontCartProvider>
+  );
+  const { result, rerender } = renderHook(() => useCart(), { wrapper });
+  await waitFor(() => expect(result.current.isHydrated).toBe(true));
+  expect(result.current.cart).toHaveLength(1);
+  enabled = true;
+  rerender();
+  await waitFor(() => expect(result.current.sharedCartRef).toBeTruthy());
+  enabled = false;
+  rerender();
+  expect(result.current.cart).toEqual([]);
+  expect(result.current.isHydrated).toBe(true);
+});

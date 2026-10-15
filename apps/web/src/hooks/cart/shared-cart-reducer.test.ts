@@ -572,8 +572,8 @@ describe('shared-cart-reducer assurance overlay', () => {
     });
     expect(toggled.display[0].hasAssurance).toBe(true);
 
-    // The overlay survives reconciliation: the server snapshot has no
-    // assurance input, so the display re-applies the shopper's choice.
+    // An unrelated command must not settle a still-pending assurance
+    // choice; only its own definitive outcome removes the overlay.
     const reconciled = sharedCartReducer(toggled, {
       generation: 1,
       operationId: 'op-missing',
@@ -636,4 +636,55 @@ it('resolves queued edits when PostgreSQL returns lower-case UUIDs for an upper-
     serverLineId: 'confirmed-case-line',
     quantity: 2,
   });
+});
+it.each([
+  'success',
+  'rejection',
+] as const)('clears coverage overlays after definitive %s so later device values are visible', (outcome) => {
+  let state = sharedCartReducer(linked(), {
+    generation: 1,
+    hasAssurance: true,
+    lineKey: cartLineIdentity({ productId: 'prod-1' }),
+    type: 'assurance/overlay',
+  });
+  state = sharedCartReducer(state, {
+    generation: 1,
+    type: 'command/enqueue',
+    entry: {
+      operationId: 'coverage',
+      intent: {
+        kind: 'set_assurance',
+        hasAssurance: true,
+        target: { kind: 'lineId', lineId: 'line-1' },
+      },
+    },
+  });
+  state =
+    outcome === 'success'
+      ? sharedCartReducer(state, {
+          generation: 1,
+          type: 'command/reconciled',
+          operationId: 'coverage',
+          snapshot: snapshot({
+            version: 4,
+            lines: [cartLine({ hasAssurance: true })],
+          }),
+        })
+      : sharedCartReducer(state, {
+          generation: 1,
+          type: 'command/failed',
+          operationId: 'coverage',
+          code: 'invalid_item',
+          retryable: false,
+        });
+  expect(state.assuranceOverlays).toEqual({});
+  state = sharedCartReducer(state, {
+    generation: 1,
+    type: 'snapshot/polled',
+    snapshot: snapshot({
+      version: 5,
+      lines: [cartLine({ hasAssurance: false })],
+    }),
+  });
+  expect(state.display[0].hasAssurance).toBe(false);
 });

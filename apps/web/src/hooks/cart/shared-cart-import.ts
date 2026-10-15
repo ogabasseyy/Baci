@@ -26,6 +26,7 @@ export function displayLineToInputLine(item: CartItem): CartInputLine {
       Math.max(1, Math.round(item.quantity))
     ),
   };
+  if (item.hasAssurance !== undefined) line.hasAssurance = item.hasAssurance;
   if (item.quizVoucherToken) line.voucherToken = item.quizVoucherToken;
   if (item.quizAwardId) line.voucherAwardId = item.quizAwardId;
   if (line.voucherToken ?? line.voucherAwardId) line.quantity = 1;
@@ -67,6 +68,7 @@ export type PlannedLegacyImport =
       kind: 'commands';
       adds: { line: CartInputLine; operationId: string }[];
       sets: { lineId: string; quantity: number }[];
+      assurances: { lineId: string; hasAssurance: boolean }[];
       warnings: string[];
     }
   | { kind: 'conflicts'; conflicts: CartMergeConflict[] };
@@ -95,7 +97,7 @@ export function syntheticIncoming(lines: CartInputLine[]): CartSnapshot {
     lines: lines.map(
       (line, index) =>
         ({
-          hasAssurance: false,
+          hasAssurance: line.hasAssurance ?? false,
           id: `import-${index}`,
           item: line.item,
           lineTotalMinor: 0,
@@ -141,7 +143,7 @@ export function planLegacyImport(
         : lines;
     if (truncated.length < lines.length) warnings.push('too_many_lines');
     const fingerprint = truncated
-      .map((line) => `${cartLineIdentity(line.item)}:${line.quantity}`)
+      .map((line) => JSON.stringify(line))
       .sort()
       .join('|');
     return {
@@ -183,6 +185,7 @@ export function planLegacyImport(
   );
   const adds: { line: CartInputLine; operationId: string }[] = [];
   const sets: { lineId: string; quantity: number }[] = [];
+  const assurances: { lineId: string; hasAssurance: boolean }[] = [];
   for (const line of planned.lines) {
     const key = cartLineIdentity(line.item);
     const existing = serverByKey.get(key);
@@ -191,9 +194,15 @@ export function planLegacyImport(
         line,
         operationId: `import:${cartId}:${fnv1aHex(key)}`,
       });
-    } else if (existing.quantity !== line.quantity) {
-      sets.push({ lineId: existing.id, quantity: line.quantity });
+    } else {
+      if (existing.quantity !== line.quantity)
+        sets.push({ lineId: existing.id, quantity: line.quantity });
+      if ((line.hasAssurance ?? false) !== (existing.hasAssurance ?? false))
+        assurances.push({
+          lineId: existing.id,
+          hasAssurance: line.hasAssurance ?? false,
+        });
     }
   }
-  return { adds, kind: 'commands', sets, warnings };
+  return { adds, assurances, kind: 'commands', sets, warnings };
 }

@@ -1,9 +1,4 @@
-import type {
-  CartItemIdentity,
-  CartMergeResolution,
-  CartSnapshot,
-} from '@baci/shared/cart';
-import type { CartItem } from '@/stores/cart-store.types';
+import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
 import type { SharedCartWrite } from '@/stores/shared-cart-writer';
 import { createCartCommandCoordinator } from './command-coordinator';
 import type {
@@ -19,17 +14,12 @@ export type {
   NativeSharedCartRef,
 };
 
-import {
-  type CartProductShell,
-  hydrateNativeCart,
-  nativeCartInput,
-} from './display';
+import { hydrateNativeCart, nativeCartInput } from './display';
 import { pairNativeCart } from './native-cart-pairing';
 import type { CartPairingLink } from './pairing-link';
 import { pendingCartRequest } from './pending-request';
 import {
   type NativeAccountLinkInput,
-  type NativeCartClient,
   NativeCartError,
 } from './shared-cart-client';
 
@@ -107,7 +97,16 @@ export function createNativeCartController(
     if (!snapshot) options.status('loading');
     const context = await options.client.context();
     assertCurrent();
-    const pending = await receipts.read(options.merchantId);
+    let pending = await receipts.read(options.merchantId);
+    if (!context && options.getLegacy().sharedCartRef && options.repairLegacy) {
+      // Retire the local generation after losing its device capability.
+      if (pending)
+        await receipts.clear(options.merchantId, pending.operationId);
+      options.repairLegacy([]);
+      pending = null;
+      snapshot = null;
+      terminal = false;
+    }
     assertCurrent();
     if (pending) {
       const recovered = await coordinator.recover();
@@ -208,7 +207,37 @@ export function createNativeCartController(
       serial(async () => {
         await ensureCart();
       }),
-    write: (action: SharedCartWrite) => serial(() => operations.write(action)),
+    write: (action: SharedCartWrite) =>
+      serial(async () => {
+        const legacy = options.getLegacy();
+        if (
+          !terminal &&
+          !snapshot &&
+          !incoming &&
+          legacy.items.length > 0 &&
+          !legacy.sharedCartRef &&
+          options.repairLegacy &&
+          (action.type === 'clear' ||
+            action.type === 'remove' ||
+            action.type === 'quantity') &&
+          !(await options.client.context())?.cartId &&
+          !(await receipts.read(options.merchantId))
+        ) {
+          const items =
+            action.type === 'clear'
+              ? []
+              : legacy.items.flatMap((item) => {
+                  if (item.id !== action.id) return [item];
+                  return action.type === 'remove' || action.quantity <= 0
+                    ? []
+                    : [{ ...item, quantity: action.quantity }];
+                });
+          options.repairLegacy(items);
+          options.status('ready');
+          return;
+        }
+        await operations.write(action);
+      }),
     pair: (
       link: CartPairingLink,
       choice: 'connect' | 'merge' | 'keep_existing',

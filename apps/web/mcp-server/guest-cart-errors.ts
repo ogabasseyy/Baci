@@ -31,3 +31,43 @@ export class GuestCartStorageUnavailableError extends Error {
     this.code = code;
   }
 }
+
+/** Creation committed before broker delivery; retain this handle on retries. */
+export class GuestCartBridgePendingError extends Error {
+  constructor(readonly cartToken: string) {
+    super('Canonical cart preparation is pending');
+  }
+}
+
+/** Broker failures are typed without retaining provider messages. */
+export class GuestCartCanonicalError extends Error {
+  readonly retryable: boolean;
+  constructor(
+    readonly code:
+      | 'version_conflict'
+      | 'refresh_required'
+      | 'unauthorized'
+      | 'temporarily_unavailable'
+      | 'invalid_request'
+      | 'invalid_item'
+      | 'merchant_unavailable'
+      | 'merchant_unresolved'
+      | 'quota_exceeded'
+      | 'rate_limited'
+      | 'cart_locked'
+      | 'idempotency_conflict'
+      | 'merge_conflict'
+      | 'handoff_consumed',
+    readonly cartToken: string,
+    readonly cartId: string | null = null,
+    readonly version: number | null = null
+  ) {
+    super('Canonical cart request could not complete');
+    this.retryable =
+      code === 'version_conflict' ||
+      code === 'refresh_required' ||
+      code === 'temporarily_unavailable' ||
+      code === 'quota_exceeded' ||
+      code === 'rate_limited';
+  }
+}

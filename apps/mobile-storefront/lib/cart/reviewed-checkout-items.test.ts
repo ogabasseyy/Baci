@@ -77,3 +77,16 @@ it('refuses to substitute a stale or foreign product shell for a canonical line'
     reviewedCheckoutItems([{ ...cached[0], product_id: 'wrong' }], review)
   ).toThrow();
 });
+
+it('keeps reviewed voucher prizes free despite a positive catalog price', () => {
+  const prize = {
+    ...review,
+    lines: [
+      { ...review.lines[0], voucherToken: 'prize', voucherAwardId: 'award' },
+    ],
+  };
+  expect(reviewedCheckoutItems(cached, prize)[0].price).toBe(0);
+  expect(
+    reviewedCheckoutItems(cached, prize)[0].negotiatedPrice
+  ).toBeUndefined();
+});

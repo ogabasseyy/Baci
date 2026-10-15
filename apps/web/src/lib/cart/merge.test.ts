@@ -222,7 +222,7 @@ describe('planCartMerge', () => {
     }
   });
 });
-it('never silently drops duplicate voucher identities already present in one cart', () => {
+it('preserves duplicate product identities with distinct voucher attachments', () => {
   const result = planCartMerge(
     snapshot([
       line(TECNO, 1, { voucherAwardId: 'award-a' }),
@@ -230,5 +230,6 @@ it('never silently drops duplicate voucher identities already present in one car
     ]),
     snapshot([])
   );
-  expect(result.ok).toBe(false);
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.lines).toHaveLength(2);
 });

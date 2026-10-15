@@ -29,7 +29,15 @@ export function useCartCheckoutSnapshot() {
   const cartId = snapshot?.cartId;
   const merchantId = snapshot?.merchantId;
   const version = snapshot?.version;
-  const key = JSON.stringify([enabled, owner, merchantId, cartId, version]);
+  const offerKey = JSON.stringify(snapshot);
+  const key = JSON.stringify([
+    enabled,
+    owner,
+    merchantId,
+    cartId,
+    version,
+    offerKey,
+  ]);
   const latest = useRef(key);
   latest.current = `${key}:${retryCount}`;
 
@@ -45,6 +53,7 @@ export function useCartCheckoutSnapshot() {
         live.snapshot?.merchantId === merchantId &&
         live.snapshot?.cartId === cartId &&
         live.snapshot?.version === version &&
+        JSON.stringify(live.snapshot) === offerKey &&
         live.prepareCheckoutReview === prepare
       );
     };
@@ -94,6 +103,7 @@ export function useCartCheckoutSnapshot() {
     merchantId,
     cartId,
     version,
+    offerKey,
     prepare,
     refresh,
     key,

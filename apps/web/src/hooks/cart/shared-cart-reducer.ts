@@ -139,7 +139,18 @@ export function sharedCartReducer(
         const identity = intentIdentity(entry.intent) as CartItemIdentity;
         const key = cartLineIdentity(identity);
         const match = (adopted.confirmed?.lines ?? []).find(
-          (line) => cartLineIdentity(line.item) === key
+          (line) =>
+            cartLineIdentity(line.item) === key &&
+            (line.voucherToken ?? undefined) ===
+              (entry.intent.kind === 'add'
+                ? (entry.intent.input?.voucherToken ??
+                  entry.intent.attachments?.voucherToken)
+                : undefined) &&
+            (line.voucherAwardId ?? undefined) ===
+              (entry.intent.kind === 'add'
+                ? (entry.intent.input?.voucherAwardId ??
+                  entry.intent.attachments?.voucherAwardId)
+                : undefined)
         );
         const before = queue.length;
         queue = resolveTempDependents(

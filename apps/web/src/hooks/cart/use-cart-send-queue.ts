@@ -19,6 +19,7 @@ import {
   RETRY_BASE_MS,
 } from './shared-cart-hook-support';
 import type { createCartProvisioning } from './shared-cart-provisioning';
+import { isTerminalCart } from './shared-cart-queue';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -84,7 +85,11 @@ export function useCartSendQueue(
         (entry) => entry.operationId === head.operationId
       );
       if (pending?.state !== 'queued') return;
-      if (!current.cartId || !current.confirmed) {
+      if (
+        !current.cartId ||
+        !current.confirmed ||
+        isTerminalCart(current.confirmed)
+      ) {
         const ensured = await ensureCart();
         if (generationRef.current !== generation || ensured === null) return;
         if (!ensured.ok) {
@@ -149,6 +154,21 @@ export function useCartSendQueue(
         finishImportOp(pending.operationId, { ok: true });
         void hydrateMissing(result.snapshot);
         return;
+      }
+      if (result.code === 'cart_locked') {
+        const fresh = await fetchSharedCartSnapshot(
+          undefined,
+          optionsRef.current.merchantSlug
+        );
+        if (generationRef.current !== generation) return;
+        if (fresh.ok && isTerminalCart(fresh.snapshot)) {
+          dispatch({
+            generation,
+            snapshot: fresh.snapshot,
+            type: 'snapshot/polled',
+          });
+          return;
+        }
       }
       if (result.code === 'version_conflict') {
         if (result.snapshot) {

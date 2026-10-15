@@ -23,9 +23,15 @@ export function SharedCartStatusPanel() {
   // Offer picks belong to one conflict cycle: when the conflict set or
   // the underlying cart changes, stale picks must not pre-arm Combine
   // for offers the shopper has not reviewed in this cycle.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: picks are scoped to the conflict lifecycle, including status transitions.
   useEffect(() => {
     setPicks({});
-  }, [state.mergeConflicts, state.snapshot?.cartId, state.snapshot?.version]);
+  }, [
+    state.mergeConflicts,
+    state.snapshot?.cartId,
+    state.snapshot?.version,
+    state.status,
+  ]);
   if (!state.enabled) return null;
   const busy = state.status === 'loading' || state.status === 'pending';
   if (

@@ -7,6 +7,8 @@ import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency
 import { readAgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
+import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
+import { ucpCartMigrationRaceOutcome } from '@/lib/agentic/ucp-cart-migration-race';
 import { buildUcpCartResponse } from '@/lib/agentic/ucp-cart-response';
 import {
   buildUcpCartContinueUrl,
@@ -99,6 +101,15 @@ export async function POST(request: NextRequest, props: RouteProps) {
     );
   }
 
+  const canonical = await handleCanonicalUcpCart({
+    merchant: context.merchant,
+    cartId: parsedParams.data.id,
+    agentId: mutation.agentId,
+    action: 'cancel',
+    operationId: mutation.idempotencyKey,
+  });
+  if (canonical) return respond(canonical.body, canonical.status);
+
   const cartResult = await loadUcpCartSession({
     cartId: parsedParams.data.id,
     merchantId: context.merchant.id,
@@ -128,7 +139,17 @@ export async function POST(request: NextRequest, props: RouteProps) {
       .eq('status', 'active')
       .select('cart_id')
       .maybeSingle();
-    if (updateError) return respond({ error: 'Database error' }, 500);
+    if (updateError) {
+      const migrated = await ucpCartMigrationRaceOutcome({
+        error: updateError,
+        cartId: parsedParams.data.id,
+        merchantId: context.merchant.id,
+        agentId: mutation.agentId,
+        supabase: context.supabase,
+      });
+      if (migrated) return respond(migrated.body, migrated.status);
+      return respond({ error: 'Database error' }, 500);
+    }
     if (!updatedCart) return respond({ error: 'Cart cannot be canceled' }, 409);
   }
 

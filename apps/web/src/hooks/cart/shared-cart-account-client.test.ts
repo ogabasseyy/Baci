@@ -88,3 +88,15 @@ describe('shared-cart account client', () => {
     );
   });
 });
+it('allows ordinary logout when merchant is outside the cart pilot', async () => {
+  fetchMock.mockResolvedValue(
+    jsonResponse({ code: 'merchant_unavailable' }, 403)
+  );
+  await expect(revokeCartDeviceSession('legacy')).resolves.toEqual({
+    ok: true,
+  });
+});
+it('still fails closed on revocation transport errors', async () => {
+  fetchMock.mockRejectedValue(new Error('offline'));
+  await expect(revokeCartDeviceSession('shop')).resolves.toEqual({ ok: false });
+});

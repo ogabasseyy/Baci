@@ -19,6 +19,7 @@ import {
   RECONCILE_POLL_MS,
   seedProducts,
 } from './shared-cart-hook-support';
+import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
@@ -131,7 +132,8 @@ export function useCartLinkLifecycle(
         });
         setLinkPhase('ready');
         void hydrateMissing(result.snapshot);
-        void maybeImport(result.snapshot, cached);
+        if (!isTerminalCart(result.snapshot))
+          void maybeImport(result.snapshot, cached);
         return;
       }
       if (result.retryable) {
@@ -208,6 +210,14 @@ export function useCartLinkLifecycle(
             target: { kind: 'lineId' as const, lineId: set.lineId },
           },
           operationId: `import:${snapshot.cartId}:set:${set.lineId}:${index}`,
+        })),
+        ...planned.assurances.map((set) => ({
+          intent: {
+            kind: 'set_assurance' as const,
+            hasAssurance: set.hasAssurance,
+            target: { kind: 'lineId' as const, lineId: set.lineId },
+          },
+          operationId: `import:${snapshot.cartId}:assurance:${set.lineId}:${set.hasAssurance}`,
         })),
       ];
       importOpIdsRef.current = new Set(

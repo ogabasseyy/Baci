@@ -32,6 +32,7 @@ import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
+import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
@@ -1229,6 +1230,14 @@ export async function POST(request: NextRequest) {
         supabase,
       });
     } catch (taxError) {
+      if (taxError instanceof OrderConditionUnavailableError)
+        return NextResponse.json(
+          {
+            error: 'Condition offer unavailable; refresh your cart',
+            details: 'invalid_condition_offer',
+          },
+          { status: 400 }
+        );
       // Codex P2 (PR #1622 round 7): malformed item ids (Zod only
       // validates as `string`) cascade into Postgres's UUID parser
       // as code 22P02. Pre-route-side-recompute, the RPC's own
@@ -1295,6 +1304,14 @@ export async function POST(request: NextRequest) {
         vatRegistered,
       });
     } catch (negotiationDiscountError) {
+      if (negotiationDiscountError instanceof OrderConditionUnavailableError)
+        return NextResponse.json(
+          {
+            error: 'Condition offer unavailable; refresh your cart',
+            details: 'invalid_condition_offer',
+          },
+          { status: 400 }
+        );
       if (isCanonicalOrderSubtotalUuidError(negotiationDiscountError)) {
         logger.warn({
           error: negotiationDiscountError,
@@ -1744,6 +1761,14 @@ export async function POST(request: NextRequest) {
           supabase,
         });
       } catch (subtotalError) {
+        if (subtotalError instanceof OrderConditionUnavailableError)
+          return NextResponse.json(
+            {
+              error: 'Condition offer unavailable; refresh your cart',
+              details: 'invalid_condition_offer',
+            },
+            { status: 400 }
+          );
         if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
           return NextResponse.json(
             { error: 'Failed to create order', details: 'invalid_items' },
@@ -1837,6 +1862,14 @@ export async function POST(request: NextRequest) {
             supabase,
           });
         } catch (subtotalError) {
+          if (subtotalError instanceof OrderConditionUnavailableError)
+            return NextResponse.json(
+              {
+                error: 'Condition offer unavailable; refresh your cart',
+                details: 'invalid_condition_offer',
+              },
+              { status: 400 }
+            );
           if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
             return NextResponse.json(
               { error: 'Failed to create order', details: 'invalid_items' },
@@ -2400,6 +2433,9 @@ export async function POST(request: NextRequest) {
         'invalid_items',
         'invalid_quantity',
         'invalid_variant',
+        'invalid_condition_offer',
+        'condition_offer_price_changed',
+        'insufficient_condition_offer_stock',
         'insufficient_stock',
         'insufficient_variant_stock',
         'merchant_not_found',

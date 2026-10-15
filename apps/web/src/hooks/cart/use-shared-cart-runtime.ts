@@ -50,6 +50,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   >(null);
 
   const createAttemptedRef = useRef(false);
+  const retiredCartIdRef = useRef<string | null>(null);
 
   const bootstrappingRef = useRef(false);
 
@@ -91,6 +92,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
     createOpRef,
     createRequestRef,
     createAttemptedRef,
+    retiredCartIdRef,
     bootstrappingRef,
     lastFetchRef,
     hydratingRef,

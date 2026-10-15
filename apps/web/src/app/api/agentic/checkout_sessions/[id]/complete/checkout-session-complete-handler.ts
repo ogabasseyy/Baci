@@ -105,6 +105,7 @@ export async function handleAgenticCheckoutSessionComplete(
     const supabase = createAgenticScopedSupabaseClient({
       merchantId: merchant.id,
       merchantSlug: merchant.slug,
+      sessionId,
     });
     const idempotency = await reserveAgenticIdempotencyKey({
       agentId: mutation.agentId,
@@ -265,7 +266,8 @@ export async function handleAgenticCheckoutSessionComplete(
     }
 
     const sharedCartPrincipalId = await resolveAgenticSharedCartPrincipalId({
-      bootstrap,
+      client: supabase,
+      agenticSessionId: sessionId,
       merchantId: merchant.id,
       metadata: preparedPayment.payment.metadata,
     });

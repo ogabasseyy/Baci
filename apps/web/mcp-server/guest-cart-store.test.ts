@@ -1,3 +1,8 @@
+import { GuestCartCanonicalError } from './guest-cart-errors';
+import {
+  VariantSelectionRequired,
+  ProductUnavailable,
+} from './guest-cart-tool-responses';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { expect, it, vi } from 'vitest';
 import {
@@ -83,8 +88,16 @@ it('retires the token when the last line is removed', async () => {
   const fake = createFakeGuestCartSupabase();
   fake.rows.set(token, liveRow([{ product_id: id, quantity: 2 }]));
   const store = storeOn(fake.supabase);
-  const result = await store.update(token, { product_id: id, quantity: 0 }, validate);
-  expect(result).toMatchObject({ cart_token: token, items: [], cart_emptied: true });
+  const result = await store.update(
+    token,
+    { product_id: id, quantity: 0 },
+    validate
+  );
+  expect(result).toMatchObject({
+    cart_token: token,
+    items: [],
+    cart_emptied: true,
+  });
   expect(fake.rows.has(token)).toBe(false);
   await expect(
     store.update(token, { product_id: id, quantity: 1 }, validate)
@@ -125,7 +138,11 @@ it('enforces the per-cart line cap', async () => {
     )
   );
   await expect(
-    storeOn(fake.supabase).update(token, { product_id: id, quantity: 1 }, validate)
+    storeOn(fake.supabase).update(
+      token,
+      { product_id: id, quantity: 1 },
+      validate
+    )
   ).rejects.toBeInstanceOf(GuestCartFullError);
 });
 
@@ -137,7 +154,11 @@ it('reports an expired token and reclaims its row', async () => {
     version: 3,
   });
   await expect(
-    storeOn(fake.supabase).update(token, { product_id: id, quantity: 1 }, validate)
+    storeOn(fake.supabase).update(
+      token,
+      { product_id: id, quantity: 1 },
+      validate
+    )
   ).rejects.toBeInstanceOf(GuestCartExpiredError);
   expect(fake.rows.has(token)).toBe(false);
 });
@@ -148,7 +169,11 @@ it('reports unknown and corrupt rows as expired', async () => {
   await expect(
     store.update(token, { product_id: id, quantity: 1 }, validate)
   ).rejects.toBeInstanceOf(GuestCartExpiredError);
-  fake.rows.set(token, { items: [{ nope: true }], expires_at: new Date().toISOString(), version: 1 });
+  fake.rows.set(token, {
+    items: [{ nope: true }],
+    expires_at: new Date().toISOString(),
+    version: 1,
+  });
   await expect(
     store.update(token, { product_id: id, quantity: 1 }, validate)
   ).rejects.toBeInstanceOf(GuestCartExpiredError);
@@ -166,7 +191,11 @@ it('surfaces transport failures as typed outages and clears them on success', as
   expect((failure as GuestCartStorageUnavailableError).code).toBe('XX000');
   expect(store.lastStorageErrorCode).toBe('XX000');
   expect(describeGuestCartStoreHealth(store).guestCarts).toBe('degraded');
-  const result = await store.update(undefined, { product_id: id, quantity: 1 }, validate);
+  const result = await store.update(
+    undefined,
+    { product_id: id, quantity: 1 },
+    validate
+  );
   expect(result.items).toHaveLength(1);
   expect(store.lastStorageErrorCode).toBeNull();
   expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
@@ -215,7 +244,11 @@ it('validates creations before any RPC and updates after merging', async () => {
     throw new Error('stale line');
   });
   await expect(
-    store.update(created.cart_token, { product_id: other, quantity: 3 }, rejected)
+    store.update(
+      created.cart_token,
+      { product_id: other, quantity: 3 },
+      rejected
+    )
   ).rejects.toThrow('stale line');
   // A rejected creation never reaches storage.
   const callsBefore = fake.calls.length;
@@ -277,9 +310,9 @@ it('blocks writes to a migrated cart with the canonical mapping', async () => {
     );
   expect(failure).toBeInstanceOf(GuestCartMigratedError);
   expect((failure as GuestCartMigratedError).cartId).toBe(other);
-  expect(
-    fake.calls.some((call) => call.name === 'upsert_mcp_guest_cart')
-  ).toBe(false);
+  expect(fake.calls.some((call) => call.name === 'upsert_mcp_guest_cart')).toBe(
+    false
+  );
   expect(store.lastStorageErrorCode).toBeNull();
 });
 
@@ -300,4 +333,127 @@ it('still probes a migrated token as live', async () => {
   fake.rows.set(token, liveRow([{ product_id: id, quantity: 1 }]));
   fake.migrate(token, other);
   await expect(storeOn(fake.supabase).hasToken(token)).resolves.toBe(true);
+});
+
+it('delegates token writes and reads to canonical authority without legacy RPC fallback', async () => {
+  const product = 'abcdefab-1111-4111-8111-111111111111';
+  const rpc = vi.fn();
+  const canonical = {
+    update: vi.fn().mockResolvedValue({
+      cart_token: token,
+      items: [{ product_id: id, quantity: 2 }],
+      expires_at: '2099-01-01T00:00:00Z',
+      canonical_cart_id: other,
+      version: 2,
+    }),
+    hasToken: vi.fn().mockResolvedValue(true),
+  };
+  const store = new GuestCartStore({ rpc } as never, canonical);
+  await store.update(
+    token,
+    {
+      product_id: product.toUpperCase(),
+      quantity: 2,
+      expectedVersion: 1,
+      operationId: 'op',
+    },
+    validate
+  );
+  expect(canonical.update).toHaveBeenCalledWith(
+    token,
+    expect.objectContaining({
+      product_id: product,
+      expectedVersion: 1,
+      operationId: 'op',
+    })
+  );
+  expect(await store.hasToken(token)).toBe(true);
+  expect(rpc).not.toHaveBeenCalled();
+});
+it('retains a durable handle when canonical preparation fails after first legacy persistence', async () => {
+  const fake = createFakeGuestCartSupabase();
+  const store = new GuestCartStore(fake.supabase, {
+    update: vi.fn().mockRejectedValue(new Error('timeout')),
+    hasToken: vi.fn(),
+  });
+  await expect(
+    store.update(undefined, { product_id: id, quantity: 1 }, validate)
+  ).rejects.toMatchObject({
+    cartToken: expect.stringMatching(/^[a-f0-9]{64}$/),
+  });
+});
+
+it.each([
+  new VariantSelectionRequired(id, 'https://ogabassey.com/products/options'),
+  new ProductUnavailable(id),
+])('validates a changed canonical product before broker mutation and preserves typed %s', async (failure) => {
+  const canonical = { update: vi.fn(), hasToken: vi.fn() };
+  const validateChanged = vi.fn().mockRejectedValue(failure);
+  const store = new GuestCartStore({ rpc: vi.fn() } as never, canonical);
+  await expect(
+    store.update(token, { product_id: id, quantity: 2 }, validateChanged)
+  ).rejects.toBe(failure);
+  expect(validateChanged).toHaveBeenCalledWith([
+    { product_id: id, quantity: 2 },
+  ]);
+  expect(canonical.update).not.toHaveBeenCalled();
+});
+it('removes a canonical line without requiring catalog availability', async () => {
+  const canonical = {
+    update: vi.fn().mockResolvedValue({
+      cart_token: token,
+      items: [],
+      expires_at: '2099-01-01T00:00:00Z',
+    }),
+    hasToken: vi.fn(),
+  };
+  const validateChanged = vi
+    .fn()
+    .mockRejectedValue(new Error('catalog offline'));
+  const store = new GuestCartStore({ rpc: vi.fn() } as never, canonical);
+  await expect(
+    store.update(token, { product_id: id, quantity: 0 }, validateChanged)
+  ).resolves.toMatchObject({ items: [] });
+  expect(validateChanged).not.toHaveBeenCalled();
+  expect(canonical.update).toHaveBeenCalled();
+});
+it('degrades bridge health only for a real outage and clears it after canonical success', async () => {
+  const canonical = {
+    update: vi
+      .fn()
+      .mockRejectedValueOnce(
+        new GuestCartCanonicalError('temporarily_unavailable', token)
+      )
+      .mockResolvedValue({
+        cart_token: token,
+        items: [{ product_id: id, quantity: 1 }],
+        expires_at: '2099-01-01T00:00:00Z',
+      }),
+    hasToken: vi.fn(),
+  };
+  const store = new GuestCartStore({ rpc: vi.fn() } as never, canonical);
+  await expect(
+    store.update(token, { product_id: id, quantity: 1 }, validate)
+  ).rejects.toMatchObject({ code: 'temporarily_unavailable' });
+  expect(describeGuestCartStoreHealth(store)).toEqual({
+    guestCarts: 'degraded',
+    guestCartsReason: 'guest cart write failed (bridge_unavailable)',
+  });
+  await store.update(token, { product_id: id, quantity: 1 }, validate);
+  expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
+});
+it.each([
+  'version_conflict',
+  'unauthorized',
+  'quota_exceeded',
+] as const)('keeps storage health green for expected %s outcomes', async (code) => {
+  const canonical = {
+    update: vi.fn().mockRejectedValue(new GuestCartCanonicalError(code, token)),
+    hasToken: vi.fn(),
+  };
+  const store = new GuestCartStore({ rpc: vi.fn() } as never, canonical);
+  await expect(
+    store.update(token, { product_id: id, quantity: 1 }, validate)
+  ).rejects.toMatchObject({ code });
+  expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
 });

@@ -460,3 +460,117 @@ describe('shared-cart-reducer failure and retry', () => {
     expect(deriveSyncStatus(state)).toBe('synced');
   });
 });
+
+describe('temp targets for coverage and repricing', () => {
+  it.each([
+    'set_assurance',
+    'set_negotiated_price',
+  ] as const)('resolves %s after its optimistic add', (kind) => {
+    const added = sharedCartReducer(linked(3, []), {
+      type: 'command/enqueue',
+      generation: 1,
+      entry: {
+        operationId: 'add',
+        intent: {
+          kind: 'add',
+          product: product(),
+          quantity: 1,
+          tempId: 'temp',
+        },
+      },
+    });
+    const intent =
+      kind === 'set_assurance'
+        ? {
+            kind,
+            hasAssurance: true,
+            target: { kind: 'temp' as const, tempId: 'temp' },
+          }
+        : {
+            kind,
+            negotiatedUnitPriceMinor: 5000,
+            target: { kind: 'temp' as const, tempId: 'temp' },
+          };
+    const queued = sharedCartReducer(added, {
+      type: 'command/enqueue',
+      generation: 1,
+      entry: { operationId: 'edit', intent },
+    });
+    expect(queued.queue[1].blockedOnTempId).toBe('temp');
+    const settled = sharedCartReducer(queued, {
+      type: 'command/reconciled',
+      generation: 1,
+      operationId: 'add',
+      snapshot: snapshot({ version: 4 }),
+    });
+    expect(settled.queue[0].intent).toMatchObject({
+      target: { kind: 'lineId', lineId: 'line-1' },
+    });
+  });
+});
+it('keeps a voucher optimistic line distinct from ordinary units of the same product', () => {
+  const added = sharedCartReducer(linked(), {
+    type: 'command/enqueue',
+    generation: 1,
+    entry: {
+      operationId: 'voucher-add',
+      intent: {
+        kind: 'add',
+        product: product(),
+        quantity: 1,
+        tempId: 'prize',
+        attachments: { voucherToken: 'token' },
+      },
+    },
+  });
+  expect(added.display).toHaveLength(2);
+  const queued = sharedCartReducer(added, {
+    type: 'command/enqueue',
+    generation: 1,
+    entry: {
+      operationId: 'coverage',
+      intent: {
+        kind: 'set_assurance',
+        hasAssurance: true,
+        target: { kind: 'temp', tempId: 'prize' },
+      },
+    },
+  });
+  const settled = sharedCartReducer(queued, {
+    type: 'command/reconciled',
+    generation: 1,
+    operationId: 'voucher-add',
+    snapshot: snapshot({
+      version: 4,
+      lines: [
+        cartLine(),
+        cartLine({ id: 'prize-line', voucherToken: 'token' }),
+      ],
+    }),
+  });
+  expect(settled.queue[0].intent).toMatchObject({
+    target: { kind: 'lineId', lineId: 'prize-line' },
+  });
+});
+it('changes assurance only on its attachment-distinct target line', () => {
+  const state = linked(3, [
+    cartLine(),
+    cartLine({ id: 'prize', voucherToken: 'voucher' }),
+  ]);
+  const queued = sharedCartReducer(state, {
+    type: 'command/enqueue',
+    generation: 1,
+    entry: {
+      operationId: 'coverage',
+      intent: {
+        kind: 'set_assurance',
+        hasAssurance: true,
+        target: { kind: 'lineId', lineId: 'prize' },
+      },
+    },
+  });
+  expect(queued.display.map((line) => line.hasAssurance)).toEqual([
+    false,
+    true,
+  ]);
+});

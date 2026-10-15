@@ -1,5 +1,9 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { hasSharedCartWriter } from '@/stores/shared-cart-writer';
+import { NativeCartError } from '@/lib/cart/native-cart-error';
+import {
+  hasSharedCartWriter,
+  retireSharedCartWriter,
+} from '@/stores/shared-cart-writer';
 import { useSharedCart } from './use-shared-cart';
 
 const mockLegacyCart = {
@@ -91,4 +95,35 @@ it('discards canonical ownership when enrollment turns off', async () => {
   renderHook(() => useSharedCart({ ...options, enabled: false }, deps));
   expect(mockLegacyCart.current.sharedCartRef).toBeUndefined();
   expect(mockLegacyCart.current.items).toEqual([]);
+});
+
+it('clears a pending receipt even when local retirement defers remote revocation', async () => {
+  const deps = {
+    client: jest.fn(() => ({
+      context: jest.fn().mockResolvedValue(null),
+      bootstrap: jest.fn(),
+      read: jest.fn(),
+      create: jest.fn(),
+      command: jest.fn(),
+      recoverCreation: jest.fn(),
+      retireDevice: jest
+        .fn()
+        .mockRejectedValue(new NativeCartError('revocation_pending')),
+    })),
+    loadProduct: jest.fn().mockResolvedValue(null),
+    receipts: {
+      read: jest.fn().mockResolvedValue({ operationId: 'pending' }),
+      save: jest.fn(),
+      clear: jest.fn(),
+    },
+  };
+  const { unmount } = renderHook(() => useSharedCart(options, deps));
+  await expect(retireSharedCartWriter()).rejects.toMatchObject({
+    code: 'revocation_pending',
+  });
+  expect(deps.receipts.clear).toHaveBeenCalledWith(
+    options.merchantId,
+    'pending'
+  );
+  unmount();
 });

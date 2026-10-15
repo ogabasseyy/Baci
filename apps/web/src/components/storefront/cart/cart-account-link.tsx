@@ -48,7 +48,7 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
   const showChoices = Boolean(saved && saved.cartId !== sharedRef.cartId);
   const plan =
     showChoices && saved && current
-      ? planCartMerge(saved, current, resolutions)
+      ? planCartMerge(current, saved, resolutions)
       : null;
   const conflicts =
     plan && !plan.ok && plan.code === 'merge_conflict' ? plan.conflicts : [];
@@ -103,7 +103,7 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
                         JSON.stringify(pick.item) !==
                         JSON.stringify(conflict.item)
                     ),
-                    { item: conflict.item, keep: 'existing' },
+                    { item: conflict.item, keep: 'incoming' },
                   ])
                 }
               >
@@ -119,7 +119,7 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
                         JSON.stringify(pick.item) !==
                         JSON.stringify(conflict.item)
                     ),
-                    { item: conflict.item, keep: 'incoming' },
+                    { item: conflict.item, keep: 'existing' },
                   ])
                 }
               >

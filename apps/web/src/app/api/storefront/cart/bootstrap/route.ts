@@ -16,6 +16,8 @@ import {
   cartJsonResponse,
   setCartSessionCookie,
 } from '@/lib/cart/response';
+import { createCartScopedClient } from '@/lib/cart/scoped-client';
+import { getCart } from '@/lib/cart/service';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
   CartSessionConfigError,
@@ -120,6 +122,25 @@ export async function POST(request: NextRequest) {
         verified.ok &&
         verified.session.merchantId === merchant.merchant.id &&
         verified.session.cartId !== null;
+      if (hasLiveSessionCookie && verified.ok) {
+        // Preserve a usable live cart, but let a completed/retired cart
+        // relinquish its cookie so subsequent writes can start afresh.
+        try {
+          const principal = { ...verified.session, scope: 'session' as const };
+          const current = await getCart({
+            principal,
+            client: createCartScopedClient(principal),
+          });
+          if (current.ok)
+            hasLiveSessionCookie =
+              current.cart.state === 'active' ||
+              current.cart.state === 'checkout';
+          else if (current.code === 'expired' || current.code === 'not_found')
+            hasLiveSessionCookie = false;
+        } catch {
+          /* An indeterminate read must not discard a potentially live cart. */
+        }
+      }
     }
     if (!hasLiveSessionCookie) {
       setCartSessionCookie(

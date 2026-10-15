@@ -11,6 +11,7 @@ import { readAgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
+import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
 import { buildUcpCartResponse } from '@/lib/agentic/ucp-cart-response';
 import { buildUcpCartInsert } from '@/lib/agentic/ucp-cart-storage';
 import { adaptUcpShippingAddressToAgentic } from '@/lib/agentic/ucp-request-adapters';
@@ -180,6 +181,23 @@ export async function POST(request: NextRequest) {
     });
     return respond({ error: 'Failed to create cart' }, 500);
   }
+
+  const canonical = await handleCanonicalUcpCart({
+    merchant,
+    cartId,
+    agentId: mutation.agentId,
+    action: 'read',
+    operationId: mutation.idempotencyKey,
+  });
+  if (canonical)
+    return respond(
+      // The legacy insert already committed. Keep its durable owner handle
+      // in cached failures so a follow-up GET can recover migrated authority.
+      canonical.status >= 400
+        ? { ...canonical.body, cart_id: cartId }
+        : canonical.body,
+      canonical.status === 200 ? 201 : canonical.status
+    );
 
   return respond(
     buildUcpCartResponse({

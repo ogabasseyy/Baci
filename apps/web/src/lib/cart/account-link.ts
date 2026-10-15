@@ -134,6 +134,7 @@ export async function linkCartToCustomer(
       principalId: receipt.data.principalId,
       cartId: receipt.data.cartId,
       grantId: receipt.data.grantId,
+      expiresAt: receipt.data.grantExpiresAt ?? principal.expiresAt,
       // The link RPC mints a fresh grant with the full session
       // vocabulary (the grants-table default).
       allowedOperations: [...CART_FULL_SESSION_OPERATIONS],

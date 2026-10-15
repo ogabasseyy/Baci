@@ -8,6 +8,7 @@ import {
 import { readAgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
+import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
 
 const mockVerifyAgenticApiKey = vi.hoisted(() => vi.fn(() => true));
 const mockResolveAgenticMerchantContext = vi.hoisted(() =>
@@ -23,6 +24,10 @@ const mockResolveAgenticMerchantContext = vi.hoisted(() =>
     slug: 'ogabassey',
   }))
 );
+
+vi.mock('@/lib/agentic/ucp-canonical-cart', () => ({
+  handleCanonicalUcpCart: vi.fn().mockResolvedValue(null),
+}));
 
 vi.mock('@/lib/agentic/auth', () => ({
   verifyAgenticApiKey: mockVerifyAgenticApiKey,
@@ -107,6 +112,7 @@ function mockCalculation() {
 describe('POST /api/agentic/carts', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue(null);
     mockVerifyAgenticApiKey.mockReturnValue(true);
     vi.mocked(reserveAgenticIdempotencyKey).mockResolvedValue({
       ok: true,
@@ -234,6 +240,69 @@ describe('POST /api/agentic/carts', () => {
         route: 'carts.create',
         status: 201,
       })
+    );
+  });
+  it('migrates an enrolled newly created cart and returns its actual continuation', async () => {
+    mockCalculation();
+    mockMutation({ line_items: [{ item: { id: 'product-1' }, quantity: 1 }] });
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(createAgenticScopedSupabaseClient).mockReturnValue({
+      from: vi.fn(() => ({ insert })),
+    } as never);
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue({
+      status: 200,
+      body: {
+        cart_id: 'canonical',
+        continue_url: 'https://shop/cart#handoff=valid',
+      },
+    });
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('https://shop/api/agentic/carts', { method: 'POST' })
+    );
+    expect(response.status).toBe(201);
+    expect(handleCanonicalUcpCart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'openai-agent',
+        action: 'read',
+        cartId: expect.stringMatching(/^cart_/),
+      })
+    );
+    expect(await response.json()).toMatchObject({
+      cart_id: 'canonical',
+      continue_url: expect.any(String),
+    });
+    expect(insert).toHaveBeenCalledOnce();
+  });
+  it('preserves the created recovery handle in a cached canonical migration failure', async () => {
+    mockCalculation();
+    mockMutation({ line_items: [{ item: { id: 'product-1' }, quantity: 1 }] });
+    const insert = vi.fn().mockResolvedValue({ error: null });
+    vi.mocked(createAgenticScopedSupabaseClient).mockReturnValue({
+      from: vi.fn(() => ({ insert })),
+    } as never);
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue({
+      status: 503,
+      body: {
+        code: 'temporarily_unavailable',
+        error: 'Shared cart unavailable',
+      },
+    });
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('https://shop/api/agentic/carts', { method: 'POST' })
+    );
+    const createdHandle = insert.mock.calls[0][0].cart_id;
+    expect(response.status).toBe(503);
+    const body = await response.json();
+    expect(body).toEqual({
+      code: 'temporarily_unavailable',
+      error: 'Shared cart unavailable',
+      cart_id: createdHandle,
+    });
+    expect(body).not.toHaveProperty('status');
+    expect(storeAgenticIdempotencyResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ key: 'idem-1', status: 503, response: body })
     );
   });
 });

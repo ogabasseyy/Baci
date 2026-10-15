@@ -158,6 +158,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   __resetCartQuotaStoreForTesting();
   console.error = consoleError;
   if (savedSecret === undefined) {
@@ -213,6 +214,8 @@ function connectBody(overrides: Record<string, unknown> = {}) {
 
 describe('POST /api/storefront/cart/handoff/redeem', () => {
   it('connects a fresh destination and issues its session proof', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-12T04:00:00Z'));
     mocks.cartPayload = {
       choice: 'connect',
       code: null,

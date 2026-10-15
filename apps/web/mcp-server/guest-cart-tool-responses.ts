@@ -1,4 +1,6 @@
 import {
+  GuestCartBridgePendingError,
+  GuestCartCanonicalError,
   GuestCartExpiredError,
   GuestCartFullError,
   GuestCartMigratedError,
@@ -32,6 +34,40 @@ export function mapGuestCartToolError(error: unknown) {
   // A migrated legacy cart has a canonical shared-cart successor: the
   // typed outcome carries it so the client refreshes into the shared
   // cart instead of starting a second guest cart.
+  if (error instanceof GuestCartCanonicalError)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: error.retryable
+            ? 'The cart changed or is temporarily unavailable. Retry with the returned cart_token and current version.'
+            : 'This cart action is not authorized or valid. Reconnect to continue.',
+        },
+      ],
+      structuredContent: {
+        success: false,
+        code: error.code,
+        retryable: error.retryable,
+        ...(error.retryable ? { cart_token: error.cartToken } : {}),
+        ...(error.cartId ? { canonical_cart_id: error.cartId } : {}),
+        ...(error.version ? { version: error.version } : {}),
+      },
+    };
+  if (error instanceof GuestCartBridgePendingError)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'Your guest cart is saved. Retry using the returned cart_token to finish connecting it.',
+        },
+      ],
+      structuredContent: {
+        success: false,
+        cart_token: error.cartToken,
+        retryable: true,
+        code: 'refresh_required',
+      },
+    };
   if (error instanceof GuestCartMigratedError) {
     return {
       content: [

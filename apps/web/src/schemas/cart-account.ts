@@ -48,4 +48,5 @@ export const cartAccountLinkReceiptSchema = z.object({
   grantId: z.uuid(),
   principalId: z.string().min(1).max(128),
   replayed: z.boolean().optional(),
+  grantExpiresAt: z.string().datetime({ offset: true }).optional(),
 });

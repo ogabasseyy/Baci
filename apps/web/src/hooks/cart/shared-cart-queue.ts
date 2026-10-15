@@ -6,6 +6,10 @@ import type {
   SharedCartState,
 } from './shared-cart-state';
 
+export function isTerminalCart(snapshot: CartSnapshot): boolean {
+  return ['completed', 'expired', 'canceled'].includes(snapshot.state);
+}
+
 export function withDisplay(state: SharedCartState): SharedCartState {
   return { ...state, display: deriveDisplay(state) };
 }
@@ -22,7 +26,32 @@ export function adoptSnapshot(
 ): SharedCartState {
   if (snapshot.merchantId !== state.merchantId) return state;
   const current = state.confirmed?.version ?? -1;
-  if (snapshot.version < current) return state;
+  if (state.cartId === snapshot.cartId && snapshot.version < current)
+    return state;
+  if (
+    state.confirmed &&
+    !isTerminalCart(state.confirmed) &&
+    state.cartId !== snapshot.cartId
+  )
+    return state;
+  if (isTerminalCart(snapshot)) {
+    return {
+      ...state,
+      cartId: snapshot.cartId,
+      confirmed: { ...snapshot, lines: [], subtotalMinor: 0, totalMinor: 0 },
+      unimportedCache: [],
+      assuranceOverlays: {},
+      queue: state.queue
+        .filter(
+          (entry) =>
+            (!entry.silent && entry.intent.kind === 'add') ||
+            ('target' in entry.intent && entry.intent.target.kind === 'temp')
+        )
+        .map((entry) => ({ ...entry, state: 'queued' as const })),
+      importStatus: 'skipped',
+      syncError: null,
+    };
+  }
   return { ...state, cartId: snapshot.cartId, confirmed: snapshot };
 }
 
@@ -86,7 +115,7 @@ export function resolveTempDependents(
     const next: SharedCartPendingEntry = { ...entry };
     delete next.blockedOnTempId;
     if (
-      (intent.kind === 'set_quantity' || intent.kind === 'remove') &&
+      'target' in intent &&
       intent.target.kind === 'temp' &&
       intent.target.tempId === tempId
     ) {
@@ -100,7 +129,7 @@ export function resolveTempDependents(
 }
 
 export function targetTempId(intent: SharedCartIntent): string | undefined {
-  if (intent.kind === 'set_quantity' || intent.kind === 'remove') {
+  if ('target' in intent) {
     return intent.target.kind === 'temp' ? intent.target.tempId : undefined;
   }
   return undefined;

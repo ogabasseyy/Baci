@@ -14,6 +14,7 @@ export function snapshotInputLines(snapshot: CartSnapshot): CartInputLine[] {
     voucherAwardId: line.voucherAwardId,
     negotiatedUnitPriceMinor: line.negotiatedUnitPriceMinor,
     negotiationStatus: line.negotiationStatus,
+    hasAssurance: line.hasAssurance,
   }));
 }
 export function nativeWriteCommand(
@@ -47,17 +48,15 @@ export function nativeWriteCommand(
   if (action.type === 'negotiate' || action.type === 'clear_negotiation') {
     const index = snapshot.lines.findIndex((line) => line.id === action.id);
     if (index < 0) return null;
-    const lines = snapshotInputLines(snapshot);
     const price =
-      action.type === 'negotiate' ? Math.round(action.price * 100) : undefined;
-    if (price !== undefined && (!Number.isSafeInteger(price) || price < 0))
+      action.type === 'negotiate' ? Math.round(action.price * 100) : null;
+    if (price !== null && (!Number.isSafeInteger(price) || price <= 0))
       throw new NativeCartError('invalid_request');
-    lines[index] = {
-      ...lines[index],
+    return {
+      type: 'set_negotiated_price',
+      lineId: action.id,
       negotiatedUnitPriceMinor: price,
-      negotiationStatus: price === undefined ? undefined : 'accepted',
     };
-    return { type: 'replace', lines };
   }
   if (action.type === 'negotiate_group') {
     const total = Math.round(action.total * 100);

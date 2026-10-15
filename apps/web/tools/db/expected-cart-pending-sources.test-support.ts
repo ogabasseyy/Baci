@@ -104,4 +104,49 @@ export const EXPECTED_CART_PENDING_SOURCES = [
       'supabase/migrations/20261015120000_commerce_cart_handoff_merchant_token.sql',
     sha256: '1fd9aaaf1c59c9ac571b4814c51656688a62328292132e2796e3f1d444e8c418',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130000_commerce_cart_final_writer_guards.sql',
+    sha256: '5c6f43749adf5fb3f021412e74ad07748c21633274077be91c299433b3ca373b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130100_commerce_cart_checkout_authority.sql',
+    sha256: '801d0087333cca5b5411e8ad366e4f9499600614983527c3e6265cd9af389c01',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130200_commerce_cart_account_lifecycle.sql',
+    sha256: '2e8c12542278b53ab741670a836eb33138676bd6ce619f05f35b7c556d7a0441',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130300_commerce_cart_handoff_canonical_merge.sql',
+    sha256: '073f70f071e4e0304e7b65d5855ca6b730c913c4878ea7f5e6a435114b3ecbb9',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130400_commerce_cart_verified_legacy_bridge.sql',
+    sha256: '086520e534c9296686d56c351422aa48c51a7fbd5c0928552158d50a839e4eb3',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130500_commerce_cart_condition_order_pricing.sql',
+    sha256: '65ddd4fa9dc552f38621d59cc110b214b40ded4ea2546c0d98bfe608df3c051e',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130600_commerce_cart_handoff_conflict_redaction.sql',
+    sha256: '5146fe9b672edb663f9f5317e734c85d42272987da81800dac786bb663d70d3f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130700_commerce_cart_handoff_condition_prices.sql',
+    sha256: '702e2424bd183811ec18c4ccd9f1b02bf088a5a90ee7c57d01b54a3c961aeee8',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015130800_commerce_cart_condition_offer_index.sql',
+    sha256: 'cdfa79401ec49fbac855d557332c1e1a47ab0e95daeae4df6270dabd7ce3ba0f',
+  },
 ] as const;

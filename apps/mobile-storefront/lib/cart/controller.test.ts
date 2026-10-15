@@ -50,6 +50,7 @@ function setup() {
     items: [] as CartItem[],
     sharedCartRef: undefined,
   }));
+  const repairLegacy = jest.fn();
   const onMergeConflicts = jest.fn();
   const publish = jest.fn();
   const status = jest.fn();
@@ -62,6 +63,7 @@ function setup() {
       return () => `key-${++next}`;
     })(),
     getLegacy,
+    repairLegacy,
     onMergeConflicts,
     loadProduct: async () => null,
     publish,
@@ -75,6 +77,7 @@ function setup() {
     status,
     controller,
     getLegacy,
+    repairLegacy,
     onMergeConflicts,
     connect: () => {
       context = { actor: 'guest', cartId };
@@ -246,4 +249,57 @@ it('clears outstanding merge choices only after a successful explicit selection'
   expect(s.onMergeConflicts).not.toHaveBeenCalled();
   await s.controller.chooseLegacy('keep_server');
   expect(s.onMergeConflicts).toHaveBeenCalledWith([], undefined);
+});
+
+it('repairs rejected legacy lines locally before requiring canonical import', async () => {
+  const s = setup();
+  s.getLegacy.mockReturnValue({
+    items: [{ id: 'deleted', product_id: 'gone' } as CartItem],
+    sharedCartRef: undefined,
+  });
+  s.client.create.mockRejectedValue(new NativeCartError('invalid_item'));
+  await s.controller.write({ type: 'remove', id: 'deleted' });
+  expect(s.repairLegacy).toHaveBeenCalledWith([]);
+  expect(s.client.create).not.toHaveBeenCalled();
+});
+it('replans a concurrent quantity change against the refreshed revision', async () => {
+  const s = setup();
+  s.connect();
+  const line = {
+    id: 'line',
+    item: { productId: 'product' },
+    quantity: 1,
+    unitPriceMinor: 100,
+    lineTotalMinor: 100,
+  };
+  s.client.read.mockResolvedValue({
+    cart: { ...snapshot, version: 4, lines: [line] },
+  });
+  await s.controller.refresh();
+  s.client.command.mockRejectedValueOnce(
+    new NativeCartError('version_conflict')
+  );
+  s.client.read.mockResolvedValue({
+    cart: { ...snapshot, version: 5, lines: [line] },
+  });
+  await s.controller.write({ type: 'quantity', id: 'line', quantity: 2 });
+  expect(s.client.command).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      expectedVersion: 5,
+      command: { type: 'set_quantity', lineId: 'line', quantity: 2 },
+    }),
+    cartId
+  );
+});
+
+it('retires the local canonical reference after losing an expired capability', async () => {
+  const s = setup();
+  s.getLegacy.mockReturnValue({
+    items: [] as CartItem[],
+    sharedCartRef: { merchantId: merchant, cartId },
+  } as never);
+  s.receipts.read.mockResolvedValue({ operationId: 'old' } as never);
+  await s.controller.refresh();
+  expect(s.repairLegacy).toHaveBeenCalledWith([]);
+  expect(s.receipts.clear).toHaveBeenCalledWith(merchant, 'old');
 });

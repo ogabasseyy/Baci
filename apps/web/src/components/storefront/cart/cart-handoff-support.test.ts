@@ -10,3 +10,18 @@ it('preserves the redemption attempt after a response is lost', () => {
 it('formats minor units rather than multiplying a displayed price', () => {
   expect(formatMinor(12345, 'NGN')).toContain('123.45');
 });
+it('keeps a stable attempt when storage access throws', () => {
+  const getter = Object.getOwnPropertyDescriptor(window, 'localStorage');
+  Object.defineProperty(window, 'localStorage', {
+    configurable: true,
+    get() {
+      throw new Error('denied');
+    },
+  });
+  try {
+    const first = loadOrCreateAttemptId('blocked-storage');
+    expect(loadOrCreateAttemptId('blocked-storage')).toBe(first);
+  } finally {
+    if (getter) Object.defineProperty(window, 'localStorage', getter);
+  }
+});

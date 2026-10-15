@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { subscribeCartSessionGeneration } from './shared-cart-storage';
 import { useSharedCart } from './use-shared-cart';
 
@@ -27,9 +27,9 @@ export function useSharedCartDelegation(input: {
       }),
     []
   );
-  const bumpSessionGeneration = useCallback(() => {
+  function bumpSessionGeneration() {
     setSessionGeneration((generation) => generation + 1);
-  }, []);
+  }
 
   // Delegation is per-merchant: enrollment binds merchantId to the slug
   // the frame served, so switching away falls back to that slug's legacy

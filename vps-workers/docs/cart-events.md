@@ -14,6 +14,20 @@ The JWT must have more than five minutes remaining at startup; rotation and
 restart are operational steps. Never print its claims or value in operator
 logs. The database, not the script, verifies signatures and checks the role.
 
+The enabled worker runs `cleanup_commerce_carts` on startup, including
+`--once`, and once every five minutes during `--loop`. The RPC uses the same
+`commerce_cart_worker` capability and its bounded retention rules for expired
+receipts, events, handoffs and checkout sessions, and idle-cart expiration.
+A failed cleanup logs a safe error and leaves its next attempt due for the
+next loop pass while event publishing continues. A publisher failure still
+exits nonzero so the service supervisor can restart it. Cleanup never runs while the existing worker
+activation flag is disabled. This change does not install or enable the service.
+
+Each publisher batch and due cleanup constructs a fresh scoped client. Use
+`COMMERCE_CART_WORKER_JWT_FILE` to let the existing token rotator replace a token
+file between calls without a worker restart. The inline JWT option requires
+process environment refresh and restart when rotated.
+
 The enabled loop drains at most 50 rows per second. PostgreSQL row locks and
 `SKIP LOCKED` fence overlapping instances. Sending through `realtime.send`
 and acknowledging the outbox share a transaction; disconnect/rollback leaves

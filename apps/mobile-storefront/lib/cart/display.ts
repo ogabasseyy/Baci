@@ -31,6 +31,9 @@ export function nativeCartInput(line: Omit<CartItem, 'id'>): CartInputLine {
       ...(condition && isNativeCondition(condition) ? { condition } : {}),
       ...(Object.keys(options).length ? { options } : {}),
     },
+    ...(line.hasAssurance !== undefined
+      ? { hasAssurance: line.hasAssurance }
+      : {}),
     quantity: line.voucher_token || line.voucher_award_id ? 1 : line.quantity,
     ...(line.voucher_token ? { voucherToken: line.voucher_token } : {}),
     ...(line.voucher_award_id ? { voucherAwardId: line.voucher_award_id } : {}),

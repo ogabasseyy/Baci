@@ -37,6 +37,7 @@ export interface NativeCartControllerOptions {
   receipts?: typeof pendingCartRequest;
   newOperationId(): string;
   getLegacy(): { items: CartItem[]; sharedCartRef?: NativeSharedCartRef };
+  repairLegacy?(items: CartItem[]): void;
   loadProduct(
     merchantId: string,
     productId: string

@@ -86,28 +86,26 @@ it('maps quantity edits and removals with line existence checks', () => {
   ).toBeNull();
 });
 
-it('rebuilds a replace command for line and group negotiation', () => {
+it('uses line commands for negotiation and replaces only for group negotiation', () => {
   expect(
     nativeWriteCommand(
       { type: 'negotiate', id: 'line-1', price: 12.5 },
       snapshot()
     )
   ).toEqual({
-    type: 'replace',
-    lines: [
-      {
-        item: { productId: 'prod-1' },
-        quantity: 2,
-        negotiatedUnitPriceMinor: 1250,
-        negotiationStatus: 'accepted',
-      },
-    ],
+    type: 'set_negotiated_price',
+    lineId: 'line-1',
+    negotiatedUnitPriceMinor: 1250,
   });
   expect(
-    nativeWriteCommand({ type: 'clear_negotiation', id: 'line-1' }, snapshot())
+    nativeWriteCommand(
+      { type: 'clear_negotiation', id: 'line-1' },
+      snapshot([line(), line({ id: 'unavailable', available: false })])
+    )
   ).toEqual({
-    type: 'replace',
-    lines: [{ item: { productId: 'prod-1' }, quantity: 2 }],
+    type: 'set_negotiated_price',
+    lineId: 'line-1',
+    negotiatedUnitPriceMinor: null,
   });
   expect(
     nativeWriteCommand({ type: 'negotiate_group', total: 10 }, snapshot())

@@ -218,7 +218,7 @@ describe('planCartMerge', () => {
     }
   });
 });
-it('never silently drops duplicate voucher identities already present in one cart', () => {
+it('preserves attachment-distinct voucher identities already present in one cart', () => {
   const result = planCartMerge(
     snapshot([
       line(TECNO, 1, { voucherAwardId: 'award-a' }),
@@ -226,5 +226,31 @@ it('never silently drops duplicate voucher identities already present in one car
     ]),
     snapshot([])
   );
-  expect(result.ok).toBe(false);
+  expect(result.ok).toBe(true);
+  if (result.ok)
+    expect(result.lines.map((line) => line.voucherAwardId)).toEqual([
+      'award-a',
+      'award-b',
+    ]);
+});
+
+it('preserves regular and voucher siblings across both carts with max quantities', () => {
+  const result = planCartMerge(
+    snapshot([line(TECNO, 2), line(TECNO, 1, { voucherAwardId: 'award-a' })]),
+    snapshot([
+      line(TECNO, 3),
+      line(TECNO, 1, { voucherAwardId: 'award-a' }),
+      line(TECNO, 1, { voucherAwardId: 'award-b' }),
+    ])
+  );
+  expect(result.ok).toBe(true);
+  if (result.ok)
+    expect(result.lines.map((line) => line.quantity)).toEqual([3, 1, 1]);
+});
+it('preserves assurance for a disjoint import and overlapping identical contexts', () => {
+  const a = line(TECNO, 1);
+  a.hasAssurance = true;
+  const result = planCartMerge(snapshot([line(TECNO, 2)]), snapshot([a]));
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(result.lines[0].hasAssurance).toBe(true);
 });

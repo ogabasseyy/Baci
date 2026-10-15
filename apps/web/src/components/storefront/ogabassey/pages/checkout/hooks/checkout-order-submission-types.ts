@@ -38,6 +38,7 @@ export interface CheckoutOrderSubmissionContext {
     clearCart: () => void;
     removeFromCart: ReturnType<typeof useCart>['removeFromCart'];
     /** Authoritative cart identity for bound checkout; absent for legacy carts. */
+    sharedCartEnabled?: boolean;
     sharedCartRef?: { cartId: string; version: number } | null;
     /** Refetches the authoritative snapshot; absent for legacy carts. */
     refreshSharedCart?: () => Promise<void>;

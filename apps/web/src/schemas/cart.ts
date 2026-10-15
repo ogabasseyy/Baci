@@ -49,6 +49,7 @@ const cartLineAttachmentsSchema = z.strictObject({
 
 export const cartInputLineSchema = z
   .strictObject({
+    hasAssurance: z.boolean().optional(),
     item: cartItemIdentitySchema,
     quantity: z.number().int().min(1).max(10),
   })

@@ -1417,6 +1417,45 @@ describe('useAuthStore', () => {
       expect(useAuthStore.getState().user).toBeNull();
     });
 
+    it('finishes local teardown when the auth provider throws during sign-out', async () => {
+      (supabase.auth.signOut as jest.Mock).mockRejectedValueOnce(
+        new Error('offline')
+      );
+      await useAuthStore.getState().signOut();
+      expect(useAuthStore.getState().user).toBeNull();
+      expect(useAuthStore.getState().session).toBeNull();
+      expect(mockClearCart).toHaveBeenCalled();
+    });
+
+    it('clears identity and loading even when provider sign-out and saved cleanup both throw', async () => {
+      const user = {
+        ...mockUser,
+        app_metadata: {},
+        aud: 'authenticated',
+        created_at: '2026-10-15T00:00:00Z',
+      };
+      const session = {
+        ...mockSession,
+        user,
+        expires_in: 3600,
+        token_type: 'bearer' as const,
+      };
+      useAuthStore.setState({ user, session });
+      (supabase.auth.signOut as jest.Mock).mockRejectedValueOnce(
+        new Error('offline')
+      );
+      mockClearSaved.mockImplementationOnce(() => {
+        throw new Error('saved cleanup failed');
+      });
+      await expect(useAuthStore.getState().signOut()).resolves.toBeUndefined();
+      expect(useAuthStore.getState()).toMatchObject({
+        user: null,
+        session: null,
+        customer: null,
+        isLoading: false,
+      });
+    });
+
     it('still signs out when cart clear persistence rejects', async () => {
       mockClearCart.mockRejectedValueOnce(new Error('persist failed'));
 

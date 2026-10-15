@@ -26,6 +26,7 @@ export const CheckoutPage: React.FC = () => {
     isHydrated,
     removeFromCart,
     sharedCartRef,
+    sharedCartEnabled,
     refreshSharedCart,
     syncStatus: sharedCartSyncStatus,
   } = useCart();
@@ -213,6 +214,7 @@ export const CheckoutPage: React.FC = () => {
       clearCart,
       removeFromCart,
       sharedCartRef: checkoutSharedCartRef,
+      sharedCartEnabled,
       refreshSharedCart,
       sharedCartSyncStatus,
     },

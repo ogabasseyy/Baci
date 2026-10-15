@@ -7,6 +7,7 @@ import {
 import { sendAgenticWebhook } from '@/lib/agentic/webhooks';
 import { submitCartBoundOrder } from '@/lib/cart/order-binding';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { orderCreateSchema } from '@/schemas/orders';
@@ -15,6 +16,9 @@ const CLIENT_ORDER_ERROR_CODES = new Set([
   'invalid_items',
   'invalid_quantity',
   'invalid_variant',
+  'invalid_condition_offer',
+  'condition_offer_price_changed',
+  'insufficient_condition_offer_stock',
   'insufficient_stock',
   'insufficient_variant_stock',
   'merchant_not_found',
@@ -185,6 +189,14 @@ export async function createAgenticCheckoutOrder(
       supabase,
     });
   } catch (taxError) {
+    if (taxError instanceof OrderConditionUnavailableError)
+      return {
+        data: { error: 'invalid_condition_offer' },
+        error: 'invalid_condition_offer',
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+      };
     // Codex P2 (PR #1622 round 7): a malformed product_id /
     // variant_id from the agentic caller cascades into Postgres
     // 22P02 inside the helper. Mirror the storefront route — map
@@ -322,7 +334,9 @@ export async function createAgenticCheckoutOrder(
       (code ? CLIENT_ORDER_ERROR_CODES.has(code) : false) ||
       CLIENT_ORDER_ERROR_CODES.has(message);
     const safeError = isClientError
-      ? (code ?? message)
+      ? code && CLIENT_ORDER_ERROR_CODES.has(code)
+        ? code
+        : message
       : 'Unable to create order';
 
     logger.error({

@@ -178,3 +178,19 @@ describe('pending and rejected negotiations', () => {
     }
   });
 });
+
+it('drops an accepted negotiation invalidated by a catalog change', () => {
+  const result = buildCartSnapshot(
+    raw([
+      line({
+        negotiationStatus: 'accepted',
+        negotiatedUnitPriceMinor: 2000,
+        negotiationInvalidated: true,
+        unitPriceMinor: 3000,
+        quantity: 2,
+      }),
+    ])
+  );
+  expect(result.snapshot.totalMinor).toBe(6000);
+  expect(result.snapshot.lines[0].negotiatedUnitPriceMinor).toBeUndefined();
+});

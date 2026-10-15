@@ -7,16 +7,19 @@ import {
 } from '@baci/shared/cart';
 import { z } from 'zod';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
-import { getCartSessionSecret } from './cart-runtime-env';
+import {
+  getCartPreviousSessionSecrets,
+  getCartSessionSecret,
+} from './cart-runtime-env';
 
 export const CART_SESSION_PROOF_VERSION = 'cp1';
 /** Absolute session-proof lifetime; renewal requires a live grant check. */
-export const CART_SESSION_PROOF_TTL_SECONDS = 24 * 60 * 60;
+export const CART_SESSION_PROOF_TTL_SECONDS = 7 * 24 * 60 * 60;
 /**
- * Expired proofs may only retire device access for one proof lifetime
+ * Expired proofs may only retire device access for one additional day
  * after expiry; beyond that a leaked proof loses revocation power too.
  */
-export const CART_REVOCATION_GRACE_SECONDS = CART_SESSION_PROOF_TTL_SECONDS;
+export const CART_REVOCATION_GRACE_SECONDS = 24 * 60 * 60;
 /** Clock-skew allowance before a future issuance time looks forged. */
 export const CART_PROOF_FUTURE_IAT_LEEWAY_SECONDS = 60;
 /** Pre-cart bootstrap proofs live only long enough to create one cart. */
@@ -222,9 +225,10 @@ function verifyCartProof(
     return { error: 'invalid_proof', ok: false };
   }
 
-  const candidates = [secret, ...(options.previousSecrets ?? [])].filter(
-    (candidate) => candidate.trim().length >= MIN_SECRET_LENGTH
-  );
+  const candidates = [
+    secret,
+    ...(options.previousSecrets ?? getCartPreviousSessionSecrets()),
+  ].filter((candidate) => candidate.trim().length >= MIN_SECRET_LENGTH);
   const signed = candidates.some((candidate) =>
     constantTimeEqual(signPayload(encoded, candidate), signature)
   );

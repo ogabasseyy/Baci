@@ -25,9 +25,15 @@ export function reviewedCheckoutItems(
       color: line.options.color,
       storage: line.options.storage,
       quantity: line.quantity,
-      price: line.validatedUnitPriceMinor / 100,
+      price:
+        line.voucherToken || line.voucherAwardId
+          ? 0
+          : line.validatedUnitPriceMinor / 100,
       negotiatedPrice:
-        !line.negotiationInvalidated && line.negotiatedUnitPriceMinor !== null
+        !line.voucherToken &&
+        !line.voucherAwardId &&
+        !line.negotiationInvalidated &&
+        line.negotiatedUnitPriceMinor !== null
           ? line.negotiatedUnitPriceMinor / 100
           : undefined,
       negotiationStatus:

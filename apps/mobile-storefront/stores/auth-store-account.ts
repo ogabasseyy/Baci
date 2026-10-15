@@ -67,7 +67,26 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
         });
       } catch (error) {
         log.error('Sign out error:', error);
-        set({ isLoading: false });
+        // The cart generation has already been retired. Finish local
+        // teardown even if the provider sign-out request threw.
+        try {
+          await clearUserStores();
+        } catch {
+          log.error('Local store cleanup failed during sign out');
+        } finally {
+          try {
+            clearQueryCachePreservingObservers(queryClient);
+          } finally {
+            set({
+              user: null,
+              session: null,
+              customer: null,
+              isLoading: false,
+              isInitialized: true,
+              _initializationInProgress: false,
+            });
+          }
+        }
       }
     },
     deleteAccount: async (): Promise<DeleteAccountResult> => {

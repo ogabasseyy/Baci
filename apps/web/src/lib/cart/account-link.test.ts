@@ -188,3 +188,39 @@ it('rejects a customer from another merchant before making an account RPC', asyn
   expect(result).toEqual({ ok: false, code: 'unauthorized' });
   expect(rpc).not.toHaveBeenCalled();
 });
+
+it('uses the fresh rotated grant expiry for the post-link scoped snapshot read', async () => {
+  const grantExpiresAt = '2099-01-08T00:00:00Z';
+  const rpc = vi.fn().mockResolvedValue({
+    data: {
+      ok: true,
+      cartId,
+      grantId: customerId,
+      principalId: 'rotated',
+      grantExpiresAt,
+    },
+    error: null,
+  });
+  vi.mocked(getCart).mockResolvedValue({
+    ok: true,
+    cart: { cartId, merchantId },
+    warnings: [],
+    operationId: '',
+    replayed: false,
+  } as never);
+  const snapshotClient = vi.fn(() => ({}) as SupabaseClient);
+  await linkCartToCustomer(
+    { ...principal, expiresAt: '2020-01-01T00:00:00Z' },
+    await customer(),
+    { operationId: 'expiry-link', choice: 'keep_current' },
+    {
+      accountClient: { rpc },
+      snapshotClient,
+      environment: 'test',
+      destination: { type: 'web' },
+    }
+  );
+  expect(snapshotClient).toHaveBeenCalledWith(
+    expect.objectContaining({ expiresAt: grantExpiresAt })
+  );
+});

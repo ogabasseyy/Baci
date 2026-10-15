@@ -29,10 +29,10 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { id } = await params;
   const auth = await authenticateApiRequest(request);
   if (!auth.user || !auth.supabase)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { id } = await params;
   if (!shippingCheckoutRecoveryIdSchema.safeParse(id).success)
     return NextResponse.json({ error: 'Invalid order' }, { status: 400 });
   const csrf = await checkCsrfProtection(request);

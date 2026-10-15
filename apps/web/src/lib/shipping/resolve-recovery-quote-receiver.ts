@@ -14,10 +14,9 @@ type RecoveryReceiverInput = {
 /**
  * Resolves the caller-supplied recovery destination into the quote-request
  * receiver override. Enforces the Nigeria-only scope (explicit country codes
- * plus a versioned national boundary check for all pins) and carries
- * the legacy snake_case postal code forward, since the quote builder only
- * reads camelCase and the booking guard would otherwise see a postal code on
- * the retained order address but none on the saved quote.
+ * plus a versioned national boundary check for all pins). A stored postcode
+ * can accompany only a verified unchanged street/city/state. Explicitly clear
+ * it otherwise so the quote builder cannot inherit stale camelCase metadata.
  */
 export function resolveRecoveryQuoteReceiver(
   receiver: RecoveryReceiverInput,
@@ -43,7 +42,7 @@ export function resolveRecoveryQuoteReceiver(
     };
   const storedAddress =
     shippingAddress && typeof shippingAddress === 'object'
-      ? (shippingAddress as { postal_code?: unknown; postalCode?: unknown })
+      ? (shippingAddress as Record<string, unknown>)
       : null;
   const legacyPostalCode =
     typeof storedAddress?.postal_code === 'string' &&
@@ -53,17 +52,56 @@ export function resolveRecoveryQuoteReceiver(
           storedAddress.postalCode.trim()
         ? storedAddress.postalCode.trim()
         : undefined;
+  const text = (value: unknown) =>
+    typeof value === 'string' ? value.trim() : '';
+  const normalize = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .split(',')
+      .map((part) => part.trim())
+      .join(',');
+  const city = text(storedAddress?.city);
+  const state = text(storedAddress?.state);
+  const oldStreet = checkoutRecoveryStreetAddress(
+    text(storedAddress?.address) || text(storedAddress?.address_line1),
+    city,
+    state
+  );
+  const unit = text(storedAddress?.address_line2);
+  // Require the full original street including an independently stored unit.
+  // Ambiguous legacy representations lose their postcode rather than guessing.
+  const unitWords = normalize(unit).replace(/,/g, ' ');
+  const unitIncluded = /^\d+$/.test(unitWords)
+    ? oldStreet
+        .split(/[,\n\r]/)
+        .some((part) => normalize(part) === normalize(unit))
+    : ` ${normalize(oldStreet).replace(/,/g, ' ')} `.includes(` ${unitWords} `);
+  const oldFullStreet =
+    unit && !unitIncluded ? `${oldStreet}, ${unit}` : oldStreet;
+  const street = checkoutRecoveryStreetAddress(
+    receiver.address,
+    receiver.city,
+    receiver.state
+  );
+  const unchanged =
+    Boolean(oldStreet && city && state) &&
+    normalize(oldFullStreet) === normalize(street) &&
+    normalize(city) === normalize(receiver.city) &&
+    normalize(state) === normalize(receiver.state) &&
+    (!text(storedAddress?.countryCode) ||
+      text(storedAddress?.countryCode).toUpperCase() === 'NG') &&
+    (!text(storedAddress?.country) ||
+      text(storedAddress?.country).toLowerCase() === 'nigeria');
   return {
     override: {
       ...receiver,
       country: 'Nigeria',
       countryCode: 'NG',
-      address: checkoutRecoveryStreetAddress(
-        receiver.address,
-        receiver.city,
-        receiver.state
-      ),
-      ...(legacyPostalCode ? { postalCode: legacyPostalCode } : {}),
+      address: street,
+      // Undefined must be present: omission lets the builder inherit the old
+      // order's camelCase postcode before the signed quote is serialized.
+      postalCode: unchanged ? legacyPostalCode : undefined,
     },
   };
 }

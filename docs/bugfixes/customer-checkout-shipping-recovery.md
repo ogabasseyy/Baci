@@ -168,3 +168,17 @@ Legacy quotes continue to match original quantities before refund reduction.
 
 The migration-applier runner includes every recovery PostgreSQL suite run by
 the Quality Gate; a contract compares both invocations to prevent drift.
+
+## Final destination review
+
+Protected recovery requests authenticate before awaiting route parameters.
+Recovery initializes the editable street with a legacy apartment/unit line
+exactly once. Selecting or entering a new destination replaces that draft and
+never silently reattaches the old unit; confirmation saves the full street that
+the owner explicitly reviewed.
+
+A legacy postcode is carried only when the complete street (including any unit),
+city and state are verified unchanged. Changed or ambiguous destinations clear
+the postcode override explicitly, preventing the quote builder from inheriting
+old camel-case metadata. Existing atomic confirmation removes both old postcode
+aliases when the signed replacement has none, preserving the original audit.

@@ -22,6 +22,7 @@ import {
   recoveryPrepare,
   recoveryQuote,
 } from './customer-checkout-shipping-recovery.postgres.test-support';
+import { resolveRecoveryQuoteReceiver } from './resolve-recovery-quote-receiver';
 import { createShippingQuoteRouteProof } from './shipping-quote-route-proof';
 
 const original = {
@@ -124,6 +125,67 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       expect(saved.address).not.toHaveProperty('postalCode');
       expect(saved.address.address_line1).toBe(saved.address.address);
       expect(saved.original).toEqual(original);
+    });
+
+    it('persists an explicitly confirmed street including its original legacy unit', () => {
+      const base = recoveryQuote();
+      const street = `${original.address_line1}, ${original.address_line2}`;
+      const value = {
+        ...base,
+        quote_request: {
+          ...base.quote_request,
+          receiver: { ...base.quote_request.receiver, address: street },
+        },
+      };
+      const saved = result(
+        asActor(
+          `${prepare(value)} ${recoveryConfirm(value.id)} ${snapshot(value.id)}`
+        )
+      );
+      expect(saved.address.address).toBe(street);
+      expect(saved.address.address_line1).toBe(street);
+      expect(saved.address).not.toHaveProperty('address_line2');
+      expect(saved.original).toEqual(original);
+      expect(saved).toMatchObject({
+        funding: 'customer_checkout',
+        fee: 110,
+        retained: 110,
+        unbooked: true,
+        confirmed: 1,
+      });
+    });
+
+    it('clears both old postcode aliases when a signed preview changes destination', () => {
+      const base = recoveryQuote();
+      const resolved = resolveRecoveryQuoteReceiver(
+        { ...base.quote_request.receiver, address: '99 New Street' },
+        original
+      );
+      if ('error' in resolved) throw new Error(resolved.error);
+      const value = {
+        ...base,
+        quote_request: {
+          ...base.quote_request,
+          receiver: { ...base.quote_request.receiver, ...resolved.override },
+        },
+      };
+      const saved = result(
+        asActor(
+          `${prepare(value)} ${recoveryConfirm(value.id)} ${snapshot(value.id)}`
+        )
+      );
+      expect(saved.address.address).toBe('99 New Street');
+      expect(saved.address.address_line1).toBe('99 New Street');
+      expect(saved.address).not.toHaveProperty('postalCode');
+      expect(saved.address).not.toHaveProperty('postal_code');
+      expect(saved.original).toEqual(original);
+      expect(saved).toMatchObject({
+        funding: 'customer_checkout',
+        fee: 110,
+        retained: 110,
+        unbooked: true,
+        confirmed: 1,
+      });
     });
 
     it('rolls back alias changes when the existing economics writer rejects confirmation', () => {

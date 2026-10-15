@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { useCheckoutShippingRecovery } from '@/hooks/orders/useCheckoutShippingRecovery';
 import { useTheme } from '@/hooks/useTheme';
+import { checkoutRecoveryInitialStreet } from '@/lib/checkout-recovery-initial-street';
 import { getOrderGiglInitialAddress } from '@/lib/order-shipment';
 import { CheckoutRecoveryAddressInput } from './CheckoutRecoveryAddressInput';
 
@@ -18,8 +19,7 @@ export function CheckoutRecoveryForm({
   const { colors } = useTheme();
   const initialAddress = getOrderGiglInitialAddress(order);
   const recovery = useCheckoutShippingRecovery(order.id, {
-    address:
-      initialAddress.address ?? order.shipping_address?.address_line1 ?? '',
+    address: checkoutRecoveryInitialStreet(order.shipping_address),
     city: initialAddress.city ?? '',
     state: initialAddress.state ?? '',
     countryCode: '',

@@ -133,6 +133,7 @@ describe('resolveRecoveryQuoteReceiver', () => {
   });
   it('accepts in-bounds manual pins and carries the legacy postal code', () => {
     const resolved = resolveRecoveryQuoteReceiver(receiver, {
+      ...receiver,
       postal_code: '100001',
     });
     expect(resolved).toEqual({
@@ -145,10 +146,102 @@ describe('resolveRecoveryQuoteReceiver', () => {
   it('prefers an explicit camelCase postal code', () => {
     const resolved = resolveRecoveryQuoteReceiver(
       { ...receiver, countryCode: 'NG' },
-      { postalCode: '101002' }
+      { ...receiver, postalCode: '101002' }
     );
     expect(resolved).toEqual({
-      override: expect.objectContaining({ postalCode: '101002' }),
+      override: expect.objectContaining({ ...receiver, postalCode: '101002' }),
+    });
+  });
+  it.each([
+    { address: '99 New Street' },
+    { city: 'Calabar' },
+    { state: 'Cross River' },
+  ])('clears both postcode spellings when destination changes %j', async (change) => {
+    const stored = { ...receiver, postal_code: '100001', postalCode: '100001' };
+    const resolved = resolveRecoveryQuoteReceiver(
+      { ...receiver, ...change },
+      stored
+    );
+    if ('error' in resolved) throw new Error(resolved.error);
+    expect(resolved.override.postalCode).toBeUndefined();
+    const built = await buildOrderGiglQuoteRequest(
+      {
+        id: 'order',
+        shipping_address: stored,
+        customer_phone: '08000000000',
+        order_items: [{ name: 'Phone', quantity: 1, price: 1000 }],
+      },
+      {
+        ...receiver,
+        country: 'Nigeria',
+        countryCode: 'NG',
+        name: 'Store',
+        phone: '08000000000',
+      },
+      undefined,
+      resolved.override
+    );
+    expect(built.ok).toBe(true);
+    if (!built.ok) throw new Error(built.code);
+    expect(built.request.receiver.postalCode).toBeUndefined();
+  });
+  it('does not carry postcode when the old destination cannot be verified', () => {
+    expect(
+      resolveRecoveryQuoteReceiver(receiver, { postalCode: '100001' })
+    ).toEqual({ override: expect.objectContaining({ postalCode: undefined }) });
+  });
+  it('keeps a postcode for equivalent composed casing and spacing with legacy unit lines', () => {
+    const resolved = resolveRecoveryQuoteReceiver(
+      { ...receiver, address: '12 TEST Street, Unit 2, Ikeja, Lagos' },
+      {
+        address_line1: '12 Test Street',
+        address_line2: 'Unit 2',
+        city: 'Ikeja',
+        state: 'Lagos',
+        postal_code: '100001',
+      }
+    );
+    expect(resolved).toEqual({
+      override: expect.objectContaining({ postalCode: '100001' }),
+    });
+  });
+  it('clears a foreign postcode even with unchanged legacy street metadata', () => {
+    const resolved = resolveRecoveryQuoteReceiver(receiver, {
+      ...receiver,
+      country: 'Canada',
+      countryCode: 'CA',
+      postalCode: 'OLD',
+    });
+    expect(resolved).toEqual({
+      override: expect.objectContaining({ postalCode: undefined }),
+    });
+  });
+  it('recognizes an original unit already embedded in the canonical street', () => {
+    const resolved = resolveRecoveryQuoteReceiver(
+      { ...receiver, address: '12 Test Street Flat 4' },
+      {
+        ...receiver,
+        address: '12 Test Street Flat 4',
+        address_line2: 'Flat 4',
+        postalCode: '100001',
+      }
+    );
+    expect(resolved).toEqual({
+      override: expect.objectContaining({ postalCode: '100001' }),
+    });
+  });
+  it('does not mistake a house number for a removed numeric unit', () => {
+    const resolved = resolveRecoveryQuoteReceiver(
+      { ...receiver, address: '4 Test Street' },
+      {
+        ...receiver,
+        address: '4 Test Street',
+        address_line2: '4',
+        postalCode: '100001',
+      }
+    );
+    expect(resolved).toEqual({
+      override: expect.objectContaining({ postalCode: undefined }),
     });
   });
 });

@@ -16,8 +16,19 @@ import {
 } from '@/lib/monnify-bills';
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
 import { resolveConcurrentFailedVtuTransaction } from '@/lib/vtu-concurrent-failed-refund';
-import type { CustomerEmailNotificationState } from '@/lib/vtu-email-claim-lease';
-import { isCustomerEmailClaimLeaseExpired } from '@/lib/vtu-email-claim-lease';
+import {
+  isVtuConcurrentUpdateError,
+  VtuConcurrentUpdateError,
+} from '@/lib/vtu-concurrent-update-error';
+import type {
+  CustomerEmailClaimLease,
+  CustomerEmailNotificationState,
+} from '@/lib/vtu-email-claim-lease';
+import {
+  getCustomerEmailAttemptedAtKey,
+  getCustomerEmailClaimLeaseGeneration,
+  isCustomerEmailClaimLeaseExpired,
+} from '@/lib/vtu-email-claim-lease';
 import {
   getSafeMetadataDiagnostics,
   VTU_CUSTOMER_FAILURE_MESSAGE,
@@ -280,9 +291,9 @@ function setCustomerEmailNotificationResult({
   for (const writeKey of state.sentWriteKeys ?? []) {
     changed = setMetadataValue(metadata, writeKey, sent) || changed;
   }
-  if (!sent) {
-    changed = setMetadataValue(metadata, state.attemptedKey, false) || changed;
-  }
+  // The attempted flag is released ONLY by the fenced clear RPC (Codex
+  // R97 P2): zeroing it here would let the settlement merge persist a
+  // release the RPC refused, unlocking a lease another path reclaimed.
   return changed;
 }
 
@@ -767,20 +778,6 @@ async function refundCardOnly({
   return { metadataChanged, refundIssued: true, refundedAmount: totalAmount };
 }
 
-class VtuConcurrentUpdateError extends Error {
-  constructor(message: string) {
-    super(message);
-    Object.setPrototypeOf(this, VtuConcurrentUpdateError.prototype);
-    this.name = 'VtuConcurrentUpdateError';
-  }
-}
-
-function isVtuConcurrentUpdateError(
-  error: unknown
-): error is VtuConcurrentUpdateError {
-  return error instanceof VtuConcurrentUpdateError;
-}
-
 const PURCHASE_RESULT_UPDATE_MAX_ATTEMPTS = 3;
 const PURCHASE_RESULT_UPDATE_BACKOFF_MS = [100, 250] as const;
 
@@ -1138,8 +1135,11 @@ async function claimCustomerEmailNotificationAttempt({
       !isCustomerEmailClaimLeaseExpired({ metadata, state })) ||
     isCustomerEmailNotificationSent(metadata, state)
   ) {
-    return false;
+    return null;
   }
+
+  const priorAttempted = metadata[state.attemptedKey];
+  const priorAttemptedAt = metadata[getCustomerEmailAttemptedAtKey(state)];
 
   const { data, error } = await supabase.rpc(
     'claim_vtu_customer_email_notification_attempt',
@@ -1155,26 +1155,60 @@ async function claimCustomerEmailNotificationAttempt({
       error: error.message,
       transactionId: row.id,
     });
-    return false;
+    return null;
   }
 
   const claimedMetadata = readMetadataRecord(data);
   if (Object.keys(claimedMetadata).length === 0) {
-    return false;
+    return null;
   }
 
   for (const [key, value] of Object.entries(claimedMetadata)) {
     setMetadataValue(metadata, key, value);
   }
-  return true;
+  const generation = getCustomerEmailClaimLeaseGeneration({
+    metadata: claimedMetadata,
+    state,
+  });
+  if (!generation) {
+    return null;
+  }
+  return { generation, priorAttempted, priorAttemptedAt };
+}
+
+function revertStaleEmailClaimLease({
+  lease,
+  metadata,
+  state,
+}: {
+  lease: CustomerEmailClaimLease;
+  metadata: Record<string, unknown>;
+  state: CustomerEmailNotificationState;
+}) {
+  // Our clear lost (reclaimed row or RPC error): restore the pre-claim
+  // lease keys so the settlement merge leaves the owner's lease
+  // untouched instead of persisting our stale generation.
+  const attemptedAtKey = getCustomerEmailAttemptedAtKey(state);
+  if (lease.priorAttempted === undefined) {
+    delete metadata[state.attemptedKey];
+  } else {
+    metadata[state.attemptedKey] = lease.priorAttempted;
+  }
+  if (lease.priorAttemptedAt === undefined) {
+    delete metadata[attemptedAtKey];
+  } else {
+    metadata[attemptedAtKey] = lease.priorAttemptedAt;
+  }
 }
 
 async function clearCustomerEmailNotificationAttempt({
+  lease,
   metadata,
   row,
   state,
   supabase,
 }: {
+  lease: CustomerEmailClaimLease;
   metadata: Record<string, unknown>;
   row: VtuTransactionRow;
   state: CustomerEmailNotificationState;
@@ -1183,6 +1217,7 @@ async function clearCustomerEmailNotificationAttempt({
   const { data, error } = await supabase.rpc(
     'clear_vtu_customer_email_notification_attempt',
     {
+      p_attempt_at: lease.generation,
       p_attempt_key: state.attemptedKey,
       p_sent_key: state.sentKey,
       p_transaction_id: row.id,
@@ -1194,11 +1229,13 @@ async function clearCustomerEmailNotificationAttempt({
       error: error.message,
       transactionId: row.id,
     });
+    revertStaleEmailClaimLease({ lease, metadata, state });
     return false;
   }
 
   const clearedMetadata = readMetadataRecord(data);
   if (Object.keys(clearedMetadata).length === 0) {
+    revertStaleEmailClaimLease({ lease, metadata, state });
     return false;
   }
 
@@ -1289,7 +1326,7 @@ async function notifyVtuCustomerSuccess({
         state: emailNotificationState,
         supabase,
       })
-    : false;
+    : null;
   const baseBody = `Your ${provider} ${label.toLowerCase()} purchase of ${formatNaira(Number(row.amount) || 0)} was successful.`;
   const cashbackBody =
     cashbackAmount > 0 && customerWalletCredited
@@ -1318,7 +1355,9 @@ async function notifyVtuCustomerSuccess({
         vtuType: row.type,
       };
 
-  let metadataChanged = claimedNotification || claimedEmailNotification;
+  let metadataChanged = Boolean(
+    claimedNotification || claimedEmailNotification
+  );
 
   // 1. Send push notification if user_id exists
   if (shouldAttemptPush && customer.user_id && claimedNotification) {
@@ -1429,6 +1468,7 @@ async function notifyVtuCustomerSuccess({
       if (!emailResult.success && claimedEmailNotification) {
         metadataChanged =
           (await clearCustomerEmailNotificationAttempt({
+            lease: claimedEmailNotification,
             metadata,
             row,
             state: emailNotificationState,
@@ -1450,6 +1490,7 @@ async function notifyVtuCustomerSuccess({
       if (claimedEmailNotification) {
         metadataChanged =
           (await clearCustomerEmailNotificationAttempt({
+            lease: claimedEmailNotification,
             metadata,
             row,
             state: emailNotificationState,
@@ -2660,6 +2701,13 @@ export async function fulfillPendingVtuTransaction({
       supabase
     );
   } catch (error) {
+    // Lost-race vend (Codex R97 P1): the Kuda fallback marker found
+    // another worker's generation — resolve THEIR row (success /
+    // confirmed refund / processing replay) instead of persisting
+    // our stale failure over their in-flight vend (free airtime).
+    if (isVtuConcurrentUpdateError(error)) {
+      return resolveCurrentVtuTransactionState({ row, supabase });
+    }
     if (!isMonnifyTransientVendError(error)) {
       throw error;
     }

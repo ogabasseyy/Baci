@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { VtuConcurrentUpdateError } from '@/lib/vtu-concurrent-update-error';
 import { executeMonnifyAirtimeKudaFallback } from './vtu-monnify-kuda-fallback';
 
 const mockPurchaseAirtime = vi.fn();
@@ -156,23 +157,27 @@ describe('executeMonnifyAirtimeKudaFallback', () => {
     expect(row.updated_at).toBe('tok-2');
   });
 
-  it('returns the Monnify rejection without calling Kuda on a zero-match lost race', async () => {
-    // Codex R96 P1: this worker paused after its Monnify failure; a
-    // replay reclaimed and settled the row. The CAS matches nothing
-    // — vend nothing (refund path), exactly like a failed write.
+  it('throws a concurrent-update loss on a zero-match lost race', async () => {
+    // Codex R97 P1: this worker paused after its Monnify failure; a
+    // replay reclaimed the row and may be vending. Returning the
+    // Monnify failure as ordinary would let the outer status-only
+    // persist mark THEIR row failed and refund while their vend
+    // lands (free airtime) — throw so fulfill resolves the current
+    // row instead of entering the failure/refund path.
     const { supabase } = createSupabase(null, null);
     const row = { ...rowBase, metadata: { ...rowBase.metadata } };
 
-    const result = await executeMonnifyAirtimeKudaFallback({
-      customerFirstName: 'OgaBassey',
-      monnifyResult: monnifyResult as never,
-      provider: 'MTN' as never,
-      row,
-      supabase: supabase as never,
-    });
+    await expect(
+      executeMonnifyAirtimeKudaFallback({
+        customerFirstName: 'OgaBassey',
+        monnifyResult: monnifyResult as never,
+        provider: 'MTN' as never,
+        row,
+        supabase: supabase as never,
+      })
+    ).rejects.toBeInstanceOf(VtuConcurrentUpdateError);
 
     expect(mockPurchaseAirtime).not.toHaveBeenCalled();
-    expect(result).toBe(monnifyResult);
     expect(row.metadata.provider).toBe('monnify');
     expect(row.updated_at).toBe('tok-1');
   });

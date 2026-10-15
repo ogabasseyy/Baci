@@ -16,8 +16,38 @@ export interface CustomerEmailNotificationState {
   sentWriteKeys?: readonly string[];
 }
 
-function getCustomerEmailAttemptedAtKey(state: CustomerEmailNotificationState) {
+export function getCustomerEmailAttemptedAtKey(
+  state: CustomerEmailNotificationState
+) {
   return `${state.attemptedKey}At`;
+}
+
+/**
+ * Owned email-claim lease (Codex R97 P2): the stamped generation fences
+ * the clear RPC, and the pre-claim values let a stale clearer revert its
+ * local claim merge so the settlement merge leaves the owner's lease
+ * keys untouched.
+ */
+export interface CustomerEmailClaimLease {
+  generation: string;
+  priorAttempted: unknown;
+  priorAttemptedAt: unknown;
+}
+
+/**
+ * Lease generation the claim RPC stamped (`<attemptedKey>At`): the clear
+ * RPC only releases the flag when the row still carries this exact value,
+ * so a stale clearer cannot unlock a lease another path reclaimed.
+ */
+export function getCustomerEmailClaimLeaseGeneration({
+  metadata,
+  state,
+}: {
+  metadata: Record<string, unknown>;
+  state: CustomerEmailNotificationState;
+}): string | null {
+  const stamped = metadata[getCustomerEmailAttemptedAtKey(state)];
+  return typeof stamped === 'string' && stamped.trim() !== '' ? stamped : null;
 }
 
 export function isCustomerEmailClaimLeaseExpired({

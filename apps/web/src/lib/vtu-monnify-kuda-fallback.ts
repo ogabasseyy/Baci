@@ -4,6 +4,7 @@ import {
   type PurchaseResult,
   purchaseAirtime,
 } from '@/lib/kuda';
+import { VtuConcurrentUpdateError } from '@/lib/vtu-concurrent-update-error';
 
 /** Minimal row shape the fallback needs (structural; no import cycle). */
 export interface MonnifyAirtimeKudaFallbackRow {
@@ -32,9 +33,12 @@ export interface MonnifyAirtimeKudaFallbackRow {
  * otherwise land the marker on a row a replay already reclaimed —
  * the unfiltered UPDATE still succeeds on the newer generation and
  * the resumed worker submits airtime Kuda already delivered.
- * Zero-match returns the Monnify rejection unsettled (refund path),
- * exactly like a failed write. Refreshes the CAS token in place so
- * downstream restores compare against the post-marker generation.
+ * Zero-match THROWS VtuConcurrentUpdateError (Codex R97 P1) so
+ * fulfill resolves the current row: returning the Monnify failure
+ * as ordinary would let the outer status-only persist mark the
+ * reclaiming worker's row failed and refund while their vend lands
+ * (free airtime). Refreshes the CAS token in place so downstream
+ * restores compare against the post-marker generation.
  * Extracted from vtu-fulfillment.ts per the Boy Scout Rule.
  */
 export async function executeMonnifyAirtimeKudaFallback({
@@ -80,10 +84,15 @@ export async function executeMonnifyAirtimeKudaFallback({
     return monnifyResult;
   }
   if (!fallbackMarkedRow) {
-    console.error('Kuda fallback routing lost race: row moved or settled:', {
-      transactionId: row.id,
-    });
-    return monnifyResult;
+    // Lost race (Codex R97 P1): another worker reclaimed this row
+    // and may be vending. Returning the Monnify failure as an
+    // ordinary result would let the outer status-only persist mark
+    // THEIR row failed and refund while their vend lands (free
+    // airtime) — throw so fulfill resolves the CURRENT row instead
+    // of entering the failure/refund path.
+    throw new VtuConcurrentUpdateError(
+      `VTU Kuda fallback routing lost race for ${row.id}: row moved or settled`
+    );
   }
   if (typeof fallbackMarkedRow.updated_at === 'string') {
     row.updated_at = fallbackMarkedRow.updated_at;

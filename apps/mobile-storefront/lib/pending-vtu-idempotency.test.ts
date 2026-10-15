@@ -454,9 +454,9 @@ describe('pending-vtu-idempotency', () => {
     rememberPendingVtuPurchase(scoped, 'noted-key');
     forgetPendingVtuPurchase(scoped);
 
-    // The forget's own persist cleared its tombstone (MMKV is
-    // memory-only under jest, so the write trivially succeeds);
-    // re-note to prove the registry→snapshot plumbing directly.
+    // The forget's own persist cleared its tombstone (the root
+    // MMKV mock is memory-backed, so the write succeeds); re-note
+    // to prove the registry→snapshot plumbing directly.
     noteForgottenVtuScopes([scoped], Date.now());
     const snapshot = parsePendingVtuSnapshot(serializePendingVtuPurchases());
 

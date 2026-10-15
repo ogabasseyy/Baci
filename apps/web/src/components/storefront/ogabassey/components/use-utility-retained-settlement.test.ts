@@ -139,6 +139,40 @@ describe('useUtilityRetainedSettlement', () => {
     }
   });
 
+  it('detaches the cancelled pass so new submits never await it', async () => {
+    // Codex R97 P2 (mobile mirror): a body read that ignores abort
+    // would otherwise leave the global pointing at this cancelled
+    // pass, forcing every new submission to await the previous
+    // account until the 10-second fallback deadline.
+    vi.useFakeTimers();
+    try {
+      rememberPendingVtuPurchase('{"detach":true}', 'key-detach');
+      notePendingVtuReference('{"detach":true}', 'VTU-DETACH');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => ({
+          ok: true,
+          status: 200,
+          json: () => new Promise(() => {}),
+        }))
+      );
+
+      const { unmount } = renderHook(() =>
+        useUtilityRetainedSettlement(input)
+      );
+      await act(async () => {});
+      expect(getPendingVtuSettlementPass()).not.toBeNull();
+
+      act(() => {
+        unmount();
+      });
+      expect(getPendingVtuSettlementPass()).toBeNull();
+      expect(recallPendingVtuKey('{"detach":true}')).toBe('key-detach');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('settles without AbortSignal.any/.timeout (safari 15.4 floor)', async () => {
     // Codex R66 6rvh_R: same guarantee as the backfill — the pass
     // must never touch the unsupported APIs.

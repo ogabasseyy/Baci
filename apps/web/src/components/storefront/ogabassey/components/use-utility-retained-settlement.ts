@@ -136,6 +136,14 @@ export function useUtilityRetainedSettlement({
     return () => {
       cancelled = true;
       controller.abort();
+      // Detach (Codex R97 P2, mobile mirror): a body read that does
+      // not promptly reject on abort would otherwise leave the
+      // global pointing at this cancelled pass, forcing every new
+      // submission to await the previous account until the
+      // 10-second fallback deadline.
+      if (activeSettlementPass === pass) {
+        activeSettlementPass = null;
+      }
     };
   }, [enabled, merchantSlug, scopeMerchantId, scopeOwnerId, userId]);
 }

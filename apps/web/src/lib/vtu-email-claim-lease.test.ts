@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { isCustomerEmailClaimLeaseExpired } from './vtu-email-claim-lease';
+import {
+  getCustomerEmailClaimLeaseGeneration,
+  isCustomerEmailClaimLeaseExpired,
+} from './vtu-email-claim-lease';
 
 describe('isCustomerEmailClaimLeaseExpired', () => {
   it('expires email claim leases after 15 minutes and treats unstamped claims as expired', async () => {
@@ -56,5 +59,39 @@ describe('isCustomerEmailClaimLeaseExpired', () => {
         state,
       })
     ).toBe(false);
+  });
+});
+
+describe('getCustomerEmailClaimLeaseGeneration', () => {
+  it('returns the stamped generation and null for missing/blank/non-string stamps', () => {
+    // Codex R97 P2: the clear RPC fences on this generation; a missing
+    // stamp means no owned lease, so the caller must not clear at all.
+    const state = {
+      attemptedKey: 'customerTokenEmailNotificationAttempted',
+      sentKey: 'customerTokenEmailNotificationSent',
+    };
+    expect(
+      getCustomerEmailClaimLeaseGeneration({
+        metadata: {
+          customerTokenEmailNotificationAttemptedAt: '2026-10-15T00:00:00.000Z',
+        },
+        state,
+      })
+    ).toBe('2026-10-15T00:00:00.000Z');
+    expect(
+      getCustomerEmailClaimLeaseGeneration({ metadata: {}, state })
+    ).toBeNull();
+    expect(
+      getCustomerEmailClaimLeaseGeneration({
+        metadata: { customerTokenEmailNotificationAttemptedAt: '   ' },
+        state,
+      })
+    ).toBeNull();
+    expect(
+      getCustomerEmailClaimLeaseGeneration({
+        metadata: { customerTokenEmailNotificationAttemptedAt: 123 },
+        state,
+      })
+    ).toBeNull();
   });
 });

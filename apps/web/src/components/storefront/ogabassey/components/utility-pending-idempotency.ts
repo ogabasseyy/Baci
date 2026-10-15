@@ -10,27 +10,14 @@ import {
 } from './utility-pending-vtu-sync';
 
 /**
- * Cross-mount recall for wallet-only VTU idempotency keys (web). The
- * key used to live in a ref, so Done + resubmit minted fresh and the
- * server debited a SECOND transaction. This module registry survives
- * remounts, so retries reuse the key and the route's idempotency row
- * dedupes instead of double-charging.
- *
- * Entries key by canonical purchase signature (server-fingerprint
- * mirror), scoped to owner + merchant then SHA-256 digested: same
- * signature in means the same payload out, with the server 409 guard
- * as backstop, and no recipient identifier rests in the map or the
- * snapshot. Deletion rule (R68 6rwG9F): only a view that just showed
- * a result may forget it; background passes mark successes stale
- * instead, so suppressed outcomes replay instead of double-charging.
- *
- * Durability: localStorage (cross-tab) so reloads and new-tab
- * retries replay the same key. Uniform 7-day TTL everywhere
- * (persisted + live, any reference state); within it the 5-minute
- * stale window arbitrates success replays of noted references.
- *
- * Sync + scoping live in utility-pending-vtu-sync.ts and
- * utility-pending-vtu-scope.ts; ops live here.
+ * Cross-mount recall for wallet-only VTU idempotency keys (web):
+ * retries reuse the key and the route's idempotency row dedupes
+ * instead of double-charging. Entries key by canonical purchase
+ * signature (scoped owner+merchant, SHA-256; no recipient in the
+ * map/snapshot). Deletion rule (R68): only a view that just showed
+ * a result may forget it; background passes mark stale instead.
+ * Durability: localStorage, 7-day TTL; 5-minute stale window for
+ * success replays. Sync/scoping in sibling modules; ops live here.
  */
 
 /** Sequential web UX never has more than a couple of pendings in flight. */
@@ -82,14 +69,8 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
   }
 }
 
-/**
- * Records the key a purchase was submitted with (cap-enforced).
- * Returns false when the entry is memory-only (Codex R96 P1): if
- * localStorage.setItem throws (quota/private mode), the in-memory
- * entry is dropped again so a retry re-mints AND re-persists —
- * keeping it would let the retry submit a key a reload cannot
- * recover, minting fresh and double-debiting on ambiguous results.
- */
+/** Records the key (cap-enforced); false when memory-only — dropped
+ * so a retry re-mints AND re-persists (R96 P1). */
 export function rememberPendingVtuPurchase(
   payloadSignature: string,
   key: string,
@@ -258,15 +239,9 @@ export function forgetPendingVtuPurchase(payloadSignature: string): void {
 }
 
 /**
- * Returns the recalled key for this purchase, minting and remembering a
- * fresh one on first submit. Mirrors mobile's
- * `getWalletIdempotencyKey(descriptor)`. Throws when the minted key
- * cannot be durably stored (Codex R96 P1): submitting a memory-only
- * key risks a reload losing it and the retry double-debiting. The
- * throw aborts before the POST (user-safe message) and the retry
- * re-mints once storage works — nothing was submitted, so no server
- * state dangles. Recalled keys are already durable (persisted at
- * mint or hydrated from the snapshot).
+ * Recalled key, else mint + remember (mobile mirror). Throws when
+ * the minted key is memory-only (R96 P1): aborts pre-POST, retry
+ * re-mints once storage works. Recalled keys are already durable.
  */
 export function getPendingVtuKey(
   payloadSignature: string,

@@ -54,13 +54,21 @@ export function loadPendingVtuSnapshot(): string | null {
 /**
  * Best-effort write; failures leave the in-memory registry working.
  * Returns false when the write throws so callers retain deletion
- * tombstones for the next persist (see persistPendingVtuEntries).
- * Unavailable storage (web/SSR fallback) counts as success — there
- * is nothing to fail, mirroring web's localStorage-absent branch.
+ * tombstones for the next persist (see persistPendingVtuEntries) —
+ * and false when no store exists at all (Codex R97 P1): a null
+ * bucket used to no-op into `true`, so the submit path treated a
+ * memory-only key as durable and sent the checkout; after an
+ * ambiguous response plus a restart the retry minted fresh and
+ * could debit/vend twice. False reaches remember(), whose
+ * pre-POST guard refuses the submission until storage works.
  */
 export function savePendingVtuSnapshot(serialized: string): boolean {
   try {
-    getPendingVtuStorage()?.set(VTU_PENDING_KEYS_STORAGE_KEY, serialized);
+    const store = getPendingVtuStorage();
+    if (!store) {
+      return false;
+    }
+    store.set(VTU_PENDING_KEYS_STORAGE_KEY, serialized);
     return true;
   } catch {
     // Persistence is best effort; the in-memory registry still dedupes

@@ -29,6 +29,12 @@ describe('EXPECTED_PENDING_TAIL_SOURCES', () => {
           sha256:
             'e4090f77f17032a4a0adc7e639f74e3e89794bb4f4792e717ac554791899de14',
         },
+        {
+          repositoryPath:
+            'supabase/migrations/20261015010000_fence_vtu_customer_email_notification_clear_by_lease.sql',
+          sha256:
+            '2112c1db75c246c7030a570434efdecfb7bbd2b95ce1b35b8a3ad37dba811a17',
+        },
       ],
       identity: [
         {

@@ -79,9 +79,22 @@ interface PendingTransactionMockOptions {
   claimData?: Record<string, unknown> | null;
   completedGatewayTransactions?: Array<{ status: string }>;
   emailClaimData?: { id: string } | null;
+  /**
+   * When null, the email-clear RPC resolves null (Codex R97 P2: the row
+   * was reclaimed under a newer lease generation, so our stale clear
+   * must leave the owner's lease untouched).
+   */
+  emailClearData?: { id: string } | null;
   notificationClaimData?: { id: string } | null;
   purchaseUpdateData?: { id: string; updated_at?: string } | null;
   purchaseUpdateErrors?: Array<{ message: string } | null>;
+  /**
+   * When set, the Kuda-fallback marker write resolves with this
+   * matched row (null = zero-match lost race, Codex R97 P1); all
+   * other updates keep purchaseUpdateData. Lets one test lose the
+   * fallback race while the claim/debit/marker succeed.
+   */
+  fallbackMarkerData?: { id: string } | null;
   /**
    * When set, pre-vend restore updates resolve as a CAS match ONLY
    * when the captured `updated_at` token equals this (Codex R65
@@ -190,9 +203,11 @@ function createPendingTransactionSupabaseMock({
   claimData = { id: 'vtu-1' },
   completedGatewayTransactions = [],
   emailClaimData = { id: 'vtu-1' },
+  emailClearData = { id: 'vtu-1' },
   notificationClaimData = { id: 'vtu-1' },
   purchaseUpdateData = { id: 'vtu-1' },
   purchaseUpdateErrors,
+  fallbackMarkerData,
   expectedRestoreToken,
   updateErrors = {},
   updatePayloads = [],
@@ -384,8 +399,15 @@ function createPendingTransactionSupabaseMock({
                 purchaseUpdateAttempt += 1;
               }
 
+              const isFallbackMarker =
+                !('status' in payloadRecord) &&
+                metadataPayload?.providerFallback === 'monnify_airtime_to_kuda';
               const purchaseUpdateMaybeSingle = vi.fn().mockResolvedValue({
-                data: updateError ? null : purchaseUpdateData,
+                data: updateError
+                  ? null
+                  : isFallbackMarker && fallbackMarkerData !== undefined
+                    ? fallbackMarkerData
+                    : purchaseUpdateData,
                 error: updateError ?? null,
               });
               return createAwaitableUpdateChain(
@@ -474,6 +496,8 @@ function createPendingTransactionSupabaseMock({
                   ? (transactionRow.metadata as Record<string, unknown>)
                   : {}),
                 [String(args?.p_attempt_key)]: true,
+                [`${String(args?.p_attempt_key)}At`]:
+                  '2026-10-15T00:00:00.000Z',
               }
             : null,
           error: null,
@@ -482,13 +506,15 @@ function createPendingTransactionSupabaseMock({
 
       if (name === 'clear_vtu_customer_email_notification_attempt') {
         return Promise.resolve({
-          data: {
-            ...(transactionRow.metadata &&
-            typeof transactionRow.metadata === 'object'
-              ? (transactionRow.metadata as Record<string, unknown>)
-              : {}),
-            [String(args?.p_attempt_key)]: false,
-          },
+          data: emailClearData
+            ? {
+                ...(transactionRow.metadata &&
+                typeof transactionRow.metadata === 'object'
+                  ? (transactionRow.metadata as Record<string, unknown>)
+                  : {}),
+                [String(args?.p_attempt_key)]: false,
+              }
+            : null,
           error: null,
         });
       }
@@ -1151,6 +1177,7 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(supabase.rpc).toHaveBeenCalledWith(
       'clear_vtu_customer_email_notification_attempt',
       {
+        p_attempt_at: '2026-10-15T00:00:00.000Z',
         p_attempt_key: 'customerTokenEmailNotificationAttempted',
         p_sent_key: 'customerTokenEmailNotificationSent',
         p_transaction_id: 'vtu-1',
@@ -1162,6 +1189,76 @@ describe('fulfillPendingVtuTransaction', () => {
         customerTokenEmailNotificationSent: false,
       }),
     });
+  });
+
+  it('leaves a reclaimed email lease untouched when our clear is stale', async () => {
+    const updatePayloads: unknown[] = [];
+    mockSendEmail.mockResolvedValueOnce({ success: false });
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      emailClearData: null,
+      merchantData: {
+        business_name: 'OgaBassey',
+        slug: 'ogabassey',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          voucherPin: 'TOKEN-READY-1234',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+      updateErrors: {
+        successMetadata: { message: 'final metadata write failed' },
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'clear_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_at: '2026-10-15T00:00:00.000Z',
+      })
+    );
+    // Neither lease key may be persisted: the row now belongs to the
+    // reclaiming owner, so our merge must not write our stale flag or
+    // stamp over theirs.
+    for (const payload of updatePayloads) {
+      const metadata = (payload as { metadata?: Record<string, unknown> })
+        .metadata;
+      if (metadata && typeof metadata === 'object') {
+        expect(metadata).not.toHaveProperty(
+          'customerTokenEmailNotificationAttempted'
+        );
+        expect(metadata).not.toHaveProperty(
+          'customerTokenEmailNotificationAttemptedAt'
+        );
+      }
+    }
   });
 
   it('skips email send when another fulfillment path already claimed delivery', async () => {
@@ -2759,6 +2856,82 @@ describe('fulfillPendingVtuTransaction', () => {
         status: 'failed',
       })
     );
+  });
+
+  it('resolves the current row instead of failing it when the fallback marker loses its race', async () => {
+    // Codex R97 P1: this worker paused after its Monnify failure; a
+    // replay reclaimed the row and is vending. Recording our stale
+    // Monnify failure over THEIR in-flight row would refund while
+    // their vend lands (free airtime) — resolve their row instead:
+    // no failed persist, no Kuda call, no refund; the client replays
+    // onto the progressed row.
+    mockMonnifyPurchaseBill.mockResolvedValue({
+      success: false,
+      reference: 'VTU-123',
+      message: 'Monnify rejected the bill payment request.',
+      providerErrorDetail:
+        'Monnify API error: 400 Bad Request - Amount must be greater than zero',
+      amount: 100,
+      status: 'failed',
+    });
+    const updatePayloads: unknown[] = [];
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 100,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'MTN',
+          productCode: '13',
+          requireValidationRef: false,
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: '08012345678',
+      },
+      fallbackMarkerData: null,
+      currentTransactionData: {
+        error_message: null,
+        metadata: {
+          provider: 'kuda',
+          providerFallback: 'monnify_airtime_to_kuda',
+        },
+        status: 'processing',
+        transaction_id: null,
+      },
+      updatePayloads,
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      reference: 'VTU-123',
+      status: 'processing',
+    });
+    expect(
+      updatePayloads.filter(
+        (payload) =>
+          typeof payload === 'object' &&
+          payload !== null &&
+          (payload as { status?: unknown }).status === 'failed'
+      )
+    ).toEqual([]);
   });
 
   it('does not fall back to Kuda airtime for generic Monnify vend failures', async () => {

@@ -16956,6 +16956,7 @@ export type Database = {
       };
       clear_vtu_customer_email_notification_attempt: {
         Args: {
+          p_attempt_at: string;
           p_attempt_key: string;
           p_sent_key: string;
           p_transaction_id: string;

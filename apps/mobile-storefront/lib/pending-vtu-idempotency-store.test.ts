@@ -12,20 +12,26 @@ import {
 
 const mockMmkvStore = new Map<string, string>();
 let mockMmkvSetThrows = false;
+let mockMmkvCreateThrows = false;
 
 jest.mock('react-native-mmkv', () => ({
-  createMMKV: () => ({
-    getString: (key: string) => mockMmkvStore.get(key) ?? null,
-    set: (key: string, value: string) => {
-      if (mockMmkvSetThrows) {
-        throw new Error('MMKV full');
-      }
-      mockMmkvStore.set(key, value);
-    },
-    remove: (key: string) => {
-      mockMmkvStore.delete(key);
-    },
-  }),
+  createMMKV: () => {
+    if (mockMmkvCreateThrows) {
+      throw new Error('MMKV unavailable');
+    }
+    return {
+      getString: (key: string) => mockMmkvStore.get(key) ?? null,
+      set: (key: string, value: string) => {
+        if (mockMmkvSetThrows) {
+          throw new Error('MMKV full');
+        }
+        mockMmkvStore.set(key, value);
+      },
+      remove: (key: string) => {
+        mockMmkvStore.delete(key);
+      },
+    };
+  },
 }));
 
 function entry(overrides: Record<string, unknown> = {}) {
@@ -63,6 +69,24 @@ describe('pending-vtu-idempotency-store', () => {
     expect(persistPendingVtuEntries([])).toBe(false);
     expect(forgottenVtuScopes.size).toBe(1);
     expect(loadPendingVtuSnapshot()).toBeNull();
+  });
+
+  it('reports failure when no store exists so submit refuses memory-only keys', async () => {
+    // Codex R97 P1: a null bucket used to no-op into `true`, so the
+    // submit path sent a checkout whose key a restart would lose.
+    // Fresh module (the bucket caches per module) with createMMKV
+    // throwing: save AND the persist wrapper report false.
+    mockMmkvCreateThrows = true;
+    try {
+      jest.resetModules();
+      const fresh = await import('./pending-vtu-idempotency-store');
+      expect(fresh.savePendingVtuSnapshot('{"entries":[]}')).toBe(false);
+      expect(fresh.persistPendingVtuEntries([])).toBe(false);
+      expect(fresh.loadPendingVtuSnapshot()).toBeNull();
+    } finally {
+      mockMmkvCreateThrows = false;
+      jest.resetModules();
+    }
   });
 
   it('rewrites a legacy snapshot with digests on registry load', async () => {

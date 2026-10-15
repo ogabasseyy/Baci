@@ -189,14 +189,17 @@ describe('utility-pending-vtu-codec', () => {
   });
 
   it('round-trips completion timestamps; legacy entries default to null', () => {
+    // Pin rememberedAt: entry() stamps Date.now() per call, so a
+    // millisecond tick between the input and expectation builds
+    // flakes the deep-equal on loaded runners (shard 3, R96 CI).
     const now = Date.now();
     const serialized = serializePendingVtuEntries(
-      [['a', entry({ completedAt: now - 1000 })]],
+      [['a', entry({ completedAt: now - 1000, rememberedAt: now })]],
       []
     );
 
     expect(parsePendingVtuSnapshot(serialized, now)).toEqual({
-      entries: [['a', entry({ completedAt: now - 1000 })]],
+      entries: [['a', entry({ completedAt: now - 1000, rememberedAt: now })]],
       forgotten: [],
     });
     // Pre-completion-tracking snapshots omit the field: fail open so

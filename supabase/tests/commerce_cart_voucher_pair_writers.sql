@@ -60,6 +60,55 @@ BEGIN
   END IF;
 END $$;
 
+-- A token-only line transferred through handoff redemption keeps its
+-- full quantity: only complete pairs pin at one.
+DO $$
+DECLARE
+  m uuid := '11111111-1111-4111-8111-111111111111';
+  p uuid := '44444444-4444-4444-8444-444444444444';
+  c uuid := 'aaaaaaaa-4500-4000-8000-000000000003';
+  g uuid := 'bbbbbbbb-4500-4000-8000-000000000003';
+  hid uuid := 'aaaaaaaa-4501-4000-8000-000000000001';
+  r jsonb;
+BEGIN
+  INSERT INTO public.commerce_carts(id, merchant_id, expires_at)
+  VALUES (c, m, now() + interval '1 day');
+  INSERT INTO public.commerce_cart_grants(id, merchant_id, cart_id, principal_id, expires_at)
+  VALUES (g, m, c, 'partial-handoff', now() + interval '1 day');
+  INSERT INTO public.commerce_cart_lines(
+    merchant_id, cart_id, product_id, quantity, last_unit_price_minor, voucher_token
+  ) VALUES (
+    m, c, p, 2, 1500,
+    'quiz_voucher:11111111-1111-4111-8111-111111111111:77777777-7777-4777-8777-777777777777:lesson.partial.handoff.sig'
+  );
+  PERFORM pg_temp.partial_claim(c, g, 'partial-handoff');
+  r := public.commerce_cart_issue_handoff(
+    repeat('c', 64), hid, c, 'pv-handoff-op', '{"type":"web"}'::jsonb
+  );
+  IF r ->> 'ok' <> 'true' THEN
+    RAISE EXCEPTION 'partial-pair handoff issue must succeed: %', r;
+  END IF;
+  PERFORM set_config('request.jwt.claims', jsonb_build_object(
+    'role', 'commerce_cart_shopper', 'exp', 9999999999,
+    'cart_scope', 'bootstrap',
+    'cart_merchant_id', '11111111-1111-4111-8111-111111111111',
+    'cart_principal_id', 'partial-fresh'
+  )::text, true);
+  r := public.commerce_cart_redeem_handoff(
+    repeat('c', 64), hid, 'pv-handoff-attempt', 'connect', 'web',
+    NULL, 1, NULL, NULL, NULL
+  );
+  IF r ->> 'ok' <> 'true' THEN
+    RAISE EXCEPTION 'partial-pair handoff redeem must succeed: %', r;
+  END IF;
+  IF (
+    SELECT quantity::integer FROM public.commerce_cart_lines
+    WHERE cart_id = c AND product_id = p
+  ) <> 2 THEN
+    RAISE EXCEPTION 'handoff must preserve the partial-pair quantity of two';
+  END IF;
+END $$;
+
 DO $$
 DECLARE
   m uuid := '11111111-1111-4111-8111-111111111111';

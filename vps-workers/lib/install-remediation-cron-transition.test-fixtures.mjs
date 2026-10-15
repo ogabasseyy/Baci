@@ -179,6 +179,7 @@ export function writeStage(
   for (const name of [
     'vercel-error-remediator',
     'sentry-mobile-error-remediator',
+    'posthog-error-remediator',
     'remediation-codex-canary',
   ]) {
     writeJob(

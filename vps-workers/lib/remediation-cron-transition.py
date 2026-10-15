@@ -15,6 +15,7 @@ from remediation_cron_transition_crontab import transition_crontab
 TARGETS = (
     ('vercel-error-remediator', '*/15 * * * *', '-n'),
     ('sentry-mobile-error-remediator', '*/5 *  * * *', '-n'),
+    ('posthog-error-remediator', '7-59/15 * * * *', '-n'),
     ('remediation-codex-canary', '22 4   * * *', '-w 600'),
 )
 BARRIER_FILES = (

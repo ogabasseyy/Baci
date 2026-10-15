@@ -1,57 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
-import { NextRequest } from 'next/server';
-import { beforeEach, expect, it, vi } from 'vitest';
-import { verifyAgenticApiKey } from './auth';
-import { readAgenticQueryRequest } from './mutation-request';
-import { handleCanonicalUcpCart } from './ucp-canonical-cart';
-import { GET } from './ucp-cart-read-route';
-import {
-  loadUcpCartSession,
-  resolveUcpCartContext,
-} from './ucp-cart-route-support';
+import { NextRequest, NextResponse } from 'next/server';
+import { expect, it, vi } from 'vitest';
+import { readUcpCart } from './ucp-cart-read-route';
 
-vi.mock('./auth', () => ({ verifyAgenticApiKey: vi.fn() }));
-vi.mock('./mutation-request', () => ({ readAgenticQueryRequest: vi.fn() }));
-vi.mock('./ucp-canonical-cart', () => ({ handleCanonicalUcpCart: vi.fn() }));
-vi.mock('./ucp-cart-route-support', () => ({
-  resolveUcpCartContext: vi.fn(),
-  loadUcpCartSession: vi.fn(),
-  buildUcpCartStateResponse: vi.fn(),
-}));
-beforeEach(() => vi.clearAllMocks());
-it('rejects unauthenticated reads before querying a merchant or cart', async () => {
-  vi.mocked(verifyAgenticApiKey).mockReturnValue(false);
-  const response = await GET(
-    new NextRequest('https://example.invalid/api/agentic/carts/cart'),
-    { params: Promise.resolve({ id: 'cart' }) }
-  );
-  expect(response.status).toBe(401);
-  expect(readAgenticQueryRequest).not.toHaveBeenCalled();
-});
-it('rejects malformed cart identity before querying cart data', async () => {
-  vi.mocked(verifyAgenticApiKey).mockReturnValue(true);
-  const response = await GET(
-    new NextRequest('https://example.invalid/api/agentic/carts/cart'),
-    { params: Promise.resolve({ id: '' }) }
-  );
-  expect(response.status).toBe(400);
-  expect(readAgenticQueryRequest).not.toHaveBeenCalled();
-});
-
-it('returns the authenticated canonical cart for the resolved merchant and caller', async () => {
-  vi.mocked(verifyAgenticApiKey).mockReturnValue(true);
-  vi.mocked(readAgenticQueryRequest).mockResolvedValue({
-    ok: true,
-    agentId: 'agent-a',
-    apiVersion: '2026-04-30',
-    body: {},
-    idempotencyKey: '',
-    method: 'GET',
-    pathname: '/api/agentic/carts/cart-a',
-    rawBody: '',
-    requestId: 'request-a',
-  });
-  const merchant = {
+const input = {
+  request: new NextRequest('https://example.invalid/api/agentic/carts/cart-a'),
+  cartId: 'cart-a',
+  agentId: 'agent-a',
+  merchant: {
     id: 'merchant-a',
     slug: 'shop-a',
     business_name: 'Shop',
@@ -60,27 +16,83 @@ it('returns the authenticated canonical cart for the resolved merchant and calle
     agentic_checkout_enabled: true,
     pay_on_delivery_enabled: false,
     paystack_subaccount_code: null,
+  },
+  supabase: createClient('https://example.invalid', 'fixture-key'),
+};
+it('returns the canonical cart scoped by the authenticated route', async () => {
+  const deps = {
+    canonical: vi
+      .fn()
+      .mockResolvedValue({ status: 200, body: { id: 'cart-a' } }),
+    load: vi.fn(),
+    respond: vi.fn(),
   };
-  vi.mocked(resolveUcpCartContext).mockResolvedValue({
-    ok: true,
-    merchant,
-    supabase: createClient('https://example.invalid', 'fixture-key'),
-  });
-  vi.mocked(handleCanonicalUcpCart).mockResolvedValue({
-    status: 200,
-    body: { id: 'cart-a', status: 'active' },
-  });
-  const response = await GET(
-    new NextRequest('https://example.invalid/api/agentic/carts/cart-a'),
-    { params: Promise.resolve({ id: 'cart-a' }) }
-  );
+  const response = await readUcpCart(input, deps);
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ id: 'cart-a', status: 'active' });
-  expect(handleCanonicalUcpCart).toHaveBeenCalledWith({
-    merchant,
+  expect(await response.json()).toEqual({ id: 'cart-a' });
+  expect(deps.canonical).toHaveBeenCalledWith({
+    merchant: input.merchant,
     cartId: 'cart-a',
     agentId: 'agent-a',
     action: 'read',
   });
-  expect(loadUcpCartSession).not.toHaveBeenCalled();
+  expect(deps.load).not.toHaveBeenCalled();
+});
+it('hides a missing legacy cart after a canonical bypass', async () => {
+  const deps = {
+    canonical: vi.fn().mockResolvedValue(null),
+    load: vi.fn().mockResolvedValue({ cart: null, error: null }),
+    respond: vi.fn(),
+  };
+  const response = await readUcpCart(input, deps);
+  expect(response.status).toBe(404);
+  expect(deps.load).toHaveBeenCalledWith({
+    cartId: 'cart-a',
+    merchantId: 'merchant-a',
+    supabase: input.supabase,
+  });
+  expect(deps.respond).not.toHaveBeenCalled();
+});
+it('returns the scoped legacy projection for the verified caller', async () => {
+  const cart = { agent_id: 'agent-a', status: 'active' };
+  const deps = {
+    canonical: vi.fn().mockResolvedValue(null),
+    load: vi.fn().mockResolvedValue({ cart, error: null }),
+    respond: vi.fn().mockResolvedValue(NextResponse.json({ id: 'cart-a' })),
+  };
+  const response = await readUcpCart(input, deps);
+  expect(await response.json()).toEqual({ id: 'cart-a' });
+  expect(deps.respond).toHaveBeenCalledWith({
+    cart,
+    merchant: input.merchant,
+    request: input.request,
+    supabase: input.supabase,
+  });
+});
+it('returns a safe error when the scoped cart read fails', async () => {
+  const deps = {
+    canonical: vi.fn().mockResolvedValue(null),
+    load: vi
+      .fn()
+      .mockResolvedValue({ cart: null, error: { message: 'fixture failure' } }),
+    respond: vi.fn(),
+  };
+  const response = await readUcpCart(input, deps);
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({ error: 'Database error' });
+  expect(deps.respond).not.toHaveBeenCalled();
+});
+it('hides a legacy cart owned by a different agent', async () => {
+  const deps = {
+    canonical: vi.fn().mockResolvedValue(null),
+    load: vi.fn().mockResolvedValue({
+      cart: { agent_id: 'agent-b', status: 'active' },
+      error: null,
+    }),
+    respond: vi.fn(),
+  };
+  const response = await readUcpCart(input, deps);
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({ error: 'Cart not found' });
+  expect(deps.respond).not.toHaveBeenCalled();
 });

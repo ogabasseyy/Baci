@@ -1,50 +1,41 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
-import { verifyAgenticApiKey } from '@/lib/agentic/auth';
-import { readAgenticQueryRequest } from '@/lib/agentic/mutation-request';
-import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
-import {
-  buildUcpCartStateResponse,
-  loadUcpCartSession,
-  resolveUcpCartContext,
-} from '@/lib/agentic/ucp-cart-route-support';
-import { ucpCartCallerMismatch } from '@/lib/agentic/ucp-cart-storage';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
-import { ucpCartRouteParamsSchema } from '@/schemas/ucp-cart-route-params';
+import type { AgenticMerchantContext } from './merchant-context';
+import type { handleCanonicalUcpCart } from './ucp-canonical-cart';
+import type { buildUcpCartStateResponse } from './ucp-cart-route-support';
+import type { loadUcpCartSession } from './ucp-cart-session-read';
+import { ucpCartCallerMismatch } from './ucp-cart-storage';
 
-type RouteProps = { params: Promise<{ id: string }> };
-export async function GET(request: NextRequest, props: RouteProps) {
-  if (!verifyAgenticApiKey(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+/** Reads through the authority supplied by the authenticated route. */
+export async function readUcpCart(
+  input: {
+    request: NextRequest;
+    cartId: string;
+    agentId: string | null;
+    merchant: AgenticMerchantContext;
+    supabase: SupabaseClient;
+  },
+  deps: {
+    canonical: typeof handleCanonicalUcpCart;
+    load: typeof loadUcpCartSession;
+    respond: typeof buildUcpCartStateResponse;
   }
-
-  const parsedParams = ucpCartRouteParamsSchema.safeParse(await props.params);
-  if (!parsedParams.success) {
-    return NextResponse.json(
-      { error: 'Invalid route params' },
-      { status: 400 }
-    );
-  }
-
-  const query = await readAgenticQueryRequest({ request });
-  if (!query.ok) return query.response;
-
-  const context = await resolveUcpCartContext(request);
-  if (!context.ok) return context.response;
-
-  const canonical = await handleCanonicalUcpCart({
-    merchant: context.merchant,
-    cartId: parsedParams.data.id,
-    agentId: query.agentId,
+) {
+  const canonical = await deps.canonical({
+    merchant: input.merchant,
+    cartId: input.cartId,
+    agentId: input.agentId,
     action: 'read',
   });
   if (canonical)
     return NextResponse.json(canonical.body, { status: canonical.status });
 
-  const cartResult = await loadUcpCartSession({
-    cartId: parsedParams.data.id,
-    merchantId: context.merchant.id,
-    supabase: context.supabase,
+  const cartResult = await deps.load({
+    cartId: input.cartId,
+    merchantId: input.merchant.id,
+    supabase: input.supabase,
   });
   if (cartResult.error) {
     logger.error({
@@ -57,14 +48,14 @@ export async function GET(request: NextRequest, props: RouteProps) {
   if (!cartResult.cart) {
     return NextResponse.json({ error: 'Cart not found' }, { status: 404 });
   }
-  if (ucpCartCallerMismatch(cartResult.cart, query.agentId)) {
+  if (ucpCartCallerMismatch(cartResult.cart, input.agentId)) {
     return NextResponse.json({ error: 'Cart not found' }, { status: 404 });
   }
 
-  return buildUcpCartStateResponse({
+  return deps.respond({
     cart: cartResult.cart,
-    merchant: context.merchant,
-    request,
-    supabase: context.supabase,
+    merchant: input.merchant,
+    request: input.request,
+    supabase: input.supabase,
   });
 }

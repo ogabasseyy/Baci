@@ -166,6 +166,11 @@ skipped_count=0
 deferred_count=0
 atomic_group_skip_bases=''
 
+if [ "$checkout_recovery_legacy_upgrade_required" -eq 1 ]; then
+  . "$script_dir/reconcile-checkout-recovery-legacy.sh"
+  reconcile_checkout_recovery_legacy || exit 1
+fi
+
 for file in "${sorted_files[@]}"; do
   base="$(basename "$file" .sql)"
   version="${base%%_*}"

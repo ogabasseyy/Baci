@@ -84,12 +84,17 @@ atomic_migration_group_next_base() {
   esac
 }
 
-# A historical prefix may already have exposed the recovery RPCs without their
-# activation gate. Do not silently finish that state as a safe atomic release.
+# A historical prefix is refused by default. Only explicit reconciliation can
+# upgrade the exact, fully applied ten-migration predecessor to its closed gate.
 verify_checkout_recovery_migration_history() {
   local history="$1" directory="$2"
   local cursor='20261013213516_customer_checkout_shipping_recovery_context'
-  local next recorded applied=0 present=0 total=0
+  local next recorded missing='' applied=0 present=0 total=0
+  checkout_recovery_legacy_upgrade_required=0
+  case "${CHECKOUT_RECOVERY_LEGACY_RECONCILIATION:-0}" in
+    0|1) ;;
+    *) echo '::error::invalid legacy recovery reconciliation approval' >&2; return 1 ;;
+  esac
   while :; do
     total=$((total + 1))
     if [ -f "$directory/$cursor.sql" ]; then present=$((present + 1)); fi
@@ -100,13 +105,21 @@ verify_checkout_recovery_migration_history() {
         return 1
       fi
       applied=$((applied + 1))
+    else
+      missing="${missing}${cursor} "
     fi
     if ! next="$(atomic_migration_group_next_base "$cursor")"; then break; fi
     cursor="$next"
   done
   if [ "$applied" -gt 0 ] && [ "$applied" -ne "$total" ]; then
-    echo "::error::partial recovery migration history ($applied/$total); reconcile before release" >&2
-    return 1
+    if [ "${CHECKOUT_RECOVERY_LEGACY_RECONCILIATION:-0}" = 1 ] &&
+      [ "$applied" -eq 10 ] && [ "$total" -eq 11 ] && [ "$present" -eq 11 ] &&
+      [ "$missing" = '20261015215000_customer_checkout_shipping_recovery_activation_gate ' ]; then
+      checkout_recovery_legacy_upgrade_required=1
+    else
+      echo "::error::partial recovery migration history ($applied/$total); reconcile before release" >&2
+      return 1
+    fi
   fi
   if [ "$present" -gt 0 ] && [ "$present" -ne "$total" ]; then
     echo "::error::incomplete recovery migration files ($present/$total); refusing RPC publication" >&2

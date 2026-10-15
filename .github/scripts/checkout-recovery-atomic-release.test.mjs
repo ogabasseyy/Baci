@@ -82,7 +82,7 @@ test('the production atomic-group helper commits RPC grants only together with t
   }
 });
 
-function runApplier(history, { missingGate = false, cap } = {}) {
+function runApplier(history, { missingGate = false, cap, reconcile = false, extraPending = false } = {}) {
   const temp = mkdtempSync(join(tmpdir(), 'baci-recovery-preflight-'));
   try {
     const bin = join(temp, 'bin');
@@ -90,6 +90,7 @@ function runApplier(history, { missingGate = false, cap } = {}) {
     const log = join(temp, 'queries.jsonl');
     mkdirSync(bin);
     mkdirSync(migrations);
+    if (extraPending) writeFileSync(join(migrations, '20260101000000_synthetic_other.sql'), 'SELECT 42;');
     for (const name of migrationNames) {
       if (missingGate && name.includes('activation_gate')) continue;
       writeFileSync(
@@ -127,6 +128,7 @@ fi
           FAKE_QUERY_LOG: log,
           MIGRATION_MAX_VERSION: cap ?? '',
           MIGRATION_PHASE: 'all',
+          CHECKOUT_RECOVERY_LEGACY_RECONCILIATION: reconcile ? '1' : '0',
         },
       }
     );
@@ -144,6 +146,38 @@ const completeHistory = migrationNames.map((name) => ({
   version: name.split('_')[0],
   name: name.replace(/^\d+_|\.sql$/g, ''),
 }));
+test('approved legacy reconciliation applies only the closed gate in one transaction', () => {
+  const result = runApplier(completeHistory.slice(0, -1), { reconcile: true });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.requests.length, 2);
+  assert.match(result.requests[1].query, /^BEGIN;/);
+  assert.match(result.requests[1].query, /recovery_legacy_history_changed/);
+  assert.match(result.requests[1].query, /CREATE TABLE private.checkout_shipping_recovery_release_activation/);
+  assert.doesNotMatch(result.requests[1].query, /CREATE TABLE private.customer_checkout_shipping_recovery_previews/);
+  assert.match(result.requests[1].query, /COMMIT;$/);
+});
+test('approved legacy reconciliation defers all writes under an earlier cap', () => {
+  const result = runApplier(completeHistory.slice(0, -1), { reconcile: true, cap: completeHistory.at(-2).version, extraPending: true });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.requests.length, 1);
+});
+test('approved reconciliation installs the gate before an older unrelated pending migration', () => {
+  const result = runApplier(completeHistory.slice(0, -1), { reconcile: true, extraPending: true });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(result.requests.length, 3);
+  assert.match(result.requests[1].query, /CREATE TABLE private.checkout_shipping_recovery_release_activation/);
+  assert.match(result.requests[2].query, /SELECT 42;/);
+});
+test('reconciliation approval cannot accept a hole or missing gate file', () => {
+  for (const [history, missingGate] of [
+    [completeHistory.filter((_, index) => index !== 3), false],
+    [completeHistory.slice(0, -1), true],
+  ]) {
+    const result = runApplier(history, { reconcile: true, missingGate });
+    assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.equal(result.requests.length, 1);
+  }
+});
 for (const [label, history] of [
   ['old ten-migration prefix', completeHistory.slice(0, -1)],
   ['middle-only history', completeHistory.slice(4, 5)],

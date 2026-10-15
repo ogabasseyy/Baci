@@ -25,6 +25,28 @@ REVOKE ALL ON TABLE private.checkout_shipping_recovery_release_activation
   FROM PUBLIC, anon, authenticated, service_role;
 INSERT INTO private.checkout_shipping_recovery_release_activation(singleton) VALUES (true);
 
+-- Older calls may already have passed the pre-gate assertion. Enforce the
+-- boundary again at their preview insert/confirmation write, so the complete
+-- transaction aborts. Retention redaction does not update confirmed_at.
+CREATE FUNCTION private.enforce_checkout_shipping_recovery_activation()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE v_enabled boolean;
+BEGIN
+  SELECT enabled INTO v_enabled FROM private.checkout_shipping_recovery_release_activation
+    WHERE singleton IS TRUE FOR SHARE;
+  IF v_enabled IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'shipping_recovery_not_activated' USING ERRCODE='55000';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+ALTER FUNCTION private.enforce_checkout_shipping_recovery_activation() OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.enforce_checkout_shipping_recovery_activation()
+  FROM PUBLIC, anon, authenticated, service_role;
+CREATE TRIGGER enforce_checkout_shipping_recovery_activation
+  BEFORE INSERT OR UPDATE OF confirmed_at ON private.customer_checkout_shipping_recovery_previews
+  FOR EACH ROW EXECUTE FUNCTION private.enforce_checkout_shipping_recovery_activation();
+
 CREATE OR REPLACE FUNCTION private.assert_customer_checkout_shipping_recovery(p_order_id uuid)
 RETURNS public.orders LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_order public.orders%ROWTYPE; v_enabled boolean;

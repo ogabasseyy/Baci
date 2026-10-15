@@ -11,9 +11,20 @@
 // First-write cross-tab races resolve to a single winner: when the
 // Web Locks API is available, minting runs inside a per-intent lock
 // and re-reads storage after acquiring it, so a tab that waited adopts
-// the winner's key instead of minting a second one. Without locks the
-// synchronous read-mint-store sequence is the fallback.
+// the winner's key instead of minting a second one. Where locks are
+// unavailable (or throw), minting instead writes a short-lived claim
+// record and adopts the winning claim after a bounded wait, so two
+// tabs still converge on one key; only if storage itself is broken
+// does the sequence fall back to a lone synchronous mint.
 const STORAGE_PREFIX = 'loyalty-redeem-key:';
+
+// Fallback cross-tab claim (used when Web Locks is unavailable): a tab
+// stakes a random claim token, then polls briefly; the lowest live
+// token wins and losers adopt the winner's minted key from storage.
+// Claims expire so a crashed claimant cannot block the intent.
+const CLAIM_POLL_INTERVAL_MS = 25;
+const CLAIM_POLL_ATTEMPTS = 20;
+const CLAIM_TTL_MS = 10_000;
 
 const keysByIntent = new Map<string, string>();
 
@@ -67,6 +78,81 @@ function lockManager(): LockManagerLike | null {
   return locks && typeof locks.request === 'function' ? locks : null;
 }
 
+interface MintClaim {
+  token: string;
+  expiresAt: number;
+}
+
+function readClaim(intent: string): MintClaim | null {
+  const raw = readStored(`${intent}:claim`);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<MintClaim>;
+    if (
+      typeof parsed.token === 'string' &&
+      typeof parsed.expiresAt === 'number' &&
+      parsed.expiresAt > Date.now()
+    ) {
+      return { token: parsed.token, expiresAt: parsed.expiresAt };
+    }
+  } catch {
+    // A malformed claim is treated as expired and overwritten.
+  }
+  return null;
+}
+
+function writeClaim(intent: string, claim: MintClaim): void {
+  writeStored(`${intent}:claim`, JSON.stringify(claim));
+}
+
+function clearClaim(intent: string, token: string): void {
+  // Token-checked: never remove a newer claimant's record.
+  if (readClaim(intent)?.token === token) removeStored(`${intent}:claim`);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Web Locks is unavailable or threw: coordinate the first mint through
+// a storage claim so concurrent tabs still converge on one key. Every
+// claimant stakes a token; after each poll the lowest live token owns
+// the mint, and once the key lands in storage every tab adopts it. A
+// claimant whose token loses simply waits for the winner's key.
+async function coordinatedMint(intent: string): Promise<string> {
+  const existing = readStored(intent);
+  if (existing) return existing;
+  const token = crypto.randomUUID();
+  const prior = readClaim(intent);
+  if (!prior || token < prior.token) {
+    writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });
+  }
+  for (let attempt = 0; attempt < CLAIM_POLL_ATTEMPTS; attempt++) {
+    const stored = readStored(intent);
+    if (stored) {
+      clearClaim(intent, token);
+      return stored;
+    }
+    const claim = readClaim(intent);
+    if (!claim || claim.token === token) {
+      const minted = mintKey(intent);
+      clearClaim(intent, token);
+      return minted;
+    }
+    if (token < claim.token) {
+      writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });
+    }
+    await delay(CLAIM_POLL_INTERVAL_MS);
+  }
+  // No winner published within the window (e.g. storage writes are
+  // failing): resolve locally rather than block redemption forever.
+  const stored = readStored(intent);
+  if (stored) return stored;
+  const minted = mintKey(intent);
+  clearClaim(intent, token);
+  return minted;
+}
+
 function mintKey(intent: string): string {
   const cached = keysByIntent.get(intent);
   if (cached && !persistedIntents.has(intent)) return cached;
@@ -95,7 +181,17 @@ async function keyForReward(
     return stored;
   }
   const locks = lockManager();
-  if (!locks) return mintKey(intent);
+  if (!locks) {
+    // No Web Locks: converge through the storage-claim protocol.
+    const coordinated = await coordinatedMint(intent);
+    const reconciled = readStored(intent);
+    if (reconciled) {
+      keysByIntent.set(intent, reconciled);
+      persistedIntents.add(intent);
+      return reconciled;
+    }
+    return coordinated;
+  }
   try {
     return await locks.request(`${intent}:lock`, () => {
       // Re-read inside the lock: a tab that waited must adopt the
@@ -109,7 +205,15 @@ async function keyForReward(
       return Promise.resolve(mintKey(intent));
     });
   } catch {
-    return mintKey(intent);
+    // Locks threw mid-flight: same storage-claim protocol as no locks.
+    const coordinated = await coordinatedMint(intent);
+    const reconciled = readStored(intent);
+    if (reconciled) {
+      keysByIntent.set(intent, reconciled);
+      persistedIntents.add(intent);
+      return reconciled;
+    }
+    return coordinated;
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { Check, Gift, Sparkles, Trophy, Users } from 'lucide-react';
 import { useState } from 'react';
+import { ThemedButton } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -143,9 +144,12 @@ export function LoyaltyEnrollmentForm({
               </div>
             )}
             {onReceiptDismiss && (
-              <Button onClick={handleReceiptDismiss} className="w-full mt-4">
+              <ThemedButton
+                onClick={handleReceiptDismiss}
+                className="w-full mt-4"
+              >
                 View my rewards
-              </Button>
+              </ThemedButton>
             )}
           </div>
         </CardContent>

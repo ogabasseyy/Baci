@@ -72,6 +72,28 @@ describe('LoyaltyEnrollmentForm', () => {
     expect(onReceiptDismiss).toHaveBeenCalledTimes(1);
   });
 
+  it('renders the receipt action with the storefront brand palette', async () => {
+    enrolledNow = false;
+
+    render(
+      <LoyaltyEnrollmentForm
+        merchantId="m"
+        customerId="c"
+        onReceiptDismiss={() => {}}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Join Loyalty Program' })
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Welcome to the Club!')).toBeInTheDocument();
+    });
+    expect(
+      screen.getByRole('button', { name: 'View my rewards' }).className
+    ).toContain('bg-store-primary');
+  });
+
   it('clears the local receipt and retries the load on dismiss', async () => {
     // Failed-refresh world: enrolled stays false after enrolling, so
     // the parent keeps rendering this form. Dismissal must still

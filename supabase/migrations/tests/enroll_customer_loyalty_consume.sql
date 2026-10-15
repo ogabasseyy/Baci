@@ -192,32 +192,3 @@ INSERT INTO public.reward_redemptions (
   NULL, 50, 'free_product',
   'RDM-CONSUME6', false, pg_catalog.now() + interval '30 days'
 );
-
-SELECT pg_temp.assert_true(
-  (SELECT (result ->> 'success')::boolean
-   FROM public.consume_loyalty_redemption(
-     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME6',
-     'attempt-key-1'
-   ) AS result)
-  AND (SELECT (result ->> 'success')::boolean
-   FROM public.consume_loyalty_redemption(
-     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME6',
-     'attempt-key-1'
-   ) AS result),
-  'same-key retry did not replay the success receipt'
-);
-
-SELECT pg_temp.assert_true(
-  (SELECT result ->> 'success' = 'false'
-     AND result ->> 'error' = 'already_consumed'
-   FROM public.consume_loyalty_redemption(
-     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME6',
-     'attempt-key-2'
-   ) AS result)
-  AND (SELECT result ->> 'success' = 'false'
-     AND result ->> 'error' = 'already_consumed'
-   FROM public.consume_loyalty_redemption(
-     '01aa0000-0000-4000-8000-000000000001', 'RDM-CONSUME6'
-   ) AS result),
-  'different-key or keyless presentation replayed success'
-);

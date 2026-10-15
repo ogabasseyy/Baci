@@ -264,6 +264,23 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
+  it('rejects an over-100 percentage code as invalid', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [
+            loyaltyRow({
+              reward_type: 'discount_percentage',
+              reward_value: 150,
+            }),
+          ]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+  });
+
   it('collapses a fixed code to invalid after a merchant currency change', async () => {
     setMerchantRow({ country: 'US', payout_currency: 'USD' });
     mockRpc((fn) =>

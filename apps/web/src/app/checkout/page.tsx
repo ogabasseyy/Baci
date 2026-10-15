@@ -63,6 +63,10 @@ import { trackServerSideBeginCheckout } from '@/lib/server-side-analytics';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { createClient } from '@/lib/supabase/client';
 import type { ShippingQuote } from '@/types/shipping-quote';
+import {
+  beginLegacyCheckoutKey,
+  type LegacyCheckoutKeySession,
+} from './begin-legacy-checkout-key';
 import type { LegacyCheckoutKeyInput } from './build-legacy-checkout-fingerprint';
 import { buildCheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
 import { clearLegacyCheckoutIdempotencyKey } from './clear-legacy-checkout-idempotency-key';
@@ -70,7 +74,6 @@ import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';
 import { captureLegacyCreditDirectPopup } from './legacy-credit-direct-popup';
 import { openLegacyCreditDirectPopup } from './open-legacy-credit-direct-popup';
 import { prepareLegacyCreditDirectCheckout } from './prepare-legacy-credit-direct-checkout';
-import { resolveLegacyCheckoutIdempotencyKey } from './resolve-legacy-checkout-idempotency-key';
 import { notifyLastOrderSnapshotChanged } from './success/client-page-order-snapshot';
 
 const DEFAULT_SHIPPING_FEE = Number.parseFloat(
@@ -349,6 +352,9 @@ type CheckoutPreparation =
       order: Record<string, unknown>;
       sign: CreditDirectSignResult;
       orderItems: ReturnType<typeof buildCheckoutOrderItems>;
+      // Retained BNPL loyalty key, cleared when payment handoff
+      // completes (popup success) so the next purchase starts fresh.
+      keyInput: LegacyCheckoutKeyInput | null;
     }
   | {
       kind: 'redirect';
@@ -368,6 +374,7 @@ interface PrepareCheckoutInput {
   currencyCode: string;
   merchantSlug: string | null;
   discountCode?: string | null;
+  discountCodeIsLoyalty?: boolean;
 }
 
 type CheckoutCartItem = Parameters<typeof buildCheckoutOrderItems>[0][number];
@@ -375,9 +382,15 @@ type CheckoutCartItem = Parameters<typeof buildCheckoutOrderItems>[0][number];
 // Create the order, persist the success-page snapshot, fire analytics, and
 // (for BNPL) fetch the Credit Direct signature. Returns a description of the
 // next step for the component to perform.
+// The orders route's CHECKOUT_ORDER_NOT_REUSABLE copy: the claimed
+// order was cancelled, so the retained key can never succeed again.
+const CHECKOUT_ORDER_NOT_REUSABLE_MESSAGE =
+  'This checkout order can no longer be reused.';
+
 async function prepareCheckout(
   input: PrepareCheckoutInput
 ): Promise<CheckoutPreparation> {
+  let keySession: LegacyCheckoutKeySession | null = null;
   try {
     const orderItems = buildCheckoutOrderItems(input.cart);
     const subtotal = input.cartTotal;
@@ -389,8 +402,8 @@ async function prepareCheckout(
     // Resolution throws when browser storage is unavailable, failing
     // the submit closed (error kind below) rather than risking a
     // duplicate order against a single-use code.
-    const keyInput: LegacyCheckoutKeyInput | null = input.discountCode
-      ? {
+    keySession = input.discountCode
+      ? await beginLegacyCheckoutKey({
           merchantId: input.merchantId,
           customerEmail: input.data.email,
           customerName: `${input.data.firstName} ${input.data.lastName}`,
@@ -398,6 +411,7 @@ async function prepareCheckout(
           gateway: input.selectedGateway,
           shippingFee: finalShippingFee,
           discountCode: input.discountCode,
+          discountCodeIsLoyalty: Boolean(input.discountCodeIsLoyalty),
           orderItems,
           shippingAddress: {
             firstName: input.data.firstName,
@@ -410,11 +424,9 @@ async function prepareCheckout(
             input.selectedShippingQuote,
             input.shippingSessionId
           ),
-        }
+        })
       : null;
-    const idempotencyKey = keyInput
-      ? await resolveLegacyCheckoutIdempotencyKey(keyInput)
-      : null;
+    const idempotencyKey = keySession?.idempotencyKey ?? null;
 
     const { order, paystackAuthUrl } = await createCheckoutOrder({
       merchantId: input.merchantId,
@@ -476,20 +488,31 @@ async function prepareCheckout(
 
       // Checkout completed: rotate the persisted key so a repeated
       // identical cart with a reusable code creates a fresh order
-      // instead of replaying this one. Error paths above keep the key
-      // so a resubmit still replays the in-flight attempt.
-      if (keyInput) await clearLegacyCheckoutIdempotencyKey(keyInput);
+      // instead of replaying this one. BNPL loyalty keys are retained
+      // inside the session (popup resume); the component clears them
+      // when payment handoff completes. Error paths keep the key so a
+      // resubmit still replays the in-flight attempt.
+      if (keySession) await keySession.completeCheckout();
       return {
         kind: 'credit_direct',
         order,
         sign: signResult.data,
         orderItems,
+        keyInput: keySession?.keyInput ?? null,
       };
     }
 
-    if (keyInput) await clearLegacyCheckoutIdempotencyKey(keyInput);
+    if (keySession) await keySession.completeCheckout();
     return { kind: 'redirect', order, paystackAuthUrl };
   } catch (error) {
+    // The claimed order was cancelled: the retained key can never
+    // succeed again, so retire it and let the next submit start fresh.
+    if (
+      keySession &&
+      (error as Error).message?.includes(CHECKOUT_ORDER_NOT_REUSABLE_MESSAGE)
+    ) {
+      await clearLegacyCheckoutIdempotencyKey(keySession.keyInput);
+    }
     return {
       kind: 'error',
       title: 'Order Failed',
@@ -1169,6 +1192,9 @@ interface DiscountResult {
   // Server-computed amount from the validate endpoint — the display source of
   // truth so caps/rounding match the order route and the redemption RPC.
   discount_amount?: number;
+  // Validate tags loyalty codes with an explicit null id; merchant
+  // codes carry their row id. Drives BNPL key retention.
+  discount_code_id?: string | null;
   minimum_order?: number;
   description?: string;
 }
@@ -1382,7 +1408,8 @@ function CheckoutPageContent() {
     order: Record<string, unknown>,
     sign: CreditDirectSignResult,
     orderItems: ReturnType<typeof buildCheckoutOrderItems>,
-    data: ShippingFormValues
+    data: ShippingFormValues,
+    keyInput: LegacyCheckoutKeyInput | null
   ) => {
     // SDK orchestration (guard, transaction build, fail-closed handling, cancel
     // wiring, open) lives in the focused helper; the page injects its own
@@ -1402,6 +1429,13 @@ function CheckoutPageContent() {
             orderId: order.id,
           });
           return;
+        }
+
+        // Payment handoff completed: retire the retained key so the
+        // next purchase starts fresh. Popup close without success
+        // keeps it, so the shopper can resume this order.
+        if (keyInput) {
+          void clearLegacyCheckoutIdempotencyKey(keyInput);
         }
 
         handoffLegacyCreditDirectSuccess({
@@ -1501,6 +1535,9 @@ function CheckoutPageContent() {
       currencyCode,
       merchantSlug,
       discountCode: appliedDiscount?.code ?? null,
+      discountCodeIsLoyalty: appliedDiscount
+        ? appliedDiscount.discount_code_id == null
+        : false,
     });
 
     if (result.kind === 'error') {
@@ -1517,7 +1554,13 @@ function CheckoutPageContent() {
       // Popup callbacks drive the rest of the flow — don't proceed to the
       // success page yet. Matching the prior behavior, the submit spinner is
       // cleared now; the popup's onClose re-clears it if reopened.
-      openCreditDirectPopup(result.order, result.sign, result.orderItems, data);
+      openCreditDirectPopup(
+        result.order,
+        result.sign,
+        result.orderItems,
+        data,
+        result.keyInput
+      );
       setFormIsLoading(false);
       return;
     }

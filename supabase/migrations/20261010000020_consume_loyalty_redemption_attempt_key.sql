@@ -55,6 +55,11 @@ BEGIN
     AND rr.used IS NOT TRUE
     AND (rr.expires_at IS NULL OR rr.expires_at > pg_catalog.now())
     AND public.loyalty_redemption_is_manual(rr.reward_type, rr.reward_value)
+    -- Fail closed on a purchase minimum (mirrors the redemption RPC):
+    -- this endpoint has no order amount to verify it against, and
+    -- migration 11 backfilled the snapshot onto legacy manual codes,
+    -- so a positive minimum must not be consumable here.
+    AND (rr.minimum_order_amount IS NULL OR rr.minimum_order_amount <= 0)
   RETURNING rr.id, rr.discount_code, rr.reward_type, rr.reward_id,
     rr.reward_name, rr.reward_product_id, rr.customer_id, rr.used_at,
     rr.consume_idempotency_key

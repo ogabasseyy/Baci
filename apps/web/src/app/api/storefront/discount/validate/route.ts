@@ -101,7 +101,13 @@ export async function POST(request: NextRequest) {
           loyaltyCode.reward_type === 'discount_fixed' ||
           loyaltyCode.reward_type === 'discount_percentage') &&
         Number.isFinite(loyaltyValue) &&
-        loyaltyValue > 0
+        loyaltyValue > 0 &&
+        // Mirror loyalty_reward_value_is_usable: a discount_percentage
+        // above 100 can never apply at checkout (the wrapper rejects
+        // the snapshot), so validation must not report it as applied.
+        // Plain discount/discount_fixed values are fixed amounts here.
+        (loyaltyCode.reward_type !== 'discount_percentage' ||
+          loyaltyValue <= 100)
       ) {
         // Dead codes collapse to generic invalid (no probing oracle).
         if (

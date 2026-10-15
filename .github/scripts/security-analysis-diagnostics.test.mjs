@@ -70,3 +70,8 @@ test('shell scripts read GitHub context through environment variables', () => {
   }
   assert.match(workflow, /PR_BASE_REF: \$\{\{ github.event.pull_request.base.ref \}\}/);
 });
+
+test('targeted and protected-branch scans use the existing full CI engine', () => {
+  assert.equal((workflow.match(/semgrep install-semgrep-pro/g) ?? []).length, 2);
+  assert.equal((workflow.match(/semgrep scan --error --strict --pro-intrafile --config auto/g) ?? []).length, 2);
+});

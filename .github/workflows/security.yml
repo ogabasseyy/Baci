@@ -185,8 +185,10 @@ jobs:
           fi
 
           echo "scanned=true" >> "$GITHUB_OUTPUT"
+          # Match the existing full CI engine; use only the existing entitlement.
+          semgrep install-semgrep-pro
           # --strict also fails on warning-level analysis errors.
-          semgrep scan --error --strict --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
+          semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
         env:
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           GITHUB_TOKEN: ${{ github.token }}
@@ -197,7 +199,8 @@ jobs:
         if: github.event_name == 'push'
         id: semgrep_push
         run: |
-          semgrep scan --error --strict --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json \
+          semgrep install-semgrep-pro
+          semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json \
             apps/web/src/app/api \
             apps/web/src/lib \
             apps/web/src/schemas \

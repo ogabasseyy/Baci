@@ -77,6 +77,29 @@ export function getClientIdentifier(request: NextRequest): string {
   return 'unknown';
 }
 
+/**
+ * Client identity for the unauthenticated cart budgets, which are the
+ * only bound tying anonymous proofs to one client. Unlike
+ * getClientIdentifier this never trusts x-forwarded-for: that header is
+ * client-suppliable on any deployment whose edge does not overwrite it,
+ * so a caller could rotate it to reset the budget. Only the platform
+ * address (NextRequest.ip, or the x-real-ip the Vercel edge sets and
+ * clients cannot spoof) identifies the client; anything else falls
+ * into the single shared 'unknown' bucket, failing closed.
+ */
+export function getTrustedClientIdentifier(request: NextRequest): string {
+  const requestWithIp = request as NextRequest & { ip?: string };
+  const requestIp = requestWithIp.ip;
+  if (requestIp && isValidIP(requestIp)) {
+    return requestIp;
+  }
+
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp && isValidIP(realIp)) return realIp;
+
+  return 'unknown';
+}
+
 // ---------------------------------------------------------------------------
 // Upstash Ratelimit instances (one per unique config, created lazily)
 // ---------------------------------------------------------------------------

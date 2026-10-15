@@ -1,3 +1,4 @@
+import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCustomerCart, linkCartToCustomer } from '@/lib/cart/account-link';
 import {
@@ -97,20 +98,33 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
     if (!result.ok) return cartErrorResponse(result.code);
     if (!result.grantId) return cartErrorResponse('temporarily_unavailable');
-    const proof = issueCartSessionProof(
-      {
-        merchantId: resolved.principal.merchantId,
-        principalId: result.principalId,
-        cartId: result.cart.cartId,
-        grantId: result.grantId,
-        scope: 'session',
-        grantExpiresAt: result.cart.expiresAt,
-      },
-      { environment: getCartProofEnvironment() }
-    );
+    let proof: string | null = null;
+    try {
+      proof = issueCartSessionProof(
+        {
+          // Fresh rotated grant minted by the link RPC with the full
+          // session vocabulary (the grants-table default).
+          allowedOperations: CART_FULL_SESSION_OPERATIONS,
+          merchantId: resolved.principal.merchantId,
+          principalId: result.principalId,
+          cartId: result.cart.cartId,
+          grantId: result.grantId,
+          scope: 'session',
+          grantExpiresAt: result.cart.expiresAt,
+        },
+        { environment: getCartProofEnvironment() }
+      );
+    } catch (error) {
+      // The link already committed and revoked the old grant: return
+      // the linked cart without the rotated proof rather than a 503;
+      // a retry replays the link receipt and re-attempts issuance.
+      console.error('Cart session proof issue failed after account link', {
+        message: error instanceof Error ? error.message : 'unknown',
+      });
+    }
     const response = cartJsonResponse({
       cart: result.cart,
-      ...(accountRequestUsesDeviceProof(request) ? { proof } : {}),
+      ...(proof && accountRequestUsesDeviceProof(request) ? { proof } : {}),
       linkedUserId: resolved.customer.userId,
       operationId: result.operationId,
       replayed: result.replayed,
@@ -120,7 +134,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     // outlive it (a non-positive lifetime would delete the cookie, so
     // omit it and let the body proof govern until it expires).
     const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
-    if (cookieMaxAge > 0) {
+    if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, resolved.merchant.id, proof, cookieMaxAge);
     }
     return response;

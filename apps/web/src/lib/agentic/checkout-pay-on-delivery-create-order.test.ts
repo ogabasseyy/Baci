@@ -48,6 +48,44 @@ beforeEach(() => {
 });
 
 describe('createPayOnDeliveryOrder', () => {
+  it('threads a prepared shared-cart binding and principal into order creation', async () => {
+    mocks.createAgenticCheckoutOrder.mockResolvedValue({
+      ok: true,
+      orderId: 'order-1',
+    });
+    const binding = {
+      cart_id: '22222222-2222-4222-8222-222222222222',
+      checkout_generation: 1,
+      checkout_session_id: '33333333-3333-4333-8333-333333333333',
+      cart_version: 4,
+    };
+
+    const result = await createPayOnDeliveryOrder({
+      buyer: { email: 'buyer@example.com' },
+      finalizationClaim: 'claim-1',
+      finalizationMetadata: { agentic: { shared_cart: binding } },
+      merchantId: 'merchant-1',
+      orderSession: {
+        currency: 'NGN',
+        merchant_id: 'merchant-1',
+        session_id: 'session-1',
+      },
+      orderSessionCalc: {
+        lineItems: [{ item: { product_id: 'product-1' } }],
+      },
+      sessionId: 'session-1',
+      sharedCartPrincipalId: 'guest-principal-1',
+      supabase: {},
+    } as never);
+
+    expect(result).toEqual({ ok: true, orderId: 'order-1' });
+    expect(mocks.createAgenticCheckoutOrder).toHaveBeenCalledWith(
+      { payload: true, shared_cart: binding },
+      {},
+      { boundPrincipalId: 'guest-principal-1' }
+    );
+  });
+
   it('creates the order and revalidates product caches', async () => {
     mocks.createAgenticCheckoutOrder.mockResolvedValue({
       ok: true,

@@ -19,6 +19,15 @@ vi.mock('@/lib/cart/account-link', () => ({
   linkCartToCustomer: vi.fn(),
 }));
 vi.mock('@/lib/cart/session-proof', () => ({
+  CART_FULL_SESSION_OPERATIONS: [
+    'add',
+    'set_quantity',
+    'remove',
+    'clear',
+    'replace',
+    'set_assurance',
+    'set_negotiated_price',
+  ],
   CART_SESSION_PROOF_VERSION: 'cp1',
   cartSessionCookieMaxAge: vi.fn(() => 3600),
   issueCartSessionProof: vi.fn(),

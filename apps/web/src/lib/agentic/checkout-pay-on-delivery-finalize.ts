@@ -38,6 +38,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
   requestId,
   route,
   sessionId,
+  sharedCartPrincipalId,
   supabase,
 }: {
   agentId?: string | null;
@@ -55,6 +56,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
   requestId: string;
   route: string;
   sessionId: string;
+  sharedCartPrincipalId?: string | null;
   supabase: SupabaseClient;
 }) {
   const finalizationClaim = buildOrderFinalizationClaim({
@@ -112,6 +114,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
       orderSession,
       orderSessionCalc,
       sessionId,
+      sharedCartPrincipalId,
       supabase,
     });
     if (!created.ok) {

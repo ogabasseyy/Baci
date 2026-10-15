@@ -23,7 +23,7 @@ import {
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getClientIdentifier } from '@/lib/rate-limit';
+import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { cartBootstrapRequestSchema } from '@/schemas/cart';
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     const quota = await checkCartQuota({
       merchantId: merchant.merchant.id,
       operation: 'bootstrap',
-      subject: getClientIdentifier(request),
+      subject: getTrustedClientIdentifier(request),
     });
     if (!quota.allowed) {
       return cartErrorResponse('quota_exceeded');

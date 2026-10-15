@@ -1,3 +1,5 @@
+import { Buffer } from 'node:buffer';
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
@@ -157,6 +159,69 @@ describe('issueCartSessionProof', () => {
       secret: SECRET,
     });
     const verified = verifyCartSessionProof(proof, {
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-12T04:00:01Z'),
+      secret: SECRET,
+    });
+
+    expect(verified.ok).toBe(true);
+    if (verified.ok) {
+      expect(verified.session.allowedOperations).toEqual([
+        'add',
+        'set_quantity',
+        'remove',
+        'clear',
+        'replace',
+        'set_assurance',
+        'set_negotiated_price',
+      ]);
+    }
+  });
+
+  it('carries a restricted grant operation set through verification', () => {
+    const proof = issueCartSessionProof(
+      { ...sessionInput(), allowedOperations: ['add', 'remove'] },
+      {
+        environment: ENVIRONMENT,
+        now: new Date('2026-10-12T04:00:00Z'),
+        secret: SECRET,
+      }
+    );
+    const verified = verifyCartSessionProof(proof, {
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-12T04:00:01Z'),
+      secret: SECRET,
+    });
+
+    expect(verified.ok).toBe(true);
+    if (verified.ok) {
+      // The TypeScript authority is exactly the grant's: a restricted
+      // grant must not widen back to the full vocabulary at this layer.
+      expect(verified.session.allowedOperations).toEqual(['add', 'remove']);
+    }
+  });
+
+  it('verifies proofs minted before the ops claim with the full vocabulary', () => {
+    const issuedAt = Math.floor(
+      new Date('2026-10-12T04:00:00Z').getTime() / 1000
+    );
+    const payload = {
+      aud: 'baci:cart-session',
+      cartId: CART_ID,
+      env: ENVIRONMENT,
+      exp: issuedAt + 3600,
+      grantId: GRANT_ID,
+      iat: issuedAt,
+      merchantId: MERCHANT_ID,
+      principalId: PRINCIPAL_ID,
+      scope: 'session',
+      v: 'cp1',
+    };
+    const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const signature = createHmac('sha256', SECRET)
+      .update(`cp1.${encoded}`)
+      .digest('base64url');
+    const verified = verifyCartSessionProof(`cp1.${encoded}.${signature}`, {
       environment: ENVIRONMENT,
       now: new Date('2026-10-12T04:00:01Z'),
       secret: SECRET,

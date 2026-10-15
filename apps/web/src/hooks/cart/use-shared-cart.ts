@@ -66,9 +66,16 @@ export function useSharedCart(
   );
 
   const cartTotal = state.display.reduce((sum, item) => {
+    // Mirror the server: a negotiated price counts only once accepted;
+    // pending/rejected proposals total at catalog.
+    const unitPrice =
+      item.negotiatedPrice != null &&
+      item.negotiationStatus !== 'pending' &&
+      item.negotiationStatus !== 'rejected'
+        ? item.negotiatedPrice
+        : item.price;
     const itemTotal =
-      (item.negotiatedPrice ?? item.price) *
-      (Number.isFinite(item.quantity) ? item.quantity : 0);
+      unitPrice * (Number.isFinite(item.quantity) ? item.quantity : 0);
     const assuranceMultiplier =
       item.hasAssurance === true
         ? 1 + (item.assuranceRate ?? DEFAULT_ASSURANCE_RATE)

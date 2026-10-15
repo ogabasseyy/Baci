@@ -6,6 +6,7 @@ import {
 } from '@/hooks/cart/shared-cart-client';
 import { toast } from '@/hooks/use-toast';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
+import { calculateCartItemSubtotal } from '@/lib/checkout/cart-entitlement-sanitizer';
 import type { SharedCartOrderBinding } from '../types';
 import { KLUMP_WALLET_CREDIT_UNAVAILABLE_TOAST } from '../utils';
 import { executeResumedDirectPayment } from '../handlers/direct-payment';
@@ -194,9 +195,16 @@ export function useCheckoutOrderSubmission(context: CheckoutOrderSubmissionConte
         processing.isOrderInFlightRef.current = false;
         return;
       }
+      // The reviewed subtotal is items-only: assurance is priced per
+      // order item at binding time, so comparing against the
+      // assurance-inclusive checkoutCartTotal would reject every
+      // insured cart. checkoutCart is already entitlement-sanitized,
+      // hence the permissive flag on the recompute.
       if (
-        Math.abs(review.review.subtotalMinor / 100 - cart.checkoutCartTotal) >
-        0.005
+        Math.abs(
+          review.review.subtotalMinor / 100 -
+            calculateCartItemSubtotal(cart.checkoutCart, true)
+        ) > 0.005
       ) {
         await cart.refreshSharedCart?.();
         toast({ title: 'Prices Updated', description: 'Prices changed during checkout. Review the updated cart and submit again.', variant: 'destructive' });

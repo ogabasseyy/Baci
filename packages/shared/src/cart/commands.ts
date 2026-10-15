@@ -14,6 +14,23 @@ export interface CartCommandIssue {
   message: string;
 }
 
+/**
+ * The complete session command vocabulary, mirroring the
+ * commerce_cart_grants.allowed_operations default for new grants
+ * (migration 20261014120100). Grants minted by the cart RPCs carry
+ * this full set unless a restricted-grant flow says otherwise;
+ * renewals propagate the verified list instead of re-widening it.
+ */
+export const CART_FULL_SESSION_OPERATIONS: readonly CartCommand['type'][] = [
+  'add',
+  'set_quantity',
+  'remove',
+  'clear',
+  'replace',
+  'set_assurance',
+  'set_negotiated_price',
+];
+
 function issue(message: string): CartCommandIssue {
   return { code: 'invalid_item', message };
 }

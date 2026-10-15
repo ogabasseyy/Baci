@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { calculateCheckoutSession } from '@/lib/agentic/checkout';
+import { readAgenticSharedCartBinding } from '@/lib/agentic/checkout-completion-payloads';
 import type { AgenticCheckoutBuyer } from '@/lib/agentic/checkout-completion-response';
 import { createAgenticCheckoutOrder } from '@/lib/agentic/checkout-order-dispatch';
 import { releasePayOnDeliveryClaimSafely } from '@/lib/agentic/checkout-pay-on-delivery-compensation';
@@ -29,6 +30,7 @@ export async function createPayOnDeliveryOrder(input: {
   };
   orderSessionCalc: CheckoutCalculation;
   sessionId: string;
+  sharedCartPrincipalId?: string | null;
   supabase: SupabaseClient;
 }): Promise<{ ok: true; orderId: string } | { ok: false }> {
   const {
@@ -39,16 +41,28 @@ export async function createPayOnDeliveryOrder(input: {
     orderSession,
     orderSessionCalc,
     sessionId,
+    sharedCartPrincipalId,
     supabase,
   } = input;
-  const orderPayload = buildPayOnDeliveryOrderPayload({
-    buyer,
-    session: orderSession,
-    sessionCalc: orderSessionCalc,
-  });
+  // Mirror the DVA completion path: a session with a prepared
+  // shared-cart binding submits bound, so the reviewed generation is
+  // revalidated and closed atomically with order creation. Unbound
+  // pay-on-delivery would otherwise charge stale session items and
+  // leave the prepared cart active for a second order.
+  const sharedCartBinding = readAgenticSharedCartBinding(finalizationMetadata);
+  const orderPayload = {
+    ...buildPayOnDeliveryOrderPayload({
+      buyer,
+      session: orderSession,
+      sessionCalc: orderSessionCalc,
+    }),
+    ...(sharedCartBinding ? { shared_cart: sharedCartBinding } : {}),
+  };
   let orderResult: Awaited<ReturnType<typeof createAgenticCheckoutOrder>>;
   try {
-    orderResult = await createAgenticCheckoutOrder(orderPayload, supabase);
+    orderResult = await createAgenticCheckoutOrder(orderPayload, supabase, {
+      boundPrincipalId: sharedCartPrincipalId ?? null,
+    });
   } catch (error) {
     await releasePayOnDeliveryClaimSafely({
       finalizationClaim,

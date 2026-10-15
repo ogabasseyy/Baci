@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { readAgenticSharedCartBinding } from '@/lib/agentic/checkout-completion-payloads';
+import { finalizeAgenticPayOnDeliveryCheckout } from '@/lib/agentic/checkout-pay-on-delivery-finalize';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 
@@ -31,6 +32,39 @@ export async function resolveAgenticSharedCartPrincipalId(input: {
     return data.principal_id;
   }
   return null;
+}
+
+type PayOnDeliveryFinalizeInput = Parameters<
+  typeof finalizeAgenticPayOnDeliveryCheckout
+>[0];
+
+/**
+ * Pay-on-delivery completion branch: bound shared-cart sessions submit
+ * with the preparing principal, exactly like the DVA path, so the
+ * reviewed generation is revalidated and closed with order creation.
+ */
+export async function completeAgenticPayOnDelivery(
+  input: Omit<PayOnDeliveryFinalizeInput, 'sharedCartPrincipalId'> & {
+    bootstrap: SupabaseClient;
+    payOnDeliveryEnabled: boolean;
+    respond: (body: unknown, status: number) => Promise<NextResponse>;
+  }
+): Promise<NextResponse> {
+  if (!input.payOnDeliveryEnabled) {
+    return input.respond(
+      { error: 'Pay on delivery is not enabled for this merchant' },
+      403
+    );
+  }
+  const sharedCartPrincipalId = await resolveAgenticSharedCartPrincipalId({
+    bootstrap: input.bootstrap,
+    merchantId: input.merchantId,
+    metadata: input.metadata,
+  });
+  return finalizeAgenticPayOnDeliveryCheckout({
+    ...input,
+    sharedCartPrincipalId,
+  });
 }
 
 /** Logs and stores the generic 500 for an unexpected completion failure. */

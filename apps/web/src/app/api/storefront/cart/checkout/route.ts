@@ -15,7 +15,6 @@ import {
 } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
-  CartSessionConfigError,
   cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
@@ -115,10 +114,11 @@ export async function POST(request: NextRequest) {
       Date.parse(result.grantExpiresAt) < Date.parse(desiredProofExpiry)
         ? result.grantExpiresAt
         : desiredProofExpiry;
-    let proof: string;
+    let proof: string | null = null;
     try {
       proof = issueCartSessionProof(
         {
+          allowedOperations: context.principal.allowedOperations,
           cartId: context.principal.cartId,
           grantId: context.principal.grantId,
           grantExpiresAt: proofExpiresAt,
@@ -129,19 +129,21 @@ export async function POST(request: NextRequest) {
         { environment: getCartProofEnvironment() }
       );
     } catch (error) {
-      if (error instanceof CartSessionConfigError) {
-        return cartErrorResponse('temporarily_unavailable');
-      }
-      throw error;
+      // Preparation already committed the session: return the reviewed
+      // snapshot without a renewed proof (the incoming proof governs
+      // until it expires) rather than failing a committed checkout.
+      console.error('Cart session proof reissue failed after prepare', {
+        message: error instanceof Error ? error.message : 'unknown',
+      });
     }
     const response = cartJsonResponse({
-      ...(requestUsesDeviceProof(request) ? { proof } : {}),
+      ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),
       replayed: result.replayed,
       sessionReused: result.sessionReused,
       snapshot: result.snapshot,
     });
     const cookieMaxAge = cartSessionCookieMaxAge(proofExpiresAt);
-    if (cookieMaxAge > 0) {
+    if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
     }
     return response;

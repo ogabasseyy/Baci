@@ -1,6 +1,10 @@
 import { Buffer } from 'node:buffer';
 import { createHmac } from 'node:crypto';
-import type { VerifiedCartSession } from '@baci/shared/cart';
+import {
+  CART_FULL_SESSION_OPERATIONS,
+  type CartCommand,
+  type VerifiedCartSession,
+} from '@baci/shared/cart';
 import { z } from 'zod';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import { getCartSessionSecret } from './cart-runtime-env';
@@ -21,6 +25,16 @@ export const CART_SESSION_PROOF_AUDIENCE = 'baci:cart-session';
 
 const MIN_SECRET_LENGTH = 32;
 
+const cartOperationSchema = z.enum([
+  'add',
+  'set_quantity',
+  'remove',
+  'clear',
+  'replace',
+  'set_assurance',
+  'set_negotiated_price',
+]);
+
 export interface CartSessionProofInput {
   merchantId: string;
   cartId: string | null;
@@ -28,6 +42,14 @@ export interface CartSessionProofInput {
   principalId: string;
   scope: 'bootstrap' | 'session';
   grantExpiresAt?: string;
+  /**
+   * Operations the backing grant allows. Encoded into the proof so the
+   * verified principal carries the grant's actual authority at the
+   * TypeScript layer too; SQL still re-checks the grant row on every
+   * mutation. Defaults to the full session vocabulary for fresh
+   * grants; renewals pass the incoming principal's verified list.
+   */
+  allowedOperations?: readonly CartCommand['type'][];
 }
 
 export type CartSessionVerification =
@@ -56,6 +78,10 @@ const proofPayloadSchema = z.strictObject({
   grantId: z.uuid().nullable(),
   iat: z.number().int().positive(),
   merchantId: z.uuid(),
+  // Grant operations encoded at issuance; absent on proofs minted
+  // before this claim existed (they verify with the full vocabulary,
+  // matching the behavior those proofs were issued under).
+  ops: z.array(cartOperationSchema).max(7).optional(),
   principalId: z.string().min(1).max(128),
   scope: z.enum(['bootstrap', 'session']),
   v: z.literal(CART_SESSION_PROOF_VERSION),
@@ -155,6 +181,13 @@ export function issueCartSessionProof(
     grantId: input.grantId,
     iat: issuedAt,
     merchantId: input.merchantId,
+    ...(input.scope === 'session'
+      ? {
+          ops: [
+            ...(input.allowedOperations ?? CART_FULL_SESSION_OPERATIONS),
+          ] as CartCommand['type'][],
+        }
+      : {}),
     principalId: input.principalId,
     scope: input.scope,
     v: CART_SESSION_PROOF_VERSION,
@@ -222,17 +255,13 @@ function verifyCartProof(
   }
 
   const session: VerifiedCartSession = {
+    // The proof carries the grant's operations from issuance, so the
+    // TypeScript authority is exactly the grant's — a restricted grant
+    // stays restricted at every layer, not only in SQL. Proofs minted
+    // before the ops claim existed verify with the full vocabulary.
     allowedOperations:
       payload.scope === 'session'
-        ? [
-            'add',
-            'set_quantity',
-            'remove',
-            'clear',
-            'replace',
-            'set_assurance',
-            'set_negotiated_price',
-          ]
+        ? [...(payload.ops ?? CART_FULL_SESSION_OPERATIONS)]
         : [],
     cartId: payload.cartId,
     expiresAt: new Date(payload.exp * 1000).toISOString(),

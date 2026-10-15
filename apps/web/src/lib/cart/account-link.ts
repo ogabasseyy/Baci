@@ -4,6 +4,7 @@ import type {
   CartResult,
   CartSnapshot,
 } from '@baci/shared/cart';
+import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   type CartAccountLinkInput,
@@ -133,15 +134,9 @@ export async function linkCartToCustomer(
       principalId: receipt.data.principalId,
       cartId: receipt.data.cartId,
       grantId: receipt.data.grantId,
-      allowedOperations: [
-        'add',
-        'set_quantity',
-        'remove',
-        'clear',
-        'replace',
-        'set_assurance',
-        'set_negotiated_price',
-      ],
+      // The link RPC mints a fresh grant with the full session
+      // vocabulary (the grants-table default).
+      allowedOperations: [...CART_FULL_SESSION_OPERATIONS],
     };
     const snapshot = await getCart({
       principal: selected,

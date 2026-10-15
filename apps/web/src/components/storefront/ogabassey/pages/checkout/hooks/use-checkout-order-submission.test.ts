@@ -427,6 +427,47 @@ describe('useCheckoutOrderSubmission', () => {
       );
     });
 
+    it('binds insured shared carts whose display total includes the assurance fee', async () => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
+      // The shopper-facing total includes the per-item assurance fee;
+      // the reviewed subtotal never does. Comparing the two directly
+      // would reject every insured cart as a phantom price change.
+      context.cart.checkoutCart = [
+        {
+          cartItemId: 'line-1',
+          id: '44444444-4444-4444-8444-444444444444',
+          name: 'Phone',
+          price: 250,
+          quantity: 1,
+          serverLineId: 'line-1',
+          hasAssurance: true,
+          assuranceRate: 0.1,
+        } as never,
+      ];
+      context.cart.checkoutCartTotal = 275;
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        ok: true,
+        replayed: false,
+        review: {
+          ...REVIEW,
+          lines: [
+            { ...REVIEW.lines[0], assuranceRate: 0.1, hasAssurance: true },
+          ],
+        },
+        sessionReused: false,
+      });
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(submitPreparedCheckout).toHaveBeenCalled();
+      expect(toast).not.toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Prices Updated' })
+      );
+    });
+
     it('stops the submit when the review reports unavailable lines', async () => {
       const context = freshContext();
       context.cart.sharedCartRef = SHARED_REF;

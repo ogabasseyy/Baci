@@ -18,7 +18,7 @@ import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import { verifyCartSessionProof } from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getClientIdentifier } from '@/lib/rate-limit';
+import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { cartHandoffIssueRequestSchema } from '@/schemas/cart';
@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
     const preQuota = await checkCartQuota({
       merchantId: 'handoff-preview',
       operation: 'handoff_preview',
-      subject: getClientIdentifier(request),
+      subject: getTrustedClientIdentifier(request),
     });
     if (!preQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
@@ -162,13 +162,14 @@ export async function GET(request: NextRequest) {
     // assembles anything: resolve the merchant with the cheap locator.
     const merchantId = await rpcHandoffMerchantId(
       createAnonClient(),
-      handoffId
+      handoffId,
+      handoffToken
     );
     if (merchantId) {
       const quota = await checkCartQuota({
         merchantId,
         operation: 'handoff_preview',
-        subject: getClientIdentifier(request),
+        subject: getTrustedClientIdentifier(request),
       });
       if (!quota.allowed) {
         return cartErrorResponse('quota_exceeded');

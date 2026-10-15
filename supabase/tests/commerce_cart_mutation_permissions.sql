@@ -97,4 +97,23 @@ INSERT INTO public.commerce_cart_device_retirements(merchant_id, device_principa
 SET LOCAL ROLE commerce_cart_shopper;
 DO $$ BEGIN IF public.commerce_cart_mutate('22222222-2222-4222-8222-222222222222','eoc-retired',1,'{"type":"remove","lineId":"dddddddd-dddd-4ddd-8ddd-dddddddddddd"}')->>'code' IS DISTINCT FROM 'unauthorized' THEN RAISE EXCEPTION 'retired device accepted mutation at end of chain'; END IF; END $$;
 RESET ROLE;
+-- Handoff issuance is serialized with device retirement at the end of
+-- the chain: an active device still mints through the device-guard
+-- wrapper, and a retired device is refused before grant liveness is
+-- ever read.
+\ir ../migrations/20261012050500_commerce_cart_handoff.sql
+\ir ../migrations/20261015110000_commerce_cart_handoff_issue_device_guard.sql
+INSERT INTO public.commerce_carts(id,merchant_id,expires_at) VALUES ('33333333-3333-4333-8333-333333333333','11111111-1111-4111-8111-111111111111',now()+interval '7 days');
+INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,expires_at) VALUES ('77777777-7777-4777-8777-777777777777','11111111-1111-4111-8111-111111111111','33333333-3333-4333-8333-333333333333','handoff-device',now()+interval '7 days');
+SET LOCAL ROLE commerce_cart_shopper;
+SELECT set_config('request.jwt.claims',jsonb_build_object('role','commerce_cart_shopper','cart_scope','session','cart_merchant_id','11111111-1111-4111-8111-111111111111','cart_id','33333333-3333-4333-8333-333333333333','cart_grant_id','77777777-7777-4777-8777-777777777777','cart_principal_id','handoff-device','exp',extract(epoch from now()+interval '5 minutes')::bigint)::text,true);
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_issue_handoff('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee','33333333-3333-4333-8333-333333333333','issue-active','{"type":"web"}'::jsonb);
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'active device issuance must succeed at end of chain, got %', result; END IF;
+END $$;
+RESET ROLE;
+INSERT INTO public.commerce_cart_device_retirements(merchant_id, device_principal_id) VALUES ('11111111-1111-4111-8111-111111111111','handoff-device');
+SET LOCAL ROLE commerce_cart_shopper;
+DO $$ BEGIN IF public.commerce_cart_issue_handoff('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb','ffffffff-ffff-4fff-8fff-ffffffffffff','33333333-3333-4333-8333-333333333333','issue-retired','{"type":"web"}'::jsonb)->>'code' IS DISTINCT FROM 'unauthorized' THEN RAISE EXCEPTION 'retired device minted a handoff at end of chain'; END IF; END $$;
+RESET ROLE;
 ROLLBACK;

@@ -2,7 +2,9 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import * as sessionProofModule from '@/lib/cart/session-proof';
 import {
+  CartSessionConfigError,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
@@ -252,6 +254,39 @@ describe('POST /api/storefront/cart/commands', () => {
       ok: true,
       session: { cartId: CART_ID, grantId: GRANT_ID },
     });
+  });
+
+  it('returns the committed cart when proof reissue hits a config failure', async () => {
+    const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState({ expiresAt: expiry, lines: [rawLine()] }),
+    };
+    const incoming = sessionProof();
+    // The mutation commits in SQL before reissue; a provisioning
+    // failure must not surface the committed change as a 503 the
+    // shopper would retry into the same failure.
+    const spy = vi
+      .spyOn(sessionProofModule, 'issueCartSessionProof')
+      .mockImplementation(() => {
+        throw new CartSessionConfigError();
+      });
+    try {
+      const response = await postCommand({
+        body: addCommand('config-reissue'),
+        headers: {
+          cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${incoming}`,
+        },
+      });
+      expect(response.status).toBe(200);
+      const payload = await response.json();
+      expect(payload.cart.version).toBe(2);
+      expect(payload.proof).toBeUndefined();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('returns the committed cart without a renewed proof when reissue crosses grant expiry', async () => {

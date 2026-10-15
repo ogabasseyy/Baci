@@ -4,6 +4,7 @@ import {
   __resetRateLimitStoreForTesting,
   checkImeiPollRateLimit,
   checkRateLimit,
+  getTrustedClientIdentifier,
   setRateLimitDiagnosticHook,
 } from './rate-limit';
 
@@ -198,5 +199,48 @@ describe('quiz route rate limits', () => {
     await expect(
       checkRateLimit(new NextRequest('http://localhost:3000/api/unknown'))
     ).resolves.toMatchObject({ allowed: true });
+  });
+});
+
+describe('getTrustedClientIdentifier (cart quota identity)', () => {
+  function requestWith(headers: Record<string, string>): NextRequest {
+    return new NextRequest('http://localhost:3000/api/storefront/cart', {
+      headers,
+    });
+  }
+
+  it('never lets a rotating x-forwarded-for reset the quota subject', () => {
+    // Every spoofed value must land in the same shared bucket, so the
+    // anonymous cart budgets cannot be reset by header rotation.
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({ 'x-forwarded-for': '203.0.113.1' })
+      )
+    ).toBe('unknown');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({ 'x-forwarded-for': '198.51.100.9, 203.0.113.1' })
+      )
+    ).toBe('unknown');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-forwarded-for': 'x' }))
+    ).toBe('unknown');
+  });
+
+  it('uses the platform-set x-real-ip when present', () => {
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'x-forwarded-for': '203.0.113.1',
+          'x-real-ip': '192.0.2.44',
+        })
+      )
+    ).toBe('192.0.2.44');
+  });
+
+  it('ignores a malformed x-real-ip', () => {
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': 'not-an-ip' }))
+    ).toBe('unknown');
   });
 });

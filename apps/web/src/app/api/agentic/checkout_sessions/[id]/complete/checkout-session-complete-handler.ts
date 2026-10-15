@@ -12,7 +12,6 @@ import {
   resolveExistingPaymentState,
 } from '@/lib/agentic/checkout-completion-response';
 import { resolveCheckoutCompletionSessionState } from '@/lib/agentic/checkout-completion-session-state';
-import { finalizeAgenticPayOnDeliveryCheckout } from '@/lib/agentic/checkout-pay-on-delivery-finalize';
 import { prepareAgenticCheckoutPayment } from '@/lib/agentic/checkout-payment-setup';
 import { getAgenticCheckoutSession } from '@/lib/agentic/checkout-session-record';
 import { reserveAgenticIdempotencyKey } from '@/lib/agentic/idempotency';
@@ -35,6 +34,7 @@ import { agenticCheckoutSessionRouteParamsSchema } from '@/schemas/agentic-check
 import type { CheckoutSessionCompleteRouteOptions } from './checkout-session-complete-handler-types';
 import {
   agenticCompleteFailureResponse,
+  completeAgenticPayOnDelivery,
   resolveAgenticSharedCartPrincipalId,
 } from './checkout-session-complete-helpers';
 
@@ -228,22 +228,18 @@ export async function handleAgenticCheckoutSessionComplete(
     }
 
     if (payment_data.provider === 'pay_on_delivery') {
-      if (merchant.pay_on_delivery_enabled !== true) {
-        return await respond(
-          { error: 'Pay on delivery is not enabled for this merchant' },
-          403
-        );
-      }
-
-      return await finalizeAgenticPayOnDeliveryCheckout({
+      return await completeAgenticPayOnDelivery({
         agentId: mutation.agentId,
+        bootstrap,
         buyer,
         idempotencyKey: mutation.idempotencyKey,
         merchantId: merchant.id,
         metadata: completionState.metadata,
         orderSession: session,
         orderSessionCalc: completionState.sessionCalc,
+        payOnDeliveryEnabled: merchant.pay_on_delivery_enabled === true,
         requestId: mutation.requestId,
+        respond,
         route: CHECKOUT_COMPLETION_IDEMPOTENCY_ROUTE,
         sessionId,
         supabase,

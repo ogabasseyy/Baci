@@ -246,6 +246,29 @@ END
 $$;
 RESET ROLE;
 
+-- 5b. The merchant locator is token-gated: a handoff id alone must not
+-- disclose which merchant it belongs to.
+SET ROLE anon;
+DO $$
+DECLARE
+  v_merchant uuid;
+BEGIN
+  SELECT public.commerce_cart_handoff_merchant('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') INTO v_merchant;
+  IF v_merchant <> '11111111-1111-4111-8111-111111111111'::uuid THEN
+    RAISE EXCEPTION 'locator must resolve the merchant for the bound token hash, got %', v_merchant;
+  END IF;
+  SELECT public.commerce_cart_handoff_merchant('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb') INTO v_merchant;
+  IF v_merchant IS NOT NULL THEN
+    RAISE EXCEPTION 'locator must disclose nothing for a wrong token hash, got %', v_merchant;
+  END IF;
+  SELECT public.commerce_cart_handoff_merchant('99999999-9999-4999-8999-999999999999', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') INTO v_merchant;
+  IF v_merchant IS NOT NULL THEN
+    RAISE EXCEPTION 'locator must disclose nothing for an unknown handoff, got %', v_merchant;
+  END IF;
+END
+$$;
+RESET ROLE;
+
 -- 6. Connect binds a fresh destination to the incoming cart exactly once.
 SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-fresh","cart_scope":"bootstrap"}';
 SET ROLE commerce_cart_shopper;

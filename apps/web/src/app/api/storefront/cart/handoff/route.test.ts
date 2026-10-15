@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { hashHandoffToken } from '@/lib/cart/handoff-token';
 import type { CartPrincipal } from '@/lib/cart/principal';
 import {
   __resetCartQuotaStoreForTesting,
   checkCartQuota,
 } from '@/lib/cart/request-context';
 import { issueCartSessionProof } from '@/lib/cart/session-proof';
-import { getClientIdentifier } from '@/lib/rate-limit';
+import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { GET, POST } from './route';
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
@@ -23,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   merchantError: null as unknown,
   merchantRows: [] as unknown[],
   handoffMerchantId: null as string | null,
+  locatorArgs: null as unknown,
   previewCalls: 0,
   previewError: null as unknown,
   previewPayload: null as unknown,
@@ -40,12 +42,13 @@ vi.mock('@/lib/supabase/anon', () => ({
         })),
       })),
     })),
-    rpc: vi.fn(async (name: string) => {
+    rpc: vi.fn(async (name: string, args: unknown) => {
       if (name === 'commerce_cart_preview_handoff') {
         mocks.previewCalls += 1;
         return { data: mocks.previewPayload, error: mocks.previewError };
       }
       if (name === 'commerce_cart_handoff_merchant') {
+        mocks.locatorArgs = args;
         return { data: mocks.handoffMerchantId, error: null };
       }
       return { data: mocks.merchantRows, error: mocks.merchantError };
@@ -136,6 +139,7 @@ beforeEach(() => {
   mocks.merchantError = null;
   mocks.merchantRows = [merchantRow()];
   mocks.handoffMerchantId = null;
+  mocks.locatorArgs = null;
   mocks.previewCalls = 0;
   mocks.previewError = null;
   mocks.previewPayload = null;
@@ -344,6 +348,12 @@ describe('GET /api/storefront/cart/handoff', () => {
     expect(payload.merchant).toEqual({ id: MERCHANT_ID, slug: 'ogabassey' });
     expect(mocks.capturedPrincipal).toBeNull();
     expect(mocks.cartRpcCalls).toHaveLength(0);
+    // The merchant locator is token-gated: it receives the pairing
+    // token hash, never the id alone.
+    expect(mocks.locatorArgs).toEqual({
+      p_handoff_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      p_token_hash: hashHandoffToken('ch1.fixture.token'),
+    });
   });
 
   it('reports consumed and expired links as statuses, unknown as 404', async () => {
@@ -383,7 +393,7 @@ describe('GET /api/storefront/cart/handoff', () => {
       `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
       { method: 'GET' }
     );
-    const subject = getClientIdentifier(probe);
+    const subject = getTrustedClientIdentifier(probe);
     for (let index = 0; index < 120; index += 1) {
       await checkCartQuota({
         merchantId: 'handoff-preview',
@@ -414,7 +424,7 @@ describe('GET /api/storefront/cart/handoff', () => {
       `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
       { method: 'GET' }
     );
-    const subject = getClientIdentifier(probe);
+    const subject = getTrustedClientIdentifier(probe);
     for (let index = 0; index < 120; index += 1) {
       await checkCartQuota({
         merchantId: MERCHANT_ID,

@@ -1,3 +1,4 @@
+import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
@@ -16,13 +17,12 @@ import {
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import { createCart, getCart } from '@/lib/cart/service';
 import {
-  CartSessionConfigError,
   cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
-import { getClientIdentifier } from '@/lib/rate-limit';
+import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createCartRequestSchema } from '@/schemas/cart';
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
     const clientQuota = await checkCartQuota({
       merchantId: context.merchant.id,
       operation: 'create',
-      subject: getClientIdentifier(request),
+      subject: getTrustedClientIdentifier(request),
     });
     if (!clientQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
@@ -168,10 +168,13 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('temporarily_unavailable');
     }
 
-    let proof: string;
+    let proof: string | null = null;
     try {
       proof = issueCartSessionProof(
         {
+          // Fresh grant minted by the create RPC with the full
+          // session vocabulary (the grants-table default).
+          allowedOperations: CART_FULL_SESSION_OPERATIONS,
           cartId: result.cart.cartId,
           grantId: result.grantId,
           grantExpiresAt: result.cart.expiresAt,
@@ -182,24 +185,26 @@ export async function POST(request: NextRequest) {
         { environment: getCartProofEnvironment() }
       );
     } catch (error) {
-      if (error instanceof CartSessionConfigError) {
-        return cartErrorResponse('temporarily_unavailable');
-      }
-      throw error;
+      // The create RPC already committed the cart and grant: return
+      // the committed cart without a session proof rather than hiding
+      // it behind a 503 that every retry would replay into.
+      console.error('Cart session proof issue failed after create commit', {
+        message: error instanceof Error ? error.message : 'unknown',
+      });
     }
 
     const response = cartJsonResponse(
       {
         cart: result.cart,
         operationId: result.operationId,
-        ...(requestUsesDeviceProof(request) ? { proof } : {}),
+        ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),
         replayed: result.replayed,
         warnings: result.warnings,
       },
       { status: 201 }
     );
     const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
-    if (cookieMaxAge > 0) {
+    if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
     }
     return response;

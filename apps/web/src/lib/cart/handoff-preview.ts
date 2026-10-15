@@ -27,14 +27,18 @@ export function redactPreviewSnapshot(snapshot: CartSnapshot): CartSnapshot {
 /**
  * Resolves only the merchant id for a handoff so the route can enforce
  * the merchant-scoped preview quota before the expensive preview RPC
- * assembles a snapshot. Returns null for unknown handoffs.
+ * assembles a snapshot. Token-gated like the preview itself: an id
+ * without its pairing token resolves nothing. Returns null for unknown
+ * handoffs and for token mismatches alike.
  */
 export async function rpcHandoffMerchantId(
   client: SupabaseClient,
-  handoffId: string
+  handoffId: string,
+  token: string
 ): Promise<string | null> {
   const response = await client.rpc('commerce_cart_handoff_merchant', {
     p_handoff_id: handoffId,
+    p_token_hash: hashHandoffToken(token),
   });
   if (response.error) {
     throw new CartRepositoryError(

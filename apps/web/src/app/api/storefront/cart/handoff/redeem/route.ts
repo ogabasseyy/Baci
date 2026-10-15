@@ -1,3 +1,4 @@
+import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
@@ -22,7 +23,6 @@ import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
   CART_SESSION_PROOF_VERSION,
-  CartSessionConfigError,
   cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
@@ -156,12 +156,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    let proof: string;
-    let maxAge: number;
+    let proof: string | null = null;
+    let maxAge = 0;
     try {
       if (redeemed.cart && redeemed.grantId) {
         proof = issueCartSessionProof(
           {
+            // Fresh destination grant minted by the redeem RPC with
+            // the full session vocabulary (the grants-table default).
+            allowedOperations: CART_FULL_SESSION_OPERATIONS,
             cartId: redeemed.cart.cartId,
             grantId: redeemed.grantId,
             grantExpiresAt: redeemed.cart.expiresAt,
@@ -188,20 +191,23 @@ export async function POST(request: NextRequest) {
         return cartErrorResponse('temporarily_unavailable');
       }
     } catch (error) {
-      if (error instanceof CartSessionConfigError) {
-        return cartErrorResponse('temporarily_unavailable');
-      }
-      throw error;
+      // The redeem RPC already consumed the handoff and committed the
+      // destination grant: return the committed result without a proof
+      // rather than answering a failure the single-use token can never
+      // retry past.
+      console.error('Cart session proof issue failed after redeem commit', {
+        message: error instanceof Error ? error.message : 'unknown',
+      });
     }
 
     const response = cartJsonResponse({
       cart: redeemed.cart,
       choice: redeemed.choice,
-      ...(requestUsesDeviceProof(request) ? { proof } : {}),
+      ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),
       replayed: redeemed.replayed,
       warnings: redeemed.warnings,
     });
-    if (maxAge > 0) {
+    if (proof && maxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, maxAge);
     }
     return response;

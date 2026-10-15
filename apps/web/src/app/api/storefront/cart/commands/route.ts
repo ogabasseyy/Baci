@@ -15,7 +15,6 @@ import {
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import { mutateCart } from '@/lib/cart/service';
 import {
-  CartSessionConfigError,
   cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
@@ -105,6 +104,7 @@ export async function POST(request: NextRequest) {
     try {
       proof = issueCartSessionProof(
         {
+          allowedOperations: context.principal.allowedOperations,
           cartId: context.principal.cartId,
           grantId: context.principal.grantId,
           grantExpiresAt: result.cart.expiresAt,
@@ -115,12 +115,13 @@ export async function POST(request: NextRequest) {
         { environment: getCartProofEnvironment() }
       );
     } catch (error) {
-      if (
-        error instanceof CartSessionConfigError ||
-        Date.parse(result.cart.expiresAt) > Date.now()
-      ) {
-        throw error;
-      }
+      // Never surface a committed mutation as a failure: the existing
+      // proof governs until it expires and retries replay by operation
+      // id. Log the failure so a provisioning gap stays visible instead
+      // of trapping the shopper in a repeating 503.
+      console.error('Cart session proof reissue failed after commit', {
+        message: error instanceof Error ? error.message : 'unknown',
+      });
     }
     const response = cartJsonResponse({
       ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),

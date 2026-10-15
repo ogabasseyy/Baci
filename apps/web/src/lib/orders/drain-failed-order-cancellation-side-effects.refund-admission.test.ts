@@ -34,7 +34,7 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
     mocks.run.mockResolvedValue('completed');
   });
 
-  it('skips a refund step without claiming when its verification budget will not fit', async () => {
+  it('claims a refund step even when its verification budget will not fit', async () => {
     const candidate = {
       attempts: 1,
       claimed_at: '2026-07-21T00:00:00Z',
@@ -45,22 +45,37 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
       .fn()
       .mockReturnValueOnce(terminalQuery([candidate]))
       .mockReturnValueOnce(terminalQuery([]))
-      .mockReturnValueOnce(terminalQuery([]));
-    // One ms short of the 76s verification budget: claiming would
-    // only burn lookups plus a claim for preflight to defer before
-    // any provider check. The row stays failed for a tick with room.
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({
+          cancellation_reason: 'Unavailable',
+          id: 'order-1',
+          merchant_id: 'merchant-1',
+        })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+    // One ms short of the 76s verification budget: the claim still
+    // runs (it finalizes fully covered rows cheaply), and the budget
+    // gates only the post-claim worker run inside the runner.
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
 
     try {
+      const deadlineMs = 1_240_000 + REFUND_PREFLIGHT_ADMISSION_BUDGET_MS - 1;
       const result = await drainFailedOrderCancellationSideEffects({
-        deadlineMs: 1_240_000 + REFUND_PREFLIGHT_ADMISSION_BUDGET_MS - 1,
+        deadlineMs,
         sendCancellationEmail: vi.fn(),
         supabase: { from } as never,
       });
 
-      expect(mocks.run).not.toHaveBeenCalled();
-      expect(from).toHaveBeenCalledTimes(3);
-      expect(result).toEqual({ drained: [], failed: [], skipped: [] });
+      expect(mocks.run).toHaveBeenCalledWith(
+        expect.objectContaining({
+          deadlineMs,
+          executeAdmissionBudgetMs: REFUND_PREFLIGHT_ADMISSION_BUDGET_MS,
+          orderId: 'order-1',
+          step: 'refund',
+        })
+      );
+      expect(result.drained).toEqual([{ orderId: 'order-1', step: 'refund' }]);
     } finally {
       now.mockRestore();
     }
@@ -90,14 +105,20 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
 
     try {
+      const deadlineMs = 1_240_000 + REFUND_PREFLIGHT_ADMISSION_BUDGET_MS;
       const result = await drainFailedOrderCancellationSideEffects({
-        deadlineMs: 1_240_000 + REFUND_PREFLIGHT_ADMISSION_BUDGET_MS,
+        deadlineMs,
         sendCancellationEmail: vi.fn(),
         supabase: { from } as never,
       });
 
       expect(mocks.run).toHaveBeenCalledWith(
-        expect.objectContaining({ orderId: 'order-1', step: 'refund' })
+        expect.objectContaining({
+          deadlineMs,
+          executeAdmissionBudgetMs: REFUND_PREFLIGHT_ADMISSION_BUDGET_MS,
+          orderId: 'order-1',
+          step: 'refund',
+        })
       );
       expect(result.drained).toEqual([{ orderId: 'order-1', step: 'refund' }]);
     } finally {

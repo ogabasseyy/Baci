@@ -58,6 +58,10 @@ export function matchCancellationRefundCoverage({
   const legById = new Map(transactions.map((leg) => [leg.id, leg]));
   const matchedRefundKobo = new Map<string, number>();
   const completedLinkedLegIds = new Set<string>();
+  // Non-manual terminal rows that cannot count as coverage (foreign
+  // currency or cross-gateway): anomalous even beside full valid
+  // coverage, unlike partial or zero-amount rows.
+  const nonCountingCompletedLegIds = new Set<string>();
   const manualLinkedLegIds = new Set<string>();
   // Manual-linked legs that quarantine instead of counting: wrong
   // currency, or a Paystack declaration without provider proof.
@@ -126,6 +130,9 @@ export function matchCancellationRefundCoverage({
     const gatewayMatches =
       rowGateway !== '' && rowGateway === normalizeMoneyField(leg.gateway);
     if ((!gatewayMatches && !isManualRow) || !currencyMatches) {
+      // Manual rows with mismatching currency continue earlier with
+      // a review flag, so only non-manual rows reach this branch.
+      nonCountingCompletedLegIds.add(paymentId);
       if (attributed) unattributedUnlinkedCount += 1;
       continue;
     }
@@ -154,12 +161,30 @@ export function matchCancellationRefundCoverage({
     const legKobo = Math.round(Number(leg.amount) * 100);
     if ((matchedRefundKobo.get(leg.id) ?? 0) >= legKobo) {
       refundedPaymentIds.add(leg.id);
-    } else if (
+    }
+    // Anomalous terminal evidence reports independently of coverage:
+    // a leg fully covered by valid rows plus one extra foreign,
+    // cross-gateway, or invalid-manual row must still quarantine (the
+    // SQL anomaly gate routes the same order to the worker), or the
+    // step would complete while the manager pends forever.
+    if (
       manualReviewLegIds.has(leg.id) ||
-      (completedLinkedLegIds.has(leg.id) && !manualLinkedLegIds.has(leg.id))
+      nonCountingCompletedLegIds.has(leg.id)
     ) {
       mismatchedTransactions.push(leg);
-    } else if (manualLinkedLegIds.has(leg.id)) {
+      continue;
+    }
+    if (refundedPaymentIds.has(leg.id)) {
+      continue;
+    }
+    // Non-manual terminal evidence short of coverage (partial
+    // provider rows, zero-amount rows) still mismatches: without
+    // this the leg would fall through and complete unpaid.
+    if (completedLinkedLegIds.has(leg.id) && !manualLinkedLegIds.has(leg.id)) {
+      mismatchedTransactions.push(leg);
+      continue;
+    }
+    if (manualLinkedLegIds.has(leg.id)) {
       // A manual-linked leg with no other evidence waits for the
       // merchant: the caller excludes it from initiation without
       // quarantining, and defers the step so the drain reclaims the

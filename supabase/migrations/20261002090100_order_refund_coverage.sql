@@ -89,6 +89,15 @@ BEGIN
               -- while the reversal never runs.
               AND COALESCE(public.normalized_gateway_name_v1(leg.gateway), '')
                 NOT IN ('WALLET', 'SAVINGS')
+              -- Manuals never cover an external leg whose provider
+              -- refund is still in flight: finalizing on merchant
+              -- money alone would double-pay when the provider
+              -- refund settles. Cash-like legs have no provider, so
+              -- their status never blocks manual proof (including
+              -- refunded-cash rescue rows).
+              AND (leg.status = 'completed'
+                OR COALESCE(public.normalized_gateway_name_v1(leg.gateway), '')
+                  IN ('STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'))
               -- A manual row positively declared as Paystack is only
               -- a merchant claim about provider money: it needs
               -- provider confirmation before it can count, mirroring
@@ -126,10 +135,14 @@ END; $$;
 -- and flips the order refunded while legs sit uncovered and the
 -- worker initiates them again (double refund). Attribution comes
 -- from the shared per-leg listing; only the per-leg LEAST is new.
--- Self-terminal refunded legs are excluded here (they count once
--- via the payment-side sum): a linked terminal refund row on such
--- a leg must not ALSO count, or the double count zeroes the
--- remainder while sibling legs sit uncovered.
+-- Self-terminal refunded EXTERNAL legs are excluded here (they
+-- count once via the payment-side sum): a linked terminal refund
+-- row on such a leg must not ALSO count, or the double count zeroes
+-- the remainder while sibling legs sit uncovered. Refunded
+-- INTERNAL legs stay in: the payment-side sum explicitly excludes
+-- internal gateways, so dropping them would erase their linked
+-- manual coverage and report the full balance outstanding right
+-- after the record response showed zero.
 CREATE OR REPLACE FUNCTION private.capped_refund_coverage_v1(
   p_order_id uuid, p_merchant_id uuid, p_currency text
 ) RETURNS numeric LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
@@ -142,7 +155,7 @@ BEGIN
     INTO v_total
     FROM private.refund_coverage_per_leg_v1(
       p_order_id, p_merchant_id, p_currency) per_leg
-   WHERE NOT per_leg.is_refunded;
+   WHERE NOT per_leg.is_refunded OR per_leg.is_internal;
   RETURN v_total;
 END; $$;
 -- Uncovered per-leg obligation: floors the manager's remainder so a

@@ -268,14 +268,15 @@ BEGIN
     RAISE EXCEPTION 'foreign-currency leg reduced remainder, got %',
       v_result->>'remaining';
   END IF;
-  -- Internal-only reversals persist the terminal label on read: with
-  -- no refund ledger rows the sync trigger never fires, so the
-  -- status call itself must persist refunded instead of exposing a
-  -- label a refresh would revert.
+  -- Internal-only reversals persist the terminal label at insert:
+  -- the reversal-ledger sync flips refunded when the internal
+  -- reversals cover the paid amount, so reports never see paid for
+  -- an order whose money is home even when the panel never opens.
   SELECT payment_status INTO v_label FROM public.orders
   WHERE id = '9ef11000-0000-4000-8000-000000000054';
-  IF v_label <> 'paid' THEN
-    RAISE EXCEPTION 'internal-only order pre-flipped, got %', v_label;
+  IF v_label <> 'refunded' THEN
+    RAISE EXCEPTION 'internal-only reversal did not flip at insert, got %',
+      v_label;
   END IF;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000054'

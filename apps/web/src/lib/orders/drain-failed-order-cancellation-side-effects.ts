@@ -187,25 +187,12 @@ export async function drainFailedOrderCancellationSideEffects({
       });
       continue;
     }
-    // A refund step admitted without its verification budget would
-    // claim only for preflight to defer before any provider check;
-    // under a sustained backlog every invocation repeats that
-    // claim-and-defer with zero progress. Skip it unclaimed so it
-    // stays failed for a tick with room, mirroring the email
-    // admission above. Later steps still run.
-    if (
-      step === 'refund' &&
-      deadlineMs !== undefined &&
-      deadlineMs - Date.now() < REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
-    ) {
-      logger.info({
-        message:
-          'Skipping cancellation refund without claiming: too little budget remains to verify',
-        orderId,
-        step,
-      });
-      continue;
-    }
+    // No pre-claim budget skip for refund steps: the claim RPC
+    // finalizes fully covered rows cheaply (no provider call), so
+    // skipping it under backlog would starve their settlement
+    // reversal and review closure indefinitely. The verification
+    // budget gates the post-claim worker run inside the runner
+    // instead, where only rows that may enter preflight see it.
     try {
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -254,6 +241,12 @@ export async function drainFailedOrderCancellationSideEffects({
       }
 
       const status = await runOrderCancellationSideEffect({
+        ...(step === 'refund'
+          ? {
+              deadlineMs,
+              executeAdmissionBudgetMs: REFUND_PREFLIGHT_ADMISSION_BUDGET_MS,
+            }
+          : {}),
         orderId,
         step,
         supabase,

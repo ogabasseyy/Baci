@@ -403,6 +403,8 @@ jobs:
           --sql-check supabase/tests/order_refund_management_round45_gates.sql
           --sql-check supabase/tests/order_refund_management_round46_gates.sql
           --sql-check supabase/tests/order_refund_management_round47_gates.sql
+          --sql-check supabase/tests/order_refund_management_round48_gates.sql
+          --sql-check supabase/tests/order_refund_management_round48_reversal_sync.sql
           --sql-check supabase/tests/order_refund_management_claims.sql
           --sql-check supabase/tests/order_refund_management_claim_routing.sql
           --sql-check supabase/tests/order_refund_management_claim_anomalies.sql

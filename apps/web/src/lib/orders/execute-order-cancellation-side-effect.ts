@@ -86,14 +86,19 @@ export async function executeOrderCancellationSideEffect({
   );
   const soleCompletedLeg = soleCompletedCancellationLeg(transactions);
   // Probe refunded legs even in mixed orders: skipping it would
-  // complete past anomalies the SQL gate refuses to finalize.
+  // complete past anomalies the SQL gate refuses to finalize. Its
+  // manual-pending refunded legs merge into the settle deferral below
+  // so clean siblings initiate first, then the step waits for the
+  // merchant instead of completing with money still outstanding.
+  let refundedManualPendingLegIds = new Set<string>();
   if (actionableLegs.length < linkLegs.length) {
-    await quarantineRefundedLegTerminalAnomaly({
-      legs: linkLegs,
-      order,
-      soleCompletedLegId: soleCompletedLeg?.id ?? null,
-      supabase,
-    });
+    ({ refundedManualPendingLegIds } =
+      await quarantineRefundedLegTerminalAnomaly({
+        legs: linkLegs,
+        order,
+        soleCompletedLegId: soleCompletedLeg?.id ?? null,
+        supabase,
+      }));
   }
   if (actionableLegs.length === 0) {
     // Every leg self-terminalized and anomaly-free: defer for claim.
@@ -287,7 +292,10 @@ export async function executeOrderCancellationSideEffect({
     deadlineMs,
     initiationTransactions,
     isLastAttempt,
-    manualPendingLegIds,
+    manualPendingLegIds: new Set([
+      ...manualPendingLegIds,
+      ...refundedManualPendingLegIds,
+    ]),
     mismatchedTransactions,
     order,
     reason,

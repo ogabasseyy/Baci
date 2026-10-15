@@ -68,6 +68,25 @@ export function OrderRefundPanel({
     }
   }, [summary?.status, orderId, onRefunded]);
 
+  // Recording needs both the manage capability and the manual flag,
+  // mirroring the action-button visibility below.
+  const canRecordManual =
+    summary?.canManageRefunds === true && summary?.canRecordManual === true;
+  // Polling can revoke recording while the form stands open (a
+  // provider refund started, the step was claimed, or the order went
+  // terminal): close and clear the stale form instead of letting the
+  // merchant follow guidance the server now rejects.
+  useEffect(() => {
+    if (!canRecordManual) {
+      setShowForm(false);
+      setConfirmed(false);
+      setReference('');
+      setDate('');
+      setNote('');
+      setLegId('');
+    }
+  }, [canRecordManual]);
+
   async function submit(action: 'retry' | 'manual') {
     if (busy) return;
     if (
@@ -224,7 +243,7 @@ export function OrderRefundPanel({
                 </>
               )}
             </div>
-            {showForm && (
+            {showForm && canRecordManual && (
               <OrderRefundManualForm
                 amount={amount}
                 busy={busy}

@@ -107,6 +107,11 @@ BEGIN
               OR (
                 public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
                 AND refund.metadata->>'payment_transaction_id' = payment.id::text
+                -- Manuals never cover a leg whose provider refund is
+                -- still in flight (this branch is external-only):
+                -- finalizing on merchant money alone would
+                -- double-pay when the provider refund settles.
+                AND payment.status = 'completed'
                 AND (
                   refund.metadata->>'method' IS DISTINCT FROM 'paystack'
                   OR refund.metadata->>'provider_refund_status' = 'processed'
@@ -155,6 +160,13 @@ BEGIN
             )
        ) < internal_leg.amount
   ) AND NOT EXISTS (
+    -- Unverified Paystack evidence blocks finalization whether it is
+    -- a merchant declaration or an ordinary provider row: either way
+    -- the money is not confirmed home, mirroring the pending
+    -- helper's normalized Paystack predicate. Without the ordinary
+    -- arm, an extra linked same-currency terminal Paystack row with
+    -- no processed stamp would finalize beside full verified
+    -- coverage and settle unnoticed.
     SELECT 1 FROM public.transactions merchant_claim
      WHERE merchant_claim.order_id = p_order_id
        AND merchant_claim.merchant_id = p_merchant_id
@@ -163,8 +175,9 @@ BEGIN
        AND merchant_claim.amount > 0
        AND UPPER(BTRIM(merchant_claim.currency))
          = UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency), ''), 'NGN')))
-       AND public.normalized_gateway_name_v1(merchant_claim.gateway) = 'MANUAL'
-       AND merchant_claim.metadata->>'method' = 'paystack'
+       AND (public.normalized_gateway_name_v1(merchant_claim.gateway) = 'PAYSTACK'
+         OR (public.normalized_gateway_name_v1(merchant_claim.gateway) = 'MANUAL'
+           AND merchant_claim.metadata->>'method' = 'paystack'))
        AND merchant_claim.metadata->>'provider_refund_status'
          IS DISTINCT FROM 'processed'
        AND (merchant_claim.metadata->>'payment_transaction_id' IS NULL

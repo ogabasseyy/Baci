@@ -286,4 +286,62 @@ describe('matchCancellationRefundCoverage', () => {
     expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
     expect(coverage.mismatchedTransactions).toEqual([]);
   });
+
+  it('mismatches a covered leg that also carries an anomalous row', () => {
+    const transactions = [leg({})];
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+        row({
+          gateway: 'manual',
+          metadata: {
+            method: 'paystack',
+            payment_transaction_id: 'payment-1',
+          },
+        }),
+      ],
+      transactions,
+    });
+
+    // The verified row covers the leg, but the unverified manual
+    // Paystack claim is anomalous terminal evidence: report both so
+    // the step quarantines instead of completing past an anomaly the
+    // SQL gate refuses to finalize.
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedTransactions).toEqual(transactions);
+    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
+  });
+
+  it('mismatches a covered leg that also carries a foreign row', () => {
+    const transactions = [leg({})];
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      refundRows: [
+        row({
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+        row({
+          currency: 'USD',
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+      ],
+      transactions,
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedTransactions).toEqual(transactions);
+    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
+  });
 });

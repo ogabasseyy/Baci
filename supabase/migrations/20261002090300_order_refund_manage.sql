@@ -280,7 +280,8 @@ BEGIN
     v_order.merchant_id,v_order.currency,v_order.amount_paid,
     v_refunded,v_remaining,v_pending,v_reversed_internal,
     v_step_status,v_step_error,v_step_attempts,v_step_retry_requests,
-    v_can_manage,v_manual_partial,v_has_movement_evidence);
+    v_can_manage,v_manual_partial,v_has_movement_evidence,
+    v_order.cancelled_at);
 END; $$;
 REVOKE ALL ON FUNCTION private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)
   FROM PUBLIC,anon,authenticated;

@@ -93,6 +93,7 @@ DECLARE
   v_leg uuid;
   v_named_nonempty boolean;
   v_failed_only_nonempty boolean;
+  v_failed_only_ids text[];
 BEGIN
   FOR r IN
     SELECT rr.id, rr.issue_type, rr.txn_id, rr.candidates, rr.metadata
@@ -128,6 +129,31 @@ BEGIN
     IF NOT (v_top_marker OR v_nested_marker OR v_carries) THEN
       CONTINUE;
     END IF;
+    -- Legs every tracked nested entry explicitly failed: the
+    -- provider definitively moved no money there, so (like the
+    -- TypeScript reader) they leave the named set below instead of
+    -- blocking recovery on evidence that can never pay out.
+    SELECT COALESCE(array_agg(failed.raw), '{}'::text[])
+      INTO v_failed_only_ids
+      FROM (
+        SELECT legs.raw AS raw
+        FROM jsonb_each(v_evidence) e
+        CROSS JOIN LATERAL (
+          SELECT e.value ->> 'payment_transaction_id' AS raw
+          UNION ALL
+          SELECT jsonb_array_elements_text(
+            CASE WHEN jsonb_typeof(
+              e.value -> 'candidate_payment_transaction_ids') = 'array'
+            THEN e.value -> 'candidate_payment_transaction_ids'
+            ELSE '[]'::jsonb END)) legs
+        WHERE legs.raw IS NOT NULL
+          AND (v_carries
+            OR coalesce(
+              (e.value -> 'audit_record_failed') = 'true'::jsonb, false))
+        GROUP BY legs.raw
+        HAVING bool_and(lower(btrim(coalesce(
+          e.value ->> 'provider_refund_status', ''))) = 'failed')
+      ) failed;
     v_txn := r.txn_id;
     BEGIN
       v_leg := (r.metadata ->> 'payment_transaction_id')::uuid;
@@ -135,8 +161,12 @@ BEGIN
       v_leg := NULL;
     END;
     SELECT coalesce(bool_or(
-        c.value ->> 'paymentTransactionId' IS NOT NULL
-        OR c.value ->> 'payment_transaction_id' IS NOT NULL), false)
+        (c.value ->> 'paymentTransactionId' IS NOT NULL
+          AND NOT (c.value ->> 'paymentTransactionId'
+            = ANY (v_failed_only_ids)))
+        OR (c.value ->> 'payment_transaction_id' IS NOT NULL
+          AND NOT (c.value ->> 'payment_transaction_id'
+            = ANY (v_failed_only_ids)))), false)
       OR EXISTS (
         SELECT 1
         FROM jsonb_each(v_evidence) e
@@ -159,26 +189,12 @@ BEGIN
       WHEN jsonb_typeof(coalesce(r.candidates, '[]'::jsonb)) = 'array'
       THEN coalesce(r.candidates, '[]'::jsonb)
       ELSE '[]'::jsonb END) c;
-    SELECT EXISTS (
-      SELECT 1
-      FROM jsonb_each(v_evidence) e
-      CROSS JOIN LATERAL (
-        SELECT e.value ->> 'payment_transaction_id' AS raw
-        UNION ALL
-        SELECT jsonb_array_elements_text(
-          CASE WHEN jsonb_typeof(
-            e.value -> 'candidate_payment_transaction_ids') = 'array'
-          THEN e.value -> 'candidate_payment_transaction_ids'
-          ELSE '[]'::jsonb END)) legs
-      WHERE legs.raw IS NOT NULL
-        AND (v_carries
-          OR coalesce(
-            (e.value -> 'audit_record_failed') = 'true'::jsonb, false))
-      GROUP BY legs.raw
-      HAVING bool_and(lower(btrim(coalesce(
-        e.value ->> 'provider_refund_status', ''))) = 'failed'))
-    INTO v_failed_only_nonempty;
-    IF v_txn IS NOT NULL OR v_leg IS NOT NULL OR v_named_nonempty
+    v_failed_only_nonempty := v_failed_only_ids <> '{}'::text[];
+    IF (v_txn IS NOT NULL
+        AND NOT (v_txn::text = ANY (v_failed_only_ids)))
+      OR (v_leg IS NOT NULL
+        AND NOT (v_leg::text = ANY (v_failed_only_ids)))
+      OR v_named_nonempty
       OR NOT v_failed_only_nonempty THEN
       RETURN true;
     END IF;

@@ -21,6 +21,11 @@ import { quarantineWithheldCancellationRefundLegs } from '@/lib/orders/quarantin
  * Sole-leg attribution mirrors the executor exactly so attributable
  * rows never quarantine here; actionable-leg mismatches stay with the
  * main flow so clean siblings initiate before the step quarantines.
+ * Returns the refunded legs still awaiting merchant manual completion
+ * so the executor merges them into the settle deferral: the main
+ * flow's matcher scopes to actionable legs and never sees them, so
+ * without the merge it would complete past money still outstanding
+ * that the SQL completion gate refuses to finalize.
  */
 export async function quarantineRefundedLegTerminalAnomaly({
   legs,
@@ -34,7 +39,7 @@ export async function quarantineRefundedLegTerminalAnomaly({
   /** The executor's sole completed leg, or null when none exists. */
   soleCompletedLegId: string | null;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
-}): Promise<void> {
+}): Promise<{ refundedManualPendingLegIds: Set<string> }> {
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
     .select(
@@ -69,6 +74,7 @@ export async function quarantineRefundedLegTerminalAnomaly({
     });
   }
   const {
+    manualPendingLegIds,
     mismatchedTransactions,
     refundedPaymentIds,
     unattributedUnlinkedCount,
@@ -130,4 +136,15 @@ export async function quarantineRefundedLegTerminalAnomaly({
     order,
     supabase,
   });
+  // Refunded legs awaiting manual completion defer with the main flow
+  // (merged by the caller after clean siblings initiate), never here:
+  // throwing now would strand the siblings behind the merchant.
+  const refundedLegIds = new Set(
+    legs.filter((leg) => leg.status === 'refunded').map((leg) => leg.id)
+  );
+  return {
+    refundedManualPendingLegIds: new Set(
+      [...manualPendingLegIds].filter((legId) => refundedLegIds.has(legId))
+    ),
+  };
 }

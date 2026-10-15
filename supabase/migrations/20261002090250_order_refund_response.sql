@@ -7,6 +7,7 @@
 -- bounded audit-event tail, the derived status label, and the
 -- capability flags. Pure read over the computed money/step state.
 DROP FUNCTION IF EXISTS private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean);
+DROP FUNCTION IF EXISTS private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean,boolean);
 CREATE OR REPLACE FUNCTION private.refund_status_response(
   p_order_id uuid,
   p_merchant_id uuid,
@@ -22,7 +23,8 @@ CREATE OR REPLACE FUNCTION private.refund_status_response(
   p_step_retry_requests integer,
   p_can_manage boolean,
   p_manual_partial boolean,
-  p_has_movement_evidence boolean
+  p_has_movement_evidence boolean,
+  p_cancelled_at timestamptz
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_history jsonb;
@@ -116,16 +118,17 @@ BEGIN
     -- beside unresolved provider money) is the only safe recovery.
     'canRetry',p_step_status='failed' AND p_step_error IS NOT NULL
       AND (p_remaining>0 OR p_refunded>0) AND p_pending=0
-      AND NOT p_manual_partial AND NOT p_has_movement_evidence,
+      AND NOT p_manual_partial AND NOT p_has_movement_evidence
+      AND p_cancelled_at IS NOT NULL,
     'canRecordManual',p_remaining>0 AND p_pending=0
-      AND NOT p_has_movement_evidence,
+      AND NOT p_has_movement_evidence AND p_cancelled_at IS NOT NULL,
     'canManageRefunds',p_can_manage
       AND COALESCE(p_step_status,'') NOT IN ('claimed','delivery_uncertain'));
 END; $$;
-REVOKE ALL ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean,boolean)
+REVOKE ALL ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean,boolean,timestamptz)
   FROM PUBLIC,anon,authenticated;
 -- Mirrors capped_refund_coverage_v1: service_role fires the manager,
 -- and authenticated EXECUTE keeps any hypothetical direct call on the
 -- clean schema-USAGE denial instead of the crashing function-ACL path.
-GRANT EXECUTE ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean,boolean)
+GRANT EXECUTE ON FUNCTION private.refund_status_response(uuid,uuid,text,numeric,numeric,numeric,numeric,numeric,text,text,integer,integer,boolean,boolean,boolean,timestamptz)
   TO service_role, authenticated;

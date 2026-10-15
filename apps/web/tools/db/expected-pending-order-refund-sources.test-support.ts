@@ -7,7 +7,7 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002090100_order_refund_coverage.sql',
-    sha256: '10aa5dfe3e449e4f9e7f0ae7703c6113c8edd36e674f3c497628a24d2b2a2fd1',
+    sha256: 'd20ddab5009028fc2afd75ea777baae391e36766432437ea08e73f069c674939',
   },
   {
     repositoryPath:
@@ -17,17 +17,17 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002090250_order_refund_response.sql',
-    sha256: 'e4f28ad10fe49abac872e50686bf3232f81657fec1035dc84dc922719b1b4092',
+    sha256: '0a11c9009a26906c71ddc8243a058d87845334bca2d38e0c7e63663f34aeffbf',
   },
   {
     repositoryPath:
       'supabase/migrations/20261002090275_order_refund_pending.sql',
-    sha256: '11e1e959c7ea5449b7746010d296f0b1db279e5d9de80676c70efe798450636e',
+    sha256: '789ad1a6cd3a16c37198ac0a83715350b227a4edc3f09909c338c3e179802eae',
   },
   {
     repositoryPath:
       'supabase/migrations/20261002090300_order_refund_manage.sql',
-    sha256: '2511aa6a44be3557e89f44eb820ed1d1672c163a7fc1d0c1f1707de1ce0e7ee3',
+    sha256: '3b033f4f5c4315397e925ef2c706e212f5b930255e86ff74c1997d53f8cc877a',
   },
   {
     repositoryPath:
@@ -42,7 +42,7 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010170000_cancellation_refund_legs_covered.sql',
-    sha256: '4a441883911207d24bd67a7fca71e52ef44fb1a4193165d40d444125da8f8707',
+    sha256: 'c67f31d48de45e8fb4dccc626f212a6fee7f685d0bb5137270bd400606b788af',
   },
   {
     repositoryPath:
@@ -53,5 +53,10 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
     repositoryPath:
       'supabase/migrations/20261010190000_guard_refund_finalizer_internal_coverage.sql',
     sha256: 'f749edff620239ff94ed0daeeb6aaa09cc7a175090b0c0e215b0ff3a1206ae19',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015120000_sync_internal_only_refund_status.sql',
+    sha256: '97192130ae75ba7fe84522f0a72543cd70d18bcf854ee9777bde34f4ca6e6c9d',
   },
 ];

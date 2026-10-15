@@ -38,6 +38,7 @@ runs, with evidence quoted in review — and the push leg attested the merge.
 Every later PR is guarded base-owned from merge on.
 """
 import ast
+import fnmatch
 import hashlib
 import re
 import sys
@@ -57,8 +58,8 @@ BASE_PINS = {
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
-    ".github/scripts/capability_gate_contract_ci_checks.py": "e4c0ede0df9081f8bf331f9e834b4793099ea02edd9fb7706cfeb68e2aeb2f00",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "c9604a8bc4c8864ab20727c5923e6f64c998eb1fc0e3ec2b326bfec574f3f6d6",
+    ".github/scripts/capability_gate_contract_ci_checks.py": "b5d95d82603b0e17fbf391f44065750984a23046ba9c2d053381412928010d15",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "1fb9d018da2cd75a59cfd75d1a81098dc0e114067db73a036ccf3e8a45e9fc0c",
     ".github/workflows/capability-register-freshness.yml": "55389404e8391ffeecffe9a31654c07064890374c8faa3a7d4917caea27e7204",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
@@ -68,7 +69,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
     "vps-workers/baci-editorial-context/test_capability_gate.py": "88815781ee49e265a1e94ee7a693340b77a53fef60a9cb08b2c3e9098c268fb8",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "2ad007d76e3d26b0c4f882141a29464836989e75f5b209a5f3516a925aa8451d",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "76fe9031ca2220e2a77d26b33754399bfbaba1db0c0f61d2a8239397f716b0df",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "20b635c6a0a4395c1c29f8c8de3bd62054ebdda11951f6a8790a5e39a948a99a",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "1381bd0b024f0e1780915ab1aab614093af2d5a61b718224310e542b9d77411b",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
@@ -78,7 +79,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/test_platform_capability_prompt.py": "0c3b79f20946ecb17bd0684ed54d3cb97b0c2d7dcf3b0cebced76d9c25caccad",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/prompt_builder.py": "59997648a8c05f9fdbba5d4a9849e96a066ae4d316a2a9d465e0e1ef58aed3ae",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "b810ae4e9a58419776e14a4f90c7611f15977062d6228d7b078544bbad5f6223",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "5fbfeb73ceb1b6ce12ddbdcc3789155bc713642e7b9fff8df612d08eb41b4064",
     "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }
@@ -146,8 +147,15 @@ def pin_failures(repo_root, base_pins, declared):
             # content is visible in the diff, so a declaration matching the
             # file's actual digest passes with a notice. Anything else stays
             # a failure — an unmatched hash would let a benign file declare
-            # a future payload's digest, then land it silently later.
-            if rel.startswith(SUITE_DIR + "/") and rel.endswith(".py") and Path(repo_root, rel).is_file():
+            # a future payload's digest, then land it silently later. The
+            # allowance mirrors the gate's discovery pattern exactly: a
+            # non-test module (sitecustomize, stdlib shadows, helpers) never
+            # qualifies, since it is not what the suite executes.
+            if (
+                rel.startswith(SUITE_DIR + "/")
+                and fnmatch.fnmatchcase(Path(rel).name, "test_*capabilit*.py")
+                and Path(repo_root, rel).is_file()
+            ):
                 if declared[rel] == sha256_of(Path(repo_root, rel)):
                     notices.append(f"declared new suite file (needs review): {rel}")
                 else:

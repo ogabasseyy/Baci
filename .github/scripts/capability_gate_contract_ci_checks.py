@@ -84,6 +84,14 @@ def _norm(line):
     return re.sub(r"\s+:", ":", line.strip())
 
 
+def _has_escaped_key(line):
+    """Double-quoted YAML keys decode backslash escapes (`"\\x69f"` is `if`),
+    which raw-text scans cannot see: quoted keys must be escape-free. Only
+    key-position quotes count (workflow/job/step levels), never script
+    content; single quotes need no check (no escape processing)."""
+    return re.match(r'^ {2,8}"[^"\n]*\\', line) is not None
+
+
 def _strip_comment(value):
     """Cut a trailing YAML comment: '#' starts one outside quotes when it
     begins the value or follows whitespace (a quoted '#' stays literal)."""
@@ -199,15 +207,30 @@ def ci_failures(ci_text):
     # way a run: step does. Startup environments are rejected too: job- or
     # step-level env can preload PR code (PYTHONPATH/sitecustomize, BASH_ENV)
     # before the gate's python3 starts.
+    checkout_with = False
     for line in lines[job_start:start]:
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
-        if re.match(r"^-\s+uses\s*:", stripped):
+        if _has_escaped_key(line):
+            return failures + ["capability gate job keys must use plain spelling (no escapes)"]
+        if re.match(r"^-\s+[\"']?uses[\"']?\s*:", stripped):
             if stripped != EXPECTED_PRECEDING_CHECKOUT:
                 return failures + ["only the pinned checkout may precede the capability gate"]
+            checkout_with = False
             continue
-        if re.match(r"^run\s*:", stripped):
+        if checkout_with:
+            if len(line) - len(line.lstrip()) > 6 and line.strip():
+                if re.search(r"[\"']?ref[\"']?\s*:", stripped):
+                    return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
+                continue
+            checkout_with = False
+        if re.match(r"^with\s*:", stripped):
+            checkout_with = True
+            if re.search(r"[\"']?ref[\"']?\s*:", stripped):
+                return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
+            continue
+        if re.match(r"^(-\s+)?[\"']?run[\"']?\s*:", stripped):
             return failures + ["no PR-controlled steps may precede the capability gate"]
         if re.match(r"^['\"]?env['\"]?\s*:", stripped):
             return failures + ["capability gate job must not set environment (startup injection)"]

@@ -148,6 +148,15 @@ export async function checkStock(
     };
   }
 
+  // Mirror the refined-search/PDP effective-stock fallback: a zero
+  // stock_quantity with a positive legacy stock column still sells.
+  const trackedQuantity = data?.stock_quantity ?? 0;
+  const legacyQuantity = data?.stock ?? 0;
+  const parentStock =
+    trackedQuantity === 0 && legacyQuantity > 0
+      ? legacyQuantity
+      : trackedQuantity;
+
   // Only an explicit false bypasses stock checks: legacy NULL rows are
   // managed inventory (platform policy shared with search and the PDPs).
   // Offer lines still resolve their own allocation: order creation
@@ -158,21 +167,35 @@ export async function checkStock(
     !options?.offerId &&
     !options?.variantId
   ) {
+    // Anchor policies override an otherwise unmanaged parent: rule out a
+    // strict serialized base before bypassing, or a depleted product
+    // sails through to an order-RPC rejection. A projection outage fails
+    // open (the RPC remains the transactional gate) to preserve the
+    // established unmanaged availability.
+    try {
+      const base = await resolveBaseStock(productId, parentStock);
+      if (base.strictUnits !== null) {
+        const aggregateFits =
+          options?.aggregateQuantity === undefined ||
+          base.strictUnits >= options.aggregateQuantity;
+        return {
+          available: base.stock >= requestedQuantity && aggregateFits,
+          currentStock: base.stock,
+          requestedQuantity,
+        };
+      }
+    } catch (error) {
+      log.warn(
+        'Base policy lookup failed for unmanaged product; failing open',
+        { error: error instanceof Error ? error.message : String(error) }
+      );
+    }
     return {
       available: true,
       currentStock: Number.MAX_SAFE_INTEGER,
       requestedQuantity,
     };
   }
-
-  // Mirror the refined-search/PDP effective-stock fallback: a zero
-  // stock_quantity with a positive legacy stock column still sells.
-  const trackedQuantity = data?.stock_quantity ?? 0;
-  const legacyQuantity = data?.stock ?? 0;
-  const parentStock =
-    trackedQuantity === 0 && legacyQuantity > 0
-      ? legacyQuantity
-      : trackedQuantity;
 
   // Offers exist only for non-variant products, so a variant identity
   // always wins when both are present (defensive: callers never send both).

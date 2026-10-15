@@ -206,6 +206,80 @@ describe('cart-stock helpers', () => {
     (supabase.from as jest.Mock).mockReturnValue({
       select: () => ({ eq: () => ({ single }) }),
     });
+    // Non-strict base policy: the unmanaged bypass still applies.
+    (supabase.rpc as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          product_id: 'product-1',
+          effective_policy: 'serialized_then_unlimited',
+          available_units: 0,
+        },
+      ],
+      error: null,
+    });
+
+    await expect(checkStock('product-1', 1)).resolves.toEqual({
+      available: true,
+      currentStock: Number.MAX_SAFE_INTEGER,
+      requestedQuantity: 1,
+    });
+  });
+
+  it('gates an unmanaged strict base on the serialized pool', async () => {
+    mockProductAndRpc(
+      { stock_quantity: 0, stock: 0, manage_stock: false },
+      {
+        get_storefront_product_base_inventory: [
+          {
+            product_id: 'product-1',
+            effective_policy: 'serialized_strict',
+            available_units: 1,
+          },
+        ],
+      }
+    );
+
+    await expect(
+      checkStock('product-1', 2, undefined, { aggregateQuantity: 2 })
+    ).resolves.toEqual({
+      available: false,
+      currentStock: 1,
+      requestedQuantity: 2,
+    });
+  });
+
+  it('keeps an unmanaged strict base purchasable while units remain', async () => {
+    mockProductAndRpc(
+      { stock_quantity: 0, stock: 0, manage_stock: false },
+      {
+        get_storefront_product_base_inventory: [
+          {
+            product_id: 'product-1',
+            effective_policy: 'serialized_strict',
+            available_units: 3,
+          },
+        ],
+      }
+    );
+
+    await expect(
+      checkStock('product-1', 2, undefined, { aggregateQuantity: 2 })
+    ).resolves.toEqual({
+      available: true,
+      currentStock: 3,
+      requestedQuantity: 2,
+    });
+  });
+
+  it('fails open for unmanaged products when the base projection errors', async () => {
+    mockProductAndRpc(
+      { stock_quantity: 0, stock: 0, manage_stock: false },
+      {
+        get_storefront_product_base_inventory: {
+          error: { message: 'projection down' },
+        },
+      }
+    );
 
     await expect(checkStock('product-1', 1)).resolves.toEqual({
       available: true,

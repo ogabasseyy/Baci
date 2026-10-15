@@ -211,6 +211,28 @@ it.each([
     quantityInCart: 0,
     expected: true,
   },
+  {
+    name: 'unmanaged strict base gates on the serialized pool when depleted',
+    offer: null,
+    product: {
+      manage_stock: false,
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 1,
+    },
+    quantityInCart: 1,
+    expected: false,
+  },
+  {
+    name: 'unmanaged strict base stays purchasable while units remain',
+    offer: null,
+    product: {
+      manage_stock: false,
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 2,
+    },
+    quantityInCart: 1,
+    expected: true,
+  },
 ])('$name', ({ offer, product, quantityInCart, expected }) => {
   mockFindMatchingConditionOffer.mockReturnValue(offer as never);
   const { result } = renderHook(() =>

@@ -74,7 +74,11 @@ export function useProductDetailPurchaseState(
       ? Boolean(resolvedVariantPurchaseSelection) && selectedVariantCanPurchase
       : routeData.product
         ? (!selectedConditionOffer &&
-            routeData.product.manage_stock === false) ||
+            routeData.product.manage_stock === false &&
+            // Anchor policies override an otherwise unmanaged parent: a
+            // strict base must gate on its serialized pool below instead
+            // of presenting an enabled purchase action while depleted.
+            routeData.product.base_effective_policy !== 'serialized_strict') ||
           (typeof selectedConditionOffer?.stock_quantity === 'number'
             ? // The offer allocation is per-offer but the strict pool
               // is product-wide: the selected line must fit its

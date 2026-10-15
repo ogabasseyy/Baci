@@ -196,17 +196,21 @@ def workflow_failures(workflow_text):
     # The checker baseline must live where it propagates to the executing
     # run step: top-level env or the gate job's env. A step-scoped entry
     # never reaches the sibling run step and silently voids the baseline.
-    top_env = next((i for i, line in enumerate(code) if re.match(r"^['\"]?env['\"]?:$", line)), None)
+    top_env = next((i for i, line in enumerate(code) if re.match(r"""^["']?env["']?:""", line)), None)
     live_pin = False
     if top_env is not None:
-        for line in code[top_env + 1 :]:
-            if len(line) - len(line.lstrip()) < 2:
-                break
-            if re.match(r"^\s*PINNED_CHECKER_SHA256:\s*[0-9a-f]{64}\s*$", line):
-                live_pin = True
-            else:
-                failures.append("contract workflow top-level env must carry only the checker pin")
-                break
+        flow = re.match(r"""^["']?env["']?:\s*(.*)$""", code[top_env]).group(1)
+        if _strip_comment(flow).strip():
+            failures.append("contract workflow top-level env must use block mapping (no inline filters)")
+        else:
+            for line in code[top_env + 1 :]:
+                if len(line) - len(line.lstrip()) < 2:
+                    break
+                if re.match(r"^\s*PINNED_CHECKER_SHA256:\s*[0-9a-f]{64}\s*$", line):
+                    live_pin = True
+                else:
+                    failures.append("contract workflow top-level env must carry only the checker pin")
+                    break
     for line in block:
         if re.match(r"^      PINNED_CHECKER_SHA256:\s*[0-9a-f]{64}\s*$", line):
             live_pin = True
@@ -218,6 +222,12 @@ def workflow_failures(workflow_text):
             break
     if any(re.match(r"^\s*[\"']?permissions[\"']?\s*:", line) for line in block):
         failures.append("contract workflow job must not override permissions")
+    # A container image swaps the python3/tar/git that execute the
+    # base-owned sequence for PR-selected binaries.
+    for line in block:
+        if re.match(r"^    [\"']?container[\"']?\s*:", line):
+            failures.append("contract workflow job must not run in a PR-selected container")
+            break
     steps = [i for i, line in enumerate(block) if re.match(r"^      -(\s|$)", line)]
     if len(steps) != 2:
         return failures + [f"contract workflow job must keep exactly its two steps (found {len(steps)})"]

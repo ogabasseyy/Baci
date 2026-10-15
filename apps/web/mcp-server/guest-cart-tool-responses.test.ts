@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import {
   GuestCartExpiredError,
   GuestCartFullError,
+  GuestCartMigratedError,
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 import {
@@ -12,6 +13,37 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+it('types a migrated cart with its canonical successor', () => {
+  expect(
+    mapGuestCartToolError(new GuestCartMigratedError('cart-canonical-1'))
+  ).toEqual({
+    content: [
+      {
+        type: 'text',
+        text: 'This guest cart moved to the shared cart (cart-canonical-1). Refresh the cart to continue with the shared cart.',
+      },
+    ],
+    structuredContent: {
+      success: false,
+      cart_migrated: true,
+      migrated_cart_id: 'cart-canonical-1',
+    },
+  });
+  expect(mapGuestCartToolError(new GuestCartMigratedError())).toEqual({
+    content: [
+      {
+        type: 'text',
+        text: 'This guest cart moved to the shared cart. Refresh the cart to continue with the shared cart.',
+      },
+    ],
+    structuredContent: {
+      success: false,
+      cart_migrated: true,
+      migrated_cart_id: null,
+    },
+  });
 });
 
 it('types an expired token as recoverable without a tool error', () => {

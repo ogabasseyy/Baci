@@ -351,3 +351,33 @@ RESET ROLE;
 UPDATE public.merchants
 SET premium_features = '["shared_cart","shared_cart_accounts","shared_cart_realtime"]'::jsonb
 WHERE id = '11111111-1111-4111-8111-111111111111';
+
+-- Prepare replay must not revive an expired session, and preparing
+-- near cart expiry extends the preparing grant to the session end.
+UPDATE public.commerce_cart_grants SET expires_at = now() + interval '1 minute'
+WHERE id = '99999999-9999-4999-8999-999999999966';
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a10","cart_scope":"session","cart_id":"cccccccc-a000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999966"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_prepare_checkout('cccccccc-a000-4000-8000-000000000000', 1, 'review-replay-expire');
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'prepare must succeed, got %', result; END IF;
+  INSERT INTO test_ctx VALUES ('replay_session', result -> 'snapshot' ->> 'checkoutSessionId');
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT expires_at FROM public.commerce_cart_grants
+      WHERE id = '99999999-9999-4999-8999-999999999966') < now() + interval '20 minutes' THEN
+    RAISE EXCEPTION 'preparing grant must extend to cover the session lifetime';
+  END IF;
+  UPDATE public.commerce_cart_checkout_sessions SET expires_at = now() - interval '1 second'
+  WHERE id = (SELECT value::uuid FROM test_ctx WHERE key = 'replay_session');
+END $$;
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a10","cart_scope":"session","cart_id":"cccccccc-a000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999966"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_prepare_checkout('cccccccc-a000-4000-8000-000000000000', 1, 'review-replay-expire');
+  IF (result ->> 'ok')::boolean OR (result ->> 'code') <> 'expired' THEN
+    RAISE EXCEPTION 'expired session replay must report expired, got %', result;
+  END IF;
+END $$;
+RESET ROLE;

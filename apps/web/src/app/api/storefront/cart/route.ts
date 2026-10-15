@@ -105,6 +105,17 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('forbidden');
     }
 
+    // Authenticate before reading the creation body, like every other
+    // protected cart mutation route: unauthenticated callers must not
+    // drive body parsing or schema validation first.
+    const context = await resolveCartRequestContext(
+      request,
+      contextDeps('bootstrap', 'forbidden')
+    );
+    if (!context.ok) {
+      return cartErrorResponse(context.error);
+    }
+
     const rawBody = await readCartJsonBody(request);
     if (!rawBody.ok) {
       return cartErrorResponse('invalid_request');
@@ -112,14 +123,6 @@ export async function POST(request: NextRequest) {
     const parsedBody = createCartRequestSchema.safeParse(rawBody.body);
     if (!parsedBody.success) {
       return cartErrorResponse('invalid_request');
-    }
-
-    const context = await resolveCartRequestContext(
-      request,
-      contextDeps('bootstrap', 'forbidden')
-    );
-    if (!context.ok) {
-      return cartErrorResponse(context.error);
     }
 
     const quota = await checkCartQuota({

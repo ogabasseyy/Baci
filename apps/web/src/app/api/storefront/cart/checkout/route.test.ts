@@ -210,6 +210,10 @@ describe('POST /api/storefront/cart/checkout', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
+    // Preparation renews the session proof (body + cookie) so the
+    // checkout stays submittable for its whole session window.
+    expect(payload.proof).toMatch(/^cp1\./);
+    expect(response.headers.get('set-cookie')).toContain('Max-Age=');
     expect(payload.replayed).toBe(false);
     expect(payload.sessionReused).toBe(false);
     expect(payload.snapshot.checkoutSessionId).toBe(SESSION_ID);

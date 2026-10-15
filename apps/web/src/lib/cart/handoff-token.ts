@@ -17,7 +17,7 @@ export class HandoffConfigError extends Error {
 
 export type HandoffDestinationType = 'web' | 'native';
 
-export type HandoffMobileApp = 'storefront' | 'admin';
+export type HandoffMobileApp = 'storefront';
 
 export interface HandoffDestination {
   type: HandoffDestinationType;
@@ -145,7 +145,7 @@ export function parseHandoffToken(
   const destination = parsed.destination;
   if (!isRecord(destination)) return null;
   if (destination.type === 'native') {
-    if (destination.app !== 'storefront' && destination.app !== 'admin') {
+    if (destination.app !== 'storefront') {
       return null;
     }
   } else if (destination.type !== 'web') {

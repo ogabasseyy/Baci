@@ -1,6 +1,7 @@
 import {
   GuestCartExpiredError,
   GuestCartFullError,
+  GuestCartMigratedError,
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 
@@ -28,6 +29,26 @@ export class ProductUnavailable extends Error {
  * Split from the tool registration to hold the 300-line file budget.
  */
 export function mapGuestCartToolError(error: unknown) {
+  // A migrated legacy cart has a canonical shared-cart successor: the
+  // typed outcome carries it so the client refreshes into the shared
+  // cart instead of starting a second guest cart.
+  if (error instanceof GuestCartMigratedError) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: error.cartId
+            ? `This guest cart moved to the shared cart (${error.cartId}). Refresh the cart to continue with the shared cart.`
+            : 'This guest cart moved to the shared cart. Refresh the cart to continue with the shared cart.',
+        },
+      ],
+      structuredContent: {
+        success: false,
+        cart_migrated: true,
+        migrated_cart_id: error.cartId,
+      },
+    };
+  }
   // An expired, evicted, or unknown token is recoverable: the typed
   // flag tells the widget to retry once without the stale token.
   if (error instanceof GuestCartExpiredError) {

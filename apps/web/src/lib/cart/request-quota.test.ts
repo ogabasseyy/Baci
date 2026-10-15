@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   __resetCartQuotaStoreForTesting,
   checkCartQuota,
+  incrementMemoryCounter,
+  MEMORY_COUNTER_MAX_ENTRIES,
 } from './request-context';
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
@@ -122,5 +124,21 @@ describe('checkCartQuota degraded store', () => {
         subject: 'principal-degraded',
       })
     ).resolves.toMatchObject({ allowed: true });
+  });
+});
+
+describe('incrementMemoryCounter store bound', () => {
+  it('evicts entries once the degraded store exceeds its bound', () => {
+    __resetCartQuotaStoreForTesting();
+    // Fill past the bound with distinct per-principal subjects.
+    for (let index = 0; index < MEMORY_COUNTER_MAX_ENTRIES + 50; index++) {
+      incrementMemoryCounter(`subject-${index}`, 60_000);
+    }
+    // The earliest subjects were evicted: counting one again restarts
+    // its window instead of continuing it.
+    expect(incrementMemoryCounter('subject-0', 60_000).count).toBe(1);
+    // A subject still inside the bound keeps its count.
+    const recent = `subject-${MEMORY_COUNTER_MAX_ENTRIES + 49}`;
+    expect(incrementMemoryCounter(recent, 60_000).count).toBe(2);
   });
 });

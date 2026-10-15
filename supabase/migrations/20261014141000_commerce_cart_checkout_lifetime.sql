@@ -82,6 +82,15 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'code', 'idempotency_conflict', 'replayed', false,
         'snapshot', null, 'currentVersion', v_new_version);
     END IF;
+    -- A replay must not revive a checkout whose session has since
+    -- expired or closed: report expiry so the client refreshes into a
+    -- new preparation instead of submitting against a stale session.
+    SELECT * INTO v_session FROM public.commerce_cart_checkout_sessions
+    WHERE id = (v_existing.result -> 'snapshot' ->> 'checkoutSessionId')::uuid;
+    IF NOT FOUND OR v_session.status <> 'active' OR v_session.expires_at <= now() THEN
+      RETURN jsonb_build_object('ok', false, 'code', 'expired', 'replayed', false,
+        'snapshot', null, 'currentVersion', v_new_version);
+    END IF;
     RETURN pg_catalog.jsonb_set(v_existing.result, '{replayed}', 'true', true);
   END IF;
 
@@ -132,6 +141,13 @@ BEGIN
   SET checkout_session_id = v_session.id, updated_at = now(),
     expires_at = greatest(expires_at, v_session.expires_at)
   WHERE id = p_cart_id;
+
+  -- The preparing grant must cover the same lifetime: a checkout
+  -- prepared near cart expiry would otherwise lose its grant (and any
+  -- proof capped at it) before the session ends.
+  UPDATE public.commerce_cart_grants
+  SET expires_at = greatest(expires_at, v_session.expires_at)
+  WHERE id = v_grant AND expires_at > now() AND revoked_at IS NULL;
 
   SELECT public.commerce_cart_build_checkout_snapshot(v_merchant, p_cart_id) INTO v_snapshot;
   v_result := jsonb_build_object('ok', true, 'code', null, 'replayed', false,

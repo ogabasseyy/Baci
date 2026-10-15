@@ -123,7 +123,9 @@ export const cartBootstrapRequestSchema = z.strictObject({
 });
 
 const handoffDestinationSchema = z.strictObject({
-  app: z.enum(['storefront', 'admin']).optional(),
+  // Only the storefront app has a native handoff consumer; do not mint
+  // destinations nothing can redeem.
+  app: z.enum(['storefront']).optional(),
   type: z.enum(['web', 'native']),
 });
 

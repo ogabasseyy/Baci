@@ -16,7 +16,6 @@ import {
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
-  subscribeCartSessionGeneration,
 } from './cart-storage';
 import type {
   AddToCartOptions,
@@ -27,11 +26,15 @@ import type {
 import { findMergingCartLineIndex } from './find-merging-cart-line';
 import { getMerchantCartState } from './merchant-cart-storage';
 import {
+  delegatedLineTarget,
+  planGroupDealVoid,
+} from './storefront-cart-delegation';
+import {
   applyValidationResults,
   createCartHash,
   validateStorefrontCart,
 } from './storefront-cart-validation';
-import { useSharedCart } from './use-shared-cart';
+import { useSharedCartDelegation } from './use-shared-cart-delegation';
 
 interface StorefrontCartProviderProps {
   children: ReactNode;
@@ -163,31 +166,12 @@ export function StorefrontCartProvider({
   const [showUpsell, setShowUpsell] = useState(false);
   const upsellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidatedCartHashRef = useRef('');
-  // Fences the shared-cart session: bumped on every merchant/slug change so
-  // late responses from the previous merchant never touch the new cart.
-  const [sessionGeneration, setSessionGeneration] = useState(1);
-  useEffect(
-    () =>
-      subscribeCartSessionGeneration(() => {
-        setSessionGeneration((generation) => generation + 1);
-      }),
-    []
-  );
-
-  // Delegation is per-merchant: enrollment binds merchantId to the slug the
-  // frame served, so switching away falls back to that slug's legacy cart
-  // instead of showing another merchant's server cart.
-  const delegated =
-    sharedCartEnabled &&
-    merchantId !== null &&
-    initialMerchantSlug !== null &&
-    merchantSlug === initialMerchantSlug;
-  const shared = useSharedCart({
-    enabled: delegated,
-    realtimeEnabled: delegated && sharedCartRealtimeEnabled,
-    merchantId: merchantId ?? '',
+  const { bumpSessionGeneration, delegated, shared } = useSharedCartDelegation({
+    sharedCartEnabled,
+    sharedCartRealtimeEnabled,
+    merchantId,
     merchantSlug,
-    sessionGeneration,
+    initialMerchantSlug,
   });
 
   // Re-sync the slug + cart when the merchant slug prop changes (after the
@@ -218,7 +202,7 @@ export function StorefrontCartProvider({
     setMerchantSlugState(slugToUse);
     // A new served merchant always fences the previous shared session, even
     // when both sides delegate.
-    setSessionGeneration((generation) => generation + 1);
+    bumpSessionGeneration();
     if (nextDelegated) {
       // The shared hook re-adopts under the new generation; the legacy cart
       // state stays parked and the group deal never crosses merchants.
@@ -469,50 +453,28 @@ export function StorefrontCartProvider({
     };
   }, []);
 
-  // Group-deal voiding for delegated edits: mirrors the legacy reset (an
-  // edit breaks the agreed group total) as server reprices. Lines the edit
-  // itself targets are excluded: clearing one would retire its server line
-  // ID and fail the edit with a stale-target error. Quantity overrides cover
-  // edits queued ahead of their void, whose re-added lines must carry the
-  // new quantity instead of the pre-edit display quantity.
+  // Group-deal voiding for delegated edits (see planGroupDealVoid):
+  // reprices every negotiated server line except the edit's own target.
   const voidDelegatedGroupDeal = (
     exceptCartItemId?: string,
     quantityOverrides?: ReadonlyMap<string, number>
   ) => {
     if (!cartWideNegotiationActiveRef.current) return;
-    for (const line of shared.cart) {
-      if (
-        line.negotiatedPrice === undefined &&
-        line.negotiationStatus === undefined
-      ) {
-        continue;
-      }
-      if (exceptCartItemId === line.cartItemId) continue;
-      const quantity = quantityOverrides?.get(line.cartItemId);
-      shared.repriceLine(quantity === undefined ? line : { ...line, quantity });
+    for (const line of planGroupDealVoid(
+      shared.cart,
+      exceptCartItemId,
+      quantityOverrides
+    )) {
+      shared.repriceLine(line);
     }
     setCartWideNegotiationActive(false);
   };
 
-  // Replicates the shared hook's first-match targeting so the void-exclusion
-  // covers exactly the line the delegated edit will touch.
   const firstDelegatedTarget = (
     cartItemIdOrProductId: string,
     variantId?: string
-  ): SharedCartDisplayItem | null => {
-    const display = shared.cart;
-    const exact = display.find(
-      (line) => line.cartItemId === cartItemIdOrProductId
-    );
-    if (exact) return exact;
-    return (
-      display.find((line) => {
-        if (line.id !== cartItemIdOrProductId) return false;
-        if (variantId !== undefined) return line.variantId === variantId;
-        return line.variantId === undefined;
-      }) ?? null
-    );
-  };
+  ): SharedCartDisplayItem | null =>
+    delegatedLineTarget(shared.cart, cartItemIdOrProductId, variantId);
 
   const noteAddedProduct = (added: Product) => {
     if (enableSmartCartPro) {
@@ -786,7 +748,7 @@ export function StorefrontCartProvider({
     saveMerchantSlugToStorage(slug);
     // Every slug change fences the previous shared session; the hook
     // re-adopts under the new generation when the slug stays enrolled.
-    setSessionGeneration((generation) => generation + 1);
+    bumpSessionGeneration();
     const nextDelegated =
       sharedCartEnabled &&
       merchantId !== null &&

@@ -7,13 +7,25 @@ import {
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
-import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
+import {
+  cartErrorResponse,
+  cartJsonResponse,
+  setCartSessionCookie,
+} from '@/lib/cart/response';
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
-import { verifyCartSessionProof } from '@/lib/cart/session-proof';
+import {
+  CartSessionConfigError,
+  cartSessionCookieMaxAge,
+  issueCartSessionProof,
+  verifyCartSessionProof,
+} from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { sharedCartPrepareRequestSchema } from '@/schemas/cart';
+
+/** Mirrors the 30-minute checkout session lifetime minted in SQL. */
+const CHECKOUT_SESSION_WINDOW_MS = 30 * 60 * 1000;
 
 /**
  * POST /api/storefront/cart/checkout
@@ -88,11 +100,43 @@ export async function POST(request: NextRequest) {
           : { currentVersion: result.currentVersion }
       );
     }
-    return cartJsonResponse({
+    // Renew the session proof for the checkout session window (the SQL
+    // mints/extends the session, cart and preparing grant to a shared
+    // 30-minute horizon) so a checkout prepared near cart expiry stays
+    // submittable for its whole session lifetime.
+    const sessionWindowExpiresAt = new Date(
+      Date.now() + CHECKOUT_SESSION_WINDOW_MS
+    ).toISOString();
+    let proof: string;
+    try {
+      proof = issueCartSessionProof(
+        {
+          cartId: context.principal.cartId,
+          grantId: context.principal.grantId,
+          grantExpiresAt: sessionWindowExpiresAt,
+          merchantId: context.merchant.id,
+          principalId: context.principal.principalId,
+          scope: 'session',
+        },
+        { environment: getCartProofEnvironment() }
+      );
+    } catch (error) {
+      if (error instanceof CartSessionConfigError) {
+        return cartErrorResponse('temporarily_unavailable');
+      }
+      throw error;
+    }
+    const response = cartJsonResponse({
+      proof,
       replayed: result.replayed,
       sessionReused: result.sessionReused,
       snapshot: result.snapshot,
     });
+    const cookieMaxAge = cartSessionCookieMaxAge(sessionWindowExpiresAt);
+    if (cookieMaxAge > 0) {
+      setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
+    }
+    return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart/checkout:', {
       message: error instanceof Error ? error.message : 'unknown',

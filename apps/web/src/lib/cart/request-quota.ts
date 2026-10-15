@@ -67,11 +67,38 @@ export function parseCounter(value: unknown): number {
   return 0;
 }
 
+/**
+ * Hard bound for the degraded in-memory store. Quota subjects include
+ * per-principal ids (each anonymous bootstrap mints a fresh one), so
+ * without eviction the map grows for the life of the process.
+ */
+export const MEMORY_COUNTER_MAX_ENTRIES = 4096;
+
+function pruneMemoryCounters(now: number): void {
+  for (const [key, counter] of memoryCounters) {
+    if (now > counter.resetTime) memoryCounters.delete(key);
+  }
+  // Still oversized after expiry pruning: evict the soonest-expiring
+  // entries so live windows are the last to go.
+  if (memoryCounters.size > MEMORY_COUNTER_MAX_ENTRIES) {
+    const byExpiry = [...memoryCounters.entries()].sort(
+      (left, right) => left[1].resetTime - right[1].resetTime
+    );
+    for (const [key] of byExpiry) {
+      if (memoryCounters.size <= MEMORY_COUNTER_MAX_ENTRIES) break;
+      memoryCounters.delete(key);
+    }
+  }
+}
+
 export function incrementMemoryCounter(
   key: string,
   windowMs: number
 ): WindowCounter {
   const now = Date.now();
+  if (memoryCounters.size > MEMORY_COUNTER_MAX_ENTRIES) {
+    pruneMemoryCounters(now);
+  }
   const existing = memoryCounters.get(key);
   const next =
     existing && now <= existing.resetTime

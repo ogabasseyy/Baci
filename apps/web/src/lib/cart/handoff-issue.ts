@@ -47,8 +47,7 @@ export async function issueCartHandoff(
   }
   if (
     input.destination.type === 'native' &&
-    input.destination.app !== 'storefront' &&
-    input.destination.app !== 'admin'
+    input.destination.app !== 'storefront'
   ) {
     return { code: 'invalid_item', ok: false };
   }

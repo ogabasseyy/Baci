@@ -187,6 +187,9 @@ export async function resolveCartMerchant(
   const sharedHost =
     host === rootDomain ||
     host === `www.${rootDomain}` ||
+    // The native clients call the api.* origin with an explicit
+    // merchantSlug hint; 'api' is a platform host, never a merchant.
+    host === `api.${rootDomain}` ||
     host === 'localhost' ||
     host === '127.0.0.1';
   const hostIdentifier = sharedHost

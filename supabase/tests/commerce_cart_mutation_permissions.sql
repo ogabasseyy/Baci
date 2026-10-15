@@ -71,6 +71,28 @@ IF public.commerce_cart_mutate('22222222-2222-4222-8222-222222222222','eoc-allow
 IF has_function_privilege(current_user,'public.commerce_cart_mutate_authorized_impl(uuid,text,integer,jsonb)','EXECUTE') THEN RAISE EXCEPTION 'shopper bypasses permission wrapper at end of chain'; END IF;
 END $$;
 RESET ROLE;
+-- Mutation-driven sliding renewal is capped at the absolute 7-day
+-- lifetime: age the cart/grant to just inside the cap, change a line,
+-- and confirm expiry does not pass created_at + 7 days.
+INSERT INTO public.commerce_cart_lines (id, merchant_id, cart_id, product_id, quantity, last_unit_price_minor)
+VALUES ('dddddddd-dddd-4ddd-8ddd-dddddddddddd', '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222', '44444444-4444-4444-8444-444444444444', 1, 100)
+ON CONFLICT (id) DO NOTHING;
+UPDATE public.commerce_carts SET created_at = now() - interval '6 days 23 hours', expires_at = now() + interval '5 minutes' WHERE id = '22222222-2222-4222-8222-222222222222';
+UPDATE public.commerce_cart_grants SET created_at = now() - interval '6 days 23 hours', expires_at = now() + interval '5 minutes' WHERE id = '66666666-6666-4666-8666-666666666666';
+SET LOCAL ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_mutate('22222222-2222-4222-8222-222222222222','eoc-cap',1,'{"type":"remove","lineId":"dddddddd-dddd-4ddd-8ddd-dddddddddddd"}');
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'cap mutation must succeed, got %', result; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.commerce_carts WHERE id = '22222222-2222-4222-8222-222222222222' AND expires_at > created_at + interval '7 days') THEN
+    RAISE EXCEPTION 'mutation extended the cart past its absolute lifetime';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.commerce_cart_grants WHERE id = '66666666-6666-4666-8666-666666666666' AND expires_at > created_at + interval '7 days') THEN
+    RAISE EXCEPTION 'mutation extended the grant past its absolute lifetime';
+  END IF;
+END $$;
 INSERT INTO public.commerce_cart_device_retirements(merchant_id, device_principal_id) VALUES ('11111111-1111-4111-8111-111111111111','restricted-device');
 SET LOCAL ROLE commerce_cart_shopper;
 DO $$ BEGIN IF public.commerce_cart_mutate('22222222-2222-4222-8222-222222222222','eoc-retired',1,'{"type":"remove","lineId":"dddddddd-dddd-4ddd-8ddd-dddddddddddd"}')->>'code' IS DISTINCT FROM 'unauthorized' THEN RAISE EXCEPTION 'retired device accepted mutation at end of chain'; END IF; END $$;

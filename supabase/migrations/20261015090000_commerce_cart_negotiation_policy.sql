@@ -481,12 +481,21 @@ BEGIN
   END IF;
 
   IF v_changed THEN
+    -- Sliding renewal is capped at the absolute 7-day lifetime from
+    -- creation, matching checkout preparation: mutations must not keep
+    -- a guest cart (and its stored voucher credentials) alive forever.
     UPDATE public.commerce_carts
     SET version = version + 1, updated_at = now(),
-      expires_at = greatest(expires_at, now() + interval '7 days')
+      expires_at = least(
+        greatest(expires_at, now() + interval '7 days'),
+        created_at + interval '7 days'
+      )
     WHERE id = p_cart_id;
     UPDATE public.commerce_cart_grants
-    SET expires_at = greatest(expires_at, now() + interval '7 days')
+    SET expires_at = least(
+        greatest(expires_at, now() + interval '7 days'),
+        created_at + interval '7 days'
+      )
     WHERE id = v_grant AND merchant_id = v_merchant AND cart_id = p_cart_id
       AND principal_id = v_principal AND revoked_at IS NULL;
     SELECT public.commerce_cart_assemble_state(v_merchant, p_cart_id) INTO v_state;

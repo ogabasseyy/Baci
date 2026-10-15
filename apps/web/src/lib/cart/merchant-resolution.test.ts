@@ -298,3 +298,28 @@ it('resolves a dedicated storefront host without proxy headers', async () => {
     p_identifier: 'ogabassey.com',
   });
 });
+
+describe('resolveCartMerchant on the platform API host', () => {
+  it('uses the merchantSlug hint on api.<rootDomain> instead of resolving "api"', async () => {
+    const rpc = vi.fn(async () => ({ data: [merchantRow()], error: null }));
+    const request = new Request(
+      'https://api.usebaci.com/api/storefront/cart/bootstrap?merchantSlug=ogabassey'
+    );
+
+    const result = await resolveCartMerchant(request, {
+      loadMerchantFeatures: async () => ({
+        premium_features: ['shared_cart'],
+      }),
+      resolveAlias: async () => null,
+      rootDomain: 'usebaci.com',
+      rpcClient: { rpc },
+    });
+
+    expect(result.ok).toBe(true);
+    // The resolver must query the hint slug, never the literal 'api'.
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_storefront_auth_merchant',
+      expect.objectContaining({ p_identifier: 'ogabassey' })
+    );
+  });
+});

@@ -69,7 +69,7 @@ export default function ProductRequest({
         error instanceof ProductRequestSubmitError && error.status === 429
           ? 'Too many requests. Please try again later.'
           : error instanceof ProductRequestSubmitError && error.status === 409
-            ? 'This request conflicts with an earlier one. Please try again.'
+            ? 'This request conflicts with an earlier one. Please edit and resend.'
             : 'Couldn’t send. Check the product name and email or phone number, then try again.'
       );
     } finally {

@@ -67,6 +67,10 @@ import {
 } from './category-product-route-control';
 import { buildCategoryProductStructuredData } from './category-product-structured-data';
 import {
+  resolveCriticalRouteOffer,
+  seedCriticalRouteOfferCondition,
+} from './critical-route-offer';
+import {
   getInitialCriticalVariantSelection,
   getInitialCriticalVariantSelectionPrimaryImage,
   shouldRedirectVariantSelectionParams,
@@ -630,10 +634,18 @@ export default async function CategoryProductPage({
     ? resolveMerchantCurrencyConfig(merchant)
     : null;
   const commerceProduct = buildCriticalCommerceRouteProduct(product);
+  // Exact-offer deep links (?offer_id=) resolve against the hydrated
+  // active offers: the critical buy box prices from the matched offer
+  // and the server shell fallback converges on the same price so the
+  // two surfaces never diverge.
+  const criticalRouteOffer = resolveCriticalRouteOffer({
+    offers: commerceProduct.offers,
+    searchParams: resolvedSearchParams,
+  });
   const visibleSummary = criticalProduct
     ? buildOgabasseyProductVisibleSummary({
         brand: product.brand,
-        condition: product.condition,
+        condition: criticalRouteOffer.offerCondition ?? product.condition,
         has_variant_matrix: product.has_variant_matrix,
         manage_stock: commerceProduct.manage_stock,
         name: product.name,
@@ -641,7 +653,13 @@ export default async function CategoryProductPage({
       })
     : null;
   const criticalInitialVariantSelection = criticalProduct
-    ? getInitialCriticalVariantSelection(commerceProduct, resolvedSearchParams)
+    ? seedCriticalRouteOfferCondition(
+        getInitialCriticalVariantSelection(
+          commerceProduct,
+          resolvedSearchParams
+        ),
+        criticalRouteOffer
+      )
     : undefined;
   const selectedVariantProductImage = criticalProduct
     ? getInitialCriticalVariantSelectionPrimaryImage(
@@ -702,6 +720,14 @@ export default async function CategoryProductPage({
           initialVariantSelection: criticalInitialVariantSelection,
           product: {
             ...criticalProduct,
+            // Converge the shell's static price/condition fallback on
+            // the pinned route offer (mirrors the client override).
+            ...(criticalRouteOffer.offerPrice != null
+              ? { price: criticalRouteOffer.offerPrice }
+              : null),
+            ...(criticalRouteOffer.offerCondition
+              ? { condition: criticalRouteOffer.offerCondition }
+              : null),
             variantCount,
             visibleSummary,
           },
@@ -725,6 +751,8 @@ export default async function CategoryProductPage({
           initialVariantSelection={
             criticalCommerceContext.initialVariantSelection
           }
+          initialOfferId={criticalRouteOffer.offerId}
+          routeOfferMissing={criticalRouteOffer.missing}
           variantAxes={criticalCommerceContext.variantAxes}
           variantAxisOptions={criticalCommerceContext.variantAxisOptions}
           variantCount={criticalCommerceContext.variantCount}

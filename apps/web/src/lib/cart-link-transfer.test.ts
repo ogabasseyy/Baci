@@ -328,3 +328,36 @@ it('treats a null manage_stock handoff product as managed', async () => {
     expect.objectContaining({ title: 'Not enough stock' })
   );
 });
+
+it('retains addToCart-rejected lines for retry', async () => {
+  setupProductsQuery({
+    data: [
+      {
+        id: added,
+        name: 'Phone',
+        status: 'active',
+        images: [],
+        manage_stock: true,
+        stock_quantity: 10,
+      },
+    ],
+    error: null,
+  });
+  const options = setupOptions({
+    itemIds: added,
+    guestQuantities: new Map([[added, 1]]),
+  });
+  options.addToCart.mockReturnValue('rejected');
+
+  await expect(fetchAndAddCartItems(options)).resolves.toBe(true);
+  expect(options.addToCart).toHaveBeenCalledTimes(1);
+  expect(options.toast).toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Not added' })
+  );
+  expect(options.toast).not.toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'Added to cart' })
+  );
+  expect(JSON.parse(guestCartParam() ?? 'null')).toEqual([
+    { product_id: added, quantity: 1 },
+  ]);
+});

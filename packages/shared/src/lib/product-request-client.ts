@@ -14,10 +14,10 @@ export class ProductRequestSubmitError extends Error {
 //
 // Idempotency binds the payload: retries must resend the identical
 // query/contact with the same requestId. Reusing an id with different
-// content is rejected as invalid (400); equivalent repeats under any
-// id are absorbed by the 24h canonical dedup (200). A 409 only
-// escapes on a concurrent-insert race — retrying the same payload is
-// safe (it dedups to the winner's row).
+// canonical content is a terminal conflict (409) — the intake RPC
+// raises 23505 and the route maps it to 409; only a fresh requestId
+// escapes it. Equivalent repeats under any id are absorbed by the 24h
+// canonical dedup (200).
 export async function submitProductRequest(
   endpoint: string,
   input: ProductRequest,
@@ -48,7 +48,7 @@ export async function submitProductRequest(
   if (response.status === 409)
     throw new ProductRequestSubmitError(
       409,
-      'Something went wrong. Please try again.'
+      'This request conflicts with an earlier one. Please start a new request.'
     );
   throw new Error('Couldn’t send your request. Please try again.');
 }

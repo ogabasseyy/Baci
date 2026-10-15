@@ -12,7 +12,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002190000_storefront_product_requests.sql',
-    sha256: '1f1ab86b8f2fe58822990a29098c1dee1e895d3b81d5188b0cd55f97a60b59e3',
+    sha256: 'a5552247b9501c151060a4c9ff2dc809af448a7b5fd8f6b71a2f049a2b395c62',
   },
   {
     repositoryPath:
@@ -57,7 +57,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261004193000_private_purchasable_search_candidates.sql',
-    sha256: 'dd93f1a6c4903f9e45784188df823c1835e3e3bbbd098397f5e95dd82bb4efea',
+    sha256: '9411a597fcb496fc6fd05e491850a953d99f22348b6d8357679a4abbb72a0b5e',
   },
   {
     repositoryPath:

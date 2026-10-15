@@ -139,10 +139,45 @@ it('shows a retry signal instead of a validation error on idempotency conflict',
   fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
   await waitFor(() =>
     expect(screen.getByRole('alert').textContent).toContain(
-      'Something went wrong'
+      'conflicts with an earlier one'
     )
   );
   expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('mints a fresh id for the same query and contact on another store', async () => {
+  vi.mocked(submitProductRequest).mockResolvedValue();
+  const { rerender } = render(
+    <ProductRequest query="iPhone 20" merchantSlug="ogabassey" />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.change(screen.getByLabelText('Email or phone number'), {
+    target: { value: 'shopper@example.com' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+  await waitFor(() =>
+    expect(screen.getByRole('status').textContent).toContain('Request sent')
+  );
+  const firstId = vi.mocked(submitProductRequest).mock.calls[0]?.[1] as {
+    requestId: string;
+  };
+
+  // A new search resets the sent state; restore the identical draft on
+  // the other store so only the merchant differs.
+  rerender(<ProductRequest query="Galaxy S30" merchantSlug="other-store" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.change(screen.getByLabelText('Requested product'), {
+    target: { value: 'iPhone 20' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+  await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(2));
+  const secondId = vi.mocked(submitProductRequest).mock.calls[1]?.[1] as {
+    requestId: string;
+  };
+
+  // Without the slug in the key, the second store would reuse the id
+  // and 409 terminally against the first store's row.
+  expect(secondId.requestId).not.toBe(firstId.requestId);
 });
 
 it('fails closed without a CSPRNG instead of minting a weak id', async () => {

@@ -261,6 +261,16 @@ export async function fetchAndAddCartItems({
         if (outcome !== 'rejected') {
           addedCount++;
           firstAddedProductName ??= product.name;
+        } else {
+          // A guard/cap rejection must stay retryable: without the id,
+          // the handoff-URL rewrite below permanently consumes a line
+          // that never reached the cart.
+          rejectedIds.push(product.id);
+          toast({
+            title: 'Not added',
+            description: `${product.name} couldn't be added. Adjust your cart, then reload to retry this link.`,
+            variant: 'destructive',
+          });
         }
       }
     }

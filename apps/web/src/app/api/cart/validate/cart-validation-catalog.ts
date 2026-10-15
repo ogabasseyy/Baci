@@ -6,6 +6,8 @@ type CatalogQueryResult = {
 
 type BaseInventoryRow = {
   product_id: string;
+  /** Anchor-first policy: overrides the parent product's own policy. */
+  effective_policy: string | null;
   available_units: number | string | null;
 };
 
@@ -80,8 +82,10 @@ export function buildCartValidationCatalog<
 
 /**
  * Live shared-unit pools for the strict serialized products in the
- * cart, in one batched base-inventory projection call. Products that
- * are not strict-tracked, carry no simple lines, or miss the
+ * cart, in one batched base-inventory projection call. Strictness
+ * comes from the projected anchor-first effective_policy — never the
+ * parent row's own policy, which an inventory anchor may override in
+ * either direction. Products that carry no simple lines or miss the
  * projection (unpublished for this caller) resolve to no entry and
  * skip the pool check; an RPC failure fails open the same way —
  * validation must never nuke carts on an infra blip.
@@ -98,21 +102,17 @@ export async function fetchStrictPoolUnits({
   }[];
   simpleProductTotals: ReadonlyMap<string, number>;
 }): Promise<Map<string, number>> {
-  const strictIds = products
-    .filter(
-      (product) =>
-        product.inventory_tracking_policy === 'serialized_strict' &&
-        simpleProductTotals.has(String(product.id))
-    )
+  const candidateIds = products
+    .filter((product) => simpleProductTotals.has(String(product.id)))
     .map((product) => String(product.id));
-  if (strictIds.length === 0) {
+  if (candidateIds.length === 0) {
     return new Map();
   }
 
   try {
     const { data, error } = await supabase.rpc(
       'get_storefront_product_base_inventory',
-      { p_product_ids: strictIds }
+      { p_product_ids: candidateIds }
     );
     if (error || !Array.isArray(data)) {
       console.error(
@@ -132,6 +132,7 @@ export async function fetchStrictPoolUnits({
             : Number.NaN;
       if (
         typeof row?.product_id === 'string' &&
+        row?.effective_policy === 'serialized_strict' &&
         Number.isFinite(units) &&
         units >= 0
       ) {

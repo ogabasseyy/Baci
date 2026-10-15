@@ -35,6 +35,7 @@ export function useCart() {
     addItem: addItemToStore,
     removeItem: removeItemFromStore,
     updateQuantity: updateQuantityInStore,
+    restoreItems: restoreItemsInStore,
     itemCount,
     subtotal,
     getItem,
@@ -45,6 +46,7 @@ export function useCart() {
       addItem: state.addItem,
       removeItem: state.removeItem,
       updateQuantity: state.updateQuantity,
+      restoreItems: state.restoreItems,
       itemCount: state.itemCount,
       subtotal: state.subtotal,
       getItem: state.getItem,
@@ -190,7 +192,11 @@ export function useCart() {
    * Update quantity with optimistic update and stock validation
    */
   const updateQuantityMutation = useMutation(
-    createUpdateQuantityMutation({ queryClient, updateQuantityInStore })
+    createUpdateQuantityMutation({
+      queryClient,
+      updateQuantityInStore,
+      restoreItemsInStore,
+    })
   );
 
   // Wrapped functions for easier consumption

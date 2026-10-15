@@ -866,7 +866,13 @@ describe('POST /api/cart/validate', () => {
       },
     ];
     mocks.offers = [{ offer_id: OFFER_ID, condition: 'used', price: 400_000 }];
-    mocks.baseInventory = [{ product_id: PRODUCT_ID, available_units: 1 }];
+    mocks.baseInventory = [
+      {
+        product_id: PRODUCT_ID,
+        effective_policy: 'serialized_strict',
+        available_units: 1,
+      },
+    ];
 
     const response = await postCartValidate({
       cartItems: [

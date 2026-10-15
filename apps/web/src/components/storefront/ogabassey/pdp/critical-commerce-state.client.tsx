@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  normalizeCanonicalProductCondition,
   resolveDefaultVariantSelection,
   resolveLowestPricedVariantSelection,
   resolveVariantDisplaySelection,
@@ -15,14 +14,16 @@ import { pruneSelectionsByVariantAvailability } from '@/components/storefront/og
 import { recoverHiddenSelectionsFromUniqueVariant } from '@/components/storefront/ogabassey/recover-hidden-variant-selections';
 import { useCart } from '@/hooks/cart';
 import {
-  buildVariantCartProduct,
-  compactVariantOptions,
   DEFAULT_CRITICAL_PRICE_CURRENCY,
   getVariantAxesWithMultipleOptions,
   normalizeCriticalVariantProduct,
   pickInitialSelectedAttributes,
 } from './critical-commerce-selection';
 import { buildCriticalInitialVariantIntent } from './critical-commerce-initial-intent';
+import {
+  buildCriticalCartAddOptions,
+  useCriticalRouteOfferState,
+} from './critical-commerce-route-offer';
 import {
   OgabasseyPdpCriticalCommerceContext,
   type OgabasseyPdpCriticalCommerceProviderProps,
@@ -39,6 +40,8 @@ export function OgabasseyPdpCriticalCommerceProvider({
   children,
   currency = DEFAULT_CRITICAL_PRICE_CURRENCY,
   initialVariantSelection,
+  initialOfferId,
+  routeOfferMissing = false,
   variantAxes = [],
   variantAxisOptions = {},
   variantCount,
@@ -132,10 +135,21 @@ export function OgabasseyPdpCriticalCommerceProvider({
     (requiresVariantSelection ? null : defaultVariantSelection);
   const selectedVariantSelection =
     effectivePurchasableVariantSelection ?? displayVariantSelection;
-  const productForCart = buildVariantCartProduct(
+  const {
+    activeRouteOffer,
+    dismissRouteOffer,
+    productForCart,
+    routeOfferMissingActive,
+  } = useCriticalRouteOfferState({
+    routeOfferMissing,
+    initialOfferId,
     selectionCartProduct,
-    selectedVariantSelection
-  );
+    selectedVariantSelection,
+    hasPurchasableVariantSelection: Boolean(
+      effectivePurchasableVariantSelection
+    ),
+    selectedCondition: selectedVariantCondition,
+  });
   const hasRequiredVariantSelection =
     renderableVariantAxes.length === 0 ||
     renderableVariantAxes.every((axis) => selectedAttributes[axis]);
@@ -204,6 +218,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
     hasRequiredVariantSelection &&
     hasRequiredHiddenVariantSelection &&
     hasPurchasableVariantSelection &&
+    !routeOfferMissingActive &&
     quantity >= 1 &&
     (maxQuantity === null || (maxQuantity > 0 && quantity <= maxQuantity));
 
@@ -211,6 +226,9 @@ export function OgabasseyPdpCriticalCommerceProvider({
     const normalizedAxis = canonicalizeVariantAxis(axis);
     if (!normalizedAxis) {
       return;
+    }
+    if (normalizedAxis === 'condition') {
+      dismissRouteOffer();
     }
 
     const nextSelection = recoverHiddenSelectionsFromUniqueVariant(
@@ -245,25 +263,13 @@ export function OgabasseyPdpCriticalCommerceProvider({
       return;
     }
 
-    const variantOptions = effectivePurchasableVariantSelection
-      ? compactVariantOptions({
-          color:
-            effectivePurchasableVariantSelection.color ??
-            effectivePurchasableVariantSelection.attributes.color,
-          condition:
-            effectivePurchasableVariantSelection.condition ??
-            productForCart.condition,
-          storage:
-            effectivePurchasableVariantSelection.storage ??
-            effectivePurchasableVariantSelection.attributes.storage,
-          variantAttributes: effectivePurchasableVariantSelection.attributes,
-          variantId: effectivePurchasableVariantSelection.variant.id,
-        })
-      : productForCart.condition
-        ? { condition: productForCart.condition }
-        : undefined;
+    const cartOptions = buildCriticalCartAddOptions({
+      purchasableSelection: effectivePurchasableVariantSelection,
+      productForCart,
+      activeRouteOffer,
+    });
 
-    addToCart(productForCart, quantity, variantOptions);
+    addToCart(productForCart, quantity, cartOptions);
     setIsCartOpen(true);
   }
 
@@ -280,6 +286,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
         productForCart,
         quantity,
         renderableVariantAxes,
+        routeOfferMissingActive,
         selectedAttributes,
         setQuantity,
         variantAxisOptions,

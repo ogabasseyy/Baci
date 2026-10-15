@@ -43,6 +43,28 @@ interface StorefrontCartProviderProps {
   validationActivationTimeoutMs?: number;
 }
 
+/**
+ * Quantity-edit line targeting, shared by the applied-ness probe and
+ * the cart updater so the two can never diverge: an explicit variant
+ * id pins the line, otherwise the V2 cart item id or a variant-less
+ * product id matches.
+ */
+function findQuantityEditTargetIndex(
+  cart: CartItem[],
+  cartItemIdOrProductId: string,
+  variantId?: string
+): number {
+  return cart.findIndex((item) => {
+    if (variantId) {
+      return item.id === cartItemIdOrProductId && item.variantId === variantId;
+    }
+    return (
+      item.cartItemId === cartItemIdOrProductId ||
+      (item.id === cartItemIdOrProductId && !item.variantId)
+    );
+  });
+}
+
 export function StorefrontCartProvider({
   children,
   enableSmartCartPro = false,
@@ -550,19 +572,40 @@ export function StorefrontCartProvider({
     variantId?: string
   ) => {
     const wasGroupActive = cartWideNegotiationActiveRef.current;
+    // Probe applied-ness synchronously, mirroring the add path: updaters
+    // run later, so an in-updater flag would still read true at the gate
+    // below. A missing target or a keepPrevious cap leaves the cart —
+    // including per-line negotiated prices — untouched, so the group
+    // deal must survive. Same-tick writers can skew the probe the way
+    // they can the add probe; the updater stays authoritative for the
+    // cart contents.
+    const probeCart = cartRef.current;
+    const probeIndex = findQuantityEditTargetIndex(
+      probeCart,
+      cartItemIdOrProductId,
+      variantId
+    );
+    let editApplied = probeIndex !== -1;
+    if (editApplied && quantity > 0) {
+      const probeItem = probeCart[probeIndex];
+      const probeMinimum = probeItem.minimum_order_quantity || 1;
+      const probeQuantity = quantity < probeMinimum ? probeMinimum : quantity;
+      editApplied = !(
+        'keepPrevious' in
+        capUpdatedSimpleLineQuantity({
+          item: probeItem,
+          cart: probeCart,
+          excludeIndex: probeIndex,
+          quantity: probeQuantity,
+        })
+      );
+    }
     setCart((previousCart) => {
-      const targetIndex = previousCart.findIndex((item) => {
-        if (variantId) {
-          return (
-            item.id === cartItemIdOrProductId && item.variantId === variantId
-          );
-        }
-
-        return (
-          item.cartItemId === cartItemIdOrProductId ||
-          (item.id === cartItemIdOrProductId && !item.variantId)
-        );
-      });
+      const targetIndex = findQuantityEditTargetIndex(
+        previousCart,
+        cartItemIdOrProductId,
+        variantId
+      );
 
       if (targetIndex === -1) return previousCart;
       if (quantity <= 0) {
@@ -612,7 +655,7 @@ export function StorefrontCartProvider({
       }
       return nextCart;
     });
-    if (wasGroupActive) {
+    if (wasGroupActive && editApplied) {
       setCartWideNegotiationActive(false);
     }
   };

@@ -17,6 +17,7 @@ import {
   formatCriticalPrice,
   type InitialCriticalVariantSelection,
 } from './critical-commerce-selection';
+import { RouteOfferMissingNotice } from '../pages/product-details-page/route-offer-missing-notice';
 import {
   OgabasseyPdpCriticalCommerceProvider,
   useOptionalOgabasseyPdpCriticalCommerce,
@@ -31,6 +32,8 @@ interface OgabasseyPdpCriticalCommerceClientProps {
   cartHref: Route;
   cartProduct: CartProduct;
   initialVariantSelection?: InitialCriticalVariantSelection;
+  initialOfferId?: string | null;
+  routeOfferMissing?: boolean;
   productName: string;
   variantAxes?: string[];
   variantAxisOptions?: Record<string, string[]>;
@@ -167,6 +170,7 @@ export function OgabasseyPdpCriticalCommerceSummary() {
     handleAttributeSelection,
     productForCart,
     renderableVariantAxes,
+    routeOfferMissingActive,
     selectedAttributes,
     variantAxisOptions,
     variantCount,
@@ -175,6 +179,7 @@ export function OgabasseyPdpCriticalCommerceSummary() {
 
   return (
     <>
+      {routeOfferMissingActive ? <RouteOfferMissingNotice /> : null}
       <div data-ogabassey-pdp-price>
         <span data-ogabassey-pdp-price-live>
           {formatCriticalPrice(productForCart.price, currency)}
@@ -264,6 +269,8 @@ export function OgabasseyPdpCriticalCommerceClient({
   cartHref,
   cartProduct,
   initialVariantSelection,
+  initialOfferId,
+  routeOfferMissing,
   productName,
   variantAxes = [],
   variantAxisOptions = {},
@@ -273,6 +280,8 @@ export function OgabasseyPdpCriticalCommerceClient({
     <OgabasseyPdpCriticalCommerceProvider
       cartProduct={cartProduct}
       initialVariantSelection={initialVariantSelection}
+      initialOfferId={initialOfferId}
+      routeOfferMissing={routeOfferMissing}
       variantAxes={variantAxes}
       variantAxisOptions={variantAxisOptions}
       variantCount={variantCount}

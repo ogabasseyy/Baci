@@ -71,7 +71,14 @@ export function ProductRequest({
     try {
       // Id creation runs inside the guarded region: a throw here must
       // clear pending via finally rather than wedge the form.
-      const key = JSON.stringify([product.trim(), contact.trim()]);
+      // The id binds the full payload including the merchant: without
+      // the slug, the same query+contact on another store would reuse
+      // the id and 409 terminally against the first store's row.
+      const key = JSON.stringify([
+        merchantSlug,
+        product.trim(),
+        contact.trim(),
+      ]);
       if (key !== request.current.key)
         request.current = { key, id: createProductRequestId() };
       // Double-submit CSRF (the intake route requires it): reuse the
@@ -95,7 +102,7 @@ export function ProductRequest({
         error instanceof ProductRequestSubmitError && error.status === 429
           ? 'Too many requests. Please try again later.'
           : error instanceof ProductRequestSubmitError && error.status === 409
-            ? 'Something went wrong. Please try again.'
+            ? 'This request conflicts with an earlier one. Please edit and resend.'
             : 'Couldn’t send. Check the product name and email or phone number, then try again.'
       );
     } finally {

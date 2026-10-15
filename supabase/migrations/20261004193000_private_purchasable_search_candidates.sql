@@ -8,11 +8,24 @@
 -- DEFINER would bypass RLS (the worse trade). Exposure therefore rests on
 -- the schema staying out of the PostgREST exposed-schemas deployment config.
 BEGIN;
-CREATE SCHEMA storefront_search_private;
+-- Replay-safe: a recovery database may already have the private schema (or
+-- the moved function) without this migration recorded as applied.
+CREATE SCHEMA IF NOT EXISTS storefront_search_private;
 REVOKE ALL ON SCHEMA storefront_search_private FROM PUBLIC;
 GRANT USAGE ON SCHEMA storefront_search_private TO anon, authenticated;
-ALTER FUNCTION public.storefront_search_refined_candidates(text,uuid,text[],uuid,text,numeric,numeric,double precision)
-  SET SCHEMA storefront_search_private;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public'
+      AND p.proname = 'storefront_search_refined_candidates'
+  ) THEN
+    ALTER FUNCTION public.storefront_search_refined_candidates(text,uuid,text[],uuid,text,numeric,numeric,double precision)
+      SET SCHEMA storefront_search_private;
+  END IF;
+END $$;
 
 
 CREATE OR REPLACE FUNCTION storefront_search_private.storefront_search_refined_candidates(

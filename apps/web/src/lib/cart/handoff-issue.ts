@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CartErrorCode } from '@baci/shared/cart';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getCartPreviousSessionSecrets } from './cart-runtime-env';
 import {
   buildHandoffContinueUrl,
   createHandoffToken,
@@ -56,25 +57,40 @@ export async function issueCartHandoff(
     return { code: 'invalid_item', ok: false };
   }
 
-  const token = createHandoffToken(
-    {
-      cartId: principal.cartId,
-      destination: input.destination,
-      environment: deps.environment,
-      merchantId: principal.merchantId,
-      operationId,
-      principalId: principal.principalId,
-    },
-    deps.secret
-  );
+  const tokenInput = {
+    cartId: principal.cartId,
+    destination: input.destination,
+    environment: deps.environment,
+    merchantId: principal.merchantId,
+    operationId,
+    principalId: principal.principalId,
+  };
+  let token = createHandoffToken(tokenInput, deps.secret);
   const handoffId = randomUUID();
-  const response = await deps.client.rpc('commerce_cart_issue_handoff', {
+  const args = {
     p_cart_id: principal.cartId,
     p_destination: input.destination,
     p_handoff_id: handoffId,
     p_operation_id: operationId,
     p_token_hash: hashHandoffToken(token),
-  });
+  };
+  let response = await deps.client.rpc('commerce_cart_issue_handoff', args);
+  // A committed operation may predate key rotation. Only a definitive
+  // operation conflict permits probing the bounded approved key ring;
+  // transport failures remain indeterminate and never trigger another issue.
+  for (const previous of getCartPreviousSessionSecrets()) {
+    if (
+      response.error ||
+      !isRecord(response.data) ||
+      response.data.code !== 'idempotency_conflict'
+    )
+      break;
+    token = createHandoffToken(tokenInput, previous);
+    response = await deps.client.rpc('commerce_cart_issue_handoff', {
+      ...args,
+      p_token_hash: hashHandoffToken(token),
+    });
+  }
   if (response.error) {
     throw new CartRepositoryError(
       'temporarily_unavailable',

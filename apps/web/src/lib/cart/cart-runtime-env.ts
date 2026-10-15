@@ -33,7 +33,10 @@ export function getCartSessionSecret(): string | undefined {
 export function getCartProofEnvironment(): string {
   assertServerRuntime('cart proof environment');
   const override = process.env.CART_PROOF_ENVIRONMENT?.trim();
-  if (override) return override;
+  if (override)
+    return override.length <= 64
+      ? override
+      : `override:${createHash('sha256').update(override).digest('base64url')}`;
   const vercel = process.env.VERCEL_ENV?.trim();
   if (vercel === 'preview') {
     const deployment = process.env.VERCEL_URL?.trim();

@@ -727,6 +727,30 @@ describe('agentic checkout order dispatch — shared cart binding', () => {
     );
   });
 
+  it('directs voucher authority failures to website checkout without retrying another order path', async () => {
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        message: 'cart_order_voucher_authority_required',
+      },
+    });
+    const result = await createAgenticCheckoutOrder(
+      boundPayload(),
+      dispatchClient(rpc)
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      status: 409,
+      error: 'Complete voucher checkout on the storefront website.',
+    });
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
   it('maps a stale binding to 409 with a refresh error', async () => {
     const rpc = vi.fn().mockResolvedValue({
       data: null,

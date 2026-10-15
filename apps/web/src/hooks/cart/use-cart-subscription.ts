@@ -33,8 +33,10 @@ export function useCartSubscription(
     let epoch = 0;
     let connection: CartReceiveConnection | null = null;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     let hiddenTimer: ReturnType<typeof setTimeout> | undefined;
     let highestHint = options.version;
+    let retryDelay = 1000;
     let fetching = false;
     let pending = false;
     const identity = { merchantId: options.merchantId, cartId: options.cartId };
@@ -49,11 +51,12 @@ export function useCartSubscription(
       );
     }
     async function refresh(): Promise<void> {
-      if (!isLive()) return;
+      if (!isLive() || document.visibilityState === 'hidden') return;
       if (fetching) {
         pending = true;
         return;
       }
+      clearTimeout(retryTimer);
       fetching = true;
       try {
         await latest.current.onRefresh();
@@ -64,12 +67,23 @@ export function useCartSubscription(
         if (alive && pending) {
           pending = false;
           void refresh();
+        } else if (isLive() && highestHint > latest.current.version) {
+          // A resolved refresh may still have failed to fetch/adopt a snapshot.
+          // Keep the committed hint pending until the reducer catches up.
+          retryTimer = setTimeout(() => {
+            if (isLive() && highestHint > latest.current.version)
+              void refresh();
+          }, retryDelay);
+          retryDelay = Math.min(15000, retryDelay * 2);
+        } else {
+          retryDelay = 1000;
         }
       }
     }
     async function stop(): Promise<void> {
       epoch += 1;
       clearTimeout(timer);
+      clearTimeout(retryTimer);
       const old = connection;
       connection = null;
       if (alive) setConnected(false);
@@ -150,12 +164,14 @@ export function useCartSubscription(
           void stop();
         }, 60000);
       else if (!connection) void connect();
+      else if (highestHint > latest.current.version) void refresh();
     }
     document.addEventListener('visibilitychange', visibility);
     void connect();
     return () => {
       alive = false;
       clearTimeout(hiddenTimer);
+      clearTimeout(retryTimer);
       document.removeEventListener('visibilitychange', visibility);
       void stop();
     };

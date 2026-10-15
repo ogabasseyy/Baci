@@ -36,7 +36,7 @@ DO $$ DECLARE r jsonb; BEGIN
 END $$;
 -- Reserved prizes need no remaining public stock and retain zero pricing.
 DO $$ DECLARE s jsonb; BEGIN
- UPDATE public.commerce_cart_lines SET voucher_token='fixture-reserved',quantity=1 WHERE cart_id='cccccccc-4000-4000-8000-000000000000';
+ UPDATE public.commerce_cart_lines SET voucher_token='fixture-reserved',voucher_award_id='dddddddd-4500-4000-8000-000000000009',quantity=1 WHERE cart_id='cccccccc-4000-4000-8000-000000000000';
  UPDATE public.products SET stock=0,stock_quantity=0 WHERE id='44444444-4444-4444-8444-444444444444';
  s:=public.commerce_cart_build_checkout_snapshot('11111111-1111-4111-8111-111111111111','cccccccc-4000-4000-8000-000000000000');
  PERFORM pg_temp.check_review((s->'estimates'->>'unavailableCount')::integer=0 AND (s->'estimates'->>'subtotalMinor')::bigint=0,'reserved voucher blocked by public stock');
@@ -44,7 +44,7 @@ END $$;
 -- Valid numeric(10,2) catalog values must survive minor-unit conversion.
 DO $$ DECLARE s jsonb; BEGIN
  UPDATE public.products SET price=30000000,stock=10,stock_quantity=10 WHERE id='44444444-4444-4444-8444-444444444444';
- UPDATE public.commerce_cart_lines SET voucher_token=NULL WHERE cart_id='cccccccc-4000-4000-8000-000000000000';
+ UPDATE public.commerce_cart_lines SET voucher_token=NULL,voucher_award_id=NULL WHERE cart_id='cccccccc-4000-4000-8000-000000000000';
  BEGIN
   s:=public.commerce_cart_build_checkout_snapshot('11111111-1111-4111-8111-111111111111','cccccccc-4000-4000-8000-000000000000');
   PERFORM pg_temp.check_review((s->'lines'->0->>'effectiveUnitPriceMinor')::bigint=3000000000,'large price changed');

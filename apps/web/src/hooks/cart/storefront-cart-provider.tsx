@@ -1,6 +1,5 @@
 'use client';
 
-import { SHARED_CART_MAX_QUANTITY_PER_LINE } from '@baci/shared/cart';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
@@ -16,24 +15,17 @@ import {
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
 } from './cart-storage';
-import type {
-  AddToCartOptions,
-  CartContextType,
-  CartItem,
-  SharedCartDisplayItem,
-} from './cart-types';
+import type { AddToCartOptions, CartContextType, CartItem } from './cart-types';
+import { createDelegatedCartActions } from './delegated-cart-actions';
 import { findMergingCartLineIndex } from './find-merging-cart-line';
 import { gateAddToCart } from './gate-add-to-cart';
 import { getMerchantCartState } from './merchant-cart-storage';
-import {
-  delegatedLineTarget,
-  planGroupDealVoid,
-} from './storefront-cart-delegation';
 import {
   applyValidationResults,
   createCartHash,
   validateStorefrontCart,
 } from './storefront-cart-validation';
+import { useCartDelegationTransitions } from './use-cart-delegation-transitions';
 import { useSharedCartDelegation } from './use-shared-cart-delegation';
 
 interface StorefrontCartProviderProps {
@@ -99,67 +91,20 @@ export function StorefrontCartProvider({
     initialMerchantSlug,
   });
 
-  const [wasDelegated, setWasDelegated] = useState(delegated);
-  if (wasDelegated !== delegated) {
-    setWasDelegated(delegated);
-    if (wasDelegated && !delegated && merchantSlug === initialMerchantSlug) {
-      // Rollback must never expose the parked pre-adoption cache. Fence all
-      // outstanding canonical work and start a safe empty legacy cart.
-      bumpSessionGeneration();
-      setCart([]);
-      setCartWideNegotiationActiveState(false);
-      setIsHydrated(true);
-    }
-  }
-
-  // Re-sync the slug + cart when the merchant slug prop changes (after the
-  // initial hydration). Adjusting during render avoids the stale frame a
-  // prop-sync effect would introduce, and only runs on an actual prop change.
-  // See react.dev "Adjusting some state when a prop changes". The mount-time
-  // load (storage is unavailable during SSR) still happens in the effect below
-  // so the server-rendered empty cart stays until `isHydrated` flips.
-  const [prevInitialMerchantSlug, setPrevInitialMerchantSlug] =
-    useState(initialMerchantSlug);
-  // In delegated mode the legacy hydration flag never flips (its effect is
-  // fenced), so the shared hook's hydration drives the prop-change branch.
-  // It must not reuse `delegated`: during the transition render the slug
-  // state still holds the old merchant, which would deadlock the branch.
-  const propChangeReady = isHydrated || shared.isHydrated;
-  if (propChangeReady && initialMerchantSlug !== prevInitialMerchantSlug) {
-    setPrevInitialMerchantSlug(initialMerchantSlug);
-    const slugToUse = initialMerchantSlug || getMerchantSlugFromStorage();
-    const nextDelegated =
-      sharedCartEnabled &&
-      merchantId !== null &&
-      initialMerchantSlug !== null &&
-      slugToUse === initialMerchantSlug;
-    // State setters only: ref writes are not rolled back when React abandons
-    // a render, so the refs sync from committed state in the effects below.
-    // A ref holding an uncommitted slug would make setMerchantSlug
-    // early-return and skip loading that merchant's cart.
-    setMerchantSlugState(slugToUse);
-    // A new served merchant always fences the previous shared session, even
-    // when both sides delegate.
-    bumpSessionGeneration();
-    if (nextDelegated) {
-      // The shared hook re-adopts under the new generation; the legacy cart
-      // state stays parked and the group deal never crosses merchants.
-      setCartWideNegotiationActiveState(false);
-    } else {
-      const merchantCartState = getMerchantCartState(slugToUse);
-      // Prune quiz-prize voucher lines whose signed token has already expired
-      // (7-day window). An expired voucher line is forced to ₦0 and re-fails
-      // every checkout until removed, so it must never survive rehydration.
-      setCart(merchantCartState.cart);
-      // Re-read the group flag for the new merchant too, so it stays consistent
-      // with the freshly loaded cart (otherwise the previous merchant's flag
-      // leaks onto this cart).
-      setCartWideNegotiationActiveState(
-        merchantCartState.cartWideNegotiationActive
-      );
-      setIsHydrated(true);
-    }
-  }
+  useCartDelegationTransitions({
+    delegated,
+    merchantSlug,
+    initialMerchantSlug,
+    merchantId,
+    sharedCartEnabled,
+    isHydrated,
+    shared,
+    bumpSessionGeneration,
+    setCart,
+    setMerchantSlugState,
+    setCartWideNegotiationActiveState,
+    setIsHydrated,
+  });
 
   // Keep the handler-facing refs aligned with committed state. Handlers read
   // the refs to avoid stale closures; syncing here (not during render) keeps
@@ -391,28 +336,11 @@ export function StorefrontCartProvider({
     };
   }, []);
 
-  // Group-deal voiding for delegated edits (see planGroupDealVoid):
-  // reprices every negotiated server line except the edit's own target.
-  const voidDelegatedGroupDeal = (
-    exceptCartItemId?: string,
-    quantityOverrides?: ReadonlyMap<string, number>
-  ) => {
-    if (!cartWideNegotiationActiveRef.current) return;
-    for (const line of planGroupDealVoid(
-      shared.cart,
-      exceptCartItemId,
-      quantityOverrides
-    )) {
-      shared.repriceLine(line);
-    }
-    setCartWideNegotiationActive(false);
-  };
-
-  const firstDelegatedTarget = (
-    cartItemIdOrProductId: string,
-    variantId?: string
-  ): SharedCartDisplayItem | null =>
-    delegatedLineTarget(shared.cart, cartItemIdOrProductId, variantId);
+  const delegatedActions = createDelegatedCartActions(
+    shared,
+    cartWideNegotiationActiveRef,
+    setCartWideNegotiationActive
+  );
 
   const noteAddedProduct = (added: Product) => {
     if (enableSmartCartPro) {
@@ -434,8 +362,7 @@ export function StorefrontCartProvider({
     const normalizedOptions = gated.options;
 
     if (delegated) {
-      voidDelegatedGroupDeal();
-      shared.addToCart(productForCart, quantity, normalizedOptions);
+      delegatedActions.addToCart(productForCart, quantity, normalizedOptions);
       noteAddedProduct(productForCart);
       return;
     }
@@ -520,11 +447,7 @@ export function StorefrontCartProvider({
     variantId?: string
   ) => {
     if (delegated) {
-      // The removed line is excluded from the void: its clear would race
-      // the removal for the same server line ID.
-      const target = firstDelegatedTarget(cartItemIdOrProductId, variantId);
-      voidDelegatedGroupDeal(target?.cartItemId);
-      shared.removeFromCart(cartItemIdOrProductId, variantId);
+      delegatedActions.removeFromCart(cartItemIdOrProductId, variantId);
       return;
     }
     const wasGroupActive = cartWideNegotiationActiveRef.current;
@@ -567,32 +490,10 @@ export function StorefrontCartProvider({
     variantId?: string
   ) => {
     if (delegated) {
-      const target = firstDelegatedTarget(cartItemIdOrProductId, variantId);
-      if (quantity <= 0) {
-        voidDelegatedGroupDeal(target?.cartItemId);
-        shared.removeFromCart(cartItemIdOrProductId, variantId);
-        return;
-      }
-      if (!target) {
-        // Legacy quirk: an update that matches nothing still drops the
-        // group flag while leaving negotiated prices in place.
-        if (cartWideNegotiationActiveRef.current) {
-          setCartWideNegotiationActive(false);
-        }
-        return;
-      }
-      // The edit queues ahead of the void clears so its server line ID is
-      // still live when it sends; the clears then retire it deliberately,
-      // re-adding at the same clamped quantity as the edit.
-      shared.updateQuantity(cartItemIdOrProductId, quantity, variantId);
-      const minimum = target.minimum_order_quantity ?? 1;
-      const clamped = Math.min(
-        SHARED_CART_MAX_QUANTITY_PER_LINE,
-        Math.max(minimum, Math.floor(quantity))
-      );
-      voidDelegatedGroupDeal(
-        undefined,
-        new Map([[target.cartItemId, clamped]])
+      delegatedActions.updateQuantity(
+        cartItemIdOrProductId,
+        quantity,
+        variantId
       );
       return;
     }
@@ -655,8 +556,7 @@ export function StorefrontCartProvider({
     if (delegated) {
       // Server clear retains the cart identity, so the merchant binding
       // stays: only the group flag resets alongside the lines.
-      setCartWideNegotiationActive(false);
-      shared.clearCart();
+      delegatedActions.clearCart();
       logger.info({ message: 'Cart cleared' });
       return;
     }
@@ -705,26 +605,7 @@ export function StorefrontCartProvider({
   const applyNegotiatedPrice = (cartItemId: string, newPrice: number) => {
     if (!enableSmartCartPro) return;
     if (delegated) {
-      const target = shared.cart.find((line) => line.cartItemId === cartItemId);
-      const wasGroupActive = cartWideNegotiationActiveRef.current;
-      // Individual-line negotiation — not a group deal.
-      setCartWideNegotiationActive(false);
-      if (!target) return;
-      // A previously active group deal clears from the other lines first so
-      // only this line keeps a negotiation, mirroring the legacy reset.
-      if (wasGroupActive) {
-        for (const line of shared.cart) {
-          if (line.cartItemId === cartItemId) continue;
-          if (
-            line.negotiatedPrice === undefined &&
-            line.negotiationStatus === undefined
-          ) {
-            continue;
-          }
-          shared.repriceLine(line);
-        }
-      }
-      shared.repriceLine(target, newPrice);
+      delegatedActions.applyNegotiatedPrice(cartItemId, newPrice);
       return;
     }
     const wasGroupActive = cartWideNegotiationActiveRef.current;
@@ -760,9 +641,7 @@ export function StorefrontCartProvider({
   const clearNegotiatedPrice = (cartItemId: string) => {
     if (!enableSmartCartPro) return;
     if (delegated) {
-      const target = shared.cart.find((line) => line.cartItemId === cartItemId);
-      setCartWideNegotiationActive(false);
-      if (target) shared.repriceLine(target);
+      delegatedActions.clearNegotiatedPrice(cartItemId);
       return;
     }
     setCart((previousCart) =>
@@ -783,19 +662,7 @@ export function StorefrontCartProvider({
     if (!enableSmartCartPro) return;
 
     if (delegated) {
-      // The server has no group-deal operation, so the provider distributes
-      // the agreed total proportionally as per-line server reprices — the
-      // same ratio math as the legacy path, confirmed line by line.
-      const currentTotal = shared.cart.reduce((sum, item) => {
-        const price = item.negotiatedPrice ?? item.price;
-        return sum + price * item.quantity;
-      }, 0);
-      if (currentTotal <= 0) return;
-      const ratio = newTotal / currentTotal;
-      for (const line of shared.cart) {
-        shared.repriceLine(line, (line.negotiatedPrice ?? line.price) * ratio);
-      }
-      setCartWideNegotiationActive(true);
+      delegatedActions.applyCartWideNegotiation(newTotal);
       return;
     }
 
@@ -819,7 +686,7 @@ export function StorefrontCartProvider({
   const toggleAssurance = (cartItemId: string) => {
     if (!enableSmartCartPro) return;
     if (delegated) {
-      shared.toggleAssurance(cartItemId);
+      delegatedActions.toggleAssurance(cartItemId);
       return;
     }
     setCart((previousCart) =>

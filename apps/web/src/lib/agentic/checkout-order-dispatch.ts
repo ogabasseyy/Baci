@@ -305,6 +305,21 @@ export async function createAgenticCheckoutOrder(
   if (
     bound &&
     !bound.ok &&
+    bound.code === 'order_rejected' &&
+    bound.message === 'cart_order_voucher_authority_required'
+  ) {
+    const error = 'Complete voucher checkout on the storefront website.';
+    return {
+      data: { error, code: 'voucher_checkout_requires_website' },
+      error,
+      ok: false,
+      status: 409,
+      statusText: 'Conflict',
+    };
+  }
+  if (
+    bound &&
+    !bound.ok &&
     bound.code !== 'order_rejected' &&
     bound.code !== 'temporarily_unavailable'
   ) {

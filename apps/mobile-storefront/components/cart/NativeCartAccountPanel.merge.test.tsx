@@ -149,3 +149,51 @@ it('does not let a late previous-owner lookup enable the new owner choices', asy
   fireEvent.press(view.getByText('Keep this cart on my account'));
   expect(linkAccount).not.toHaveBeenCalled();
 });
+
+it.each([
+  'version_conflict',
+  'refresh_required',
+])('reloads saved observation after %s and keeps fresh choices blocked if reloading fails', async (code) => {
+  const loadSavedCart = jest
+    .fn()
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockImplementation(async () => {
+      useNativeSharedCartStore.setState({
+        savedCart: { ...saved, version: 9 },
+      });
+    });
+  const linkAccount = jest
+    .fn()
+    .mockRejectedValueOnce(new NativeCartError(code))
+    .mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    accountsEnabled: true,
+    accountUserId: owner,
+    linkAccount,
+    loadSavedCart,
+    savedCart: saved,
+    snapshot: current,
+  });
+  const view = render(<NativeCartAccountPanel />);
+  await act(async () => {});
+  fireEvent.press(view.getByText('Keep saved offer'));
+  fireEvent.press(view.getByText('Combine both carts'));
+  await waitFor(() => expect(loadSavedCart).toHaveBeenCalledTimes(2));
+  fireEvent.press(view.getByText('Use saved cart'));
+  fireEvent.press(view.getByText('Keep this cart on my account'));
+  expect(linkAccount).toHaveBeenCalledTimes(1);
+  fireEvent.press(view.getByText('Retry loading saved cart'));
+  await act(async () => {});
+  // Old offer picks were invalidated with the observation.
+  fireEvent.press(view.getByText('Combine both carts'));
+  expect(linkAccount).toHaveBeenCalledTimes(1);
+  fireEvent.press(view.getByText('Keep saved offer'));
+  fireEvent.press(view.getByText('Combine both carts'));
+  await waitFor(() => expect(linkAccount).toHaveBeenCalledTimes(2));
+  expect(linkAccount.mock.calls[1][0]).toMatchObject({
+    expectedSavedVersion: 9,
+    expectedCurrentVersion: 3,
+  });
+});

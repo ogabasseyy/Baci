@@ -112,6 +112,9 @@ export function NativeCartAccountPanel() {
         pendingInput.current = null;
         setPending(false);
         operationRef.current = null;
+        setSavedRead({ scope, status: 'loading' });
+        setPicks([]);
+        setReadRetry((value) => value + 1);
         setNotice('Your carts changed. Review them and choose again.');
         return;
       }

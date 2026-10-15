@@ -70,3 +70,46 @@ it('bounds long preview deployment identifiers without sharing deployment identi
   vi.stubEnv('VERCEL_URL', `baci-${'feature'.repeat(15)}-two.vercel.app`);
   expect(getCartProofEnvironment()).not.toBe(first);
 });
+
+it('bounds explicit environment overrides deterministically without collisions', () => {
+  vi.stubEnv('CART_PROOF_ENVIRONMENT', 'a'.repeat(65));
+  const first = getCartProofEnvironment();
+  expect(first.length).toBeLessThanOrEqual(64);
+  expect(getCartProofEnvironment()).toBe(first);
+  vi.stubEnv('CART_PROOF_ENVIRONMENT', `${'a'.repeat(64)}b`);
+  expect(getCartProofEnvironment()).not.toBe(first);
+});
+
+it('issues verifiable proofs with a long explicit override and rejects another override', async () => {
+  const { issueCartSessionProof, verifyCartSessionProof } = await import(
+    './session-proof'
+  );
+  vi.stubEnv('CART_PROOF_ENVIRONMENT', 'first-environment-'.repeat(8));
+  const secret = 'fixture-environment-proof-secret-at-least-32';
+  const now = new Date('2026-10-15T12:00:00Z');
+  const proof = issueCartSessionProof(
+    {
+      scope: 'session',
+      merchantId: '11111111-1111-4111-8111-111111111111',
+      cartId: '22222222-2222-4222-8222-222222222222',
+      grantId: '33333333-3333-4333-8333-333333333333',
+      principalId: 'guest-fixture',
+    },
+    { secret, environment: getCartProofEnvironment(), now }
+  );
+  expect(
+    verifyCartSessionProof(proof, {
+      secret,
+      environment: getCartProofEnvironment(),
+      now,
+    }).ok
+  ).toBe(true);
+  vi.stubEnv('CART_PROOF_ENVIRONMENT', 'second-environment-'.repeat(8));
+  expect(
+    verifyCartSessionProof(proof, {
+      secret,
+      environment: getCartProofEnvironment(),
+      now,
+    }).ok
+  ).toBe(false);
+});

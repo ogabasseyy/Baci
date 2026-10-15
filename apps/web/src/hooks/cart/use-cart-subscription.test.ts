@@ -188,3 +188,56 @@ it('keeps a healthy receive channel during a brief background transition', async
   expect(s.disconnect).not.toHaveBeenCalled();
   expect(s.deps.loadAccess).toHaveBeenCalledTimes(1);
 });
+
+it('retries an unadopted hint after a refresh silently fails, and stops once adopted', async () => {
+  vi.useFakeTimers();
+  const s = setup();
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  const { rerender } = renderHook(
+    (p) => useCartSubscription({ ...p, onRefresh: refresh }, s.deps),
+    { initialProps: options }
+  );
+  await act(async () => {});
+  await act(async () =>
+    s.event({ merchantId: 'm', cartId: 'c', version: 3, operationId: 'new' })
+  );
+  expect(refresh).toHaveBeenCalledTimes(1);
+  await act(async () => vi.advanceTimersByTime(1000));
+  expect(refresh).toHaveBeenCalledTimes(2);
+  rerender({ ...options, version: 3 });
+  await act(async () => vi.advanceTimersByTime(5000));
+  expect(refresh).toHaveBeenCalledTimes(2);
+});
+
+it('backs off pending hints to fifteen seconds and pauses retries while hidden', async () => {
+  vi.useFakeTimers();
+  const visibility = vi
+    .spyOn(document, 'visibilityState', 'get')
+    .mockReturnValue('visible');
+  const s = setup();
+  const refresh = vi.fn().mockResolvedValue(undefined);
+  renderHook(() =>
+    useCartSubscription({ ...options, onRefresh: refresh }, s.deps)
+  );
+  await act(async () => {});
+  await act(async () =>
+    s.event({ merchantId: 'm', cartId: 'c', version: 3, operationId: 'new' })
+  );
+  for (const delay of [1000, 2000, 4000, 8000, 15000, 15000]) {
+    const before = refresh.mock.calls.length;
+    await act(async () => vi.advanceTimersByTime(delay - 1));
+    expect(refresh).toHaveBeenCalledTimes(before);
+    await act(async () => vi.advanceTimersByTime(1));
+    expect(refresh).toHaveBeenCalledTimes(before + 1);
+  }
+  visibility.mockReturnValue('hidden');
+  act(() => document.dispatchEvent(new Event('visibilitychange')));
+  const before = refresh.mock.calls.length;
+  await act(async () => vi.advanceTimersByTime(60000));
+  expect(refresh).toHaveBeenCalledTimes(before);
+  expect(s.disconnect).toHaveBeenCalledTimes(1);
+  visibility.mockReturnValue('visible');
+  await act(async () => document.dispatchEvent(new Event('visibilitychange')));
+  await act(async () => s.status(true));
+  expect(refresh).toHaveBeenCalledTimes(before + 1);
+});

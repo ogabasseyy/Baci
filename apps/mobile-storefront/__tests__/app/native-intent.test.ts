@@ -26,7 +26,7 @@ jest.mock('@/lib/cart/pairing-link', () => ({
     mockCapture(path, config),
 }));
 
-import { redirectSystemPath } from './+native-intent';
+import { redirectSystemPath } from '../../app/+native-intent';
 
 describe('redirectSystemPath', () => {
   beforeEach(() => {

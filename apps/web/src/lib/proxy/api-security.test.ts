@@ -6,14 +6,9 @@ vi.mock('@/lib/rate-limit', () => ({
   createRateLimitResponse: vi.fn(() => new Response(null, { status: 429 })),
 }));
 vi.mock('@/lib/slug-alias-cache', () => ({ getCurrentSlugForAlias: vi.fn() }));
-vi.mock('@/lib/domain-cache-simple', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/lib/domain-cache-simple')>();
-  return {
-    ...actual,
-    isRecentlyUnmappedCustomDomain: vi.fn().mockReturnValue(false),
-  };
-});
+vi.mock('@/lib/reverse-domain-cache', () => ({
+  isRecentlyUnmappedCustomDomain: vi.fn().mockReturnValue(false),
+}));
 vi.mock('./host', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./host')>();
   return {
@@ -147,7 +142,7 @@ describe('API security stage', () => {
   it('rejects repeat forged origins without consuming the caller rate budget', async () => {
     const { checkRateLimit } = await import('@/lib/rate-limit');
     const { isRecentlyUnmappedCustomDomain } = await import(
-      '@/lib/domain-cache-simple'
+      '@/lib/reverse-domain-cache'
     );
     vi.mocked(checkRateLimit).mockClear();
     vi.mocked(isRecentlyUnmappedCustomDomain).mockReturnValue(true);

@@ -41,6 +41,9 @@ vi.mock('@/lib/supabase/middleware', () => ({
 vi.mock('@/lib/domain-cache-simple', () => ({
   getCustomDomainForSlug: vi.fn().mockResolvedValue(null),
   getSlugForCustomDomain: vi.fn().mockResolvedValue('ogabassey'),
+}));
+
+vi.mock('@/lib/reverse-domain-cache', () => ({
   isRecentlyUnmappedCustomDomain: vi.fn().mockReturnValue(false),
 }));
 

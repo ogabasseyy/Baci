@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { MerchantContext } from '@/hooks/merchant/merchant-context';
 import type { MerchantContextType } from '@/hooks/merchant/types';
@@ -16,18 +17,17 @@ function wrapper({
   merchant: unknown;
   children: ReactNode;
 }) {
-  return (
-    <MerchantContext.Provider
-      value={{ merchant, loading: false } as unknown as MerchantContextType}
-    >
-      {cart === null ? (
-        children
-      ) : (
-        <CartContext.Provider value={cart as CartContextType}>
-          {children}
-        </CartContext.Provider>
-      )}
-    </MerchantContext.Provider>
+  return createElement(
+    MerchantContext.Provider,
+    {
+      value: { merchant, loading: false } as unknown as MerchantContextType,
+    },
+    cart === null
+      ? children
+      : createElement(CartContext.Provider, {
+          value: cart as CartContextType,
+          children,
+        })
   );
 }
 

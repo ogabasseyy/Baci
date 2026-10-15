@@ -1,6 +1,5 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { isRecentlyUnmappedCustomDomain } from '@/lib/domain-cache-simple';
 import {
   ANALYTICS_CONVERSION_API_PATH,
   isAliasApiShapedOnRewritableHost,
@@ -17,6 +16,7 @@ import {
 } from '@/lib/proxy/host';
 import { isAuthenticatedInternalRequest } from '@/lib/proxy/request-classification';
 import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
+import { isRecentlyUnmappedCustomDomain } from '@/lib/reverse-domain-cache';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 
 export type ApiSecurityContext = {

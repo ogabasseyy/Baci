@@ -5,7 +5,6 @@ vi.mock('server-only', () => ({}));
 vi.mock('@/env', () => ({ getSupabaseServiceRoleKey: () => 's'.repeat(32) }));
 
 import {
-  recoveryJson as json,
   RECOVERY_MERCHANT_ID as merchantId,
   RECOVERY_ORDER_ID as orderId,
   RECOVERY_OWNER_ID as ownerId,
@@ -88,7 +87,7 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
     });
     it('projects surviving fulfillment quantities in the recovery context', () => {
       const output = asActor(
-        `UPDATE public.order_items SET fulfillment_data = '{"fulfillmentQuantity": 0}'::jsonb WHERE order_id='${orderId}';
+        `RESET ROLE; UPDATE public.order_items SET fulfillment_data = '{"fulfillmentQuantity": 0}'::jsonb WHERE order_id='${orderId}'; SET LOCAL ROLE authenticated;
       SELECT (item->>'quantity') || '|' || (item->>'fulfillment_quantity') FROM pg_catalog.jsonb_array_elements((public.get_customer_checkout_shipping_recovery_context('${orderId}') -> 'order' -> 'order_items')) AS item;`
       );
       const rows = output
@@ -99,7 +98,7 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       for (const row of rows) expect(row).toMatch(/\|0$/);
     });
     it('cascades recovery previews with the owning order and merchant', () => {
-      const output = asActor(
+      const output = database.query(
         `SELECT count(*) FROM pg_catalog.pg_constraint WHERE conrelid = 'private.customer_checkout_shipping_recovery_previews'::pg_catalog.regclass AND confdeltype = 'c';`
       );
       expect(output.trim().split('\n').at(-1)?.trim()).toBe('2');

@@ -74,7 +74,8 @@ mobile UI: `20261013213516_customer_checkout_shipping_recovery_context.sql`,
 `20261014080000_customer_checkout_shipping_recovery_scalar_address.sql`,
 `20261014120000_customer_checkout_shipping_recovery_review_followups.sql`,
 `20261014130000_customer_checkout_shipping_recovery_hardening.sql` and
-`20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql`.
+`20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql` and
+`20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql`.
 The automated migration runner applies the whole directory; a manual rollout
 must include every recovery migration or legacy scalar destinations stay
 unbookable and the context schema check fails closed. No native dependency
@@ -105,3 +106,31 @@ does not include it. The helper uses only the caller's RLS client and the
 recovery preparation RPC. The credential manifest permits exactly the reviewed
 route-to-helper-to-signer path; direct signer access and sibling-route reuse
 remain rejected by regression tests.
+
+## Final review corrections
+
+- The appended migration restores authenticated EXECUTE on confirmation after
+  the hardening migration revoked it. Anonymous and service-role execution of
+  context, preparation and confirmation remain denied; all original function
+  authorization and explicit-confirmation checks remain in place.
+- The retained-preview redaction scan has a partial `confirmed_at` index that
+  excludes already-redacted rows. The context projects surviving quantities
+  using JSON numeric type and integral-value checks, matching booking for
+  string, decimal, zero and invalid fulfillment values.
+- All destination pins use the complete, versioned GRID3/geoBoundaries Nigeria
+  geometry, replacing an inset hand-drawn polygon. Calabar, Brass, Bonny, Uyo
+  and Ngala regressions pass; foreign pins (including NG-labelled Garoua) stay
+  rejected. This checks national scope, not carrier serviceability. Attribution
+  and immutable source hashes are recorded beside the vendored geometry.
+- Recovery replaces both country fields, so foreign legacy metadata cannot
+  misclassify an explicitly confirmed Nigerian destination as international.
+- The cleanup fallback's exact admin importer, admin path and two credential
+  paths are registered. CRON_SECRET authentication precedes construction, and
+  its sole RPC remains the bounded retention sweep. No verifier logic changed.
+- PostgreSQL tests assert the effective authenticated, non-superuser role and
+  the final EXECUTE privileges of every recovery RPC. Existing actor callers
+  already used transactions; a new guard fails if a future caller omits one.
+  Synthetic sender columns now match the production fingerprint, and privileged
+  fixture edits are separate from authenticated RPC calls.
+- Quote selection and its tests are extracted below the module size limit;
+  the recovery form has dedicated rendering, interaction, busy and error tests.

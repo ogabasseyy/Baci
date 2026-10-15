@@ -60,7 +60,10 @@ export function recoveryConfirm(id: string) {
 
 export function recoveryActorAuth(actor = RECOVERY_OWNER_ID) {
   return `SELECT set_config('request.jwt.claim.role','authenticated',true);
-    SELECT set_config('request.jwt.claim.sub','${actor}',true); SET LOCAL ROLE authenticated;`;
+    SELECT set_config('request.jwt.claim.sub','${actor}',true); SET LOCAL ROLE authenticated;
+    DO $actor$ BEGIN IF current_user <> 'authenticated' THEN
+      RAISE EXCEPTION 'recovery actor requires an authenticated transaction';
+    END IF; END $actor$;`;
 }
 
 // Condition wait with a robust timeout: polls the database until the probe

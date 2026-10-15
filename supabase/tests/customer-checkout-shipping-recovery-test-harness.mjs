@@ -1,24 +1,17 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { extractSqlFunctionDefinition } from './extract-sql-function-definition.mjs';
 import { createShippingQuoteProofTestDatabase } from './shipping-quote-proof-postgres-test-harness.mjs';
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const migrations = resolve(directory, '../migrations');
 function definition(name, schema, functionName) {
-  const text = readFileSync(resolve(migrations, name), 'utf8');
-  const start = text.indexOf(
-    `CREATE OR REPLACE FUNCTION ${schema}.${functionName}(`
+  return extractSqlFunctionDefinition(
+    readFileSync(resolve(migrations, name), 'utf8'),
+    schema,
+    functionName
   );
-  if (start < 0) throw new Error(`Missing ${functionName}`);
-  const body = text.slice(start);
-  const delimiter = /AS (\$[a-z_]*\$)/i.exec(body);
-  if (!delimiter) throw new Error(`Missing body ${functionName}`);
-  const end = body.indexOf(
-    `${delimiter[1]};`,
-    delimiter.index + delimiter[0].length
-  );
-  return body.slice(0, end + delimiter[1].length + 1);
 }
 export function createCustomerCheckoutShippingRecoveryTestDatabase({
   beforeFix = false,

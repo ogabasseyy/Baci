@@ -70,6 +70,15 @@ describe('canonical guest-cart delegation', () => {
     );
     expect(recordStorageError).toHaveBeenLastCalledWith('bridge_unavailable');
   });
+  it('surfaces definitive canonical rejections from first migration unchanged', async () => {
+    const failure = new GuestCartCanonicalError('invalid_item', token);
+    canonical.update.mockRejectedValue(failure);
+    await expect(
+      updateGuestCartWithCanonical({ ...input, token: undefined })
+    ).rejects.toBe(failure);
+    expect(updateLegacy).toHaveBeenCalledOnce();
+    expect(recordStorageError).toHaveBeenLastCalledWith(null);
+  });
   it('retains typed refresh failures without retrying legacy writes or degrading health', async () => {
     const failure = new GuestCartCanonicalError('version_conflict', token);
     canonical.update.mockRejectedValue(failure);

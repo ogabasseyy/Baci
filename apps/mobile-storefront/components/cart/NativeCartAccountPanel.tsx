@@ -114,17 +114,10 @@ export function NativeCartAccountPanel() {
       setNotice('Cart linked to your account.');
     } catch (error) {
       if (ownerScopeRef.current !== scope) return;
-      if (
-        error instanceof NativeCartError &&
-        !error.indeterminate &&
-        [
-          'invalid_item',
-          'invalid_request',
-          'merge_conflict',
-          'version_conflict',
-          'refresh_required',
-        ].includes(error.code)
-      ) {
+      // Any non-indeterminate error is definitive for this request:
+      // the same choice can never succeed, so clear the pending
+      // operation and offer a fresh choice instead of a doomed retry.
+      if (error instanceof NativeCartError && !error.indeterminate) {
         pendingInput.current = null;
         setPending(false);
         operationRef.current = null;

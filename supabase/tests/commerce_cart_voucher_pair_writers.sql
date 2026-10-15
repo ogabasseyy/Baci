@@ -80,6 +80,24 @@ BEGIN
   END IF;
 END $$;
 
+-- The event worker must have no direct table access to the outbox:
+-- publish goes through the SECURITY DEFINER RPC only.
+DO $$
+BEGIN
+  IF has_table_privilege('commerce_cart_worker', 'public.commerce_cart_events', 'SELECT')
+    OR has_table_privilege('commerce_cart_worker', 'public.commerce_cart_events', 'UPDATE')
+  THEN
+    RAISE EXCEPTION 'cart worker must not hold direct outbox table privileges';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'commerce_cart_events'
+      AND 'commerce_cart_worker' = ANY (roles)
+  ) THEN
+    RAISE EXCEPTION 'cart worker must not hold direct outbox policies';
+  END IF;
+END $$;
+
 -- A token-only line transferred through handoff redemption keeps its
 -- full quantity: only complete pairs pin at one.
 DO $$

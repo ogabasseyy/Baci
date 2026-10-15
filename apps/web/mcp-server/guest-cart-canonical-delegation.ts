@@ -70,6 +70,17 @@ export async function updateGuestCartWithCanonical({
           error.code === 'temporarily_unavailable'
         )
           recordStorageError('bridge_unavailable');
+        // Only retryable/transport failures are pending preparation:
+        // a definitive canonical rejection (invalid item, unauthorized,
+        // idempotency conflict, ...) must surface unchanged rather
+        // than telling the caller to retry a request that cannot pass.
+        // Untyped failures are transport-level (timeouts, socket
+        // errors from the bridge call) and stay pending.
+        if (
+          error instanceof GuestCartCanonicalError &&
+          !error.retryable
+        )
+          throw error;
         throw new GuestCartBridgePendingError(result.cart_token);
       }
     }

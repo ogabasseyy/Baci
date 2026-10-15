@@ -153,6 +153,8 @@ it('does not let a late previous-owner lookup enable the new owner choices', asy
 it.each([
   'version_conflict',
   'refresh_required',
+  'unauthorized',
+  'session_changed',
 ])('reloads saved observation after %s and keeps fresh choices blocked if reloading fails', async (code) => {
   const loadSavedCart = jest
     .fn()

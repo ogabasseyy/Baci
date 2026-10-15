@@ -132,5 +132,7 @@ remain rejected by regression tests.
   already used transactions; a new guard fails if a future caller omits one.
   Synthetic sender columns now match the production fingerprint, and privileged
   fixture edits are separate from authenticated RPC calls.
+  The existing Quality Gate explicitly enables these real PostgreSQL suites
+  before any test-plan shortcut; a workflow contract test prevents silent skips.
 - Quote selection and its tests are extracted below the module size limit;
   the recovery form has dedicated rendering, interaction, busy and error tests.

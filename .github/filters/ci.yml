@@ -243,6 +243,10 @@ deploy_scripts:
   - '.github/workflows/preview.yml'
 # Root Next config changes affect the web app even when apps/web/** is untouched.
 web:
+  - 'supabase/migrations/*customer_checkout_shipping_recovery*'
+  - 'supabase/tests/*recovery*'
+  - 'supabase/tests/extract-sql-function-definition*'
+  - '.github/scripts/shipping-recovery-ci-contract.test.mjs'
   - 'apps/web/**'
   - 'scripts/backfill-feed-images.ts'
   - 'apps/cloudflare-evidence-qualification-worker/**'

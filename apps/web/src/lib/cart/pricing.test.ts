@@ -158,3 +158,23 @@ describe('buildCartSnapshot', () => {
     expect(empty.warnings).toEqual([]);
   });
 });
+
+describe('pending and rejected negotiations', () => {
+  it('prices pending and rejected proposals at catalog, never at the proposal', () => {
+    for (const negotiationStatus of ['pending', 'rejected'] as const) {
+      const { snapshot } = buildCartSnapshot(
+        raw([
+          line({
+            negotiatedUnitPriceMinor: 2000,
+            negotiationStatus,
+            quantity: 2,
+            unitPriceMinor: 2500,
+          }),
+        ])
+      );
+
+      expect(snapshot.lines[0].lineTotalMinor).toBe(5000);
+      expect(snapshot.totalMinor).toBe(5000);
+    }
+  });
+});

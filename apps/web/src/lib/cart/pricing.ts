@@ -56,9 +56,14 @@ function priceLine(raw: RawCartLine): {
   }
 
   // Quiz voucher lines check out at zero, mirroring build-order-items.
+  // Only an accepted negotiation prices the line (mirroring the SQL
+  // checkout builder); pending/rejected proposals display at catalog.
   const unitPriceMinor = hasVoucher
     ? 0
-    : (raw.negotiatedUnitPriceMinor ?? raw.unitPriceMinor);
+    : raw.negotiationStatus === 'accepted' &&
+        raw.negotiatedUnitPriceMinor != null
+      ? raw.negotiatedUnitPriceMinor
+      : raw.unitPriceMinor;
 
   const line: CartLine = {
     assuranceRate: raw.assuranceRate ?? undefined,

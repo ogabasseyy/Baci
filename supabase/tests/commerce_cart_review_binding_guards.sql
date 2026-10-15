@@ -448,3 +448,45 @@ DO $$ DECLARE v_cart_cap timestamptz; v_grant_cap timestamptz; BEGIN
     RAISE EXCEPTION 'prepare must not extend the grant past its absolute lifetime';
   END IF;
 END $$;
+
+-- Cart creation is bound by the same negotiation policy: initial
+-- lines cannot self-accept a deep or non-negotiable price either.
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-create-policy","cart_scope":"bootstrap"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_create('create-policy-deep',
+    '[{"item":{"productId":"44444444-4444-4444-8444-444444444444"},"quantity":1,"negotiatedUnitPriceMinor":1}]'::jsonb, 'NGN');
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'create with deep proposal must succeed, got %', result; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines l JOIN commerce_carts c ON c.id = l.cart_id
+    WHERE c.merchant_id = '11111111-1111-4111-8111-111111111111' AND l.product_id = '44444444-4444-4444-8444-444444444444'
+      AND l.negotiated_unit_price_minor = 1 AND l.negotiation_status = 'pending') THEN
+    RAISE EXCEPTION 'create must store a deep proposal as pending, never accepted';
+  END IF;
+END $$;
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_create('create-policy-tecno',
+    '[{"item":{"productId":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"},"quantity":1,"negotiatedUnitPriceMinor":9900}]'::jsonb, 'NGN');
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'create with tecno proposal must succeed, got %', result; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE product_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' AND negotiation_status = 'pending') THEN
+    RAISE EXCEPTION 'create must never auto-accept a non-negotiable brand';
+  END IF;
+END $$;
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_create('create-policy-band',
+    '[{"item":{"productId":"44444444-4444-4444-8444-444444444444"},"quantity":1,"negotiatedUnitPriceMinor":1470}]'::jsonb, 'NGN');
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'create with in-band proposal must succeed, got %', result; END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE product_id = '44444444-4444-4444-8444-444444444444' AND negotiated_unit_price_minor = 1470 AND negotiation_status = 'accepted') THEN
+    RAISE EXCEPTION 'create must auto-accept an in-band proposal on a negotiable product';
+  END IF;
+END $$;

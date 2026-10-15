@@ -32,7 +32,9 @@ CREATE TABLE public.products (
   stock_quantity integer NOT NULL DEFAULT 0,
   stock integer NOT NULL DEFAULT 0,
   manage_stock boolean NOT NULL DEFAULT true,
-  has_variants boolean NOT NULL DEFAULT false
+  has_variants boolean NOT NULL DEFAULT false,
+  brand text,
+  name text
 );
 CREATE TABLE public.product_variants (
   id uuid PRIMARY KEY,

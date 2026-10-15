@@ -246,11 +246,20 @@ DO $$ DECLARE result jsonb; ver integer; BEGIN
     RAISE EXCEPTION 'effective set_assurance must persist the server-owned rate';
   END IF;
   SELECT version INTO ver FROM commerce_carts WHERE id = 'cccccccc-9000-4000-8000-000000000000';
-  result := public.commerce_cart_mutate('cccccccc-9000-4000-8000-000000000000','guard-reprice',ver,
+  result := public.commerce_cart_mutate('cccccccc-9000-4000-8000-000000000000','guard-reprice-deep',ver,
     '{"type":"set_negotiated_price","lineId":"dddddddd-9000-4000-8000-000000000000","negotiatedUnitPriceMinor":1200}'::jsonb);
   IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'effective mutate lost set_negotiated_price: %', result; END IF;
-  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE id = 'dddddddd-9000-4000-8000-000000000000' AND negotiated_unit_price_minor = 1200 AND negotiation_status = 'accepted' AND quantity = 1) THEN
-    RAISE EXCEPTION 'effective reprice must update the same line in place';
+  -- A 20% self-proposal exceeds the 2% auto-negotiation band: it is
+  -- stored as a pending proposal on the same line, never accepted.
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE id = 'dddddddd-9000-4000-8000-000000000000' AND negotiated_unit_price_minor = 1200 AND negotiation_status = 'pending' AND quantity = 1) THEN
+    RAISE EXCEPTION 'deep self-proposal must stay pending on the same line';
+  END IF;
+  SELECT version INTO ver FROM commerce_carts WHERE id = 'cccccccc-9000-4000-8000-000000000000';
+  result := public.commerce_cart_mutate('cccccccc-9000-4000-8000-000000000000','guard-reprice-band',ver,
+    '{"type":"set_negotiated_price","lineId":"dddddddd-9000-4000-8000-000000000000","negotiatedUnitPriceMinor":1470}'::jsonb);
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'in-band reprice must succeed: %', result; END IF;
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE id = 'dddddddd-9000-4000-8000-000000000000' AND negotiated_unit_price_minor = 1470 AND negotiation_status = 'accepted' AND quantity = 1) THEN
+    RAISE EXCEPTION 'in-band reprice must auto-accept on the same line';
   END IF;
 END $$;
 RESET ROLE;
@@ -266,6 +275,36 @@ DO $$ DECLARE result jsonb; ver integer; BEGIN
   END IF;
 END $$;
 RESET ROLE;
+
+-- Negotiation policy: deep or non-negotiable proposals never charge.
+INSERT INTO products (id, merchant_id, price, status, stock_quantity, stock, manage_stock, brand, name) VALUES
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '11111111-1111-4111-8111-111111111111', 100.00, 'active', 10, 10, true, 'Tecno', 'Tecno Spark 20');
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a9","cart_scope":"session","cart_id":"cccccccc-9000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999965"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; ver integer; BEGIN
+  SELECT version INTO ver FROM commerce_carts WHERE id = 'cccccccc-9000-4000-8000-000000000000';
+  result := public.commerce_cart_mutate('cccccccc-9000-4000-8000-000000000000','guard-add-deep',ver,
+    '{"type":"add","item":{"productId":"33333333-3333-4333-8333-333333333333"},"quantity":1,"negotiatedUnitPriceMinor":1}'::jsonb);
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'deep add proposal must be stored, got: %', result; END IF;
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE cart_id = 'cccccccc-9000-4000-8000-000000000000' AND product_id = '33333333-3333-4333-8333-333333333333' AND negotiated_unit_price_minor = 1 AND negotiation_status = 'pending') THEN
+    RAISE EXCEPTION 'a 1-minor self-proposal must stay pending, never accepted';
+  END IF;
+  SELECT version INTO ver FROM commerce_carts WHERE id = 'cccccccc-9000-4000-8000-000000000000';
+  result := public.commerce_cart_mutate('cccccccc-9000-4000-8000-000000000000','guard-add-tecno',ver,
+    '{"type":"add","item":{"productId":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"},"quantity":1,"negotiatedUnitPriceMinor":9900}'::jsonb);
+  IF NOT (result ->> 'ok')::boolean THEN RAISE EXCEPTION 'tecno proposal must be stored, got: %', result; END IF;
+  IF NOT EXISTS (SELECT 1 FROM commerce_cart_lines WHERE cart_id = 'cccccccc-9000-4000-8000-000000000000' AND product_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' AND negotiation_status = 'pending') THEN
+    RAISE EXCEPTION 'non-negotiable brands must never auto-accept, even in band';
+  END IF;
+END $$;
+RESET ROLE;
+DO $$ DECLARE snap jsonb; line jsonb; BEGIN
+  SELECT public.commerce_cart_build_checkout_snapshot('11111111-1111-4111-8111-111111111111', 'cccccccc-9000-4000-8000-000000000000') INTO snap;
+  SELECT l INTO line FROM jsonb_array_elements(snap -> 'lines') l WHERE l ->> 'productId' = '33333333-3333-4333-8333-333333333333';
+  IF (line ->> 'effectiveUnitPriceMinor')::integer <> 25000 THEN
+    RAISE EXCEPTION 'pending proposal must charge catalog, got %', line;
+  END IF;
+END $$;
 
 -- A near-expiry cart must remain usable for the accepted checkout session.
 UPDATE commerce_carts SET expires_at = now() + interval '1 second' WHERE id = 'cccccccc-8000-4000-8000-000000000000';

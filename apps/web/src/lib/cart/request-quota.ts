@@ -155,7 +155,9 @@ export async function incrementWindowCounter(
  */
 const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
   'bootstrap',
+  'create',
   'handoff_preview',
+  'handoff_redeem',
 ]);
 
 /**

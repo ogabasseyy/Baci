@@ -17,6 +17,13 @@ CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
 $$;
 
 -- Minimal catalog stubs exposing exactly the columns the command RPCs read.
+CREATE TABLE public.merchants (
+  id uuid PRIMARY KEY,
+  slug text NOT NULL,
+  premium_features jsonb NOT NULL DEFAULT '[]'::jsonb
+);
+INSERT INTO public.merchants (id, slug, premium_features) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'ogabassey', '["shared_cart","shared_cart_accounts","shared_cart_realtime"]'::jsonb);
 CREATE TABLE public.products (
   id uuid PRIMARY KEY,
   merchant_id uuid NOT NULL,

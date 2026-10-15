@@ -27,14 +27,52 @@ export type ReadCartJsonBodyResult =
   | { ok: false };
 
 /**
+ * Cart payloads are small (at most 20 lines with bounded fields); the
+ * byte cap keeps a caller from forcing large allocations before any
+ * schema validation runs.
+ */
+export const CART_JSON_BODY_MAX_BYTES = 64 * 1024;
+
+async function readBodyTextCapped(
+  request: Request,
+  maxBytes: number
+): Promise<string | null> {
+  const declared = Number(request.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return null;
+  }
+  if (!request.body) {
+    return await request.text();
+  }
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder();
+  let bytes = 0;
+  let text = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
+/**
  * Lenient JSON body reader: an absent body parses as an empty object so
- * bootstrap accepts bare POSTs, while malformed JSON fails without
- * throwing. Strict Zod schemas still reject unexpected shapes.
+ * bootstrap accepts bare POSTs, while malformed or oversized JSON fails
+ * without throwing. Strict Zod schemas still reject unexpected shapes.
  */
 export async function readCartJsonBody(
   request: Request
 ): Promise<ReadCartJsonBodyResult> {
-  const text = await request.text();
+  const text = await readBodyTextCapped(request, CART_JSON_BODY_MAX_BYTES);
+  if (text === null) {
+    return { ok: false };
+  }
   if (!text.trim()) {
     return { body: {}, ok: true };
   }

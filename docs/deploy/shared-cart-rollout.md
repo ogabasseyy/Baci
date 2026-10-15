@@ -18,6 +18,13 @@ flags remain disabled by default, and no merchant is enrolled.
   pending).
 - Device-scoped revocation (`commerce_cart_revoke_device_grants`) used
   by native retirement and web sign-out; it never clears cart contents.
+- Worker credential boundary: the `commerce_cart_worker` role's event
+  policies are intentionally unscoped (`USING (true)`) because the
+  publisher drains every merchant's outbox. That credential must stay
+  worker-only — never provision it to web, native, or any
+  shopper-facing surface — and prefer constraining the role to the
+  publish RPC path before enabling `shared_cart_realtime` in
+  production.
 
 ## Release sequence (requires separate authorization)
 

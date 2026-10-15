@@ -112,6 +112,22 @@ describe('checkCartQuota degraded store', () => {
         subject: 'ip-degraded',
       })
     ).resolves.toMatchObject({ allowed: false });
+    // Cart creation and handoff redemption materialize carts/grants
+    // from anonymous capabilities, so they fail closed too.
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'create',
+        subject: 'ip-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: false });
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'handoff_redeem',
+        subject: 'ip-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: false });
   });
 
   it('keeps authenticated operations on the degraded memory budget', async () => {

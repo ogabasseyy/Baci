@@ -37,15 +37,32 @@ def evidence_digest_for(repo, data):
     refs = sorted({ref for row in data["capabilities"] if row.get("status") != "unverified" for ref in row["source_refs"]})
     digest = hashlib.sha256()
     for ref in refs:
-        digest.update(ref.encode())
-        digest.update(b"\0")
-        digest.update(hashlib.sha256((Path(repo) / ref).read_bytes()).hexdigest().encode())
-        digest.update(b"\n")
+        for label, content in _cited_blobs(repo, ref):
+            digest.update(label.encode())
+            digest.update(b"\0")
+            digest.update(hashlib.sha256(content).hexdigest().encode())
+            digest.update(b"\n")
     digest.update(json.dumps(data["capabilities"], sort_keys=True).encode())
     digest.update(str(data.get("reviewed_at", "")).encode())
     digest.update(str(data.get("source_revision", "")).encode())
     digest.update(str(data.get("review_scope", "")).encode())
     return digest.hexdigest()
+
+
+def _cited_blobs(repo, ref):
+    """Yield (label, bytes) for a cited ref.
+
+    Directory citations expand to their sorted descendant files (the binding
+    check treats directories the same way): hashing the directory itself
+    would crash instead of binding.
+    """
+    target = Path(repo) / ref
+    if target.is_dir():
+        for path in sorted(target.rglob("*")):
+            if path.is_file():
+                yield (path.relative_to(Path(repo)).as_posix(), path.read_bytes())
+    else:
+        yield (ref, target.read_bytes())
 
 
 def main(argv=None):

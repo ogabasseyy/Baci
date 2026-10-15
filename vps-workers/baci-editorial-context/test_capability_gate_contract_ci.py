@@ -20,6 +20,7 @@ _check_spec.loader.exec_module(check)
 CI = """on:
   push:
   pull_request:
+  merge_group:
 jobs:
   changes:
     runs-on: ubuntu-24.04
@@ -46,6 +47,7 @@ class ContractCiTests(unittest.TestCase):
         ci = """on:
   push:
   pull_request:
+  merge_group:
 jobs:
   changes:
     runs-on: ubuntu-24.04
@@ -171,10 +173,118 @@ jobs:
         self.assertTrue(failures)
         self.assertIn("precede", failures[0])
 
+    def test_merge_group_presence_and_scope(self):
+        # merge_group keeps the quality gate running on merge-queue
+        # integration commits; dropping or narrowing it strands the queue.
+        failures = check.ci_failures(CI.replace("  merge_group:\n", "", 1))
+        self.assertTrue(failures)
+        self.assertIn("merge_group", failures[0])
+        narrowed = CI.replace(
+            "  merge_group:\n", "  merge_group:\n    types: [opened]\n", 1
+        )
+        failures = check.ci_failures(narrowed)
+        self.assertTrue(failures)
+        self.assertIn("types", failures[0])
+
+    def test_inline_trigger_filters_fail(self):
+        # Flow-style mappings on the trigger line are invisible to the
+        # subkey parser: pull_request: {branches: [never]} would silence
+        # the gate for main PRs while the key stays present.
+        inline = CI.replace(
+            "  pull_request:\n", "  pull_request: {branches: [never]}\n", 1
+        )
+        failures = check.ci_failures(inline)
+        self.assertTrue(failures)
+        self.assertIn("inline", failures[0])
+
+    def test_commented_branch_pattern_does_not_match(self):
+        # `branches: [never] #, main` filters to never: main comes from the
+        # YAML comment and must not count as a pattern.
+        ci = CI.replace(
+            "  pull_request:\n  merge_group:\n",
+            "  pull_request:\n    branches: [never] #, main\n  merge_group:\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("main", failures[0])
+
+    def test_quoted_hash_pattern_stays_literal(self):
+        # A '#' inside quotes is a literal pattern character, not a
+        # comment: ["#main", main] still matches main.
+        ci = CI.replace(
+            "  pull_request:\n  merge_group:\n",
+            '  pull_request:\n    branches: ["#main", main]\n  merge_group:\n',
+            1,
+        )
+        self.assertEqual(check.ci_failures(ci), [])
+
+    def test_pre_gate_local_action_fails(self):
+        # A local uses: step runs PR code before the gate exactly like a
+        # run: step does — only the pinned checkout may precede it.
+        ci = CI.replace(
+            "      - name: Test capability register binding\n",
+            "      - uses: ./tools/evil-action\n      - name: Test capability register binding\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("only the pinned checkout", failures[0])
+
+    def test_swapped_checkout_pin_fails(self):
+        # Swapping the checkout action itself runs attacker code before
+        # the gate while the step layout still looks intact.
+        ci = CI.replace(
+            "      - name: Test capability register binding\n",
+            "      - uses: actions/checkout@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
+            "      - name: Test capability register binding\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("only the pinned checkout", failures[0])
+
+    def test_pinned_checkout_before_gate_passes(self):
+        # The real ci.yml shape (exact checkout, then the gate) stays
+        # green: the preceding-step pin must not false-positive.
+        ci = CI.replace(
+            "      - name: Test capability register binding\n",
+            "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
+            "        with:\n          fetch-depth: 0\n          persist-credentials: false\n"
+            "      - name: Test capability register binding\n",
+            1,
+        )
+        self.assertEqual(check.ci_failures(ci), [])
+
+    def test_top_level_startup_env_fails(self):
+        # Top-level env inherits into the gate job: a PR-added PYTHONPATH
+        # preloads sitecustomize before the gate's python3 starts.
+        ci = CI.replace(
+            "  merge_group:\n",
+            "  merge_group:\n\nenv:\n  PYTHONPATH: /tmp/payload\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("startup code", failures[0])
+
+    def test_gate_job_env_fails(self):
+        # Job-level env preloads PR code into every step: PYTHONPATH brings
+        # sitecustomize, BASH_ENV is sourced by bash before the gate runs.
+        ci = CI.replace(
+            "  changes:\n    runs-on: ubuntu-24.04\n",
+            "  changes:\n    runs-on: ubuntu-24.04\n    env:\n      PYTHONPATH: ${{ github.workspace }}/payload\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("environment", failures[0])
+
     def test_fake_comment_cannot_satisfy(self):
         ci = """on:
   push:
   pull_request:
+  merge_group:
 jobs:
   changes:
     runs-on: ubuntu-24.04

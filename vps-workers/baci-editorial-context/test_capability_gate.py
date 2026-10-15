@@ -203,6 +203,11 @@ class CapabilityGateTests(unittest.TestCase):
         self.assertFalse(gate.requires_register_update(fresh, touched))
         # Unrelated change: no re-review.
         self.assertFalse(gate.requires_register_update(fresh, {"apps/web/src/lib/other.ts"}, base))
+        # Map-cited-only change (map claims' evidence moved, map and
+        # register untouched): the map's review date would go stale.
+        cited_map = "Shop boundary in `apps/web/mcp-server/server.ts` applies"
+        self.assertTrue(gate.requires_register_update(fresh, {"apps/web/mcp-server/server.ts"}, base, map_text=cited_map))
+        self.assertFalse(gate.requires_register_update(fresh, {"apps/web/src/lib/other.ts"}, base, map_text=cited_map))
         # Stale register: the freshness hard gate (not this rule) owns the failure.
         self.assertFalse(gate.requires_register_update(stale, unverified_change, base))
         # Unknown inputs: fail closed elsewhere, nothing to enforce here.
@@ -219,6 +224,14 @@ class CapabilityGateTests(unittest.TestCase):
         self.assertIs(gate.newer_base_register(tip, tip), tip)
         self.assertIs(gate.newer_base_register(None, fork), fork)
         self.assertIs(gate.newer_base_register("unreadable", fork), fork)
+
+    def test_newer_base_register_compares_instants(self):
+        # Lexicographic ordering picks the older register across UTC
+        # offsets: 00:30+00:00 is newer than 01:00+01:00.
+        tip = {"reviewed_at": "2026-10-10T00:30:00+00:00"}
+        fork = {"reviewed_at": "2026-10-10T01:00:00+01:00"}
+        self.assertIs(gate.newer_base_register(tip, fork), tip)
+        self.assertIs(gate.newer_base_register(fork, tip), tip)
 
 if __name__ == "__main__":
     unittest.main()

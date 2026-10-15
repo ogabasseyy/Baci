@@ -65,7 +65,7 @@ def _ordered_branch_match(subs, trig, lines, end):
             pats.append(item.group(1))
             j += 1
         for raw in pats:
-            for part in raw.strip().strip("[]").split(","):
+            for part in _strip_comment(raw).strip().strip("[]").split(","):
                 pat = part.strip().strip("'\"")
                 if not pat:
                     continue
@@ -84,8 +84,30 @@ def _norm(line):
     return re.sub(r"\s+:", ":", line.strip())
 
 
+def _strip_comment(value):
+    """Cut a trailing YAML comment: '#' starts one outside quotes when it
+    begins the value or follows whitespace (a quoted '#' stays literal)."""
+    in_single = in_double = False
+    for i, ch in enumerate(value):
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        elif ch == "#" and not in_single and not in_double and (i == 0 or value[i - 1] in " \t"):
+            return value[:i]
+    return value
+
+
 _JOB_HEADER = re.compile(r"^  [A-Za-z0-9_.\-]+\s*:")
-_JOB_CONDITION = re.compile(r"^    (if|needs|continue-on-error)\s*:")
+_JOB_CONDITION = re.compile(r"^    [\"']?(if|needs|continue-on-error)[\"']?\s*:")
+EXPECTED_PRECEDING_CHECKOUT = "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
+# Interpreter/shell startup preloads: inheriting one of these at workflow
+# scope runs PR-controlled code before the gate's python3 starts.
+_STARTUP_ENV = frozenset({
+    "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV",
+    "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB",
+    "PERLLIB", "RUBYLIB", "RUBYOPT",
+})
 _NEXT_STEP = re.compile(r"^      -(\s|$)")
 _TRIGGER_KEY = re.compile(r"^  ([A-Za-z_]+)\s*:\s*(.*)$")
 _TRIGGER_SUBKEY = re.compile(r"^    ([A-Za-z_-]+)\s*:\s*(.*)$")
@@ -104,8 +126,17 @@ def trigger_failures(ci_text):
     subs, end = _on_block_subs(lines)
     if subs is None:
         return ["ci.yml must declare workflow triggers"]
-    failures = [f"ci.yml must keep the {name} trigger" for name in sorted({"push", "pull_request"} - set(subs))]
-    for trig in ("push", "pull_request"):
+    failures = [f"ci.yml must keep the {name} trigger" for name in sorted({"push", "pull_request", "merge_group"} - set(subs))]
+    try:
+        on_at = next(i for i, line in enumerate(lines) if line == "on:")
+    except StopIteration:
+        on_at = None
+    if on_at is not None:
+        for line in lines[on_at + 1 : end]:
+            inline = re.match(r"^  (push|pull_request|merge_group)\s*:\s*(.*)$", line)
+            if inline and _strip_comment(inline.group(2)).strip():
+                failures.append(f"ci.yml must not carry inline {inline.group(1)} trigger filters:")
+    for trig in ("push", "pull_request", "merge_group"):
         for key, rest, idx in subs.get(trig, []):
             if key in ("paths", "paths-ignore", "branches-ignore"):
                 failures.append(f"ci.yml must not narrow the {trig} trigger with {key}:")
@@ -123,6 +154,22 @@ def ci_failures(ci_text):
     """Exact invocation block bound to an unconditional executing job."""
     lines = ci_text.splitlines()
     failures = trigger_failures(ci_text)
+    # Top-level env inherits into every job including the gate: a PR-added
+    # startup variable preloads code before the gate runs.
+    try:
+        top = next(i for i, line in enumerate(lines) if line == "env:")
+    except StopIteration:
+        top = None
+    if top is not None:
+        for line in lines[top + 1 :]:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if not line.startswith("  ") or line.startswith("   "):
+                break
+            if stripped.split(":")[0] in _STARTUP_ENV:
+                failures.append(f"ci.yml top-level env must not preload startup code ({stripped.split(':')[0]})")
+                break
     starts = [i for i, line in enumerate(lines) if _norm(line) == _norm(STEP_NAME_LINE)]
     if len(starts) != 1:
         return failures + ["ci.yml must invoke the capability gate exactly once"]
@@ -144,13 +191,25 @@ def ci_failures(ci_text):
         stripped = line.strip()
         if stripped and not stripped.startswith("#") and re.match(r"^ref\s*:", stripped):
             return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
-    # PR-controlled scripts must not run before the gate: a preceding step
+    # PR-controlled code must not run before the gate: a preceding step
     # could overwrite the checked-out gate code, which then runs while the
-    # contract (separate checkout) still sees pristine files.
+    # contract (separate checkout) still sees pristine files. Only the exact
+    # pinned checkout may precede it — a local action runs PR code the same
+    # way a run: step does. Startup environments are rejected too: job- or
+    # step-level env can preload PR code (PYTHONPATH/sitecustomize, BASH_ENV)
+    # before the gate's python3 starts.
     for line in lines[job_start:start]:
         stripped = line.strip()
-        if stripped and not stripped.startswith("#") and re.match(r"^run\s*:", stripped):
+        if not stripped or stripped.startswith("#"):
+            continue
+        if re.match(r"^-\s+uses\s*:", stripped):
+            if stripped != EXPECTED_PRECEDING_CHECKOUT:
+                return failures + ["only the pinned checkout may precede the capability gate"]
+            continue
+        if re.match(r"^run\s*:", stripped):
             return failures + ["no PR-controlled steps may precede the capability gate"]
+        if re.match(r"^env\s*:", stripped):
+            return failures + ["capability gate job must not set environment (startup injection)"]
     code = []
     for line in lines[start + 1 :]:
         if _NEXT_STEP.match(line):
@@ -162,128 +221,4 @@ def ci_failures(ci_text):
         or any(len(line) - len(line.lstrip()) != 8 for line in code)
     ):
         return failures + ["capability gate invocation must be exactly the pinned block"]
-    return failures
-
-
-def contract_trigger_failures(workflow_text):
-    """The guard's own triggers must stay unwidened-in-reverse.
-
-    Presence alone is not enough: types: [opened] or branches: [never]
-    under pull_request_target keeps the key while silencing synchronize
-    updates or main-targeted PRs, so later enforcement changes bypass the
-    independent guard after merge.
-    """
-    lines = workflow_text.splitlines()
-    try:
-        on = next(i for i, line in enumerate(lines) if line == "on:")
-    except StopIteration:
-        return ["contract workflow must declare triggers"]
-    end = len(lines)
-    for i in range(on + 1, len(lines)):
-        line = lines[i]
-        if line and not line[0].isspace() and not line.startswith("#"):
-            end = i
-            break
-    failures = []
-    current = None
-    subs = {}
-    for i in range(on + 1, end):
-        line = lines[i]
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        key = _TRIGGER_KEY.match(line)
-        if key:
-            current = key.group(1)
-            subs[current] = []
-            continue
-        sub = _TRIGGER_SUBKEY.match(line)
-        if sub and current is not None:
-            subs[current].append((sub.group(1), sub.group(2), i))
-    if "pull_request_target" not in subs:
-        return ["contract workflow must keep the pull_request_target trigger"]
-    for key, rest, idx in subs["pull_request_target"]:
-        if key in ("paths", "paths-ignore", "branches-ignore"):
-            failures.append(f"contract workflow must not narrow pull_request_target with {key}:")
-        if key == "types":
-            got = [rest] if rest.strip() else []
-            j = idx + 1
-            while j < end:
-                item = _TRIGGER_ITEM.match(lines[j])
-                if not item:
-                    break
-                got.append(item.group(1))
-                j += 1
-            want = {"opened", "synchronize", "reopened", "edited"}
-            have = {part.strip().strip("'\"") for raw in got for part in raw.strip().strip("[]").split(",") if part.strip()}
-            if not want <= have:
-                failures.append("contract workflow must keep the full pull_request_target types:")
-        if key == "branches":
-            got = [rest] if rest.strip() else []
-            j = idx + 1
-            while j < end:
-                item = _TRIGGER_ITEM.match(lines[j])
-                if not item:
-                    break
-                got.append(item.group(1))
-                j += 1
-            patterns = [p.strip().strip("'\"") for raw in got for p in raw.strip().strip("[]").split(",") if p.strip()]
-            if not any(fnmatch.fnmatchcase("main", pat) for pat in patterns):
-                failures.append("contract workflow must keep an exact main match in pull_request_target branches:")
-    return failures
-
-
-def workflow_failures(workflow_text):
-    """The contract workflow must keep executing base-owned logic, exactly.
-
-    Substring markers can hide in comments or dead steps, so the single run
-    block is compared line for line: an added executable step, a dropped
-    fetch, or head-owned execution all fail. The workflow also stays
-    read-only and keeps its pull_request_target trigger.
-    """
-    code = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
-    failures = contract_trigger_failures(workflow_text)
-    if not any(re.match(r"^\s*pull_request_target\s*:", line) for line in code):
-        failures.append("contract workflow must keep the pull_request_target trigger")
-    if "contents: read" not in "\n".join(code):
-        failures.append("contract workflow must stay read-only (contents: read)")
-    if not any(line.strip() == "ref: ${{ github.event.pull_request.head.sha }}" for line in code):
-        failures.append("contract workflow must check out the PR head (base ref would validate the base tree)")
-    if not any(re.match(r"^\s*PINNED_CHECKER_SHA256:\s*[0-9a-f]{64}\s*$", line) for line in code):
-        failures.append("contract workflow must declare its checker pin as a live entry (not a comment)")
-    headers = [i for i, line in enumerate(code) if re.match(r"^  [A-Za-z0-9_.\-]+\s*:", line)]
-    gate = next((i for i, line in enumerate(code) if re.match(r"^  gate-contract\s*:", line)), None)
-    if gate is None:
-        return failures + ["contract workflow must keep the gate-contract job"]
-    later = [i for i in headers if i > gate]
-    block = code[gate : (later[0] if later else len(code))]
-    # A disabled or failure-tolerant job skips the guard while the shell
-    # block stays byte-identical: reject job-level and step-level gates.
-    for line in block:
-        if re.match(r"^    (if|needs|continue-on-error)\s*:", line):
-            failures.append("contract workflow job must stay unconditional")
-            break
-    for line in block:
-        if re.match(r"^        (if|continue-on-error)\s*:", line):
-            failures.append("contract workflow steps must stay unconditional")
-            break
-    if any(re.match(r"^\s*permissions\s*:", line) for line in block):
-        failures.append("contract workflow job must not override permissions")
-    steps = [line for line in block if re.match(r"^      -(\s|$)", line)]
-    if len(steps) != 2:
-        return failures + [f"contract workflow job must keep exactly its two steps (found {len(steps)})"]
-    runs = [i for i, line in enumerate(code) if re.match(r"^\s*run\s*:", line)]
-    if len(runs) != 1:
-        return failures + [f"contract workflow must have exactly one run step (found {len(runs)})"]
-    if not re.match(r"^\s*run\s*:\s*\|\s*$", code[runs[0]]):
-        return failures + ["contract workflow run step must stay a block run"]
-    indent = len(code[runs[0]]) - len(code[runs[0]].lstrip())
-    body = []
-    for line in code[runs[0] + 1 :]:
-        stripped = line.strip()
-        if len(line) - len(line.lstrip()) <= indent:
-            break
-        body.append(stripped)
-    if body != EXPECTED_RUN:
-        failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
     return failures

@@ -11,6 +11,7 @@ from capability_gate_contract_ci_checks import (
     WORKFLOW,
     _on_block_subs,
     _ordered_branch_match,
+    _strip_comment,
 )
 
 # The gate job's run block, stripped per line. Any edit — an added step, a
@@ -52,6 +53,27 @@ EXPECTED_JOB_CONDITIONS = {
     "gate-attestation": "github.event_name == 'push'",
 }
 
+# Required status checks are named by job name and ignore event triggers,
+# while a skipped job still reports success: swapping these display names
+# would let the push-only attestation satisfy the guard's required context
+# while the real check runs under an unrequired name.
+EXPECTED_JOB_NAMES = {
+    "gate-contract": "Capability Gate Contract",
+    "gate-attestation": "Capability Gate Contract Attestation",
+}
+
+# The attestation is never trusted, but its same-named context must not be
+# rewritable into fake confirmation: pin its steps exactly.
+EXPECTED_ATTESTATION_STEPS = [
+    "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
+    "with:",
+    "fetch-depth: 1",
+    "persist-credentials: false",
+    "- name: Attest merged enforcement pins",
+    "shell: bash",
+    'run: python3 .github/scripts/capability_gate_contract_check.py "$PINNED_CHECKER_SHA256"',
+]
+
 _JOB_HEADER = re.compile(r"^  ([A-Za-z0-9_.\-]+)\s*:")
 _TRIGGER_KEY = re.compile(r"^  ([A-Za-z_]+)\s*:\s*(.*)$")
 _TRIGGER_SUBKEY = re.compile(r"^    ([A-Za-z_-]+)\s*:\s*(.*)$")
@@ -73,6 +95,11 @@ def contract_trigger_failures(workflow_text):
     failures = []
     if "pull_request_target" not in subs:
         return ["contract workflow must keep the pull_request_target trigger"]
+    on_at = next(i for i, line in enumerate(lines) if line == "on:")
+    for line in lines[on_at + 1 : end]:
+        inline = re.match(r"^  pull_request_target\s*:\s*(.*)$", line)
+        if inline and _strip_comment(inline.group(1)).strip():
+            failures.append("contract workflow must not carry inline pull_request_target trigger filters:")
     for key, rest, idx in subs["pull_request_target"]:
         if key in ("paths", "paths-ignore", "branches-ignore"):
             failures.append(f"contract workflow must not narrow pull_request_target with {key}:")
@@ -86,7 +113,8 @@ def contract_trigger_failures(workflow_text):
                 got.append(item.group(1))
                 j += 1
             want = {"opened", "synchronize", "reopened", "edited"}
-            have = {part.strip().strip("'\"") for raw in got for part in raw.strip().strip("[]").split(",") if part.strip()}
+            clean = [_strip_comment(raw) for raw in got]
+            have = {part.strip().strip("'\"") for raw in clean for part in raw.strip().strip("[]").split(",") if part.strip()}
             if not want <= have:
                 failures.append("contract workflow must keep the full pull_request_target types:")
     if _ordered_branch_match(subs, "pull_request_target", lines, end) is False:
@@ -142,11 +170,23 @@ def workflow_failures(workflow_text):
         conds = [
             (m.group(1), m.group(2))
             for line in slice_
-            if (m := re.match(r"^    (if|needs|continue-on-error)\s*:\s*(.*)$", line))
+            if (m := re.match(r"^    [\"']?(if|needs|continue-on-error)[\"']?\s*:\s*(.*)$", line))
         ]
         if ("if", want) not in conds or len([c for c, _ in conds if c == "if"]) != 1:
             failures.append(f"contract workflow {job} job must run only on its safe event")
-    conds = [(m.group(1), m.group(2)) for line in block if (m := re.match(r"^    (if|needs|continue-on-error)\s*:\s*(.*)$", line))]
+    for job, want_name in EXPECTED_JOB_NAMES.items():
+        at = next(i for i, line in enumerate(code) if re.match(rf"^  {job}\s*:", line))
+        following = [i for i in range(len(code)) if i > at and re.match(r"^  [A-Za-z0-9_.\-]+\s*:", code[i])]
+        slice_ = code[at : (following[0] if following else len(code))]
+        names = [m.group(1).strip().strip("\"'") for line in slice_ if (m := re.match(r"^    name\s*:\s*(.*)$", line))]
+        if names != [want_name]:
+            failures.append(f"contract workflow {job} job must keep its guard status name")
+    att = next(i for i, line in enumerate(code) if re.match(r"^  gate-attestation\s*:", line))
+    att_steps = [line.strip() for line in code[att:] if line.strip() and not line.strip().startswith("#")]
+    att_steps = att_steps[att_steps.index("steps:") + 1 :]
+    if att_steps != EXPECTED_ATTESTATION_STEPS:
+        failures.append("contract workflow attestation must keep exactly its pinned steps")
+    conds = [(m.group(1), m.group(2)) for line in block if (m := re.match(r"^    [\"']?(if|needs|continue-on-error)[\"']?\s*:\s*(.*)$", line))]
     if any(c in ("needs", "continue-on-error") for c, _ in conds):
         failures.append("contract workflow gate job must stay unconditional")
     # The checker baseline must live where it propagates to the executing
@@ -160,13 +200,16 @@ def workflow_failures(workflow_text):
                 break
             if re.match(r"^\s*PINNED_CHECKER_SHA256:\s*[0-9a-f]{64}\s*$", line):
                 live_pin = True
+            else:
+                failures.append("contract workflow top-level env must carry only the checker pin")
+                break
     for line in block:
         if re.match(r"^      PINNED_CHECKER_SHA256:\s*[0-9a-f]{64}\s*$", line):
             live_pin = True
     if not live_pin:
         failures.append("contract workflow must declare its checker pin where it propagates (top-level or gate job env)")
     for line in block:
-        if re.match(r"^        (if|continue-on-error)\s*:", line):
+        if re.match(r"^        [\"']?(if|continue-on-error)[\"']?\s*:", line):
             failures.append("contract workflow steps must stay unconditional")
             break
     if any(re.match(r"^\s*permissions\s*:", line) for line in block):
@@ -194,4 +237,21 @@ def workflow_failures(workflow_text):
         body.append(stripped)
     if body != EXPECTED_RUN:
         failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
+    # Startup env preloads PR code before the checker starts (job BASH_ENV,
+    # step PYTHONPATH/sitecustomize): job env carries only the pin, steps none.
+    env_open = False
+    for line in block:
+        if re.match(r"^    env\s*:", line):
+            env_open = True
+            continue
+        if env_open:
+            if re.match(r"^      \S", line):
+                if not re.match(r"^      PINNED_CHECKER_SHA256:\s*[0-9a-f]{64}\s*$", line):
+                    failures.append("contract workflow job env must carry only the checker pin")
+                    break
+                continue
+            env_open = False
+        if re.match(r"^        env\s*:", line):
+            failures.append("contract workflow steps must not set environment")
+            break
     return failures

@@ -219,6 +219,79 @@ class ContractWorkflowTests(unittest.TestCase):
         self.assertTrue(failures)
         self.assertIn("exactly one run step", failures[0])
 
+    def test_quoted_conditions_fail(self):
+        # "if": false is the same key as if: false and must not slip past.
+        text = _workflow_text()
+        quoted_step = text.replace(
+            "        run: |\n",
+            '        "if": false\n        run: |\n',
+            1,
+        )
+        failures = check.workflow_failures(quoted_step)
+        self.assertTrue(failures)
+        self.assertIn("unconditional", " ".join(failures))
+        quoted_job = text.replace(
+            "    if: github.event_name == 'pull_request_target'\n",
+            '    "if": false\n',
+            1,
+        )
+        failures = check.workflow_failures(quoted_job)
+        self.assertTrue(failures)
+        self.assertIn("safe event", " ".join(failures))
+
+    def test_swapped_or_dropped_job_names_fail(self):
+        # Required checks are named by job name and ignore triggers, while
+        # skipped jobs report success: a name swap lets the push-only
+        # attestation satisfy the guard's required context.
+        text = _workflow_text()
+        swapped = text.replace(
+            "    name: Capability Gate Contract\n",
+            "    name: Capability Gate Contract Attestation\n",
+            1,
+        )
+        failures = check.workflow_failures(swapped)
+        self.assertTrue(failures)
+        self.assertIn("status name", " ".join(failures))
+        dropped = text.replace("    name: Capability Gate Contract\n", "", 1)
+        failures = check.workflow_failures(dropped)
+        self.assertTrue(failures)
+        self.assertIn("status name", " ".join(failures))
+
+    def test_attestation_rewrite_fails(self):
+        text = _workflow_text()
+        weakened = text.replace(
+            'run: python3 .github/scripts/capability_gate_contract_check.py "$PINNED_CHECKER_SHA256"\n',
+            "run: echo attested\n",
+            1,
+        )
+        failures = check.workflow_failures(weakened)
+        self.assertTrue(failures)
+        self.assertIn("attestation", " ".join(failures))
+
+    def test_startup_environments_fail(self):
+        # BASH_ENV is sourced by bash and PYTHONPATH preloads
+        # sitecustomize before the base-owned checker starts.
+        text = _workflow_text()
+        bashed = text.replace(
+            "    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n    steps:\n      - uses: actions/checkout",
+            "    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n    env:\n      BASH_ENV: /tmp/payload.sh\n    steps:\n      - uses: actions/checkout",
+            1,
+        )
+        failures = check.workflow_failures(bashed)
+        self.assertTrue(failures)
+        self.assertIn("env", " ".join(failures))
+        pathed = text.replace(
+            '        run: |\n',
+            '        env:\n          PYTHONPATH: ${{ github.workspace }}/payload\n        run: |\n',
+            1,
+        )
+        failures = check.workflow_failures(pathed)
+        self.assertTrue(failures)
+        self.assertIn("env", " ".join(failures))
+        topped = text.replace("env:\n", "env:\n  BASH_ENV: /tmp/payload.sh\n", 1)
+        failures = check.workflow_failures(topped)
+        self.assertTrue(failures)
+        self.assertIn("only the checker pin", " ".join(failures))
 
 if __name__ == "__main__":
     unittest.main()

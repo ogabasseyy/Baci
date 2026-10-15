@@ -1,3 +1,5 @@
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { registerCatalogRenderer } from './catalog-render-tool';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
 /**
@@ -1242,7 +1244,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
       contents: [
         {
           uri: STORE_WIDGET_URI,
-          mimeType: 'text/html+skybridge',
+          mimeType: 'text/html;profile=mcp-app',
           text: premiumWidgetHtml,
           _meta: {
             ui: {
@@ -1253,6 +1255,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
                 resourceDomains: [MCP_PUBLIC_ORIGIN],
               },
             },
+            'openai/widgetDescription': 'Interactive Ogabassey products with guest-cart controls and website checkout links.',
             'openai/widgetPrefersBorder': true,
             'openai/widgetCSP': {
               connect_domains: [],
@@ -1639,23 +1642,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     );
   }
 
-  // Tool: Get product details
-  server.registerTool(
-    'get_product',
-    {
-      outputSchema: mcpToolOutputSchemas.get_product,
-      title: 'Get Product Details',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
-      inputSchema: productLookupInputSchema,
-      _meta: {
-        'openai/outputTemplate': STORE_WIDGET_URI,
-        'openai/toolInvocation/invoking': 'Loading product...',
-        'openai/toolInvocation/invoked': 'Product loaded',
-      },
-    },
-    async (args) => {
+  const getProductDetails = async (args: { product_id?: string; product_name?: string }): Promise<CallToolResult> => {
       const merchantId = await getMerchantId();
       if (!merchantId) {
         return {
@@ -1727,8 +1714,25 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
       }
 
       return buildMcpProductDetail({ product, supabase, formatPrice, getSafeCatalogImageUrl });
-    }
+    };
+  // Tool: Get product details
+  server.registerTool(
+    'get_product',
+    {
+      outputSchema: mcpToolOutputSchemas.get_product,
+      title: 'Get Product Details',
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      description:
+        `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
+      inputSchema: productLookupInputSchema,
+      _meta: {
+        'openai/toolInvocation/invoking': 'Loading product...',
+        'openai/toolInvocation/invoked': 'Product loaded',
+      },
+    },
+    getProductDetails
   );
+  registerCatalogRenderer(server, STORE_WIDGET_URI, (id) => getProductDetails({ product_id: id }));
 
   if (ORDER_PAYMENT_TOOLS_ENABLED) {
     // Tool: Check order status
@@ -2552,7 +2556,7 @@ const httpServer = createServer(
     if (req.method === 'GET' && url.pathname.startsWith('/mcp/render/')) {
       // Serve widget HTML for ChatGPT to render
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Content-Type', 'text/html+skybridge; charset=utf-8');
+      res.setHeader('Content-Type', 'text/html;profile=mcp-app; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       res.writeHead(200);
       res.end(premiumWidgetHtml);

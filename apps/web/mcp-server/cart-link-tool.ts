@@ -58,6 +58,7 @@ export function registerCartLinkTools(
     // module's shape so runtime and card stay on one contract.
     inputSchema: cartLinkInputSchema.shape,
     _meta: {
+      ui: { visibility: ['model', 'app'] },
       'openai/widgetAccessible': true, // Enable widget-initiated calls
       'openai/toolInvocation/invoking': 'Finding your cart on Ogabassey...',
       'openai/toolInvocation/invoked': 'Ready to add on Ogabassey',

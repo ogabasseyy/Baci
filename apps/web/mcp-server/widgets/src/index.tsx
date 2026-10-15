@@ -1,3 +1,4 @@
+import { initializeMcpApp } from './mcp-app-bridge';
 import { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrandLogo } from './brand-logo';
@@ -6,6 +7,8 @@ import { useCartHandoff } from './hooks/use-cart-handoff';
 import { useOpenAiGlobal } from './hooks/use-openai-global';
 import { ProductCard } from './product-card';
 import type { Product } from './widget-types';
+
+void initializeMcpApp();
 
 // Main App Component
 export function App() {

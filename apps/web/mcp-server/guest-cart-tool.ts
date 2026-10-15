@@ -47,6 +47,7 @@ export function registerGuestCartTool(
         idempotentHint: false,
       },
       _meta: {
+        ui: { visibility: ['model', 'app'] },
         'openai/widgetAccessible': true,
         'openai/toolInvocation/invoking': 'Saving to your guest cart…',
         'openai/toolInvocation/invoked': 'Guest cart saved',

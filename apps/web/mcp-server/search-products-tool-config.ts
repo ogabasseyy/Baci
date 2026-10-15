@@ -5,7 +5,7 @@ import { MCP_SEARCH_CATEGORY_GUIDANCE } from './search-category-guidance';
 import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from './search-products-description';
 
 /** Search registration metadata/schema; retrieval handler remains in the server. */
-export function createSearchProductsToolConfig(widgetUri: string) {
+export function createSearchProductsToolConfig(_widgetUri?: string) {
   return {
     outputSchema: mcpToolOutputSchemas.search_products,
     title: 'Search Products',
@@ -39,7 +39,6 @@ export function createSearchProductsToolConfig(widgetUri: string) {
       limit: z.number().min(1).max(20).optional().default(10),
     },
     _meta: {
-      'openai/outputTemplate': widgetUri,
       'openai/toolInvocation/invoking': 'Searching catalog...',
       'openai/toolInvocation/invoked': 'Search complete',
     },

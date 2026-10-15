@@ -15,6 +15,18 @@ const PREFLIGHT_FINISH_WRITE_RESERVE_MS = 8_000;
 // One initiation leg worst case, mirroring the initiation admission
 // (provider call plus its audit reserve).
 const REFUND_INITIATION_LEG_WORST_MS = 38_000;
+// Worst-case budget a refund verification needs before it may start:
+// the provider check plus one initiation leg plus the finish-write
+// reserve. The drain admits refund rows against this BEFORE claiming
+// (see drain-failed-order-cancellation-side-effects): without the
+// pre-claim check, a short window claims the row only for the
+// admission below to defer it, repeating every invocation under
+// backlog with zero progress. Single source: the admission below
+// and the drain both use it, so they cannot drift apart.
+export const REFUND_PREFLIGHT_ADMISSION_BUDGET_MS =
+  PREFLIGHT_PROVIDER_CALL_WORST_MS +
+  REFUND_INITIATION_LEG_WORST_MS +
+  PREFLIGHT_FINISH_WRITE_RESERVE_MS;
 
 // Run one leg's provider verification under the admission budget.
 // Returns true when the leg verified, false when the window ran
@@ -46,13 +58,10 @@ export async function schedulePreflightProviderVerification({
   // verified prefix into initiated refunds. Reserving the whole
   // outstanding set instead starves multi-leg orders behind every
   // window shorter than the full worst case.
-  const remainingMs =
-    deadlineMs === undefined
-      ? undefined
-      : deadlineMs - Date.now() - PREFLIGHT_FINISH_WRITE_RESERVE_MS;
-  const requiredMs =
-    PREFLIGHT_PROVIDER_CALL_WORST_MS + REFUND_INITIATION_LEG_WORST_MS;
-  if (remainingMs !== undefined && remainingMs < requiredMs) {
+  if (
+    deadlineMs !== undefined &&
+    deadlineMs - Date.now() < REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
+  ) {
     if (hasVerifiedPrefix) {
       return false;
     }

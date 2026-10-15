@@ -17,8 +17,13 @@ BEGIN
   -- balance recordable beside it (double-record). No currency
   -- filtering on the scan for this reason: it would drop the row
   -- from both sums.
+  -- Amounts carry no positivity constraint, so non-positive rows
+  -- floor at one unit: a zero row would otherwise vanish and a
+  -- negative row could cancel real in-flight money, opening
+  -- recording the executor would refuse. Honest positive sums stay
+  -- exact; corrupt rows pin the gate instead of erasing evidence.
   RETURN (SELECT
-    COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')
+    COALESCE(sum(CASE WHEN COALESCE(amount,0) <= 0 THEN 1 ELSE amount END) FILTER (WHERE status NOT IN ('completed','refunded','failed')
       OR (status IN ('completed','refunded')
         AND (public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
           OR (public.normalized_gateway_name_v1(gateway)='MANUAL'
@@ -32,6 +37,7 @@ BEGIN
             WHERE leg.id::text = transactions.metadata->>'payment_transaction_id'
               AND leg.order_id=p_order_id AND leg.merchant_id=p_merchant_id
               AND leg.transaction_type='payment'
+              AND leg.status IN ('completed','refund_pending','refunded')
               AND (public.normalized_gateway_name_v1(transactions.gateway)='MANUAL'
                 OR public.normalized_gateway_name_v1(transactions.gateway)
                   =public.normalized_gateway_name_v1(leg.gateway)))

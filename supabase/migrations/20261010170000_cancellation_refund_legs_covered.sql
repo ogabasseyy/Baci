@@ -173,7 +173,20 @@ BEGIN
              = merchant_claim.metadata->>'payment_transaction_id'
              AND leg.order_id = p_order_id
              AND leg.merchant_id = p_merchant_id
-             AND leg.transaction_type = 'payment'))
+             AND leg.transaction_type = 'payment'
+             AND leg.status IN ('completed', 'refund_pending', 'refunded')))
+  ) AND NOT EXISTS (
+    -- In-flight refund evidence blocks finalization even when every
+    -- leg is terminally covered: finalizing would complete the side
+    -- effect (never drained again) while the manager still reports
+    -- pending and a second provider refund could settle unnoticed.
+    -- Mirrors the pending gate's nonterminal predicate verbatim;
+    -- only definitively failed rows are dead enough to ignore.
+    SELECT 1 FROM public.transactions in_flight
+     WHERE in_flight.order_id = p_order_id
+       AND in_flight.merchant_id = p_merchant_id
+       AND in_flight.transaction_type = 'refund'
+       AND in_flight.status NOT IN ('completed', 'refunded', 'failed')
   ) AND NOT EXISTS (
     -- Anomalous terminal evidence blocks finalization exactly like
     -- the manager's pending gate: a currency-mismatched,
@@ -198,6 +211,10 @@ BEGIN
                AND leg.order_id = p_order_id
                AND leg.merchant_id = p_merchant_id
                AND leg.transaction_type = 'payment'
+               -- A link is valid only to a funded leg: the executor
+               -- never loads failed legs, so a refund on one is
+               -- unreconciled evidence, never coverage.
+               AND leg.status IN ('completed', 'refund_pending', 'refunded')
                AND (public.normalized_gateway_name_v1(anomaly.gateway) = 'MANUAL'
                  OR public.normalized_gateway_name_v1(anomaly.gateway)
                    = public.normalized_gateway_name_v1(leg.gateway)))

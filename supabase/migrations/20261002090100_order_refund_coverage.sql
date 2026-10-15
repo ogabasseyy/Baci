@@ -78,6 +78,7 @@ BEGIN
             OR refund.metadata->>'provider_refund_status' = 'processed')
        AND (
          (refund.metadata->>'payment_transaction_id' = leg.id::text
+          AND leg.status IN ('completed', 'refund_pending', 'refunded')
           AND (
             (
               public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'

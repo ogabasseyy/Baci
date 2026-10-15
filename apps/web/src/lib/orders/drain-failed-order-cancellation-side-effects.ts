@@ -9,6 +9,7 @@ import {
   type OrderCancellationSideEffectStep,
   runOrderCancellationSideEffect,
 } from '@/lib/orders/run-order-cancellation-side-effect';
+import { REFUND_PREFLIGHT_ADMISSION_BUDGET_MS } from '@/lib/orders/schedule-preflight-provider-verification';
 import {
   type CancellationDrainCandidateRow,
   selectCancellationDrainCandidates,
@@ -181,6 +182,25 @@ export async function drainFailedOrderCancellationSideEffects({
       logger.info({
         message:
           'Skipping cancellation email without claiming: too little budget remains to send',
+        orderId,
+        step,
+      });
+      continue;
+    }
+    // A refund step admitted without its verification budget would
+    // claim only for preflight to defer before any provider check;
+    // under a sustained backlog every invocation repeats that
+    // claim-and-defer with zero progress. Skip it unclaimed so it
+    // stays failed for a tick with room, mirroring the email
+    // admission above. Later steps still run.
+    if (
+      step === 'refund' &&
+      deadlineMs !== undefined &&
+      deadlineMs - Date.now() < REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
+    ) {
+      logger.info({
+        message:
+          'Skipping cancellation refund without claiming: too little budget remains to verify',
         orderId,
         step,
       });

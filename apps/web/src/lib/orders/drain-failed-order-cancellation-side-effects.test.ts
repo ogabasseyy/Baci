@@ -193,14 +193,16 @@ describe('drainFailedOrderCancellationSideEffects', () => {
         terminalQuery({ id: 'order-2', merchant_id: 'merchant-2' })
       )
       .mockReturnValueOnce(terminalQuery({ id: 'merchant-2' }));
-    // One slot left and 30s on the clock: the older email cannot meet
-    // its 48s sender budget, so the refund must take the slot instead
-    // of the batch going out empty every invocation.
+    // One slot left: the older email cannot meet its 48s sender
+    // budget on its 30s clock, so the refund — with room on its own
+    // 80s clock — must take the slot instead of the batch going out
+    // empty every invocation.
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
 
     try {
       const result = await drainFailedOrderCancellationSideEffects({
-        deadlineMs: 1_270_000,
+        deadlineMs: 1_320_000,
+        emailDeadlineMs: 1_270_000,
         limit: 1,
         sendCancellationEmail: vi.fn(),
         supabase: { from } as never,
@@ -243,7 +245,8 @@ describe('drainFailedOrderCancellationSideEffects', () => {
 
     try {
       const result = await drainFailedOrderCancellationSideEffects({
-        deadlineMs: 1_270_000,
+        deadlineMs: 1_320_000,
+        emailDeadlineMs: 1_270_000,
         limit: 1,
         sendCancellationEmail: vi.fn(),
         supabase: { from } as never,

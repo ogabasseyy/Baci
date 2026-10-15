@@ -41,6 +41,8 @@ function request(items: ShipmentItem[]): QuoteRequest {
       address: 'Street',
       city: 'Lagos',
       state: 'Lagos',
+      country: 'Nigeria',
+      countryCode: 'NG',
     },
     items,
   };

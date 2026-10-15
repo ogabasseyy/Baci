@@ -13,7 +13,7 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const workerRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const CODEX_JOB_COUNT = 3;
+const CODEX_JOB_COUNT = 4;
 
 // Replicates the runbook emergency-rollback extraction: sed the
 // REMOTE_SH merge block out of deploy.sh (dropping the ssh opener
@@ -90,6 +90,7 @@ describe('remediation deploy crontab', () => {
 
     assert.match(deployScript, /vercel-error-remediator\.lock bash -lc/);
     assert.match(deployScript, /sentry-mobile-error-remediator\.lock bash -lc/);
+    assert.match(deployScript, /posthog-error-remediator\.lock bash -lc/);
     assert.match(
       deployScript,
       /install -d -m 700 \$REMOTE_DIR\/locks && touch \$REMOTE_DIR\/locks\/error-remediator-global\.lock && chmod 600 \$REMOTE_DIR\/locks\/error-remediator-global\.lock/
@@ -107,6 +108,7 @@ describe('remediation deploy crontab', () => {
     assert.match(crontabHelper, /exec flock -F /);
     assert.match(transitionHelper, /'vercel-error-remediator'.*'-n'/);
     assert.match(transitionHelper, /'sentry-mobile-error-remediator'.*'-n'/);
+    assert.match(transitionHelper, /'posthog-error-remediator'.*'-n'/);
     assert.match(transitionHelper, /'remediation-codex-canary'.*'-w 600'/);
     const transition = deployScript.indexOf(
       'install_remediation_cron_transition'

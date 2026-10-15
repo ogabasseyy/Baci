@@ -364,7 +364,10 @@ describe('Kuda API Client', () => {
       });
     });
 
-    it('logs sanitized raw Kuda TSQ responses when bill debug is enabled', async () => {
+    it('logs fixed Kuda metadata without response payloads when bill debug is enabled', async () => {
+      // Codex R98 P1: redacting selected keys did not satisfy the VTU
+      // exception's absolute ban on provider response bodies in logs —
+      // the marker carries routing metadata only.
       vi.stubEnv('KUDA_BILL_DEBUG', '1');
       const { checkTransactionStatus } = await import('@/lib/kuda');
       const consoleInfoSpy = vi
@@ -401,28 +404,12 @@ describe('Kuda API Client', () => {
         await checkTransactionStatus('kuda-bill-1');
 
         const payload = consoleInfoSpy.mock.calls.find((call) =>
-          String(call[0]).includes('Kuda raw response received')
+          String(call[0]).includes('Kuda response received')
         )?.[1] as Record<string, unknown> | undefined;
-        expect(payload).toMatchObject({
-          message: 'Kuda raw response received',
+        expect(payload).toEqual({
+          message: 'Kuda response received',
+          requestRef: expect.any(String),
           serviceType: KudaServiceType.BILL_TSQ,
-          rawResponse: {
-            data: {
-              CustomerIdentifier: expect.objectContaining({
-                redacted: true,
-                type: 'string',
-              }),
-              PhoneNumber: expect.objectContaining({
-                redacted: true,
-                type: 'string',
-              }),
-              Pin: expect.objectContaining({
-                redacted: true,
-                type: 'object',
-                keys: expect.arrayContaining(['Number', 'Units']),
-              }),
-            },
-          },
         });
         const serializedPayload = JSON.stringify(payload);
         expect(serializedPayload).not.toContain(tokenValue);

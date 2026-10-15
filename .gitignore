@@ -110,6 +110,7 @@ scripts/*.jsonl
 scripts/log*.txt
 scripts/deploy_log*.txt
 scripts/match_log*.txt
+vps-workers/logs/
 
 # Migration files (contains local data/credentials)
 migration_db.sql

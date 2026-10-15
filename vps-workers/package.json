@@ -27,6 +27,7 @@
     "preflight-direct-web-workers": "node jobs/preflight-direct-web-workers.mjs",
     "run-web-cron": "node jobs/run-web-cron.mjs",
     "ai-storefront-trigger-server": "node jobs/ai-storefront-trigger-server.mjs",
+    "posthog-error-remediator": "node jobs/posthog-error-remediator.mjs",
     "sentry-mobile-error-remediator": "node jobs/sentry-mobile-error-remediator.mjs",
     "vercel-error-remediator": "node jobs/vercel-error-remediator.mjs",
     "vercel-log-drain-receiver": "node jobs/vercel-log-drain-receiver.mjs",

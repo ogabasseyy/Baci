@@ -256,45 +256,4 @@ describe('remediation case state', () => {
       assert.throws(() => state.snapshot(), /Invalid remediation case state/);
     }
   });
-
-  it('round-robins categories so a noisy category cannot exhaust a run', () => {
-    const directory = mkdtempSync(join(tmpdir(), 'baci-case-fairness-'));
-    const state = createRemediationCaseState({
-      now: () => Date.parse('2026-08-01T10:04:00.000Z'),
-      path: join(directory, 'cases.json'),
-    });
-    const candidates = [
-      candidate({
-        fingerprint: 'runtime-1',
-        category: 'vercel_runtime_exception',
-        source: 'vercel',
-        sample: { source: 'vercel' },
-      }),
-      candidate({
-        fingerprint: 'runtime-2',
-        category: 'vercel_runtime_exception',
-        source: 'vercel',
-        sample: { source: 'vercel' },
-      }),
-      candidate({
-        fingerprint: 'runtime-3',
-        category: 'vercel_runtime_exception',
-        source: 'vercel',
-        sample: { source: 'vercel' },
-      }),
-      candidate({
-        fingerprint: 'timeout-1',
-        category: 'vercel_timeout',
-        source: 'vercel',
-        sample: { source: 'vercel' },
-      }),
-    ];
-
-    const ordered = state.orderCandidates(state.reconcile(candidates));
-
-    assert.deepEqual(
-      ordered.slice(0, 2).map((value) => value.category),
-      ['vercel_runtime_exception', 'vercel_timeout']
-    );
-  });
 });

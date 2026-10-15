@@ -9,6 +9,7 @@ import re
 from capability_gate_contract_ci_checks import (
     CHECKER,
     WORKFLOW,
+    _has_escaped_key,
     _on_block_subs,
     _ordered_branch_match,
     _strip_comment,
@@ -195,7 +196,7 @@ def workflow_failures(workflow_text):
     # The checker baseline must live where it propagates to the executing
     # run step: top-level env or the gate job's env. A step-scoped entry
     # never reaches the sibling run step and silently voids the baseline.
-    top_env = next((i for i, line in enumerate(code) if line == "env:"), None)
+    top_env = next((i for i, line in enumerate(code) if re.match(r"^['\"]?env['\"]?:$", line)), None)
     live_pin = False
     if top_env is not None:
         for line in code[top_env + 1 :]:
@@ -242,6 +243,10 @@ def workflow_failures(workflow_text):
         failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
     # Startup env preloads PR code before the checker starts (job BASH_ENV,
     # step PYTHONPATH/sitecustomize): job env carries only the pin, steps none.
+    for line in block:
+        if _has_escaped_key(line):
+            failures.append("contract workflow keys must use plain spelling (no escapes)")
+            break
     env_open = False
     for line in block:
         if re.match(r"^    [\"']?env[\"']?\s*:", line):

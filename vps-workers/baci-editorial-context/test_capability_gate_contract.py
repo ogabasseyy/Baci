@@ -209,6 +209,12 @@ class ContractCheckTests(unittest.TestCase):
             failures, notices = check.pin_failures(root, {}, {rel: digest})
             self.assertEqual(failures, [])
             self.assertTrue(any("new suite file" in n for n in notices))
+            # A non-test module never qualifies, even with a matching
+            # digest: sitecustomize and stdlib shadows are not executed.
+            (suite / "sitecustomize.py").write_bytes(b"import os\n")
+            shadow = f"{check.SUITE_DIR}/sitecustomize.py"
+            shade, _ = check.pin_failures(root, {}, {shadow: check.sha256_of(Path(root, shadow))})
+            self.assertTrue(any("unknown pin" in f for f in shade))
             # A mismatched hash fails: otherwise a benign file could declare
             # a future payload's digest, then land it silently in a later PR.
             wrong, _ = check.pin_failures(root, {}, {rel: "ab" * 32})

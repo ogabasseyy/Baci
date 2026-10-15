@@ -135,6 +135,68 @@ class ContractExecTests(unittest.TestCase):
         self.assertTrue(failures)
         self.assertIn("types", " ".join(failures))
 
+    def test_flow_checkout_with_ref_fails(self):
+        # `with: {ref: base.sha}` keeps the accepted uses line while the
+        # checkout lands on the base revision, emptying the gate diff.
+        ci = CI.replace(
+            "      - name: Test capability register binding\n",
+            "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
+            '        with: {ref: "${{ github.event.pull_request.base.sha }}", fetch-depth: 0}\n'
+            "      - name: Test capability register binding\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("must not pin a ref", failures[0])
+
+    def test_inline_and_quoted_run_steps_fail(self):
+        inline = CI.replace(
+            "      - name: Test capability register binding\n",
+            "      - run: cp attacker.py vps-workers/baci-editorial-context/capability_gate.py\n"
+            "      - name: Test capability register binding\n",
+            1,
+        )
+        failures = check.ci_failures(inline)
+        self.assertTrue(failures)
+        self.assertIn("precede", failures[0])
+        quoted_uses = CI.replace(
+            "      - name: Test capability register binding\n",
+            '      - "uses": ./tools/evil-action\n'
+            "      - name: Test capability register binding\n",
+            1,
+        )
+        failures = check.ci_failures(quoted_uses)
+        self.assertTrue(failures)
+        self.assertIn("only the pinned checkout", failures[0])
+
+    def test_escaped_condition_keys_fail(self):
+        # YAML decodes "\x69f" to `if`: the raw-text scans must reject the
+        # escaped spelling instead of missing the condition.
+        ci = CI.replace(
+            "  changes:\n    runs-on: ubuntu-24.04\n",
+            '  changes:\n    runs-on: ubuntu-24.04\n    "\\x69f": false\n',
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("plain spelling", failures[0])
+        text = _workflow_text()
+        quoted = text.replace(
+            "        run: |\n",
+            '        "\\x69f": false\n        run: |\n',
+            1,
+        )
+        failures = check.workflow_failures(quoted)
+        self.assertTrue(failures)
+        self.assertIn("plain spelling", " ".join(failures))
+
+    def test_quoted_top_level_env_key_workflow_fails(self):
+        text = _workflow_text()
+        quoted = text.replace("env:\n", '"env":\n  BASH_ENV: /tmp/x.sh\n', 1)
+        failures = check.workflow_failures(quoted)
+        self.assertTrue(failures)
+        self.assertIn("only the checker pin", " ".join(failures))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,6 +24,7 @@ describe('checkout recovery context', () => {
       customer_phone: null,
       shipping_address: {},
       shipping_fee: 110,
+      delivery_method: null,
       order_items: [item],
     };
     const context = {
@@ -32,6 +33,18 @@ describe('checkout recovery context', () => {
       quote_preference: null,
     };
     expect(shippingRecoveryContextSchema.parse(context)).toEqual(context);
+    expect(
+      shippingRecoveryContextSchema.safeParse({
+        ...context,
+        order: { ...order, delivery_method: undefined },
+      }).success
+    ).toBe(false);
+    expect(
+      shippingRecoveryContextSchema.parse({
+        ...context,
+        order: { ...order, delivery_method: 'door' },
+      }).order.delivery_method
+    ).toBe('door');
     expect(
       shippingRecoveryContextSchema.safeParse({
         ...context,

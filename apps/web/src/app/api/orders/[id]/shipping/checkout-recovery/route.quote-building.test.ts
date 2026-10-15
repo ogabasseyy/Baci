@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { assertQuoteItemsMatchOrder } from '@/lib/shipping/international-quote-items-match';
+import {
+  assertShippableBookingItems,
+  toDomesticBookingItems,
+  toQuoteComparableOrderItems,
+} from '@/lib/shipping/order-shipment-booking-utils';
 import {
   recoveryContext as context,
   primeRecoveryMocks,
   recoveryQuoteId as quoteId,
-  recoveryReceiver as receiver,
   postRecovery as request,
 } from './route.test-support';
 
@@ -66,6 +71,65 @@ describe('paid checkout shipping recovery quote building', () => {
       items: { quantity: number }[];
     };
     expect(quoted.items.map((item) => item.quantity)).toEqual([1]);
+  });
+  it.each([
+    'pickup_station',
+    'pickup',
+    'airport',
+  ])('rejects durable %s delivery after the old quote disappears', async (deliveryMethod) => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: {
+        ...context,
+        quote_preference: null,
+        order: { ...context.order, delivery_method: deliveryMethod },
+      },
+      error: null,
+    });
+    const response = await request();
+    expect(response.status).toBe(409);
+    expect(mocks.quotes).not.toHaveBeenCalled();
+    expect(mocks.sender).not.toHaveBeenCalled();
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  });
+  it('books the surviving recovery quote line despite a fully refunded original-quantity collision', async () => {
+    const rows = [
+      {
+        ...context.order.order_items[0],
+        quantity: 2,
+        fulfillment_quantity: 1,
+        fulfillment_data: { fulfillmentQuantity: 1 },
+      },
+      {
+        ...context.order.order_items[0],
+        quantity: 1,
+        fulfillment_quantity: 0,
+        fulfillment_data: { fulfillmentQuantity: 0 },
+      },
+    ];
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ...context, order: { ...context.order, order_items: rows } },
+      error: null,
+    });
+    expect((await request()).status).toBe(200);
+    const staged = mocks.rpc.mock.calls.find(
+      ([name]) => name === 'prepare_customer_checkout_shipping_recovery'
+    );
+    const quoteRequest = staged?.[1].p_quote.quote_request;
+    expect(quoteRequest.items).toHaveLength(1);
+    expect(quoteRequest.items[0].quantity).toBe(1);
+    expect(() =>
+      assertQuoteItemsMatchOrder(
+        quoteRequest,
+        toQuoteComparableOrderItems(rows, { defaultWeight: 1 })
+      )
+    ).not.toThrow();
+    const items = toDomesticBookingItems(rows, quoteRequest.items);
+    expect(items).toHaveLength(1);
+    expect(items[0].quantity).toBe(1);
+    expect(() => assertShippableBookingItems(items)).not.toThrow();
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).not.toContain(
+      'confirm_customer_checkout_shipping_recovery'
+    );
   });
   it('maps staging rejections to a structured JSON error', async () => {
     mocks.rpc.mockImplementation(async (name: string) => {

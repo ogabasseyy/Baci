@@ -104,7 +104,10 @@ export async function POST(
       { error: resolvedReceiver.error },
       { status: 400 }
     );
-  if (preference?.is_station_pickup)
+  if (
+    preference?.is_station_pickup ||
+    (order.delivery_method !== null && order.delivery_method !== 'door')
+  )
     return NextResponse.json(
       {
         error:

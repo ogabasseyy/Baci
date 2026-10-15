@@ -30,6 +30,20 @@ test('the quality gate enables real recovery PostgreSQL tests before test-plan s
     'prepare-checkout-shipping-recovery.postgres.test.ts',
     'customer-checkout-shipping-recovery-quantity.postgres.test.ts',
     'customer-checkout-shipping-recovery-aliases.postgres.test.ts',
+    'customer-checkout-shipping-recovery-delivery.postgres.test.ts',
   ]) assert.ok(step.run.includes(`src/lib/shipping/${suite}`), `missing ${suite}`);
   assert.ok(step.run.includes('extract-sql-function-definition.test.mjs'));
+});
+
+test('the migration runner enables every recovery PostgreSQL suite from the quality gate', () => {
+  const workflow = parse(readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'));
+  const step = workflow.jobs['quality-test'].steps.find((step) => step.name === 'Verify authenticated shipping recovery in PostgreSQL');
+  const runner = readFileSync(new URL('./run-migration-applier-tests.sh', import.meta.url), 'utf8');
+  const command = runner.split('\n').find((line) => line.includes('vitest run') && line.includes('customer-checkout-shipping-recovery.postgres.test.ts'));
+  assert.ok(command, 'missing migration-runner recovery invocation');
+  assert.match(command, /^BACI_SHIPPING_QUOTE_POSTGRES=1 /);
+  const suites = step.run.match(/src\/lib\/shipping\/[\w.-]+\.postgres\.test\.ts/g);
+  assert.ok(suites?.length >= 6);
+  for (const suite of suites) assert.ok(command.includes(suite), `migration runner missing ${suite}`);
+  assert.ok(command.includes('shipping-quote-route-proof.postgres.test.ts'));
 });

@@ -17,6 +17,11 @@ const sources = [
       '20261015124602_customer_checkout_shipping_recovery_address_aliases.sql',
     sha256: '6c4e56759fea25200a28a748a848c9da213550bc678e47ba9fe7a2727823188c',
   },
+  {
+    filename:
+      '20261015130721_customer_checkout_shipping_recovery_delivery_boundary.sql',
+    sha256: '1c411255bf10472a71c0f38a2b744d246764453832b7a6e32091a72226f8ac6b',
+  },
 ];
 
 describe('checkout recovery repair replay registration', () => {

@@ -128,13 +128,34 @@ export function toDomesticBookingItems(
   quoteItems: ShipmentItem[] | undefined
 ): ShipmentItem[] {
   if (!quoteItems?.length) return toShipmentItems(orderItems);
+  // Recovery quotes already contain surviving quantities. Recognize the whole
+  // surviving item set before matching rows, so an original-quantity collision
+  // cannot select a fully refunded sibling. Legacy quotes keep their old match.
+  const survivingItems = orderItems.filter(
+    (item) => survivingShipmentQuantity(item) > 0
+  );
+  const usesSurvivingQuantities =
+    quoteItems.length === survivingItems.length &&
+    quoteItems.every((item) => {
+      const index = survivingItems.findIndex(
+        (orderItem) =>
+          orderItem.name === item.name &&
+          survivingShipmentQuantity(orderItem) === item.quantity &&
+          Number(orderItem.price) === item.value
+      );
+      if (index === -1) return false;
+      survivingItems.splice(index, 1);
+      return true;
+    });
   const unmatchedOrderItems = [...orderItems];
   return quoteItems
     .map((item) => {
       const orderItemIndex = unmatchedOrderItems.findIndex(
         (orderItem) =>
           orderItem.name === item.name &&
-          orderItem.quantity === item.quantity &&
+          (usesSurvivingQuantities
+            ? survivingShipmentQuantity(orderItem)
+            : orderItem.quantity) === item.quantity &&
           Number(orderItem.price) === item.value
       );
       const matchedOrderItem =

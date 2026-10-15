@@ -10,6 +10,7 @@ export const shippingRecoveryContextSchema = z.object({
     customer_phone: z.string().nullable(),
     shipping_address: z.unknown(),
     shipping_fee: z.number().positive(),
+    delivery_method: z.string().nullable(),
     order_items: z.array(
       z.object({
         name: z.string().nullable(),

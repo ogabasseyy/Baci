@@ -33,6 +33,7 @@ export const recoveryContext = {
       state: 'Lagos',
     },
     shipping_fee: 110,
+    delivery_method: null,
     order_items: [
       {
         name: 'Phone',

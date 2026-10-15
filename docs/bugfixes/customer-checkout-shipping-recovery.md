@@ -75,8 +75,9 @@ mobile UI: `20261013213516_customer_checkout_shipping_recovery_context.sql`,
 `20261014120000_customer_checkout_shipping_recovery_review_followups.sql`,
 `20261014130000_customer_checkout_shipping_recovery_hardening.sql`,
 `20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql`,
-`20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql` and
-`20261015124602_customer_checkout_shipping_recovery_address_aliases.sql`.
+`20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql`,
+`20261015124602_customer_checkout_shipping_recovery_address_aliases.sql` and
+`20261015130721_customer_checkout_shipping_recovery_delivery_boundary.sql`.
 The automated migration runner applies the whole directory; a manual rollout
 must include every recovery migration or legacy scalar destinations stay
 unbookable and the context schema check fails closed. No native dependency
@@ -152,3 +153,18 @@ fees, funding, locking and booking remain subject to the existing checks.
 
 Edits to the shared PostgreSQL harness trigger web CI. The authenticated
 PostgreSQL recovery gate includes the destination-alias regression suite.
+
+## Durable delivery method and refunded duplicate lines
+
+Recovery rejects explicit pickup, pickup-station and airport orders even after
+their old quote has disappeared. The durable method is included in the context,
+and the shared database assertion enforces address-only eligibility for context,
+preparation and confirmation. A delivery-method change invalidates recovery;
+existing owner, payment, locking and same-price boundaries remain in place.
+
+Booking recognizes recovery quotes matching the complete surviving item set,
+so an identically named fully refunded row cannot consume the surviving line.
+Legacy quotes continue to match original quantities before refund reduction.
+
+The migration-applier runner includes every recovery PostgreSQL suite run by
+the Quality Gate; a contract compares both invocations to prevent drift.

@@ -1,6 +1,6 @@
 ALTER TABLE public.orders ADD COLUMN updated_at timestamptz DEFAULT now(),
   ADD COLUMN shipping_address jsonb, ADD COLUMN shipping_fee numeric,
-  ADD COLUMN fulfillment_type text, ADD COLUMN shipping_provider text, ADD COLUMN customer_name text,
+  ADD COLUMN delivery_method text, ADD COLUMN fulfillment_type text, ADD COLUMN shipping_provider text, ADD COLUMN customer_name text,
   ADD COLUMN customer_email text, ADD COLUMN customer_phone text;
 -- Columns consumed by the production sender-scoped fingerprint. Keep fixture
 -- types aligned with merchants in the baseline, including JSONB registration.

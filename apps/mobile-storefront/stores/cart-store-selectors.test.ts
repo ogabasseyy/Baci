@@ -89,7 +89,7 @@ describe('applyReprice', () => {
     };
   }
 
-  it('refreshes the line and its condition attribute to the live display value', () => {
+  it('stores the raw live condition code, matching the add path', () => {
     const { items } = applyReprice(
       {
         items: [offerLine()],
@@ -98,14 +98,17 @@ describe('applyReprice', () => {
       {},
       { 'line-1': 'open_box' }
     );
-    expect(items[0].condition).toBe('Open Box');
+    // Raw code in, raw code out (display formatting happens at render);
+    // formatting here would corrupt the code basis and contradict the
+    // pinned cart-store reprice contract.
+    expect(items[0].condition).toBe('open_box');
     expect(items[0].variant_attributes).toEqual({
-      condition: 'Open Box',
+      condition: 'Used',
       storage: '256GB',
     });
   });
 
-  it('leaves attributes without a condition key alone instead of inventing a label part', () => {
+  it('leaves variant attributes alone on a condition refresh', () => {
     const { items } = applyReprice(
       {
         items: [offerLine({ variant_attributes: { storage: '256GB' } })],
@@ -114,7 +117,7 @@ describe('applyReprice', () => {
       {},
       { 'line-1': 'open_box' }
     );
-    expect(items[0].condition).toBe('Open Box');
+    expect(items[0].condition).toBe('open_box');
     expect(items[0].variant_attributes).toEqual({ storage: '256GB' });
   });
 

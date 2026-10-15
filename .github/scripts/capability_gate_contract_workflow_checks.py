@@ -183,7 +183,10 @@ def workflow_failures(workflow_text):
             failures.append(f"contract workflow {job} job must keep its guard status name")
     att = next(i for i, line in enumerate(code) if re.match(r"^  gate-attestation\s*:", line))
     att_steps = [line.strip() for line in code[att:] if line.strip() and not line.strip().startswith("#")]
-    att_steps = att_steps[att_steps.index("steps:") + 1 :]
+    try:
+        att_steps = att_steps[att_steps.index("steps:") + 1 :]
+    except ValueError:
+        return failures + ["contract workflow attestation must keep exactly its pinned steps"]
     if att_steps != EXPECTED_ATTESTATION_STEPS:
         failures.append("contract workflow attestation must keep exactly its pinned steps")
     conds = [(m.group(1), m.group(2)) for line in block if (m := re.match(r"^    [\"']?(if|needs|continue-on-error)[\"']?\s*:\s*(.*)$", line))]
@@ -212,7 +215,7 @@ def workflow_failures(workflow_text):
         if re.match(r"^        [\"']?(if|continue-on-error)[\"']?\s*:", line):
             failures.append("contract workflow steps must stay unconditional")
             break
-    if any(re.match(r"^\s*permissions\s*:", line) for line in block):
+    if any(re.match(r"^\s*[\"']?permissions[\"']?\s*:", line) for line in block):
         failures.append("contract workflow job must not override permissions")
     steps = [i for i, line in enumerate(block) if re.match(r"^      -(\s|$)", line)]
     if len(steps) != 2:
@@ -241,7 +244,7 @@ def workflow_failures(workflow_text):
     # step PYTHONPATH/sitecustomize): job env carries only the pin, steps none.
     env_open = False
     for line in block:
-        if re.match(r"^    env\s*:", line):
+        if re.match(r"^    [\"']?env[\"']?\s*:", line):
             env_open = True
             continue
         if env_open:
@@ -251,7 +254,14 @@ def workflow_failures(workflow_text):
                     break
                 continue
             env_open = False
-        if re.match(r"^        env\s*:", line):
+        if re.match(r"^        [\"']?env[\"']?\s*:", line):
             failures.append("contract workflow steps must not set environment")
+            break
+    # Steps must run their scripts with the default shell: a custom shell
+    # template can ignore {0} and report success without executing them.
+    for line in block:
+        shell = re.match(r"^        [\"']?shell[\"']?\s*:\s*(.*)$", line)
+        if shell and _strip_comment(shell.group(1)).strip() != "bash":
+            failures.append("contract workflow steps must keep the default shell (custom templates can skip the script)")
             break
     return failures

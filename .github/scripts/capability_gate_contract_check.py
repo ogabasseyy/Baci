@@ -57,27 +57,29 @@ BASE_PINS = {
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
-    ".github/scripts/capability_gate_contract_ci_checks.py": "1dfc25c5e9ee6f82f29f92242c5a2e8e7712a40b67b0ccc89611db332ee844be",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "09d7a281cabdf9be3dde887cdafa4a1d1b8f7c691ff7b404adedf649e8470f0c",
+    ".github/scripts/capability_gate_contract_ci_checks.py": "e4c0ede0df9081f8bf331f9e834b4793099ea02edd9fb7706cfeb68e2aeb2f00",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "c9604a8bc4c8864ab20727c5923e6f64c998eb1fc0e3ec2b326bfec574f3f6d6",
     ".github/workflows/capability-register-freshness.yml": "55389404e8391ffeecffe9a31654c07064890374c8faa3a7d4917caea27e7204",
-    "vps-workers/baci-editorial-context/capability_gate.py": "3a135b202932152a5415c2be0a489603c68718ce9e0e68cd4947b320365cf73a",
-    "vps-workers/baci-editorial-context/capability_gate_paths.py": "0f1266944a1ddca4672eb1cba2ed1986e5d44f33d80861885bcc4021da8eae0e",
+    "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
+    "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
     "vps-workers/baci-editorial-context/register_digests.py": "fb42b161df30abfa27d7178bdfff75dc4fbada4d65561d14168d20f7ca70b860",
     "vps-workers/baci-editorial-context/platform_capabilities.py": "113a575d81f4af2e61182db47b2489d9a4ca0137d6457e76c6522a38a6ce394a",
     "vps-workers/baci-editorial-context/register_status.py": "6b3b6e87392da5662c31029db144bc86a08d4ae6e50481bb5a4a67c68621219a",
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
-    "vps-workers/baci-editorial-context/test_capability_gate.py": "ce5239e10fd1bf4b91088dfe9227298eb1d8d7a396c320b4771657a42216e352",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "83f56d5f9236175db74f0cea0238443d75e14416469a08888e1bc7de2839031a",
+    "vps-workers/baci-editorial-context/test_capability_gate.py": "88815781ee49e265a1e94ee7a693340b77a53fef60a9cb08b2c3e9098c268fb8",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "2ad007d76e3d26b0c4f882141a29464836989e75f5b209a5f3516a925aa8451d",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "20b635c6a0a4395c1c29f8c8de3bd62054ebdda11951f6a8790a5e39a948a99a",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "1381bd0b024f0e1780915ab1aab614093af2d5a61b718224310e542b9d77411b",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
-    "vps-workers/baci-editorial-context/test_capability_register_binding.py": "c40e511a2b944f189f622fc2dad076ce6095ab9def3325ebff4b1bf8b0cb5b40",
+    "vps-workers/baci-editorial-context/test_capability_register_binding.py": "04e3dfceeabed2b9b6d37cdca3c6c76fb70d68d6a0e698ec63a3dc28c6ff4478",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
     "vps-workers/baci-editorial-context/test_platform_capabilities.py": "7e05d5b4c325ffe55aa36a3812e1ed67d3d8646bdaa0b425c511dab2115bc987",
     "vps-workers/baci-editorial-context/test_platform_capability_prompt.py": "0c3b79f20946ecb17bd0684ed54d3cb97b0c2d7dcf3b0cebced76d9c25caccad",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/prompt_builder.py": "59997648a8c05f9fdbba5d4a9849e96a066ae4d316a2a9d465e0e1ef58aed3ae",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "b810ae4e9a58419776e14a4f90c7611f15977062d6228d7b078544bbad5f6223",
+    "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }
 
@@ -141,12 +143,15 @@ def pin_failures(repo_root, base_pins, declared):
     for rel in declared:
         if rel not in base_pins:
             # A brand-new suite file has no baseline to betray: its whole
-            # content is visible in the diff, so the declaration passes with
-            # a notice like any other reviewed addition. Anything else stays
-            # a failure — pins for existing-but-unpinned paths would silently
-            # bless files the base never reviewed.
+            # content is visible in the diff, so a declaration matching the
+            # file's actual digest passes with a notice. Anything else stays
+            # a failure — an unmatched hash would let a benign file declare
+            # a future payload's digest, then land it silently later.
             if rel.startswith(SUITE_DIR + "/") and rel.endswith(".py") and Path(repo_root, rel).is_file():
-                notices.append(f"declared new suite file (needs review): {rel}")
+                if declared[rel] == sha256_of(Path(repo_root, rel)):
+                    notices.append(f"declared new suite file (needs review): {rel}")
+                else:
+                    failures.append(f"new suite file pin does not match its content: {rel} (declare the file's actual hash)")
             else:
                 failures.append(f"unknown pin declaration: {rel}")
     return failures, notices

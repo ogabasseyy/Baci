@@ -145,28 +145,25 @@ def _resolve_cited_filenames(names, cwd=".", base=None):
     return resolved, unresolved
 
 
-def _merge_base_out(base, head, cwd):
+def _git_out(args, cwd):
+    """Run git, returning (returncode, stdout); (None, "") when un-runnable."""
     try:
-        proc = subprocess.run(
-            ["git", "-C", str(cwd), "merge-base", str(base), str(head)],
-            capture_output=True, text=True,
-        )
+        proc = subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True)
     except Exception:
+        return None, ""
+    return proc.returncode, proc.stdout
+
+
+def _merge_base_out(base, head, cwd):
+    rc, out = _git_out(["merge-base", str(base), str(head)], cwd)
+    if rc != 0 or not out.strip():
         return None
-    if proc.returncode != 0 or not proc.stdout.strip():
-        return None
-    return proc.stdout.strip()
+    return out.strip()
 
 
 def _is_ancestor(older, newer, cwd):
-    try:
-        proc = subprocess.run(
-            ["git", "-C", str(cwd), "merge-base", "--is-ancestor", str(older), str(newer)],
-            capture_output=True, text=True,
-        )
-    except Exception:
-        return False
-    return proc.returncode == 0
+    rc, _ = _git_out(["merge-base", "--is-ancestor", str(older), str(newer)], cwd)
+    return rc == 0
 
 
 def _comparison_base(base, cwd="."):
@@ -220,13 +217,13 @@ def _touches_cited_refs(register, changed):
     return any(_matches(p, refs) for p in changed)
 
 
-def _changed_refs_unbound(register, changed, cwd="."):
+def _changed_refs_unbound(register, changed, cwd=".", map_text=None):
     """Changed cited sources must match their blobs at the bound revision.
 
     Ancestry alone accepts an intermediate descendant that predates the
     reviewed edit. For every cited path this diff touches, the blob at
     source_revision must equal the checkout copy — otherwise the recorded
-    revision does not contain the reviewed change.
+    revision does not contain the reviewed change. Map citations bind alike.
     """
     try:
         refs = {_canon(ref) for row in register["capabilities"] for ref in row["source_refs"]}
@@ -236,6 +233,10 @@ def _changed_refs_unbound(register, changed, cwd="."):
     # matcher the touch detection uses, or a changed file under a cited
     # directory binds nothing while the metadata still advances.
     touched = {p for p in (_canon(p) for p in (changed or ())) if _matches(p, refs)}
+    if isinstance(map_text, str):
+        # Review artifacts bind via metadata advance, never blob equality.
+        map_refs = map_cited_paths(map_text) | map_link_targets(map_text) | map_cited_filenames(map_text)
+        touched |= {p for p in (_canon(p) for p in (changed or ())) if p not in (REGISTER_PATH, MAP_PATH) and _matches(p, map_refs)}
     if not touched:
         return []
     revision = register.get("source_revision")

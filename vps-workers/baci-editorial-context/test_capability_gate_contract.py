@@ -199,15 +199,20 @@ class ContractCheckTests(unittest.TestCase):
 
     def test_declared_new_suite_file_passes_with_notice(self):
         # A brand-new suite file has no baseline to betray: declaring its
-        # pin passes with a notice instead of deadlocking suite growth.
+        # actual digest passes with a notice instead of deadlocking growth.
         with tempfile.TemporaryDirectory() as root:
             suite = Path(root, check.SUITE_DIR)
             suite.mkdir(parents=True)
             (suite / "test_000_capability_new.py").write_bytes(b"import os\n")
             rel = f"{check.SUITE_DIR}/test_000_capability_new.py"
-            failures, notices = check.pin_failures(root, {}, {rel: "ab" * 32})
+            digest = check.sha256_of(Path(root, rel))
+            failures, notices = check.pin_failures(root, {}, {rel: digest})
             self.assertEqual(failures, [])
             self.assertTrue(any("new suite file" in n for n in notices))
+            # A mismatched hash fails: otherwise a benign file could declare
+            # a future payload's digest, then land it silently in a later PR.
+            wrong, _ = check.pin_failures(root, {}, {rel: "ab" * 32})
+            self.assertTrue(any("does not match" in f for f in wrong))
             # Pins for non-suite paths or missing files still fail: only
             # reviewed suite additions get the transition.
             bad, _ = check.pin_failures(root, {}, {"other/new.py": "ab" * 32})

@@ -24,6 +24,12 @@ import {
   noteForgottenVtuScopes,
   persistPendingVtuEntries,
 } from './pending-vtu-idempotency-store';
+import {
+  hasNotedPendingVtuReferenceIn,
+  isStalePendingVtuSuccessIn,
+  listNotedPendingVtuReferencesFrom,
+  markPendingVtuCompletedIn,
+} from './pending-vtu-reference-queries';
 
 /** Sequential mobile UX never has more than a couple of pendings in flight. */
 const MAX_PENDING_PURCHASES = 32;
@@ -189,7 +195,7 @@ export function hasNotedPendingVtuReference(
   descriptor: string,
   reference: string
 ): boolean {
-  return pendingPurchases.get(descriptor)?.reference === reference;
+  return hasNotedPendingVtuReferenceIn(pendingPurchases, descriptor, reference);
 }
 
 /** Records observed success on a RETAINED entry (first wins; immediate successes reset instead). */
@@ -197,35 +203,27 @@ export function markPendingVtuCompleted(
   descriptor: string,
   now: number = Date.now()
 ): void {
-  const pending = pendingPurchases.get(descriptor);
-  if (pending && pending.completedAt === null) {
-    pending.completedAt = now;
-    persistPendingVtuPurchases();
-  }
+  markPendingVtuCompletedIn(
+    pendingPurchases,
+    persistPendingVtuPurchases,
+    descriptor,
+    now
+  );
 }
 
-/**
- * True when a success replays an already-completed purchase: same
- * NOTED reference AND completion observed past the recall window, so
- * this submit is a NEW intent. Callers MUST forget and prompt fresh.
- * Staleness keys off COMPLETION time (slow first completions still
- * present); unobserved completions are NEVER stale.
- */
+/** Staleness predicate (contract in isStalePendingVtuSuccessIn). Callers MUST forget and prompt fresh. */
 export function isStalePendingVtuSuccess(
   descriptor: string,
   reference: string,
   now: number = Date.now()
 ): boolean {
-  const pending = pendingPurchases.get(descriptor);
-  if (
-    !pending ||
-    pending.reference === null ||
-    pending.reference !== reference ||
-    pending.completedAt === null
-  ) {
-    return false;
-  }
-  return now - pending.completedAt > PENDING_VTU_STALE_AFTER_MS;
+  return isStalePendingVtuSuccessIn(
+    pendingPurchases,
+    descriptor,
+    reference,
+    now,
+    PENDING_VTU_STALE_AFTER_MS
+  );
 }
 
 /**
@@ -285,18 +283,7 @@ export function forgetPendingVtuPurchase(
  * other owners' tagged entries are excluded; untagged fail open.
  */
 export function listNotedPendingVtuReferences(scopeTag?: string): string[] {
-  const references = new Set<string>();
-  for (const entry of pendingPurchases.values()) {
-    if (
-      entry.reference !== null &&
-      (scopeTag === undefined ||
-        entry.scopeTag === undefined ||
-        entry.scopeTag === scopeTag)
-    ) {
-      references.add(entry.reference);
-    }
-  }
-  return [...references];
+  return listNotedPendingVtuReferencesFrom(pendingPurchases.values(), scopeTag);
 }
 
 /** Test-only escape hatch: module state survives across test cases. */

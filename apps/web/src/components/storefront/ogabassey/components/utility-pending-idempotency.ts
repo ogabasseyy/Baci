@@ -2,6 +2,12 @@ import { createWalletIdempotencyKey } from './utility-checkout';
 import { clearPendingVtuSnapshot } from './utility-pending-idempotency-store';
 import { isExpiredPendingVtuEntry } from './utility-pending-vtu-codec';
 import {
+  hasNotedPendingVtuReferenceIn,
+  isStalePendingVtuSuccessIn,
+  listNotedPendingVtuReferencesFrom,
+  markPendingVtuCompletedIn,
+} from './utility-pending-vtu-reference-queries';
+import {
   forgottenScopedKeys,
   noteForgottenVtuScope,
   pendingVtuPurchases,
@@ -131,11 +137,12 @@ export function markPendingVtuCompleted(
   payloadSignature: string,
   now: number = Date.now()
 ): void {
-  const pending = pendingVtuPurchases.get(payloadSignature);
-  if (pending && pending.completedAt === null) {
-    pending.completedAt = now;
-    persistPendingVtuPurchases();
-  }
+  markPendingVtuCompletedIn(
+    pendingVtuPurchases,
+    persistPendingVtuPurchases,
+    payloadSignature,
+    now
+  );
 }
 
 /**
@@ -200,39 +207,26 @@ export function hasNotedPendingVtuReference(
   payloadSignature: string,
   reference: string
 ): boolean {
-  return pendingVtuPurchases.get(payloadSignature)?.reference === reference;
+  return hasNotedPendingVtuReferenceIn(
+    pendingVtuPurchases,
+    payloadSignature,
+    reference
+  );
 }
 
-/**
- * True when a success response replays an already-completed purchase
- * instead of resolving the current submit: same NOTED reference AND
- * completion was observed longer ago than the recall window, so this
- * submit is a NEW intent, not a retry. Callers MUST forget the
- * signature and prompt a fresh submit instead of presenting the
- * earlier vend as the new purchase. Staleness keys off the COMPLETION
- * time, never the submit/noted time: a reference noted while
- * processing (or a completion observed seconds ago) is NOT stale, so
- * a slow first completion — e.g. via reconciliation minutes after a
- * 202 — is presented instead of misreported as "Already Completed"
- * (which would forget the key and double-debit the prompted retry).
- * Entries with no OBSERVED completion are NEVER stale. Past the TTL
- * recall already dropped them, so this predicate never sees them.
- */
+/** Staleness predicate (contract in isStalePendingVtuSuccessIn). Callers MUST forget and prompt fresh. */
 export function isStalePendingVtuSuccess(
   payloadSignature: string,
   reference: string,
   now: number = Date.now()
 ): boolean {
-  const pending = pendingVtuPurchases.get(payloadSignature);
-  if (
-    !pending ||
-    pending.reference === null ||
-    pending.reference !== reference ||
-    pending.completedAt === null
-  ) {
-    return false;
-  }
-  return now - pending.completedAt > PENDING_VTU_STALE_AFTER_MS;
+  return isStalePendingVtuSuccessIn(
+    pendingVtuPurchases,
+    payloadSignature,
+    reference,
+    now,
+    PENDING_VTU_STALE_AFTER_MS
+  );
 }
 
 export function forgetPendingVtuPurchase(payloadSignature: string): void {
@@ -278,21 +272,10 @@ export function getPendingVtuKey(
  */
 export function listNotedPendingVtuReferences(scopeTag?: string): string[] {
   syncPendingVtuPurchasesFromSnapshot();
-  // Deduped: several descriptors can note the same reference (and
-  // unscoped test keys twin with their migrated digests after a
-  // sync) — one history read per reference is enough.
-  const references = new Set<string>();
-  for (const entry of pendingVtuPurchases.values()) {
-    if (
-      entry.reference !== null &&
-      (scopeTag === undefined ||
-        entry.scopeTag === undefined ||
-        entry.scopeTag === scopeTag)
-    ) {
-      references.add(entry.reference);
-    }
-  }
-  return [...references];
+  return listNotedPendingVtuReferencesFrom(
+    pendingVtuPurchases.values(),
+    scopeTag
+  );
 }
 
 /** Test-only escape hatch: module state survives across renderHook mounts. */

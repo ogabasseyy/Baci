@@ -96,6 +96,30 @@ describe('PostHog issue-name classification', () => {
                 aggregations: { occurrences: 4 },
                 name: 'Layout of memory panel failed',
               },
+              {
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a017',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'ParserError: cannot read properties of foo',
+              },
+              {
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a018',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: "ParserError: cannot read property 'id' of foo",
+              },
+              {
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a019',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'ParserError: cannot read proprietary image format',
+              },
+              {
+                id: '01961f15-9db7-4b9c-9c1a-51e2b823a020',
+                status: 'active',
+                aggregations: { occurrences: 4 },
+                name: 'ParserError: cannot read propertarian manifest',
+              },
             ],
           })
         ),
@@ -116,6 +140,10 @@ describe('PostHog issue-name classification', () => {
         'PostHog error tracking issue',
         'PostHog error tracking issue',
         'Network failure',
+        'PostHog error tracking issue',
+        'Null reference',
+        'Null reference',
+        'PostHog error tracking issue',
         'PostHog error tracking issue',
       ]
     );

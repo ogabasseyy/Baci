@@ -118,7 +118,9 @@ const classifyPostHogIssueName = (value) => {
   ) {
     return 'Network failure';
   }
-  if (/\bnull\b|\bundefined\b|cannot read propert/i.test(name)) {
+  if (
+    /\bnull\b|\bundefined\b|\bcannot read propert(?:y|ies)\b/i.test(name)
+  ) {
     return 'Null reference';
   }
   return 'PostHog error tracking issue';

@@ -13,7 +13,10 @@ import {
   restoreInterruptedPreVendVtuRow,
 } from '@/lib/vtu-pre-vend-recovery';
 import { hasVtuCollectionEvidence } from '@/lib/vtu-refund-collection-evidence';
-import { markVtuProviderSubmissionStarted } from '@/lib/vtu-submission-marker';
+import {
+  markVtuProviderSubmissionStarted,
+  VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY,
+} from '@/lib/vtu-submission-marker';
 
 interface RecoveryInput {
   row: VtuTransactionRow;
@@ -203,6 +206,49 @@ export async function persistVtuWalletDebitConfirmation({
       metadata: getSafeMetadataDiagnostics(debitedMetadata),
       transactionId: row.id,
     });
+    // Ambiguous commit (Codex R105 P1): the UPDATE may have landed
+    // while its response was lost — the row would then carry our
+    // flag under a newer token, and restoring with the stale token
+    // matches nothing, stranding a debited row without a marker
+    // until the 5-minute stale gate. Re-read: when the flag is
+    // present, the row is still processing, NO submission marker
+    // exists yet (whoever flagged has not submitted — a marker
+    // means a rival owns submission), and no provider response was
+    // persisted, the debit is confirmed — adopt the fresh token +
+    // metadata and proceed to the provider instead of restoring.
+    // The downstream marker CAS stays the mutex: a concurrent
+    // flagger racing us to mark loses exactly one CAS.
+    const { data: rereadRow, error: rereadError } = await supabase
+      .from('vtu_transactions')
+      .select('metadata, status, transaction_id, updated_at')
+      .eq('id', row.id)
+      .maybeSingle();
+    const rereadMetadata =
+      !rereadError &&
+      rereadRow?.metadata !== null &&
+      typeof rereadRow?.metadata === 'object' &&
+      !Array.isArray(rereadRow?.metadata)
+        ? (rereadRow.metadata as Record<string, unknown>)
+        : null;
+    const responsePersisted =
+      (typeof rereadRow?.transaction_id === 'string' &&
+        rereadRow.transaction_id.trim() !== '') ||
+      (typeof rereadMetadata?.monnifyVendReference === 'string' &&
+        rereadMetadata.monnifyVendReference.trim() !== '');
+    if (
+      !rereadError &&
+      rereadMetadata !== null &&
+      rereadMetadata.walletDebited === true &&
+      rereadRow?.status === 'processing' &&
+      !(VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY in rereadMetadata) &&
+      !responsePersisted
+    ) {
+      if (typeof rereadRow?.updated_at === 'string') {
+        row.updated_at = rereadRow.updated_at;
+      }
+      row.metadata = rereadMetadata;
+      return;
+    }
     await restoreInterruptedPreVendVtuRow({
       // Fixed user-safe template: the raw DB error stays in the
       // server log above — error_message is customer-visible history.

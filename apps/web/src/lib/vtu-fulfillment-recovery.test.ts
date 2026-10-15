@@ -27,12 +27,19 @@ vi.mock('@/lib/vtu-pre-vend-recovery', () => ({
 vi.mock('@/lib/vtu-refund-collection-evidence', () => ({
   hasVtuCollectionEvidence: mocks.hasVtuCollectionEvidence,
 }));
-vi.mock('@/lib/vtu-submission-marker', () => ({
-  markVtuProviderSubmissionStarted: mocks.markVtuProviderSubmissionStarted,
-}));
+vi.mock('@/lib/vtu-submission-marker', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/lib/vtu-submission-marker')
+  >('@/lib/vtu-submission-marker');
+  return {
+    ...actual,
+    markVtuProviderSubmissionStarted: mocks.markVtuProviderSubmissionStarted,
+  };
+});
 
 import type { VtuTransactionRow } from '@/lib/vtu-fulfillment';
 import { VtuPersistenceError } from '@/lib/vtu-persistence-error';
+import { VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY } from '@/lib/vtu-submission-marker';
 import {
   persistVtuWalletDebitConfirmation,
   recoverStrandedPreVendVtuRow,
@@ -146,10 +153,16 @@ describe('vtu-fulfillment-recovery', () => {
   });
 
   describe('persistVtuWalletDebitConfirmation', () => {
-    function createConfirmSupabase(confirmResult: {
-      data: { updated_at: string } | null;
-      error: { message: string } | null;
-    }) {
+    function createConfirmSupabase(
+      confirmResult: {
+        data: { updated_at: string } | null;
+        error: { message: string } | null;
+      },
+      rereadResult: {
+        data: Record<string, unknown> | null;
+        error: { message: string } | null;
+      } = { data: null, error: null }
+    ) {
       const eqCalls: [string, unknown][] = [];
       const confirmMaybeSingle = vi.fn(() => Promise.resolve(confirmResult));
       const makeChain = (): {
@@ -168,9 +181,15 @@ describe('vtu-fulfillment-recovery', () => {
         return chain;
       };
       const update = vi.fn(() => makeChain());
+      const rereadMaybeSingle = vi.fn(() => Promise.resolve(rereadResult));
+      const select = vi.fn(() => ({
+        eq: vi.fn(() => ({ maybeSingle: rereadMaybeSingle })),
+      }));
       return {
         eqCalls,
-        supabase: { from: vi.fn(() => ({ update })) },
+        rereadMaybeSingle,
+        select,
+        supabase: { from: vi.fn(() => ({ select, update })) },
         update,
       };
     }
@@ -240,6 +259,122 @@ describe('vtu-fulfillment-recovery', () => {
             'VTU wallet debit confirmation conflicted; the purchase will resume automatically.',
         })
       );
+    });
+
+    it('adopts the flag when the errored write actually committed', async () => {
+      // Codex R105 P1: the UPDATE landed but its response was lost —
+      // the row carries walletDebited under a newer token. Adopt the
+      // fresh token + metadata and proceed to the provider instead
+      // of restoring with the stale token (which matches nothing and
+      // strands the debited row without a marker).
+      const { supabase: confirmSupabase } = createConfirmSupabase(
+        { data: null, error: { message: 'connection reset' } },
+        {
+          data: {
+            metadata: { split: 'wallet', walletDebited: true },
+            status: 'processing',
+            transaction_id: null,
+            updated_at: 'tok-2',
+          },
+          error: null,
+        }
+      );
+      const debitRow = confirmRow('tok-1');
+
+      await persistVtuWalletDebitConfirmation({
+        preDebitMetadata: { split: 'wallet' },
+        row: debitRow,
+        supabase: confirmSupabase as unknown as SupabaseClient,
+      });
+
+      expect(debitRow.metadata).toEqual({
+        split: 'wallet',
+        walletDebited: true,
+      });
+      expect(debitRow.updated_at).toBe('tok-2');
+      expect(mocks.restoreInterruptedPreVendVtuRow).not.toHaveBeenCalled();
+    });
+
+    it('restores when the ambiguous re-read shows a rival marker', async () => {
+      // Codex R105 P1: a marker means someone owns submission — the
+      // flag may be theirs. Adopting would clobber their marker at
+      // the downstream CAS and double-vend; restore + throw instead.
+      const { supabase: confirmSupabase } = createConfirmSupabase(
+        { data: null, error: { message: 'connection reset' } },
+        {
+          data: {
+            metadata: {
+              split: 'wallet',
+              walletDebited: true,
+              [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]:
+                '2020-01-01T00:00:00.000Z',
+            },
+            status: 'processing',
+            transaction_id: null,
+            updated_at: 'tok-9',
+          },
+          error: null,
+        }
+      );
+
+      await expect(
+        persistVtuWalletDebitConfirmation({
+          preDebitMetadata: { split: 'wallet' },
+          row: confirmRow('tok-1'),
+          supabase: confirmSupabase as unknown as SupabaseClient,
+        })
+      ).rejects.toBeInstanceOf(VtuPersistenceError);
+      expect(mocks.restoreInterruptedPreVendVtuRow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userSafeMessage:
+            'VTU wallet debit confirmation failed; the purchase will resume automatically.',
+        })
+      );
+    });
+
+    it('restores when the ambiguous re-read itself fails', async () => {
+      // Codex R105 P1: fully ambiguous — keep the pre-existing
+      // restore + throw (locks the old behavior for the
+      // unrecoverable case).
+      const { supabase: confirmSupabase } = createConfirmSupabase(
+        { data: null, error: { message: 'connection reset' } },
+        { data: null, error: { message: 'reread failed' } }
+      );
+
+      await expect(
+        persistVtuWalletDebitConfirmation({
+          preDebitMetadata: { split: 'wallet' },
+          row: confirmRow('tok-1'),
+          supabase: confirmSupabase as unknown as SupabaseClient,
+        })
+      ).rejects.toBeInstanceOf(VtuPersistenceError);
+      expect(mocks.restoreInterruptedPreVendVtuRow).toHaveBeenCalledTimes(1);
+    });
+
+    it('restores when the ambiguous re-read shows no flag', async () => {
+      // Codex R105 P1: the write genuinely failed — nothing to
+      // adopt. Restore + throw so the retry re-drives cleanly.
+      const { supabase: confirmSupabase } = createConfirmSupabase(
+        { data: null, error: { message: 'connection reset' } },
+        {
+          data: {
+            metadata: { split: 'wallet' },
+            status: 'processing',
+            transaction_id: null,
+            updated_at: 'tok-1',
+          },
+          error: null,
+        }
+      );
+
+      await expect(
+        persistVtuWalletDebitConfirmation({
+          preDebitMetadata: { split: 'wallet' },
+          row: confirmRow('tok-1'),
+          supabase: confirmSupabase as unknown as SupabaseClient,
+        })
+      ).rejects.toBeInstanceOf(VtuPersistenceError);
+      expect(mocks.restoreInterruptedPreVendVtuRow).toHaveBeenCalledTimes(1);
     });
 
     it('keeps the status-only gate for rows without a CAS token', async () => {

@@ -140,6 +140,31 @@ describe('fetchJsonWithDeadline', () => {
     expect(captured?.aborted).toBe(true);
   });
 
+  it('maps React Native iOS cancellation to the timeout message', async () => {
+    // Codex R105 P2: RN iOS rejects a deadline abort with a plain
+    // Error("Fetch request has been canceled") — name "Error", not
+    // "AbortError". Without this the checkout surfaces a low-level
+    // cancellation as "Payment Failed" instead of the retryable
+    // timeout message.
+    vi.useFakeTimers();
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => {
+          reject(new Error('Fetch request has been canceled'));
+        });
+      });
+    });
+
+    const read = fetchJsonWithDeadline('/api/test', {
+      deadlineMs: Date.now() + 100,
+    });
+    const expectation = expect(read).rejects.toThrow(
+      'Request timed out. Please try again.'
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    await expectation;
+  });
+
   it('aborts the fetch when the body outlives the deadline', async () => {
     // Codex R72 6rzq3y: response.json() locks the stream, so only a
     // fetch-level abort releases a stalled body pre-retry.

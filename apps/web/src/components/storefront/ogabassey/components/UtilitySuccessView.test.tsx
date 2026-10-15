@@ -1,23 +1,19 @@
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
 import { UtilitySuccessView } from './UtilitySuccessView';
 
-// The backfill hook publishes only for the still-signed-in polling
-// account (Codex R85 P1): establish a stable submitter session, as a
-// real purchase view always renders post-authentication.
-vi.mock('@/lib/supabase/client', () => ({
-  createClient: () => ({
-    auth: {
-      getSession: async () => ({
-        data: { session: { user: { id: 'user-1' } } },
-        error: null,
-      }),
-    },
-  }),
-}));
-
 describe('UtilitySuccessView', () => {
+  // The backfill hook publishes only for the still-signed-in polling
+  // account (Codex R85 P1): publish a stable submitter identity, as a
+  // real purchase view always renders post-authentication. The hook
+  // reads the synchronously published live identity (Codex R102
+  // P2) — never an awaited getSession — so the suite publishes to
+  // the real module instead of mocking the auth client.
+  beforeEach(() => {
+    publishCustomerIdentity({ id: 'user-1' }, null, 'ogabassey');
+  });
   it('renders transaction details and closes the modal', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

@@ -18,7 +18,16 @@ export interface FetchWithTimeoutOptions extends RequestInit {
 }
 
 export function isAbortError(error: unknown) {
-  return error instanceof Error && error.name === 'AbortError';
+  // Abort detection cannot rely on the AbortError name alone: React
+  // Native's iOS networking reports an aborted request as a plain
+  // Error with "Fetch request has been canceled" (Codex R105 P2).
+  // The callers gate on their own timer having fired, so a stray
+  // message match outside a deadline abort cannot misclassify.
+  return (
+    error instanceof Error &&
+    (error.name === 'AbortError' ||
+      /\baborted\b|\bcancell?ed\b/i.test(error.message))
+  );
 }
 
 function composeAbortSignals(signals: AbortSignal[]): AbortSignal | undefined {

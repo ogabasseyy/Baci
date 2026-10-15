@@ -150,7 +150,7 @@ def _base_register(base, cwd="."):
         return None
 
 
-def requires_register_update(register, changed, base_register=None, rev_acceptable=None):
+def requires_register_update(register, changed, base_register=None, rev_acceptable=None, map_text=None):
     """A fresh register whose cited sources changed needs re-review.
 
     Freshness alone cannot catch this: the register is still inside its
@@ -177,6 +177,12 @@ def requires_register_update(register, changed, base_register=None, rev_acceptab
     # still pending re-review.
     registers = [register] if base_register is None else [register, base_register]
     touched = any(_touches_cited_refs(item, changed) for item in registers)
+    # Map-cited sources carry the map's behavioral claims: changing one
+    # without touching the map or register would keep the old review date
+    # and revision over new evidence, so map citations count as touches.
+    if not touched and isinstance(map_text, str):
+        map_refs = map_cited_paths(map_text) | map_link_targets(map_text) | map_cited_filenames(map_text)
+        touched = any(_matches(p, map_refs) for p in changed)
     # The access map carries its own audit provenance (reviewed date +
     # source revision): a map-only edit that keeps the old metadata presents
     # rewritten claims as previously audited, so it re-reviews like the
@@ -246,7 +252,11 @@ def main(cwd="."):
             tip_register = _base_register(base, cwd) if base != fork_base else None
             base_register = newer_base_register(tip_register, fork_register)
         rev_ok = lambda new, old: _replacement_revision_ok(new, old, cwd)  # noqa: E731
-        if requires_register_update(register, changed, base_register, rev_ok):
+        try:
+            map_text = Path(root, MAP_PATH).read_text()
+        except OSError:
+            map_text = None
+        if requires_register_update(register, changed, base_register, rev_ok, map_text):
             print(
                 "capability sources changed without a register re-review; "
                 f"update {REGISTER_PATH} (reviewed_at + digests) in this change"

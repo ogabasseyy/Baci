@@ -3,6 +3,7 @@
 Pure path logic: map citations, filename resolution, and matching. The
 policy layer (freshness, re-review, main) lives in capability_gate.py.
 """
+import datetime as dt
 import hashlib
 import os
 import re
@@ -35,9 +36,23 @@ def newer_base_register(tip_register, fork_register):
         fork_date = (fork_register or {}).get("reviewed_at", "")
     except AttributeError:
         return fork_register
+    # ISO strings order lexicographically only under one offset: compare
+    # parsed instants, keeping the string fallback for unreadable values.
+    tip_instant = _reviewed_instant(tip_date)
+    fork_instant = _reviewed_instant(fork_date)
+    if tip_instant is not None and fork_instant is not None:
+        return tip_register if tip_instant > fork_instant else fork_register
     if isinstance(tip_date, str) and isinstance(fork_date, str) and tip_date > fork_date:
         return tip_register
     return fork_register
+
+
+def _reviewed_instant(value):
+    try:
+        moment = dt.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return moment if moment.tzinfo is not None else moment.replace(tzinfo=dt.timezone.utc)
+    except (TypeError, ValueError):
+        return None
 
 
 def map_cited_paths(text):

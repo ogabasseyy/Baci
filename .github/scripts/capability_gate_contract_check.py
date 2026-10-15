@@ -57,22 +57,22 @@ BASE_PINS = {
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
-    ".github/scripts/capability_gate_contract_ci_checks.py": "449faeabfa95e4eb281c367a25cd312b7f758349ee15212737a1ba0eeca0b4ce",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "094829abdef05eee3fe0cad015cae60c89c6c7c776d5ae02e842155f5c3afd44",
+    ".github/scripts/capability_gate_contract_ci_checks.py": "1dfc25c5e9ee6f82f29f92242c5a2e8e7712a40b67b0ccc89611db332ee844be",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "09d7a281cabdf9be3dde887cdafa4a1d1b8f7c691ff7b404adedf649e8470f0c",
     ".github/workflows/capability-register-freshness.yml": "55389404e8391ffeecffe9a31654c07064890374c8faa3a7d4917caea27e7204",
-    "vps-workers/baci-editorial-context/capability_gate.py": "1f9ace1d783ed9022114800f4f14abfb79ab57487ae0ed382797c365fb836083",
-    "vps-workers/baci-editorial-context/capability_gate_paths.py": "f5f8e13fe3de62b4f47864d281b2b2257c8157f1163526cdcafbb033f073c405",
-    "vps-workers/baci-editorial-context/register_digests.py": "aae14e6e045e67fd2331e8ca5afd15926b96291bcb5408a2c2d2e41e07ce8767",
+    "vps-workers/baci-editorial-context/capability_gate.py": "3a135b202932152a5415c2be0a489603c68718ce9e0e68cd4947b320365cf73a",
+    "vps-workers/baci-editorial-context/capability_gate_paths.py": "0f1266944a1ddca4672eb1cba2ed1986e5d44f33d80861885bcc4021da8eae0e",
+    "vps-workers/baci-editorial-context/register_digests.py": "fb42b161df30abfa27d7178bdfff75dc4fbada4d65561d14168d20f7ca70b860",
     "vps-workers/baci-editorial-context/platform_capabilities.py": "113a575d81f4af2e61182db47b2489d9a4ca0137d6457e76c6522a38a6ce394a",
     "vps-workers/baci-editorial-context/register_status.py": "6b3b6e87392da5662c31029db144bc86a08d4ae6e50481bb5a4a67c68621219a",
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
-    "vps-workers/baci-editorial-context/test_capability_gate.py": "41ebaf3f0f6ff5cf6e76d20fad10527b25b2e76837f4c0939224f92e735790bf",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "0220743f21e4cfe4491fe5b1bc7dae315a034304efb6c54e14ce67fe6ccfcce8",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "95507d83503745681a9a32998317b1bce39b134f7bf5068fe3d37e58f0baa7d5",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "14fd985f345e11a91756685182454d44c6d765b55d2864b080d705f05a2433fa",
+    "vps-workers/baci-editorial-context/test_capability_gate.py": "ce5239e10fd1bf4b91088dfe9227298eb1d8d7a396c320b4771657a42216e352",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "83f56d5f9236175db74f0cea0238443d75e14416469a08888e1bc7de2839031a",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "20b635c6a0a4395c1c29f8c8de3bd62054ebdda11951f6a8790a5e39a948a99a",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "1381bd0b024f0e1780915ab1aab614093af2d5a61b718224310e542b9d77411b",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
-    "vps-workers/baci-editorial-context/test_capability_register_binding.py": "243fab8b2e83d618e74226f7f3d88e3397740846ced58d3efcfd0993d3421c79",
+    "vps-workers/baci-editorial-context/test_capability_register_binding.py": "c40e511a2b944f189f622fc2dad076ce6095ab9def3325ebff4b1bf8b0cb5b40",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
     "vps-workers/baci-editorial-context/test_platform_capabilities.py": "7e05d5b4c325ffe55aa36a3812e1ed67d3d8646bdaa0b425c511dab2115bc987",
     "vps-workers/baci-editorial-context/test_platform_capability_prompt.py": "0c3b79f20946ecb17bd0684ed54d3cb97b0c2d7dcf3b0cebced76d9c25caccad",
@@ -140,7 +140,15 @@ def pin_failures(repo_root, base_pins, declared):
             )
     for rel in declared:
         if rel not in base_pins:
-            failures.append(f"unknown pin declaration: {rel}")
+            # A brand-new suite file has no baseline to betray: its whole
+            # content is visible in the diff, so the declaration passes with
+            # a notice like any other reviewed addition. Anything else stays
+            # a failure — pins for existing-but-unpinned paths would silently
+            # bless files the base never reviewed.
+            if rel.startswith(SUITE_DIR + "/") and rel.endswith(".py") and Path(repo_root, rel).is_file():
+                notices.append(f"declared new suite file (needs review): {rel}")
+            else:
+                failures.append(f"unknown pin declaration: {rel}")
     return failures, notices
 
 

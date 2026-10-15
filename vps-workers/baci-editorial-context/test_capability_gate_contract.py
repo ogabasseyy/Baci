@@ -4,6 +4,7 @@ The base-owned checker reads PR files as data, never executes them: these
 tests pin that behavior with fabricated trees plus a self-consistency run
 against this checkout (forgotten pin updates fail here, not in CI).
 """
+import hashlib
 import importlib.util
 import shutil
 import subprocess
@@ -24,6 +25,7 @@ _check_spec.loader.exec_module(check)
 CI = """on:
   push:
   pull_request:
+  merge_group:
 jobs:
   changes:
     runs-on: ubuntu-24.04
@@ -194,6 +196,37 @@ class ContractCheckTests(unittest.TestCase):
             failures = check.undeclared_suite_files(root, declared)
             self.assertEqual(len(failures), 1)
             self.assertIn("test_000_capability_exit", failures[0])
+
+    def test_declared_new_suite_file_passes_with_notice(self):
+        # A brand-new suite file has no baseline to betray: declaring its
+        # pin passes with a notice instead of deadlocking suite growth.
+        with tempfile.TemporaryDirectory() as root:
+            suite = Path(root, check.SUITE_DIR)
+            suite.mkdir(parents=True)
+            (suite / "test_000_capability_new.py").write_bytes(b"import os\n")
+            rel = f"{check.SUITE_DIR}/test_000_capability_new.py"
+            failures, notices = check.pin_failures(root, {}, {rel: "ab" * 32})
+            self.assertEqual(failures, [])
+            self.assertTrue(any("new suite file" in n for n in notices))
+            # Pins for non-suite paths or missing files still fail: only
+            # reviewed suite additions get the transition.
+            bad, _ = check.pin_failures(root, {}, {"other/new.py": "ab" * 32})
+            self.assertTrue(any("unknown pin" in f for f in bad))
+            missing, _ = check.pin_failures(root, {}, {f"{check.SUITE_DIR}/ghost.py": "ab" * 32})
+            self.assertTrue(any("unknown pin" in f for f in missing))
+
+    def test_workflow_checker_pin_matches_shipped_checker(self):
+        # A stale bootstrap pin fails every later PR under the base-owned
+        # guard, so the pin's freshness is asserted in-repo, not by format.
+        repo = Path(__file__).resolve().parents[2]
+        declared = check.declared_checker_pin(
+            (repo / ".github/workflows/capability-gate-contract.yml").read_text()
+        )
+        self.assertIsNotNone(declared)
+        actual = hashlib.sha256(
+            (repo / ".github/scripts/capability_gate_contract_check.py").read_bytes()
+        ).hexdigest()
+        self.assertEqual(actual, declared)
 
     def test_head_pins_match_declared(self):
         # Forgetting a pin refresh after an enforcement edit fails the suite

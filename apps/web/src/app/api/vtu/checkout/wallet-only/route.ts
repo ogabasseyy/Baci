@@ -251,9 +251,11 @@ export async function POST(request: NextRequest) {
         return mapFulfillmentToResponse(replayedFulfillment);
       }
       // Log internally; don't leak the raw DB error to the client.
+      // The key itself is the unguessable replay credential — log
+      // the prepared transaction id instead (Muse R108 MEDIUM).
       console.error('Failed to record idempotency key:', {
         error: insertError.message,
-        idempotencyKey,
+        transactionId: prepared.transaction.id,
       });
       return createErrorResponse('Failed to record idempotency key.', 500);
     }

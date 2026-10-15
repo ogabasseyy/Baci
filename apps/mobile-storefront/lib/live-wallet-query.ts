@@ -9,12 +9,26 @@ import { useAuthStore } from '@/stores/auth-store';
  * different auth user) means a switch is mid-flight: the query
  * stays held until they agree. Shared with the wallet hook's
  * `enabled` flag so the gate and the query hold on one predicate.
+ *
+ * A present row with a null user_id is unattributed (never linked
+ * to any auth user — hydration always matches by user_id, so this
+ * is a stale or foreign row, not the current user's): with an
+ * active session the query stays held rather than reading that
+ * row's balance (Muse R108 MEDIUM). A missing user_id
+ * (undefined — the caller supplied no linkage signal at all)
+ * preserves the legacy agree.
  */
 export function walletIdentitiesAgree(
   customer: { id?: string | null; user_id?: string | null } | null | undefined,
   userId: string | null | undefined
 ): boolean {
-  return !customer?.id || !userId || (customer.user_id ?? userId) === userId;
+  if (!customer?.id || !userId) {
+    return true;
+  }
+  if (customer.user_id === null) {
+    return false;
+  }
+  return (customer.user_id ?? userId) === userId;
 }
 
 /**

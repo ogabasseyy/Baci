@@ -217,4 +217,15 @@ describe('live-wallet-query', () => {
     expect(walletIdentitiesAgree(null, 'u1')).toBe(true);
     expect(walletIdentitiesAgree({ id: 'c1', user_id: 'u1' }, null)).toBe(true);
   });
+
+  it('holds a known-unlinked row against an active session', () => {
+    // Muse R108 MEDIUM: user_id null means the row is
+    // unattributed (a stale or foreign row — hydration always
+    // matches by user_id), so the wallet query must stay held
+    // rather than gate on that row's balance.
+    expect(walletIdentitiesAgree({ id: 'c1', user_id: null }, 'u1')).toBe(
+      false
+    );
+    expect(walletIdentitiesAgree({ id: 'c1', user_id: null }, null)).toBe(true);
+  });
 });

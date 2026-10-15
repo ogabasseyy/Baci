@@ -61,6 +61,7 @@ describe('cleanupOrphanVtuTransactionAfterKeyRace', () => {
       markEq,
       markMaybeSingle,
       rereadEq,
+      rereadMaybeSingle,
       rereadSelect,
       supabase: { from },
       update,
@@ -177,5 +178,54 @@ describe('cleanupOrphanVtuTransactionAfterKeyRace', () => {
     });
     await expect(cleanup(markRaced.supabase)).resolves.toBe('unresolved');
     expect(markRaced.updateCalls).toHaveLength(1);
+  });
+
+  it('retries a transient re-read error instead of stranding the orphan', async () => {
+    // Codex R108 P2: a blip on the verification re-read must not
+    // abandon a pending orphan no reconciler can discover.
+    const { rereadMaybeSingle, supabase } = createSupabase({
+      deleteData: null,
+      deleteError: { message: 'timeout' },
+      rereadData: { id: 'vtu-orphan', metadata: {}, status: 'pending' },
+    });
+    rereadMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'blip' },
+    });
+
+    const outcome = await cleanup(supabase);
+
+    expect(outcome).toBe('marked_failed');
+    expect(rereadMaybeSingle).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a transient mark error instead of stranding the orphan', async () => {
+    const { markMaybeSingle, supabase, updateCalls } = createSupabase({
+      deleteData: null,
+      deleteError: { message: 'timeout' },
+      rereadData: { id: 'vtu-orphan', metadata: {}, status: 'pending' },
+    });
+    markMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'blip' },
+    });
+
+    const outcome = await cleanup(supabase);
+
+    expect(outcome).toBe('marked_failed');
+    expect(updateCalls).toHaveLength(2);
+  });
+
+  it('gives up after exhausting retries under sustained outage', async () => {
+    const { rereadMaybeSingle, supabase } = createSupabase({
+      deleteData: null,
+      deleteError: { message: 'db down' },
+      rereadError: { message: 'db down' },
+    });
+
+    const outcome = await cleanup(supabase);
+
+    expect(outcome).toBe('unresolved');
+    expect(rereadMaybeSingle).toHaveBeenCalledTimes(3);
   });
 });

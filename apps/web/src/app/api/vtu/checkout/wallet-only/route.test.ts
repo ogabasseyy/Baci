@@ -949,6 +949,97 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     );
   });
 
+  it('non-race insert failure: 500s without logging the raw idempotency key', async () => {
+    // Muse R108 MEDIUM: the key is the unguessable replay
+    // credential — error logs and responses must carry the
+    // prepared transaction id, never the key.
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    supabaseMockRef.current = {
+      from: vi.fn((table: string) => {
+        if (table === 'vtu_idempotency_keys') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: null,
+                }),
+              })),
+            })),
+            insert: vi.fn(() =>
+              Promise.resolve({
+                data: null,
+                error: { message: 'connection reset' },
+              })
+            ),
+          };
+        }
+        if (table === 'merchants') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { id: 'merchant-1' },
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+        if (table === 'customers') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  maybeSingle: vi.fn().mockResolvedValue({
+                    data: { id: 'customer-1', email: 'c@example.com' },
+                    error: null,
+                  }),
+                })),
+              })),
+            })),
+          };
+        }
+        if (table === 'vtu_transactions') {
+          return {
+            delete: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  eq: vi.fn(() => ({
+                    select: vi.fn(() => ({
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: { id: 'vtu-tx-new' },
+                        error: null,
+                      }),
+                    })),
+                  })),
+                })),
+              })),
+            })),
+          };
+        }
+        return {
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
+        };
+      }),
+      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    };
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(500);
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    for (const call of consoleErrorSpy.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain(VALID_KEY);
+    }
+    expect(JSON.stringify(body)).not.toContain(VALID_KEY);
+    consoleErrorSpy.mockRestore();
+  });
+
   it('cross-customer collision: stored row owned by a different customer rejects with 400', async () => {
     const state: IdempotencyRowState = {
       row: {

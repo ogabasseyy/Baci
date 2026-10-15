@@ -12,6 +12,19 @@ export type OrphanVtuCleanupOutcome =
   | 'owned_elsewhere'
   | 'unresolved';
 
+const ORPHAN_CLEANUP_MAX_ATTEMPTS = 3;
+const ORPHAN_CLEANUP_BACKOFF_MS = [100, 250] as const;
+
+interface OrphanCleanupAttempt {
+  outcome: OrphanVtuCleanupOutcome;
+  /** Error-driven failures are transient-plausible and worth a
+   *  retry; deterministic observations (zero-match) re-observe the
+   *  same state and return immediately. */
+  retryable: boolean;
+  /** Last transport error, for the exhausted-retries log only. */
+  detail?: unknown;
+}
+
 /**
  * Removes a VTU row orphaned by a lost idempotency-key race: the row
  * was prepared, the key insert failed, and no client will ever
@@ -35,11 +48,16 @@ export type OrphanVtuCleanupOutcome =
  * worker this orphan should never have met (log loudly; do NOT
  * mark over a live row). Only a still-pending re-read is marked,
  * CAS'd on status so a concurrent transition zero-matches instead
- * of clobbering. Anything else is unresolved — sustained outage;
- * the caller proceeds (today's behavior) since no retry or cron
- * can see an unmapped row either.
+ * of clobbering. Error-driven failures (delete/reread/mark
+ * transport errors) retry in-request up to
+ * ORPHAN_CLEANUP_MAX_ATTEMPTS with backoff: a transient blip must
+ * not strand a pending orphan no reconciler can discover (Codex
+ * R108 P2). Only sustained failure stays unresolved — the caller
+ * proceeds (today's behavior) since no retry or cron can see an
+ * unmapped row either, and a down database cannot persist a
+ * cleanup marker anyway.
  */
-export async function cleanupOrphanVtuTransactionAfterKeyRace({
+async function attemptOrphanCleanupOnce({
   merchantId,
   supabase,
   transactionId,
@@ -47,7 +65,7 @@ export async function cleanupOrphanVtuTransactionAfterKeyRace({
   merchantId: string;
   supabase: SupabaseClient;
   transactionId: string;
-}): Promise<OrphanVtuCleanupOutcome> {
+}): Promise<OrphanCleanupAttempt> {
   const { data: deleted, error: deleteError } = await supabase
     .from('vtu_transactions')
     .delete()
@@ -57,13 +75,7 @@ export async function cleanupOrphanVtuTransactionAfterKeyRace({
     .select('id')
     .maybeSingle();
   if (!deleteError && deleted) {
-    return 'deleted';
-  }
-  if (deleteError) {
-    console.error(
-      'Failed to delete orphan VTU transaction after idempotency-key race:',
-      deleteError
-    );
+    return { outcome: 'deleted', retryable: false };
   }
   const { data: current, error: rereadError } = await supabase
     .from('vtu_transactions')
@@ -71,22 +83,22 @@ export async function cleanupOrphanVtuTransactionAfterKeyRace({
     .eq('id', transactionId)
     .maybeSingle();
   if (rereadError) {
-    console.error(
-      'Failed to re-read orphan VTU transaction after unverified delete:',
-      rereadError
-    );
-    return 'unresolved';
+    return {
+      detail: rereadError,
+      outcome: 'unresolved',
+      retryable: true,
+    };
   }
   if (!current) {
     // The delete landed while its response was lost: gone is gone.
-    return 'deleted';
+    return { outcome: 'deleted', retryable: false };
   }
   if (current.status !== 'pending') {
     console.error(
       'Orphan VTU transaction progressed under the key race; leaving it to its owner:',
       { status: current.status, transactionId }
     );
-    return 'owned_elsewhere';
+    return { outcome: 'owned_elsewhere', retryable: false };
   }
   const currentMetadata =
     current.metadata !== null &&
@@ -109,12 +121,70 @@ export async function cleanupOrphanVtuTransactionAfterKeyRace({
     .eq('status', 'pending')
     .select('id')
     .maybeSingle();
-  if (markError || !marked) {
-    console.error(
-      'Failed to mark orphan VTU transaction failed after unverified delete:',
-      markError ?? { transactionId }
-    );
-    return 'unresolved';
+  if (markError) {
+    return { detail: markError, outcome: 'unresolved', retryable: true };
   }
-  return 'marked_failed';
+  if (!marked) {
+    // Deterministic zero-match: the row provably left pending
+    // between re-read and mark. Retrying re-observes the same
+    // state, so return immediately (existing unresolved
+    // contract); the loud log preserves the mystery for triage.
+    console.error(
+      'Orphan VTU transaction left pending between re-read and mark; leaving it to its owner:',
+      { transactionId }
+    );
+    return { outcome: 'unresolved', retryable: false };
+  }
+  return { outcome: 'marked_failed', retryable: false };
+}
+
+export async function cleanupOrphanVtuTransactionAfterKeyRace({
+  merchantId,
+  supabase,
+  transactionId,
+}: {
+  merchantId: string;
+  supabase: SupabaseClient;
+  transactionId: string;
+}): Promise<OrphanVtuCleanupOutcome> {
+  let attempt: OrphanCleanupAttempt = {
+    outcome: 'unresolved',
+    retryable: false,
+  };
+  for (
+    let attemptNumber = 1;
+    attemptNumber <= ORPHAN_CLEANUP_MAX_ATTEMPTS;
+    attemptNumber++
+  ) {
+    attempt = await attemptOrphanCleanupOnce({
+      merchantId,
+      supabase,
+      transactionId,
+    });
+    if (!attempt.retryable || attemptNumber === ORPHAN_CLEANUP_MAX_ATTEMPTS) {
+      if (attempt.outcome === 'unresolved') {
+        console.error(
+          'Orphan VTU cleanup unresolved after exhausting retries:',
+          {
+            attempts: attemptNumber,
+            error: attempt.detail ?? { transactionId },
+            transactionId,
+          }
+        );
+      }
+      return attempt.outcome;
+    }
+    const delayMs =
+      ORPHAN_CLEANUP_BACKOFF_MS[
+        Math.min(attemptNumber - 1, ORPHAN_CLEANUP_BACKOFF_MS.length - 1)
+      ];
+    console.warn('Retrying orphan VTU cleanup after transient failure:', {
+      attempt: attemptNumber,
+      delayMs,
+      maxAttempts: ORPHAN_CLEANUP_MAX_ATTEMPTS,
+      transactionId,
+    });
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return attempt.outcome;
 }

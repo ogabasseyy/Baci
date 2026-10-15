@@ -39,3 +39,39 @@ describe('VTU customer email notification migration', () => {
     expect(sql).toContain("'customerReceiptEmailNotificationSent', true");
   });
 });
+
+describe('VTU customer email notification key-pair migration', () => {
+  const pairMigrationPath = resolve(
+    __dirname,
+    '../../../../supabase/migrations/20261015232000_pair_vtu_customer_email_notification_keys.sql'
+  );
+  const pairRegressionPath = resolve(
+    __dirname,
+    '../../../../supabase/migrations/tests/vtu_customer_email_notification_key_pairs.sql'
+  );
+
+  it('pair-validates attempt/sent keys in both email RPCs', () => {
+    const sql = readFileSync(pairMigrationPath, 'utf8');
+
+    expect(sql).toContain(
+      'CREATE OR REPLACE FUNCTION public.claim_vtu_customer_email_notification_attempt'
+    );
+    expect(sql).toContain(
+      'CREATE OR REPLACE FUNCTION public.clear_vtu_customer_email_notification_attempt'
+    );
+    expect(sql).toContain('Mismatched VTU customer email metadata key pair');
+    expect(sql).not.toContain('v_allowed_attempt_keys');
+    expect(sql).not.toContain('v_allowed_sent_keys');
+  });
+
+  it('ships a mismatched-pair live regression', () => {
+    const sql = readFileSync(pairRegressionPath, 'utf8');
+
+    expect(sql).toContain('EMAIL-PAIR-REGRESSION');
+    expect(sql).toContain('mismatched claim (receipt attempt + token sent)');
+    expect(sql).toContain('mismatched claim (token attempt + receipt sent)');
+    expect(sql).toContain('mismatched clear did not raise');
+    expect(sql).toContain('matched receipt clear did not release');
+    expect(sql).toContain('ROLLBACK;');
+  });
+});

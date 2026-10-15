@@ -32,7 +32,9 @@ jobs:
       - name: Assert capability register is inside its evidence window
         env:
           BACI_REGISTER_REQUIRE_FRESH: '1'
-        run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_*capabilit*.py'
+        # Register-scoped only: running the whole capability suite here
+        # would present contract/gate breakage as a freshness failure.
+        run: python3 -m unittest discover -s vps-workers/baci-editorial-context -p 'test_capability_register_*.py'
       - name: Open an issue when the register goes stale
         if: failure() && steps.window.outputs.status == 'stale' && github.event_name == 'schedule'
         env:

@@ -197,6 +197,83 @@ class ContractExecTests(unittest.TestCase):
         self.assertTrue(failures)
         self.assertIn("only the checker pin", " ".join(failures))
 
+    def test_top_level_flow_env_fails(self):
+        ci = CI.replace(
+            "jobs:\n",
+            "env: {BASH_ENV: /tmp/x}\n\njobs:\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("block mapping", failures[0])
+        text = _workflow_text()
+        flowed = text.replace(
+            "env:\n",
+            "env: {BASH_ENV: /tmp/x}\n",
+            1,
+        )
+        failures = check.workflow_failures(flowed)
+        self.assertTrue(failures)
+        self.assertIn("block mapping", " ".join(failures))
+
+    def test_gate_job_container_fails(self):
+        ci = CI.replace(
+            "  changes:\n    runs-on: ubuntu-24.04\n",
+            "  changes:\n    runs-on: ubuntu-24.04\n    container: ghcr.io/evil:latest\n",
+            1,
+        )
+        failures = check.ci_failures(ci)
+        self.assertTrue(failures)
+        self.assertIn("PR-selected container", failures[0])
+        text = _workflow_text()
+        contained = text.replace(
+            "    if: github.event_name == 'pull_request_target'\n",
+            "    if: github.event_name == 'pull_request_target'\n    container: ghcr.io/evil:latest\n",
+            1,
+        )
+        failures = check.workflow_failures(contained)
+        self.assertTrue(failures)
+        self.assertIn("PR-selected container", " ".join(failures))
+
+    def test_scalar_decoy_gate_fails(self):
+        # A `name: |` scalar smuggling the pinned lines while the job calls
+        # a reusable workflow must fail: the text is content, not steps.
+        decoy = CI.replace(
+            "      - name: Test capability register binding\n        uses: ./.github/actions/capability-gate\n",
+            "      - uses: ./.github/workflows/attacker.yml\n        name: |\n          - name: Test capability register binding\n          uses: ./.github/actions/capability-gate\n",
+            1,
+        )
+        failures = check.ci_failures(decoy)
+        self.assertTrue(failures)
+        called = CI.replace(
+            "  changes:\n    runs-on: ubuntu-24.04\n",
+            "  changes:\n    runs-on: ubuntu-24.04\n    uses: ./.github/workflows/attacker.yml\n",
+            1,
+        )
+        failures = check.ci_failures(called)
+        self.assertTrue(failures)
+        self.assertIn("reusable workflow", " ".join(failures))
+
+    def test_escaped_branch_pattern_fails(self):
+        # `"!m\\x61in"` decodes to `!main`: the later exclusion empties the
+        # filter while the raw text still shows a main match.
+        attacked = CI.replace(
+            "  pull_request:\n",
+            '  pull_request:\n    branches: [main, "!m\\x61in"]\n',
+            1,
+        )
+        failures = check.ci_failures(attacked)
+        self.assertTrue(failures)
+        self.assertIn("main match", failures[0])
+        plain_exclusion = CI.replace(
+            "  pull_request:\n",
+            '  pull_request:\n    branches: [main, "!main"]\n',
+            1,
+        )
+        failures = check.ci_failures(plain_exclusion)
+        self.assertTrue(failures)
+        self.assertIn("main match", failures[0])
+
 
 if __name__ == "__main__":
     unittest.main()

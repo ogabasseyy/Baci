@@ -66,7 +66,7 @@ def _ordered_branch_match(subs, trig, lines, end):
             j += 1
         for raw in pats:
             for part in _strip_comment(raw).strip().strip("[]").split(","):
-                pat = part.strip().strip("'\"")
+                pat = _decode_scalar(part.strip()).strip("'\"")
                 if not pat:
                     continue
                 if pat.startswith("!"):
@@ -90,6 +90,41 @@ def _has_escaped_key(line):
     key-position quotes count (workflow/job/step levels), never script
     content; single quotes need no check (no escape processing)."""
     return re.match(r'^ {2,8}"[^"\n]*\\', line) is not None
+
+
+def _decode_scalar(value):
+    """Decode a double-quoted YAML scalar's backslash escapes so quoted and
+    bare spellings evaluate identically (`"!m\\x61in"` is `!main`). Bare and
+    single-quoted scalars process no escapes and pass through untouched."""
+    text = value.strip()
+    if len(text) >= 2 and text.startswith('"') and text.endswith('"'):
+        try:
+            return text[1:-1].encode("utf-8").decode("unicode_escape").encode("latin-1").decode("utf-8")
+        except (UnicodeError, ValueError):
+            return text
+    return text
+
+
+def _without_block_scalars(lines):
+    """Blank block-scalar content lines (indices preserved).
+
+    A multiline `name: |` can otherwise smuggle the pinned step text into a
+    scalar body while the job never invokes the gate: structure scans must
+    not match inside scalar bodies. Literal (`|`) and folded (`>`) headers
+    (with chomping/indent indicators) open a scalar; content is every
+    following non-blank line indented past the header.
+    """
+    scrubbed = list(lines)
+    scalar_indent = None
+    for i, line in enumerate(scrubbed):
+        if scalar_indent is not None:
+            if line.strip() and len(line) - len(line.lstrip()) > scalar_indent:
+                scrubbed[i] = ""
+                continue
+            scalar_indent = None
+        if re.match(r"^\s*[^#\s].*:\s*[|>][-+]?[0-9]?\s*(#.*)?$", line):
+            scalar_indent = len(line) - len(line.lstrip())
+    return scrubbed
 
 
 def _strip_comment(value):
@@ -163,22 +198,31 @@ def ci_failures(ci_text):
     lines = ci_text.splitlines()
     failures = trigger_failures(ci_text)
     # Top-level env inherits into every job including the gate: a PR-added
-    # startup variable preloads code before the gate runs.
+    # startup variable preloads code before the gate runs. The key accepts
+    # quote spellings; an inline (flow) mapping is rejected outright.
     try:
-        top = next(i for i, line in enumerate(lines) if line == "env:")
+        top = next(i for i, line in enumerate(lines) if re.match(r"""^["']?env["']?:""", line))
     except StopIteration:
         top = None
     if top is not None:
-        for line in lines[top + 1 :]:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                continue
-            if not line.startswith("  ") or line.startswith("   "):
-                break
-            if stripped.split(":")[0].strip().strip("\"'") in _STARTUP_ENV:
-                key = stripped.split(":")[0].strip().strip("\"'")
-                failures.append(f"ci.yml top-level env must not preload startup code ({key})")
-                break
+        flow = re.match(r"""^["']?env["']?:\s*(.*)$""", lines[top]).group(1)
+        if _strip_comment(flow).strip():
+            failures.append("ci.yml top-level env must use block mapping (no inline filters)")
+        else:
+            for line in lines[top + 1 :]:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                if not line.startswith("  ") or line.startswith("   "):
+                    break
+                if stripped.split(":")[0].strip().strip("\"'") in _STARTUP_ENV:
+                    key = stripped.split(":")[0].strip().strip("\"'")
+                    failures.append(f"ci.yml top-level env must not preload startup code ({key})")
+                    break
+    # Structure scans must not match inside block scalars: a multiline
+    # `name: |` can smuggle the pinned step text while the job calls a
+    # reusable workflow instead of running any step.
+    lines = _without_block_scalars(lines)
     starts = [i for i, line in enumerate(lines) if _norm(line) == _norm(STEP_NAME_LINE)]
     if len(starts) != 1:
         return failures + ["ci.yml must invoke the capability gate exactly once"]
@@ -194,6 +238,13 @@ def ci_failures(ci_text):
     job = lines[job_start : (later[0] if later else len(lines))]
     if any(_JOB_CONDITION.match(line) for line in job):
         return failures + ["capability gate job must stay unconditional (no job-level if:/needs:/continue-on-error:)"]
+    # A job-level `uses:` turns the job into a reusable-workflow call (no
+    # step ever runs); a `container:` swaps the python3 that runs the gate.
+    for line in job:
+        if re.match(r"^    [\"']?container[\"']?\s*:", line):
+            return failures + ["capability gate job must not run in a PR-selected container"]
+        if re.match(r"^    [\"']?uses[\"']?\s*:", line):
+            return failures + ["capability gate job must not call a reusable workflow"]
     # A checkout pinned to the base SHA would diff the base against itself
     # and skip the suite while the contract stays green.
     for line in lines[job_start:start]:

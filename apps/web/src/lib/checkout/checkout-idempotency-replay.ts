@@ -91,6 +91,7 @@ export async function prepareCheckoutIdempotencyReplay({
   const checkoutRequestPayload = buildOrderIdempotencyPayload(payload);
   let checkoutRequestHash = hashOrderIdempotencyPayload(checkoutRequestPayload);
   let isLegacyIdempotencyReplay = false;
+  let hasStoredHashMatch = false;
   const localeRequestHash = hashOrderIdempotencyPayload(
     buildOrderIdempotencyPayload(payload, { itemSort: 'locale' })
   );
@@ -105,6 +106,7 @@ export async function prepareCheckoutIdempotencyReplay({
     });
     if (localeHashStored) {
       checkoutRequestHash = localeRequestHash;
+      hasStoredHashMatch = true;
     }
   }
 
@@ -113,6 +115,7 @@ export async function prepareCheckoutIdempotencyReplay({
   // adopt the first one the database confirms, so a retry whose source row
   // was cleaned up still replays the original order instead of conflicting.
   for (const alternatePayload of alternatePayloads ?? []) {
+    if (hasStoredHashMatch) break;
     const alternateHash = hashOrderIdempotencyPayload(
       buildOrderIdempotencyPayload(alternatePayload)
     );
@@ -126,6 +129,7 @@ export async function prepareCheckoutIdempotencyReplay({
     });
     if (alternateStored) {
       checkoutRequestHash = alternateHash;
+      hasStoredHashMatch = true;
       break;
     }
     // A retry can also add delivery metadata the original lacked: probe the
@@ -150,6 +154,8 @@ export async function prepareCheckoutIdempotencyReplay({
     });
     if (legacyAlternateStored) {
       checkoutRequestHash = legacyAlternateHash;
+      hasStoredHashMatch = true;
+      isLegacyIdempotencyReplay = true;
       break;
     }
   }
@@ -175,6 +181,11 @@ export async function prepareCheckoutIdempotencyReplay({
       });
     } else if (isLegacyOrder === true) {
       isLegacyIdempotencyReplay = true;
+      // Metadata detection controls post-replay metadata persistence. It must
+      // never replace a hash that the database has already confirmed stored.
+      if (hasStoredHashMatch) {
+        return { checkoutRequestHash, isLegacyIdempotencyReplay };
+      }
       let legacyHash = hashOrderIdempotencyPayload(
         buildLegacyOrderIdempotencyPayload(payload)
       );

@@ -40,11 +40,13 @@ export const eventPipelineFrozenRoutes = {
   // its existing idempotent-replay decision to quote enrichment. Notification,
   // payment, tenant authorization, and privileged-client authority are unchanged.
   // Re-pinned for confirmed-replay quote recovery: a same-key retry restores
-  // the first-attempt validation shape with only the expiry check skipped, so
+  // the first-attempt destination while skipping expiry and mutable item checks, so
   // the order RPC can replay it. Notification, payment, tenant authorization,
   // and privileged-client authority are unchanged.
+  // Final quote orchestration extraction preserves caller/RLS authority;
+  // carrier comes from the validated quote and matched replay hashes persist.
   'apps/web/src/app/api/orders/route.ts':
-    '859b67641cdc96c820a34d3420a0d6a6a3707efc04836f241e75e2e791aa3d76',
+    'c661c53c31c762b0ed27c7e7bf326413ce88b4bd083fdee5338e15348266a88e',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

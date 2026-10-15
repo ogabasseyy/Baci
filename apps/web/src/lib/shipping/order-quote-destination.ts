@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { shippingCoordinatePairSchema } from '@/schemas/shipping-coordinate-pair';
-import { readCoordinate } from './international-quote-order-guard';
 import {
   matchesQuoteDestination,
   type OrderShippingAddressForQuote,
@@ -15,6 +14,7 @@ import {
   isShippingProviderCode,
   parseStoredQuoteRequest,
 } from './order-shipment-booking-utils';
+import { readCoordinate } from './read-coordinate';
 
 export type { OrderShippingAddressForQuote } from './order-quote-destination-address';
 export { normalizeAddressForQuoteMatch } from './order-quote-destination-address';
@@ -103,10 +103,10 @@ export async function enrichShippingAddressWithQuoteDestination(
   }
 
   const expiresAt = Date.parse(quote.expires_at ?? '');
-  // A confirmed same-key retry must reach the order RPC's replay path even
-  // after its quote expired. Expiry is the only non-deterministic check here,
-  // so skipping it alone reproduces the first attempt's destination and hash;
-  // the RPC hash comparison stays authoritative for replay-vs-conflict.
+  // Confirmed same-key retries skip expiry and catalog-derived item matching:
+  // those inputs can change after creation. Destination/pin, merchant, provider
+  // and fee checks still run; the RPC's stored hash enforces the caller's
+  // product, quantity and price instead of rewriting the existing order.
   if (
     !context.isConfirmedReplay &&
     Number.isFinite(expiresAt) &&

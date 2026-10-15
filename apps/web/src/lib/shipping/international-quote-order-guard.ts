@@ -7,6 +7,7 @@ import {
 } from './international-quote-receiver-match';
 import { OrderShipmentBookingError } from './order-shipment-booking-error';
 import { toQuoteComparableOrderItems } from './order-shipment-booking-utils';
+import { readCoordinate } from './read-coordinate';
 import type { QuoteRequest } from './types';
 
 type OrderShippingAddress = {
@@ -39,33 +40,6 @@ function matchesOptionalText(
 }
 
 const COORDINATE_TOLERANCE = 1e-6;
-
-type CoordinateReading =
-  | { status: 'absent' | 'invalid' }
-  | { status: 'valid'; value: number };
-
-export function readCoordinate(
-  value: unknown,
-  minimum: number,
-  maximum: number
-): CoordinateReading {
-  if (value === null || value === undefined) return { status: 'absent' };
-  const numericValue =
-    typeof value === 'number'
-      ? value
-      : typeof value === 'string' && value.trim().length > 0
-        ? Number(value.trim())
-        : undefined;
-  if (
-    numericValue === undefined ||
-    !Number.isFinite(numericValue) ||
-    numericValue < minimum ||
-    numericValue > maximum
-  ) {
-    return { status: 'invalid' };
-  }
-  return { status: 'valid', value: numericValue };
-}
 
 function matchesCoordinatePair(
   orderAddress: OrderShippingAddress,

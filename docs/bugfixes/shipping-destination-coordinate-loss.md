@@ -30,7 +30,10 @@ guard that rejects the subsequent booking.
 - Existing order reuse never adopts missing coordinates from matching address
   text alone. A confirmed same-key idempotent replay re-derives the first
   attempt's validated quote pin in memory only (the stored order row is never
-  rewritten). The booking guard stays intact.
+  rewritten). It skips quote expiry and catalog-derived item matching because
+  those can change after creation. Destination/pin, merchant, provider and fee
+  checks still run, and the RPC's stored request hash enforces the caller's
+  product, quantity and price. The booking guard stays intact.
 
 Unchanged schema helpers were extracted to keep the edited schemas below the
 repository's 300-line limit. Public schema imports remain compatible.
@@ -98,10 +101,12 @@ schema suites also run. No test calls a live carrier or writes production data.
 
 ## Source-contract receipts
 
-The order route only adds its existing idempotent-replay decision to quote
-validation. Its frozen event-boundary receipt was updated after verifying that
-tenant authorization, payments, notifications and privileged-client authority
-are unchanged. The storefront inventory was regenerated through its existing
+The order route delegates quote item loading, keyed replay and destination /
+provider validation to focused helpers. It persists the validated quote carrier
+and binds effective provider selections into replay hashes. Airport validation
+derives an omitted provider from its already merchant-scoped quote. The frozen
+event-boundary receipt covers the final reviewed bytes; tenant authorization,
+payments, notifications and privileged-client authority remain unchanged. The storefront inventory was regenerated through its existing
 source-bound generator; all 573 route classifications remain unchanged. Neither
 validator was relaxed. Independent operation schemas now have focused modules
 and colocated tests, with `orders.ts` retaining its compatibility exports.
@@ -117,3 +122,11 @@ No-pin legacy hashes and selected-quote hashes retain their original bytes.
 Historical quote-less retries whose pins were stripped before this prevention
 change cannot prove the original pin and fail closed; no compatibility fallback
 discards coordinates or weakens the booking destination guard.
+
+## Review clarification: existing booking prefix compatibility
+
+Checkout adoption requires matching normalized destination text. The existing
+booking guard additionally permits an order street beginning with the full raw
+quote street followed by a comma, including extra text after composed locality
+suffixes. A regression explicitly pins that existing behavior; this change does
+not broaden it or change coordinate matching.

@@ -1,10 +1,10 @@
-import { readCoordinate } from '@/lib/shipping/international-quote-order-guard';
 import type {
   InternationalShipmentOrderItem,
   ProductShippingMetadata,
 } from '@/lib/shipping/international-shipment-items';
 import { toInternationalQuoteValidationItemsFromOrder } from '@/lib/shipping/international-shipment-items';
 import type { OrderShippingAddressForQuote } from '@/lib/shipping/order-quote-destination';
+import { readCoordinate } from '@/lib/shipping/read-coordinate';
 import { shippingCoordinatePairSchema } from '@/schemas/shipping-coordinate-pair';
 
 type ReuseOrderQuoteValidationContext = {

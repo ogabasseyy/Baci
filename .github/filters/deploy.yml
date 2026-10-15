@@ -129,6 +129,7 @@ tracking:
   - 'apps/web/src/lib/shipping/order-shipment-booking-utils.ts'
   - 'apps/web/src/lib/shipping/package-dimensions.ts'
   - 'apps/web/src/lib/shipping/quote-provider-failure.ts'
+  - 'apps/web/src/lib/shipping/select-preferred-quote.ts'
   - 'apps/web/src/lib/shipping/shipping-config.ts'
   - 'apps/web/src/lib/shipping/surviving-shipment-quantity.ts'
   - 'apps/web/src/lib/shipping/tracking-types.ts'

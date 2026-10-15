@@ -9,7 +9,7 @@ CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT nullif
 \ir ../migrations/20261012050000_commerce_cart_core.sql
 \ir ../migrations/20261012050100_commerce_cart_roles.sql
 CREATE FUNCTION public.commerce_cart_create(text,jsonb,text) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"ok":true}'::jsonb $$;
-\ir ../migrations/20261014120000_commerce_cart_account_continuity.sql
+\ir ../migrations/20261014120001_commerce_cart_account_continuity.sql
 INSERT INTO public.commerce_carts(id,merchant_id,expires_at) VALUES
 ('22222222-2222-4222-8222-222222222222','11111111-1111-4111-8111-111111111111',now()+interval '7 days'),
 ('22222222-2222-4222-8222-222222222223','11111111-1111-4111-8111-111111111111',now()+interval '7 days'),

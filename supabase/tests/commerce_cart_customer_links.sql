@@ -19,7 +19,7 @@ INSERT INTO public.customers VALUES
 \ir ../migrations/20261012050200_commerce_cart_commands.sql
 \ir ../migrations/20261012050400_commerce_cart_create_grant.sql
 \ir ../migrations/20261012050500_commerce_cart_handoff.sql
-\ir ../migrations/20261014120000_commerce_cart_account_continuity.sql
+\ir ../migrations/20261014120001_commerce_cart_account_continuity.sql
 \ir ../migrations/20261014120100_commerce_cart_mutation_permissions.sql
 \ir ../migrations/20261014120400_commerce_cart_handoff_merge_guards.sql
 \ir ../migrations/20261014120200_commerce_cart_account_tables.sql

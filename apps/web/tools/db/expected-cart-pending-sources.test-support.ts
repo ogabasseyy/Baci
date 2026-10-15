@@ -46,7 +46,7 @@ export const EXPECTED_CART_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261014120000_commerce_cart_account_continuity.sql',
+      'supabase/migrations/20261014120001_commerce_cart_account_continuity.sql',
     sha256: '62c726db284129e7b6875edf5b37ad32ce8c2da155e96eb4dbbbd7ff8b09bf8a',
   },
   {
@@ -71,12 +71,12 @@ export const EXPECTED_CART_PENDING_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261014130000_agentic_idempotency_caller_scope.sql',
+      'supabase/migrations/20261014130001_agentic_idempotency_caller_scope.sql',
     sha256: 'e6da9a10fdc74c85ceda39ec663e7d5d9a44f3fbb78d39b72cdcb70cd1fac87e',
   },
   {
     repositoryPath:
-      'supabase/migrations/20261014140000_agentic_cart_revision_guard.sql',
+      'supabase/migrations/20261014140001_agentic_cart_revision_guard.sql',
     sha256: '339aff778b52196f67bede94ac91caad38c99dcdecd03c864430c7756ebf444a',
   },
   {

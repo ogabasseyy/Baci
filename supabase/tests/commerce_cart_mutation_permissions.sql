@@ -32,7 +32,7 @@ CREATE TABLE public.product_variants (
 );
 \ir ../migrations/20261012050200_commerce_cart_commands.sql
 CREATE OR REPLACE FUNCTION public.commerce_cart_create(p_operation_id text, p_lines jsonb, p_currency text) RETURNS jsonb LANGUAGE sql AS $$ SELECT '{"ok":true}'::jsonb $$;
-\ir ../migrations/20261014120000_commerce_cart_account_continuity.sql
+\ir ../migrations/20261014120001_commerce_cart_account_continuity.sql
 CREATE OR REPLACE FUNCTION public.commerce_cart_mutate(p_cart_id uuid, p_operation_id text, p_expected_version integer, p_command jsonb) RETURNS jsonb LANGUAGE sql SECURITY DEFINER SET search_path='' AS $$ SELECT jsonb_build_object('ok',true) $$;
 GRANT EXECUTE ON FUNCTION public.commerce_cart_mutate(uuid,text,integer,jsonb) TO commerce_cart_shopper;
 \ir ../migrations/20261014120100_commerce_cart_mutation_permissions.sql

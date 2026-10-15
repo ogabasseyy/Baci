@@ -3,10 +3,9 @@ import type {
   ShipmentItem,
   ShippingAddress,
   ShippingProviderCode,
-  ShippingQuote,
 } from '@/lib/shipping/types';
 import { SHIPPING_PROVIDER_CODES } from '@/lib/shipping/types';
-import { matchesGiglProviderRate } from './matches-gigl-provider-rate';
+import { matchesQuoteItem } from './international-quote-items-match';
 import { OrderShipmentBookingError } from './order-shipment-booking-error';
 import { readPackageDimensionsCm } from './package-dimensions';
 import { survivingShipmentQuantity } from './surviving-shipment-quantity';
@@ -127,18 +126,56 @@ export function toShipmentItems(orderItems: OrderItemRecord[]): ShipmentItem[] {
 
 export function toDomesticBookingItems(
   orderItems: OrderItemRecord[],
-  quoteItems: ShipmentItem[] | undefined
+  quoteItems: ShipmentItem[] | undefined,
+  defaultWeight?: number
 ): ShipmentItem[] {
   if (!quoteItems?.length) return toShipmentItems(orderItems);
+  // Match a complete surviving snapshot or preserve legacy original quantities.
+  const matches = (
+    orderItem: OrderItemRecord,
+    item: ShipmentItem,
+    original = false
+  ) => {
+    // Direct legacy callers lack the package context validated by order booking.
+    if (defaultWeight === undefined)
+      return (
+        orderItem.name === item.name &&
+        (original
+          ? orderItem.quantity
+          : survivingShipmentQuantity(orderItem)) === item.quantity &&
+        Number(orderItem.price) === item.value
+      );
+    const comparable = toQuoteComparableOrderItems([orderItem], {
+      defaultWeight,
+      quantityMode: original ? 'original' : undefined,
+    })[0];
+    return comparable !== undefined && matchesQuoteItem(comparable, item);
+  };
+  const survivingItems = orderItems.filter(
+    (item) => survivingShipmentQuantity(item) > 0
+  );
+  const usesSurvivingQuantities =
+    quoteItems.length === survivingItems.length &&
+    quoteItems.every((item) => {
+      const index = survivingItems.findIndex((orderItem) =>
+        matches(orderItem, item)
+      );
+      if (index === -1) return false;
+      survivingItems.splice(index, 1);
+      return true;
+    });
   const unmatchedOrderItems = [...orderItems];
   return quoteItems
     .map((item) => {
-      const orderItemIndex = unmatchedOrderItems.findIndex(
-        (orderItem) =>
-          orderItem.name === item.name &&
-          orderItem.quantity === item.quantity &&
-          Number(orderItem.price) === item.value
+      const orderItemIndex = unmatchedOrderItems.findIndex((orderItem) =>
+        matches(orderItem, item, !usesSurvivingQuantities)
       );
+      if (orderItemIndex === -1 && defaultWeight !== undefined)
+        throw new OrderShipmentBookingError(
+          'The saved shipping quote no longer matches this order.',
+          400,
+          'SHIPPING_QUOTE_ITEMS_MISMATCH'
+        );
       const matchedOrderItem =
         orderItemIndex === -1 ? item : unmatchedOrderItems[orderItemIndex];
       if (orderItemIndex !== -1) unmatchedOrderItems.splice(orderItemIndex, 1);
@@ -203,7 +240,7 @@ export function quotedShipmentItemWeight(item: {
 
 export function toQuoteComparableOrderItems(
   items: unknown,
-  options: { defaultWeight?: number } = {}
+  options: { defaultWeight?: number; quantityMode?: 'original' } = {}
 ) {
   if (!Array.isArray(items)) return [];
   return items.flatMap((item) => {
@@ -212,6 +249,7 @@ export function toQuoteComparableOrderItems(
       name?: string | null;
       quantity?: number | null;
       price?: number | string | null;
+      fulfillment_data?: unknown;
       length?: number | string | null;
       width?: number | string | null;
       height?: number | string | null;
@@ -235,10 +273,18 @@ export function toQuoteComparableOrderItems(
         width: record.width,
         height: record.height,
       });
+    const quantity =
+      options.quantityMode === 'original'
+        ? Math.max(0, record.quantity ?? 1)
+        : survivingShipmentQuantity({
+            fulfillment_data: record.fulfillment_data,
+            quantity: record.quantity ?? null,
+          });
+    if (quantity <= 0) return [];
     return [
       {
         name: record.name ?? null,
-        quantity: record.quantity ?? null,
+        quantity,
         price: record.price,
         weight: quotedShipmentItemWeight(record) ?? options.defaultWeight,
         ...(dimensions ?? {}),
@@ -247,42 +293,7 @@ export function toQuoteComparableOrderItems(
   });
 }
 
-export function selectPreferredQuote(
-  quotes: ShippingQuote[],
-  currentQuote: {
-    serviceTier: string | null;
-    carrierName: string | null;
-    providerRateId?: string | null;
-  }
-): ShippingQuote | null {
-  const normalizedServiceTier = currentQuote.serviceTier?.toLowerCase() ?? null;
-  const normalizedCarrierName = currentQuote.carrierName?.toLowerCase() ?? null;
-  const normalizedProviderRateId = currentQuote.providerRateId?.trim() || null;
-
-  return (
-    quotes.find(
-      (quote) =>
-        normalizedProviderRateId &&
-        quote.providerRateId === normalizedProviderRateId
-    ) ||
-    quotes.find(
-      (quote) =>
-        normalizedProviderRateId &&
-        matchesGiglProviderRate(normalizedProviderRateId, quote.providerRateId)
-    ) ||
-    quotes.find(
-      (quote) =>
-        quote.serviceTier.toLowerCase() === normalizedServiceTier &&
-        quote.carrierName.toLowerCase() === normalizedCarrierName
-    ) ||
-    quotes.find(
-      (quote) => quote.serviceTier.toLowerCase() === normalizedServiceTier
-    ) ||
-    quotes[0] ||
-    null
-  );
-}
-
 export { buildOrderShipmentReceiver as buildReceiver } from './build-order-shipment-receiver';
 export { deriveMerchantLocation } from './merchant-location';
 export { domesticSendersDiffer } from './merchant-sender-comparison';
+export { selectPreferredQuote } from './select-preferred-quote';

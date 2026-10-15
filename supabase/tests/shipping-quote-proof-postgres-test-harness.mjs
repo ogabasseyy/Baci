@@ -1,4 +1,5 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +11,7 @@ const migrations = resolve(directory, '../migrations');
 export function createShippingQuoteProofTestDatabase({
   beforeFix = false,
 } = {}) {
-  const container = `baci-quote-proof-${process.pid}`;
+  const container = `baci-quote-proof-${process.pid}-${randomUUID().slice(0, 8)}`;
 
   function docker(args, input) {
     const result = spawnSync('docker', args, {
@@ -44,6 +45,47 @@ export function createShippingQuoteProofTestDatabase({
       ],
       input
     );
+  }
+
+  /** @returns {Promise<string>} */
+  function queryAsync(input) {
+    return new Promise((resolveQuery, reject) => {
+      const process = spawn('docker', [
+        'exec',
+        '-i',
+        container,
+        'psql',
+        '-X',
+        '-qAt',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-v',
+        'VERBOSITY=verbose',
+        '-U',
+        'postgres',
+        '-d',
+        'postgres',
+      ]);
+      let output = '';
+      let errors = '';
+      const timeout = setTimeout(() => process.kill('SIGKILL'), 30000);
+      process.stdout.on('data', (chunk) => {
+        output += chunk;
+      });
+      process.stderr.on('data', (chunk) => {
+        errors += chunk;
+      });
+      process.on('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      process.on('close', (code) => {
+        clearTimeout(timeout);
+        if (code === 0) resolveQuery(output);
+        else reject(new Error(errors || `psql exited ${code}`));
+      });
+      process.stdin.end(input);
+    });
   }
 
   function readMigration(name) {
@@ -163,5 +205,5 @@ export function createShippingQuoteProofTestDatabase({
     });
   }
 
-  return { query, start, stop };
+  return { query, queryAsync, start, stop };
 }

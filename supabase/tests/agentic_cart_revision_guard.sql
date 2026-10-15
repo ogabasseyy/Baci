@@ -4,7 +4,7 @@ BEGIN;
 CREATE TABLE public.agentic_cart_sessions(cart_id text PRIMARY KEY,cart_items jsonb,updated_at timestamptz NOT NULL);
 INSERT INTO public.agentic_cart_sessions VALUES('fixture','[]','2026-10-14 00:00:00+00');
 \if :install_guard
-\ir ../migrations/20261014140000_agentic_cart_revision_guard.sql
+\ir ../migrations/20261014140001_agentic_cart_revision_guard.sql
 \endif
 DO $$ DECLARE old_revision timestamptz; affected integer; BEGIN
  SELECT updated_at INTO old_revision FROM public.agentic_cart_sessions WHERE cart_id='fixture';

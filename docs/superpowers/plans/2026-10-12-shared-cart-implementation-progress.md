@@ -721,7 +721,7 @@ Task 12 continuation (same day, second continuation):
   nonsecret) instead of overwriting a newer cart. Observed RED (6
   tests across adapter/idempotency/profile/routes) then GREEN.
 - Receipt scoping: new append-only migration
-  `20261014130000_agentic_idempotency_caller_scope.sql` (pending,
+  `20261014130001_agentic_idempotency_caller_scope.sql` (pending,
   independently hashed, registered in both pending-source registries)
   scopes idempotency records by verified platform caller; cart routes
   pass `mutation.agentId` through reserve/lookup/reclaim/store.
@@ -786,7 +786,7 @@ reviewed lines now block checkout; they are never silently omitted. The native
 checkout display-local assurance overlay remains unchanged.
 
 A further append-only pending migration,
-`20261014140000_agentic_cart_revision_guard.sql`, makes UCP's timestamp CAS
+`20261014140001_agentic_cart_revision_guard.sql`, makes UCP's timestamp CAS
 strictly advance for every writer; both pending registries contain its hash
 (17 pending sources, including the checkout-lifetime correction below). Disposable local SQL demonstrated the failure without
 the trigger and success with it. No remote migration was applied.

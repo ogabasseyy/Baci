@@ -20,4 +20,14 @@ export const eventPipelineGatewayCronCredentialPaths = [
   [route, sweep, finalizer, completion, storefront, jwt, signing, env],
   [route, sweep, finalizer, effects, email, env],
   [route, sweep, finalizer, effects, email, zepto, env],
+  // Exact CRON_SECRET-gated recovery retention fallback and its admin client.
+  [
+    'apps/web/src/app/api/cron/cleanup-checkout-shipping-recovery-previews/route.ts',
+    env,
+  ],
+  [
+    'apps/web/src/app/api/cron/cleanup-checkout-shipping-recovery-previews/route.ts',
+    'apps/web/src/lib/supabase/admin.ts',
+    env,
+  ],
 ];

@@ -6,7 +6,7 @@
  */
 
 import crypto from 'node:crypto';
-import { logKudaRawResponse } from '@/lib/kuda-debug-log';
+import { logKudaResponse } from '@/lib/kuda-debug-log';
 import {
   extractKudaTransactionId,
   extractKudaVoucherPin,
@@ -540,9 +540,7 @@ export async function kudaRequest<T = unknown>(
   }
 
   const raw = await response.json();
-  logKudaRawResponse({
-    raw,
-    requestData: data,
+  logKudaResponse({
     requestRef: ref,
     serviceType,
   });

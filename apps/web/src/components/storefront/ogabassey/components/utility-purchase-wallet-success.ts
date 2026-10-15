@@ -32,6 +32,7 @@ interface UtilityWalletSuccessOutcomeInput {
   setTransactionVoucherPin: Dispatch<SetStateAction<string | null>>;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   submitAmount: number;
+  submitBalance: number;
 }
 
 /**
@@ -62,6 +63,7 @@ export function applyUtilityWalletSuccessOutcome({
   setTransactionVoucherPin,
   setWalletBalance,
   submitAmount,
+  submitBalance,
 }: UtilityWalletSuccessOutcomeInput): boolean {
   // Terminal forgets (fresh buy-again); processing keeps (a fresh
   // resubmit would bypass the dedupe row and debit twice). Refresh
@@ -105,6 +107,7 @@ export function applyUtilityWalletSuccessOutcome({
     result,
     setWalletBalance,
     submitAmount,
+    submitBalance,
   });
   setTransactionRef(result.reference);
   markAttemptShown(scoped ?? null);

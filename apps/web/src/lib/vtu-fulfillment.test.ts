@@ -5180,8 +5180,89 @@ describe('fulfillPendingVtuTransaction', () => {
         'refund_customer_wallet_for_vtu',
         expect.objectContaining({ p_amount: 700 })
       );
-      // The card portion is what gets returned as fresh credit.
-      expect(result).toMatchObject({ refundedToWallet: 700 });
+      // Both legs were reversed, so the response reports the total
+      // (Codex R98 P2): card-only reporting claimed refundedToWallet:
+      // 700 here and 0 for wallet-only splits.
+      expect(result).toMatchObject({ refundedToWallet: 1000 });
+    });
+
+    it('wallet-only Kuda failure after wallet debit: reports the full restored amount', async () => {
+      // Codex R98 P2: wallet-only splits have card: 0, so card-only
+      // reporting serialized refundedToWallet: 0 (or omitted it)
+      // even though reverse_vtu_wallet_payment restored the full
+      // purchase amount.
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'reverse_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: [
+              {
+                success: true,
+                reversed_amount: 1000,
+                new_balance: 2000,
+                reversal_transaction_id: 'rev-tx-1',
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+
+      mockPurchaseAirtime.mockResolvedValue({
+        success: false,
+        message: 'Vend rejected (biller status: k11)',
+        amount: 1000,
+        status: 'failed',
+      });
+
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        updatePayloads,
+        transactionRow: {
+          id: 'vtu-kuda-fail-wo',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'airtime',
+          network_provider: 'MTN',
+          phone_number: '08012345678',
+          amount: 1000,
+          request_reference: 'VTU-KFAIL-WO',
+          transaction_id: null,
+          status: 'pending',
+          metadata: {
+            paymentSplit: { wallet: 1000, card: 0 },
+            walletDebited: true,
+          },
+          error_message: null,
+          merchant_commission: 10,
+          customer_cashback: 0,
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          source: 'checkout',
+        },
+        rpcImpl,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        supabase,
+        transactionId: 'vtu-kuda-fail-wo',
+      });
+
+      expect(result).toMatchObject({
+        status: 'failed',
+        refundedToWallet: 1000,
+      });
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.anything()
+      );
+      // Persisted metadata keeps the card leg only: the history
+      // projector sums it with the split's wallet leg, so persisting
+      // the total would double-count the restoration there.
+      expect(updatePayloads).toContainEqual({
+        metadata: expect.objectContaining({ refundAmount: 0 }),
+      });
     });
 
     it('fresh vend failure with unconfirmed wallet reversal throws retryable (key preserved)', async () => {

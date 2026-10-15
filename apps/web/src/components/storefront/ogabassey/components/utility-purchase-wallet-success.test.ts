@@ -34,6 +34,7 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     setTransactionVoucherPin: vi.fn(),
     setWalletBalance: vi.fn(),
     submitAmount: 500,
+    submitBalance: 5000,
     ...overrides,
   } as Parameters<typeof applyUtilityWalletSuccessOutcome>[0];
 }
@@ -50,6 +51,9 @@ describe('applyUtilityWalletSuccessOutcome', () => {
 
     expect(input.forgetScopedKey).toHaveBeenCalledWith('scoped-1');
     expect(applyUtilityPurchaseBalanceEffect).toHaveBeenCalledOnce();
+    expect(applyUtilityPurchaseBalanceEffect).toHaveBeenCalledWith(
+      expect.objectContaining({ submitAmount: 500, submitBalance: 5000 })
+    );
     expect(input.setTransactionRef).toHaveBeenCalledWith('REF-1');
     expect(input.markAttemptShown).toHaveBeenCalledWith('scoped-1');
     expect(input.setStep).toHaveBeenCalledWith('success');

@@ -675,6 +675,13 @@ async function refundHybridKudaFailure({
       return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
     }
   }
+  // Both legs were reversed above (wallet unconditionally, card when
+  // present). Persist the card leg only (Codex R98 P2): the history
+  // projector sums it with the split's wallet leg, so persisting the
+  // total here would double-count. The immediate response below
+  // reports the total instead — card-only reporting serialized
+  // refundedToWallet: 0 for wallet-only splits (card: 0) even though
+  // the full purchase amount was restored.
   const metadataChanged = applyRefundMetadata(
     metadata,
     paymentSplit.card,
@@ -683,7 +690,7 @@ async function refundHybridKudaFailure({
   return {
     metadataChanged,
     refundIssued: true,
-    refundedAmount: paymentSplit.card,
+    refundedAmount: paymentSplit.wallet + paymentSplit.card,
   };
 }
 

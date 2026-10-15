@@ -158,6 +158,11 @@ export function useUtilityPurchase({
 
     setLoading(true);
     const submittingIdentity = user?.id ?? customer?.id ?? null;
+    // Pre-submit balance generation (Codex R98 P2): the success
+    // effect decrements locally only while state still holds this
+    // value — a refresh that lands post-debit refreshes for server
+    // truth instead of double-counting the debit.
+    const submitBalance = getWalletBalance();
     // Per-execution capture: concurrent submits can't redirect completion.
     const captured: { attempt: UtilityIdempotencyAttempt | null } = {
       attempt: null,
@@ -221,6 +226,7 @@ export function useUtilityPurchase({
         setTransactionVoucherPin,
         setWalletBalance,
         submitAmount: payload.amount,
+        submitBalance,
       });
       if (stale) {
         return;

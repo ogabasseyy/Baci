@@ -24,7 +24,7 @@ type MockUserResult = {
 };
 
 type MockSessionResult = {
-  data: { session: { access_token: string } | null };
+  data: { session: { access_token: string; user: { id: string } } | null };
   error: Error | null;
 };
 
@@ -105,7 +105,9 @@ beforeEach(() => {
     error: null,
   });
   mockGetSession.mockResolvedValue({
-    data: { session: { access_token: 'token-123' } },
+    data: {
+      session: { access_token: 'token-123', user: { id: 'auth-user-1' } },
+    },
     error: null,
   });
 });
@@ -313,12 +315,13 @@ describe('useVTUHistory', () => {
     queryClient.clear();
   });
 
-  it('skips settling when the account switches mid-fetch', async () => {
+  it('rejects when the fetch identity differs from the query-key owner', async () => {
+    // Codex R98 P1: the key owner is user-2 (store) but getUser
+    // reports user-1 — returning user-1's rows would cache them
+    // under user-2's key. Reject instead of returning + settling.
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('hist-switch', 'key-switch');
     notePendingVtuReference('hist-switch', 'VTU-123');
-    // getUser (fetch identity) still reports user-1, but the store
-    // has moved on — the rows were never shown to the submitter.
     mockAuthUserId.mockReturnValue('auth-user-2');
     const queryClient = createTestClient();
     fetchSpy.mockResolvedValue({
@@ -340,9 +343,94 @@ describe('useVTUHistory', () => {
     const { result, unmount } = renderHook(() => useVTUHistory('all'), {
       wrapper: createWrapper(queryClient),
     });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.isError).toBe(true));
 
+    expect(result.current.error).toMatchObject({
+      message: 'Account changed during history load. Please try again.',
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData(['vtu', 'history', 'auth-user-2', 'all', 20])
+    ).toBeUndefined();
     expect(recallPendingVtuKey('hist-switch')).toBe('key-switch');
+    expect(isStalePendingVtuSuccess('hist-switch', 'VTU-123')).toBe(false);
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('rejects when the session token belongs to another account', async () => {
+    // Codex R98 P1: getUser agrees with the key owner (user-1) but
+    // the session — atomic with the token the server reads — names
+    // user-2 (switch between the two auth calls). Never fetch with
+    // another account's token.
+    const queryClient = createTestClient();
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-456', user: { id: 'auth-user-2' } },
+      },
+      error: null,
+    });
+
+    const { result, unmount } = renderHook(() => useVTUHistory('all'), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error).toMatchObject({
+      message: 'Account changed during history load. Please try again.',
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData(['vtu', 'history', 'auth-user-1', 'all', 20])
+    ).toBeUndefined();
+
+    unmount();
+    queryClient.clear();
+  });
+
+  it('discards rows fetched before a post-fetch account switch', async () => {
+    // Codex R98 P1: identities agree through the fetch, then the
+    // store moves to user-2 before the return — the rows must be
+    // discarded, not cached under user-1's key (a switch back
+    // within staleTime would otherwise display them) and not
+    // settled against user-1's pending keys.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('hist-post', 'key-post');
+    notePendingVtuReference('hist-post', 'VTU-123');
+    const queryClient = createTestClient();
+    fetchSpy.mockImplementation(async () => {
+      mockAuthUserId.mockReturnValue('auth-user-2');
+      return {
+        ok: true,
+        json: async () => ({
+          transactions: [
+            {
+              id: 'tx-1',
+              created_at: '2026-04-08T12:00:00.000Z',
+              type: 'electricity',
+              status: 'successful',
+              amount: 2500,
+              request_reference: 'VTU-123',
+            },
+          ],
+        }),
+      };
+    });
+
+    const { result, unmount } = renderHook(() => useVTUHistory('all'), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.error).toMatchObject({
+      message: 'Account changed during history load. Please try again.',
+    });
+    expect(
+      queryClient.getQueryData(['vtu', 'history', 'auth-user-1', 'all', 20])
+    ).toBeUndefined();
+    expect(recallPendingVtuKey('hist-post')).toBe('key-post');
+    expect(isStalePendingVtuSuccess('hist-post', 'VTU-123')).toBe(false);
 
     unmount();
     queryClient.clear();

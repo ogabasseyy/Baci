@@ -21,6 +21,14 @@ type WalletSuccessResult = Extract<
  * reference after a lost response + reload) refresh for server truth
  * instead of decrementing a second time — the debit is already
  * reflected in the displayed balance.
+ *
+ * The local decrement is tied to the pre-submit balance generation
+ * (Codex R98 P2): a wallet refresh that lands after the server debit
+ * but before the vend response (e.g. from the still-mounted funding
+ * panel) already puts the post-debit balance into state, and
+ * decrementing again would leave an artificially low balance that
+ * blocks valid follow-ups as underfunded. A moved balance refreshes
+ * for server truth instead.
  */
 export function applyUtilityPurchaseBalanceEffect({
   appliedReferences,
@@ -29,6 +37,7 @@ export function applyUtilityPurchaseBalanceEffect({
   result,
   setWalletBalance,
   submitAmount,
+  submitBalance,
 }: {
   appliedReferences: Set<string>;
   isAmbiguousReplay: boolean;
@@ -36,6 +45,7 @@ export function applyUtilityPurchaseBalanceEffect({
   result: WalletSuccessResult;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   submitAmount: number;
+  submitBalance: number;
 }): void {
   if (isAmbiguousReplay) {
     appliedReferences.add(result.reference);
@@ -52,6 +62,16 @@ export function applyUtilityPurchaseBalanceEffect({
   if (typeof result.cashback?.newBalance === 'number') {
     setWalletBalance(result.cashback.newBalance);
   } else {
-    setWalletBalance((balance) => Math.max(balance - submitAmount, 0));
+    setWalletBalance((balance) => {
+      if (balance !== submitBalance) {
+        // State moved since submit: a refresh already applied the
+        // debit (or another purchase landed) — decrementing again
+        // would double-count. Refresh converges to server truth.
+        // (Idempotent refetch; safe under StrictMode double-invoke.)
+        refreshWallet();
+        return balance;
+      }
+      return Math.max(balance - submitAmount, 0);
+    });
   }
 }

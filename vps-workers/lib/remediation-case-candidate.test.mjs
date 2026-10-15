@@ -147,4 +147,50 @@ describe('remediation case candidate normalizer', () => {
     assert.equal(normalized.sample.message.includes('9'.repeat(16)), false);
     assert.match(normalized.sample.message, /\[REDACTED_PHONE\]/);
   });
+
+  it('preserves PostHog provider identity through normalization', () => {
+    const normalized = createRemediationCaseCandidateNormalizer().normalize({
+      category: 'posthog_issue',
+      fingerprint: 'posthog-abc123',
+      firstSeen: '2026-08-09T10:00:00Z',
+      lastSeen: '2026-08-09T10:01:00Z',
+      occurrences: 4,
+      sample: {
+        issueId: 'posthog-issue-1',
+        message: 'TypeError',
+        route: '(redacted PostHog location)',
+        source: 'posthog',
+      },
+    });
+
+    assert.equal(normalized.source, 'posthog');
+    assert.equal(normalized.category, 'posthog_issue');
+    assert.equal(
+      normalized.caseKey,
+      'posthog:posthog_issue:posthog-abc123'
+    );
+    assert.equal(normalized.sample.message, 'TypeError');
+    assert.equal(normalized.sample.issueId, 'posthog-issue-1');
+  });
+
+  it('drops a non-allowlisted PostHog issueId instead of persisting it', () => {
+    const normalized = createRemediationCaseCandidateNormalizer().normalize({
+      category: 'posthog_issue',
+      fingerprint: 'posthog-hostile',
+      occurrences: 4,
+      sample: {
+        issueId: '../../etc/passwd alice@example.com',
+        message: 'TypeError',
+        source: 'posthog',
+      },
+      source: 'posthog',
+    });
+
+    assert.equal(normalized.source, 'posthog');
+    assert.equal(normalized.sample.issueId, undefined);
+    assert.equal(
+      JSON.stringify(normalized).includes('alice@example.com'),
+      false
+    );
+  });
 });

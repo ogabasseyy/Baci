@@ -5,6 +5,7 @@ import {
   contextForCandidate,
 } from './remediation-case-context.mjs';
 import { createStoredDraftPrReconciler } from './remediation-case-draft-pr-reconciliation.mjs';
+import { compareRemediationCasesByOutcomeRecency } from './remediation-case-rotation.mjs';
 import { quietStaleRemediationCases } from './remediation-case-state-quiet.mjs';
 import { createRemediationCaseStateStorage } from './remediation-case-state-storage.mjs';
 import { createRemediationCaseStateValidator } from './remediation-case-state-validation.mjs';
@@ -205,6 +206,11 @@ export function createRemediationCaseState({
         const group = groups.get(candidate.category) || [];
         group.push(candidate);
         groups.set(candidate.category, group);
+      }
+      // Rotate within each category so a recurring hot case cannot hold
+      // the single per-run slot forever (see remediation-case-rotation).
+      for (const group of groups.values()) {
+        group.sort(compareRemediationCasesByOutcomeRecency(state.cases));
       }
       const categories = [...groups.keys()].sort();
       const cursor = categories.indexOf(state.fairness.lastCategory);

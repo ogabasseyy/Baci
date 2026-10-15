@@ -8,10 +8,16 @@ service. Expose only an HTTPS reverse proxy path to this local listener.
 
 `jobs/vercel-error-remediator.mjs` handles repeated Vercel runtime/build errors.
 `jobs/sentry-mobile-error-remediator.mjs` polls unresolved native mobile issues
-from the dedicated Sentry project every five minutes. It copies only bounded,
-classified issue metadata rather than event payloads or user data. Both workers
-reserve and persist last-seen observations so concurrent cron ticks do not wake
-Codex twice for the same incident.
+from the dedicated Sentry project every five minutes. `jobs/posthog-error-remediator.mjs`
+polls active PostHog Error Tracking issue summaries on a bounded 15-minute
+schedule. The API source copies only a fixed category, stable issue identity,
+timestamps, occurrence count, and an allowlisted exception class or fixed
+keyword bucket; each selected candidate is then enriched with a sanitized
+top-frame coordinate and release from the issue-detail action. It never
+copies free-form error text, stack frames, event properties, sessions, or
+users. All workers reserve and persist last-seen
+observations so concurrent cron ticks do not wake Codex twice for the same
+incident.
 
 In dry-run mode the workers write remediation prompts and email operator reports.
 Run them manually with:
@@ -20,7 +26,19 @@ Run them manually with:
 cd /home/bassey/baci-workers
 node jobs/vercel-error-remediator.mjs
 node jobs/sentry-mobile-error-remediator.mjs
+node jobs/posthog-error-remediator.mjs
 ```
+
+The PostHog worker requires `POSTHOG_REMEDIATION_HOST`,
+`POSTHOG_REMEDIATION_PROJECT_ID`, and a separate
+`POSTHOG_REMEDIATION_PERSONAL_API_KEY` limited to `error_tracking:read`. Do not
+use a `phc_` project ingestion key or the source-map upload credential as a
+read credential. It remains dormant unless `BACI_POSTHOG_REMEDIATION_ENABLED=1`.
+It uses the documented Error Tracking query endpoint with provider nextOffset
+cursor pagination, reads at most 100 summaries per page, defaults to ten pages,
+and fails closed if the configured page ceiling would leave a measurement gap.
+Past 1,000 active issues the source remediates nothing until issues are
+resolved or muted. Occurrence counts cover the trailing 7 days.
 
 Autofix mode is off by default. With `BACI_REMEDIATION_AUTOFIX_ENABLED=1`, the
 worker creates an isolated worktree from the full checkout at `BACI_REPO_DIR`,
@@ -33,7 +51,7 @@ only the narrowly scoped DAC and identity capabilities needed for the parent
 Codex process to read auth and drops generated shells to the worker UID. The
 deploy script builds the pinned
 `Dockerfile.codex-remediator` image and injects its immutable commit tag into
-both remediation cron entries. The worker then inspects changed files, runs
+all remediation cron entries. The worker then inspects changed files, runs
 the immutable lint, typecheck, and test gates without provider secrets in the
 same dependency-mounted remediator image, pushes a `codex/<source>-remediation-*`
 branch, and opens a draft pull request. Each tick handles a bounded candidate

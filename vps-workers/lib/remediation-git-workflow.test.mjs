@@ -25,6 +25,7 @@ describe('remediation git workflow', () => {
         GIT_COMMITTER_NAME: 'Baci Remediator',
         SSH_AUTH_SOCK: '/run/agent.sock',
         SENTRY_REMEDIATION_AUTH_TOKEN: 'must-not-reach-child-processes',
+        POSTHOG_REMEDIATION_PERSONAL_API_KEY: 'must-not-reach-child-processes',
       },
       prompt: 'Fix this production error.',
       runner,
@@ -73,6 +74,14 @@ describe('remediation git workflow', () => {
       environments.some(
         ({ command, env }) =>
           command === 'codex' && 'SENTRY_REMEDIATION_AUTH_TOKEN' in env
+      ),
+      false
+    );
+    assert.equal(
+      environments.some(
+        ({ command, env }) =>
+          ['codex', 'git'].includes(command) &&
+          'POSTHOG_REMEDIATION_PERSONAL_API_KEY' in env
       ),
       false
     );

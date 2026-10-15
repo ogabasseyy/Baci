@@ -27,7 +27,7 @@ export const EXPECTED_CART_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261012050500_commerce_cart_handoff.sql',
-    sha256: '08c896662ef7c6f2342fcc1a0dc03b7caae8cd38783e4aa80f905fdc9523af0a',
+    sha256: 'f6c24ec4e279871b128ff185f718758180414ff6998a5f24eb7c29c34396c035',
   },
   {
     repositoryPath:

@@ -1144,4 +1144,61 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+
+-- 18. Connect caps the minted destination grant at the incoming cart expiry.
+INSERT INTO public.commerce_carts (id, merchant_id, currency, version, state, expires_at) VALUES
+  ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '11111111-1111-4111-8111-111111111111', 'NGN', 1, 'active', now() + interval '2 hours');
+INSERT INTO public.commerce_cart_lines (merchant_id, cart_id, product_id, quantity, last_unit_price_minor) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '44444444-4444-4444-8444-444444444444', 1, 1500);
+INSERT INTO public.commerce_cart_grants (id, merchant_id, cart_id, principal_id, expires_at, revoked_at) VALUES
+  ('99999999-9999-4999-8999-999999999900', '11111111-1111-4111-8111-111111111111', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'guest-short', now() + interval '2 hours', NULL);
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-short","cart_scope":"session","cart_id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","cart_grant_id":"99999999-9999-4999-8999-999999999900"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_issue_handoff(
+    'efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'handoff-op-short',
+    '{"type":"web"}'::jsonb
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'short-cart issue must succeed, got %', v_result; END IF;
+END
+$$;
+RESET ROLE;
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-short-dest","cart_scope":"bootstrap"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_redeem_handoff(
+    'efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1',
+    'attempt-short-1', 'connect', 'web', NULL, 1, NULL, NULL, NULL
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'short-cart connect must succeed, got %', v_result; END IF;
+  IF (v_result ->> 'grantId') IS NULL THEN RAISE EXCEPTION 'short-cart connect must mint a grant, got %', v_result; END IF;
+END
+$$;
+RESET ROLE;
+DO $$
+DECLARE
+  v_grant_expiry timestamptz;
+  v_cart_expiry timestamptz;
+BEGIN
+  SELECT expires_at INTO v_grant_expiry FROM public.commerce_cart_grants
+  WHERE cart_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' AND principal_id = 'guest-short-dest';
+  SELECT expires_at INTO v_cart_expiry FROM public.commerce_carts
+  WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  IF v_grant_expiry IS NULL THEN RAISE EXCEPTION 'connect must persist the destination grant'; END IF;
+  IF v_grant_expiry > v_cart_expiry THEN
+    RAISE EXCEPTION 'destination grant % must not outlive its cart %', v_grant_expiry, v_cart_expiry;
+  END IF;
+END
+$$;
+
 ROLLBACK;

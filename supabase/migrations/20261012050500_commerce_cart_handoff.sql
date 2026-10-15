@@ -468,12 +468,14 @@ BEGIN
     WHERE g.cart_id = v_incoming.id AND g.principal_id = v_principal;
     IF FOUND THEN
       UPDATE public.commerce_cart_grants
-      SET expires_at = now() + interval '7 days', revoked_at = NULL
+      SET expires_at = least(now() + interval '7 days', v_incoming.expires_at),
+          revoked_at = NULL
       WHERE id = v_dest_grant;
     ELSE
       v_dest_grant := pg_catalog.gen_random_uuid();
       INSERT INTO public.commerce_cart_grants (id, merchant_id, cart_id, principal_id, principal_type, expires_at)
-      VALUES (v_dest_grant, v_merchant, v_incoming.id, v_principal, 'guest', now() + interval '7 days');
+      VALUES (v_dest_grant, v_merchant, v_incoming.id, v_principal, 'guest',
+        least(now() + interval '7 days', v_incoming.expires_at));
     END IF;
     SELECT public.commerce_cart_assemble_state(v_merchant, v_incoming.id) INTO v_state;
     v_receipt := jsonb_build_object('choice', 'connect', 'merchantId', v_merchant,

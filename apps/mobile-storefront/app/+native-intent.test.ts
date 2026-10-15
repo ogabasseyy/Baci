@@ -36,7 +36,9 @@ describe('redirectSystemPath', () => {
       merchantId: 'merchant-1',
       merchantSlug: 'ogabassey',
       merchantDomain: 'shop.example.com',
-      platformRootDomain: 'api.usebaci.com',
+      // The issuer mints <slug>.usebaci.com links; the API origin is
+      // the api.* host of that root.
+      platformRootDomain: 'usebaci.com',
     });
   });
 });

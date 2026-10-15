@@ -165,10 +165,13 @@ BEGIN
         OR COALESCE(length(p_note),0)>500 THEN
         RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
       END IF;
+      -- Replay identity normalizes like the coverage paths: a legacy
+      -- 'Manual' spelling or padded reference is the same transfer.
       SELECT jsonb_build_object('amount',sum(amount),'method',min(metadata->>'method'),
         'refunded_at',min(metadata->>'refunded_at'),'note',min(metadata->>'note')) INTO v_replay
         FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
-        AND gateway='manual' AND metadata->>'reference'=v_reference;
+        AND public.normalized_gateway_name_v1(gateway)='MANUAL'
+        AND btrim(metadata->>'reference')=v_reference;
       IF (v_replay->>'amount') IS NOT NULL THEN
         IF (v_replay->>'amount')::numeric<>p_amount OR v_replay->>'method'<>p_method
           OR (v_replay->>'refunded_at')::timestamptz<>p_refunded_at THEN
@@ -183,7 +186,8 @@ BEGIN
           UPDATE public.transactions SET metadata = metadata ||
             jsonb_build_object('note',p_note)
             WHERE order_id=p_order_id AND transaction_type='refund'
-              AND gateway='manual' AND metadata->>'reference'=v_reference;
+              AND public.normalized_gateway_name_v1(gateway)='MANUAL'
+              AND btrim(metadata->>'reference')=v_reference;
         END IF;
         p_action := 'status'; -- Idempotent retry of an already recorded transfer.
       END IF;

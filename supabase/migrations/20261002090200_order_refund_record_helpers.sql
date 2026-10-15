@@ -67,7 +67,11 @@ BEGIN
       RAISE EXCEPTION 'unallocated_refund_requires_review' USING ERRCODE='P0001';
     END IF;
     IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id
-      AND transaction_type='payment' AND status='completed'
+      AND transaction_type='payment'
+      AND (status='completed'
+        OR (status='refunded'
+          AND public.normalized_gateway_name_v1(gateway) IN (
+            'CASH','STORE_CREDIT','MANUAL','PAY_ON_DELIVERY')))
       AND upper(btrim(currency)) IS DISTINCT FROM upper(btrim(p_currency))) THEN
       RAISE EXCEPTION 'payment_currency_requires_review' USING ERRCODE='P0001';
     END IF;
@@ -84,9 +88,13 @@ BEGIN
     IF p_leg_id IS NOT NULL THEN
       SELECT id INTO v_pinned_leg FROM public.transactions
         WHERE id=p_leg_id AND order_id=p_order_id AND merchant_id=p_merchant_id
-        AND transaction_type='payment' AND status='completed'
-        AND (gateway IS NULL OR btrim(gateway)=''
-          OR upper(btrim(gateway)) NOT IN ('WALLET','SAVINGS'));
+        AND transaction_type='payment'
+        AND ((status='completed'
+            AND (gateway IS NULL OR btrim(gateway)=''
+              OR upper(btrim(gateway)) NOT IN ('WALLET','SAVINGS')))
+          OR (status='refunded'
+            AND public.normalized_gateway_name_v1(gateway) IN (
+              'CASH','STORE_CREDIT','MANUAL','PAY_ON_DELIVERY')));
       IF NOT FOUND THEN
         RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
       END IF;
@@ -150,9 +158,20 @@ BEGIN
       AND r.metadata->>'payment_transaction_id'=leg.id::text),0),0)),0)
     INTO v_allocatable_outstanding FROM public.transactions leg
     WHERE leg.order_id=p_order_id AND leg.merchant_id=p_merchant_id
-    AND leg.transaction_type='payment' AND leg.status='completed'
-    AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
-      OR upper(btrim(leg.gateway)) NOT IN ('WALLET','SAVINGS'));
+    AND leg.transaction_type='payment'
+    -- A cash-like leg that already drifted to refunded without its
+    -- linked manual still needs that proof: the completion and
+    -- finalizer gates require the row, the worker skips refunded
+    -- legs, and a completed-only scan would strand the rescue
+    -- record. Admit refunded cash-like legs (only) everywhere the
+    -- allocator scans; self-terminal external, wallet/savings,
+    -- and unknown-gateway legs stay out.
+    AND ((leg.status='completed'
+        AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
+          OR upper(btrim(leg.gateway)) NOT IN ('WALLET','SAVINGS')))
+      OR (leg.status='refunded'
+        AND public.normalized_gateway_name_v1(leg.gateway) IN (
+          'CASH','STORE_CREDIT','MANUAL','PAY_ON_DELIVERY')));
     IF v_allocatable_outstanding>v_remaining THEN
       RAISE EXCEPTION 'payment_ledger_requires_review' USING ERRCODE='P0001';
     END IF;
@@ -161,9 +180,11 @@ BEGIN
     -- Wallet and savings legs reverse through their own ledgers and are
     -- already counted in v_reversed_internal: allocating manual money to
     -- them would double-count it. Cash, store-credit, and other internal
-    -- legs have no auto-reversal path, so they stay allocatable; missing
-    -- or blank gateways stay allocatable like the worker's external-leg
-    -- rule instead of silently stranding the manual amount.
+    -- legs have no auto-reversal path, so they stay allocatable, even
+    -- drifted to refunded (their linked manual is still required
+    -- proof); missing or blank gateways stay allocatable like the
+    -- worker's external-leg rule instead of silently stranding the
+    -- manual amount.
     -- A concurrent twin racing the same merchant reference slips past
     -- the idempotency check above and collides here: scope the rescue
     -- to the reference index only, so an unrelated unique violation
@@ -171,9 +192,13 @@ BEGIN
     BEGIN
     FOR v_payment IN SELECT id,amount,currency FROM public.transactions
       WHERE order_id=p_order_id AND merchant_id=p_merchant_id
-      AND transaction_type='payment' AND status='completed'
-      AND (gateway IS NULL OR btrim(gateway)=''
-        OR upper(btrim(gateway)) NOT IN ('WALLET','SAVINGS'))
+      AND transaction_type='payment'
+      AND ((status='completed'
+          AND (gateway IS NULL OR btrim(gateway)=''
+            OR upper(btrim(gateway)) NOT IN ('WALLET','SAVINGS')))
+        OR (status='refunded'
+          AND public.normalized_gateway_name_v1(gateway) IN (
+            'CASH','STORE_CREDIT','MANUAL','PAY_ON_DELIVERY')))
       ORDER BY CASE WHEN id=v_pinned_leg THEN 0 ELSE 1 END,created_at,id
     LOOP
       SELECT GREATEST(v_payment.amount-COALESCE(sum(amount),0),0) INTO v_leg_remaining

@@ -19,7 +19,9 @@
 --  20261010000017_loyalty_redemption_max_percentage,
 --  20261010000018_consume_loyalty_redemption,
 --  20261010000019_loyalty_redemption_identity_snapshots,
---  20261010000020_consume_loyalty_redemption_attempt_key).
+--  20261010000020_consume_loyalty_redemption_attempt_key,
+--  20261010000021_loyalty_checkout_order_wrapper,
+--  20261010000022_loyalty_ngn_eligibility).
 -- Usage: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f \
 --   supabase/migrations/tests/enroll_customer_loyalty.sql
 --

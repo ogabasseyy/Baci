@@ -186,6 +186,20 @@ jobs:
         run: |
           node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
+      - name: Verify authenticated shipping recovery in PostgreSQL
+        env:
+          BACI_SHIPPING_QUOTE_POSTGRES: '1'
+        run: |
+          node --test supabase/tests/extract-sql-function-definition.test.mjs
+          pnpm --filter @baci/web exec vitest run \
+            src/lib/shipping/customer-checkout-shipping-recovery-acl.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-concurrency.postgres.test.ts \
+            src/lib/shipping/prepare-checkout-shipping-recovery.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-quantity.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-aliases.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts
       - name: Run Tests
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}

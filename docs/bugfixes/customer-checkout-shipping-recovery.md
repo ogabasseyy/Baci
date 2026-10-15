@@ -192,3 +192,8 @@ Unknown or different tiers remain blocked, and provider/currency/address-only
 filters plus the same-paid-fee, proof and explicit-confirmation gates remain.
 The shipping-sheet fixture now satisfies the actual hook contract without
 `as never`, so missing required fields are caught by typecheck.
+
+Carrier-only saved preferences do not distinguish delivery tiers. Recovery can
+prefer the candidate matching the paid fee in that case, while explicit saved
+tier/rate matches still take priority. Other callers without a paid-fee fallback
+keep their existing selection behavior.

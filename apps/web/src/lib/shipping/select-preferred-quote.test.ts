@@ -53,4 +53,25 @@ describe('selectPreferredQuote', () => {
       })
     ).toBe(standard);
   });
+  it('matches the paid fee when a saved carrier does not identify a service', () => {
+    expect(
+      selectPreferredQuote([standard, faster], {
+        serviceTier: null,
+        carrierName: 'GIGL',
+        providerRateId: null,
+        samePrice: 200,
+      })
+    ).toBe(faster);
+  });
+  it('keeps a verified saved rate ahead of the paid-fee fallback', () => {
+    const saved = { ...standard, providerRateId: 'GIGL_30_0_1_0_0_4' };
+    expect(
+      selectPreferredQuote([faster, saved], {
+        serviceTier: null,
+        carrierName: 'GIGL',
+        providerRateId: saved.providerRateId,
+        samePrice: 200,
+      })
+    ).toBe(saved);
+  });
 });

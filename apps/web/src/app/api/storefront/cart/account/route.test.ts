@@ -9,14 +9,17 @@ import { GET, POST } from './route';
 vi.mock('@/lib/cart/request-quota', () => ({
   checkCartQuota: vi.fn().mockResolvedValue({ allowed: true }),
 }));
-vi.mock('@/lib/cart/account-request', () => ({
-  resolveAccountCartRequest: vi.fn(),
-}));
+vi.mock('@/lib/cart/account-request', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/lib/cart/account-request')>();
+  return { ...actual, resolveAccountCartRequest: vi.fn() };
+});
 vi.mock('@/lib/cart/account-link', () => ({
   getCustomerCart: vi.fn(),
   linkCartToCustomer: vi.fn(),
 }));
 vi.mock('@/lib/cart/session-proof', () => ({
+  CART_SESSION_PROOF_VERSION: 'cp1',
   cartSessionCookieMaxAge: vi.fn(() => 3600),
   issueCartSessionProof: vi.fn(),
   verifyCartSessionProof: vi.fn(),
@@ -36,10 +39,11 @@ const context = {
   },
   customer: { userId: 'user' },
 };
-const request = (body = '{}') =>
+const request = (body = '{}', headers: Record<string, string> = {}) =>
   new Request('https://shop.test/api/storefront/cart/account', {
     method: 'POST',
     body,
+    headers,
   }) as NextRequest;
 beforeEach(() => {
   vi.clearAllMocks();
@@ -92,6 +96,48 @@ it('issues the selected rotated principal only after an atomic account choice', 
     expect.anything()
   );
   expect((await response.json()).linkedUserId).toBe('user');
+});
+it('returns the rotated proof to native callers presenting it via the proof header', async () => {
+  vi.mocked(linkCartToCustomer).mockResolvedValue({
+    ok: true,
+    cart: { cartId: 'selected', expiresAt: '2099-01-01T00:00:00Z' },
+    grantId: 'new-grant',
+    principalId: 'rotated',
+    operationId: 'x',
+    warnings: [],
+    replayed: false,
+  } as never);
+  vi.mocked(issueCartSessionProof).mockReturnValue('cp1.rotated.signature');
+  // Native transport: Authorization carries the shopper JWT, so the
+  // cart proof travels in X-Cart-Session-Proof. Without the rotated
+  // proof in the body the client cannot adopt the linked cart and
+  // retries forever against the revoked grant.
+  const response = await POST(
+    request('{"operationId":"x","choice":"use_saved"}', {
+      authorization: 'Bearer shopper-jwt',
+      'x-cart-session-proof': 'cp1.old.signature',
+    })
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json()).proof).toBe('cp1.rotated.signature');
+});
+it('keeps the rotated proof out of the body for cookie-only web callers', async () => {
+  vi.mocked(linkCartToCustomer).mockResolvedValue({
+    ok: true,
+    cart: { cartId: 'selected', expiresAt: '2099-01-01T00:00:00Z' },
+    grantId: 'new-grant',
+    principalId: 'rotated',
+    operationId: 'x',
+    warnings: [],
+    replayed: false,
+  } as never);
+  vi.mocked(issueCartSessionProof).mockReturnValue('cp1.rotated.signature');
+  const response = await POST(
+    request('{"operationId":"x","choice":"use_saved"}')
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json()).proof).toBeUndefined();
+  expect(response.headers.get('set-cookie')).toContain('Max-Age=3600');
 });
 it('authenticates before parsing the account-link body', async () => {
   vi.mocked(resolveAccountCartRequest).mockResolvedValue({

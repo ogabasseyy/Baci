@@ -60,6 +60,9 @@ export type PrepareCartCheckoutResult =
       replayed: boolean;
       sessionReused: boolean;
       sessionExpiresAt: string;
+      /** Live grant expiry after the prepare-time extension; the
+       * renewed session proof is capped at this instant. */
+      grantExpiresAt: string;
     }
   | { ok: false; code: CartErrorCode; currentVersion: number | null };
 

@@ -490,3 +490,94 @@ DO $$ BEGIN
     RAISE EXCEPTION 'create must auto-accept an in-band proposal on a negotiable product';
   END IF;
 END $$;
+
+-- Voucher lines review at zero (mirroring build-order-items and the TS
+-- snapshot) while the catalog value stays available for validation,
+-- and stock demand is pooled per (product, variant) exactly like the
+-- order function validates and decrements it.
+INSERT INTO products (id, merchant_id, price, status, stock_quantity, stock, manage_stock, brand, name) VALUES
+  ('ffffffff-ffff-4fff-8fff-fffffffffff1', '11111111-1111-4111-8111-111111111111', 20.00, 'active', 10, 10, true, 'Generic', 'Voucher Widget'),
+  ('ffffffff-ffff-4fff-8fff-fffffffffff2', '11111111-1111-4111-8111-111111111111', 10.00, 'active', 2, 2, true, 'Generic', 'Pooled Widget');
+INSERT INTO commerce_carts (id, merchant_id, currency, version, state, created_at, expires_at) VALUES
+  ('cccccccc-f000-4000-8000-000000000000', '11111111-1111-4111-8111-111111111111', 'NGN', 1, 'active', now(), now() + interval '1 hour'),
+  ('cccccccc-f100-4000-8000-000000000000', '11111111-1111-4111-8111-111111111111', 'NGN', 1, 'active', now(), now() + interval '1 hour');
+INSERT INTO commerce_cart_lines (id, merchant_id, cart_id, product_id, quantity, last_unit_price_minor, voucher_token) VALUES
+  ('dddddddd-f000-4000-8000-000000000001', '11111111-1111-4111-8111-111111111111', 'cccccccc-f000-4000-8000-000000000000', 'ffffffff-ffff-4fff-8fff-fffffffffff1', 1, 2000, NULL),
+  ('dddddddd-f000-4000-8000-000000000002', '11111111-1111-4111-8111-111111111111', 'cccccccc-f000-4000-8000-000000000000', 'ffffffff-ffff-4fff-8fff-fffffffffff1', 1, 2000, 'tok-review-zero'),
+  ('dddddddd-f100-4000-8000-000000000001', '11111111-1111-4111-8111-111111111111', 'cccccccc-f100-4000-8000-000000000000', 'ffffffff-ffff-4fff-8fff-fffffffffff2', 2, 1000, NULL),
+  ('dddddddd-f100-4000-8000-000000000002', '11111111-1111-4111-8111-111111111111', 'cccccccc-f100-4000-8000-000000000000', 'ffffffff-ffff-4fff-8fff-fffffffffff2', 1, 1000, 'tok-review-pool');
+INSERT INTO commerce_cart_grants (id, merchant_id, cart_id, principal_id, expires_at, revoked_at) VALUES
+  ('99999999-9999-4999-8999-999999999972', '11111111-1111-4111-8111-111111111111', 'cccccccc-f000-4000-8000-000000000000', 'guest-voucher-review', now() + interval '7 days', NULL);
+DO $$ DECLARE snap jsonb; vline jsonb; oline jsonb; BEGIN
+  SELECT public.commerce_cart_build_checkout_snapshot('11111111-1111-4111-8111-111111111111', 'cccccccc-f000-4000-8000-000000000000') INTO snap;
+  SELECT l INTO vline FROM jsonb_array_elements(snap -> 'lines') l WHERE l ->> 'id' = 'dddddddd-f000-4000-8000-000000000002';
+  SELECT l INTO oline FROM jsonb_array_elements(snap -> 'lines') l WHERE l ->> 'id' = 'dddddddd-f000-4000-8000-000000000001';
+  IF (vline ->> 'effectiveUnitPriceMinor')::integer <> 0 THEN
+    RAISE EXCEPTION 'voucher line must review at zero, got %', vline;
+  END IF;
+  IF (vline ->> 'validatedUnitPriceMinor')::integer <> 2000 THEN
+    RAISE EXCEPTION 'voucher line must retain the catalog value for validation, got %', vline;
+  END IF;
+  IF (oline ->> 'effectiveUnitPriceMinor')::integer <> 2000 THEN
+    RAISE EXCEPTION 'ordinary line must review at catalog, got %', oline;
+  END IF;
+  IF (snap -> 'estimates' ->> 'subtotalMinor')::bigint <> 2000 THEN
+    RAISE EXCEPTION 'reviewed subtotal must exclude the voucher line, got %', snap;
+  END IF;
+  SELECT public.commerce_cart_build_checkout_snapshot('11111111-1111-4111-8111-111111111111', 'cccccccc-f100-4000-8000-000000000000') INTO snap;
+  IF (snap -> 'estimates' ->> 'unavailableCount')::integer <> 2 THEN
+    RAISE EXCEPTION 'pooled demand 3 against stock 2 must mark both lines unavailable, got %', snap;
+  END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(snap -> 'lines') l WHERE (l ->> 'available')::boolean) THEN
+    RAISE EXCEPTION 'no pooled line may report available, got %', snap;
+  END IF;
+END $$;
+UPDATE products SET stock_quantity = 3, stock = 3 WHERE id = 'ffffffff-ffff-4fff-8fff-fffffffffff2';
+DO $$ DECLARE snap jsonb; BEGIN
+  SELECT public.commerce_cart_build_checkout_snapshot('11111111-1111-4111-8111-111111111111', 'cccccccc-f100-4000-8000-000000000000') INTO snap;
+  IF (snap -> 'estimates' ->> 'unavailableCount')::integer <> 0 THEN
+    RAISE EXCEPTION 'pooled demand 3 against stock 3 must be available, got %', snap;
+  END IF;
+END $$;
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-voucher-review","cart_scope":"session","cart_id":"cccccccc-f000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999972"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE prep jsonb; BEGIN
+  prep := public.commerce_cart_prepare_checkout('cccccccc-f000-4000-8000-000000000000', 1, 'review-voucher-zero');
+  IF NOT (prep ->> 'ok')::boolean THEN RAISE EXCEPTION 'voucher prepare failed: %', prep; END IF;
+  IF prep ->> 'grantExpiresAt' IS NULL THEN
+    RAISE EXCEPTION 'prepare must report the grant expiry: %', prep;
+  END IF;
+  INSERT INTO test_ctx VALUES ('voucher_session', prep -> 'snapshot' ->> 'checkoutSessionId');
+  INSERT INTO test_ctx VALUES ('voucher_grant_exp', prep ->> 'grantExpiresAt');
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT expires_at FROM public.commerce_cart_grants WHERE id = '99999999-9999-4999-8999-999999999972')
+     <> (SELECT value::timestamptz FROM test_ctx WHERE key = 'voucher_grant_exp') THEN
+    RAISE EXCEPTION 'prepare grantExpiresAt must equal the live grant expiry';
+  END IF;
+END $$;
+SET request.jwt.claims = '{"role":"authenticated","storefront_order_context":"route","storefront_order_merchant_id":"11111111-1111-4111-8111-111111111111"}';
+SET ROLE authenticated;
+DO $$ DECLARE result jsonb; BEGIN
+  SELECT public.create_storefront_order_with_cart_binding('base',
+    (SELECT value::uuid FROM test_ctx WHERE key = 'voucher_session'), 1,
+    jsonb_build_object('p_merchant_id','11111111-1111-4111-8111-111111111111',
+      'p_customer_email','test@example.invalid','p_customer_name','Fixture',
+      'p_cart_principal_id','guest-voucher-review',
+      'p_items', jsonb_build_array(
+        jsonb_build_object('cart_line_id','dddddddd-f000-4000-8000-000000000001','product_id','ffffffff-ffff-4fff-8fff-fffffffffff1','quantity',1,'price',20,'variant_attributes',jsonb_build_object()),
+        jsonb_build_object('cart_line_id','dddddddd-f000-4000-8000-000000000002','product_id','ffffffff-ffff-4fff-8fff-fffffffffff1','quantity',1,'price',0,'variant_attributes',jsonb_build_object())
+      ),
+      'p_checkout_idempotency_key','review-voucher-zero')
+  ) INTO result;
+  IF NOT (result ->> 'ok')::boolean THEN
+    RAISE EXCEPTION 'zero-priced voucher submit must succeed, got %', result;
+  END IF;
+END $$;
+RESET ROLE;
+DO $$ BEGIN
+  IF (SELECT count(*) FROM order_stub_calls WHERE idempotency_key = 'review-voucher-zero') <> 1 THEN
+    RAISE EXCEPTION 'voucher order must reach the order mock once';
+  END IF;
+END $$;

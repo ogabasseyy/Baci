@@ -101,12 +101,20 @@ export async function POST(request: NextRequest) {
     // Renew the session proof bound to the prepared session's actual
     // expiry, but never shorten the credential the shopper already
     // holds: a longer-lived incoming proof stays authoritative so an
-    // abandoned checkout does not strand a still-active cart.
-    const proofExpiresAt =
+    // abandoned checkout does not strand a still-active cart. The
+    // renewal is still capped at the live grant expiry returned by the
+    // prepare RPC (which extends the grant to cover the session, up to
+    // the absolute cart lifetime), so a proof never outlives the grant
+    // it authenticates.
+    const desiredProofExpiry =
       Date.parse(result.sessionExpiresAt) >
       Date.parse(context.principal.expiresAt)
         ? result.sessionExpiresAt
         : context.principal.expiresAt;
+    const proofExpiresAt =
+      Date.parse(result.grantExpiresAt) < Date.parse(desiredProofExpiry)
+        ? result.grantExpiresAt
+        : desiredProofExpiry;
     let proof: string;
     try {
       proof = issueCartSessionProof(

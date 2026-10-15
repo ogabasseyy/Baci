@@ -237,6 +237,74 @@ describe('resolveCartMerchant', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('resolves a shopper still on the retired-slug host after a rename', async () => {
+    const request = new Request(
+      'https://old-slug.usebaci.com/api/storefront/cart'
+    );
+    const client = {
+      rpc: vi.fn(async (_name: string, args: { p_identifier: string }) => ({
+        data: args.p_identifier === 'ogabassey' ? [merchantRow()] : [],
+        error: null,
+      })),
+    };
+
+    const result = await resolveCartMerchant(request, {
+      resolveAlias: async (slug) => (slug === 'old-slug' ? 'ogabassey' : null),
+      rootDomain: 'usebaci.com',
+      rpcClient: client,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.merchant.slug).toBe('ogabassey');
+  });
+
+  it('follows a retired slug carried by a trusted proxy header', async () => {
+    const request = new Request(
+      'https://old-slug.usebaci.com/api/storefront/cart',
+      { headers: { 'x-merchant-slug': 'old-slug' } }
+    );
+    const client = {
+      rpc: vi.fn(async (_name: string, args: { p_identifier: string }) => ({
+        data: args.p_identifier === 'ogabassey' ? [merchantRow()] : [],
+        error: null,
+      })),
+    };
+
+    const result = await resolveCartMerchant(request, {
+      resolveAlias: async (slug) => (slug === 'old-slug' ? 'ogabassey' : null),
+      rootDomain: 'usebaci.com',
+      rpcClient: client,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('uses the merchant hint on Vercel deployment hosts', async () => {
+    const rpc = vi.fn(async () => ({ data: [merchantRow()], error: null }));
+    const request = new Request(
+      'https://baci-git-shared-cart-ogabassey.vercel.app/api/storefront/cart?merchantSlug=ogabassey'
+    );
+
+    const result = await resolveCartMerchant(request, {
+      resolveAlias: async () => null,
+      rootDomain: 'usebaci.com',
+      rpcClient: { rpc },
+    });
+
+    expect(result.ok).toBe(true);
+    // The deployment hostname itself is never resolved as a merchant.
+    expect(rpc).toHaveBeenCalledWith(
+      'resolve_storefront_auth_merchant',
+      expect.objectContaining({ p_identifier: 'ogabassey' })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'resolve_storefront_auth_merchant',
+      expect.objectContaining({
+        p_identifier: 'baci-git-shared-cart-ogabassey.vercel.app',
+      })
+    );
+  });
+
   it('rejects unpublished stores without revealing internals', async () => {
     const request = new Request(
       'https://usebaci.com/api/storefront/cart?merchantSlug=ogabassey'

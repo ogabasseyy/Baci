@@ -82,7 +82,21 @@ export async function prepareCartCheckout(
         'Cart RPC commerce_cart_prepare_checkout omitted sessionExpiresAt'
       );
     }
+    if (
+      typeof data.grantExpiresAt !== 'string' ||
+      !data.grantExpiresAt ||
+      !Number.isFinite(Date.parse(data.grantExpiresAt))
+    ) {
+      // Same fail-closed rule for the grant lifetime: the renewed proof
+      // is capped at the grant, so an absent grant expiry must not be
+      // guessed from the session or cart lifetime.
+      throw new CartRepositoryError(
+        'temporarily_unavailable',
+        'Cart RPC commerce_cart_prepare_checkout omitted grantExpiresAt'
+      );
+    }
     return {
+      grantExpiresAt: data.grantExpiresAt,
       ok: true,
       replayed: data.replayed === true,
       sessionReused: data.sessionReused === true,

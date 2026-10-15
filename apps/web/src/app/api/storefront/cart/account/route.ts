@@ -1,12 +1,14 @@
 import type { NextRequest } from 'next/server';
 import { getCustomerCart, linkCartToCustomer } from '@/lib/cart/account-link';
-import { resolveAccountCartRequest } from '@/lib/cart/account-request';
+import {
+  accountRequestUsesDeviceProof,
+  resolveAccountCartRequest,
+} from '@/lib/cart/account-request';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   checkCartQuota,
   createAnonMerchantFeatureLookup,
   readCartJsonBody,
-  requestUsesDeviceProof,
 } from '@/lib/cart/request-context';
 import {
   cartErrorResponse,
@@ -108,7 +110,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     );
     const response = cartJsonResponse({
       cart: result.cart,
-      ...(requestUsesDeviceProof(request) ? { proof } : {}),
+      ...(accountRequestUsesDeviceProof(request) ? { proof } : {}),
       linkedUserId: resolved.customer.userId,
       operationId: result.operationId,
       replayed: result.replayed,

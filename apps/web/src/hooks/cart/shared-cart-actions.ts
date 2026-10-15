@@ -40,11 +40,12 @@ export function createCartActions(context: SharedCartRuntime) {
     if (!enabled) return;
     // Mirror gateAddToCart exactly: an award id alone (no token yet)
     // exempts the reserved unit from the stock guard and pins quantity.
+    const productRecord = product as unknown as Record<string, unknown>;
     const isVoucherProduct = Boolean(
       options?.quizVoucherToken ||
         options?.quizAwardId ||
-        (product as unknown as Record<string, unknown>).quizVoucherToken ||
-        (product as unknown as Record<string, unknown>).isQuizPrize
+        productRecord.quizVoucherToken ||
+        productRecord.isQuizPrize
     );
     if (product.manage_stock && product.stock <= 0 && !isVoucherProduct) {
       return;
@@ -64,8 +65,28 @@ export function createCartActions(context: SharedCartRuntime) {
         variantId: options?.variantId,
       })
     );
+    // The server merges an add only into the line whose voucher
+    // attachments also match (commerce_cart_mutate line identity), so
+    // the per-line cap applies per attachment-distinct line: an
+    // ordinary line at the cap must not block a voucher add, and a
+    // voucher line must not eat into an ordinary add's headroom.
+    const voucherToken =
+      options?.quizVoucherToken ??
+      (typeof productRecord.quizVoucherToken === 'string'
+        ? productRecord.quizVoucherToken
+        : undefined);
+    const voucherAwardId =
+      options?.quizAwardId ??
+      (typeof productRecord.quizAwardId === 'string'
+        ? productRecord.quizAwardId
+        : undefined);
     const existing = current.display
-      .filter((line) => cartLineIdentity(cartItemToIdentity(line)) === key)
+      .filter(
+        (line) =>
+          cartLineIdentity(cartItemToIdentity(line)) === key &&
+          (line.quizVoucherToken ?? undefined) === voucherToken &&
+          (line.quizAwardId ?? undefined) === voucherAwardId
+      )
       .reduce((sum, line) => sum + line.quantity, 0);
     let sendQuantity = Math.max(1, Math.floor(quantity));
     if (isVoucherProduct) sendQuantity = 1;

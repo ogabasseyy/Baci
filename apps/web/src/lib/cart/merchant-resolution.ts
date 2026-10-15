@@ -191,7 +191,13 @@ export async function resolveCartMerchant(
     // merchantSlug hint; 'api' is a platform host, never a merchant.
     host === `api.${rootDomain}` ||
     host === 'localhost' ||
-    host === '127.0.0.1';
+    host === '127.0.0.1' ||
+    // Vercel deployment hosts (previews and branch deploys) are
+    // platform hosts too: no merchant lives under them, so the
+    // validated merchant hint governs, exactly as on api.*. Real
+    // storefront and custom-domain hosts never match this suffix.
+    host === 'vercel.app' ||
+    host.endsWith('.vercel.app');
   const hostIdentifier = sharedHost
     ? null
     : host.endsWith(`.${rootDomain}`)
@@ -200,7 +206,8 @@ export async function resolveCartMerchant(
         ? host.slice(0, -'.localhost'.length)
         : host.replace(/^www\./, '');
   const resolveForHost = async (
-    identifier: string
+    identifier: string,
+    requestedIdentifier?: string
   ): Promise<ResolveCartMerchantResult> => {
     const resolved = await resolvePublished(deps.rpcClient, identifier);
     if (!resolved.ok || sharedHost) return resolved;
@@ -210,6 +217,20 @@ export async function resolveCartMerchant(
       host === `${merchant.slug}.${rootDomain}` ||
       host === `${merchant.slug}.localhost` ||
       (domain && (host === domain || host === `www.${domain}`))
+    )
+      return resolved;
+    // A retired slug still routes to this merchant (the alias table is
+    // merchant-owned server data recorded at rename time), and shoppers
+    // may still be on the old host: cookies are namespaced by merchant
+    // id, so the rename must not orphan their carts. The alias host is
+    // therefore as authoritative as the canonical one — but only the
+    // identifier that actually resolved through the alias may vouch
+    // for the host, never an arbitrary hint.
+    if (
+      requestedIdentifier !== undefined &&
+      requestedIdentifier !== merchant.slug &&
+      (host === `${requestedIdentifier}.${rootDomain}` ||
+        host === `${requestedIdentifier}.localhost`)
     )
       return resolved;
     return { error: 'merchant_unresolved', ok: false };
@@ -237,13 +258,26 @@ export async function resolveCartMerchant(
 
   try {
     if (trusted) {
-      return await withEnrollment(await resolveForHost(trusted));
+      const direct = await resolveForHost(trusted);
+      if (direct.ok || direct.error === 'merchant_unavailable') {
+        return await withEnrollment(direct);
+      }
+      // The proxy header may carry a retired slug (it mirrors the host
+      // the shopper actually used); fall through the alias table just
+      // like the host-derived path below.
+      if (isSlugShapedIdentifier(trusted)) {
+        const current = await deps.resolveAlias(trusted);
+        if (current && current !== trusted) {
+          return await withEnrollment(await resolveForHost(current, trusted));
+        }
+      }
+      return await withEnrollment(direct);
     }
     if (!isValidMerchantIdentifier(hint)) {
       if (isSlugShapedIdentifier(hint)) {
         const current = await deps.resolveAlias(hint);
         if (current && current !== hint) {
-          return await withEnrollment(await resolveForHost(current));
+          return await withEnrollment(await resolveForHost(current, hint));
         }
       }
       return { error: 'merchant_unresolved', ok: false };
@@ -254,7 +288,7 @@ export async function resolveCartMerchant(
     }
     const current = await deps.resolveAlias(hint);
     if (current && current !== hint) {
-      return await withEnrollment(await resolveForHost(current));
+      return await withEnrollment(await resolveForHost(current, hint));
     }
     return { error: 'merchant_unresolved', ok: false };
   } catch {

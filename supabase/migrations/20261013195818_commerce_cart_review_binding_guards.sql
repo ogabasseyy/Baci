@@ -989,6 +989,13 @@ $$;
 
 
 -- Checkout totals can exceed int32 even within quantity and line caps.
+-- Pricing and stock sources deliberately mirror create_storefront_order:
+-- catalog price comes from products/product_variants and stock from the
+-- same pools the order function decrements. public.product_offers is a
+-- PDP/browse projection that order creation never consults, so
+-- condition lines price from the parent catalog here too; pricing them
+-- from product_offers would make the reviewed snapshot diverge from
+-- the order the binding validates.
 CREATE OR REPLACE FUNCTION public.commerce_cart_build_checkout_snapshot(
   p_merchant_id uuid, p_cart_id uuid
 ) RETURNS jsonb
@@ -1088,7 +1095,13 @@ BEGIN
           OR negotiated <= 0
           OR negotiated >= catalog_minor
         )
-      ) AS neg_invalid
+      ) AS neg_invalid,
+      (voucher_token IS NOT NULL OR voucher_award_id IS NOT NULL) AS has_voucher,
+      -- The order function validates and decrements stock per
+      -- (product, variant) pool with summed quantities, so availability
+      -- must judge the pooled demand too: attachment-distinct lines of
+      -- one product share the pool even though they never merge.
+      sum(quantity) OVER (PARTITION BY product_id, variant_id) AS pool_demand
     FROM line_checks
   )
   SELECT
@@ -1102,13 +1115,14 @@ BEGIN
       line_id,
       quantity,
       CASE
+        WHEN has_voucher THEN 0
         WHEN negotiated IS NOT NULL AND neg_status = 'accepted' AND NOT neg_invalid
         THEN negotiated
         ELSE validated
       END AS effective,
       (
         offer_ok
-        AND (NOT manage_stock OR stock_qty >= quantity)
+        AND (NOT manage_stock OR stock_qty >= pool_demand)
       ) AS available,
       jsonb_build_object(
         'id', line_id,
@@ -1128,17 +1142,18 @@ BEGIN
         'validatedUnitPriceMinor', validated,
         'effectiveUnitPriceMinor',
           CASE
+            WHEN has_voucher THEN 0
             WHEN negotiated IS NOT NULL AND neg_status = 'accepted' AND NOT neg_invalid
             THEN negotiated
             ELSE validated
           END,
         'priceChanged', validated IS DISTINCT FROM last_price,
-        'available', offer_ok AND (NOT manage_stock OR stock_qty >= quantity),
+        'available', offer_ok AND (NOT manage_stock OR stock_qty >= pool_demand),
         'unavailableReason',
           CASE
             WHEN NOT offer_ok THEN 'offer_invalid'
             WHEN manage_stock AND stock_qty <= 0 THEN 'out_of_stock'
-            WHEN manage_stock AND stock_qty < quantity THEN 'insufficient_stock'
+            WHEN manage_stock AND stock_qty < pool_demand THEN 'insufficient_stock'
             ELSE NULL
           END,
         'stockQty', stock_qty,

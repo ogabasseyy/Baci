@@ -658,4 +658,85 @@ describe('useSharedCart actions', () => {
       command: { quantity: 1, type: 'add' },
     });
   });
+
+  it('does not let a capped ordinary line block a voucher add', async () => {
+    // The server keeps attachment-distinct lines separate with their
+    // own per-line caps, so an ordinary line at the cap of 10 must not
+    // clamp a one-unit voucher add for the same product to zero.
+    mockAdopted(3, [cartLine({ quantity: 10 })]);
+    vi.mocked(sendSharedCartCommand).mockResolvedValue({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({
+        lines: [
+          cartLine({ quantity: 10 }),
+          cartLine({
+            id: 'line-voucher',
+            lineTotalMinor: 0,
+            quantity: 1,
+            unitPriceMinor: 0,
+            voucherToken: 'tok-1',
+          }),
+        ],
+        version: 4,
+      }),
+      warnings: [],
+    });
+    const { result } = await linkedHook();
+
+    await act(async () => {
+      result.current.addToCart(product(), 1, { quizVoucherToken: 'tok-1' });
+    });
+
+    await waitFor(() =>
+      expect(vi.mocked(sendSharedCartCommand)).toHaveBeenCalledTimes(1)
+    );
+    expect(vi.mocked(sendSharedCartCommand).mock.calls[0]?.[0]).toMatchObject({
+      command: { quantity: 1, type: 'add' },
+    });
+  });
+
+  it('does not let a voucher line eat into an ordinary add headroom', async () => {
+    mockAdopted(3, [
+      cartLine({
+        id: 'line-voucher',
+        lineTotalMinor: 0,
+        quantity: 1,
+        unitPriceMinor: 0,
+        voucherToken: 'tok-1',
+      }),
+    ]);
+    vi.mocked(sendSharedCartCommand).mockResolvedValue({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({
+        lines: [
+          cartLine({
+            id: 'line-voucher',
+            lineTotalMinor: 0,
+            quantity: 1,
+            unitPriceMinor: 0,
+            voucherToken: 'tok-1',
+          }),
+          cartLine({ id: 'line-2', quantity: 10 }),
+        ],
+        version: 4,
+      }),
+      warnings: [],
+    });
+    const { result } = await linkedHook();
+
+    await act(async () => {
+      result.current.addToCart(product(), 10);
+    });
+
+    await waitFor(() =>
+      expect(vi.mocked(sendSharedCartCommand)).toHaveBeenCalledTimes(1)
+    );
+    // The full cap of 10 is available to the ordinary line; the
+    // voucher line's reserved unit belongs to a different server line.
+    expect(vi.mocked(sendSharedCartCommand).mock.calls[0]?.[0]).toMatchObject({
+      command: { quantity: 10, type: 'add' },
+    });
+  });
 });

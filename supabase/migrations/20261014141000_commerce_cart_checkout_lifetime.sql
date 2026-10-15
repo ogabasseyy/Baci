@@ -21,6 +21,7 @@ DECLARE
   v_snapshot jsonb;
   v_result jsonb;
   v_new_version integer;
+  v_grant_expires_at timestamptz;
 BEGIN
   IF nullif(v_claims ->> 'cart_merchant_id', '') IS NULL
     OR (v_claims ->> 'cart_merchant_id') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
@@ -162,10 +163,17 @@ BEGIN
     )
   WHERE id = v_grant AND expires_at > now() AND revoked_at IS NULL;
 
+  -- Report the grant's post-extension expiry so the route can cap the
+  -- renewed session proof at the grant it authenticates (the absolute
+  -- lifetime cap above can leave the grant shorter than the session).
+  SELECT expires_at INTO v_grant_expires_at
+  FROM public.commerce_cart_grants WHERE id = v_grant;
+
   SELECT public.commerce_cart_build_checkout_snapshot(v_merchant, p_cart_id) INTO v_snapshot;
   v_result := jsonb_build_object('ok', true, 'code', null, 'replayed', false,
     'sessionReused', v_reused,
     'sessionExpiresAt', v_session.expires_at,
+    'grantExpiresAt', v_grant_expires_at,
     'snapshot', v_snapshot || jsonb_build_object(
       'checkoutSessionId', v_session.id,
       'generation', v_session.checkout_generation,

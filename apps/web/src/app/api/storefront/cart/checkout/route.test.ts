@@ -220,6 +220,9 @@ describe('POST /api/storefront/cart/checkout', () => {
     mocks.cartPayload = {
       code: null,
       ok: true,
+      grantExpiresAt: new Date(
+        Date.now() + 2 * 24 * 60 * 60 * 1000
+      ).toISOString(),
       replayed: false,
       sessionExpiresAt: sessionExpiresAt.toISOString(),
       sessionReused: false,
@@ -251,6 +254,9 @@ describe('POST /api/storefront/cart/checkout', () => {
     mocks.cartPayload = {
       code: null,
       ok: true,
+      grantExpiresAt: new Date(
+        Date.now() + 2 * 24 * 60 * 60 * 1000
+      ).toISOString(),
       replayed: false,
       sessionExpiresAt: sessionExpiresAt.toISOString(),
       sessionReused: true,
@@ -275,10 +281,42 @@ describe('POST /api/storefront/cart/checkout', () => {
     );
   });
 
+  it('caps the renewed proof at the grant expiry', async () => {
+    const grantExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+    mocks.cartPayload = {
+      code: null,
+      grantExpiresAt: grantExpiresAt.toISOString(),
+      ok: true,
+      replayed: false,
+      sessionExpiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      sessionReused: true,
+      snapshot: rawSnapshot(),
+    };
+    const incoming = sessionProofExpiringAt(
+      new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    );
+
+    const response = await postPrepare({
+      body: prepareBody({ operationId: 'prep-op-grant-cap' }),
+      headers: { authorization: `Bearer ${incoming}` },
+    });
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    // The session runs 30 minutes but the grant ends in 15: the proof
+    // must not outlive the grant it authenticates.
+    expect(proofExpSeconds(payload.proof)).toBe(
+      Math.floor(grantExpiresAt.getTime() / 1000)
+    );
+  });
+
   it('surfaces reuse on a repeated preparation', async () => {
     mocks.cartPayload = {
       code: null,
       ok: true,
+      grantExpiresAt: new Date(
+        Date.now() + 2 * 24 * 60 * 60 * 1000
+      ).toISOString(),
       replayed: false,
       sessionExpiresAt: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
       sessionReused: true,

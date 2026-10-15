@@ -1,7 +1,9 @@
-import { readFile, mkdir, lstat, realpath, unlink } from 'node:fs/promises';
+import { lstat, mkdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { createRunToken } from './claims.mjs';
+import { parseCliArgs } from './cli-args.mjs';
 import {
   ENCODER_OPTIONS,
   MIN_FREE_BYTES,
@@ -9,15 +11,10 @@ import {
   RECIPE_CANONICAL_JSON,
   RECIPE_ID,
 } from './constants.mjs';
-import { createRunToken } from './claims.mjs';
-import { parseCliArgs } from './cli-args.mjs';
-import {
-  isUnsupportedSyncError,
-  writeConfinedFile,
-} from './disk-guards.mjs';
+import { isUnsupportedSyncError, writeConfinedFile } from './disk-guards.mjs';
 import { acquireEncoderLock } from './encoder-lock.mjs';
-import { readInventoryJobs } from './job-schema.mjs';
 import { PilotGenerateError, runJob } from './generate-job.mjs';
+import { readInventoryJobs } from './job-schema.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -41,7 +38,6 @@ async function findPnpmPin() {
   }
   return 'unknown';
 }
-
 
 // A confined output child is a real directory whose canonical path is
 // exactly the joined path: any symlink in the chain (or a non-directory
@@ -147,20 +143,28 @@ export async function runPilotGeneration({
   const writeReport = hooks.writeReportFile ?? writeConfinedFile;
   const serializeReport = () => `${JSON.stringify(report, null, 2)}\n`;
   try {
-    await writeReport(join(outputRoot, 'reports'), reportName, serializeReport());
+    await writeReport(
+      join(outputRoot, 'reports'),
+      reportName,
+      serializeReport()
+    );
   } catch (error) {
     if (!isUnsupportedSyncError(error)) {
       throw error;
     }
-    // Degraded durability, same as generation commits: the jobs already
-    // published, so record the marked summary unsynced rather than
-    // exiting nonzero with no report at all. The failed attempt left
-    // bytes behind; remove them so the exclusive retry owns the name.
+    // Degraded durability, same as generation commits: writeConfinedFile
+    // unlinks its own failed output inside the verified parent before
+    // rethrowing, so the unsynced retry re-binds without an unconfined
+    // caller pathname unlink that could follow a swapped parent symlink.
     report.durability = 'sync-unsupported';
-    await unlink(join(outputRoot, 'reports', reportName)).catch(() => undefined);
-    await writeReport(join(outputRoot, 'reports'), reportName, serializeReport(), {
-      sync: false,
-    });
+    await writeReport(
+      join(outputRoot, 'reports'),
+      reportName,
+      serializeReport(),
+      {
+        sync: false,
+      }
+    );
   }
   return { failed, ok, reused, total: results.length };
 }

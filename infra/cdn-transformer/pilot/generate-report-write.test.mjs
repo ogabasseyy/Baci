@@ -4,8 +4,8 @@ import {
   copyFile,
   mkdir,
   mkdtemp,
-  readFile,
   readdir,
+  readFile,
   rename,
   symlink,
   writeFile,
@@ -89,10 +89,10 @@ test('report publication refuses a reports swap won at the final write', async (
 test('report publication degrades on unsupported sync instead of failing the batch', async () => {
   // Filesystems where fsync returns EINVAL/ENOSYS: the jobs already
   // published, so the report must land marked sync-unsupported (not
-  // exit nonzero with no summary). The injected writer fails the first
-  // attempt after leaving partial bytes, proving the retry clears the
-  // name and publishes through the unsynced path.
-  const { base, inputRoot, locksDir, outputRoot } = await setup();
+  // exit nonzero with no summary). writeConfinedFile unlinks its own
+  // failed write inside the verified parent before throwing, so the
+  // { sync: false } retry publishes without a caller pathname unlink.
+  const { inputRoot, locksDir, outputRoot } = await setup();
   const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
   const inventoryPath = join(inputRoot, 'inventory.json');
   await writeFile(inventoryPath, JSON.stringify(records, null, 2));
@@ -104,13 +104,12 @@ test('report publication degrades on unsupported sync instead of failing the bat
       writeReportFile: async (dir, name, bytes, options) => {
         calls += 1;
         if (calls === 1) {
-          await writeFile(join(dir, name), 'partial-bytes');
           throw Object.assign(new Error('fsync not supported'), {
             code: 'EINVAL',
           });
         }
         retryOptions = options;
-        return writeConfinedFile(dir, name, bytes, options);
+        return await writeConfinedFile(dir, name, bytes, options);
       },
     },
     inputRoot,
@@ -127,4 +126,45 @@ test('report publication degrades on unsupported sync instead of failing the bat
   );
   assert.equal(report.durability, 'sync-unsupported');
   assert.equal(report.summary.total, 1);
+});
+
+test('unsupported-sync report retry never unlinks through a swapped reports symlink', async () => {
+  const { base, inputRoot, locksDir, outputRoot } = await setup();
+  const records = [await addSnapshot(inputRoot, 'tiny-48x48.png', 'tiny-a')];
+  const inventoryPath = join(inputRoot, 'inventory.json');
+  await writeFile(inventoryPath, JSON.stringify(records, null, 2));
+  const outside = join(base, 'outside');
+  await mkdir(outside);
+  const { writeConfinedFile } = await import('./disk-guards.mjs');
+  let outsideReportPath;
+  await assert.rejects(
+    runPilotGeneration({
+      hooks: {
+        writeReportFile: async (dir, name, bytes, options) => {
+          if (options?.sync !== false) {
+            outsideReportPath = join(outside, name);
+            await writeFile(outsideReportPath, 'precious-outside-report');
+            await rename(
+              join(outputRoot, 'reports'),
+              join(base, 'reports-swapped')
+            );
+            await symlink(outside, join(outputRoot, 'reports'));
+            throw Object.assign(new Error('fsync not supported'), {
+              code: 'EINVAL',
+            });
+          }
+          return await writeConfinedFile(dir, name, bytes, options);
+        },
+      },
+      inputRoot,
+      inventoryPath,
+      locksDir,
+      outputRoot,
+    }),
+    /confined/
+  );
+  assert.equal(
+    await readFile(outsideReportPath, 'utf8'),
+    'precious-outside-report'
+  );
 });

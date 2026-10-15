@@ -23,6 +23,7 @@ interface UtilityWalletSuccessOutcomeInput {
   markAttemptShown: (scoped: string | null) => void;
   noteScopedReference: (scoped: string, reference: string) => void;
   clearIntent: () => void;
+  getCurrentBalance: () => number;
   refreshWallet: () => void;
   result: WalletSuccess;
   setLoading: Dispatch<SetStateAction<boolean>>;
@@ -54,6 +55,7 @@ export function applyUtilityWalletSuccessOutcome({
   markAttemptShown,
   noteScopedReference,
   clearIntent,
+  getCurrentBalance,
   refreshWallet,
   result,
   setLoading,
@@ -99,6 +101,7 @@ export function applyUtilityWalletSuccessOutcome({
   clearIntent();
   applyUtilityPurchaseBalanceEffect({
     appliedReferences,
+    getCurrentBalance,
     // Recalled key ⇒ identical submit already went out: ambiguous.
     isAmbiguousReplay:
       replayResolvesProcessing ||

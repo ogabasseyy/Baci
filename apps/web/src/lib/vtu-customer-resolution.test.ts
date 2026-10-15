@@ -79,6 +79,7 @@ describe('resolveVtuCustomer', () => {
       supabase,
       user: {
         email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         id: 'user-1',
       } as Parameters<typeof resolveVtuCustomer>[0]['user'],
     });
@@ -101,6 +102,7 @@ describe('resolveVtuCustomer', () => {
       supabase,
       user: {
         email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         id: 'user-1',
       } as Parameters<typeof resolveVtuCustomer>[0]['user'],
     });
@@ -131,6 +133,7 @@ describe('resolveVtuCustomer', () => {
       supabase,
       user: {
         email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         id: 'user-1',
       } as Parameters<typeof resolveVtuCustomer>[0]['user'],
     });
@@ -150,6 +153,7 @@ describe('resolveVtuCustomer', () => {
       supabase,
       user: {
         email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         id: 'user-1',
       } as Parameters<typeof resolveVtuCustomer>[0]['user'],
     });
@@ -174,6 +178,7 @@ describe('resolveVtuCustomer', () => {
       supabase,
       user: {
         email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         id: 'user-1',
       } as Parameters<typeof resolveVtuCustomer>[0]['user'],
     });
@@ -190,6 +195,7 @@ describe('resolveVtuCustomer', () => {
       supabase,
       user: {
         email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         id: 'user-1',
       } as Parameters<typeof resolveVtuCustomer>[0]['user'],
     });
@@ -212,6 +218,54 @@ describe('resolveVtuCustomer', () => {
 
     expect(customer).toBeNull();
     expect(customerUpdate).not.toHaveBeenCalled();
+  });
+
+  it('refuses to link an email match for an unverified session', async () => {
+    // Muse R109 HIGH: an account carrying a victim's address (no
+    // email_confirmed_at) must never first-claim their guest row —
+    // no link write, no row returned, no DB lookup at all.
+    const { customerUpdate, supabase } = createResolveCustomerSupabase({
+      byEmail: {
+        ...linkedCustomer,
+        user_id: null,
+      },
+    });
+
+    const customer = await resolveVtuCustomer({
+      merchantId: 'merchant-1',
+      supabase,
+      user: {
+        email: 'customer@example.com',
+        email_confirmed_at: null,
+        id: 'user-1',
+      } as unknown as Parameters<typeof resolveVtuCustomer>[0]['user'],
+    });
+
+    expect(customer).toBeNull();
+    expect(customerUpdate).not.toHaveBeenCalled();
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it('refuses a byUserId hit for an unverified session', async () => {
+    // A row claimed before the verification gate must not stay
+    // spendable: the gate covers the byUserId hit too, mirroring
+    // resolvePrimaryWalletIdentity.
+    const { supabase } = createResolveCustomerSupabase({
+      byUserId: linkedCustomer,
+    });
+
+    const customer = await resolveVtuCustomer({
+      merchantId: 'merchant-1',
+      supabase,
+      user: {
+        email: 'customer@example.com',
+        email_confirmed_at: undefined,
+        id: 'user-1',
+      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
+    });
+
+    expect(customer).toBeNull();
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 });
 
@@ -247,6 +301,7 @@ describe('resolveVtuCustomer strictLookups', () => {
 
   const strictUser = {
     email: 'customer@example.com',
+    email_confirmed_at: '2026-01-01T00:00:00.000Z',
     id: 'user-1',
   } as Parameters<typeof resolveVtuCustomer>[0]['user'];
 

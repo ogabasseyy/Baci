@@ -218,6 +218,7 @@ export function useUtilityPurchase({
       isScopedStale,
       markAttemptShown,
       noteScopedReference,
+      getCurrentBalance: getWalletBalance,
       refreshWallet,
       result,
       setLoading,

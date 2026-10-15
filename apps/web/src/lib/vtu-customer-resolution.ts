@@ -24,6 +24,16 @@ export interface CustomerRecord {
  * mismatched replay is rejected. The unlinked row is returned as-is
  * so the guard can still compare ids (Codex R86 P1).
  *
+ * Unverified sessions resolve to null (Muse R109 HIGH): the email
+ * claim alone proves nothing — an account carrying a victim's
+ * address must never link or spend as their guest row — and the
+ * gate covers the byUserId hit too, so a row claimed before this
+ * fix stays unspendable. Mirrors resolvePrimaryWalletIdentity's
+ * `email_confirmed_at` gate: app logins (email OTP, Google, Apple)
+ * always verify, so no legit session changes behavior, and the
+ * gate holds under either hosted-confirmation setting. Every
+ * caller already fails closed on null.
+ *
  * Extracted from `vtu-pending-transaction.ts` per the 300-line Boy
  * Scout Rule (Codex R63 6ruGlr); the preparation module re-exports
  * this, so existing callers are untouched.
@@ -46,6 +56,9 @@ export async function resolveVtuCustomer({
   strictLookups?: boolean;
   user: User;
 }) {
+  if (!user.email_confirmed_at || !user.email) {
+    return null;
+  }
   const { data: byUserId, error: byUserIdError } = await supabase
     .from('customers')
     .select('id, email, first_name, last_name, phone, user_id')

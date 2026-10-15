@@ -106,6 +106,15 @@ export async function reconcileProcessingVtuTransactions({
 }): Promise<VtuProcessingReconciliationSummary> {
   const olderThan = new Date(now.getTime() - MIN_PROCESSING_AGE_MS);
   const pageSize = normalizeLimit(limit);
+  // The age gate ANDs with the status filter (separate PostgREST
+  // modifiers): aged rows are candidates only when the filter also
+  // matches. In particular plain pending rows — mapping-less
+  // orphans, PK-race leftovers whose cleanup stayed unresolved —
+  // NEVER match (the pending arm requires monnifyTransientVendError
+  // or preVendInterruptedAt), so this cron cannot re-fulfill them
+  // into a second debit (Muse R109 MEDIUM rebuttal, verified
+  // against getReconciliableStatusFilter + the claim's
+  // provider-reference requirement).
   const { count, error: countError } = await supabase
     .from('vtu_transactions')
     .select('id', { count: 'exact', head: true })

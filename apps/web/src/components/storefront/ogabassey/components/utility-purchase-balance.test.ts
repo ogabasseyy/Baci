@@ -22,6 +22,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     run: (extra: Record<string, unknown> = {}) =>
       applyUtilityPurchaseBalanceEffect({
         appliedReferences,
+        getCurrentBalance: () => 5000,
         isAmbiguousReplay: false,
         refreshWallet,
         result: success(),
@@ -50,34 +51,26 @@ describe('applyUtilityPurchaseBalanceEffect', () => {
 
     h.run();
 
-    expect(h.setWalletBalance).toHaveBeenCalledTimes(1);
-    const updater = h.setWalletBalance.mock.calls[0]?.[0] as (
-      balance: number
-    ) => number;
-    // Untouched since submit: instant local decrement, no refresh.
-    expect(updater(5000)).toBe(4000);
+    // Untouched since submit: instant local decrement, no refresh —
+    // set with a VALUE (Codex R109 P2: no updater, so no
+    // render-phase side effect for StrictMode to replay).
+    expect(h.setWalletBalance).toHaveBeenCalledWith(4000);
     expect(h.refreshWallet).not.toHaveBeenCalled();
     // Clamp at zero for a small untouched balance.
-    const h2 = harness({ submitBalance: 200 });
+    const h2 = harness({ getCurrentBalance: () => 200, submitBalance: 200 });
     h2.run();
-    const updater2 = h2.setWalletBalance.mock.calls[0]?.[0] as (
-      balance: number
-    ) => number;
-    expect(updater2(200)).toBe(0);
+    expect(h2.setWalletBalance).toHaveBeenCalledWith(0);
   });
 
   it('refreshes instead of decrementing when state moved since submit', () => {
     // Codex R98 P2: a refresh that landed post-debit (or another
     // purchase) already moved state off the pre-submit generation —
     // decrementing again would double-count the debit.
-    const h = harness();
+    const h = harness({ getCurrentBalance: () => 4000 });
 
     h.run();
 
-    const updater = h.setWalletBalance.mock.calls[0]?.[0] as (
-      balance: number
-    ) => number;
-    expect(updater(4000)).toBe(4000);
+    expect(h.setWalletBalance).not.toHaveBeenCalled();
     expect(h.refreshWallet).toHaveBeenCalledTimes(1);
   });
 

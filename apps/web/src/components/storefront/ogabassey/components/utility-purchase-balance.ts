@@ -32,6 +32,7 @@ type WalletSuccessResult = Extract<
  */
 export function applyUtilityPurchaseBalanceEffect({
   appliedReferences,
+  getCurrentBalance,
   isAmbiguousReplay,
   refreshWallet,
   result,
@@ -40,6 +41,7 @@ export function applyUtilityPurchaseBalanceEffect({
   submitBalance,
 }: {
   appliedReferences: Set<string>;
+  getCurrentBalance: () => number;
   isAmbiguousReplay: boolean;
   refreshWallet: () => void;
   result: WalletSuccessResult;
@@ -62,16 +64,22 @@ export function applyUtilityPurchaseBalanceEffect({
   if (typeof result.cashback?.newBalance === 'number') {
     setWalletBalance(result.cashback.newBalance);
   } else {
-    setWalletBalance((balance) => {
-      if (balance !== submitBalance) {
-        // State moved since submit: a refresh already applied the
-        // debit (or another purchase landed) — decrementing again
-        // would double-count. Refresh converges to server truth.
-        // (Idempotent refetch; safe under StrictMode double-invoke.)
-        refreshWallet();
-        return balance;
-      }
-      return Math.max(balance - submitAmount, 0);
-    });
+    // Moved-state check OUTSIDE the updater (Codex R109 P2):
+    // updater functions must be pure — React may replay them
+    // during StrictMode/concurrent rendering, and the old
+    // refreshWallet() call inside scheduled duplicate refresh
+    // generations plus nested render-phase updates (the
+    // "idempotent, StrictMode-safe" claim was wrong). The live
+    // reader observes the same committed state the updater would:
+    // this runs at response-settle, after all updates flush.
+    const currentBalance = getCurrentBalance();
+    if (currentBalance !== submitBalance) {
+      // State moved since submit: a refresh already applied the
+      // debit (or another purchase landed) — decrementing again
+      // would double-count. Refresh converges to server truth.
+      refreshWallet();
+    } else {
+      setWalletBalance(Math.max(currentBalance - submitAmount, 0));
+    }
   }
 }

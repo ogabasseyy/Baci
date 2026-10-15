@@ -47,6 +47,7 @@ function baseInput(
     isScopedStale: vi.fn(),
     markAttemptShown: vi.fn(),
     noteScopedReference: vi.fn(),
+    getCurrentBalance: () => 5000,
     refreshWallet: vi.fn(),
     result: {
       kind: 'wallet-success',

@@ -176,6 +176,7 @@ function prepareAirtime(supabase: PrepareSupabase, networkProvider = 'mtn') {
     supabase,
     user: {
       id: 'user-1',
+      email_confirmed_at: '2026-01-01T00:00:00.000Z',
       email: 'customer@example.com',
     } as unknown as Parameters<typeof preparePendingVtuTransaction>[0]['user'],
     input: {
@@ -332,6 +333,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -366,6 +368,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -415,6 +418,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -471,6 +475,7 @@ describe('preparePendingVtuTransaction', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction
@@ -522,6 +527,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -587,6 +593,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -628,6 +635,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -695,6 +703,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -757,6 +766,7 @@ describe('preparePendingVtuTransaction', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction
@@ -795,6 +805,7 @@ describe('preparePendingVtuTransaction', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction
@@ -870,6 +881,7 @@ describe('preparePendingVtuTransaction', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction
@@ -900,6 +912,7 @@ describe('preparePendingVtuTransaction', () => {
             supabase,
             user: {
               id: 'user-1',
+              email_confirmed_at: '2026-01-01T00:00:00.000Z',
               email: 'customer@example.com',
             } as unknown as Parameters<
               typeof preparePendingVtuTransaction
@@ -925,6 +938,7 @@ describe('preparePendingVtuTransaction', () => {
             supabase,
             user: {
               id: 'user-1',
+              email_confirmed_at: '2026-01-01T00:00:00.000Z',
               email: 'customer@example.com',
             } as unknown as Parameters<
               typeof preparePendingVtuTransaction
@@ -949,6 +963,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1005,6 +1020,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1050,6 +1066,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1096,6 +1113,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1132,6 +1150,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1188,6 +1207,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1233,6 +1253,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1308,6 +1329,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1354,6 +1376,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1402,6 +1425,7 @@ describe('preparePendingVtuTransaction', () => {
             supabase,
             user: {
               id: 'user-1',
+              email_confirmed_at: '2026-01-01T00:00:00.000Z',
               email: 'customer@example.com',
             } as unknown as Parameters<
               typeof preparePendingVtuTransaction
@@ -1494,6 +1518,7 @@ describe('preparePendingVtuTransaction strictLookups', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -1566,6 +1591,7 @@ describe('preparePendingVtuTransaction strictLookups', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction

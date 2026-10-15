@@ -30,6 +30,7 @@ export interface SettleUtilityPurchaseResultInput {
   isScopedStale: (scoped: string, reference: string) => boolean;
   markAttemptShown: (scoped: string | null) => void;
   noteScopedReference: (scoped: string, reference: string) => void;
+  getCurrentBalance: () => number;
   refreshWallet: () => void;
   result: UtilityCheckoutResult;
   setLoading: Dispatch<SetStateAction<boolean>>;
@@ -60,6 +61,7 @@ export function settleUtilityPurchaseResult({
   isScopedStale,
   markAttemptShown,
   noteScopedReference,
+  getCurrentBalance,
   refreshWallet,
   result,
   setLoading,
@@ -109,6 +111,7 @@ export function settleUtilityPurchaseResult({
       markAttemptShown,
       noteScopedReference,
       clearIntent,
+      getCurrentBalance,
       refreshWallet,
       result,
       setLoading,

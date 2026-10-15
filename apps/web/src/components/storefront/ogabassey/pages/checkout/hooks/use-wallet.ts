@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useWalletFetchCoordination } from './use-wallet-fetch-coordination';
 
 interface UseWalletOptions {
   userId: string | undefined;
@@ -101,19 +102,10 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
     StorefrontWalletTransaction[]
   >([]);
   const [refreshToken, setRefreshToken] = useState(0);
-  // Set synchronously in refreshWallet; cleared when the fetch
-  // settles (aborted successors leave it for the winning fetch).
-  const refreshPendingRef = useRef(false);
-  // Initial-read gate (Codex R103 P2): claimed synchronously in the
-  // render-phase identity reset below (a fetch effect cannot cover
-  // the commit/effect gap), cleared when the current generation's
-  // first fetch settles — success, error, or timeout alike.
-  const initialReadPendingRef = useRef(false);
-  // Request generation (Codex R76 6r51Px): claimed synchronously
-  // by refreshWallet, captured by each effect run. An older fetch
-  // settling in the microtask window before React runs the new
-  // effect's cleanup must not clear state for the replacement.
-  const fetchGenerationRef = useRef(0);
+  // Fetch-generation + pending-flag coordination, extracted per the
+  // 300-line ceiling (Codex R104 P1).
+  const fetchCoordination = useWalletFetchCoordination();
+  const fetchGenerationRef = fetchCoordination.fetchGenerationRef;
   // Latest-balance mirror (Codex R78 6sN80p): assigned during render
   // (not in an effect — passive effects can lag the microtask that
   // resumes a settled gate), so any committed render has already
@@ -140,20 +132,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   const [fetchedIdentity, setFetchedIdentity] = useState<string | null>(null);
   if (identity !== fetchedIdentity) {
     setFetchedIdentity(identity);
-    if (identity !== null) {
-      // A fetch is now due for an identity whose balance reads
-      // zero: block submits until it settles (see above). A null
-      // identity (signed out) schedules no fetch — upstream auth
-      // gates own that state, so leave the flag untouched.
-      initialReadPendingRef.current = true;
-    }
-    // Claim the next generation NOW, not in the effect (Codex R95
-    // P1, same as refreshWallet below): the old effect's cleanup
-    // runs only after this render commits, so a previous-account
-    // response resolving in between would otherwise see an
-    // un-superseded generation and repopulate the new session with
-    // the previous customer's balance and funding account.
-    fetchGenerationRef.current += 1;
+    fetchCoordination.claimIdentity(identity);
     setWalletBalance(0);
     setWalletErrorLive(false);
     setPayWithWallet(false);
@@ -180,7 +159,10 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
 
     const fetchWalletBalance = () => {
       if (!userId || !merchantSlug) {
-        refreshPendingRef.current = false;
+        fetchCoordination.settleFetch(generation, {
+          fetchTimedOut: false,
+          signalAborted: false,
+        });
         return;
       }
 
@@ -243,21 +225,13 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
             clearTimeout(timeoutId);
             timeoutId = undefined;
           }
-          if (!isSuperseded()) {
-            setWalletLoading(false);
-            refreshPendingRef.current = false;
-            initialReadPendingRef.current = false;
-          } else if (
-            fetchTimedOut &&
-            generation === fetchGenerationRef.current
+          if (
+            fetchCoordination.settleFetch(generation, {
+              fetchTimedOut,
+              signalAborted: abortController.signal.aborted,
+            })
           ) {
-            // A timeout abort looks superseded (signal aborted) but
-            // has no successor to clear the pending state — without
-            // this, walletLoading stays true forever and the purchase
-            // gate blocks until reload.
             setWalletLoading(false);
-            refreshPendingRef.current = false;
-            initialReadPendingRef.current = false;
           }
         });
     };
@@ -290,15 +264,10 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
       setRequiresFundingAccountConsent(!account);
     },
     refreshWallet: () => {
-      refreshPendingRef.current = true;
-      // Claim the next generation NOW, not in the effect: the
-      // in-flight fetch may settle before React commits this
-      // update, and only a synchronously-bumped generation lets
-      // its finally recognize it is superseded.
-      fetchGenerationRef.current += 1;
+      fetchCoordination.claimRefresh();
       setRefreshToken((token) => token + 1);
     },
-    isWalletRefreshPending: () => refreshPendingRef.current,
-    isWalletInitialReadPending: () => initialReadPendingRef.current,
+    isWalletRefreshPending: fetchCoordination.isRefreshPending,
+    isWalletInitialReadPending: fetchCoordination.isInitialReadPending,
   };
 }

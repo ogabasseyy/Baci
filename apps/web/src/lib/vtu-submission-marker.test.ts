@@ -90,7 +90,12 @@ describe('markVtuProviderSubmissionStarted', () => {
     // the debit; a replay reclaimed and settled the row. The CAS
     // write matches nothing — report the lost race so the caller
     // restores instead of submitting a second provider purchase.
-    const { select, supabase, update } = createSupabase(null, undefined, null);
+    // No prior attempt errored, so no re-read is needed (R104 P1).
+    const { rereadEq, select, supabase, update } = createSupabase(
+      null,
+      undefined,
+      null
+    );
     const row: {
       id: string;
       metadata: Record<string, unknown>;
@@ -112,6 +117,120 @@ describe('markVtuProviderSubmissionStarted', () => {
     expect(row.metadata).toEqual({ walletDebited: true });
     expect(update).toHaveBeenCalledTimes(1);
     expect(select).toHaveBeenCalledWith('id, updated_at');
+    expect(rereadEq).not.toHaveBeenCalled();
+  });
+
+  it('re-reads a zero-match retry and adopts our committed marker', async () => {
+    // Codex R104 P1: attempt 1 committed but its response AND
+    // read-back failed, so attempt 2 zero-matches on OUR token
+    // advance — re-read and adopt instead of declaring a lost race
+    // (which would restore with the stale token, match nothing,
+    // and strand a debited row with a marker but no submission).
+    const { rereadMaybeSingle, supabase, update, updateMaybeSingle } =
+      createSupabase({ message: 'timeout' });
+    updateMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'timeout' },
+    });
+    rereadMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'reread failed' },
+    });
+    updateMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    rereadMaybeSingle.mockImplementation(() => {
+      const sent = update.mock.calls[0]?.[0] as unknown as {
+        metadata: Record<string, unknown>;
+      };
+      return Promise.resolve({
+        data: {
+          metadata: {
+            walletDebited: true,
+            [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]:
+              sent.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY],
+          },
+          status: 'processing',
+          transaction_id: null,
+          updated_at: 'tok-2',
+        },
+        error: null,
+      });
+    });
+    const row: {
+      id: string;
+      metadata: Record<string, unknown>;
+      updated_at: string;
+    } = {
+      id: 'vtu-1',
+      metadata: { walletDebited: true },
+      updated_at: 'tok-1',
+    };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toBeNull();
+    expect(update).toHaveBeenCalledTimes(2);
+    const sentMarker = (
+      update.mock.calls[0]?.[0] as unknown as {
+        metadata: Record<string, unknown>;
+      }
+    ).metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY];
+    expect(row.metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]).toBe(
+      sentMarker
+    );
+    expect(row.updated_at).toBe('tok-2');
+  });
+
+  it('declares a lost race when the zero-match re-read shows a rival marker', async () => {
+    // Codex R104 P1: the re-read disambiguates — a foreign marker
+    // means a genuine race, so fail closed without refreshing the
+    // token (our stale snapshot must not clobber the mover's keys).
+    const { rereadMaybeSingle, supabase, updateMaybeSingle } = createSupabase({
+      message: 'timeout',
+    });
+    updateMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'timeout' },
+    });
+    rereadMaybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'reread failed' },
+    });
+    updateMaybeSingle.mockResolvedValueOnce({ data: null, error: null });
+    rereadMaybeSingle.mockResolvedValueOnce({
+      data: {
+        metadata: {
+          walletDebited: true,
+          [VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY]: '2020-01-01T00:00:00.000Z',
+        },
+        status: 'processing',
+        transaction_id: null,
+        updated_at: 'tok-rival',
+      },
+      error: null,
+    });
+    const row: {
+      id: string;
+      metadata: Record<string, unknown>;
+      updated_at: string;
+    } = {
+      id: 'vtu-1',
+      metadata: { walletDebited: true },
+      updated_at: 'tok-1',
+    };
+
+    const result = await markVtuProviderSubmissionStarted({
+      row,
+      supabase: supabase as never,
+    });
+
+    expect(result).toEqual({
+      message: 'VTU provider-submission marker lost race: row moved or settled',
+    });
+    expect(row.metadata).toEqual({ walletDebited: true });
+    expect(row.updated_at).toBe('tok-1');
   });
 
   it('keeps the status-only gate for rows without a CAS token', async () => {

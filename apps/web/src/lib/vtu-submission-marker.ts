@@ -81,6 +81,91 @@ const MARKER_WRITE_BACKOFF_MS = [100, 250] as const;
  * (updated_at null) keep the status-only gate: a settled row still
  * rejects, an untouched processing row still matches.
  */
+type VtuMarkerReread =
+  | {
+      kind: 'ok';
+      current: {
+        metadata: unknown;
+        status: unknown;
+        transaction_id: unknown;
+        updated_at: unknown;
+      };
+      currentMetadata: Record<string, unknown> | null;
+    }
+  | { kind: 'missing' }
+  | { kind: 'error'; message: string };
+
+async function rereadVtuMarkerRow({
+  row,
+  supabase,
+}: {
+  row: { id: string };
+  supabase: SupabaseClient;
+}): Promise<VtuMarkerReread> {
+  const { data: current, error: rereadError } = await supabase
+    .from('vtu_transactions')
+    .select('metadata, status, transaction_id, updated_at')
+    .eq('id', row.id)
+    .maybeSingle();
+  if (rereadError) {
+    return { kind: 'error', message: rereadError.message };
+  }
+  if (!current) {
+    return { kind: 'missing' };
+  }
+  const currentMetadata =
+    current.metadata !== null &&
+    typeof current.metadata === 'object' &&
+    !Array.isArray(current.metadata)
+      ? (current.metadata as Record<string, unknown>)
+      : null;
+  return { kind: 'ok', current, currentMetadata };
+}
+
+function classifyVtuMarkerReread({
+  current,
+  currentMetadata,
+  ownMarker,
+}: {
+  current: { status: unknown; transaction_id: unknown };
+  currentMetadata: Record<string, unknown> | null;
+  ownMarker: unknown;
+}): {
+  markerOurs: boolean;
+  markerPresent: boolean;
+  responsePersisted: boolean;
+} {
+  const markerPresent =
+    currentMetadata !== null &&
+    VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY in currentMetadata;
+  // Ownership (Codex R96 P1): after a long pause another worker
+  // may have reclaimed the row and written ITS marker — adopting
+  // any present marker would let both workers vend. Only our own
+  // value proves our write landed (same-ms collision across
+  // workers is impossible here: reclaims need a 5-minute-stale
+  // row, so rival markers are minutes apart).
+  const markerOurs =
+    currentMetadata !== null &&
+    currentMetadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY] === ownMarker;
+  const responsePersisted =
+    (typeof current.transaction_id === 'string' &&
+      current.transaction_id.trim() !== '') ||
+    (typeof currentMetadata?.monnifyVendReference === 'string' &&
+      currentMetadata.monnifyVendReference.trim() !== '');
+  return { markerOurs, markerPresent, responsePersisted };
+}
+
+async function backoffVtuMarkerWrite(attempt: number): Promise<void> {
+  if (attempt >= MARKER_WRITE_MAX_ATTEMPTS) {
+    return;
+  }
+  const backoffMs =
+    MARKER_WRITE_BACKOFF_MS[
+      Math.min(attempt - 1, MARKER_WRITE_BACKOFF_MS.length - 1)
+    ];
+  await new Promise((resolve) => setTimeout(resolve, backoffMs));
+}
+
 export async function markVtuProviderSubmissionStarted({
   row,
   supabase,
@@ -100,6 +185,11 @@ export async function markVtuProviderSubmissionStarted({
   // P1) — a merely-present marker may be another worker's.
   const ownMarker = metadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY];
   let lastMessage = 'Failed to persist provider-submission marker';
+  // A prior attempt errored while its read-back also failed: the
+  // write may have committed. The next attempt's zero-match is
+  // then OUR token advance, not a rival — re-read before
+  // declaring a race (Codex R104 P1).
+  let sawAmbiguousWrite = false;
   for (let attempt = 1; attempt <= MARKER_WRITE_MAX_ATTEMPTS; attempt += 1) {
     const updateQuery = supabase
       .from('vtu_transactions')
@@ -114,6 +204,35 @@ export async function markVtuProviderSubmissionStarted({
       .maybeSingle();
     if (!error) {
       if (!markedRow) {
+        if (sawAmbiguousWrite) {
+          const reread = await rereadVtuMarkerRow({ row, supabase });
+          if (reread.kind === 'error') {
+            lastMessage = reread.message;
+            await backoffVtuMarkerWrite(attempt);
+            continue;
+          }
+          if (reread.kind === 'ok') {
+            const rereadState = classifyVtuMarkerReread({
+              current: reread.current,
+              currentMetadata: reread.currentMetadata,
+              ownMarker,
+            });
+            if (
+              rereadState.markerOurs &&
+              !rereadState.responsePersisted &&
+              reread.current.status === 'processing'
+            ) {
+              if (typeof reread.current.updated_at === 'string') {
+                row.updated_at = reread.current.updated_at;
+              }
+              row.metadata = reread.currentMetadata;
+              return null;
+            }
+          }
+          // Anything else is a genuine race: our stale snapshot
+          // must not clobber the mover's keys, so never
+          // refresh-and-force here — declare and restore.
+        }
         return {
           message:
             'VTU provider-submission marker lost race: row moved or settled',
@@ -129,50 +248,28 @@ export async function markVtuProviderSubmissionStarted({
       return null;
     }
     lastMessage = error.message;
-    const { data: current, error: rereadError } = await supabase
-      .from('vtu_transactions')
-      .select('metadata, status, transaction_id, updated_at')
-      .eq('id', row.id)
-      .maybeSingle();
-    if (!rereadError) {
-      if (!current) {
-        // Vanished row: definitive — nothing to adopt or retry.
-        return { message: error.message };
-      }
-      const currentMetadata =
-        current.metadata !== null &&
-        typeof current.metadata === 'object' &&
-        !Array.isArray(current.metadata)
-          ? (current.metadata as Record<string, unknown>)
-          : null;
-      const markerPresent =
-        currentMetadata !== null &&
-        VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY in currentMetadata;
-      // Ownership (Codex R96 P1): after a long pause another worker
-      // may have reclaimed the row and written ITS marker — adopting
-      // any present marker would let both workers vend. Only our own
-      // value proves our write landed (same-ms collision across
-      // workers is impossible here: reclaims need a 5-minute-stale
-      // row, so rival markers are minutes apart).
-      const markerOurs =
-        currentMetadata !== null &&
-        currentMetadata[VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY] === ownMarker;
-      const responsePersisted =
-        (typeof current.transaction_id === 'string' &&
-          current.transaction_id.trim() !== '') ||
-        (typeof currentMetadata?.monnifyVendReference === 'string' &&
-          currentMetadata.monnifyVendReference.trim() !== '');
-      if (markerOurs && !responsePersisted && current.status === 'processing') {
-        if (typeof current.updated_at === 'string') {
-          row.updated_at = current.updated_at;
+    const reread = await rereadVtuMarkerRow({ row, supabase });
+    if (reread.kind === 'ok') {
+      const rereadState = classifyVtuMarkerReread({
+        current: reread.current,
+        currentMetadata: reread.currentMetadata,
+        ownMarker,
+      });
+      if (
+        rereadState.markerOurs &&
+        !rereadState.responsePersisted &&
+        reread.current.status === 'processing'
+      ) {
+        if (typeof reread.current.updated_at === 'string') {
+          row.updated_at = reread.current.updated_at;
         }
-        row.metadata = currentMetadata;
+        row.metadata = reread.currentMetadata;
         return null;
       }
       if (
-        markerPresent ||
-        responsePersisted ||
-        current.status !== 'processing'
+        rereadState.markerPresent ||
+        rereadState.responsePersisted ||
+        reread.current.status !== 'processing'
       ) {
         // Definitive: the state resolved against us (another worker
         // submitted or moved the row) — a retry cannot adopt, so fail
@@ -182,16 +279,17 @@ export async function markVtuProviderSubmissionStarted({
       // Else: genuinely-failed write (readable row, still
       // processing, no marker, no response) — fall through and retry
       // the idempotent write below; the next attempt may land.
+    } else if (reread.kind === 'missing') {
+      // Vanished row: definitive — nothing to adopt or retry.
+      return { message: error.message };
+    } else {
+      // The re-read itself errored — fully ambiguous. Flag it (a
+      // later zero-match is then OUR token advance until proven
+      // otherwise), backoff, then retry; a later write may ack or a
+      // later re-read may adopt.
+      sawAmbiguousWrite = true;
     }
-    // Else: the re-read itself errored — fully ambiguous. Backoff,
-    // then retry; a later write may ack or a later re-read may adopt.
-    if (attempt < MARKER_WRITE_MAX_ATTEMPTS) {
-      const backoffMs =
-        MARKER_WRITE_BACKOFF_MS[
-          Math.min(attempt - 1, MARKER_WRITE_BACKOFF_MS.length - 1)
-        ];
-      await new Promise((resolve) => setTimeout(resolve, backoffMs));
-    }
+    await backoffVtuMarkerWrite(attempt);
   }
   return { message: lastMessage };
 }

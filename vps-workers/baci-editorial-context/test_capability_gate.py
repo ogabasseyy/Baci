@@ -233,5 +233,40 @@ class CapabilityGateTests(unittest.TestCase):
         self.assertIs(gate.newer_base_register(tip, fork), tip)
         self.assertIs(gate.newer_base_register(fork, tip), tip)
 
+    def test_map_cited_change_binds_to_revision(self):
+        # A map-cited source changed after the bound revision fails even
+        # when the metadata advanced: the revision must contain the change.
+        with tempfile.TemporaryDirectory() as root:
+            repo = Path(root)
+
+            def git(*args):
+                subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@example.com", "-c", "user.name=t", *args], check=True, capture_output=True)
+
+            git("init", "-q", ".")
+            (repo / "apps/web").mkdir(parents=True)
+            (repo / "apps/web/mcp.ts").write_text("v1\n")
+            git("add", ".")
+            git("commit", "-q", "-m", "one")
+            at = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            (repo / "apps/web/mcp.ts").write_text("v2\n")
+            register = {"source_revision": at, "capabilities": []}
+            cited = "Shop boundary in `apps/web/mcp.ts` applies"
+            self.assertEqual(
+                gate._changed_refs_unbound(register, {"apps/web/mcp.ts"}, cwd=repo, map_text=cited),
+                ["cited change not bound at source_revision: apps/web/mcp.ts"],
+            )
+            git("commit", "-q", "-am", "two")
+            now = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            register["source_revision"] = now
+            self.assertEqual(gate._changed_refs_unbound(register, {"apps/web/mcp.ts"}, cwd=repo, map_text=cited), [])
+
+    def test_review_artifacts_do_not_self_bind(self):
+        # The map links the register: a metadata advance must not demand
+        # blob equality with the previously bound tree (self-binding
+        # paradox) — artifacts bind via reviewed_at + revision instead.
+        register = {"source_revision": "a" * 40, "capabilities": []}
+        linked = "Start at [Reviewed capabilities](baci-capabilities.json) now"
+        self.assertEqual(gate._changed_refs_unbound(register, {gate.REGISTER_PATH}, cwd=".", map_text=linked), [])
+
 if __name__ == "__main__":
     unittest.main()

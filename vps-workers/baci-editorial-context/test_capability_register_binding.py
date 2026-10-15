@@ -82,14 +82,18 @@ def _provenance_failures(repo, data):
     failures = []
     refs = sorted({ref for row in data["capabilities"] if row.get("status") != "unverified" for ref in row["source_refs"]})
     for ref in refs:
-        at_rev = subprocess.run(
-            ["git", "-C", str(repo), "show", f"{revision}:{ref}"],
-            capture_output=True,
-        )
-        if at_rev.returncode != 0:
-            failures.append(f"cited source absent at source_revision {revision[:10]}: {ref}")
-        elif hashlib.sha256(at_rev.stdout).hexdigest() != hashlib.sha256((Path(repo) / ref).read_bytes()).hexdigest():
-            failures.append(f"cited content differs from source_revision {revision[:10]}: {ref}")
+        # Directory citations expand to the same deterministic descendant
+        # set the digest binds: `git show rev:dir` prints a tree listing,
+        # so comparing it against a directory read would crash or mismatch.
+        for label, current in _digests._cited_blobs(repo, ref):
+            at_rev = subprocess.run(
+                ["git", "-C", str(repo), "show", f"{revision}:{label}"],
+                capture_output=True,
+            )
+            if at_rev.returncode != 0:
+                failures.append(f"cited source absent at source_revision {revision[:10]}: {label}")
+            elif hashlib.sha256(at_rev.stdout).hexdigest() != hashlib.sha256(current).hexdigest():
+                failures.append(f"cited content differs from source_revision {revision[:10]}: {label}")
     return failures
 
 
@@ -180,21 +184,6 @@ class CapabilityBindingTests(unittest.TestCase):
             self.assertTrue(any("source_revision" in f for f in provenance), f"provenance alone must reject after redigest: {provenance}")
             self.assertTrue(binding_failures(repo, {"capabilities": [{"source_refs": ["missing.txt"]}], "evidence_digest": "x"}), "missing cited source must fail")
             self.assertTrue(binding_failures(repo, {"capabilities": [{"source_refs": ["../escape.txt"]}], "evidence_digest": "x"}), "escaping cited source must fail")
-
-    def test_evidence_digest_expands_directory_citations(self):
-        # Directory citations are binding-supported: the digest must hash
-        # descendants, not crash on read_bytes, and move with content.
-        with tempfile.TemporaryDirectory() as root:
-            repo = Path(root)
-            (repo / "app" / "sub").mkdir(parents=True)
-            (repo / "app" / "b.ts").write_text("b1")
-            (repo / "app" / "sub" / "a.ts").write_text("a1")
-            data = {"capabilities": [{"status": "code_evidenced", "source_refs": ["app"]}],
-                    "reviewed_at": "2026-01-01T00:00:00Z", "source_revision": "a" * 40}
-            first = evidence_digest_for(repo, data)
-            self.assertEqual(evidence_digest_for(repo, data), first)
-            (repo / "app" / "sub" / "a.ts").write_text("a2")
-            self.assertNotEqual(evidence_digest_for(repo, data), first)
 
     def test_ci_invokes_capability_gate_unconditionally(self):
         # The gate cannot notice its own caller changing: if ci.yml drops or

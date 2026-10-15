@@ -263,7 +263,7 @@ def main(cwd="."):
             )
             return 1
         if register is not None:
-            unbound = _changed_refs_unbound(register, changed, cwd)
+            unbound = _changed_refs_unbound(register, changed, cwd, map_text)
             if unbound:
                 print("capability register re-review does not bind its changed sources:")
                 for failure in unbound:

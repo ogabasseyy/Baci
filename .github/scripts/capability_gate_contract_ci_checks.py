@@ -110,7 +110,7 @@ _STARTUP_ENV = frozenset({
 })
 _NEXT_STEP = re.compile(r"^      -(\s|$)")
 _TRIGGER_KEY = re.compile(r"^  ([A-Za-z_]+)\s*:\s*(.*)$")
-_TRIGGER_SUBKEY = re.compile(r"^    ([A-Za-z_-]+)\s*:\s*(.*)$")
+_TRIGGER_SUBKEY = re.compile(r"^    [\"']?([A-Za-z_-]+)[\"']?\s*:\s*(.*)$")
 _TRIGGER_ITEM = re.compile(r"^      -\s(.*)$")
 
 
@@ -167,8 +167,9 @@ def ci_failures(ci_text):
                 continue
             if not line.startswith("  ") or line.startswith("   "):
                 break
-            if stripped.split(":")[0] in _STARTUP_ENV:
-                failures.append(f"ci.yml top-level env must not preload startup code ({stripped.split(':')[0]})")
+            if stripped.split(":")[0].strip().strip("\"'") in _STARTUP_ENV:
+                key = stripped.split(":")[0].strip().strip("\"'")
+                failures.append(f"ci.yml top-level env must not preload startup code ({key})")
                 break
     starts = [i for i, line in enumerate(lines) if _norm(line) == _norm(STEP_NAME_LINE)]
     if len(starts) != 1:
@@ -189,7 +190,7 @@ def ci_failures(ci_text):
     # and skip the suite while the contract stays green.
     for line in lines[job_start:start]:
         stripped = line.strip()
-        if stripped and not stripped.startswith("#") and re.match(r"^ref\s*:", stripped):
+        if stripped and not stripped.startswith("#") and re.match(r"^['\"]?ref['\"]?\s*:", stripped):
             return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
     # PR-controlled code must not run before the gate: a preceding step
     # could overwrite the checked-out gate code, which then runs while the
@@ -208,7 +209,7 @@ def ci_failures(ci_text):
             continue
         if re.match(r"^run\s*:", stripped):
             return failures + ["no PR-controlled steps may precede the capability gate"]
-        if re.match(r"^env\s*:", stripped):
+        if re.match(r"^['\"]?env['\"]?\s*:", stripped):
             return failures + ["capability gate job must not set environment (startup injection)"]
     code = []
     for line in lines[start + 1 :]:

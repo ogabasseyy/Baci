@@ -189,6 +189,19 @@ if [[ "$(grep -c 'semgrep scan --error' "$SEC")" -ne 2 ]]; then
   echo "::error::expected 2 semgrep scan --error invocations in $SEC"
   fail=1
 fi
+# Findings must stay visible: SARIF file output is summary-only on
+# the console, so every scan invocation (2x scan + 1x ci) also
+# writes --text-output. The bare --text format flag is mutually
+# exclusive with --sarif on the pinned 1.104.0 image and must never
+# be re-added (it errors before scanning).
+if [[ "$(grep -c -- '--text-output=/dev/stdout' "$SEC")" -ne 3 ]]; then
+  echo "::error::expected 3 --text-output=/dev/stdout scan outputs in $SEC"
+  fail=1
+fi
+if grep -Eq ' --text( |$)' "$SEC"; then
+  echo "::error::bare --text flag breaks --sarif scans on semgrep 1.104.0; use --text-output only"
+  fail=1
+fi
 fail_if="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; print}' "$SEC")"
 fail_run="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; getline; print}' "$SEC")"
 for scan in semgrep_pr semgrep_push semgrep_full; do

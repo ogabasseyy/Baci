@@ -56,6 +56,8 @@ m_trip_coe() { sub "$TRIP" "      - name: Flag trusted-tree change" "      - nam
 m_trip_early_exit0() { sub "$TRIP" "          exit 1" "$NL_EXIT0"; }
 m_trip_exit0_swap() { sub "$TRIP" "          exit 1" "          exit 0"; }
 m_scan_error_dropped() { sub "$SEC" "semgrep scan --error" "semgrep scan"; }
+m_text_output_dropped() { sub "$SEC" " --text-output=/dev/stdout" ""; }
+m_bare_text_added() { sub "$SEC" "--sarif --output=semgrep.sarif --text-output=/dev/stdout" "--sarif --output=semgrep.sarif --text --text-output=/dev/stdout"; }
 m_gate_disjuncts_dropped() { sub "$SEC" " || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure'" ""; }
 m_gate_run_true() { sub "$SEC" "run: exit 1" "run: true"; }
 m_gate_coe() { sub "$SEC" "        run: exit 1" "$NL_GATE_COE"; }
@@ -96,6 +98,8 @@ neg "tripwire-continue-on-error" "must not carry if" m_trip_coe
 neg "tripwire-early-exit-0" "exactly one exit line" m_trip_early_exit0
 neg "tripwire-exit-0-swap" "no longer fails" m_trip_exit0_swap
 neg "scan-error-dropped" "expected 2 semgrep scan --error" m_scan_error_dropped
+neg "text-output-dropped" "expected 3 --text-output" m_text_output_dropped
+neg "bare-text-added" "breaks --sarif scans" m_bare_text_added
 neg "gate-disjuncts-dropped" "lost the semgrep_push outcome disjunct" m_gate_disjuncts_dropped
 neg "gate-run-true" "must be exactly 'run: exit 1'" m_gate_run_true
 neg "gate-continue-on-error" "must not carry continue-on-error" m_gate_coe

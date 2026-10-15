@@ -165,14 +165,14 @@ jobs:
           EOF
           chmod 700 "$fetch_askpass"
           GIT_ASKPASS="$fetch_askpass" GIT_TERMINAL_PROMPT=0 \
-            git -c credential.helper= fetch --no-tags --prune origin \
+            git -c credential.helper= fetch --no-tags origin \
             "${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
-          mapfile -t changed_files < <(
-            git diff --name-only --diff-filter=d "origin/${{ github.event.pull_request.base.ref }}...HEAD" -- \
-              '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml' |
-            grep -E '^(next\.config\.ts$|apps/web/src/app/api/|apps/web/src/lib/|apps/web/src/schemas/|apps/mobile-admin/(app|hooks|lib)/|apps/mobile-storefront/(app|hooks|lib|services|stores)/|packages/shared/|supabase/migrations/|\.github/workflows/)' ||
-            true
-          )
+          # Fail closed: a diff that errors (bad base ref, fetch failure)
+          # must fail the scan, not silently skip it via empty input.
+          diff_out="$(git diff --name-only --diff-filter=d "origin/${{ github.event.pull_request.base.ref }}...HEAD" -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml')" || {
+            echo "::error::PR base diff failed; failing closed instead of skipping the scan."; exit 1
+          }
+          mapfile -t changed_files < <(grep -E '^(next\.config\.ts$|apps/web/src/app/api/|apps/web/src/lib/|apps/web/src/schemas/|apps/mobile-admin/(app|hooks|lib)/|apps/mobile-storefront/(app|hooks|lib|services|stores)/|packages/shared/|supabase/migrations/|\.github/workflows/)' <<<"$diff_out" || true)
 
           if [ ${#changed_files[@]} -eq 0 ]; then
             echo "No security-relevant changed files. Skipping Semgrep."
@@ -180,7 +180,7 @@ jobs:
           fi
 
           # --error: bare scan exits 0 with findings; the gate reads the outcome. --text-output prints findings (SARIF alone is summary-only, invisible when findings match dismissed alerts).
-          semgrep scan --error --config auto --sarif --output=semgrep.sarif --text --text-output=/dev/stdout "${changed_files[@]}"
+          semgrep scan --error --config auto --sarif --output=semgrep.sarif --text-output=/dev/stdout "${changed_files[@]}"
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
@@ -190,7 +190,7 @@ jobs:
         if: github.event_name == 'push'
         id: semgrep_push
         run: |
-          semgrep scan --error --config auto --sarif --output=semgrep.sarif --text --text-output=/dev/stdout \
+          semgrep scan --error --config auto --sarif --output=semgrep.sarif --text-output=/dev/stdout \
             apps/web/src/app/api \
             apps/web/src/lib \
             apps/web/src/schemas \
@@ -213,7 +213,7 @@ jobs:
       - name: Run full Semgrep on scheduled and manual scans
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         id: semgrep_full
-        run: semgrep ci --sarif --output=semgrep.sarif
+        run: semgrep ci --sarif --output=semgrep.sarif --text-output=/dev/stdout
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true

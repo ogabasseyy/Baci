@@ -174,7 +174,7 @@ export async function GET(request: NextRequest) {
     );
     redirectUrl.searchParams.set('merchant_slug', target.merchantSlug);
 
-    // FP: redirect authority is allowlisted by isAllowedRedirectHost (throws otherwise); request input selects among allowed hosts only. Dismissed in code-scanning (false-positive).
+    // FP: redirect target is constrained before this line — managed flow by isAllowedRedirectHost against the root domain, custom flow by the active-row domains-table match (the trailing allowlist check there is self-certifying). Request input selects among resolved hosts only. Dismissed in code-scanning (false-positive).
     // nosemgrep: javascript.express.open-redirect-deepsemgrep.open-redirect-deepsemgrep
     return NextResponse.redirect(redirectUrl, 308);
   } catch (error) {

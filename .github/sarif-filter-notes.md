@@ -25,6 +25,15 @@ runs use the workspace copy, which already is a trusted branch. No
 fallback: a base without the auditor fails closed (bootstrap PRs stay red
 by design).
 
+Suppressed-findings transport: `nosemgrep` silences the scan exit
+code but Semgrep still emits the finding into `--sarif` output, and
+GitHub code scanning ignores the `inSource` flag — so suppressed
+findings stay visible as (dismissed) alerts rather than vanishing.
+The filter deliberately does NOT drop them: only the single audited
+checkout finding is exempted, keeping every other suppression
+auditable in the alert trail. In-repo suppression fixes the required
+gate; the alert view remains dismissal-managed.
+
 Fork-PR gap (post-merge follow-up, not more `pull_request` YAML): forks
 skip this job, so they need a base-side audit.
 

@@ -6,15 +6,30 @@ import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.t
 import { CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-checkout-recovery-pending-sources';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 
-const filename =
-  '20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql';
-const source = {
-  repositoryPath: `supabase/migrations/${filename}`,
-  sha256: 'c447cf6614df344591430a14df91201ae5404b1c6413e59d307205ec66641225',
-};
+const sources = [
+  {
+    filename:
+      '20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql',
+    sha256: 'c447cf6614df344591430a14df91201ae5404b1c6413e59d307205ec66641225',
+  },
+  {
+    filename:
+      '20261015124602_customer_checkout_shipping_recovery_address_aliases.sql',
+    sha256: '6c4e56759fea25200a28a748a848c9da213550bc678e47ba9fe7a2727823188c',
+  },
+];
 
-describe('checkout recovery ACL repair replay registration', () => {
-  it('registers the reviewed bytes exactly once as pending, never as production or post-replay', async () => {
+describe('checkout recovery repair replay registration', () => {
+  it.each(
+    sources
+  )('registers $filename exactly once as pending, never as production or post-replay', async ({
+    filename,
+    sha256,
+  }) => {
+    const source = {
+      repositoryPath: `supabase/migrations/${filename}`,
+      sha256,
+    };
     const manifest = supabaseHistoryReplayManifest;
     expect(
       manifest.pendingSources.filter(

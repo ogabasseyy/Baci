@@ -73,9 +73,10 @@ mobile UI: `20261013213516_customer_checkout_shipping_recovery_context.sql`,
 `20261013213522_customer_checkout_shipping_recovery_confirmation.sql`,
 `20261014080000_customer_checkout_shipping_recovery_scalar_address.sql`,
 `20261014120000_customer_checkout_shipping_recovery_review_followups.sql`,
-`20261014130000_customer_checkout_shipping_recovery_hardening.sql` and
-`20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql` and
-`20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql`.
+`20261014130000_customer_checkout_shipping_recovery_hardening.sql`,
+`20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql`,
+`20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql` and
+`20261015124602_customer_checkout_shipping_recovery_address_aliases.sql`.
 The automated migration runner applies the whole directory; a manual rollout
 must include every recovery migration or legacy scalar destinations stay
 unbookable and the context schema check fails closed. No native dependency
@@ -136,3 +137,18 @@ remain rejected by regression tests.
   before any test-plan shortcut; a workflow contract test prevents silent skips.
 - Quote selection and its tests are extracted below the module size limit;
   the recovery form has dedicated rendering, interaction, busy and error tests.
+
+## Recovery reachability and destination aliases
+
+Eligible owners can open recovery from either fulfillment mode, including when
+an old quote was deleted and ordinary provider booking is disabled. Existing
+owner, order eligibility and explicit confirmation guards still apply. Recovery
+in progress blocks wallet and standard mode changes, dismissal and booking.
+
+Confirmation updates legacy street/postcode aliases from the validated quote
+and removes stale second address lines. Missing replacement postcodes remove
+old postcode aliases. The private audit preserves the original destination;
+fees, funding, locking and booking remain subject to the existing checks.
+
+Edits to the shared PostgreSQL harness trigger web CI. The authenticated
+PostgreSQL recovery gate includes the destination-alias regression suite.

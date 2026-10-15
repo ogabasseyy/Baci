@@ -9,6 +9,7 @@ test('migration-only recovery changes cannot skip the PostgreSQL quality gate', 
     'supabase/migrations/*customer_checkout_shipping_recovery*',
     'supabase/tests/*recovery*',
     'supabase/tests/extract-sql-function-definition*',
+    'supabase/tests/shipping-quote-proof-postgres-test-harness.mjs',
     '.github/scripts/shipping-recovery-ci-contract.test.mjs',
   ]) assert.ok(filters.web.includes(path), `missing web gate pattern ${path}`);
 });
@@ -28,6 +29,7 @@ test('the quality gate enables real recovery PostgreSQL tests before test-plan s
     'customer-checkout-shipping-recovery-concurrency.postgres.test.ts',
     'prepare-checkout-shipping-recovery.postgres.test.ts',
     'customer-checkout-shipping-recovery-quantity.postgres.test.ts',
+    'customer-checkout-shipping-recovery-aliases.postgres.test.ts',
   ]) assert.ok(step.run.includes(`src/lib/shipping/${suite}`), `missing ${suite}`);
   assert.ok(step.run.includes('extract-sql-function-definition.test.mjs'));
 });

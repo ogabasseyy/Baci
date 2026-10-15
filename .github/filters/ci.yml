@@ -246,6 +246,7 @@ web:
   - 'supabase/migrations/*customer_checkout_shipping_recovery*'
   - 'supabase/tests/*recovery*'
   - 'supabase/tests/extract-sql-function-definition*'
+  - 'supabase/tests/shipping-quote-proof-postgres-test-harness.mjs'
   - '.github/scripts/shipping-recovery-ci-contract.test.mjs'
   - 'apps/web/**'
   - 'scripts/backfill-feed-images.ts'

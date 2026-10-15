@@ -65,6 +65,12 @@ describe('EXPECTED_PENDING_TAIL_SOURCES', () => {
           sha256:
             'c447cf6614df344591430a14df91201ae5404b1c6413e59d307205ec66641225',
         },
+        {
+          repositoryPath:
+            'supabase/migrations/20261015124602_customer_checkout_shipping_recovery_address_aliases.sql',
+          sha256:
+            '6c4e56759fea25200a28a748a848c9da213550bc678e47ba9fe7a2727823188c',
+        },
       ],
       identity: [
         {

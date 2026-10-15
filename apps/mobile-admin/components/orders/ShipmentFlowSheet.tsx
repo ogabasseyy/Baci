@@ -220,7 +220,9 @@ export function ShipmentFlowSheet({
                         onRefreshFundingAccount={() =>
                           void giglShipping.refreshFundingAccount()
                         }
-                        onModeChange={() => onModeChange('provider')}
+                        onModeChange={() => {
+                          if (!recoveryBusy) onModeChange('provider');
+                        }}
                         onRetryQuote={() => void giglShipping.requestQuote()}
                         onTransferred={giglShipping.startTransferPoll}
                         quote={giglShipping.quote}
@@ -237,10 +239,7 @@ export function ShipmentFlowSheet({
                   selectedMode={selectedMode}
                 />
               ) : null}
-              {step === 'method' &&
-              selectedMode === 'provider' &&
-              !isSubmitting &&
-              recoveryOrder ? (
+              {step === 'method' && !isSubmitting && recoveryOrder ? (
                 <CheckoutShippingRecoveryPanel
                   key={recoveryOrder.id}
                   order={recoveryOrder}

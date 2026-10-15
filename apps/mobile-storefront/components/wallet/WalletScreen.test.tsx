@@ -4,7 +4,7 @@ import { Pressable, Text } from 'react-native';
 import { useWalletRouteActionSetup } from '@/components/wallet/use-wallet-route-action-setup';
 import type { WalletActiveSavingsGoal } from '@/hooks/wallet-query';
 import { SampleInterestPreview } from './SampleInterestPreview';
-import { createWalletSavingsActions } from './use-wallet-savings-actions';
+import { useWalletSavingsController } from './use-wallet-savings-controller';
 import { WalletScreen } from './WalletScreen';
 import { fundWallet } from './wallet-screen.handlers';
 
@@ -111,8 +111,8 @@ jest.mock('./use-wallet-appearance', () => ({
 jest.mock('./use-wallet-saved-cards', () => ({
   useWalletSavedCards: () => false,
 }));
-jest.mock('./use-wallet-savings-actions', () => ({
-  createWalletSavingsActions: jest.fn(() => ({
+jest.mock('./use-wallet-savings-controller', () => ({
+  useWalletSavingsController: jest.fn(() => ({
     handleAddSavingsContribution: jest.fn(),
     handleFundSavingsWallet: jest.fn(),
     handleOpenSavings: jest.fn(),
@@ -171,9 +171,12 @@ describe('WalletScreen interest preview integration', () => {
 
   it('preserves the selected goal and contribution after a production wallet top-up', () => {
     render(<WalletScreen />);
-    const actions = jest.mocked(createWalletSavingsActions).mock.calls[0][0];
+    const actions = jest.mocked(useWalletSavingsController).mock.calls[0][0];
 
-    actions.startWalletTopUp();
+    const actual = jest.requireActual<
+      typeof import('./use-wallet-savings-actions')
+    >('./use-wallet-savings-actions');
+    actual.createWalletSavingsActions(actions).handleFundSavingsWallet();
 
     const funding = jest.mocked(fundWallet).mock.calls[0][0];
     expect(funding.fundAmount).toBe('500');

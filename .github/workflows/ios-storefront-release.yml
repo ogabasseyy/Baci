@@ -31,6 +31,7 @@ permissions:
   contents: read
 
 env:
+  EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
   BACI_MOBILE_BUILD_PLATFORM: ios
   # Compile Expo consumers against the same resolved JSI headers and library.
   EXPO_USE_PRECOMPILED_MODULES: '0'
@@ -187,7 +188,9 @@ jobs:
           STOREFRONT_TIKTOK_APP_SECRET: ${{ secrets.STOREFRONT_TIKTOK_APP_SECRET }}
           STOREFRONT_FACEBOOK_APP_ID: ${{ secrets.STOREFRONT_FACEBOOK_APP_ID }}
           STOREFRONT_FACEBOOK_CLIENT_TOKEN: ${{ secrets.STOREFRONT_FACEBOOK_CLIENT_TOKEN }}
-        run: pnpm exec expo prebuild --platform ios --clean
+        run: |
+          pnpm exec expo config --type public --json | node ../../.github/scripts/sentry-storefront-provenance.mjs ios
+          pnpm exec expo prebuild --platform ios --clean
 
       - name: Fix prebuild signing style for archive
         working-directory: ${{ env.WORKING_DIR }}

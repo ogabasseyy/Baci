@@ -20,6 +20,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors, { BRAND } from '@/constants/Colors';
 import { CHAT_WIDGET_DEFAULT_BOTTOM_OFFSET } from '@/constants/layout';
 import { useAuthGuard } from '@/hooks/use-auth-guard';
+import { useRouteDiagnostics } from '@/hooks/use-route-diagnostics';
 import { CONFIG } from '@/lib/config';
 import { getOptionalGestureHandlerRuntime } from '@/lib/optional-gesture-handler';
 import { QueryProvider } from '@/lib/QueryProvider';
@@ -74,6 +75,7 @@ export function RootLayoutNav({
 
   // Auth guard handles sign out redirects before protected screens render.
   useAuthGuard();
+  useRouteDiagnostics();
 
   return (
     <QueryProvider persistenceEnabled={persistenceEnabled}>

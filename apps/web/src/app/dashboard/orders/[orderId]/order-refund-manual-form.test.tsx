@@ -10,11 +10,14 @@ function props(overrides = {}) {
     confirmed: true,
     currency: 'NGN',
     date: '2026-09-28T12:00',
+    legId: '',
+    legOptions: [],
     method: 'bank_transfer',
     note: '',
     onAmountChange: vi.fn(),
     onConfirmedChange: vi.fn(),
     onDateChange: vi.fn(),
+    onLegIdChange: vi.fn(),
     onMethodChange: vi.fn(),
     onNoteChange: vi.fn(),
     onReferenceChange: vi.fn(),
@@ -71,5 +74,28 @@ describe('OrderRefundManualForm', () => {
     expect(
       screen.getByRole('button', { name: 'Save manual refund' })
     ).toBeDisabled();
+  });
+  it('offers the capture choice only when several legs are eligible', () => {
+    const onLegIdChange = vi.fn();
+    const { rerender } = render(
+      <OrderRefundManualForm {...props({ onLegIdChange })} />
+    );
+    expect(screen.queryByLabelText('Paystack capture')).toBeNull();
+    rerender(
+      <OrderRefundManualForm
+        {...props({
+          legOptions: [
+            { id: 'leg-1', label: 'Paystack · pp-a · ₦70.00 outstanding' },
+            { id: 'leg-2', label: 'Paystack · pp-b · ₦100.00 outstanding' },
+          ],
+          method: 'paystack',
+          onLegIdChange,
+        })}
+      />
+    );
+    fireEvent.change(screen.getByLabelText('Paystack capture'), {
+      target: { value: 'leg-2' },
+    });
+    expect(onLegIdChange).toHaveBeenCalledWith('leg-2');
   });
 });

@@ -1,8 +1,38 @@
 export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
-      'supabase/migrations/20261002090000_order_refund_management.sql',
-    sha256: '57614f59d010fba15b91ba52d936dbb79ca5a65c257a04f064f1e5bb9f446b5e',
+      'supabase/migrations/20261002090000_order_refund_events.sql',
+    sha256: '0d478e83115b801a0a7596738196ac692a5cc395d2e1ea35e6b2f6e35c961f74',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090100_order_refund_coverage.sql',
+    sha256: '206f4369ffbae88144b47680e12b2e6e7abec3081ceac1719acfc913a050d5f9',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090200_order_refund_record_helpers.sql',
+    sha256: '0386f0a4654949b37ab05375e5d8627160cef96b74b4cfc5c490d6043d4a9cb5',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090250_order_refund_response.sql',
+    sha256: 'e4f28ad10fe49abac872e50686bf3232f81657fec1035dc84dc922719b1b4092',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090275_order_refund_pending.sql',
+    sha256: '2c45e72672ad5fe61c9ba41daa91160801bbcc90c7ab2e718bba678f0181ef00',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090300_order_refund_manage.sql',
+    sha256: '9bd69bf406cc414c197c45a2e2dce289801a9067eab94e3bd36c3aa92b092a70',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002090400_order_refund_public_access.sql',
+    sha256: '9494b1713be3f8b884f9ac78ad38ea4f21fceae78889d131d9967dcc07c005dd',
   },
   {
     repositoryPath:
@@ -11,7 +41,17 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20261010170000_cancellation_refund_legs_covered.sql',
+    sha256: 'ac96312b11cee5e941196e3a2f7812ca8cb97080e1dd5f7cb44dc637e98e0bb3',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261010180000_count_manual_refund_coverage_in_claim.sql',
-    sha256: 'b8dcda944268d9752d53c736c804d57d54e32537cb9cc4c6021b3b497c367b85',
+    sha256: 'a9855c583e4a583962fe1128b40e7d2aaa1a38b72dc90d007e06ba541136f5bf',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010190000_guard_refund_finalizer_internal_coverage.sql',
+    sha256: 'f749edff620239ff94ed0daeeb6aaa09cc7a175090b0c0e215b0ff3a1206ae19',
   },
 ];

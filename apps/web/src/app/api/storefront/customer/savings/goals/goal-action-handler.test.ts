@@ -191,6 +191,35 @@ describe('executeSavingsGoalAction', () => {
     expect(body.error).toBe('savings_goal_not_paused');
   });
 
+  it('maps pending-transfer cancellation blocks to 409 for retry', async () => {
+    const mockSupabase = {
+      rpc: vi.fn().mockResolvedValue({
+        data: null,
+        error: {
+          code: 'P0001',
+          message: 'savings_goal_not_cancellable_pending_transfer',
+        },
+      }),
+    };
+    mockResolveCustomerSavingsContext.mockResolvedValue({
+      customer: { id: 'customer-1' },
+      merchant: { id: 'merchant-1' },
+      supabase: mockSupabase,
+    });
+
+    const response = await executeSavingsGoalAction({
+      request: postRequest({
+        goalId: '00000000-0000-4000-8000-000000000101',
+        merchantSlug: 'ogabassey',
+      }),
+      rpcName: 'cancel_customer_savings_goal_future_debits',
+    });
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).toBe('savings_goal_not_cancellable_pending_transfer');
+  });
+
   it('returns 500 for unexpected action RPC errors', async () => {
     const mockSupabase = {
       rpc: vi.fn().mockResolvedValue({

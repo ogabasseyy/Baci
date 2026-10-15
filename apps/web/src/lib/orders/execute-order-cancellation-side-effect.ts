@@ -1,9 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { assertExternalCancellationRefundableAmount } from '@/lib/orders/assert-external-cancellation-refundable-amount';
 import { classifyCancellationRefundLinks } from '@/lib/orders/classify-cancellation-refund-links';
+import { collectAwaitingCancellationRefundLegs } from '@/lib/orders/collect-awaiting-cancellation-refund-legs';
 import { executeCustomerEmailCancellationSideEffect } from '@/lib/orders/execute-customer-email-cancellation-side-effect';
 import { fetchAuditBlockedCancellationLegIds } from '@/lib/orders/fetch-audit-blocked-cancellation-legs';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
-import { initiatePaystackCancellationRefunds } from '@/lib/orders/initiate-paystack-cancellation-refunds';
 import { isExternalPaymentGateway } from '@/lib/orders/is-external-payment-gateway';
 import { matchCancellationRefundCoverage } from '@/lib/orders/match-cancellation-refund-coverage';
 import type {
@@ -12,14 +13,17 @@ import type {
   CancellationOrder,
 } from '@/lib/orders/order-cancellation-side-effect-types';
 import { preflightCancellationRefundInitiation } from '@/lib/orders/preflight-cancellation-refund-initiation';
+import { quarantineInternalOnlyManualPaystack } from '@/lib/orders/quarantine-internal-only-manual-paystack';
 import { quarantineInvalidRefundAmountLegs } from '@/lib/orders/quarantine-invalid-refund-amount-legs';
 import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
-import { quarantineWithheldCancellationRefundLegs } from '@/lib/orders/quarantine-withheld-cancellation-refund-legs';
+import { quarantineRefundedLegTerminalAnomaly } from '@/lib/orders/quarantine-refunded-leg-terminal-anomaly';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
   DeferredError,
   type OrderCancellationSideEffectStep,
 } from '@/lib/orders/run-order-cancellation-side-effect';
+import { settleCancellationRefundInitiation } from '@/lib/orders/settle-cancellation-refund-initiation';
+import { soleCompletedCancellationLeg } from '@/lib/orders/sole-completed-cancellation-leg';
 import { unsupportedRefundReasons } from '@/lib/orders/unsupported-refund-reasons';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 
@@ -55,42 +59,66 @@ export async function executeOrderCancellationSideEffect({
   // Mirror the completion gate's funded-leg statuses: refund-state legs
   // (e.g. PayPal flips the payment row itself while its provider refund
   // is pending) must stay visible so they quarantine or defer instead of
-  // slipping to false completion.
+  // slipping to false completion. Self-terminal refunded legs load too
+  // so the empty-actionable case below can tell them from a corrupt
+  // order with no payment evidence at all.
   const { data: transactionRows, error: transactionError } = await supabase
     .from('transactions')
     .select('id, amount, currency, gateway, gateway_reference, status')
     .eq('order_id', order.id)
     .eq('merchant_id', order.merchant_id)
     .eq('transaction_type', 'payment')
-    .in('status', ['completed', 'refund_pending'])
+    .in('status', ['completed', 'refund_pending', 'refunded'])
     .order('created_at', { ascending: true });
   if (transactionError || !transactionRows?.length) {
     throw new Error('No completed payment transaction found');
   }
-  const transactions = (transactionRows as GatewayPaymentTransaction[]).filter(
-    (transaction) => isExternalPaymentGateway(transaction.gateway)
+  // Link validity spans every funded leg: a terminal refund row linked
+  // to a refunded leg is legitimate evidence, not an outside-order link.
+  const linkLegs = transactionRows as GatewayPaymentTransaction[];
+  const actionableLegs = transactionRows.filter(
+    (row) => row.status !== 'refunded'
   );
-  // Link validity spans every funded leg, not just the external ones the
-  // provider path acts on: the merchant RPC allocates manual money to
-  // cash/store-credit legs (they have no auto-reversal), so judging
-  // those links against the external-only list would misread a valid
-  // manual allocation as pointing outside the order and terminalize a
-  // recoverable refund. Matching still scopes initiation to external
-  // legs; internal legs only surface as manual-pending (defer) or
-  // malformed-manual (quarantine).
-  const allLegs = transactionRows as GatewayPaymentTransaction[];
-  if (!transactions.length) {
-    throw new Error('No completed gateway payment transaction found');
+  const allLegs = actionableLegs as GatewayPaymentTransaction[];
+  // Only external legs initiate provider refunds or verify listings.
+  const transactions = allLegs.filter((t) =>
+    isExternalPaymentGateway(t.gateway)
+  );
+  const soleCompletedLeg = soleCompletedCancellationLeg(transactions);
+  // Probe refunded legs even in mixed orders: skipping it would
+  // complete past anomalies the SQL gate refuses to finalize.
+  if (actionableLegs.length < linkLegs.length) {
+    await quarantineRefundedLegTerminalAnomaly({
+      legs: linkLegs,
+      order,
+      soleCompletedLegId: soleCompletedLeg?.id ?? null,
+      supabase,
+    });
+  }
+  if (actionableLegs.length === 0) {
+    // Every leg self-terminalized and anomaly-free: defer for claim.
+    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
+    throw new DeferredError('cancellation_refund_awaiting_provider_completion');
   }
   const { data: refundRows, error: refundLookupError } = await supabase
     .from('transactions')
-    .select('gateway_reference, metadata, status, amount, currency, gateway')
+    .select(
+      'id, gateway_reference, metadata, status, amount, currency, gateway'
+    )
     .eq('order_id', order.id)
     .eq('merchant_id', order.merchant_id)
     .eq('transaction_type', 'refund')
     .order('created_at', { ascending: true });
   if (refundLookupError) {
     throw new Error('Unable to verify existing cancellation refunds');
+  }
+  if (!transactions.length) {
+    await quarantineInternalOnlyManualPaystack({
+      allLegs,
+      order,
+      refundRows: refundRows ?? [],
+      supabase,
+    });
   }
   const auditBlockedLegIds = await fetchAuditBlockedCancellationLegIds({
     order,
@@ -102,17 +130,7 @@ export async function executeOrderCancellationSideEffect({
     invalidLinkReason,
     linkedPaymentId,
     unlinkedRefunds,
-  } = classifyCancellationRefundLinks(refundRows ?? [], allLegs);
-  // Mirror the claim gate's sole-completed-leg attribution: an unlinked
-  // legacy refund covering the only completed leg must not terminalize
-  // the step while another leg's provider refund is still outstanding —
-  // the completion gate attributes it and finalizes once that leg lands.
-  const soleCompletedLegs = transactions.filter(
-    (transaction) =>
-      transaction.status === 'completed' && Number(transaction.amount) > 0
-  );
-  const soleCompletedLeg =
-    soleCompletedLegs.length === 1 ? soleCompletedLegs[0] : null;
+  } = classifyCancellationRefundLinks(refundRows ?? [], linkLegs);
   const {
     manualLinkedLegIds,
     manualPendingLegIds,
@@ -162,11 +180,17 @@ export async function executeOrderCancellationSideEffect({
   // legs. In-flight non-Paystack legs (e.g. PayPal flips the payment row
   // itself while its provider refund is pending) are not unsupported:
   // their provider refund resolves on its own, so they must reach the
-  // provider-awaiting deferral below instead. Reference-less legs still
-  // quarantine — with nothing to track they can never resolve by waiting.
+  // provider-awaiting deferral below instead. Manual-pending legs bypass
+  // too: the merchant is still recording the balance (no provider
+  // reference needed for manual records), and quarantining would
+  // disable recording (delivery_uncertain) instead of deferring for
+  // completion — unverifiable Paystack claims still quarantine via the
+  // withheld path. Other reference-less legs quarantine: with nothing
+  // to track they can never resolve by waiting.
   const unsupportedLegs = transactions.filter(
     (transaction) =>
       !refundedPaymentIds.has(transaction.id) &&
+      !manualPendingLegIds.has(transaction.id) &&
       (!transaction.gateway_reference ||
         (normalizePaymentGateway(transaction.gateway) !== 'PAYSTACK' &&
           transaction.status !== 'refund_pending'))
@@ -182,47 +206,14 @@ export async function executeOrderCancellationSideEffect({
     });
   }
   // A legacy/corrupt non-finite or non-positive leg amount must
-  // never reach the provider (the reduction below would treat NaN as
-  // zero while the predicate accepts it): quarantine it for review
-  // first. The predicate below stays as a fail-closed backstop for
-  // callers that skip this preflight.
+  // never reach the provider (the reduction would treat NaN as zero
+  // while the predicate accepts it): quarantine it for review first.
+  // The extracted backstop stays fail-closed for callers that skip
+  // this preflight, and returns quietly for internal-only orders.
   await quarantineInvalidRefundAmountLegs({ order, supabase, transactions });
-  const gatewayRefundAmount = transactions.reduce(
-    (total, transaction) => total + (Number(transaction.amount) || 0),
-    0
-  );
-  if (
-    gatewayRefundAmount <= 0 ||
-    !Number.isSafeInteger(Math.round(gatewayRefundAmount * 100)) ||
-    transactions.some(
-      (transaction) =>
-        !Number.isFinite(Number(transaction.amount)) ||
-        Number(transaction.amount) <= 0
-    )
-  ) {
-    throw new Error('Completed payment transaction has no refundable amount');
-  }
-  // Legs with a provider-accepted audit row are still in flight: the
-  // reconciler completes them and the drain resumes the remaining legs.
-  // Only legs without provider evidence (failed or ambiguous rows) need a
-  // terminal quarantine review.
-  const awaitingRefundPaymentIds = new Set<string>();
-  const reviewRefundPaymentIds = new Set<string>();
-  for (const row of refundRows ?? []) {
-    // Terminal rows (completed or legacy refunded) are not in flight.
-    if (row.status === 'completed' || row.status === 'refunded') continue;
-    const paymentId = linkedPaymentId(row);
-    if (typeof paymentId !== 'string') continue;
-    if (
-      row.status === 'refund_pending' &&
-      typeof row.gateway_reference === 'string' &&
-      /^[1-9][0-9]*$/.test(row.gateway_reference)
-    ) {
-      awaitingRefundPaymentIds.add(paymentId);
-    } else {
-      reviewRefundPaymentIds.add(paymentId);
-    }
-  }
+  assertExternalCancellationRefundableAmount(transactions);
+  const { awaitingRefundPaymentIds, reviewRefundPaymentIds } =
+    collectAwaitingCancellationRefundLegs({ linkedPaymentId, refundRows });
   const pendingTransactions = transactions.filter((transaction) =>
     reviewRefundPaymentIds.has(transaction.id)
   );
@@ -271,39 +262,38 @@ export async function executeOrderCancellationSideEffect({
   // same way: their provider refund may already exist. Clean legs still
   // move below. Fully refunded legs need no quarantine: nothing will be
   // initiated for them, so terminalizing would only strand the rest.
-  const { auditBlockedTransactions, initiationTransactions } =
-    await preflightCancellationRefundInitiation({
-      auditBlockedLegIds,
-      deadlineMs,
-      linkedPaymentId,
-      manualLinkedLegIds,
-      mismatchedIds,
-      order,
-      refundedPaymentIds,
-      refundRows,
-      supabase,
-      transactions,
-    });
-  const refundIds = await initiatePaystackCancellationRefunds({
+  const {
+    auditBlockedTransactions,
+    budgetDeferred,
+    budgetSkippedManualLegIds,
+    initiationTransactions,
+    verifiedManualPaystackLegIds,
+  } = await preflightCancellationRefundInitiation({
+    auditBlockedLegIds,
     deadlineMs,
+    linkedPaymentId,
+    manualLinkedLegIds,
+    mismatchedIds,
+    order,
+    refundedPaymentIds,
+    refundRows,
+    supabase,
+    transactions,
+  });
+  return settleCancellationRefundInitiation({
+    auditBlockedTransactions,
+    budgetDeferred,
+    budgetSkippedManualLegIds,
+    deadlineMs,
+    initiationTransactions,
     isLastAttempt,
+    manualPendingLegIds,
+    mismatchedTransactions,
     order,
     reason,
     refundedPaymentIds,
+    step,
     supabase,
-    transactions: initiationTransactions,
+    verifiedManualPaystackLegIds,
   });
-  await quarantineWithheldCancellationRefundLegs({
-    auditBlockedTransactions,
-    mismatchedTransactions,
-    order,
-    supabase,
-  });
-  if (manualPendingLegIds.size > 0) {
-    // Never complete under a pending manual: the final record would
-    // land on a completed row no drain reselects, stranding finalization.
-    await tryResetCancellationSideEffectAttempts(supabase, order.id, step);
-    throw new DeferredError('cancellation_refund_awaiting_manual_completion');
-  }
-  return { refundIds };
 }

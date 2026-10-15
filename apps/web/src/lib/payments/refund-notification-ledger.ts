@@ -10,17 +10,32 @@ function formatAmount(amount: number, currency: string): string {
   }).format(amount);
 }
 
+const MANUAL_COVERAGE_INTERNAL_GATEWAYS = new Set([
+  'STORE_CREDIT',
+  'CASH',
+  'MANUAL',
+  'PAY_ON_DELIVERY',
+]);
+
 /**
  * Total the refunded amount for a cancelled order's notification, mirroring
  * the completion RPC: every funded external payment leg sums its linked
  * same-gateway, same-currency completed refunds to at least its amount,
- * counting Paystack rows only after provider verification.
- * Refund-state legs (e.g. PayPal flips the payment row itself to
- * refund_pending while its provider refund is pending) still need their
- * linked refund; only self-terminal refunded legs carry their own
- * evidence. Unlinked legacy refunds match when the order holds exactly
- * one completed external payment leg. Throws
- * refund_notification_ledger_* on mismatch.
+ * counting Paystack rows only after provider verification. Each leg
+ * contributes at most its own amount (mirroring the capped per-leg
+ * helper): an overfunded leg must not inflate the notified total.
+ * Merchant-declared Paystack rows count only after provider
+ * verification, mirroring the claim gate's positive rule. Refund-state
+ * legs (e.g. PayPal flips the payment row itself to refund_pending
+ * while its provider refund is pending) still need their linked
+ * refund; only self-terminal refunded legs carry their own evidence.
+ * Unlinked legacy refunds match when the order holds exactly one
+ * completed external payment leg. Manual-only internal legs (cash,
+ * store credit, and kin — never wallet/savings, which reverse through
+ * their own ledgers) validate through explicitly linked manual rows in
+ * matching money, mirroring the aggregate claim, and join the total;
+ * without them a cash-only finalization would dead-letter its own
+ * notification. Throws refund_notification_ledger_* on mismatch.
  */
 export async function refundNotificationLedgerAmount({
   merchantId,
@@ -44,6 +59,16 @@ export async function refundNotificationLedgerAmount({
   const externalLegs = paymentLegs.filter(
     (leg) => Number(leg.amount) > 0 && isExternalPaymentGateway(leg.gateway)
   );
+  // Manual-allocatable internal legs, mirroring the claim guard's set:
+  // cash-like money the merchant returns by hand. Wallet and savings
+  // reverse through their own ledgers and never carry manual coverage.
+  const manualLegs = paymentLegs.filter(
+    (leg) =>
+      Number(leg.amount) > 0 &&
+      MANUAL_COVERAGE_INTERNAL_GATEWAYS.has(
+        normalizePaymentGateway(leg.gateway)
+      )
+  );
   // Terminal evidence is completed or refunded (legacy
   // provider-confirmed rows), mirroring the aggregate claim: the claim
   // finalizes on refunded rows, so the ledger must count them or the
@@ -61,10 +86,10 @@ export async function refundNotificationLedgerAmount({
   // Self-terminal legs (e.g. a PayPal-only cancellation flips the
   // payment row itself to refunded) carry their own evidence without a
   // separate refund transaction: an empty refund-row set is valid when
-  // every external leg is self-terminal.
+  // every covered leg is self-terminal.
   if (
     !refundLegs?.length &&
-    externalLegs.some((leg) => leg.status !== 'refunded')
+    [...externalLegs, ...manualLegs].some((leg) => leg.status !== 'refunded')
   ) {
     throw new Error('refund_notification_ledger_lookup_failed');
   }
@@ -83,23 +108,33 @@ export async function refundNotificationLedgerAmount({
     }
     const legCurrency = normalizeCurrencyCode(leg.currency);
     const legGateway = normalizePaymentGateway(leg.gateway);
+    const legKobo = Math.round(Number(leg.amount) * 100);
     const matchedKobo = refunds
       .filter((refund) => {
         const refundGateway = normalizePaymentGateway(refund.gateway);
         const metadata = refund.metadata as {
+          method?: unknown;
           payment_transaction_id?: unknown;
           provider_refund_status?: unknown;
         } | null;
         // Merchant-attested manual rows link explicitly and count as
         // coverage in matching money, mirroring the aggregate claim;
         // they never sole-attribute, so an unlinked manual row still
-        // mismatches for review.
-        if (refundGateway === 'MANUAL')
+        // mismatches for review. A manual row declaring the Paystack
+        // method counts only after provider verification, mirroring
+        // the claim gate's positive rule.
+        if (refundGateway === 'MANUAL') {
+          if (
+            metadata?.method === 'paystack' &&
+            metadata?.provider_refund_status !== 'processed'
+          )
+            return false;
           return (
             metadata?.payment_transaction_id === leg.id &&
             normalizeCurrencyCode(refund.currency) === legCurrency &&
             Number(refund.amount) > 0
           );
+        }
         if (refundGateway === '' || refundGateway !== legGateway) return false;
         // A locally completed Paystack refund counts only after it is
         // provider-verified; other gateways keep local-status trust.
@@ -125,25 +160,105 @@ export async function refundNotificationLedgerAmount({
         (sum, refund) => sum + Math.round(Number(refund.amount) * 100),
         0
       );
-    if (matchedKobo < Math.round(Number(leg.amount) * 100)) return undefined;
-    return { amount: matchedKobo / 100, currency: leg.currency };
+    if (matchedKobo < legKobo) return undefined;
+    return {
+      amount: Math.min(matchedKobo, legKobo) / 100,
+      currency: leg.currency,
+    };
   });
+  // Manual-only legs validate exactly like the claim's internal
+  // coverage: explicitly linked manual rows in matching money summing
+  // to the leg, capped at the leg, with the claim's Paystack
+  // method/provider gate. Self-terminal refunded legs carry their own
+  // evidence.
+  const linkedManualRefunds = manualLegs.map((leg) => {
+    if (leg.status === 'refunded') {
+      return { amount: leg.amount, currency: leg.currency };
+    }
+    const legCurrency = normalizeCurrencyCode(leg.currency);
+    const legKobo = Math.round(Number(leg.amount) * 100);
+    const matchedKobo = refunds
+      .filter((refund) => {
+        const metadata = refund.metadata as {
+          method?: unknown;
+          payment_transaction_id?: unknown;
+          provider_refund_status?: unknown;
+        } | null;
+        if (
+          metadata?.method === 'paystack' &&
+          metadata?.provider_refund_status !== 'processed'
+        )
+          return false;
+        return (
+          normalizePaymentGateway(refund.gateway) === 'MANUAL' &&
+          metadata?.payment_transaction_id === leg.id &&
+          normalizeCurrencyCode(refund.currency) === legCurrency &&
+          Number(refund.amount) > 0
+        );
+      })
+      .reduce(
+        (sum, refund) => sum + Math.round(Number(refund.amount) * 100),
+        0
+      );
+    if (matchedKobo < legKobo) return undefined;
+    return {
+      amount: Math.min(matchedKobo, legKobo) / 100,
+      currency: leg.currency,
+    };
+  });
+  const linkedTotals = [...linkedRefunds, ...linkedManualRefunds];
   if (
-    externalLegs.length === 0 ||
-    linkedRefunds.some((refund) => refund === undefined)
+    (externalLegs.length === 0 && manualLegs.length === 0) ||
+    linkedTotals.some((refund) => refund === undefined)
   ) {
     throw new Error('refund_notification_ledger_mismatch');
   }
-  const refundAmount = (linkedRefunds as Array<{ amount: number }>).reduce(
+  const refundAmount = (linkedTotals as Array<{ amount: number }>).reduce(
     (sum, leg) => sum + Number(leg.amount),
     0
   );
+  // Internal reversals return outside the refund ledger — wallet
+  // reversals credit customer_wallets, savings reversals restore the
+  // goal — but the refund manager counts both as refunded coverage,
+  // so the notification total must too or mixed orders understate
+  // (a ₦50 cash leg plus a ₦50 wallet reversal would read ₦50 of
+  // ₦100 returned). Mirror the manager's predicates verbatim: the
+  // wallet source_type and the savings reversed_at key.
+  const { data: walletRows, error: walletError } = await supabase
+    .from('customer_wallet_transactions')
+    .select('amount')
+    .eq('source_id', order.id)
+    .eq('merchant_id', merchantId)
+    .eq('source_type', 'order_reversal');
+  if (walletError) throw new Error('refund_notification_ledger_lookup_failed');
+  const { data: savingsRows, error: savingsError } = await supabase
+    .from('customer_savings_redemptions')
+    .select('amount, metadata')
+    .eq('order_id', order.id)
+    .eq('merchant_id', merchantId);
+  if (savingsError) throw new Error('refund_notification_ledger_lookup_failed');
+  const reversalAmount =
+    (walletRows ?? []).reduce(
+      (sum: number, row: { amount: number }) => sum + Number(row.amount),
+      0
+    ) +
+    (savingsRows ?? [])
+      .filter(
+        (row: { metadata: unknown }) =>
+          row.metadata !== null &&
+          typeof row.metadata === 'object' &&
+          'reversed_at' in row.metadata
+      )
+      .reduce(
+        (sum: number, row: { amount: number }) => sum + Number(row.amount),
+        0
+      );
   // Normalize the order currency once: a legacy padded code must
   // compare equal AND format — Intl.NumberFormat throws on ' NGN '.
   const orderCurrency = normalizeCurrencyCode(order.currency) || 'NGN';
   if (
     refundAmount <= 0 ||
-    linkedRefunds.some(
+    linkedTotals.some(
       (leg) =>
         normalizeCurrencyCode((leg as { currency: string }).currency) !==
         orderCurrency
@@ -151,5 +266,5 @@ export async function refundNotificationLedgerAmount({
   ) {
     throw new Error('refund_notification_ledger_mismatch');
   }
-  return formatAmount(refundAmount, orderCurrency);
+  return formatAmount(refundAmount + reversalAmount, orderCurrency);
 }

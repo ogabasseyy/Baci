@@ -71,7 +71,20 @@ function buildSupabase({
     const chain: Record<string, unknown> = {};
     chain.select = vi.fn().mockReturnValue(chain);
     chain.eq = vi.fn().mockReturnValue(chain);
+    chain.in = vi.fn().mockReturnValue(chain);
     chain.single = vi.fn().mockResolvedValue(result);
+    // List-query terminal for the refund-gateway probe: a terminal
+    // provider row preserves the pre-existing copy in these tests.
+    // biome-ignore lint/suspicious/noThenProperty: Supabase query builders are thenable.
+    chain.then = (resolve: (value: unknown) => void) =>
+      Promise.resolve(
+        table === 'transactions'
+          ? {
+              data: [{ gateway: 'paystack', status: 'completed' }],
+              error: null,
+            }
+          : result
+      ).then(resolve);
     return chain;
   });
   return { from, supabase: { from } as never };

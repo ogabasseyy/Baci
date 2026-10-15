@@ -6,11 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { orderRefundStatusLabels } from '@/config/order-refund';
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import { buildManualRefundPayload } from '@/lib/orders/build-manual-refund-payload';
 import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
-import { describeRefundWorkerError } from '@/lib/orders/describe-refund-worker-error';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
+import { selectRefundPinLegOptions } from '@/lib/orders/select-refund-pin-leg-options';
 import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
 import { OrderRefundManualForm } from './order-refund-manual-form';
+import { OrderRefundTimeline } from './order-refund-timeline';
+import { useRefundStatusPolling } from './use-refund-status-polling';
 
 export function OrderRefundPanel({
   orderId,
@@ -30,45 +33,27 @@ export function OrderRefundPanel({
   const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+  const [legId, setLegId] = useState('');
+  // Several outstanding captures force a Paystack pin choice; a
+  // sole leg stays unpinned for the RPC to resolve on live data.
+  const legOptions = selectRefundPinLegOptions(
+    summary?.legs ?? [],
+    summary?.currency ?? 'NGN'
+  );
+  const requireLeg = method === 'paystack' && legOptions.length > 1;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    let active = true;
-    async function load() {
-      const startedRevision = revision.current;
-      try {
-        const response = await fetch(
-          `/api/orders/${encodeURIComponent(orderId)}/refund`,
-          {
-            signal: controller.signal,
-            cache: 'no-store',
-            credentials: 'include',
-          }
-        );
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok)
-          throw new Error(data.error || 'Unable to load refund');
-        if (active && startedRevision === revision.current) {
-          setSummary(data);
-          setError(null);
-        }
-      } catch (e) {
-        if (
-          active &&
-          startedRevision === revision.current &&
-          !controller.signal.aborted
-        )
-          setError(e instanceof Error ? e.message : 'Unable to load refund');
-      }
-    }
-    void load();
-    const timer = setInterval(() => void load(), 30_000);
-    return () => {
-      active = false;
-      controller.abort();
-      clearInterval(timer);
-    };
-  }, [orderId]);
+  // Only a refunded order is terminal: a failed row can still
+  // transition asynchronously (drain retries, provider
+  // reconciliation), and the ledger-derived balance would go stale
+  // without the poll.
+  const terminal = summary?.status === 'refunded';
+  useRefundStatusPolling({
+    onError: setError,
+    onSummary: setSummary,
+    orderId,
+    revision,
+    terminal,
+  });
 
   // The parent passes an inline callback, so its identity changes on
   // every parent render: fire the completion callback once per order.
@@ -95,8 +80,13 @@ export function OrderRefundPanel({
     if (action === 'manual') {
       const validationError = validateManualRefundInput({
         amount,
+        confirmed,
         date,
+        method,
+        paymentLegId: legId || null,
+        reference,
         remaining: summary?.remaining ?? null,
+        requirePaymentLeg: requireLeg,
       });
       if (validationError) {
         setError(validationError);
@@ -110,15 +100,15 @@ export function OrderRefundPanel({
       const payload =
         action === 'retry'
           ? { action }
-          : {
-              action,
-              amount: Number(amount),
-              refundedAt: new Date(date).toISOString(),
-              method,
-              reference,
-              note,
+          : buildManualRefundPayload({
+              amount,
               confirmed,
-            };
+              date,
+              method,
+              note,
+              paymentLegId: legId || null,
+              reference,
+            });
       const updated = await apiPost<RefundSummary>(
         `/api/orders/${encodeURIComponent(orderId)}/refund`,
         payload
@@ -133,6 +123,7 @@ export function OrderRefundPanel({
       setReference('');
       setDate('');
       setNote('');
+      setLegId('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to manage refund');
     } finally {
@@ -163,7 +154,7 @@ export function OrderRefundPanel({
         ) : (
           <>
             <p role="status" className="font-semibold">
-              {orderRefundStatusLabels[summary.status]}
+              {orderRefundStatusLabels[summary.status] ?? summary.status}
             </p>
             <dl className="text-sm space-y-1">
               <div className="flex justify-between">
@@ -186,9 +177,7 @@ export function OrderRefundPanel({
               )}
             </dl>
             {summary.error && (
-              <p className="text-sm text-destructive" title={summary.error}>
-                {describeRefundWorkerError(summary.error)}
-              </p>
+              <p className="text-sm text-destructive">{summary.error}</p>
             )}
             <p className="text-xs text-muted-foreground">
               Attempts in current cycle: {summary.attempts}. Retries requested:{' '}
@@ -196,8 +185,9 @@ export function OrderRefundPanel({
             </p>
             {summary.status === 'requires_review' && (
               <p className="text-sm">
-                Verify the existing refund in Paystack before taking further
-                action.
+                {summary.needsPaystackCheck
+                  ? 'Verify the existing refund in Paystack before taking further action.'
+                  : 'Review the flagged refund details before taking further action.'}
               </p>
             )}
             <div className="flex flex-wrap gap-2">
@@ -221,7 +211,10 @@ export function OrderRefundPanel({
                       disabled={busy}
                       onClick={() => {
                         setConfirmed(false);
-                        setAmount(String(summary.remaining));
+                        // Two-decimal string: a raw float conversion can
+                        // carry binary artifacts (0.30000000000000004)
+                        // that fail the panel's own decimal guard.
+                        setAmount(summary.remaining.toFixed(2));
                         setShowForm(!showForm);
                       }}
                     >
@@ -238,12 +231,18 @@ export function OrderRefundPanel({
                 confirmed={confirmed}
                 currency={summary.currency}
                 date={date}
+                legId={legId}
+                legOptions={requireLeg ? legOptions : []}
                 method={method}
                 note={note}
                 onAmountChange={setAmount}
                 onConfirmedChange={setConfirmed}
                 onDateChange={setDate}
-                onMethodChange={setMethod}
+                onLegIdChange={setLegId}
+                onMethodChange={(value) => {
+                  setMethod(value);
+                  setLegId('');
+                }}
                 onNoteChange={setNote}
                 onReferenceChange={setReference}
                 onSubmit={() => void submit('manual')}
@@ -251,46 +250,11 @@ export function OrderRefundPanel({
                 remaining={summary.remaining}
               />
             )}
-            {summary.events && summary.events.length > 0 && (
-              <details>
-                <summary>Refund activity</summary>
-                <ul className="space-y-2 text-sm" aria-label="Refund activity">
-                  {summary.events.map((event) => {
-                    // Worker strings never render verbatim here either:
-                    // fixed label visible, raw text in the title.
-                    const eventError =
-                      event.details.error || event.details.previousError;
-                    return (
-                      <li key={event.id}>
-                        <p>
-                          {orderRefundStatusLabels[event.action] ||
-                            'Refund activity'}{' '}
-                          · {new Date(event.date).toLocaleString()}
-                        </p>
-                        {eventError && (
-                          <p title={eventError}>
-                            {describeRefundWorkerError(eventError)}
-                          </p>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </details>
-            )}
-            {summary.history.length > 0 && (
-              <ul className="space-y-2 text-sm" aria-label="Refund history">
-                {summary.history.map((item) => (
-                  <li key={item.id} className="border-t pt-2">
-                    <p>
-                      {money(item.amount)} · {item.status} · {item.method}
-                    </p>
-                    <p className="break-all">{item.reference}</p>
-                    <p>{new Date(item.date).toLocaleString()}</p>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <OrderRefundTimeline
+              currency={summary.currency}
+              events={summary.events ?? []}
+              history={summary.history}
+            />
           </>
         )}
       </CardContent>

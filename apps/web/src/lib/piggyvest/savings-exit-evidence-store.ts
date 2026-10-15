@@ -22,7 +22,7 @@ export function createSavingsExitEvidenceStore(
       port: configuration.port,
       database: 'piggyvest_local',
       user: 'piggyvest_exit_evidence_writer',
-      password: 'synthetic-local-only',
+      password: configuration.password,
       ssl: false,
       application_name: 'baci-exit-evidence',
       connectionTimeoutMillis: 2000,

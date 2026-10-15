@@ -1,4 +1,6 @@
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
+import { isManualAllocatableRefundLeg } from './is-manual-allocatable-refund-leg';
+import { isUnverifiedManualPaystackRefund } from './is-unverified-manual-paystack-refund';
 import { normalizeRefundMoneyField } from './normalize-refund-money-field';
 
 interface CancellationRefundRow {
@@ -26,7 +28,12 @@ interface CancellationRefundRow {
  * legs carrying them never initiate (double-refund protection) and
  * never mismatch for the manual rows themselves; a partial manual
  * record reports its leg pending so the caller defers (never
- * quarantines, never completes) until the merchant finishes.
+ * quarantines, never completes) until the merchant finishes. A
+ * cash-like leg with no manual row yet reports pending the same way:
+ * the claim routes mixed orders to the worker instead of finalizing,
+ * and completing before the merchant records would strand settlement
+ * reversal, notifications, and review closure on a completed row the
+ * drain never reselects.
  */
 export function matchCancellationRefundCoverage({
   linkedPaymentId,
@@ -52,7 +59,9 @@ export function matchCancellationRefundCoverage({
   const matchedRefundKobo = new Map<string, number>();
   const completedLinkedLegIds = new Set<string>();
   const manualLinkedLegIds = new Set<string>();
-  const badManualLegIds = new Set<string>();
+  // Manual-linked legs that quarantine instead of counting: wrong
+  // currency, or a Paystack declaration without provider proof.
+  const manualReviewLegIds = new Set<string>();
   const unverifiedLinkedLegIds = new Set<string>();
   let unattributedUnlinkedCount = 0;
   for (const row of refundRows ?? []) {
@@ -85,7 +94,15 @@ export function matchCancellationRefundCoverage({
       // on their leg; matching-money rows below also count as coverage.
       manualLinkedLegIds.add(paymentId);
       if (!currencyMatches) {
-        badManualLegIds.add(paymentId);
+        manualReviewLegIds.add(paymentId);
+        continue;
+      }
+      // Shared with the executor's internal-only branch: without
+      // provider confirmation the row must quarantine for review like
+      // the claim gate, or the leg would mark covered and finish
+      // without settlement reversal or notifications.
+      if (isUnverifiedManualPaystackRefund(row)) {
+        manualReviewLegIds.add(paymentId);
         continue;
       }
     } else if (isManualRow) {
@@ -138,7 +155,7 @@ export function matchCancellationRefundCoverage({
     if ((matchedRefundKobo.get(leg.id) ?? 0) >= legKobo) {
       refundedPaymentIds.add(leg.id);
     } else if (
-      badManualLegIds.has(leg.id) ||
+      manualReviewLegIds.has(leg.id) ||
       (completedLinkedLegIds.has(leg.id) && !manualLinkedLegIds.has(leg.id))
     ) {
       mismatchedTransactions.push(leg);
@@ -147,6 +164,12 @@ export function matchCancellationRefundCoverage({
       // merchant: the caller excludes it from initiation without
       // quarantining, and defers the step so the drain reclaims the
       // row instead of completing it before the merchant finishes.
+      manualPendingLegIds.add(leg.id);
+    } else if (isManualAllocatableRefundLeg(leg.gateway)) {
+      // A cash-like leg with no manual row yet waits the same way:
+      // only the merchant can cover it (the caller never initiates
+      // provider refunds for internal legs), so falling through
+      // would complete the step with money still owed.
       manualPendingLegIds.add(leg.id);
     }
   }

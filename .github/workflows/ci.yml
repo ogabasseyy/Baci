@@ -43,6 +43,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Test release retries and dependency update policy
+        run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
+      - name: Test Sentry Storefront Release Provenance
+        run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -383,12 +387,39 @@ jobs:
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
           --sql-check supabase/tests/order_refund_management.sql
+          --sql-check supabase/tests/order_refund_management_tenancy.sql
+          --sql-check supabase/tests/order_refund_management_owner.sql
+          --sql-check supabase/tests/order_refund_management_split_records.sql
+          --sql-check supabase/tests/order_refund_management_reversal_records.sql
+          --sql-check supabase/tests/order_refund_management_wallet_cash.sql
+          --sql-check supabase/tests/order_refund_management_pending_review.sql
+          --sql-check supabase/tests/order_refund_management_unverified_funds.sql
+          --sql-check supabase/tests/order_refund_management_gateway_attribution.sql
+          --sql-check supabase/tests/order_refund_management_round33_obligation.sql
+          --sql-check supabase/tests/order_refund_management_round33_anomalies.sql
+          --sql-check supabase/tests/order_refund_management_round33_foundation.sql
+          --sql-check supabase/tests/order_refund_management_round33_pins.sql
+          --sql-check supabase/tests/order_refund_management_round33_implicit_pins.sql
+          --sql-check supabase/tests/order_refund_management_round45_gates.sql
+          --sql-check supabase/tests/order_refund_management_claims.sql
+          --sql-check supabase/tests/order_refund_management_claim_routing.sql
+          --sql-check supabase/tests/order_refund_management_claim_anomalies.sql
+          --sql-check supabase/tests/order_refund_management_mixed_flow.sql
+          --sql-check supabase/tests/order_refund_management_completed_flow.sql
+          --sql-check supabase/tests/order_refund_management_boundaries.sql
+          --sql-check supabase/tests/order_refund_management_per_leg_coverage.sql
+          --sql-check supabase/tests/order_refund_finalizer_internal_coverage.sql
+          --sql-check supabase/tests/order_refund_coverage_helper_confinement.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL
         run: >-
           bash supabase/tests/run-cache-invalidation-outbox-test-runner.test.sh &&
           bash supabase/tests/run-cache-invalidation-outbox-test.sh
+      - name: Test order-refund claim/manual serialization
+        env:
+          MINIMAL_PHASE1: 1
+        run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
 
   quality-misc:
     name: Quality Gate - Misc
@@ -475,6 +506,15 @@ jobs:
           .github/scripts/stage-preview-prebuilt-refs-report.test.mjs
           .github/scripts/materialize-preview-prebuilt-refs.test.mjs
           .github/scripts/preview-deploy-run.test.mjs
+          .github/scripts/coordinate-production-release.test.mjs
+          .github/scripts/coordinate-publication.test.mjs
+          .github/scripts/release-production.test.mjs
+          .github/scripts/release-subprocess.test.mjs
+          .github/scripts/verify-coordinated-release.test.mjs
+          ci_scripts/validate-promote-record.test.mjs
+          .github/scripts/ops-promote-record-contract.test.mjs
+          .github/scripts/release-discovery.test.mjs
+          .github/scripts/release-budget-contract.test.mjs
           && bash .github/scripts/verify-gigl-worker-final-state.test.sh
       - name: Verify Quiz Assets
         if: needs.changes.outputs.web == 'true' || needs.changes.outputs.quiz_db == 'true'

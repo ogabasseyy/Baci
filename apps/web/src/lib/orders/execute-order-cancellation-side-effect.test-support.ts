@@ -33,7 +33,7 @@ export const paystackPayment = {
   id: 'payment-1',
 };
 
-function transactionQuery(data: unknown) {
+export function transactionQuery(data: unknown) {
   return {
     eq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),

@@ -59,7 +59,146 @@ describe('OrderRefundSection', () => {
     const setOrder = vi.fn();
     render(
       <OrderRefundSection
-        order={orderWith({ paymentStatus: 'Unpaid' })}
+        order={orderWith({ paymentStatus: 'Unpaid', transactions: [] })}
+        setOrder={setOrder}
+      />
+    );
+    expect(screen.queryByText('Refund')).not.toBeInTheDocument();
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+  it('shows the refund panel when funding is unknown', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({ paymentStatus: 'Pending', transactions: undefined })}
+        setOrder={setOrder}
+      />
+    );
+    // A failed transactions read fails open so recovery stays
+    // visible; the panel RPC remains the permission gate.
+    expect(await screen.findByText('Refund')).toBeInTheDocument();
+  });
+  it('shows the refund panel for BNPL-approved cancelled orders', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({
+          paymentStatus: 'Bnpl Approved',
+        })}
+        setOrder={setOrder}
+      />
+    );
+    expect(await screen.findByText('Refund')).toBeInTheDocument();
+  });
+  it('shows the refund panel for funded pending cancelled orders', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({
+          paymentStatus: 'Pending',
+          transactions: [
+            {
+              id: 'leg-1',
+              transaction_type: 'payment',
+              status: 'completed',
+              amount: 100,
+              currency: 'NGN',
+              gateway: 'paystack',
+              created_at: '2026-10-01T00:00:00Z',
+            },
+          ],
+        })}
+        setOrder={setOrder}
+      />
+    );
+    expect(await screen.findByText('Refund')).toBeInTheDocument();
+  });
+  it('shows the refund panel for mid-flight pending cancelled orders', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({
+          paymentStatus: 'Pending',
+          transactions: [
+            {
+              id: 'leg-1',
+              transaction_type: 'payment',
+              status: 'refund_pending',
+              amount: 100,
+              currency: 'NGN',
+              gateway: 'paystack',
+              created_at: '2026-10-01T00:00:00Z',
+            },
+          ],
+        })}
+        setOrder={setOrder}
+      />
+    );
+    expect(await screen.findByText('Refund')).toBeInTheDocument();
+  });
+  it('shows the refund panel for self-terminalized pending cancelled orders', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({
+          paymentStatus: 'Pending',
+          transactions: [
+            {
+              id: 'leg-1',
+              transaction_type: 'payment',
+              status: 'refunded',
+              amount: 100,
+              currency: 'NGN',
+              gateway: 'paypal',
+              created_at: '2026-10-01T00:00:00Z',
+            },
+          ],
+        })}
+        setOrder={setOrder}
+      />
+    );
+    // The claim finalizes self-terminal legs, so a failed or
+    // exhausted legacy row still needs its status and retry action.
+    expect(await screen.findByText('Refund')).toBeInTheDocument();
+  });
+  it('hides the refund panel for unfunded pending cancelled orders', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({ paymentStatus: 'Pending', transactions: [] })}
+        setOrder={setOrder}
+      />
+    );
+    expect(screen.queryByText('Refund')).not.toBeInTheDocument();
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  });
+  it('hides the refund panel when no payment leg moved money', async () => {
+    const setOrder = vi.fn();
+    render(
+      <OrderRefundSection
+        order={orderWith({
+          paymentStatus: 'Pending',
+          transactions: [
+            {
+              id: 'leg-1',
+              transaction_type: 'payment',
+              status: 'failed',
+              amount: 100,
+              currency: 'NGN',
+              gateway: 'paystack',
+              created_at: '2026-10-01T00:00:00Z',
+            },
+            {
+              id: 'leg-2',
+              transaction_type: 'refund',
+              status: 'completed',
+              amount: 100,
+              currency: 'NGN',
+              gateway: 'manual',
+              created_at: '2026-10-01T00:00:00Z',
+            },
+          ],
+        })}
         setOrder={setOrder}
       />
     );

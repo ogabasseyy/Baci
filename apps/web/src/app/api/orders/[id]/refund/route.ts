@@ -6,7 +6,9 @@ import { orderRefundSchema } from '@/schemas/order-refund';
 
 // Fixed user-facing messages for known refund identifiers. Raw database
 // exception text must never reach the client (CWE-209): unknown
-// identifiers fall back to the generic message.
+// identifiers fall back to the generic message. Success payloads
+// arrive pre-masked from the RPC (direct REST callers bypass this
+// route), so the summary error passes through untouched below.
 const KNOWN_REFUND_ERRORS: Record<string, string> = {
   not_authenticated: 'Authentication required',
   refund_forbidden: 'You do not have permission to manage this refund',
@@ -29,6 +31,45 @@ const KNOWN_REFUND_ERRORS: Record<string, string> = {
   refund_confirmation_required:
     'Confirm that the money already moved before recording',
 };
+
+// HTTP status per known application error. Genuine state conflicts
+// (busy, already done, reference race, review-blocked) stay 409;
+// malformed requests are 400, failed state preconditions are 422,
+// and identity errors mirror their transport status. Callers branch
+// on the code field; the status keeps caches and telemetry honest.
+const KNOWN_REFUND_STATUS: Record<string, number> = {
+  not_authenticated: 401,
+  refund_forbidden: 403,
+  order_not_found: 404,
+  cancelled_paid_order_required: 422,
+  refund_processing_or_requires_review: 409,
+  invalid_manual_refund: 400,
+  already_refunded: 409,
+  failed_refund_required: 422,
+  refund_exceeds_remaining: 422,
+  manual_reference_conflict: 409,
+  unallocated_refund_requires_review: 409,
+  manual_completion_required: 409,
+  payment_currency_requires_review: 409,
+  payment_ledger_requires_review: 409,
+  invalid_refund_action: 400,
+  refund_confirmation_required: 400,
+};
+
+// Success payloads carry the RPC's pre-mapped summary error and the
+// structured Paystack signal the panel's requires-review guidance
+// needs. Both are derived at the data layer because direct REST
+// callers bypass this route; pass them through untouched and only
+// normalize the flag's shape here.
+function maskRefundWorkerText(data: {
+  error?: unknown;
+  needsPaystackCheck?: unknown;
+}) {
+  return {
+    ...data,
+    needsPaystackCheck: data.needsPaystackCheck === true,
+  };
+}
 
 async function handle(
   request: NextRequest,
@@ -60,7 +101,7 @@ async function handle(
     );
     if (!parsed.success)
       return NextResponse.json(
-        { error: 'Invalid refund request' },
+        { error: 'Invalid refund request', code: 'invalid_refund_request' },
         { status: 400 }
       );
     const body = parsed.data;
@@ -73,12 +114,36 @@ async function handle(
         p_reference: body.reference,
         p_note: body.note ? body.note : null,
         p_confirmed: body.confirmed,
+        p_payment_transaction_id: body.paymentTransactionId ?? null,
       });
   }
   const { data, error } = await auth.supabase.rpc('manage_order_refund', args);
   if (error) {
+    // Callers only branch on the application-level code: raw SQLSTATEs
+    // stay server-side so error classes are not fingerprinted. The RPC
+    // converts its own reference race to manual_reference_conflict, so
+    // any residual 23505 here is genuinely unexpected (500), never a
+    // blanket-mapped conflict that could mask an unrelated violation.
+    // Match on whole identifier tokens: drivers can wrap the RAISE
+    // text with surrounding context, but a bare substring would also
+    // match an unrelated word that merely contains a known token
+    // (e.g. a constraint name). Token membership keeps wrapped known
+    // failures coded while unknown text falls back to internal_error.
+    // Lowercase first: without it, uppercase letters act as
+    // delimiters and a wrapper that uppercases the RAISE text would
+    // miss every match.
+    const messageTokens = (error.message ?? '')
+      .toLowerCase()
+      .split(/[^a-z0-9_]+/);
+    const matchedError = Object.keys(KNOWN_REFUND_ERRORS).find((known) =>
+      messageTokens.includes(known)
+    );
+    const code = matchedError ?? 'internal_error';
+    // A matched application error carries its own semantic status;
+    // unmatched errors keep the SQLSTATE-derived transport status.
     const status =
-      error.code === '42501'
+      (matchedError ? KNOWN_REFUND_STATUS[matchedError] : undefined) ??
+      (error.code === '42501'
         ? 403
         : error.code === '28000'
           ? 401
@@ -88,25 +153,20 @@ async function handle(
               ? 409
               : error.code === '22023'
                 ? 400
-                : 500;
-    // Callers only branch on the application-level code: raw SQLSTATEs
-    // stay server-side so error classes are not fingerprinted. The RPC
-    // converts its own reference race to manual_reference_conflict, so
-    // any residual 23505 here is genuinely unexpected (500), never a
-    // blanket-mapped conflict that could mask an unrelated violation.
-    const code =
-      KNOWN_REFUND_ERRORS[error.message] === undefined
-        ? 'internal_error'
-        : error.message;
+                : 500);
     return NextResponse.json(
       {
-        error: KNOWN_REFUND_ERRORS[error.message] ?? 'Unable to manage refund',
+        error:
+          (matchedError ? KNOWN_REFUND_ERRORS[matchedError] : undefined) ??
+          'Unable to manage refund',
         code,
       },
       { status }
     );
   }
-  return NextResponse.json(data);
+  return NextResponse.json(
+    data && typeof data === 'object' ? maskRefundWorkerText(data) : data
+  );
 }
 
 export function GET(

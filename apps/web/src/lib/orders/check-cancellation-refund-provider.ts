@@ -93,7 +93,12 @@ export async function checkCancellationRefundProvider({
   );
   const manualCandidates: number[] = [];
   for (const item of knownRefunds) {
-    if (item.status !== 'completed') continue;
+    // Both terminal statuses count, matching the preflight
+    // verification set and the proof stamp: a legacy refunded-status
+    // manual claim must pair with provider evidence like a completed
+    // one, or an empty provider listing would verify it into
+    // coverage with no money behind it.
+    if (item.status !== 'completed' && item.status !== 'refunded') continue;
     if (item.metadata?.method !== 'paystack') continue;
     if (
       normalizeRefundMoneyField(item.currency) !==

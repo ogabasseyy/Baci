@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import type { Product } from '@/types/product';
 import type { SavingsSearchParams } from './start-savings.types';
@@ -26,6 +26,7 @@ const product: Product = {
   ],
 };
 let mockParams: SavingsSearchParams = {};
+let mockMerchantId = 'merchant-1';
 const mockProducts = jest.fn<
   (input: { limit: number; search?: string }) => {
     products: Product[];
@@ -39,13 +40,9 @@ jest.mock('@/hooks/use-product-search', () => ({
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => ({ data: null, refetch: jest.fn(), isRefetching: false }),
 }));
-const mockUseDebounce = jest.fn((value: string, _delay?: number) => value);
-jest.mock('@/hooks/use-debounce', () => ({
-  useDebounce: (value: string, delay: number) => mockUseDebounce(value, delay),
-}));
 jest.mock('@/stores/auth-store', () => ({
   useAuthStore: (select: (state: { merchantId: string }) => unknown) =>
-    select({ merchantId: 'merchant-1' }),
+    select({ merchantId: mockMerchantId }),
 }));
 jest.mock('@/lib/config', () => ({
   CONFIG: { MERCHANT_ID: 'merchant-1', MERCHANT_SLUG: 'ogabassey' },
@@ -56,10 +53,36 @@ jest.mock('./use-start-savings-payment-methods', () => ({
 jest.mock('./use-start-savings-submit', () => ({
   useStartSavingsSubmit: () => ({}),
 }));
+const mockUseCapability = jest.fn<(...args: unknown[]) => unknown>();
+jest.mock('@/lib/piggyvest-primary-capability', () => ({
+  usePiggyvestPrimaryCapability: (...args: unknown[]) =>
+    mockUseCapability(...args),
+}));
 
 beforeEach(() => {
+  jest.useFakeTimers();
   jest.clearAllMocks();
   mockParams = {};
+  mockMerchantId = 'merchant-1';
+});
+
+afterEach(() => {
+  jest.clearAllTimers();
+  jest.useRealTimers();
+});
+
+it.each([
+  ['merchant-1', null, true],
+  ['merchant-1', true, true],
+  ['6b5cb8a4-5575-456c-b936-8cdfae30db74', true, false],
+  ['6b5cb8a4-5575-456c-b936-8cdfae30db74', null, true],
+  ['6b5cb8a4-5575-456c-b936-8cdfae30db74', false, true],
+])('exposes plan funding BVN requirements for merchant %s with capability %s', (merchantId, capability, requiresBvn) => {
+  mockMerchantId = merchantId as string;
+  mockUseCapability.mockReturnValue(capability);
+  const { result } = renderHook(() => useStartSavingsController());
+  expect(result.current.planFundingRequiresBvn).toBe(requiresBvn);
+  expect(result.current.fetchExistingPlanFunding).toEqual(expect.any(Function));
 });
 
 it('passes route product and variant into selection and exposes the resolved choice', () => {
@@ -129,14 +152,18 @@ it('debounces keystrokes before querying the product catalogue', () => {
   const { result } = renderHook(() => useStartSavingsController());
 
   act(() => result.current.setSearchValue('iph'));
-
-  // 300ms like storefront search; the debounced (not raw) value drives
-  // the uncancelled per-string catalogue query.
-  expect(mockUseDebounce).toHaveBeenLastCalledWith('iph', 300);
+  act(() => jest.advanceTimersByTime(200));
+  act(() => result.current.setSearchValue(' iphone '));
+  act(() => jest.advanceTimersByTime(299));
+  expect(result.current.debouncedSearch).toBe('');
+  expect(mockProducts).not.toHaveBeenCalledWith(
+    expect.objectContaining({ search: expect.any(String) })
+  );
+  act(() => jest.advanceTimersByTime(1));
   expect(mockProducts).toHaveBeenLastCalledWith({
     enabled: true,
     limit: 8,
-    search: 'iph',
+    search: 'iphone',
   });
-  expect(result.current.debouncedSearch).toBe('iph');
+  expect(result.current.debouncedSearch).toBe(' iphone ');
 });

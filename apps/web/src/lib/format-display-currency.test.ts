@@ -83,4 +83,10 @@ describe('formatDisplayCurrency', () => {
   it('throws for unsupported currency codes', () => {
     expect(() => formatDisplayCurrency(250, 'NOT_REAL')).toThrow();
   });
+
+  it('trims padded legacy currency codes instead of crashing', () => {
+    expect(formatDisplayCurrency(100, ' ngn ')).toBe(
+      formatDisplayCurrency(100, 'NGN')
+    );
+  });
 });

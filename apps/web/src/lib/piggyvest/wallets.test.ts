@@ -50,6 +50,7 @@ describe('retrievePiggyvestWallet', () => {
         message: 'Wallet details fetched',
         data: {
           id: 'f3ac0937-1d03-4843-b3d3-a09210967e49',
+          api_customer_id: 'customer-synthetic-001',
           business_id: '43e157b6-179c-432a-9392-e0827da96d82',
           virtual_account_id: null,
           currency: 'NGN',
@@ -72,6 +73,7 @@ describe('retrievePiggyvestWallet', () => {
 
     expect(wallet.balance).toBe(5000000);
     expect(wallet.status).toBe('active');
+    expect(wallet.api_customer_id).toBe('customer-synthetic-001');
     vi.unstubAllGlobals();
   });
 });

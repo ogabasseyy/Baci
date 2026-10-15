@@ -7,6 +7,7 @@ import {
 } from './assert-refund-notification-send-time';
 import { awaitRefundNotificationDeadline } from './await-refund-notification-deadline';
 import { deliverMerchantRefundNotification } from './deliver-merchant-refund-notification';
+import { isProviderBackedRefund } from './is-provider-backed-refund';
 import { refundNotificationLedgerAmount } from './refund-notification-ledger';
 
 export type RefundEmailSender = (message: {
@@ -164,7 +165,16 @@ export async function deliverClaimedRefundNotification({
     if (row.event_type === 'processed_customer_email') {
       if (!order.customer_email)
         throw new Error('refund_customer_email_missing');
-      const text = `Hello ${order.customer_name || 'there'}, we have processed the refund of ${amount} for cancelled order #${orderNumber}. Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${merchant.support_email || merchant.email}.`;
+      const hasProviderRefund = await isProviderBackedRefund({
+        merchantId: row.merchant_id,
+        orderId: order.id,
+        supabase,
+      });
+      const contact = merchant.support_email || merchant.email;
+      const arrivalText = hasProviderRefund
+        ? `Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${contact}.`
+        : `If you have any questions about your refund, contact ${contact}.`;
+      const text = `Hello ${order.customer_name || 'there'}, we have processed the refund of ${amount} for cancelled order #${orderNumber}. ${arrivalText}`;
       // Admit on the full four-attempt sender budget: starting the
       // uncapped loop short of it aborts mid-send into
       // delivery_uncertain.
@@ -198,7 +208,7 @@ export async function deliverClaimedRefundNotification({
             toName: order.customer_name ?? undefined,
             subject: `Refund processed for order #${orderNumber}`,
             textContent: text,
-            htmlContent: `<p>Hello ${escapeHtmlText(order.customer_name || 'there')},</p><p>We have processed the refund of <strong>${escapeHtmlText(amount)}</strong> for cancelled order #${escapeHtmlText(orderNumber)}.</p><p>Your bank or card provider may take up to 10 business days to show the funds. If they do not arrive, contact ${escapeHtmlText(merchant.support_email || merchant.email)}.</p>`,
+            htmlContent: `<p>Hello ${escapeHtmlText(order.customer_name || 'there')},</p><p>We have processed the refund of <strong>${escapeHtmlText(amount)}</strong> for cancelled order #${escapeHtmlText(orderNumber)}.</p><p>${escapeHtmlText(arrivalText)}</p>`,
             replyTo: merchant.support_email || merchant.email,
             fromName: merchant.email_sender_name || merchant.business_name,
             emailType: 'orders',

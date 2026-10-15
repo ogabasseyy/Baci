@@ -12,7 +12,13 @@ export interface RefundSummary {
     | 'queued'
     | 'failed'
     | 'not_started';
+  // Fixed display label mapped at the API boundary, never raw
+  // worker/provider text: the route maps the RPC's strings before
+  // responding so provider internals stay server-side.
   error: string | null;
+  // The requires-review guidance branches on this instead of sniffing
+  // the (now mapped) error text for a provider mention.
+  needsPaystackCheck: boolean;
   attempts: number;
   retryRequests: number;
   canRetry: boolean;
@@ -39,5 +45,18 @@ export interface RefundSummary {
     reference: string;
     date: string;
     recorded_by: string | null;
+  }>;
+  // Pin candidates for Paystack attestations: completed Paystack
+  // captures with money still outstanding, oldest first. Only
+  // Paystack legs are listed because preflight cannot verify an
+  // attestation pinned anywhere else. The manual form offers them
+  // when more than one exists; the RPC resolves a sole leg itself
+  // on live data (fresher than polling).
+  legs: Array<{
+    id: string;
+    amount: number;
+    outstanding: number;
+    gateway: string | null;
+    reference: string | null;
   }>;
 }

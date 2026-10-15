@@ -13,7 +13,7 @@ const summary = {
   remaining: 27574.83,
   pending: 0,
   status: 'failed',
-  error: 'Insufficient balance to process refund',
+  error: 'The refund ran into a problem. Support has the details.',
   attempts: 5,
   retryRequests: 0,
   canRetry: true,
@@ -43,16 +43,13 @@ describe('OrderRefundPanel', () => {
     });
     render(<OrderRefundPanel orderId="order-1" />);
     const button = await screen.findByRole('button', { name: 'Retry refund' });
-    // Worker errors render a fixed label; the raw string stays in
-    // the title for support, never as visible merchant-facing text.
+    // The API pre-maps worker errors to fixed labels; the panel
+    // renders the payload label directly with no raw-text tooltip.
     const label = screen.getByText(
       'The refund ran into a problem. Support has the details.'
     );
     expect(label).toBeInTheDocument();
-    expect(label).toHaveAttribute(
-      'title',
-      'Insufficient balance to process refund'
-    );
+    expect(label).not.toHaveAttribute('title');
     fireEvent.click(button);
     await waitFor(() =>
       expect(apiPost).toHaveBeenCalledWith('/api/orders/order-1/refund', {
@@ -60,46 +57,6 @@ describe('OrderRefundPanel', () => {
       })
     );
     expect(await screen.findByText('Queued')).toBeInTheDocument();
-  });
-  it('requires confirmation when recording money already returned', async () => {
-    vi.mocked(apiPost).mockResolvedValue({
-      ...summary,
-      status: 'refunded',
-      refunded: 27574.83,
-      remaining: 0,
-      canRetry: false,
-      canRecordManual: false,
-    });
-    render(<OrderRefundPanel orderId="order-1" />);
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Record manual refund' })
-    );
-    expect(
-      screen.getByRole('button', { name: 'Save manual refund' })
-    ).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('Refund date and time'), {
-      target: { value: '2026-09-28T13:00' },
-    });
-    fireEvent.change(screen.getByLabelText('Reference'), {
-      target: { value: 'bank-1' },
-    });
-    fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Save manual refund' }));
-    await waitFor(() =>
-      expect(apiPost).toHaveBeenCalledWith(
-        '/api/orders/order-1/refund',
-        expect.objectContaining({
-          action: 'manual',
-          amount: 27574.83,
-          confirmed: true,
-          reference: 'bank-1',
-        })
-      )
-    );
-    expect(await screen.findByRole('status')).toHaveTextContent('Refunded');
-    expect(
-      screen.queryByRole('button', { name: 'Retry refund' })
-    ).not.toBeInTheDocument();
   });
   it('shows load errors without enabling refund actions', async () => {
     vi.stubGlobal(
@@ -175,44 +132,6 @@ describe('OrderRefundPanel', () => {
       'Unable to load refund'
     );
   });
-  it('validates manual amount and date before submitting', async () => {
-    render(<OrderRefundPanel orderId="order-1" />);
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Record manual refund' })
-    );
-    fireEvent.change(screen.getByLabelText('Refund date and time'), {
-      target: { value: '2026-09-28T13:00' },
-    });
-    fireEvent.change(screen.getByLabelText('Reference'), {
-      target: { value: 'bank-1' },
-    });
-    fireEvent.click(screen.getByRole('checkbox'));
-    // Native input validation (required/min/type) runs before submit
-    // handlers, so submit the form directly to exercise the guards.
-    const form = screen
-      .getByRole('button', { name: 'Save manual refund' })
-      .closest('form');
-    if (!form) throw new Error('expected the manual refund form');
-    fireEvent.change(screen.getByLabelText(/Amount/), {
-      target: { value: '-5' },
-    });
-    fireEvent.submit(form);
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Enter a valid refund amount greater than zero.'
-    );
-    expect(apiPost).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText(/Amount/), {
-      target: { value: '100' },
-    });
-    fireEvent.change(screen.getByLabelText('Refund date and time'), {
-      target: { value: 'not-a-date' },
-    });
-    fireEvent.submit(form);
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Enter a valid refund date and time.'
-    );
-    expect(apiPost).not.toHaveBeenCalled();
-  });
   it('encodes the order id in refund requests', async () => {
     render(<OrderRefundPanel orderId="order/1?x" />);
     await screen.findByRole('button', { name: 'Retry refund' });
@@ -243,7 +162,7 @@ describe('OrderRefundPanel', () => {
     rerender(<OrderRefundPanel orderId="order-2" onRefunded={second} />);
     await waitFor(() => expect(second).toHaveBeenCalledTimes(1));
   });
-  it('masks raw worker text in the refund activity list', async () => {
+  it('renders the pre-mapped activity labels without tooltips', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -257,7 +176,10 @@ describe('OrderRefundPanel', () => {
               action: 'retry_requested',
               date: '2026-10-01T12:00:00Z',
               actor: null,
-              details: { error: 'Paystack/insufficient-balance (acquirer 51)' },
+              details: {
+                error:
+                  'The refund ran into a problem. Support has the details.',
+              },
             },
           ],
         }),
@@ -267,13 +189,74 @@ describe('OrderRefundPanel', () => {
     const label = await screen.findByText(
       'The refund ran into a problem. Support has the details.'
     );
-    expect(label).toHaveAttribute(
-      'title',
-      'Paystack/insufficient-balance (acquirer 51)'
-    );
-    expect(
-      screen.queryByText('Paystack/insufficient-balance (acquirer 51)')
-    ).not.toBeInTheDocument();
+    expect(label).not.toHaveAttribute('title');
+  });
+  it('stops polling once the refund reaches a terminal state', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ ...summary, status: 'refunded' }),
+        })
+      );
+      render(<OrderRefundPanel orderId="order-1" />);
+      await vi.waitFor(() =>
+        expect(screen.getAllByText('Refunded').length).toBeGreaterThan(0)
+      );
+      // Mount and terminal-transition loads settle, then quiet: a
+      // full minute must add no further status polls.
+      const settled = vi.mocked(fetch).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(settled);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('keeps polling while the refund can still change', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<OrderRefundPanel orderId="order-1" />);
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: 'Retry refund' })
+        ).toBeInTheDocument()
+      );
+      const settled = vi.mocked(fetch).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(settled);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('keeps polling a failed refund with no actions left', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            ...summary,
+            canRecordManual: false,
+            canRetry: false,
+            status: 'failed',
+          }),
+        })
+      );
+      render(<OrderRefundPanel orderId="order-1" />);
+      await vi.waitFor(() =>
+        expect(screen.getAllByText('Failed').length).toBeGreaterThan(0)
+      );
+      // The drain or provider reconciliation can still transition
+      // the row, so the poll must continue past action exhaustion.
+      const settled = vi.mocked(fetch).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(settled);
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it('clears transfer fields after recording a partial manual refund', async () => {
     vi.mocked(apiPost).mockResolvedValue({

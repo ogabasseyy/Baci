@@ -6,6 +6,7 @@ import {
   it,
   jest,
 } from '@jest/globals';
+import * as Sentry from '@sentry/react-native';
 import {
   getCrashBreadcrumbsForTest,
   installCrashDiagnostics,
@@ -28,11 +29,36 @@ describe('crash diagnostics', () => {
   let consoleErrorSpy: jest.SpiedFunction<typeof console.error>;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     resetCrashDiagnosticsForTest();
     consoleErrorSpy = jest
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
     delete globalWithErrorUtils.ErrorUtils;
+  });
+
+  it('persists safe state breadcrumbs to native Sentry without private details', () => {
+    recordCrashBreadcrumb('home:state', {
+      blockCount: 4,
+      isFocused: false,
+      customerEmail: 'private@example.com',
+      selectedCategoryId: 'private-id',
+      error: 'token=private',
+    });
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
+      category: 'app.diagnostics',
+      message: 'home:state',
+      level: 'info',
+      data: { blockCount: 4, isFocused: false },
+    });
+  });
+
+  it('keeps diagnostics and error-handler chaining working when Sentry throws', () => {
+    jest.mocked(Sentry.addBreadcrumb).mockImplementationOnce(() => {
+      throw new Error('native unavailable');
+    });
+    expect(() => recordCrashBreadcrumb('home:unmounted')).not.toThrow();
+    expect(getCrashBreadcrumbsForTest().at(-1)?.name).toBe('home:unmounted');
   });
 
   afterEach(() => {

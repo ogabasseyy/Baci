@@ -4,7 +4,9 @@
 -- finalization (order transition, settlement reversal, notifications,
 -- review close) instead of stranding the order paid. Partial manual
 -- coverage still leaves the legs uncovered, and the executor matcher
--- mirrors this rule so both gates agree.
+-- mirrors this rule so both gates agree. The legs-covered completion
+-- gate lives in the extracted helper migration (...10170000) so each
+-- file stays under the 300-line limit.
 CREATE OR REPLACE FUNCTION public.claim_order_cancellation_side_effect(
   p_order_id uuid,
   p_step text,
@@ -24,14 +26,26 @@ BEGIN
     RAISE EXCEPTION 'invalid_cancellation_side_effect';
   END IF;
 
-  SELECT o.merchant_id
+  SELECT o.merchant_id, o.currency
     INTO v_order
     FROM public.orders o
    WHERE o.id = p_order_id
      AND (
        o.shipping_status IN ('cancelled', 'canceled')
        OR o.cancelled_at IS NOT NULL
-     );
+     )
+    -- Take the same orders-row lock the manager holds for its whole
+    -- manual transaction, so claim-vs-manual serialization is explicit
+    -- at claim start: a mid-flight manual blocks this claim until it
+    -- commits (and this short, provider-call-free claim blocks a
+    -- starting manual until the row shows claimed). The side-effect
+    -- FK's KEY SHARE would serialize the late upsert anyway, but an
+    -- incidental lock is not a contract: without a shared lock here,
+    -- a manual that read a missing side-effect row could commit
+    -- between the worker's ledger read and its provider POST,
+    -- double-paying the customer. Lock order matches the manager
+    -- (orders, then side-effect): no deadlock.
+    FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'cancelled_order_not_found' USING ERRCODE = 'P0002';
   END IF;
@@ -95,119 +109,11 @@ BEGIN
      AND side_effect.status = 'claimed'
      AND side_effect.claimed_at < now() - interval '5 minutes';
 
-  IF p_step = 'refund' AND NOT EXISTS (
-    SELECT 1
-      FROM public.transactions payment
-     WHERE payment.order_id = p_order_id
-       AND payment.merchant_id = v_order.merchant_id
-       AND payment.transaction_type = 'payment'
-       -- Mirror the completion gate's funded-leg statuses: refund-state
-       -- legs (e.g. PayPal flips the payment row itself to refund_pending
-       -- while its provider refund is pending) have no separate refund
-       -- row yet, so scanning only completed legs would complete the
-       -- side effect while the order stays paid with no worker resuming
-       -- the outstanding refund.
-       AND payment.status IN ('completed', 'refund_pending')
-       AND payment.amount > 0
-       AND COALESCE(public.normalized_gateway_name_v1(payment.gateway), '') NOT IN (
-         'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
-       )
-       AND NOT EXISTS (
-         SELECT 1 FROM public.transactions refund
-          WHERE refund.order_id = p_order_id
-            AND refund.merchant_id = v_order.merchant_id
-            AND refund.transaction_type = 'refund'
-            -- Normalize gateways exactly like the executor's linked path
-            -- (whitespace-trimmed, uppercased; missing gateways never
-            -- match): exact equality would leave a legacy `Paystack` leg
-            -- uncovered here while the executor treats its `paystack`
-            -- refund as covering it, stranding the order paid with no
-            -- aggregate finalization.
-            -- Terminal refund evidence is completed or refunded (legacy
-            -- provider-confirmed rows): both count as returned money,
-            -- mirroring the manager and the status trigger.
-            AND refund.status IN ('completed', 'refunded')
-            AND refund.amount > 0
-            AND upper(btrim(refund.currency)) = upper(btrim(payment.currency))
-            -- A locally completed Paystack refund counts only after it is
-            -- provider-verified; other gateways keep local-status trust.
-            -- Normalized like the gateway match above so a legacy
-            -- `Paystack` row cannot slip through unverified while the
-            -- executor (which normalizes) waits for verification. The
-            -- normalizer maps missing gateways to NULL, keeping them
-            -- strict, as before.
-            AND (
-              (
-                public.normalized_gateway_name_v1(refund.gateway) = public.normalized_gateway_name_v1(payment.gateway)
-                AND (
-                  public.normalized_gateway_name_v1(refund.gateway) <> 'PAYSTACK'
-                  OR refund.metadata->>'provider_refund_status' = 'processed'
-                )
-            AND (
-              refund.metadata->>'payment_transaction_id' = payment.id::text
-              OR (
-                refund.metadata->>'payment_transaction_id' IS NULL
-                -- As in the completion gate: the unlinked refund
-                -- attributes to the sole completed leg only, never to a
-                -- refund_pending leg whose own provider refund is still
-                -- outstanding.
-                AND payment.status = 'completed'
-                AND 1 = (
-                  SELECT count(*) FROM public.transactions only_payment
-                   WHERE only_payment.order_id = p_order_id
-                     AND only_payment.merchant_id = v_order.merchant_id
-                     AND only_payment.transaction_type = 'payment'
-                     AND only_payment.status = 'completed'
-                     AND only_payment.amount > 0
-                     AND COALESCE(public.normalized_gateway_name_v1(only_payment.gateway), '') NOT IN (
-                       'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
-                       'PAY_ON_DELIVERY'
-                     )
-                )
-              )
-            )
-              -- Merchant-attested manual rows link explicitly and count as
-              -- coverage in matching money, mirroring the executor
-              -- matcher; they never sole-attribute, so an unlinked manual
-              -- row stays out of coverage for review.
-              OR (
-                public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
-                AND refund.metadata->>'payment_transaction_id' = payment.id::text
-              )
-            )
-            )
-          -- Partial refunds accumulate: the leg is covered when matching
-          -- rows sum to at least its amount, mirroring the executor rule.
-          HAVING coalesce(sum(refund.amount), 0) >= payment.amount
-       )
-  ) AND NOT EXISTS (
-    -- Mixed orders finalize only once their manual-only legs are
-    -- covered too: an outstanding cash balance must keep the claim
-    -- in the worker branch (where the matcher defers it as
-    -- manual-pending) instead of finalizing early with money still
-    -- owed. Wallet and savings legs stay out as before: they
-    -- reverse through their own ledgers, never through coverage.
-    SELECT 1 FROM public.transactions internal_leg
-     WHERE internal_leg.order_id = p_order_id
-       AND internal_leg.merchant_id = v_order.merchant_id
-       AND internal_leg.transaction_type = 'payment'
-       AND internal_leg.status IN ('completed', 'refund_pending')
-       AND internal_leg.amount > 0
-       AND COALESCE(public.normalized_gateway_name_v1(internal_leg.gateway), '') IN (
-         'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
-       )
-       AND (
-         SELECT COALESCE(SUM(refund.amount), 0)
-           FROM public.transactions refund
-          WHERE refund.order_id = p_order_id
-            AND refund.merchant_id = v_order.merchant_id
-            AND refund.transaction_type = 'refund'
-            AND refund.status IN ('completed', 'refunded')
-            AND refund.amount > 0
-            AND UPPER(BTRIM(refund.currency)) = UPPER(BTRIM(internal_leg.currency))
-            AND public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
-            AND refund.metadata->>'payment_transaction_id' = internal_leg.id::text
-       ) < internal_leg.amount
+  -- Coverage detail lives in the extracted legs-covered helper
+  -- (split for the 300-line boundary); the side-effect state
+  -- transitions below stay here.
+  IF p_step = 'refund' AND private.cancellation_refund_legs_covered_v1(
+    p_order_id, v_order.merchant_id, v_order.currency
   ) THEN
     -- Every funded leg has terminal refund evidence, but the last leg may
     -- have landed through a silent self-terminal refund no worker

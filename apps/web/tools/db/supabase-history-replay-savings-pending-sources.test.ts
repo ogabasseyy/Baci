@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { EXPECTED_PENDING_SOURCES } from './expected-pending-sources.test-support';
+import { EXPECTED_PIGGYVEST_MAIN_PENDING_SOURCES } from './expected-piggyvest-main-pending-sources.test-support';
+import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_SAVINGS_ENGAGEMENT_PENDING_SOURCES } from './expected-savings-engagement-pending-sources.test-support';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 
@@ -54,6 +56,25 @@ const engagementFilenames = EXPECTED_SAVINGS_ENGAGEMENT_PENDING_SOURCES.map(
 );
 
 describe('savings pending migration registration', () => {
+  it.each([
+    ...EXPECTED_PIGGYVEST_MAIN_PENDING_SOURCES,
+    ...EXPECTED_PRIMARY_PENDING_SOURCES,
+  ])('preserves canonical main and primary pins for $repositoryPath', async (source) => {
+    expect(
+      supabaseHistoryReplayManifest.pendingSources.filter(
+        (entry) => entry.repositoryPath === source.repositoryPath
+      )
+    ).toEqual([source]);
+    expect(
+      EXPECTED_PENDING_SOURCES.filter(
+        (entry) => entry.repositoryPath === source.repositoryPath
+      )
+    ).toEqual([source]);
+    const bytes = await readFile(path.join(root, source.repositoryPath));
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(
+      source.sha256
+    );
+  });
   it.each(
     filenames
   )('pins the exact reviewed bytes of %s', async (filename) => {

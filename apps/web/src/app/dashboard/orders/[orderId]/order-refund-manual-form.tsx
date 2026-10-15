@@ -10,11 +10,14 @@ export function OrderRefundManualForm({
   confirmed,
   currency,
   date,
+  legId,
+  legOptions,
   method,
   note,
   onAmountChange,
   onConfirmedChange,
   onDateChange,
+  onLegIdChange,
   onMethodChange,
   onNoteChange,
   onReferenceChange,
@@ -27,11 +30,14 @@ export function OrderRefundManualForm({
   confirmed: boolean;
   currency: string;
   date: string;
+  legId: string;
+  legOptions: Array<{ id: string; label: string }>;
   method: string;
   note: string;
   onAmountChange: (value: string) => void;
   onConfirmedChange: (value: boolean) => void;
   onDateChange: (value: string) => void;
+  onLegIdChange: (value: string) => void;
   onMethodChange: (value: string) => void;
   onNoteChange: (value: string) => void;
   onReferenceChange: (value: string) => void;
@@ -62,7 +68,7 @@ export function OrderRefundManualForm({
         value={amount}
         onChange={(e) => onAmountChange(e.target.value)}
       />
-      <Label htmlFor="refund-date">Refund date and time</Label>
+      <Label htmlFor="refund-date">Refund date and time (Nigeria time)</Label>
       <Input
         id="refund-date"
         type="datetime-local"
@@ -82,6 +88,25 @@ export function OrderRefundManualForm({
         <option value="cash">Cash</option>
         <option value="other">Other</option>
       </select>
+      {legOptions.length > 0 && (
+        <>
+          <Label htmlFor="refund-leg">Paystack capture</Label>
+          <select
+            id="refund-leg"
+            className="w-full rounded-md border p-2"
+            required
+            value={legId}
+            onChange={(e) => onLegIdChange(e.target.value)}
+          >
+            <option value="">Select the refunded capture…</option>
+            {legOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
       <Label htmlFor="refund-reference">Reference</Label>
       <Input
         id="refund-reference"

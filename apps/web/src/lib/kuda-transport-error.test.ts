@@ -57,6 +57,20 @@ describe('isKudaOutcomeUnknown', () => {
     ).toBe(false);
   });
 
+  it('treats HTTP 408 as ambiguous while other 4xx fail fast', () => {
+    // Codex R107 P1: a 408 means the dispatched body may have
+    // reached Kuda — reconcile, never refund-on-deliver.
+    expect(
+      isKudaOutcomeUnknown(new KudaApiHttpError(408, 'Request Timeout'))
+    ).toBe(true);
+    expect(isKudaOutcomeUnknown(new KudaApiHttpError(400, 'Bad Request'))).toBe(
+      false
+    );
+    expect(isKudaOutcomeUnknown(new KudaApiHttpError(404, 'Not Found'))).toBe(
+      false
+    );
+  });
+
   it('fails closed to unknown for anything else thrown post-attempt', () => {
     // A parser bug after a landed vend must requery, never refund:
     // stuck-pending is visible, a wrongful refund is silent loss.

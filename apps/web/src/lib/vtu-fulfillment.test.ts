@@ -1375,6 +1375,74 @@ describe('fulfillPendingVtuTransaction', () => {
     );
   });
 
+  it('still sends the token email when the earlier receipt outcome is unknown', async () => {
+    // Codex R107 P2: an uncertain receipt must not block the
+    // distinct token-ready email once the PIN exists — the state
+    // machine sends token (not receipt), and the receipt itself is
+    // never retried.
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      merchantData: {
+        business_name: 'OgaBassey',
+        slug: 'ogabassey',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          customerReceiptEmailNotificationSent: false,
+          customerReceiptEmailNotificationSentDeliveryOutcome: 'unknown',
+          voucherPin: 'TOKEN-READY-1234',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockSendEmail).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'claim_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_key: 'customerTokenEmailNotificationAttempted',
+      })
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'claim_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_key: 'customerReceiptEmailNotificationAttempted',
+      })
+    );
+    expect(updatePayloads).toContainEqual({
+      metadata: expect.objectContaining({
+        customerTokenEmailNotificationSent: true,
+      }),
+    });
+  });
+
   it('leaves a reclaimed email lease untouched when our clear is stale', async () => {
     const updatePayloads: unknown[] = [];
     mockSendEmail.mockResolvedValueOnce({ success: false });

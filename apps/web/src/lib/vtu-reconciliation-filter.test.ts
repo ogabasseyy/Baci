@@ -66,7 +66,7 @@ describe('getReconciliableStatusFilter', () => {
     );
     // R90 token backfill with R93 legacy receipt markers.
     expect(filter).toContain(
-      'or(metadata->>customerReceiptEmailNotificationSent.eq.true,metadata->>customerEmailNotificationSent.eq.true,metadata->>customerPendingTokenEmailNotificationSent.eq.true)'
+      'or(metadata->>customerReceiptEmailNotificationSent.eq.true,metadata->>customerEmailNotificationSent.eq.true,metadata->>customerPendingTokenEmailNotificationSent.eq.true,metadata->>customerReceiptEmailNotificationSentDeliveryOutcome.eq.unknown,metadata->>customerEmailNotificationSentDeliveryOutcome.eq.unknown)'
     );
     // R82: no boolean `is.true/is.false` on text extraction.
     expect(filter).not.toMatch(/->>[a-zA-Z0-9_]+(\.not)?\.is\.(true|false)/);

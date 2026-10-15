@@ -97,8 +97,19 @@ export const RECONCILABLE_VTU_TYPES = [
 // rows need no special case: the R86 arm already re-drives them,
 // and the re-drive notifies with the PIN in hand. Re-driving is
 // safe (settle-only; the token claim serializes concurrency).
+// Receipt-proof for the token-backfill arm accepts a sent receipt OR
+// an uncertain one (Codex R107 P2): when the receipt send was
+// accepted-but-unacknowledged, the row must still unlock the
+// distinct token-ready email once backfill adds the PIN — without
+// retrying the original receipt (the failure arms keep excluding
+// unknown outcomes; the state machine sends token, not receipt,
+// whenever the PIN is present).
+const TOKEN_BACKFILL_RECEIPT_PROOF =
+  'or(metadata->>customerReceiptEmailNotificationSent.eq.true,metadata->>customerEmailNotificationSent.eq.true,metadata->>customerPendingTokenEmailNotificationSent.eq.true,metadata->>customerReceiptEmailNotificationSentDeliveryOutcome.eq.unknown,metadata->>customerEmailNotificationSentDeliveryOutcome.eq.unknown)';
 const TOKEN_BACKFILL_ARM =
-  'and(or(type.eq.electricity,type.eq.cable_tv,type.eq.betting),customer_id.not.is.null,metadata->>voucherPin.not.is.null,or(metadata->>customerReceiptEmailNotificationSent.eq.true,metadata->>customerEmailNotificationSent.eq.true,metadata->>customerPendingTokenEmailNotificationSent.eq.true),metadata->>customerTokenEmailNotificationSent.is.null,metadata->>customerTokenEmailNotificationAttempted.is.null)';
+  'and(or(type.eq.electricity,type.eq.cable_tv,type.eq.betting),customer_id.not.is.null,metadata->>voucherPin.not.is.null,' +
+  TOKEN_BACKFILL_RECEIPT_PROOF +
+  ',metadata->>customerTokenEmailNotificationSent.is.null,metadata->>customerTokenEmailNotificationAttempted.is.null)';
 function getEmailStuckClaimDisjunct({
   attemptedKey,
   attemptedAtKey,

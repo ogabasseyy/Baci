@@ -45,7 +45,14 @@ export function isKudaOutcomeUnknown(error: unknown): boolean {
   if (error instanceof KudaApiHttpError) {
     // Definitive rejection (unknown reference, bad amount, …) —
     // safe to fail and refund. 5xx may have landed: unknown.
-    return error.status >= 500;
+    // HTTP 408 is the ambiguous 4xx (Codex R107 P1): the request
+    // body was dispatched and the vend may have reached Kuda, so
+    // it reconciles through BILL_TSQ like a 5xx instead of
+    // refunding on top of delivered value. (A 408 from GetToken
+    // never reaches this branch — token acquisition wraps all
+    // non-OK responses as pre-dispatch, correctly: no token,
+    // no vend.)
+    return error.status === 408 || error.status >= 500;
   }
   // Timeout (Error('…timed out') and DOMException aborts, which skip
   // the instanceof Error conversion in kudaRequest), connection

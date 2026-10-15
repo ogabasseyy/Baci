@@ -1,6 +1,7 @@
 import { redactCodexOutput } from './remediation-codex-output.mjs';
 
 const CATEGORIES = new Set([
+  'posthog_issue',
   'sentry_issue',
   'unknown_error',
   'vercel_http_5xx',
@@ -61,7 +62,9 @@ export function createRemediationCaseCandidateNormalizer() {
 
   function sourceFor(candidate) {
     const source = sanitize(candidate?.source || candidate?.sample?.source, 40);
-    return source === 'sentry' || source === 'vercel' ? source : 'unknown';
+    return source === 'sentry' || source === 'vercel' || source === 'posthog'
+      ? source
+      : 'unknown';
   }
 
   function categoryFor(candidate, source) {
@@ -107,18 +110,20 @@ export function createRemediationCaseCandidateNormalizer() {
     };
     const normalized = { source };
     for (const [field, length] of Object.entries(fields)) {
-      const value =
-        source === 'sentry' &&
-        ['issueId', 'organization', 'project'].includes(field)
-          ? sanitizeSentryIdentity(sample[field], length)
-          : ['message', 'route'].includes(field)
-            ? sanitizeHumanText(
-                field === 'route'
-                  ? String(sample[field] || '').split(/[?#]/, 1)[0]
-                  : sample[field],
-                length
-              )
-            : sanitize(sample[field], length);
+      const strictIdentity =
+        (source === 'sentry' &&
+          ['issueId', 'organization', 'project'].includes(field)) ||
+        (source === 'posthog' && field === 'issueId');
+      const value = strictIdentity
+        ? sanitizeSentryIdentity(sample[field], length)
+        : ['message', 'route'].includes(field)
+          ? sanitizeHumanText(
+              field === 'route'
+                ? String(sample[field] || '').split(/[?#]/, 1)[0]
+                : sample[field],
+              length
+            )
+          : sanitize(sample[field], length);
       if (value) normalized[field] = value;
     }
     if (Array.isArray(sample.stackSummary)) {

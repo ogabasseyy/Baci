@@ -21,19 +21,33 @@ import { supabase } from '@/lib/supabase';
 import type { CartItem } from '@/stores/cart-store';
 import {
   type CartConditionChange,
+  type CartOfferAdoption,
   type CartPriceChange,
   type CartUnavailableLine,
+  collectLegacyOfferLineProductIds,
   collectOfferLineProductIds,
   fetchLiveOfferRepriceMap,
   getDriftedOfferCondition,
   hasLinePriceDrift,
+  isParentPricedOfferlessLine,
   pickChangedConditionById,
+  pickChangedOfferIdById,
   pickChangedPriceById,
+  resolveLegacyOfferId,
   resolveOfferLinePrice,
 } from './cart-reprice-offer-lines';
 
-export type { CartConditionChange, CartPriceChange, CartUnavailableLine };
-export { pickChangedConditionById, pickChangedPriceById };
+export type {
+  CartConditionChange,
+  CartOfferAdoption,
+  CartPriceChange,
+  CartUnavailableLine,
+};
+export {
+  pickChangedConditionById,
+  pickChangedOfferIdById,
+  pickChangedPriceById,
+};
 
 const log = createLogger('CartReprice');
 
@@ -57,6 +71,14 @@ export interface RepriceResult {
   /** Lines whose row vanished after a successful lookup. Failed lookups
    * fail open and never land here; checkout must stop for these. */
   unavailable: CartUnavailableLine[];
+  /**
+   * Adopted exact offer ids for legacy offerless lines, keyed by cart
+   * line id. The adopted line reprices from the live offer row like an
+   * exact offer line, so checkout accepts it.
+   */
+  offerIdById: Record<string, string>;
+  /** Legacy lines that adopted an unambiguous live offer this round. */
+  adoptions: CartOfferAdoption[];
 }
 
 type VariantOverrideRow = {
@@ -71,6 +93,8 @@ const EMPTY_RESULT: RepriceResult = {
   changes: [],
   conditionChanges: [],
   unavailable: [],
+  offerIdById: {},
+  adoptions: [],
 };
 
 export async function repriceCartItems(
@@ -94,11 +118,12 @@ export async function repriceCartItems(
     );
 
     // Base prices (active products only — mirrors the order RPC's catalog read).
-    // `has_condition_offers` flags products whose non-variant lines are priced
-    // from `product_offers` (open_box/used) instead of `products.price`.
+    // `has_condition_offers` flags products with live offer rows; the parent
+    // `condition` distinguishes a true parent-priced base line from a legacy
+    // offer line that predates exact offer ids.
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, price, has_condition_offers')
+      .select('id, price, has_condition_offers, condition')
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .in('id', productIds);
@@ -113,11 +138,13 @@ export async function repriceCartItems(
 
     const productPrice = new Map<string, number>();
     const conditionOfferProducts = new Set<string>();
+    const parentCondition = new Map<string, string | null>();
     for (const product of products) {
       productPrice.set(product.id, Number(product.price));
       if (product.has_condition_offers) {
         conditionOfferProducts.add(product.id);
       }
+      parentCondition.set(product.id, product.condition ?? null);
     }
 
     // Variant overrides via the same RLS-safe RPC the order validation uses.
@@ -160,11 +187,18 @@ export async function repriceCartItems(
       }
     }
 
-    // Live offer rows for exact offer lines. A failed lookup skips offer
-    // lines rather than falling back to base prices, which would corrupt
-    // a valid offer price.
+    // Live offer rows for exact offer lines AND legacy offerless lines on
+    // offer-products (the latter need the rows for unambiguous adoption).
+    // A failed lookup skips offer lines rather than falling back to base
+    // prices, which would corrupt a valid offer price.
+    const offerFetchProductIds = Array.from(
+      new Set([
+        ...collectOfferLineProductIds(items),
+        ...collectLegacyOfferLineProductIds(items, conditionOfferProducts),
+      ])
+    );
     const { map: offerPrice, failed: offerLookupFailed } =
-      await fetchLiveOfferRepriceMap(collectOfferLineProductIds(items));
+      await fetchLiveOfferRepriceMap(offerFetchProductIds);
 
     const result: RepriceResult = {
       priceById: {},
@@ -172,6 +206,8 @@ export async function repriceCartItems(
       changes: [],
       conditionChanges: [],
       unavailable: [],
+      offerIdById: {},
+      adoptions: [],
     };
     for (const item of items) {
       // Voucher reward lines (quiz awards, price 0) are validated by the
@@ -188,16 +224,60 @@ export async function repriceCartItems(
         continue;
       }
 
+      // Offerless non-variant lines on products with condition offers
+      // split two ways (the order RPC prices every such line from the
+      // parent unless it carries an exact offer id):
+      // - parent-priced base lines (no condition, or the parent's own
+      //   condition) fall through to the normal base-price path below;
+      //   skipping them would leave a merchant base-price edit unapplied
+      //   until checkout rejects the stale total.
+      // - legacy offer lines (a non-parent condition, persisted before
+      //   exact offer ids) adopt the unambiguous live offer for their
+      //   stored condition, or are unavailable when no single offer
+      //   matches — checkout would otherwise price them as parent lines
+      //   and reject the cart.
+      let effectiveItem = item;
+      let adoptedOfferId: string | null = null;
+      if (
+        !item.variant_id &&
+        !(typeof item.offer_id === 'string' && item.offer_id.length > 0) &&
+        conditionOfferProducts.has(item.product_id)
+      ) {
+        if (
+          isParentPricedOfferlessLine(
+            item,
+            parentCondition.get(item.product_id)
+          )
+        ) {
+          // Base line: fall through to the productPrice path below.
+        } else if (offerLookupFailed) {
+          continue;
+        } else {
+          adoptedOfferId = resolveLegacyOfferId(item, offerPrice);
+          if (!adoptedOfferId) {
+            result.unavailable.push({ id: item.id, name: item.name });
+            continue;
+          }
+          effectiveItem = { ...item, offer_id: adoptedOfferId };
+          result.offerIdById[item.id] = adoptedOfferId;
+          result.adoptions.push({
+            id: item.id,
+            name: item.name,
+            offerId: adoptedOfferId,
+          });
+        }
+      }
+
       // Exact offer lines reprice from the live offer row. A failed lookup
       // skips the line, but a vanished offer after a successful lookup
       // is unavailable (the orders route would reject it).
       if (
-        !item.variant_id &&
-        typeof item.offer_id === 'string' &&
-        item.offer_id.length > 0
+        !effectiveItem.variant_id &&
+        typeof effectiveItem.offer_id === 'string' &&
+        effectiveItem.offer_id.length > 0
       ) {
         if (!offerLookupFailed) {
-          const live = resolveOfferLinePrice(item, offerPrice);
+          const live = resolveOfferLinePrice(effectiveItem, offerPrice);
           if (!live) {
             result.unavailable.push({ id: item.id, name: item.name });
           } else {
@@ -239,16 +319,6 @@ export async function repriceCartItems(
         continue;
       }
 
-      // Non-variant lines WITHOUT an exact offer on products with condition
-      // offers (open_box/used) are priced from `product_offers`, not
-      // `products.price`. We cannot resolve which offer price applies, so
-      // skip them — repricing to the base price would corrupt a valid offer
-      // price and raise a bogus drift alert. Checkout still validates these
-      // lines against the live offer separately.
-      if (!item.variant_id && conditionOfferProducts.has(item.product_id)) {
-        continue;
-      }
-
       const basePrice = productPrice.get(item.product_id);
       if (basePrice == null) {
         // The lookup above succeeded, so a missing row means the product
@@ -256,10 +326,23 @@ export async function repriceCartItems(
         result.unavailable.push({ id: item.id, name: item.name });
         continue;
       }
+      // A variant row that is missing (deleted/inactive) or belongs to
+      // another product after a successful lookup is unavailable: the
+      // order RPC joins variants with `v.product_id = p.id` and rejects
+      // the whole order with `invalid_variant`. Falling back to the base
+      // price would sail past the removal alert and fail at checkout. A
+      // row that exists with a null override still inherits the parent
+      // price below. (Lookup failure already skipped these lines above.)
+      if (item.variant_id && !variantLookupFailed) {
+        const row = variantOverride.get(item.variant_id);
+        if (!row || row.productId !== item.product_id) {
+          result.unavailable.push({ id: item.id, name: item.name });
+          continue;
+        }
+      }
       // Authoritative unit price: variant.price_override ?? product.price.
-      // Only honor an override whose variant actually belongs to this line's
-      // product (guards stale/corrupt lines), mirroring the checkout parity
-      // `candidateVariant.product_id === item.product_id` check.
+      // Missing/wrong-product rows already resolved to unavailable above;
+      // a null override on a live row still inherits the parent price.
       const override = item.variant_id
         ? variantOverride.get(item.variant_id)
         : undefined;

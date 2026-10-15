@@ -6,6 +6,7 @@ type ProductsResponse = {
     id: string;
     price: number | string;
     has_condition_offers?: boolean;
+    condition?: string | null;
   }> | null;
   error: { message: string } | null;
 };
@@ -109,6 +110,8 @@ describe('repriceCartItems', () => {
       changes: [],
       conditionChanges: [],
       unavailable: [],
+      offerIdById: {},
+      adoptions: [],
     });
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
@@ -123,6 +126,8 @@ describe('repriceCartItems', () => {
       changes: [],
       conditionChanges: [],
       unavailable: [],
+      offerIdById: {},
+      adoptions: [],
     });
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
@@ -161,7 +166,7 @@ describe('repriceCartItems', () => {
 
     expect(mockFrom).toHaveBeenCalledWith('products');
     expect(productQuery.select).toHaveBeenCalledWith(
-      'id, price, has_condition_offers'
+      'id, price, has_condition_offers, condition'
     );
     expect(productQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(productQuery.eq).toHaveBeenCalledWith('status', 'active');
@@ -271,6 +276,8 @@ describe('repriceCartItems', () => {
       changes: [],
       conditionChanges: [],
       unavailable: [],
+      offerIdById: {},
+      adoptions: [],
     });
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockWarn).toHaveBeenCalledWith(
@@ -325,7 +332,7 @@ describe('repriceCartItems', () => {
     );
   });
 
-  it('ignores a variant override that belongs to a different product', async () => {
+  it('marks a variant line unavailable when its override belongs to a different product', async () => {
     const item = createCartItem({
       id: 'variant-line',
       product_id: 'product-1',
@@ -337,7 +344,10 @@ describe('repriceCartItems', () => {
       error: null,
     });
     // The override row's variant belongs to a DIFFERENT product (stale/corrupt
-    // cart line), so it must be ignored and the base price used instead.
+    // cart line). The order RPC joins variants with `v.product_id = p.id`
+    // and rejects with `invalid_variant`, so the line is unavailable —
+    // falling back to the base price would sail past the removal alert
+    // and fail at checkout.
     mockRpc.mockResolvedValue({
       data: [
         {
@@ -351,7 +361,57 @@ describe('repriceCartItems', () => {
 
     const result = await repriceCartItems([item], 'merchant-1');
 
+    expect(result.priceById).toEqual({});
+    expect(result.unavailable).toEqual([
+      { id: 'variant-line', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('inherits the parent price when the live variant row has a null override', async () => {
+    const item = createCartItem({
+      id: 'variant-line',
+      product_id: 'product-1',
+      variant_id: 'variant-1',
+      price: 390000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [{ id: 'product-1', price: 430000 }],
+      error: null,
+    });
+    mockRpc.mockResolvedValue({
+      data: [
+        { id: 'variant-1', product_id: 'product-1', price_override: null },
+      ],
+      error: null,
+    });
+
+    const result = await repriceCartItems([item], 'merchant-1');
+
     expect(result.priceById).toEqual({ 'variant-line': 430000 });
+    expect(result.unavailable).toEqual([]);
+  });
+
+  it('marks a variant line unavailable when its row is missing after a successful lookup', async () => {
+    const item = createCartItem({
+      id: 'variant-line',
+      product_id: 'product-1',
+      variant_id: 'variant-deleted',
+      price: 390000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [{ id: 'product-1', price: 430000 }],
+      error: null,
+    });
+    // Successful lookup, but the variant row is gone (deleted/inactive):
+    // checkout would reject with `invalid_variant`.
+    mockRpc.mockResolvedValue({ data: [], error: null });
+
+    const result = await repriceCartItems([item], 'merchant-1');
+
+    expect(result.priceById).toEqual({});
+    expect(result.unavailable).toEqual([
+      { id: 'variant-line', name: 'iPhone 13' },
+    ]);
   });
 
   it('skips voucher reward lines (free awards are not repriced)', async () => {
@@ -375,32 +435,175 @@ describe('repriceCartItems', () => {
     expect(result.priceById).toEqual({ 'paid-line': 430000 });
   });
 
-  it('skips non-variant lines on products that carry condition offers', async () => {
-    // Condition offers (open_box/used) are priced from product_offers, so the
-    // base products.price would corrupt the stored offer price.
-    const conditionOfferLine = createCartItem({
-      id: 'offer-line',
+  it('reprices parent-priced base lines on products that carry condition offers', async () => {
+    // The order RPC prices every offerless non-variant line from
+    // products.price, so a base line (no condition, or the parent's own
+    // condition) tracks the parent price even when the product also
+    // carries condition offers.
+    const bareBaseLine = createCartItem({
+      id: 'bare-base-line',
       product_id: 'offer-product',
-      condition: 'Open Box',
-      price: 300000,
+      price: 390000,
     });
-    const baseLine = createCartItem({ id: 'base-line', price: 390000 });
+    const newBaseLine = createCartItem({
+      id: 'new-base-line',
+      product_id: 'offer-product',
+      condition: 'new',
+      price: 390000,
+    });
     productQuery.in.mockResolvedValue({
       data: [
-        { id: 'offer-product', price: 430000, has_condition_offers: true },
-        { id: 'product-1', price: 410000, has_condition_offers: false },
+        {
+          id: 'offer-product',
+          price: 430000,
+          has_condition_offers: true,
+          condition: 'new',
+        },
       ],
       error: null,
     });
 
     const result = await repriceCartItems(
-      [conditionOfferLine, baseLine],
+      [bareBaseLine, newBaseLine],
       'merchant-1'
     );
 
-    // The offer line is left untouched; the base line reprices to live price.
-    expect(result.priceById).toEqual({ 'base-line': 410000 });
-    expect(result.changes.map((change) => change.id)).toEqual(['base-line']);
+    expect(result.priceById).toEqual({
+      'bare-base-line': 430000,
+      'new-base-line': 430000,
+    });
+    expect(result.unavailable).toEqual([]);
+  });
+
+  it('adopts the unambiguous live offer for a legacy offerless line', async () => {
+    // Persisted before exact offer ids: an offer condition and price but
+    // no offer_id. Exactly one live offer matches the stored condition,
+    // so the line adopts it and reprices from the live offer row.
+    const legacyLine = createCartItem({
+      id: 'legacy-line',
+      product_id: 'offer-product',
+      condition: 'Open Box',
+      price: 300000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        {
+          id: 'offer-product',
+          price: 430000,
+          has_condition_offers: true,
+          condition: 'new',
+        },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [
+        { id: 'offer-1', price: 310000, condition: 'open_box' },
+      ],
+    });
+
+    const result = await repriceCartItems([legacyLine], 'merchant-1');
+
+    expect(result.offerIdById).toEqual({ 'legacy-line': 'offer-1' });
+    expect(result.adoptions).toEqual([
+      { id: 'legacy-line', name: 'iPhone 13', offerId: 'offer-1' },
+    ]);
+    expect(result.priceById).toEqual({ 'legacy-line': 310000 });
+    expect(result.unavailable).toEqual([]);
+  });
+
+  it('marks a legacy line unavailable when no live offer matches its condition', async () => {
+    const legacyLine = createCartItem({
+      id: 'legacy-line',
+      product_id: 'offer-product',
+      condition: 'Open Box',
+      price: 300000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        {
+          id: 'offer-product',
+          price: 430000,
+          has_condition_offers: true,
+          condition: 'new',
+        },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [{ id: 'offer-9', price: 200000, condition: 'used' }],
+    });
+
+    const result = await repriceCartItems([legacyLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({});
+    expect(result.unavailable).toEqual([
+      { id: 'legacy-line', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('marks a legacy line unavailable when two live offers share its condition', async () => {
+    const legacyLine = createCartItem({
+      id: 'legacy-line',
+      product_id: 'offer-product',
+      condition: 'Open Box',
+      price: 300000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        {
+          id: 'offer-product',
+          price: 430000,
+          has_condition_offers: true,
+          condition: 'new',
+        },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [
+        { id: 'offer-1', price: 310000, condition: 'open_box' },
+        { id: 'offer-2', price: 320000, condition: 'Open Box' },
+      ],
+    });
+
+    const result = await repriceCartItems([legacyLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({});
+    expect(result.unavailable).toEqual([
+      { id: 'legacy-line', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('skips legacy lines (but not base lines) when the offer lookup fails', async () => {
+    const legacyLine = createCartItem({
+      id: 'legacy-line',
+      product_id: 'offer-product',
+      condition: 'Open Box',
+      price: 300000,
+    });
+    const baseLine = createCartItem({
+      id: 'base-line',
+      product_id: 'offer-product',
+      price: 390000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        {
+          id: 'offer-product',
+          price: 430000,
+          has_condition_offers: true,
+          condition: 'new',
+        },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue(null);
+
+    const result = await repriceCartItems([legacyLine, baseLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({ 'base-line': 430000 });
+    expect(result.unavailable).toEqual([]);
   });
 
   it('reprices exact offer lines from the live offer price', async () => {

@@ -130,4 +130,33 @@ describe('applyReprice', () => {
     );
     expect(items[0]).toBe(line);
   });
+
+  it('adopts an exact offer id and clears the negotiation even without a price drift', () => {
+    const line = offerLine({
+      offer_id: undefined,
+      price: 310000,
+      negotiatedPrice: 300000,
+      negotiationStatus: 'accepted',
+    });
+    const { items } = applyReprice(
+      { items: [line], cartWideNegotiationActive: false },
+      { 'line-1': 310000 },
+      {},
+      { 'line-1': 'offer-1' }
+    );
+    expect(items[0].offer_id).toBe('offer-1');
+    expect(items[0].negotiatedPrice).toBeUndefined();
+    expect(items[0].negotiationStatus).toBeUndefined();
+  });
+
+  it('ignores an adopted id identical to the stored one', () => {
+    const line = offerLine({ offer_id: 'offer-1' });
+    const { items } = applyReprice(
+      { items: [line], cartWideNegotiationActive: false },
+      {},
+      {},
+      { 'line-1': 'offer-1' }
+    );
+    expect(items[0]).toBe(line);
+  });
 });

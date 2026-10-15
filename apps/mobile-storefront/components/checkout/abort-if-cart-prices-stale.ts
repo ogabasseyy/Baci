@@ -1,6 +1,7 @@
 import { Alert } from 'react-native';
 import {
   pickChangedConditionById,
+  pickChangedOfferIdById,
   pickChangedPriceById,
   repriceCartItems,
 } from '@/services/cart-reprice';
@@ -34,14 +35,16 @@ export async function abortIfCartPricesStale(
   }
   const priceMoved = reprice.changes.length > 0;
   const conditionMoved = reprice.conditionChanges.length > 0;
-  if (!priceMoved && !conditionMoved) {
+  const offerAdopted = reprice.adoptions.length > 0;
+  if (!priceMoved && !conditionMoved && !offerAdopted) {
     return false;
   }
   useCartStore
     .getState()
     .repriceItems(
       pickChangedPriceById(reprice),
-      pickChangedConditionById(reprice)
+      pickChangedConditionById(reprice),
+      pickChangedOfferIdById(reprice)
     );
   // A condition-only refresh still aborts so the reconciled line is what
   // checkout submits — but the message must describe the actual change,

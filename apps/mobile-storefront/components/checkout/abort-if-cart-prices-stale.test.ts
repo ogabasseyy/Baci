@@ -9,6 +9,7 @@ jest.mock('@/services/cart-reprice', () => ({
   repriceCartItems: jest.fn(),
   pickChangedPriceById: jest.fn(() => ({})),
   pickChangedConditionById: jest.fn(() => ({})),
+  pickChangedOfferIdById: jest.fn(() => ({})),
 }));
 
 jest.mock('@/stores/cart-store', () => ({
@@ -38,6 +39,8 @@ describe('abortIfCartPricesStale', () => {
       changes: [],
       conditionChanges: [],
       unavailable: [{ id: 'line-1', name: 'iPhone 13' }],
+      offerIdById: {},
+      adoptions: [],
     });
     const alertSpy = jest
       .spyOn(Alert, 'alert')
@@ -62,10 +65,40 @@ describe('abortIfCartPricesStale', () => {
       changes: [],
       conditionChanges: [],
       unavailable: [],
+      offerIdById: {},
+      adoptions: [],
     });
 
     const result = await abortIfCartPricesStale([cartItem()], 'merchant-1');
 
     expect(result).toBe(false);
+  });
+
+  it('aborts when a legacy line adopted an offer id without a price drift', async () => {
+    mockReprice.mockResolvedValue({
+      priceById: { 'line-1': 390000 },
+      conditionById: {},
+      changes: [],
+      conditionChanges: [],
+      unavailable: [],
+      offerIdById: { 'line-1': 'offer-1' },
+      adoptions: [{ id: 'line-1', name: 'iPhone 13', offerId: 'offer-1' }],
+    });
+    const mockRepriceItems = jest.fn();
+    mockGetState.mockReturnValue({ repriceItems: mockRepriceItems });
+    const alertSpy = jest
+      .spyOn(Alert, 'alert')
+      .mockImplementation(() => undefined);
+
+    const result = await abortIfCartPricesStale([cartItem()], 'merchant-1');
+
+    expect(result).toBe(true);
+    expect(mockRepriceItems).toHaveBeenCalled();
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Items updated',
+      expect.stringContaining('updated'),
+      expect.anything()
+    );
+    alertSpy.mockRestore();
   });
 });

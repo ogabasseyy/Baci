@@ -7,7 +7,10 @@ import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-genera
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
 import { nativeAssurancePolicy } from './cart-assurance-config';
-import { resolveNativeAddedLineAssurance } from './cart-assurance-default';
+import {
+  resolveNativeAddedLineAssurance,
+  resolveNativeAddedLinePendingSetting,
+} from './cart-assurance-default';
 import {
   createCartLineId,
   isSameCartLine,
@@ -99,6 +102,8 @@ export const useCartStore = create<CartState>()(
               {
                 ...itemToAdd,
                 hasAssurance: resolveNativeAddedLineAssurance(itemToAdd),
+                assurancePendingSetting:
+                  resolveNativeAddedLinePendingSetting(itemToAdd) || undefined,
                 id: createCartLineId(itemToAdd, lineSequence),
               },
             ];
@@ -251,8 +256,10 @@ export const useCartStore = create<CartState>()(
 
       ...createCheckoutGenerationActions(set),
 
-      repriceItems: (priceById, conditionById) => {
-        set((state) => applyReprice(state, priceById, conditionById));
+      repriceItems: (priceById, conditionById, offerIdById) => {
+        set((state) =>
+          applyReprice(state, priceById, conditionById, offerIdById)
+        );
       },
 
       toggleAssurance: (id) => {
@@ -262,10 +269,36 @@ export const useCartStore = create<CartState>()(
               ? {
                   ...item,
                   hasAssurance: !item.hasAssurance,
+                  // An explicit toggle wins over any later settings
+                  // reconciliation: the shopper has chosen.
+                  assurancePendingSetting: undefined,
                 }
               : item
           ),
         }));
+      },
+
+      reconcilePendingAssuranceLines: (shippingInsuranceEnabled) => {
+        set((state) => {
+          if (
+            !state.items.some((item) => item.assurancePendingSetting === true)
+          ) {
+            return state;
+          }
+          return {
+            items: state.items.map((item) =>
+              item.assurancePendingSetting === true
+                ? {
+                    ...item,
+                    hasAssurance: shippingInsuranceEnabled
+                      ? true
+                      : item.hasAssurance,
+                    assurancePendingSetting: undefined,
+                  }
+                : item
+            ),
+          };
+        });
       },
     }),
     {

@@ -46,6 +46,7 @@ jest.mock('@/services/cart-reprice', () => ({
     return out;
   },
   pickChangedConditionById: () => ({}),
+  pickChangedOfferIdById: () => ({}),
 }));
 
 jest.mock('@/services/orders', () => ({

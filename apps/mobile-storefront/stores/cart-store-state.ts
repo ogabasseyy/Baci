@@ -38,8 +38,12 @@ export interface CartState {
   // Reconcile stored prices with the live catalog (keyed by cart line id).
   repriceItems: (
     priceById: Record<string, number>,
-    conditionById?: Record<string, string>
+    conditionById?: Record<string, string>,
+    offerIdById?: Record<string, string>
   ) => void;
   // Device assurance actions
   toggleAssurance: (id: string) => void;
+  // Flip lines that defaulted off while the shipping-insurance setting
+  // was unknown, once the live value arrives (affirmative true only).
+  reconcilePendingAssuranceLines: (shippingInsuranceEnabled: boolean) => void;
 }

@@ -6,6 +6,7 @@ import {
   type CartConditionChange,
   type CartPriceChange,
   pickChangedConditionById,
+  pickChangedOfferIdById,
   pickChangedPriceById,
   repriceCartItems,
 } from '@/services/cart-reprice';
@@ -74,14 +75,21 @@ export function useCartReprice() {
         if (cancelled) {
           return;
         }
-        if (result.changes.length > 0 || result.conditionChanges.length > 0) {
+        if (
+          result.changes.length > 0 ||
+          result.conditionChanges.length > 0 ||
+          result.adoptions.length > 0
+        ) {
           // Apply only the reported drifts (pickChangedPriceById) so a ≤₦1
           // tolerance line in priceById can't silently clear a negotiation.
           // Drifted offer conditions refresh alongside the price so the
-          // line matches what checkout will accept.
+          // line matches what checkout will accept. Adopted legacy offer
+          // ids apply even without a drift: the line needs the exact id
+          // for checkout to price it from the offer.
           repriceItems(
             pickChangedPriceById(result),
-            pickChangedConditionById(result)
+            pickChangedConditionById(result),
+            pickChangedOfferIdById(result)
           );
           setPriceChanges(result.changes);
           setConditionChanges(result.conditionChanges);

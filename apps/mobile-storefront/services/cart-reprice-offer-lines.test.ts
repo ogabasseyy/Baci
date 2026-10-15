@@ -1,11 +1,16 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { getStorefrontProductOffersByProductIds } from '@/lib/fetch-storefront-product-offers';
 import type { CartItem } from '@/stores/cart-store';
+import type { LiveOfferRepriceMap } from './cart-reprice-offer-lines';
 import {
+  collectLegacyOfferLineProductIds,
   collectOfferLineProductIds,
   fetchLiveOfferRepriceMap,
   getDriftedOfferCondition,
+  isParentPricedOfferlessLine,
   pickChangedConditionById,
+  pickChangedOfferIdById,
+  resolveLegacyOfferId,
   resolveOfferLinePrice,
 } from './cart-reprice-offer-lines';
 
@@ -149,6 +154,138 @@ describe('getDriftedOfferCondition', () => {
     expect(getDriftedOfferCondition(undefined, 'used')).toBeNull();
     expect(getDriftedOfferCondition('used', null)).toBeNull();
     expect(getDriftedOfferCondition('used', '')).toBeNull();
+  });
+});
+
+describe('isParentPricedOfferlessLine', () => {
+  it.each([
+    [{ condition: undefined }, 'new', true],
+    [{ condition: '' }, 'new', true],
+    [{ condition: 'new' }, 'new', true],
+    [{ condition: 'New' }, 'new', true],
+    [{ condition: 'used' }, 'used', true],
+    [{ condition: undefined }, null, true],
+    [{ condition: 'new' }, null, true],
+    [{ condition: 'used' }, 'new', false],
+    [{ condition: 'Open Box' }, 'new', false],
+    [{ condition: 'refurbished' }, 'new', false],
+    [{ condition: 'new' }, 'used', false],
+  ])('line %j on parent %j is parent-priced: %j', (line, parent, expected) => {
+    expect(
+      isParentPricedOfferlessLine(line, parent as string | null | undefined)
+    ).toBe(expected);
+  });
+});
+
+describe('collectLegacyOfferLineProductIds', () => {
+  it('collects products behind offerless non-variant lines on offer-products', () => {
+    const ids = collectLegacyOfferLineProductIds(
+      [
+        offerLine({ id: 'legacy', offer_id: undefined }),
+        offerLine({ id: 'exact', offer_id: 'offer-1' }),
+        offerLine({
+          id: 'variant',
+          offer_id: undefined,
+          variant_id: 'v1',
+        }),
+        offerLine({
+          id: 'plain',
+          offer_id: undefined,
+          product_id: 'plain-product',
+        }),
+      ],
+      new Set(['offer-product'])
+    );
+
+    expect(ids).toEqual(['offer-product']);
+  });
+});
+
+describe('resolveLegacyOfferId', () => {
+  function offerMap(
+    rows: Array<{ id: string; product: string; condition: string | null }>
+  ): LiveOfferRepriceMap {
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        { price: 1, productId: row.product, condition: row.condition },
+      ])
+    );
+  }
+
+  it('resolves the single live offer matching the stored condition', () => {
+    expect(
+      resolveLegacyOfferId(
+        offerLine({ offer_id: undefined, condition: 'Open Box' }),
+        offerMap([
+          { id: 'offer-1', product: 'offer-product', condition: 'open_box' },
+          { id: 'offer-2', product: 'offer-product', condition: 'used' },
+        ])
+      )
+    ).toBe('offer-1');
+  });
+
+  it('returns null when no live offer matches', () => {
+    expect(
+      resolveLegacyOfferId(
+        offerLine({ offer_id: undefined, condition: 'Open Box' }),
+        offerMap([
+          { id: 'offer-2', product: 'offer-product', condition: 'used' },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it('returns null when two live offers share the condition', () => {
+    expect(
+      resolveLegacyOfferId(
+        offerLine({ offer_id: undefined, condition: 'used' }),
+        offerMap([
+          { id: 'offer-1', product: 'offer-product', condition: 'used' },
+          { id: 'offer-2', product: 'offer-product', condition: 'uk_used' },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it('ignores other products and null live conditions', () => {
+    expect(
+      resolveLegacyOfferId(
+        offerLine({ offer_id: undefined, condition: 'used' }),
+        offerMap([
+          { id: 'offer-x', product: 'other-product', condition: 'used' },
+          { id: 'offer-n', product: 'offer-product', condition: null },
+        ])
+      )
+    ).toBeNull();
+  });
+
+  it('returns null for lines without a stored condition', () => {
+    expect(
+      resolveLegacyOfferId(
+        offerLine({ offer_id: undefined, condition: undefined }),
+        offerMap([
+          { id: 'offer-1', product: 'offer-product', condition: 'used' },
+        ])
+      )
+    ).toBeNull();
+  });
+});
+
+describe('pickChangedOfferIdById', () => {
+  it('picks adopted ids for adopted lines only', () => {
+    expect(
+      pickChangedOfferIdById({
+        adoptions: [{ id: 'a' }],
+        offerIdById: { a: 'offer-1', b: 'offer-2' },
+      })
+    ).toEqual({ a: 'offer-1' });
+  });
+
+  it('returns empty when nothing was adopted', () => {
+    expect(pickChangedOfferIdById({ adoptions: [], offerIdById: {} })).toEqual(
+      {}
+    );
   });
 });
 

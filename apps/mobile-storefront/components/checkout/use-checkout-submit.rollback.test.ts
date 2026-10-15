@@ -64,6 +64,7 @@ jest.mock('@/services/cart-reprice', () => ({
     mockRepriceCartItems(items, merchantId),
   pickChangedPriceById: () => ({}),
   pickChangedConditionById: () => ({}),
+  pickChangedOfferIdById: () => ({}),
 }));
 
 jest.mock('@/services/orders', () => ({
@@ -194,6 +195,8 @@ describe('useCheckoutSubmit rollback credit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     mockCreateOrder.mockImplementation(async (request) => {
@@ -244,6 +247,8 @@ describe('useCheckoutSubmit rollback credit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     mockCreateOrder.mockResolvedValue(
@@ -275,6 +280,8 @@ describe('useCheckoutSubmit rollback credit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     mockCreateOrder.mockResolvedValue(

@@ -32,6 +32,12 @@ export interface CartConditionChange {
   newCondition: string;
 }
 
+export interface CartOfferAdoption {
+  id: string;
+  name: string;
+  offerId: string;
+}
+
 /**
  * Live prices for ONLY the lines that drifted beyond tolerance (`changes`).
  * `priceById` includes every resolved line, so applying it wholesale could
@@ -70,6 +76,90 @@ export function collectOfferLineProductIds(items: CartItem[]): string[] {
         .filter((id): id is string => typeof id === 'string' && id.length > 0)
     )
   );
+}
+
+/**
+ * Distinct product ids behind legacy offerless lines that may need offer
+ * resolution: non-variant lines without an exact offer id on products
+ * flagged with condition offers. The live-offer fetch must cover these
+ * products so the caller can adopt an unambiguous offer (or mark the
+ * line unavailable) instead of repricing it to the parent price.
+ */
+export function collectLegacyOfferLineProductIds(
+  items: CartItem[],
+  offerProductIds: ReadonlySet<string>
+): string[] {
+  return Array.from(
+    new Set(
+      items
+        .filter(
+          (item) =>
+            !item.variant_id &&
+            !(typeof item.offer_id === 'string' && item.offer_id.length > 0) &&
+            typeof item.product_id === 'string' &&
+            offerProductIds.has(item.product_id)
+        )
+        .map((item) => item.product_id as string)
+    )
+  );
+}
+
+/**
+ * True when an offerless line is parent-priced (not a legacy offer line):
+ * no stored condition, or a condition canonically equal to the parent's.
+ * The order RPC prices every offerless non-variant line from
+ * `products.price`, so these lines reprice through the normal base path
+ * even on products that also carry condition offers. A missing parent
+ * condition defaults to 'new', matching the products.condition default.
+ */
+export function isParentPricedOfferlessLine(
+  item: Pick<CartItem, 'condition'>,
+  parentCondition: string | null | undefined
+): boolean {
+  if (item.condition == null || item.condition === '') {
+    return true;
+  }
+  return (
+    normalizeCanonicalProductCondition(item.condition) ===
+    normalizeCanonicalProductCondition(parentCondition ?? 'new')
+  );
+}
+
+/**
+ * Unambiguous live offer for a legacy offerless line, matched by
+ * canonical condition within the line's product. Returns null when no
+ * live offer (or more than one) matches: the caller must mark the line
+ * unavailable rather than guess, since checkout prices offerless lines
+ * from the parent and would reject a wrongly adopted basis.
+ */
+export function resolveLegacyOfferId(
+  item: CartItem,
+  offerMap: LiveOfferRepriceMap
+): string | null {
+  if (item.condition == null || item.condition === '') {
+    return null;
+  }
+  const wanted = normalizeCanonicalProductCondition(item.condition);
+  if (wanted === '') {
+    return null;
+  }
+  let match: string | null = null;
+  for (const [offerId, row] of offerMap) {
+    if (row.productId !== item.product_id) {
+      continue;
+    }
+    if (
+      row.condition == null ||
+      normalizeCanonicalProductCondition(row.condition) !== wanted
+    ) {
+      continue;
+    }
+    if (match !== null) {
+      return null;
+    }
+    match = offerId;
+  }
+  return match;
 }
 
 /**
@@ -170,6 +260,26 @@ export function pickChangedConditionById(result: {
     const liveCondition = result.conditionById[change.id];
     if (typeof liveCondition === 'string' && liveCondition !== '') {
       changed[change.id] = liveCondition;
+    }
+  }
+  return changed;
+}
+
+/**
+ * Adopted offer ids for legacy lines, keyed by cart line id. Adoptions
+ * apply even without a price/condition drift: an unadopted legacy line
+ * carries no exact id, so checkout would price it from the parent and
+ * reject the cart.
+ */
+export function pickChangedOfferIdById(result: {
+  adoptions?: { id: string }[];
+  offerIdById: Record<string, string>;
+}): Record<string, string> {
+  const changed: Record<string, string> = {};
+  for (const adoption of result.adoptions ?? []) {
+    const offerId = result.offerIdById[adoption.id];
+    if (typeof offerId === 'string' && offerId !== '') {
+      changed[adoption.id] = offerId;
     }
   }
   return changed;

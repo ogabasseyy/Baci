@@ -49,6 +49,7 @@ jest.mock('@/services/cart-reprice', () => ({
     return out;
   },
   pickChangedConditionById: () => ({}),
+  pickChangedOfferIdById: () => ({}),
 }));
 
 jest.mock('@/services/orders', () => ({
@@ -252,6 +253,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     mockReadPersistedRedvaultOrder.mockResolvedValueOnce({
@@ -396,6 +399,8 @@ describe('useCheckoutSubmit', () => {
       priceById: {},
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     const params = createParams({ selectedPayment: 'credit_direct' });
@@ -440,6 +445,8 @@ describe('useCheckoutSubmit', () => {
       priceById: {},
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     const params = createParams({ selectedPayment: 'pay_on_delivery' });
@@ -469,6 +476,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1250000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     const setIsProcessing = jest.fn();
@@ -481,7 +490,11 @@ describe('useCheckoutSubmit', () => {
     });
 
     expect(mockRepriceCartItems).toHaveBeenCalledWith([cartItem], 'merchant-1');
-    expect(mockRepriceItems).toHaveBeenCalledWith({ 'line-1': 1250000 }, {});
+    expect(mockRepriceItems).toHaveBeenCalledWith(
+      { 'line-1': 1250000 },
+      {},
+      {}
+    );
     expect(Alert.alert).toHaveBeenCalledWith(
       'Prices updated',
       expect.stringContaining('please review the new total'),
@@ -537,6 +550,8 @@ describe('useCheckoutSubmit', () => {
         priceById: { 'line-1': 1200000 },
         conditionById: {},
         conditionChanges: [],
+        offerIdById: {},
+        adoptions: [],
         unavailable: [],
       });
       await firstSubmit;
@@ -551,6 +566,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     mockCreateOrder.mockResolvedValue({
@@ -589,6 +606,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     // A 100% discount zeroes the gateway amount while the order stays
@@ -627,6 +646,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     mockCreateOrder.mockResolvedValue({
@@ -664,6 +685,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     let resolvePersistedRead: (value: null) => void = () => undefined;
@@ -715,6 +738,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     const setIsProcessing = jest.fn();
@@ -750,6 +775,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     const params = createParams();
@@ -775,6 +802,8 @@ describe('useCheckoutSubmit', () => {
       priceById: { 'line-1': 1200000 },
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
 
@@ -817,6 +846,8 @@ describe('useCheckoutSubmit', () => {
       priceById: {},
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     const params = createParams({ selectedPayment: 'payforme' });
@@ -842,6 +873,8 @@ describe('useCheckoutSubmit', () => {
       priceById: {},
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     const initError = new Error('klump init failed');
@@ -876,6 +909,8 @@ describe('useCheckoutSubmit', () => {
       priceById: {},
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     const initError = new Error('provider init threw');
@@ -916,6 +951,8 @@ describe('useCheckoutSubmit', () => {
       priceById: {},
       conditionById: {},
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
       unavailable: [],
     });
     // Unique order identity: the durable purchase claim persists across

@@ -67,12 +67,14 @@ export function clearGroupNegotiation(items: CartItem[]): CartItem[] {
 export function applyReprice(
   state: { items: CartItem[]; cartWideNegotiationActive: boolean },
   priceById: Record<string, number>,
-  conditionById: Record<string, string> = {}
+  conditionById: Record<string, string> = {},
+  offerIdById: Record<string, string> = {}
 ): { items: CartItem[]; cartWideNegotiationActive?: boolean } {
   let changed = false;
   let items = state.items.map((item) => {
     const livePrice = priceById[item.id];
     const liveCondition = conditionById[item.id];
+    const adoptedOfferId = offerIdById[item.id];
     // Same line-total basis as drift detection: checkout rejects an
     // extended-total move past tolerance, so the store must not drop a
     // sub-tolerance unit move on quantity > 1 that detection reported.
@@ -84,7 +86,14 @@ export function applyReprice(
       typeof liveCondition === 'string' &&
       liveCondition !== '' &&
       liveCondition !== item.condition;
-    if (!priceDrifted && !conditionDrifted) {
+    // Adopting an exact offer id moves the line's economics basis from
+    // parent-priced to offer-priced: always a real change, even when the
+    // live offer price happens to equal the stored price.
+    const offerAdopted =
+      typeof adoptedOfferId === 'string' &&
+      adoptedOfferId !== '' &&
+      adoptedOfferId !== item.offer_id;
+    if (!priceDrifted && !conditionDrifted && !offerAdopted) {
       return item;
     }
     changed = true;
@@ -97,6 +106,7 @@ export function applyReprice(
       ...item,
       ...(priceDrifted ? { price: livePrice as number } : null),
       ...(conditionDrifted ? { condition: liveCondition as string } : null),
+      ...(offerAdopted ? { offer_id: adoptedOfferId as string } : null),
       negotiatedPrice: undefined,
       negotiationStatus: undefined,
     };

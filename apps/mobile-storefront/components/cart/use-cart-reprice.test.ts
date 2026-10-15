@@ -54,6 +54,17 @@ jest.mock('@/services/cart-reprice', () => ({
     }
     return out;
   },
+  pickChangedOfferIdById: (result: {
+    adoptions?: { id: string }[];
+    offerIdById: Record<string, string>;
+  }) => {
+    const out: Record<string, string> = {};
+    for (const adoption of result.adoptions ?? []) {
+      const live = result.offerIdById[adoption.id];
+      if (typeof live === 'string') out[adoption.id] = live;
+    }
+    return out;
+  },
 }));
 
 jest.mock('@/stores/cart-store', () => ({
@@ -114,6 +125,8 @@ describe('useCartReprice', () => {
       conditionById: {},
       changes,
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
     });
 
     const { result } = renderHook(() => useCartReprice());
@@ -123,7 +136,11 @@ describe('useCartReprice', () => {
         mockItems,
         'merchant-1'
       );
-      expect(mockRepriceItems).toHaveBeenCalledWith({ 'cart-1': 1250000 }, {});
+      expect(mockRepriceItems).toHaveBeenCalledWith(
+        { 'cart-1': 1250000 },
+        {},
+        {}
+      );
       expect(result.current.priceChanges).toEqual(changes);
     });
 
@@ -140,6 +157,8 @@ describe('useCartReprice', () => {
       priceById: {},
       changes: [],
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
     });
 
     renderHook(() => useCartReprice());
@@ -160,6 +179,8 @@ describe('useCartReprice', () => {
       priceById: {},
       changes: [],
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
     });
 
     renderHook(() => useCartReprice());
@@ -188,6 +209,8 @@ describe('useCartReprice', () => {
       priceById: {},
       changes: [],
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
     });
 
     const { rerender } = renderHook(() => useCartReprice());
@@ -211,6 +234,8 @@ describe('useCartReprice', () => {
       priceById: {},
       changes: [],
       conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
     });
 
     const { rerender } = renderHook(() => useCartReprice());
@@ -288,6 +313,8 @@ describe('useCartReprice', () => {
       conditionById: { 'cart-1': 'refurbished' },
       changes: [],
       conditionChanges,
+      offerIdById: {},
+      adoptions: [],
     });
 
     const { result } = renderHook(() => useCartReprice());
@@ -295,7 +322,8 @@ describe('useCartReprice', () => {
     await waitFor(() => {
       expect(mockRepriceItems).toHaveBeenCalledWith(
         {},
-        { 'cart-1': 'refurbished' }
+        { 'cart-1': 'refurbished' },
+        {}
       );
       expect(result.current.priceChanges).toEqual([]);
       expect(result.current.conditionChanges).toEqual(conditionChanges);

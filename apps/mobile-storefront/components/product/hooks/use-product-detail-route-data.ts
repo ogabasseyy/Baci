@@ -102,11 +102,17 @@ export function useProductDetailRouteData({
     ? 'Availability could not be loaded. Check your connection and try again.'
     : null;
   // Search/compare entry points forward the advertised matched offer id.
-  // Accept it only when it names one of this product's own offers; the
-  // condition-compatibility check happens at selection time so a later
-  // condition change on the PDP is never pinned to a stale offer.
+  // Accept it only when it names one of this product's own offers on a
+  // product that actually carries condition offers with a live hydration:
+  // a failed offer fetch preserves the row's prior offers array, so an
+  // id match alone would accept a stale identity and skip the retry
+  // error path. The condition-compatibility check happens at selection
+  // time so a later condition change on the PDP is never pinned to a
+  // stale offer.
   const routeOfferId =
     routeOfferIdParam &&
+    product?.has_condition_offers === true &&
+    product?.offers_hydration_failed !== true &&
     product?.offers?.some(
       (offer) => String(offer.id) === String(routeOfferIdParam)
     )

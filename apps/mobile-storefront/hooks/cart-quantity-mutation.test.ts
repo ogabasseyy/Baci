@@ -20,11 +20,23 @@ jest.mock('@/lib/read-persisted-checkout-generation', () => ({
 jest.mock('./cart-notifications', () => ({
   showCartToast: jest.fn(),
 }));
+jest.mock('./cart-stock', () => ({
+  checkStock: jest.fn(),
+  getExistingProductQuantityForStock: jest.fn(() => 0),
+}));
+jest.mock('./cart-query-cache', () => ({
+  getCachedOptionStock: jest.fn(() => undefined),
+}));
 
 import type { QueryClient } from '@tanstack/react-query';
 import { resetCartLineSequence, useCartStore } from '../stores/cart-store';
 import type { CartItem } from '../stores/cart-store.types';
 import { createUpdateQuantityMutation } from './cart-quantity-mutation';
+import { checkStock } from './cart-stock';
+
+const mockCheckStock = checkStock as unknown as jest.MockedFunction<
+  typeof checkStock
+>;
 
 function line(overrides: Partial<CartItem> & { id: string }): CartItem {
   return {
@@ -186,5 +198,65 @@ describe('cart quantity mutation rollback', () => {
     );
 
     expect(useCartStore.getState().items.map((i) => i.id)).toEqual(['b']);
+  });
+});
+
+describe('cart quantity mutation validation', () => {
+  beforeEach(() => {
+    seed([]);
+    jest.clearAllMocks();
+  });
+
+  it('validates the clamped store quantity, not the raw request', async () => {
+    seed([line({ id: 'a', product_id: 'p1', quantity: 1, max_quantity: 5 })]);
+    const { onMutate, mutationFn } = mutation();
+
+    // onMutate runs first (react-query order) and clamps the store to 5.
+    onMutate({ id: 'a', quantity: 10 });
+    expect(useCartStore.getState().items[0]?.quantity).toBe(5);
+
+    // Live stock covers the clamped 5 but not the raw 10: validation
+    // must pass against the applied quantity.
+    mockCheckStock.mockImplementation(
+      async (_productId: unknown, requested: unknown) => ({
+        available: (requested as number) <= 5,
+        currentStock: 5,
+        requestedQuantity: requested as number,
+      })
+    );
+
+    const result = await mutationFn({ id: 'a', quantity: 10 });
+
+    expect(mockCheckStock).toHaveBeenCalledWith(
+      'p1',
+      5,
+      undefined,
+      expect.objectContaining({ aggregateQuantity: 0 })
+    );
+    expect(result).toEqual({
+      id: 'a',
+      quantity: 5,
+      stockCheck: {
+        available: true,
+        currentStock: 5,
+        requestedQuantity: 5,
+      },
+    });
+  });
+
+  it('rejects when live stock does not cover the clamped quantity', async () => {
+    seed([line({ id: 'a', product_id: 'p1', quantity: 1, max_quantity: 5 })]);
+    const { onMutate, mutationFn } = mutation();
+
+    onMutate({ id: 'a', quantity: 10 });
+    mockCheckStock.mockResolvedValue({
+      available: false,
+      currentStock: 2,
+      requestedQuantity: 5,
+    });
+
+    await expect(mutationFn({ id: 'a', quantity: 10 })).rejects.toThrow(
+      'Only 2 items available in stock'
+    );
   });
 });

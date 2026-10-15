@@ -55,20 +55,21 @@ export function createUpdateQuantityMutation({
   return {
     mutationFn: async ({
       id,
-      quantity,
     }: UpdateQuantityVariables): Promise<UpdateQuantityResult> => {
       // H21 fix: Read fresh items from store instead of stale closure variable
       const freshItems = useCartStore.getState().items;
       const item = freshItems.find((i) => i.id === id);
       if (!item) throw new Error('Item not found');
 
-      // Validate stock for the new quantity, with cached fallback for
-      // offline. onMutate already applied the new quantity to the store,
-      // so the product aggregate below is the post-update total strict
-      // sibling caps need.
+      // Validate the APPLIED quantity, not the raw request: onMutate
+      // already clamped the store through max_quantity, and `item` above
+      // is the post-write row. Validating the raw input would report a
+      // stock error (and roll back) when live stock covers the clamped
+      // amount but not the unbounded request.
+      const appliedQuantity = item.quantity;
       const stockCheck = await checkStock(
         item.product_id,
-        quantity,
+        appliedQuantity,
         getCachedOptionStock(queryClient, item.product_id, {
           variantId: item.variant_id ?? null,
           offerId: item.offer_id ?? null,
@@ -88,7 +89,7 @@ export function createUpdateQuantityMutation({
         );
       }
 
-      return { id, quantity, stockCheck };
+      return { id, quantity: appliedQuantity, stockCheck };
     },
 
     onMutate: ({

@@ -40,6 +40,7 @@ const product = {
   price: 100,
   condition: 'new',
   has_variants: false,
+  has_condition_offers: true,
   offers: [
     { id: 'o1', condition: 'used', price: 80 },
     { id: 'o2', condition: 'open_box', price: 90 },
@@ -109,6 +110,40 @@ it('fails closed when an exact offer link meets a hydration failure', () => {
   expect(result.current.routeOfferHydrationFailed).toBe(true);
   expect(result.current.routeOfferId).toBeNull();
   expect(result.current.error).toMatch(/could not be loaded/);
+});
+
+it('rejects a stale offer id when the live hydration failed', () => {
+  mockParams = { slug: 'phone', offer_id: 'o1' };
+  // A failed offer fetch preserves the row's prior offers array: the id
+  // still matches, but the identity is stale and must not be accepted.
+  const stale = { ...product, offers_hydration_failed: true };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: stale,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  expect(result.current.routeOfferId).toBeNull();
+  expect(result.current.routeOfferHydrationFailed).toBe(true);
+  expect(result.current.error).toMatch(/could not be loaded/);
+});
+
+it('rejects an offer id on a product that never carried offers', () => {
+  mockParams = { slug: 'phone', offer_id: 'o1' };
+  const offerless = { ...product, has_condition_offers: false };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: offerless,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  expect(result.current.routeOfferId).toBeNull();
 });
 
 it('ignores the hydration marker without an exact offer link', () => {

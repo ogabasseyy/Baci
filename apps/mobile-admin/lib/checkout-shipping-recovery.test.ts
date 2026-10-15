@@ -44,4 +44,14 @@ describe('requestCheckoutShippingRecovery', () => {
     });
     await expect(requestCheckoutShippingRecovery('o', body)).rejects.toThrow();
   });
+  it.each([
+    null,
+    {},
+    { error: 123 },
+  ])('uses the fallback for malformed server error %j', async (payload) => {
+    fetcher.mockResolvedValue({ ok: false, json: async () => payload });
+    await expect(requestCheckoutShippingRecovery('o', body)).rejects.toThrow(
+      'Shipping recovery request failed. Please retry.'
+    );
+  });
 });

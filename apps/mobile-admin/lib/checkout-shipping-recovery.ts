@@ -1,6 +1,9 @@
-import { z } from 'zod';
 import { createAuthenticatedFetch } from '@/hooks/orders/authenticated-fetch';
-import { checkoutShippingRecoverySchema } from '@/schemas/checkout-shipping-recovery';
+import {
+  checkoutShippingRecoveryConfirmationSchema,
+  checkoutShippingRecoveryErrorSchema,
+  checkoutShippingRecoverySchema,
+} from '@/schemas/checkout-shipping-recovery';
 import { BASE_URL } from './api-client';
 
 export async function requestCheckoutShippingRecovery(
@@ -31,7 +34,7 @@ export async function requestCheckoutShippingRecovery(
   );
   const payload: unknown = await response.json();
   if (!response.ok) {
-    const parsed = z.object({ error: z.string() }).safeParse(payload);
+    const parsed = checkoutShippingRecoveryErrorSchema.safeParse(payload);
     throw new Error(
       parsed.success
         ? parsed.data.error
@@ -40,7 +43,5 @@ export async function requestCheckoutShippingRecovery(
   }
   if (body.action === 'preview')
     return checkoutShippingRecoverySchema.parse(payload);
-  return z
-    .object({ quoteId: z.string(), confirmed: z.literal(true) })
-    .parse(payload);
+  return checkoutShippingRecoveryConfirmationSchema.parse(payload);
 }

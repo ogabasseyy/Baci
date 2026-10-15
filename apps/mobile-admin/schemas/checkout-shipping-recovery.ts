@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+export const checkoutShippingRecoveryErrorSchema = z.object({
+  error: z.string(),
+});
+
+export const checkoutShippingRecoveryConfirmationSchema = z.object({
+  quoteId: z.string(),
+  confirmed: z.literal(true),
+});
+
 export const checkoutShippingRecoverySchema = z.object({
   previewId: z.string().nullable(),
   quote: z.object({

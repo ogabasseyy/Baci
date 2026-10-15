@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { toAdminPublicQuote } from '@/app/api/shipping/quotes/admin-order-gigl-quote.helpers';
 import {
   buildAdminOrderGiglProductLookup,
@@ -18,8 +17,12 @@ import { prepareCheckoutShippingRecovery } from '@/lib/shipping/prepare-checkout
 import { resolveBookingMerchantSender } from '@/lib/shipping/resolve-booking-merchant-sender';
 import { resolveRecoveryQuoteReceiver } from '@/lib/shipping/resolve-recovery-quote-receiver';
 import type { ShippingQuote } from '@/lib/shipping/types';
-import { shippingCheckoutRecoverySchema } from '@/schemas/shipping-checkout-recovery';
+import {
+  shippingCheckoutRecoveryIdSchema,
+  shippingCheckoutRecoverySchema,
+} from '@/schemas/shipping-checkout-recovery';
 import { shippingRecoveryContextSchema } from '@/schemas/shipping-checkout-recovery-context';
+import { shippingCheckoutRecoveryConfirmationSchema } from '@/schemas/shipping-checkout-recovery-response';
 import { recoveryFailure } from './route.failure';
 
 export async function POST(
@@ -30,7 +33,7 @@ export async function POST(
   const auth = await authenticateApiRequest(request);
   if (!auth.user || !auth.supabase)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!z.uuid().safeParse(id).success)
+  if (!shippingCheckoutRecoveryIdSchema.safeParse(id).success)
     return NextResponse.json({ error: 'Invalid order' }, { status: 400 });
   const csrf = await checkCsrfProtection(request);
   if (!csrf.valid)
@@ -70,9 +73,8 @@ export async function POST(
       } as never
     );
     if (error) return recoveryFailure(error);
-    const confirmed = z
-      .object({ quoteId: z.uuid(), confirmed: z.literal(true) })
-      .safeParse(data);
+    const confirmed =
+      shippingCheckoutRecoveryConfirmationSchema.safeParse(data);
     return confirmed.success
       ? NextResponse.json(confirmed.data)
       : recoveryFailure(null);
@@ -226,7 +228,7 @@ export async function POST(
   if (staged.error) return recoveryFailure(staged.error);
   if (
     typeof staged.data !== 'string' ||
-    !z.uuid().safeParse(staged.data).success
+    !shippingCheckoutRecoveryIdSchema.safeParse(staged.data).success
   )
     return recoveryFailure(null);
   return NextResponse.json({

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+export const shippingCheckoutRecoveryIdSchema = z.uuid();
+
 export const shippingCheckoutRecoverySchema = z.discriminatedUnion('action', [
   z.strictObject({
     action: z.literal('preview'),
@@ -15,7 +17,7 @@ export const shippingCheckoutRecoverySchema = z.discriminatedUnion('action', [
   }),
   z.strictObject({
     action: z.literal('confirm'),
-    previewId: z.uuid(),
+    previewId: shippingCheckoutRecoveryIdSchema,
     confirmDestination: z.literal(true),
   }),
 ]);

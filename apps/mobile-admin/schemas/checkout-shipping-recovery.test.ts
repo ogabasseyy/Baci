@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { checkoutShippingRecoverySchema } from './checkout-shipping-recovery';
+import {
+  checkoutShippingRecoveryConfirmationSchema,
+  checkoutShippingRecoveryErrorSchema,
+  checkoutShippingRecoverySchema,
+} from './checkout-shipping-recovery';
 
 describe('checkoutShippingRecoverySchema', () => {
   it('allows a changed price preview without confirmation token', () => {
@@ -26,5 +30,53 @@ describe('checkoutShippingRecoverySchema', () => {
         canConfirm: true,
       }).success
     ).toBe(false);
+  });
+});
+
+describe('checkoutShippingRecoveryConfirmationSchema', () => {
+  it('preserves string quote IDs and strips unrelated fields', () => {
+    expect(
+      checkoutShippingRecoveryConfirmationSchema.parse({
+        quoteId: 'q',
+        confirmed: true,
+        internal: 'hidden',
+      })
+    ).toEqual({ quoteId: 'q', confirmed: true });
+  });
+
+  it.each([
+    null,
+    {},
+    { quoteId: undefined, confirmed: true },
+    { quoteId: 123, confirmed: true },
+    { quoteId: 'q', confirmed: false },
+    { quoteId: 'q', confirmed: 'true' },
+    { quoteId: 'q' },
+  ])('rejects invalid confirmation %j', (payload) => {
+    expect(
+      checkoutShippingRecoveryConfirmationSchema.safeParse(payload).success
+    ).toBe(false);
+  });
+});
+
+describe('checkoutShippingRecoveryErrorSchema', () => {
+  it('parses the server error and strips unrelated fields', () => {
+    expect(
+      checkoutShippingRecoveryErrorSchema.parse({
+        error: 'Not authorized',
+        internal: 'hidden',
+      })
+    ).toEqual({ error: 'Not authorized' });
+  });
+
+  it.each([
+    null,
+    {},
+    { error: 123 },
+    { error: null },
+  ])('rejects invalid error payload %j', (payload) => {
+    expect(checkoutShippingRecoveryErrorSchema.safeParse(payload).success).toBe(
+      false
+    );
   });
 });

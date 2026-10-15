@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { shippingCheckoutRecoverySchema } from './shipping-checkout-recovery';
+import {
+  shippingCheckoutRecoveryIdSchema,
+  shippingCheckoutRecoverySchema,
+} from './shipping-checkout-recovery';
 
 const receiver = {
   address: '12 Test Street',
@@ -10,6 +13,15 @@ const receiver = {
   longitude: 0,
 };
 describe('checkout recovery input', () => {
+  it('validates order UUIDs without coercion', () => {
+    const id = '40000000-0000-4000-8000-000000000001';
+    expect(shippingCheckoutRecoveryIdSchema.parse(id)).toBe(id);
+    for (const invalid of [undefined, null, '', 'not-a-uuid', 123]) {
+      expect(shippingCheckoutRecoveryIdSchema.safeParse(invalid).success).toBe(
+        false
+      );
+    }
+  });
   it('accepts an explicit zero pin', () => {
     expect(
       shippingCheckoutRecoverySchema.parse({ action: 'preview', receiver })

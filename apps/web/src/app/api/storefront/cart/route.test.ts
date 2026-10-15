@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CartPrincipal } from '@/lib/cart/principal';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
+import * as sessionProofModule from '@/lib/cart/session-proof';
 import {
   CART_SESSION_PROOF_TTL_SECONDS,
   issueCartSessionProof,
@@ -359,6 +360,68 @@ describe('GET /api/storefront/cart', () => {
 });
 
 describe('POST /api/storefront/cart', () => {
+  it.each([
+    'web',
+    'native',
+  ])('retries committed creation when %s session proof issuance fails', async (surface) => {
+    const bootstrap = bootstrapProof();
+    mocks.cartPayload = {
+      code: null,
+      grantId: GRANT_ID,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    const mint = vi
+      .spyOn(sessionProofModule, 'issueCartSessionProof')
+      .mockImplementationOnce(() => {
+        throw new Error('fixture mint failure');
+      });
+    const headers: Record<string, string> =
+      surface === 'web'
+        ? { cookie: cartCookie(bootstrap) }
+        : { authorization: `Bearer ${bootstrap}` };
+    const request = {
+      body: { operationId: 'create-proof-retry' },
+      headers,
+      noCsrf: surface === 'native',
+    };
+    const failed = await postCart(request);
+    expect(failed.status).toBe(503);
+    expect(await failed.json()).toMatchObject({
+      code: 'temporarily_unavailable',
+    });
+    expect(failed.headers.get('set-cookie')).toBeNull();
+    mint.mockRestore();
+    mocks.cartPayload = {
+      code: null,
+      grantId: GRANT_ID,
+      ok: true,
+      replayed: true,
+      state: rawState(),
+    };
+    const retried = await postCart(request);
+    expect(retried.status).toBe(201);
+    const payload = await retried.json();
+    expect(payload).toMatchObject({
+      operationId: 'create-proof-retry',
+      replayed: true,
+      cart: { cartId: CART_ID },
+    });
+    const proof =
+      surface === 'native'
+        ? payload.proof
+        : (retried.headers.get('set-cookie') ?? '').match(
+            /baci-cart-[^=]+=([^;]+)/
+          )?.[1];
+    expect(
+      verifyCartSessionProof(proof, {
+        environment: 'test',
+        secret: TEST_SECRET,
+      }).ok
+    ).toBe(true);
+  });
+
   it('lazily creates a cart and upgrades to a session proof', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-12T04:00:00Z'));

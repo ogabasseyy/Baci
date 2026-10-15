@@ -90,3 +90,65 @@ it('keeps reviewed voucher prizes free despite a positive catalog price', () => 
     reviewedCheckoutItems(cached, prize)[0].negotiatedPrice
   ).toBeUndefined();
 });
+
+it.each([
+  ['prize', null],
+  [null, 'award'],
+] as const)('prices partial voucher credentials %s/%s from the reviewed catalog price', (voucherToken, voucherAwardId) => {
+  const partial = {
+    ...review,
+    lines: [{ ...review.lines[0], voucherToken, voucherAwardId }],
+  };
+  expect(reviewedCheckoutItems(cached, partial)[0]).toMatchObject({
+    price: 120,
+    quantity: 2,
+    negotiatedPrice: undefined,
+  });
+});
+
+it.each([
+  ['prize', null],
+  [null, 'award'],
+] as const)('does not let partial voucher credentials suppress a valid reviewed negotiation', (voucherToken, voucherAwardId) => {
+  const negotiated = {
+    ...review,
+    lines: [
+      {
+        ...review.lines[0],
+        voucherToken,
+        voucherAwardId,
+        negotiationInvalidated: false,
+        effectiveUnitPriceMinor: 8000,
+      },
+    ],
+  };
+  expect(reviewedCheckoutItems(cached, negotiated)[0]).toMatchObject({
+    price: 120,
+    negotiatedPrice: 80,
+    negotiationStatus: 'accepted',
+    quantity: 2,
+  });
+});
+
+it.each([
+  ['prize', null],
+  [null, 'award'],
+] as const)('clears both submitted voucher fields for partial canonical pairs %s/%s without mutating cached metadata', (voucherToken, voucherAwardId) => {
+  const cachedWithOldVoucher = cached.map((item) => ({
+    ...item,
+    voucher_token: 'old-token',
+    voucher_award_id: 'old-award',
+  }));
+  const partial = {
+    ...review,
+    lines: [{ ...review.lines[0], voucherToken, voucherAwardId }],
+  };
+  const [item] = reviewedCheckoutItems(cachedWithOldVoucher, partial);
+  expect(item.voucher_token).toBeUndefined();
+  expect(item.voucher_award_id).toBeUndefined();
+  expect(cachedWithOldVoucher[0]).toMatchObject({
+    voucher_token: 'old-token',
+    voucher_award_id: 'old-award',
+  });
+  expect(partial.lines[0]).toMatchObject({ voucherToken, voucherAwardId });
+});

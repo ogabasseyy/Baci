@@ -88,15 +88,20 @@ describe('shared-cart account client', () => {
     );
   });
 });
-it('allows ordinary logout when merchant is outside the cart pilot', async () => {
+it('fails closed when enrollment rejection did not revoke device authority', async () => {
   fetchMock.mockResolvedValue(
     jsonResponse({ code: 'merchant_unavailable' }, 403)
   );
   await expect(revokeCartDeviceSession('legacy')).resolves.toEqual({
-    ok: true,
+    ok: false,
   });
 });
 it('still fails closed on revocation transport errors', async () => {
   fetchMock.mockRejectedValue(new Error('offline'));
   await expect(revokeCartDeviceSession('shop')).resolves.toEqual({ ok: false });
+});
+
+it('allows logout when the server confirms no proof exists to retire', async () => {
+  fetchMock.mockResolvedValue(jsonResponse({ code: 'missing_proof' }, 401));
+  await expect(revokeCartDeviceSession('shop')).resolves.toEqual({ ok: true });
 });

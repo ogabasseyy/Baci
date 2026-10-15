@@ -167,6 +167,10 @@ export function useCartLinkLifecycle(
         dispatch({ generation, status: 'skipped', type: 'import/resolved' });
         return;
       }
+      if (planned.kind === 'blocked') {
+        dispatch({ generation, type: 'import/capacity_exceeded' });
+        return;
+      }
       if (planned.kind === 'conflicts') {
         dispatch({
           conflicts: planned.conflicts,

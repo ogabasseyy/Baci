@@ -110,6 +110,10 @@ export interface CartContextType {
   syncError?: CartErrorCode | null;
   /** Re-sends the head of the pending queue with its original retry key. */
   retryPendingSync?: () => void;
+  /** Explicitly discards the saved device import and keeps the canonical cart. */
+  discardLegacyImport?: () => void;
+  /** Import warnings such as `import_capacity_exceeded`. */
+  importWarnings?: string[];
   /** Legacy-import lines blocked on an explicit offer choice. */
   importConflicts?: import('@baci/shared/cart').CartMergeConflict[];
   /** Applies the shopper's per-line choices and retries the import. */

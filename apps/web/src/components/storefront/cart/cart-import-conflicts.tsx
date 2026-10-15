@@ -1,6 +1,9 @@
 'use client';
 
-import type { CartMergeResolution } from '@baci/shared/cart';
+import {
+  type CartMergeResolution,
+  SHARED_CART_MAX_LINES,
+} from '@baci/shared/cart';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -15,7 +18,36 @@ export function CartImportConflicts() {
   const cart = useCart();
   const [picks, setPicks] = useState<CartMergeResolution[]>([]);
   const conflicts = cart.importConflicts ?? [];
-  if (!cart.sharedCartEnabled || conflicts.length === 0) return null;
+  const capacityExceeded =
+    cart.importWarnings?.includes('import_capacity_exceeded') ?? false;
+  if (!cart.sharedCartEnabled) return null;
+  if (capacityExceeded)
+    return (
+      <section
+        aria-label="Cart import capacity"
+        className="mx-auto max-w-xl px-4 py-6"
+      >
+        <h2 className="text-base font-semibold">
+          Make room for your device cart
+        </h2>
+        <p role="alert" className="mt-2 text-sm">
+          Combining these carts exceeds the {SHARED_CART_MAX_LINES}-line limit.
+          Your device items and offers are still saved on this device. Remove
+          items from your shared cart, then retry importing.
+        </p>
+        <Button type="button" onClick={() => cart.resolveImportConflicts?.([])}>
+          Retry importing device cart
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => cart.discardLegacyImport?.()}
+        >
+          Keep shared cart and discard saved device cart
+        </Button>
+      </section>
+    );
+  if (conflicts.length === 0) return null;
   const complete = conflicts.every((conflict) =>
     picks.some(
       (pick) => JSON.stringify(pick.item) === JSON.stringify(conflict.item)

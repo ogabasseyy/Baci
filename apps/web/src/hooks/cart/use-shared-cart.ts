@@ -57,6 +57,7 @@ export function useSharedCart(
     retryPendingSync,
     refreshSharedCart,
     retryImport,
+    discardLegacyImport,
     resolveImportConflicts,
   } = recovery;
 
@@ -101,6 +102,7 @@ export function useSharedCart(
         // Disabled hook: nothing to refresh.
       },
       retryImport: noop,
+      discardLegacyImport: noop,
       resolveImportConflicts: noop,
       retryPendingSync: noop,
       syncError: null,
@@ -126,6 +128,7 @@ export function useSharedCart(
     repriceLine,
     refreshSharedCart,
     retryImport,
+    discardLegacyImport,
     resolveImportConflicts,
     retryPendingSync,
     syncError: state.syncError,

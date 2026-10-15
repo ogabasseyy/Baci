@@ -70,6 +70,10 @@ export function createCartRecovery(
       dispatch({ generation, status: 'skipped', type: 'import/resolved' });
       return;
     }
+    if (planned.kind === 'blocked') {
+      dispatch({ generation, type: 'import/capacity_exceeded' });
+      return;
+    }
     if (planned.kind === 'conflicts') {
       dispatch({
         conflicts: planned.conflicts,
@@ -92,6 +96,19 @@ export function createCartRecovery(
     importOpIdsRef.current = new Set(entries.map((entry) => entry.operationId));
     dispatch({ entries, generation, type: 'import/enqueue' });
   }
+  function discardLegacyImport(): void {
+    if (
+      !enabled ||
+      stateRef.current.importStatus !== 'failed' ||
+      !stateRef.current.confirmed
+    )
+      return;
+    dispatch({
+      generation: generationRef.current,
+      status: 'skipped',
+      type: 'import/resolved',
+    });
+  }
   function resolveImportConflicts(
     resolutions: import('@baci/shared/cart').CartMergeResolution[]
   ): void {
@@ -101,6 +118,7 @@ export function createCartRecovery(
     retryPendingSync,
     refreshSharedCart,
     retryImport,
+    discardLegacyImport,
     resolveImportConflicts,
   };
 }

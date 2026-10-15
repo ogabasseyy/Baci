@@ -13,6 +13,7 @@ export function reviewedCheckoutItems(
         candidate.id === line.id && candidate.product_id === line.productId
     );
     if (!item) throw new NativeCartError('refresh_required');
+    const isVoucher = Boolean(line.voucherToken && line.voucherAwardId);
     const negotiationStatus = line.negotiationInvalidated
       ? undefined
       : line.negotiationStatus;
@@ -25,13 +26,9 @@ export function reviewedCheckoutItems(
       color: line.options.color,
       storage: line.options.storage,
       quantity: line.quantity,
-      price:
-        line.voucherToken || line.voucherAwardId
-          ? 0
-          : line.validatedUnitPriceMinor / 100,
+      price: isVoucher ? 0 : line.validatedUnitPriceMinor / 100,
       negotiatedPrice:
-        !line.voucherToken &&
-        !line.voucherAwardId &&
+        !isVoucher &&
         !line.negotiationInvalidated &&
         line.negotiatedUnitPriceMinor !== null
           ? line.negotiatedUnitPriceMinor / 100
@@ -42,8 +39,10 @@ export function reviewedCheckoutItems(
         negotiationStatus === 'rejected'
           ? negotiationStatus
           : undefined,
-      voucher_token: line.voucherToken ?? undefined,
-      voucher_award_id: line.voucherAwardId ?? undefined,
+      voucher_token: isVoucher ? (line.voucherToken ?? undefined) : undefined,
+      voucher_award_id: isVoucher
+        ? (line.voucherAwardId ?? undefined)
+        : undefined,
     };
   });
 }

@@ -252,6 +252,7 @@ export function sharedCartReducer(
         ...state,
         importConflicts: [],
         importStatus: action.status,
+        importWarnings: [],
         unimportedCache: [],
       });
     }
@@ -259,16 +260,22 @@ export function sharedCartReducer(
       return withDisplay({
         ...state,
         importConflicts: action.conflicts,
+        importWarnings: [],
         importStatus: 'failed',
       });
     }
+    case 'import/capacity_exceeded':
     case 'import/failed': {
       // The server snapshot stands alone now; the cache stays in storage
       // for an explicit retry but leaves the display.
       return withDisplay({
         ...state,
         importStatus: 'failed',
-        syncError: action.code,
+        importWarnings:
+          action.type === 'import/capacity_exceeded'
+            ? ['import_capacity_exceeded']
+            : state.importWarnings,
+        ...(action.type === 'import/failed' ? { syncError: action.code } : {}),
         unimportedCache: [],
       });
     }

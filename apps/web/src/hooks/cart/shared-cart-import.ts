@@ -58,6 +58,7 @@ export function fnv1aHex(value: string): string {
 
 export type PlannedLegacyImport =
   | { kind: 'nothing' }
+  | { kind: 'blocked'; code: 'too_many_lines'; lineCount: number }
   | {
       kind: 'create';
       lines: CartInputLine[];
@@ -159,31 +160,18 @@ export function planLegacyImport(
     };
   }
 
-  const serverKeys = new Set(
-    server.lines.map((line) => cartLineIdentity(line.item))
-  );
-  const overlapping = lines.filter((line) =>
-    serverKeys.has(cartLineIdentity(line.item))
-  );
-  const incomingOnly = lines.filter(
-    (line) => !serverKeys.has(cartLineIdentity(line.item))
-  );
-  // Server lines win their slots; local-only lines fill what remains.
-  const capacity = Math.max(0, SHARED_CART_MAX_LINES - server.lines.length);
-  const keptIncomingOnly = incomingOnly.slice(0, capacity);
-  if (keptIncomingOnly.length < incomingOnly.length) {
-    warnings.push('too_many_lines');
-  }
-  const planned = planCartMerge(
-    server,
-    syntheticIncoming([...overlapping, ...keptIncomingOnly]),
-    resolutions
-  );
+  // Preserve every device attachment lane. A partial merge cannot claim the
+  // import completed: retain the cache until the shopper makes enough room.
+  const planned = planCartMerge(server, syntheticIncoming(lines), resolutions);
   if (!planned.ok) {
     if (planned.code === 'merge_conflict') {
       return { conflicts: planned.conflicts, kind: 'conflicts' };
     }
-    return { conflicts: [], kind: 'conflicts' };
+    return {
+      kind: 'blocked',
+      code: planned.code,
+      lineCount: planned.lineCount,
+    };
   }
   // Match the merge planner's attachment lanes only for bases with siblings.
   // A lone conflicting offer still follows its explicit base-item resolution.

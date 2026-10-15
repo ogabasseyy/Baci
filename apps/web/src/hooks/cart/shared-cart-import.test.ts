@@ -358,3 +358,63 @@ it('uses an atomic import when a newly added line carries selected coverage', ()
     },
   });
 });
+
+it('reports capacity for a full server and legal attachment siblings, preserving every device line for retry', () => {
+  const local = [
+    cartItem({
+      id: 'prod-1',
+      quizAwardId: 'award-a',
+      quizVoucherToken: 'token-a',
+    }),
+    cartItem({
+      id: 'prod-1',
+      quizAwardId: 'award-b',
+      quizVoucherToken: 'token-b',
+      hasAssurance: true,
+    }),
+  ];
+  const original = structuredClone(local);
+  const full = snapshot({
+    lines: Array.from({ length: 20 }, (_, index) =>
+      cartLine({
+        id: `server-${index}`,
+        item: { productId: `prod-${index + 1}` },
+      })
+    ),
+  });
+  expect(planLegacyImport(local, full, CART_ID)).toEqual({
+    kind: 'blocked',
+    code: 'too_many_lines',
+    lineCount: 22,
+  });
+  expect(local).toEqual(original);
+  const room = {
+    ...full,
+    lines: full.lines.slice(0, 18),
+    version: full.version + 1,
+  };
+  const retry = planLegacyImport(local, room, CART_ID);
+  expect(retry.kind).toBe('commands');
+  if (retry.kind !== 'commands')
+    throw new Error('expected import after making room');
+  expect(
+    retry.replacement?.lines.filter((line) => line.voucherToken)
+  ).toHaveLength(2);
+  expect(
+    retry.replacement?.lines.find((line) => line.voucherToken === 'token-b')
+      ?.hasAssurance
+  ).toBe(true);
+});
+it('does not silently omit a local-only line when the server cart is full', () => {
+  const full = snapshot({
+    lines: Array.from({ length: 20 }, (_, index) =>
+      cartLine({
+        id: `server-${index}`,
+        item: { productId: `server-product-${index}` },
+      })
+    ),
+  });
+  expect(
+    planLegacyImport([cartItem({ id: 'device-only' })], full, CART_ID)
+  ).toMatchObject({ kind: 'blocked', code: 'too_many_lines' });
+});

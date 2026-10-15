@@ -32,7 +32,7 @@ try:
     for match in re.finditer(r'CREATE OR REPLACE FUNCTION public\.[\s\S]*?\$\$;',f.read_text()): sql+='\n'+match.group()
    else: sql+='\n\\i '+str(f)
  if '--baseline' not in sys.argv:
-  for name in ['20261015141000_commerce_cart_mutation_lifetime_cap.sql','20261015142000_commerce_cart_replace_attachment_identity.sql','20261015143000_commerce_cart_handoff_attachment_lifetime.sql','20261015144000_commerce_cart_checkout_add_identity.sql','20261015145000_commerce_cart_checkout_complete_vouchers.sql','20261015150000_commerce_cart_agentic_checkout_economics.sql']:
+  for name in ['20261015141000_commerce_cart_mutation_lifetime_cap.sql','20261015142000_commerce_cart_replace_attachment_identity.sql','20261015143000_commerce_cart_handoff_attachment_lifetime.sql','20261015144000_commerce_cart_checkout_add_identity.sql','20261015145000_commerce_cart_checkout_complete_vouchers.sql','20261015150000_commerce_cart_agentic_checkout_economics.sql','20261015151000_commerce_cart_partial_voucher_binding.sql']:
    sql+='\n'+(root/'supabase/migrations'/name).read_text()
  tests=(root/'supabase/tests/commerce_cart_verified_legacy_bridge.sql').read_text()
  if '--baseline' in sys.argv:

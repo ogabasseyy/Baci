@@ -105,8 +105,7 @@ export async function revokeCartDeviceSession(
     return {
       ok: response.ok
         ? body?.revoked === true
-        : (response.status === 401 && body?.code === 'missing_proof') ||
-          (response.status === 403 && body?.code === 'merchant_unavailable'),
+        : response.status === 401 && body?.code === 'missing_proof',
     };
   } catch {
     return { ok: false };

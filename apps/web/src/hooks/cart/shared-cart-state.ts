@@ -183,6 +183,7 @@ export type SharedCartAction =
       generation: number;
       conflicts: CartMergeConflict[];
     }
+  | { type: 'import/capacity_exceeded'; generation: number }
   | { type: 'import/failed'; generation: number; code: CartErrorCode }
   | {
       type: 'assurance/overlay';

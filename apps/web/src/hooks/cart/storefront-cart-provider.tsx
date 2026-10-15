@@ -746,6 +746,8 @@ export function StorefrontCartProvider({
           syncError: shared.syncError,
           retryPendingSync: shared.retryPendingSync,
           importConflicts: shared.importConflicts,
+          importWarnings: shared.importWarnings,
+          discardLegacyImport: shared.discardLegacyImport,
           resolveImportConflicts: shared.resolveImportConflicts,
           sharedCartRef:
             shared.cartId && shared.version !== null

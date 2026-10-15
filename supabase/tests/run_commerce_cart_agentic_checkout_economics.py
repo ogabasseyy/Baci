@@ -66,9 +66,12 @@ with tempfile.TemporaryDirectory(prefix='cart-condition-order-') as directory:
         sql += "\nCREATE TABLE public.agentic_binding_calls(discount numeric,expected numeric,items jsonb);\n"+capture
         if '--before-agentic-economics-fix' not in sys.argv:
             sql += (root / 'supabase/migrations/20261015150000_commerce_cart_agentic_checkout_economics.sql').read_text()*2
+        if '--before-partial-voucher-binding-fix' not in sys.argv:
+            sql += (root / 'supabase/migrations/20261015151000_commerce_cart_partial_voucher_binding.sql').read_text()*2
         assertions=(root / 'supabase/tests/commerce_cart_agentic_checkout_economics.sql').read_text()
         if '--voucher-only' in sys.argv: assertions=assertions.replace('FOR n IN 1..6 LOOP','FOR n IN 2..2 LOOP')
-        sql += assertions+'\nROLLBACK;'
+        sql += assertions
+        sql += (root / 'supabase/tests/commerce_cart_partial_voucher_binding.sql').read_text()+'\nROLLBACK;'
         result = subprocess.run(['psql', '-X', '-v', 'ON_ERROR_STOP=1', '-h', str(socket), '-p', '55492', '-U', 'postgres', '-d', 'postgres'], input=sql, text=True, capture_output=True)
         print('PASS' if result.returncode == 0 else 'FAIL')
         if result.returncode:

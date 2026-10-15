@@ -185,12 +185,13 @@ export async function POST(request: NextRequest) {
         { environment: getCartProofEnvironment() }
       );
     } catch (error) {
-      // The create RPC already committed the cart and grant: return
-      // the committed cart without a session proof rather than hiding
-      // it behind a 503 that every retry would replay into.
+      // Creation is committed, but the client must retain its stable creation
+      // operation until proof installation succeeds. The RPC replays the same
+      // cart and grant when that exact request is retried.
       console.error('Cart session proof issue failed after create commit', {
         message: error instanceof Error ? error.message : 'unknown',
       });
+      return cartErrorResponse('temporarily_unavailable');
     }
 
     const response = cartJsonResponse(

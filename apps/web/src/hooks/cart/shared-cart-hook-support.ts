@@ -66,6 +66,7 @@ export interface UseSharedCartResult {
   toggleAssurance: (cartItemId: string) => void;
   retryPendingSync: () => void;
   retryImport: () => void;
+  discardLegacyImport: () => void;
   resolveImportConflicts: (
     resolutions: import('@baci/shared/cart').CartMergeResolution[]
   ) => void;

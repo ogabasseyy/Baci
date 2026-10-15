@@ -45,6 +45,7 @@ try:
  sql+='\n'+(root/'supabase/migrations/20261015144000_commerce_cart_checkout_add_identity.sql').read_text()
  if '--before-voucher-pair-fix' not in sys.argv: sql+=('\n'+(root/'supabase/migrations/20261015145000_commerce_cart_checkout_complete_vouchers.sql').read_text())*2
  sql+='\n'+(root/'supabase/migrations/20261015150000_commerce_cart_agentic_checkout_economics.sql').read_text()
+ sql+='\n'+(root/'supabase/migrations/20261015151000_commerce_cart_partial_voucher_binding.sql').read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_checkout_complete_vouchers.sql').read_text()
  sql+='\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-checkout-voucher-review.log','w'),stderr=subprocess.STDOUT,cwd=root)

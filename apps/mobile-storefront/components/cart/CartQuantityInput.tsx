@@ -41,7 +41,12 @@ export default function CartQuantityInput({
     if (Number.isNaN(parsed) || parsed <= 0) {
       setLocalValue(value.toString());
     } else {
-      onChange(maxValue === undefined ? parsed : Math.min(parsed, maxValue));
+      const committed =
+        maxValue === undefined ? parsed : Math.min(parsed, maxValue);
+      // Keep the displayed draft at the committed (clamped) value even
+      // when the external quantity does not change, e.g. already at max.
+      setLocalValue(String(committed));
+      onChange(committed);
     }
   };
 

@@ -47,6 +47,7 @@ describe('CartQuantityInput', () => {
 
     expect(onChange).toHaveBeenCalledWith(10);
     expect(onChange).toHaveBeenCalledTimes(1);
+    expect(screen.getByDisplayValue('10')).toBeTruthy();
   });
 
   it('does not commit on blur alone', () => {

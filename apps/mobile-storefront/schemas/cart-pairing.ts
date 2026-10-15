@@ -2,8 +2,11 @@ import { z } from 'zod';
 export const nativePairingHintSchema = z.object({
   merchantId: z.uuid(),
   destination: z.discriminatedUnion('type', [
-    z.object({ type: z.literal('web') }),
-    z.object({ type: z.literal('native'), app: z.literal('storefront') }),
+    z.strictObject({ type: z.literal('web') }),
+    z.strictObject({
+      type: z.literal('native'),
+      app: z.literal('storefront'),
+    }),
   ]),
 });
 

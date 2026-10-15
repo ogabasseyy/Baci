@@ -63,6 +63,7 @@ it.each([
 it('rejects tenant mismatch and duplicate or query-string secrets', () => {
   for (const path of [
     `https://shop.example.com/cart#handoff=${token({ merchantId: hid })}&hid=${hid}`,
+    `https://shop.example.com/cart#handoff=${token({ destination: { type: 'web', app: 'storefront' } })}&hid=${hid}`,
     `https://shop.example.com/cart#handoff=${token()}&handoff=${token()}&hid=${hid}`,
     `https://shop.example.com/cart?handoff=${token()}&hid=${hid}`,
   ]) {

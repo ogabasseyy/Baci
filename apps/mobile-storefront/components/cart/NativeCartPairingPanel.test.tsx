@@ -36,10 +36,13 @@ jest.mock('@/stores/cart-store', () => ({
 }));
 jest.mock('@/lib/cart/shared-cart-client', () => ({
   createNativeCartClient: () => ({
-    previewHandoff: async () => ({
-      snapshot: { lines: [{ quantity: 2 }] },
-      expiresAt: '2099-01-01T00:00:00Z',
-    }),
+    previewHandoff: async (_handoffId: string, token: string) => {
+      if (token.includes('crafted')) throw new Error('Invalid handoff');
+      return {
+        snapshot: { lines: [{ quantity: 2 }] },
+        expiresAt: '2099-01-01T00:00:00Z',
+      };
+    },
   }),
 }));
 afterEach(() => clearCartPairingLink());
@@ -63,4 +66,27 @@ it('offers a trusted browser fallback for a web-bound grant, without attempting 
   await waitFor(() =>
     expect(WebBrowser.openBrowserAsync).toHaveBeenCalledWith(url)
   );
+});
+it('does not offer the browser fallback when server preview rejects a crafted web hint', async () => {
+  jest.mocked(WebBrowser.openBrowserAsync).mockClear();
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'web' } })).toString('base64url')}.crafted`;
+  const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+  captureCartPairingLink(url, {
+    merchantId: merchant,
+    merchantSlug: 'shop',
+    merchantDomain: 'shop.example.com',
+  });
+  const screen = render(<NativeCartPairingPanel />);
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'This cart link could not be verified. Request a new link or try again later.'
+      )
+    ).toBeTruthy()
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Continue on website' })
+  ).toBeNull();
+  expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
 });

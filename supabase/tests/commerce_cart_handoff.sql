@@ -1201,4 +1201,87 @@ BEGIN
 END
 $$;
 
+
+-- 19. Connect must not resurrect a revoked destination grant.
+DO $$ DECLARE v_ver integer; BEGIN
+  SELECT version INTO v_ver FROM public.commerce_carts WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  PERFORM set_config('test.rev_incoming_version', v_ver::text, false);
+END $$;
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-short","cart_scope":"session","cart_id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","cart_grant_id":"99999999-9999-4999-8999-999999999900"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_issue_handoff(
+    'f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'handoff-op-rev1',
+    '{"type":"web"}'::jsonb
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'revoke-case issue must succeed, got %', v_result; END IF;
+END
+$$;
+RESET ROLE;
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-rev-dest","cart_scope":"bootstrap"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_redeem_handoff(
+    'f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2',
+    'attempt-rev-1', 'connect', 'web', NULL,
+    current_setting('test.rev_incoming_version')::integer, NULL, NULL, NULL
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'first connect must succeed, got %', v_result; END IF;
+END
+$$;
+RESET ROLE;
+UPDATE public.commerce_cart_grants SET revoked_at = now()
+WHERE cart_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' AND principal_id = 'guest-rev-dest';
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-short","cart_scope":"session","cart_id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb","cart_grant_id":"99999999-9999-4999-8999-999999999900"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_issue_handoff(
+    'f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    'handoff-op-rev2',
+    '{"type":"web"}'::jsonb
+  ) INTO v_result;
+  IF NOT (v_result ->> 'ok')::boolean THEN RAISE EXCEPTION 'revoke-case reissue must succeed, got %', v_result; END IF;
+END
+$$;
+RESET ROLE;
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-rev-dest","cart_scope":"bootstrap"}';
+SET ROLE commerce_cart_shopper;
+DO $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.commerce_cart_redeem_handoff(
+    'f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2f2',
+    'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3',
+    'attempt-rev-2', 'connect', 'web', NULL,
+    current_setting('test.rev_incoming_version')::integer, NULL, NULL, NULL
+  ) INTO v_result;
+  IF (v_result ->> 'ok')::boolean OR (v_result ->> 'code') <> 'unauthorized' THEN
+    RAISE EXCEPTION 'connect after revocation must be unauthorized, got %', v_result;
+  END IF;
+END
+$$;
+RESET ROLE;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.commerce_cart_grants
+    WHERE cart_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' AND principal_id = 'guest-rev-dest' AND revoked_at IS NOT NULL) THEN
+    RAISE EXCEPTION 'revoked grant must stay revoked after a connect attempt';
+  END IF;
+END $$;
+
 ROLLBACK;

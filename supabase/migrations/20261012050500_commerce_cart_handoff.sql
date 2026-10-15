@@ -252,6 +252,7 @@ DECLARE
   v_incoming public.commerce_carts%ROWTYPE;
   v_dest public.commerce_carts%ROWTYPE;
   v_dest_grant uuid;
+  v_dest_revoked timestamptz;
   v_grant_live boolean;
   v_grant_known boolean;
   v_state jsonb;
@@ -464,12 +465,16 @@ BEGIN
         'state', v_state, 'currentVersion', v_incoming.version,
         'incomingVersion', v_incoming.version, 'destVersion', NULL);
     END IF;
-    SELECT g.id INTO v_dest_grant FROM public.commerce_cart_grants g
+    SELECT g.id, g.revoked_at INTO v_dest_grant, v_dest_revoked FROM public.commerce_cart_grants g
     WHERE g.cart_id = v_incoming.id AND g.principal_id = v_principal;
+    IF FOUND AND v_dest_revoked IS NOT NULL THEN
+      -- A retired device stays retired: a retained handoff token must
+      -- not silently resurrect the grant revocation retired.
+      RETURN jsonb_build_object('ok', false, 'code', 'unauthorized', 'replayed', false, 'state', null, 'currentVersion', null);
+    END IF;
     IF FOUND THEN
       UPDATE public.commerce_cart_grants
-      SET expires_at = least(now() + interval '7 days', v_incoming.expires_at),
-          revoked_at = NULL
+      SET expires_at = least(now() + interval '7 days', v_incoming.expires_at)
       WHERE id = v_dest_grant;
     ELSE
       v_dest_grant := pg_catalog.gen_random_uuid();

@@ -30,6 +30,11 @@ CodeRabbit review is pending (unavailable in this worktree session).
   is authored and listing-verified, not yet run against the fixture
   stack), and official re-verification of the pinned `2026-04-08`
   profile before any external enrollment claim.
+- HARD BLOCKER before UCP activation: legacy UCP carts with a null
+  `agent_id` are readable/writable by any authenticated platform caller
+  for the merchant (documented compatibility in
+  `ucp-cart-storage.ts`). Backfill `agent_id` for legacy rows or make
+  null-owner rows inaccessible before enabling agentic cart traffic.
 - Full monorepo test suite and final review at a reviewed commit.
 
 ## Invariants checked by design

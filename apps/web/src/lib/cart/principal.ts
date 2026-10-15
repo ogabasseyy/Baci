@@ -117,6 +117,9 @@ export async function resolveCartPrincipal(
   return {
     ok: true,
     principal: {
+      // Scope-level ceiling only: the grant's allowed_operations are
+      // enforced authoritatively by the SQL command RPC on every
+      // mutation, never by this TypeScript list alone.
       allowedOperations: session.allowedOperations,
       cartId: session.cartId,
       expiresAt: session.expiresAt,

@@ -2,6 +2,10 @@ import { randomUUID } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
+  cartSessionCookieName,
+  readCookieFromRequest,
+} from '@/lib/cart/principal';
+import {
   checkCartQuota,
   createAnonMerchantFeatureLookup,
   readCartJsonBody,
@@ -16,6 +20,7 @@ import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
   CartSessionConfigError,
   issueCartSessionProof,
+  verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getClientIdentifier } from '@/lib/rate-limit';
@@ -98,12 +103,32 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-    setCartSessionCookie(
-      response,
-      merchant.merchant.id,
-      proof,
-      CART_BOOTSTRAP_PROOF_TTL_SECONDS
+    // Never downgrade a live session cookie to a cart-less bootstrap
+    // proof: a stale tab re-provisioning would make the shopper's live
+    // cart look lost in this browser. The body still returns the fresh
+    // bootstrap proof for native/programmatic callers.
+    const existingProof = readCookieFromRequest(
+      request,
+      cartSessionCookieName(merchant.merchant.id)
     );
+    let hasLiveSessionCookie = false;
+    if (existingProof) {
+      const verified = verifyCartSessionProof(existingProof, {
+        environment: getCartProofEnvironment(),
+      });
+      hasLiveSessionCookie =
+        verified.ok &&
+        verified.session.merchantId === merchant.merchant.id &&
+        verified.session.cartId !== null;
+    }
+    if (!hasLiveSessionCookie) {
+      setCartSessionCookie(
+        response,
+        merchant.merchant.id,
+        proof,
+        CART_BOOTSTRAP_PROOF_TTL_SECONDS
+      );
+    }
     return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart/bootstrap:', {

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
+  issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { POST } from './route';
@@ -133,6 +134,31 @@ describe('POST /api/storefront/cart/bootstrap', () => {
       'baci-cart-11111111-1111-4111-8111-111111111111'
     );
     expect(cookieProof).toBe(payload.proof);
+  });
+
+  it('never downgrades a live session cookie to a bootstrap proof', async () => {
+    const sessionProof = issueCartSessionProof(
+      {
+        cartId: '22222222-2222-4222-8222-222222222222',
+        grantId: '33333333-3333-4333-8333-333333333333',
+        merchantId: MERCHANT_ID,
+        principalId: 'guest-live',
+        scope: 'session',
+      },
+      { environment: 'test', secret: TEST_SECRET }
+    );
+    const cookieName = `baci-cart-${MERCHANT_ID}`;
+
+    const response = await postBootstrap({
+      body: {},
+      headers: { cookie: `csrf-token=csrf-1; ${cookieName}=${sessionProof}` },
+    });
+
+    expect(response.status).toBe(201);
+    // The body still carries a fresh bootstrap proof, but the live
+    // session cookie is left untouched.
+    expect((await response.json()).proof).toMatch(/^cp1\./);
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 
   it('serves native clients that carry no cookies', async () => {

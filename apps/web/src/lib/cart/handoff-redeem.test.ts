@@ -164,3 +164,37 @@ describe('redeemCartHandoff', () => {
     }
   });
 });
+it('passes opaque handoff selectors through to the scoped RPC without rewriting them as attachment inputs', async () => {
+  const { redeemCartHandoff: rpcRedeemCartHandoff } = await import(
+    './handoff-redeem'
+  );
+  const lines = [
+    {
+      item: { productId: '44444444-4444-4444-8444-444444444444' },
+      sourceLineId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      quantity: 2,
+    },
+  ];
+  const rpc = vi.fn().mockResolvedValue({
+    data: { ok: false, code: 'version_conflict' },
+    error: null,
+  });
+  await rpcRedeemCartHandoff({ rpc } as never, {
+    token: 'ch1.payload.signature',
+    handoffId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    attemptId: 'opaque-attempt',
+    caller: 'web',
+    choice: 'merge',
+    lines,
+    expectedDestVersion: 2,
+    expectedIncomingVersion: 3,
+  });
+  expect(rpc).toHaveBeenCalledWith(
+    'commerce_cart_redeem_handoff',
+    expect.objectContaining({
+      p_lines: lines,
+      p_expected_dest_version: 2,
+      p_expected_incoming_version: 3,
+    })
+  );
+});

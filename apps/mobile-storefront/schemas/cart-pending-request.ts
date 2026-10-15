@@ -44,6 +44,17 @@ const command = z.discriminatedUnion('type', [
   z.object({ type: z.literal('clear') }),
   z.object({ type: z.literal('replace'), lines: z.array(line).max(20) }),
 ]);
+// References are valid only during a locked, version-checked handoff merge.
+// Keep normal command/account line parsing independent of this transport.
+const handoffLine = z.union([
+  z.object({
+    sourceLineId: z.uuid(),
+    item,
+    quantity: z.number().int().min(1).max(10),
+    hasAssurance: z.boolean().optional(),
+  }),
+  line.extend({ hasAssurance: z.boolean().optional() }).strict(),
+]);
 export const nativeHandoffRedeemSchema = z
   .object({
     token: z.string().regex(/^ch1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
@@ -53,7 +64,7 @@ export const nativeHandoffRedeemSchema = z
     destCartId: z.uuid().optional(),
     expectedIncomingVersion: z.number().int().min(1).optional(),
     expectedDestVersion: z.number().int().min(1).optional(),
-    lines: z.array(line).max(20).optional(),
+    lines: z.array(handoffLine).max(40).optional(),
     resolutions: z
       .array(z.object({ item, keep: z.enum(['incoming', 'existing']) }))
       .max(20)

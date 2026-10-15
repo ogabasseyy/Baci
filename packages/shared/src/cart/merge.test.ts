@@ -254,3 +254,50 @@ it('preserves assurance for a disjoint import and overlapping identical contexts
   expect(result.ok).toBe(true);
   if (result.ok) expect(result.lines[0].hasAssurance).toBe(true);
 });
+it('preserves redacted handoff siblings as opaque references without leaking attachments', () => {
+  const existing = snapshot([{ ...line(TECNO, 2), id: 'dest-ordinary' }]);
+  const incoming = snapshot([
+    { ...line(TECNO, 1), id: 'source-ordinary' },
+    { ...line(TECNO, 1), id: 'source-voucher' },
+  ]);
+  const planned = planCartMerge(existing, incoming, [], {
+    handoffReferences: true,
+  });
+  expect(planned).toEqual({
+    ok: true,
+    lines: [
+      {
+        sourceLineId: 'dest-ordinary',
+        item: { productId: TECNO },
+        quantity: 2,
+      },
+      {
+        sourceLineId: 'source-ordinary',
+        item: { productId: TECNO },
+        quantity: 1,
+      },
+      {
+        sourceLineId: 'source-voucher',
+        item: { productId: TECNO },
+        quantity: 1,
+      },
+    ],
+  });
+});
+it('allows forty stored handoff references before server-side lane coalescing', () => {
+  const make = (side: string) =>
+    Array.from({ length: 20 }, (_, index) => ({
+      ...line(TECNO, 1),
+      id: `${side}-${index}`,
+    }));
+  const planned = planCartMerge(
+    snapshot(make('dest')),
+    snapshot(make('source')),
+    [],
+    { handoffReferences: true }
+  );
+  expect(planned.ok && planned.lines).toHaveLength(40);
+  expect(
+    planCartMerge(snapshot([line(TECNO, 1)]), snapshot([]))
+  ).not.toHaveProperty('lines.0.sourceLineId');
+});

@@ -70,8 +70,33 @@ function hasVoucher(attachments: CartLineAttachments): boolean {
 export function planCartMerge(
   existing: CartSnapshot,
   incoming: CartSnapshot,
-  resolutions: CartMergeResolution[] = []
+  resolutions: CartMergeResolution[] = [],
+  options: { handoffReferences?: boolean } = {}
 ): PlanCartMergeResult {
+  if (options.handoffReferences) {
+    // Preview attachments are private. Submit bounded stored-line references
+    // and let the locked server snapshots resolve lanes, quantities and picks.
+    if (
+      [existing, incoming].some(
+        (cart) => cart.lines.length > SHARED_CART_MAX_LINES
+      )
+    )
+      return {
+        ok: false,
+        code: 'too_many_lines',
+        lineCount: existing.lines.length + incoming.lines.length,
+      };
+    const refs = new Map<string, CartInputLine>();
+    for (const line of [...existing.lines, ...incoming.lines]) {
+      refs.set(line.id, {
+        sourceLineId: line.id,
+        item: line.item,
+        quantity: line.quantity,
+        ...(line.hasAssurance ? { hasAssurance: true } : {}),
+      });
+    }
+    return { ok: true, lines: [...refs.values()] };
+  }
   // A cart may lawfully hold a regular line plus attachment-specific siblings.
   // Keep legacy one-to-one conflict choices, but do not collapse sibling lanes.
   const siblingBases = new Set<string>();

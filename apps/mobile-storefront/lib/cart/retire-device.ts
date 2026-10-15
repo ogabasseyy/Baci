@@ -38,13 +38,23 @@ export async function flushRetiredCartDevice(
       }
     );
     const result: unknown = await response.json();
-    if (
-      !response.ok ||
-      !result ||
-      typeof result !== 'object' ||
-      !('revoked' in result) ||
-      result.revoked !== true
-    )
+    const validBody =
+      result !== null && typeof result === 'object' && !Array.isArray(result);
+    // The authenticated revocation endpoint returns expired_proof only after
+    // signature/audience checks and after its post-expiry revocation grace.
+    // This acknowledges the exact retired record, never active authority.
+    const retirementExpired =
+      validBody &&
+      response.status === 401 &&
+      'code' in result &&
+      result.code === 'expired_proof' &&
+      !('revoked' in result);
+    const revoked =
+      validBody &&
+      response.ok &&
+      'revoked' in result &&
+      result.revoked === true;
+    if (!revoked && !retirementExpired)
       throw new NativeCartError('revocation_pending');
     await storage.acknowledgeRetirement?.(config.merchantId, proof);
   } catch {

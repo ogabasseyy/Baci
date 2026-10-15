@@ -68,7 +68,9 @@ export async function pairNativeCart(
   if (choice === 'merge') {
     const current = deps.getSnapshot();
     if (!current) throw new NativeCartError('refresh_required');
-    const plan = planCartMerge(current, preview.snapshot, resolutions);
+    const plan = planCartMerge(current, preview.snapshot, resolutions, {
+      handoffReferences: true,
+    });
     if (!plan.ok) {
       if (plan.code === 'merge_conflict')
         deps.onMergeConflicts?.(

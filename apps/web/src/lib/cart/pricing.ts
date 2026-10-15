@@ -27,7 +27,7 @@ function priceLine(raw: RawCartLine): {
 } {
   const warnings: CartWarning[] = [];
   let estimated = false;
-  const hasVoucher = Boolean(raw.voucherToken ?? raw.voucherAwardId);
+  const hasVoucher = Boolean(raw.voucherToken && raw.voucherAwardId);
 
   if (!raw.available) {
     estimated = true;

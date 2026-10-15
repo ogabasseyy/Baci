@@ -2,7 +2,6 @@
 import type { CartItemIdentity, CartSnapshot } from '@baci/shared/cart';
 import { cartLineIdentity } from '@baci/shared/cart';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { planCartMerge } from '@/lib/cart/merge';
 import { buildCsrfHeaders } from '@/lib/csrf';
 import {
   type Choice,
@@ -11,6 +10,7 @@ import {
   loadOrCreateAttemptId,
   type MergeConflictView,
   type PreviewResponse,
+  planHandoffMerge as planMerge,
   redactHandoffFragment,
 } from './cart-handoff-support';
 export function useCartHandoff(props: { token: string; handoffId: string }) {
@@ -211,7 +211,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       item: conflictItemForKey(key) ?? { productId: key },
       keep,
     }));
-    const planned = planCartMerge(destCart, preview.snapshot, resolutionList);
+    const planned = planMerge(destCart, preview.snapshot, resolutionList);
     if (!planned.ok && planned.code === 'too_many_lines') {
       setRedeemError(
         'These carts hold too many different items to merge. Connect instead.'
@@ -250,8 +250,8 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       setRedeemError('Choose which version to keep for every listed item.');
       return;
     }
-    // Re-plan locally so quantities follow max; the server re-enforces.
-    const planned = planCartMerge(destCart, preview.snapshot, resolutionList);
+    // Keep opaque refs; the server applies the chosen offer and quantities.
+    const planned = planMerge(destCart, preview.snapshot, resolutionList);
     if (!planned.ok) {
       if (planned.code === 'merge_conflict') {
         setConflicts(planned.conflicts);

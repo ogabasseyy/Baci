@@ -1,11 +1,14 @@
+import type { CartSnapshot } from '@baci/shared/cart';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { redactPreviewSnapshot } from '@/lib/cart/handoff-preview';
+import { cartHandoffRedeemRequestSchema } from '@/schemas/cart';
 import { CartHandoff } from './cart-handoff';
 
 const TOKEN = 'ch1.test-payload.test-signature';
 const HANDOFF_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
-function snapshot(overrides: Record<string, unknown> = {}) {
+function snapshot(overrides: Record<string, unknown> = {}): CartSnapshot {
   return {
     cartId: '22222222-2222-4222-8222-222222222222',
     currency: 'NGN',
@@ -274,6 +277,32 @@ describe('CartHandoff', () => {
     fetchMock.mockImplementation(async (url: string | URL) => {
       const href = String(url);
       if (href.includes('/api/storefront/cart/handoff/redeem')) {
+        if (
+          fetchMock.mock.calls.filter(([url]) =>
+            String(url).includes('/handoff/redeem')
+          ).length === 1
+        )
+          return jsonResponse(
+            {
+              code: 'merge_conflict',
+              conflicts: [
+                {
+                  item: { productId: '44444444-4444-4444-8444-444444444444' },
+                  existing: {
+                    quantity: 1,
+                    hasNegotiation: true,
+                    hasVoucher: false,
+                  },
+                  incoming: {
+                    quantity: 1,
+                    hasNegotiation: true,
+                    hasVoucher: false,
+                  },
+                },
+              ],
+            },
+            409
+          );
         return jsonResponse({
           cart: destCart,
           choice: 'merge',
@@ -303,8 +332,8 @@ describe('CartHandoff', () => {
     expect(
       await screen.findByRole('heading', { name: /choose what to keep/i })
     ).toBeInTheDocument();
-    // The first click plans locally and persists the attempt without
-    // posting; the resolution screen reuses that same attempt identifier.
+    // The server challenges redacted offers; the resolution retry keeps
+    // the original attempt identifier.
     const persistedAttempt = localStorage.getItem(
       `baci-cart-handoff-attempt:${HANDOFF_ID}`
     );
@@ -323,8 +352,8 @@ describe('CartHandoff', () => {
     const redeemCalls = fetchMock.mock.calls.filter(([url]) =>
       String(url).includes('/handoff/redeem')
     );
-    expect(redeemCalls).toHaveLength(1);
-    const body = JSON.parse(String((redeemCalls[0]?.[1] as RequestInit).body));
+    expect(redeemCalls).toHaveLength(2);
+    const body = JSON.parse(String((redeemCalls[1]?.[1] as RequestInit).body));
     expect(body.resolutions).toEqual([
       {
         item: { productId: '44444444-4444-4444-8444-444444444444' },
@@ -523,4 +552,59 @@ it('continues successful redemption when attempt cleanup storage throws', async 
   } finally {
     remove.mockRestore();
   }
+});
+
+it('submits redacted preview siblings as opaque references through the real redeem schema', async () => {
+  const sourceIds = [
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2',
+  ];
+  const destId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3';
+  const source = snapshot({
+    cartId: '33333333-3333-4333-8333-333333333333',
+    lines: [
+      { ...snapshot().lines[0], id: sourceIds[0], quantity: 2 },
+      {
+        ...snapshot().lines[0],
+        id: sourceIds[1],
+        voucherToken: 'private-voucher',
+        voucherAwardId: 'private-award',
+        negotiatedUnitPriceMinor: 100,
+        negotiationStatus: 'accepted',
+        hasAssurance: true,
+      },
+    ],
+  });
+  const redacted = JSON.parse(JSON.stringify(redactPreviewSnapshot(source)));
+  const dest = snapshot({
+    lines: [{ ...snapshot().lines[0], id: destId, quantity: 4 }],
+  });
+  fetchMock.mockReset();
+  fetchMock.mockImplementation(async (url: string) => {
+    if (String(url).includes('/handoff/redeem'))
+      return jsonResponse({ cart: dest });
+    if (String(url).includes('/handoff?'))
+      return jsonResponse({
+        status: 'pending',
+        merchant: { slug: 'ogabassey' },
+        snapshot: redacted,
+      });
+    return jsonResponse({ cart: dest });
+  });
+  render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+  fireEvent.click(await screen.findByRole('button', { name: /merge/i }));
+  await waitFor(() => expect(replaceMock).toHaveBeenCalled());
+  const call = fetchMock.mock.calls.find(([url]) =>
+    String(url).includes('/handoff/redeem')
+  );
+  const body = cartHandoffRedeemRequestSchema.parse(
+    JSON.parse(String(call?.[1].body))
+  );
+  expect(body.lines?.map((line) => line.sourceLineId).sort()).toEqual(
+    [destId, ...sourceIds].sort()
+  );
+  expect(body.lines?.map((line) => line.quantity)).toEqual([4, 2, 1]);
+  expect(JSON.stringify(body)).not.toMatch(
+    /private-voucher|private-award|negotiatedUnitPriceMinor|negotiationStatus/
+  );
 });

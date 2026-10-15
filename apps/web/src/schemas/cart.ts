@@ -140,6 +140,10 @@ const handoffResolutionSchema = z.strictObject({
   keep: z.enum(['incoming', 'existing']),
 });
 
+const handoffInputLineSchema = cartInputLineSchema.extend({
+  sourceLineId: z.uuid().optional(),
+});
+
 export const cartHandoffRedeemRequestSchema = z
   .strictObject({
     attemptId: z.string().trim().min(1).max(128),
@@ -148,7 +152,7 @@ export const cartHandoffRedeemRequestSchema = z
     expectedDestVersion: z.number().int().min(1).optional(),
     expectedIncomingVersion: z.number().int().min(1).optional(),
     handoffId: z.uuid(),
-    lines: z.array(cartInputLineSchema).max(20).optional(),
+    lines: z.array(handoffInputLineSchema).max(40).optional(),
     resolutions: z.array(handoffResolutionSchema).max(20).optional(),
     token: z.string().regex(/^ch1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/),
   })

@@ -381,3 +381,34 @@ it('accepts the existing 400-character voucher contract in canonical cart comman
     }).success
   ).toBe(true);
 });
+it('preserves up to forty handoff-only stored-line refs while rejecting them in ordinary replacement writes', () => {
+  const lines = Array.from({ length: 40 }, (_, index) => ({
+    sourceLineId: `aaaaaaaa-aaaa-4aaa-8aaa-${index.toString(16).padStart(12, '0')}`,
+    item: { productId: '44444444-4444-4444-8444-444444444444' },
+    quantity: 1,
+  }));
+  const body = {
+    attemptId: 'ref-union',
+    choice: 'merge',
+    handoffId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    token: 'ch1.payload.signature',
+    destCartId: '22222222-2222-4222-8222-222222222222',
+    expectedIncomingVersion: 1,
+    expectedDestVersion: 1,
+    lines,
+  };
+  expect(cartHandoffRedeemRequestSchema.parse(body).lines).toEqual(lines);
+  expect(
+    cartHandoffRedeemRequestSchema.safeParse({
+      ...body,
+      lines: [...lines, lines[0]],
+    }).success
+  ).toBe(false);
+  expect(
+    sharedCartMutationRequestSchema.safeParse({
+      operationId: 'ordinary',
+      expectedVersion: 1,
+      command: { type: 'replace', lines: [lines[0]] },
+    }).success
+  ).toBe(false);
+});

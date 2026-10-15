@@ -75,8 +75,8 @@ describe('UCP shared-cart adapter contracts (pinned fixtures)', () => {
     expect(ucpCartCallerMismatch({ agent_id: 'agent-a' }, 'agent-b')).toBe(
       true
     );
-    // Legacy rows without a recorded caller remain compatible.
-    expect(ucpCartCallerMismatch({ agent_id: null }, 'agent-b')).toBe(false);
+    // Legacy rows without a recorded caller cannot establish authority.
+    expect(ucpCartCallerMismatch({ agent_id: null }, 'agent-b')).toBe(true);
   });
 });
 

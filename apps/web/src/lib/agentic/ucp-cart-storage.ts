@@ -76,20 +76,15 @@ export function migratedCartRefreshOutcome(record: {
 
 /**
  * A platform cart stays scoped to its creating caller until explicit
- * handoff/linking. Legacy rows without a recorded caller stay readable
- * by any authenticated merchant agent (compatibility), but a recorded
- * owner mismatch is hidden as not-found. Mutations are stricter: an
- * unrecorded owner can never be matched, so legacy rows are read-only
- * until they are backfilled with agent_id (see the activation gates in
- * docs/qa/shared-cart-acceptance.md).
+ * handoff/linking. Missing owners cannot establish caller authority: hide
+ * legacy ownerless rows until their identity is explicitly backfilled.
  */
 export function ucpCartCallerMismatch(
   record: { agent_id?: string | null },
   agentId?: string | null,
-  options?: { mutation?: boolean }
+  _options?: { mutation?: boolean }
 ): boolean {
-  if (options?.mutation && !record.agent_id) return true;
-  return Boolean(record.agent_id && record.agent_id !== agentId);
+  return !record.agent_id || !agentId || record.agent_id !== agentId;
 }
 
 /**

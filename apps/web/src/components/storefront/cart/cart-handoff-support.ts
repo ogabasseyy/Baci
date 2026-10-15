@@ -1,4 +1,5 @@
 import type { CartItemIdentity, CartSnapshot } from '@baci/shared/cart';
+import { type CartMergeResolution, planCartMerge } from '@baci/shared/cart';
 
 export interface PreviewMerchant {
   id: string;
@@ -112,4 +113,15 @@ export function redactHandoffFragment() {
     '',
     window.location.pathname + window.location.search
   );
+}
+
+/** Public previews carry opaque line ids; SQL reconstructs private offer lanes. */
+export function planHandoffMerge(
+  existing: CartSnapshot,
+  incoming: CartSnapshot,
+  resolutions: CartMergeResolution[] = []
+) {
+  return planCartMerge(existing, incoming, resolutions, {
+    handoffReferences: true,
+  });
 }

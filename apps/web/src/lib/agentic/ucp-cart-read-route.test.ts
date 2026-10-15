@@ -96,3 +96,20 @@ it('hides a legacy cart owned by a different agent', async () => {
   expect(await response.json()).toEqual({ error: 'Cart not found' });
   expect(deps.respond).not.toHaveBeenCalled();
 });
+
+it.each([
+  null,
+  undefined,
+])('hides legacy carts without an owner (%s)', async (agent_id) => {
+  const deps = {
+    canonical: vi.fn().mockResolvedValue(null),
+    load: vi
+      .fn()
+      .mockResolvedValue({ cart: { agent_id, status: 'active' }, error: null }),
+    respond: vi.fn(),
+  };
+  const response = await readUcpCart(input, deps);
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({ error: 'Cart not found' });
+  expect(deps.respond).not.toHaveBeenCalled();
+});

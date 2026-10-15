@@ -38,6 +38,8 @@ export interface CartItemIdentity {
  * validates them against the catalog and pins voucher lines to quantity 1.
  */
 export interface CartInputLine extends CartLineAttachments {
+  /** Handoff-only opaque stored-line selector; ordinary writes reject it. */
+  sourceLineId?: string;
   hasAssurance?: boolean;
   item: CartItemIdentity;
   quantity: number;

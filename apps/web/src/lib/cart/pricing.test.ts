@@ -194,3 +194,14 @@ it('drops an accepted negotiation invalidated by a catalog change', () => {
   expect(result.snapshot.totalMinor).toBe(6000);
   expect(result.snapshot.lines[0].negotiatedUnitPriceMinor).toBeUndefined();
 });
+
+it.each([
+  { voucherToken: 'token-only', voucherAwardId: null },
+  { voucherToken: null, voucherAwardId: 'award-only' },
+])('keeps incomplete voucher pairs catalog-priced: %j', (credentials) => {
+  const { snapshot } = buildCartSnapshot(
+    raw([line({ ...credentials, quantity: 2 })])
+  );
+  expect(snapshot.lines[0].unitPriceMinor).toBe(2500);
+  expect(snapshot.totalMinor).toBe(5000);
+});

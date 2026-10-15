@@ -79,9 +79,9 @@ describe('ucp cart storage', () => {
 });
 
 describe('ucpCartCallerMismatch', () => {
-  it('keeps legacy null-owner carts readable but never writable', () => {
+  it('denies legacy null-owner carts for reads and writes', () => {
     const legacy = { agent_id: null };
-    expect(ucpCartCallerMismatch(legacy, 'agent-b')).toBe(false);
+    expect(ucpCartCallerMismatch(legacy, 'agent-b')).toBe(true);
     expect(ucpCartCallerMismatch(legacy, 'agent-b', { mutation: true })).toBe(
       true
     );

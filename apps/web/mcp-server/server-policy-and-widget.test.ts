@@ -134,3 +134,14 @@ describe('MCP policy and widget responses', () => {
   });
 
 });
+
+it('keeps the submitted-review v4 widget resource available alongside the standard v5 resource', async () => {
+  const server = await startMcpServerWithPostgrest({});
+  try {
+    const read = async (uri: string) => getResultRecord(await postMcpJsonRpc(server.baseUrl, { id: 121, method: 'resources/read', params: { uri } }));
+    const current = await read('ui://widget/store-v5.html');
+    const legacy = await read('ui://widget/store-v4.html');
+    expect(legacy.contents).toEqual([expect.objectContaining({uri: 'ui://widget/store-v4.html', mimeType: 'text/html+skybridge'})]);
+    expect((legacy.contents as Array<{text: string}>)[0].text).toEqual((current.contents as Array<{text: string}>)[0].text);
+  } finally { await server.close(); }
+});

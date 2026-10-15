@@ -43,7 +43,6 @@ import { VTU_PROVIDER_SUBMISSION_STARTED_AT_KEY } from '@/lib/vtu-submission-mar
 import {
   persistVtuWalletDebitConfirmation,
   recoverStrandedPreVendVtuRow,
-  shouldSkipRefundWithoutCollectionEvidence,
   writeVtuProviderSubmissionMarkerOrRestore,
 } from './vtu-fulfillment-recovery';
 
@@ -138,18 +137,6 @@ describe('vtu-fulfillment-recovery', () => {
     expect(mocks.restoreInterruptedPreVendVtuRow).toHaveBeenCalledWith(
       expect.objectContaining({ row })
     );
-  });
-
-  it('skips card-only refunds only without collection evidence', async () => {
-    const metadata = {};
-    await expect(
-      shouldSkipRefundWithoutCollectionEvidence({ metadata, row, supabase })
-    ).resolves.toBe(false);
-
-    mocks.hasVtuCollectionEvidence.mockResolvedValue(false);
-    await expect(
-      shouldSkipRefundWithoutCollectionEvidence({ metadata, row, supabase })
-    ).resolves.toBe(true);
   });
 
   describe('persistVtuWalletDebitConfirmation', () => {

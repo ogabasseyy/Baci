@@ -1,7 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSafeMetadataDiagnostics } from '@/lib/vtu-metadata-fields';
 
-const SETTLEMENT_METADATA_MERGE_ATTEMPTS = 2;
+// Five attempts (Codex R106 P2): the owned patch may hold this
+// pass's only email `sent: true`, and two attempts let a pair of
+// concurrent commits in the same millisecond window discard it —
+// the row then resends post-lease-expiry. Each retry re-reads
+// fresh; latecomers settle with empty patches (no writes), so live
+// contention drains within the budget and exhaustion needs five
+// consecutive contentions. A confirm-RPC would buy nothing more:
+// it fails identically under a true outage, and under a healthy
+// database these retries converge the same way.
+const SETTLEMENT_METADATA_MERGE_ATTEMPTS = 5;
+const SETTLEMENT_METADATA_MERGE_BACKOFF_MS = [25, 50, 100, 200] as const;
 
 function metadataValueOf(value: unknown): string {
   return JSON.stringify(value) ?? 'undefined';
@@ -100,6 +110,15 @@ export async function mergeVtuSettlementMetadata({
       return 'persisted';
     }
     lastCasError = casError?.message ?? null;
+    // Breath between attempts so contending settlers serialize
+    // instead of CAS-thrashing the same generation.
+    if (attempt < SETTLEMENT_METADATA_MERGE_ATTEMPTS) {
+      const backoffMs =
+        SETTLEMENT_METADATA_MERGE_BACKOFF_MS[
+          Math.min(attempt - 1, SETTLEMENT_METADATA_MERGE_BACKOFF_MS.length - 1)
+        ];
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
   }
 
   if (rereadFailed) {
@@ -109,7 +128,7 @@ export async function mergeVtuSettlementMetadata({
     });
     return 'skipped-reread-failed';
   }
-  console.error('VTU settlement metadata merge gave up after two attempts:', {
+  console.error('VTU settlement metadata merge gave up after five attempts:', {
     error: lastCasError ?? 'CAS race lost',
     metadata: getSafeMetadataDiagnostics(ownedPatch),
     transactionId: rowId,

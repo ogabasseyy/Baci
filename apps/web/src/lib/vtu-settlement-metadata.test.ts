@@ -90,14 +90,17 @@ describe('mergeVtuSettlementMetadata', () => {
     expect(mocks.casEqUpdatedAt).toHaveBeenCalledWith('updated_at', 't2');
   });
 
-  it('retries once on a lost CAS race then gives up without throwing', async () => {
+  it('retries lost CAS races up to five attempts then gives up without throwing', async () => {
+    // Codex R106 P2: the owned patch may hold this pass's only
+    // email `sent: true` — exhaustion must need five consecutive
+    // contentions, not a pair of commits in one millisecond window.
     // Give-up is safe: credit RPCs already landed idempotently and
     // unpersisted flags re-select the row on the next cron tick.
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
     const { mocks, supabase } = createSupabaseMock({
-      casResults: [null, null],
+      casResults: [null, null, null, null, null],
     });
     try {
       const result = await mergeVtuSettlementMetadata({
@@ -108,11 +111,39 @@ describe('mergeVtuSettlementMetadata', () => {
       });
 
       expect(result).toBe('skipped-race-lost');
-      expect(mocks.maybeSingleCas).toHaveBeenCalledTimes(2);
-      expect(mocks.maybeSingleReread).toHaveBeenCalledTimes(2);
+      expect(mocks.maybeSingleCas).toHaveBeenCalledTimes(5);
+      expect(mocks.maybeSingleReread).toHaveBeenCalledTimes(5);
     } finally {
       consoleErrorSpy.mockRestore();
     }
+  });
+
+  it('converges when contention drains on a later attempt', async () => {
+    // Codex R106 P2: latecomers settle with empty patches (no
+    // writes), so a storm always drains — a fourth-attempt win
+    // proves the sender's completion marker survives it.
+    const { mocks, supabase } = createSupabaseMock({
+      casResults: [null, null, null, { id: 'vtu-1' }],
+    });
+
+    const result = await mergeVtuSettlementMetadata({
+      baselineMetadata: {},
+      mutatedMetadata: {
+        customerReceiptEmailNotificationSent: true,
+        merchantWalletCredited: true,
+      },
+      rowId: 'vtu-1',
+      supabase,
+    });
+
+    expect(result).toBe('persisted');
+    expect(mocks.maybeSingleCas).toHaveBeenCalledTimes(4);
+    expect(mocks.updatePayloads).toHaveLength(4);
+    expect(mocks.updatePayloads[3]).toMatchObject({
+      metadata: expect.objectContaining({
+        customerReceiptEmailNotificationSent: true,
+      }),
+    });
   });
 
   it('persists on the second attempt after one lost race', async () => {
@@ -166,7 +197,7 @@ describe('mergeVtuSettlementMetadata', () => {
       });
 
       expect(result).toBe('skipped-reread-failed');
-      expect(mocks.maybeSingleReread).toHaveBeenCalledTimes(2);
+      expect(mocks.maybeSingleReread).toHaveBeenCalledTimes(5);
       expect(mocks.updatePayloads).toHaveLength(0);
     } finally {
       consoleErrorSpy.mockRestore();

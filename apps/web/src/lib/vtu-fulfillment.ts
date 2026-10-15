@@ -32,6 +32,7 @@ import {
 } from '@/lib/vtu-email-claim-lease';
 import {
   getSafeMetadataDiagnostics,
+  setMetadataValue,
   VTU_CUSTOMER_FAILURE_MESSAGE,
   VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
 } from '@/lib/vtu-metadata-fields';
@@ -48,12 +49,9 @@ import {
 } from '@/lib/vtu-fallback-credit-correction';
 import { awardVtuAirtimeLoyaltyPoints } from '@/lib/vtu-loyalty-points-award';
 import { executeMonnifyAirtimeKudaFallback } from '@/lib/vtu-monnify-kuda-fallback';
+import { getVtuProviderLabel, readPaymentSplit } from '@/lib/vtu-payment-split';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';
-import {
-  VTU_REFUND_SKIPPED_KEY,
-  VTU_REFUND_SKIPPED_NO_COLLECTION,
-} from '@/lib/vtu-refund-collection-evidence';
 import {
   RetryableVtuError,
   throwIfVtuRefundUnconfirmed,
@@ -62,9 +60,10 @@ import {
 import {
   persistVtuWalletDebitConfirmation,
   recoverStrandedPreVendVtuRow,
-  shouldSkipRefundWithoutCollectionEvidence,
   writeVtuProviderSubmissionMarkerOrRestore,
 } from './vtu-fulfillment-recovery';
+import { refundVtuToCustomerWallet } from './vtu-fulfillment-refund';
+import { findExistingVtuRefundLedger } from './vtu-fulfillment-refund-branches';
 import { mergeVtuSettlementMetadata } from './vtu-settlement-metadata';
 
 export type { RetryableVtuErrorContext } from '@/lib/vtu-refund-guard';
@@ -112,25 +111,6 @@ export function isInsufficientWalletBalanceError(
     error?.code === 'P0001' &&
     message.includes(INSUFFICIENT_WALLET_BALANCE_MESSAGE)
   );
-}
-
-interface PaymentSplit {
-  wallet: number;
-  card: number;
-}
-
-function readPaymentSplit(
-  metadata: Record<string, unknown> | null | undefined
-): PaymentSplit | null {
-  const split = metadata?.paymentSplit as Partial<PaymentSplit> | undefined;
-  if (
-    !split ||
-    typeof split.wallet !== 'number' ||
-    typeof split.card !== 'number'
-  ) {
-    return null;
-  }
-  return { wallet: split.wallet, card: split.card };
 }
 
 export interface VtuTransactionRow {
@@ -244,6 +224,24 @@ const LEGACY_CUSTOMER_EMAIL_SENT_KEY = 'customerEmailNotificationSent';
 const LEGACY_CUSTOMER_PENDING_TOKEN_EMAIL_SENT_KEY =
   'customerPendingTokenEmailNotificationSent';
 
+function getCustomerEmailDeliveryOutcomeKey(sentKey: string): string {
+  return `${sentKey}DeliveryOutcome`;
+}
+
+function isCustomerEmailDeliveryOutcomeUnknown(
+  metadata: Record<string, unknown>,
+  state: CustomerEmailNotificationState
+): boolean {
+  // Uncertain terminal state (Codex R106 P2): ZeptoMail accepted
+  // the send but its response was lost — the email may have
+  // landed, so automatic retries (reconciliation filter arms and
+  // the in-flight attempt gates below) must exclude the row
+  // instead of collapsing it into a definite send failure.
+  return (
+    metadata[getCustomerEmailDeliveryOutcomeKey(state.sentKey)] === 'unknown'
+  );
+}
+
 function getCustomerEmailNotificationState({
   isTokenReady,
   type,
@@ -280,10 +278,12 @@ function isCustomerEmailNotificationSent(
 }
 
 function setCustomerEmailNotificationResult({
+  deliveryOutcome,
   metadata,
   sent,
   state,
 }: {
+  deliveryOutcome?: 'unknown';
   metadata: Record<string, unknown>;
   sent: boolean;
   state: CustomerEmailNotificationState;
@@ -291,6 +291,26 @@ function setCustomerEmailNotificationResult({
   let changed = setMetadataValue(metadata, state.sentKey, sent);
   for (const writeKey of state.sentWriteKeys ?? []) {
     changed = setMetadataValue(metadata, writeKey, sent) || changed;
+  }
+  if (deliveryOutcome === 'unknown') {
+    // Marker mirrors the sent writes (including legacy mirrors)
+    // so every filter arm can exclude on its own key. Definite
+    // failures leave the key absent (retryable); thrown sends
+    // never pass an outcome (a throw means never accepted).
+    changed =
+      setMetadataValue(
+        metadata,
+        getCustomerEmailDeliveryOutcomeKey(state.sentKey),
+        'unknown'
+      ) || changed;
+    for (const writeKey of state.sentWriteKeys ?? []) {
+      changed =
+        setMetadataValue(
+          metadata,
+          getCustomerEmailDeliveryOutcomeKey(writeKey),
+          'unknown'
+        ) || changed;
+    }
   }
   // The attempted flag is released ONLY by the fenced clear RPC (Codex
   // R97 P2): zeroing it here would let the settlement merge persist a
@@ -398,10 +418,6 @@ function formatNaira(amount: number) {
   return `₦${formatter.format(amount)}`;
 }
 
-function getVtuProviderLabel(row: VtuTransactionRow) {
-  return row.network_provider || row.biller_name || VTU_TYPE_LABELS[row.type];
-}
-
 function getStorefrontUtilityType(type: VtuTransactionRow['type']) {
   switch (type) {
     case 'airtime':
@@ -421,401 +437,6 @@ function getStorefrontUtilityType(type: VtuTransactionRow['type']) {
 
 function assertNeverVtuType(value: never): never {
   throw new Error(`Unhandled VTU transaction type: ${value}`);
-}
-
-function setMetadataValue(
-  metadata: Record<string, unknown>,
-  key: string,
-  value: unknown
-) {
-  if (metadata[key] === value) {
-    return false;
-  }
-  metadata[key] = value;
-  return true;
-}
-
-/**
- * Refund a failed VTU vend's wallet debit back to the customer wallet so
- * the customer can retry from restored credit. Wallet-only: utilities
- * are paid exclusively from wallet balance (gateway and saved-card
- * utility routes return VTU_WALLET_ONLY without collecting), so there
- * is no card portion to refund — do not reintroduce split-payment
- * refund logic here.
- *
- * Gates:
- *  - row.customer_id must be set (no wallet to credit otherwise)
- *  - row.amount must be positive
- *  - row.source === 'checkout' — only checkout-sourced VTU rows move
- *    customer money (the wallet-only route debits the wallet before
- *    vending); 'direct' and 'storefront_modal' are blocked at the API
- *    layer before a row is ever created, and 'loyalty_reward' / 'gift'
- *    are funded by points / merchant, not the customer's wallet.
- *
- * Note: an earlier draft gated on metadata.paymentReference, but not
- * every collecting path stores that on vtu_transactions.metadata —
- * gating on it would skip refunds this gate must cover.
- *
- * Idempotent at the RPC layer via pg_advisory_xact_lock + a uniqueness
- * lookup on (source_type='vtu_transaction_refund', source_id, type='refund').
- * Also writes metadata.refundIssued / metadata.refundAmount for visibility.
- */
-function reconstructReplayRefundTotal({
-  metadata,
-  totalAmount,
-}: {
-  metadata: Record<string, unknown>;
-  totalAmount: number;
-}): number {
-  const persisted = Number(metadata.refundAmount ?? Number.NaN);
-  if (
-    metadata.refundContext === 'hybrid_vend_failure' &&
-    Number.isFinite(persisted)
-  ) {
-    const paymentSplit = readPaymentSplit(metadata);
-    if (paymentSplit) {
-      return paymentSplit.wallet + persisted;
-    }
-  }
-  // Every other branch (card_only, wallet_race / wallet_only_race,
-  // ledger sync) persists exactly what was restored. Legacy rows
-  // refunded before refundAmount existed fall back to the total.
-  if (Number.isFinite(persisted)) {
-    return persisted;
-  }
-  return totalAmount;
-}
-
-async function refundVtuToCustomerWallet({
-  metadata,
-  row,
-  supabase,
-  refundContext = 'kuda_failure',
-  requireCollectionEvidence = false,
-}: {
-  metadata: Record<string, unknown>;
-  row: VtuTransactionRow;
-  supabase: SupabaseClient;
-  /**
-   * Existing-failed rows only (Codex R51 6rqH1I): the card-only
-   * fallthrough refunds full row.amount for rows WITHOUT a
-   * paymentSplit — a legacy shape that includes gateway-init and
-   * declined-authorization rows which never collected. Fresh vend
-   * failures leave this false (this pass's vend attempt proves
-   * collection preceded it); rows arriving ALREADY failed demand
-   * recorded evidence or the row is marked skipped, never credited.
-   */
-  requireCollectionEvidence?: boolean;
-  /**
-   * `kuda_failure` (default): the vend was actually attempted and the
-   * upstream provider rejected it. If the wallet leg was already debited
-   * (`metadata.walletDebited === true`), reverse it; refund the card
-   * portion as fresh wallet credit.
-   *
-   * `wallet_race`: the strict-amount wallet RPC raised
-   * `insufficient_wallet_balance` BEFORE the vend ran. The wallet was
-   * never debited, so there is nothing to reverse. Only the card portion
-   * needs refunding (and only if cardPortion > 0 — wallet-only flows
-   * with no gateway charge produce no ledger row at all).
-   */
-  refundContext?: 'kuda_failure' | 'wallet_race';
-}): Promise<{
-  metadataChanged: boolean;
-  refundIssued: boolean;
-  refundedAmount: number;
-}> {
-  const totalAmount = Number(row.amount ?? 0);
-
-  if (!row.customer_id || totalAmount <= 0) {
-    return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
-  }
-  if (row.source !== 'checkout') {
-    return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
-  }
-  if (metadata.refundIssued === true) {
-    // Already refunded on a prior fulfillment pass. Reconstruct the
-    // restored total (Codex R103 P2): the hybrid kuda-failure branch
-    // persists only the card leg (the history projector sums it with
-    // the split's wallet leg), so reading the persisted value raw
-    // would serialize refundedToWallet: 0 for wallet-only splits on
-    // cached replays. Every other branch persists exactly what was
-    // restored, so only that label adds the wallet leg back.
-    return {
-      metadataChanged: false,
-      refundIssued: true,
-      refundedAmount: reconstructReplayRefundTotal({ metadata, totalAmount }),
-    };
-  }
-
-  const paymentSplit = readPaymentSplit(metadata);
-  const walletWasDebited = metadata.walletDebited === true;
-
-  // Dispatch by refund context. The branches were extracted into named
-  // helpers so each can be reasoned about (and tested) in isolation. The
-  // P1 invariant: a `kuda_failure` context with `paymentSplit` MUST also
-  // have `walletDebited === true`. If it doesn't, the wallet leg was
-  // never charged — falling through to the card-only branch would refund
-  // `totalAmount` and over-credit by `paymentSplit.wallet`. Throw rather
-  // than guess.
-  if (refundContext === 'kuda_failure' && paymentSplit && walletWasDebited) {
-    return await refundHybridKudaFailure({
-      metadata,
-      row,
-      supabase,
-      paymentSplit,
-    });
-  }
-  if (refundContext === 'wallet_race' && paymentSplit) {
-    return await refundHybridWalletRace({
-      metadata,
-      row,
-      supabase,
-      paymentSplit,
-    });
-  }
-  if (refundContext === 'kuda_failure' && paymentSplit && !walletWasDebited) {
-    // Logically equivalent to wallet-race (wallet never debited). The
-    // post-fact replay path defaults `refundContext` to 'kuda_failure'
-    // for any failed row, including rows whose original failure was a
-    // wallet-race — so this branch is reached during normal recovery,
-    // not just on invariant violations. Consult the ledger (the source
-    // of truth) before deciding which path we're on:
-    //   - refund row exists → wallet-race already compensated; sync
-    //     metadata and return so the customer isn't stuck in a 500
-    //     loop after a transient metadata-persist failure.
-    //   - no refund row → genuine invariant violation (vend was
-    //     attempted, wallet never debited, no compensation issued).
-    //     Fail closed so the webhook retries with a clean slate.
-    const existingRefund = await findExistingVtuRefundLedger({
-      row,
-      supabase,
-    });
-    if (existingRefund) {
-      const metadataChanged = applyRefundMetadata(
-        metadata,
-        existingRefund.amount,
-        'wallet_race'
-      );
-      return {
-        metadataChanged,
-        refundIssued: true,
-        refundedAmount: existingRefund.amount,
-      };
-    }
-    throwVtuPersistenceError(
-      `Refund dispatch invariant violated for ${row.id}: paymentSplit present, walletDebited=false, refundContext=kuda_failure, no ledger refund row`
-    );
-  }
-  // Card-only path (no paymentSplit — legacy shape; current
-  // checkout rows always persist a split at prepare time): refund the
-  // full row.amount ONLY with collection evidence when the caller
-  // requires it (see vtu-fulfillment-recovery for the why).
-  if (
-    requireCollectionEvidence &&
-    (await shouldSkipRefundWithoutCollectionEvidence({
-      metadata,
-      row,
-      supabase,
-    }))
-  ) {
-    const metadataChanged = setMetadataValue(
-      metadata,
-      VTU_REFUND_SKIPPED_KEY,
-      VTU_REFUND_SKIPPED_NO_COLLECTION
-    );
-    return { metadataChanged, refundIssued: false, refundedAmount: 0 };
-  }
-  return await refundCardOnly({ metadata, row, supabase, totalAmount });
-}
-
-interface RefundBranchInput {
-  metadata: Record<string, unknown>;
-  row: VtuTransactionRow;
-  supabase: SupabaseClient;
-}
-
-interface RefundBranchResult {
-  metadataChanged: boolean;
-  refundIssued: boolean;
-  refundedAmount: number;
-}
-
-function applyRefundMetadata(
-  metadata: Record<string, unknown>,
-  refundAmount: number,
-  refundContextLabel: string
-): boolean {
-  let metadataChanged = setMetadataValue(metadata, 'refundIssued', true);
-  metadataChanged =
-    setMetadataValue(metadata, 'refundAmount', refundAmount) || metadataChanged;
-  metadataChanged =
-    setMetadataValue(metadata, 'refundedAt', new Date().toISOString()) ||
-    metadataChanged;
-  metadataChanged =
-    setMetadataValue(metadata, 'refundContext', refundContextLabel) ||
-    metadataChanged;
-  return metadataChanged;
-}
-
-async function refundHybridKudaFailure({
-  metadata,
-  row,
-  supabase,
-  paymentSplit,
-}: RefundBranchInput & {
-  paymentSplit: PaymentSplit;
-}): Promise<RefundBranchResult> {
-  // Reverse the wallet leg first (idempotent at the RPC layer).
-  const { error: reverseError } = await supabase.rpc(
-    'reverse_vtu_wallet_payment',
-    {
-      p_vtu_transaction_id: row.id,
-      p_reason: `VTU vend failed: ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)}`,
-      p_merchant_id: row.merchant_id,
-    }
-  );
-  if (reverseError) {
-    console.error('Failed to reverse VTU wallet portion:', {
-      customerId: row.customer_id,
-      error: reverseError.message,
-      merchantId: row.merchant_id,
-      rpc: 'reverse_vtu_wallet_payment',
-      transactionId: row.id,
-    });
-    return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
-  }
-  // Card portion refund (only if there was a card leg).
-  if (paymentSplit.card > 0) {
-    const { error: refundError } = await supabase.rpc(
-      'refund_customer_wallet_for_vtu',
-      {
-        p_customer_id: row.customer_id,
-        p_merchant_id: row.merchant_id,
-        p_amount: paymentSplit.card,
-        p_vtu_transaction_id: row.id,
-        p_description: `Refund (card portion) for failed ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)} purchase`,
-      }
-    );
-    if (refundError) {
-      console.error('Failed to refund VTU card portion to customer wallet:', {
-        amount: paymentSplit.card,
-        customerId: row.customer_id,
-        error: refundError.message,
-        merchantId: row.merchant_id,
-        rpc: 'refund_customer_wallet_for_vtu',
-        transactionId: row.id,
-      });
-      return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
-    }
-  }
-  // Both legs were reversed above (wallet unconditionally, card when
-  // present). Persist the card leg only (Codex R98 P2): the history
-  // projector sums it with the split's wallet leg, so persisting the
-  // total here would double-count. The immediate response below
-  // reports the total instead — card-only reporting serialized
-  // refundedToWallet: 0 for wallet-only splits (card: 0) even though
-  // the full purchase amount was restored.
-  const metadataChanged = applyRefundMetadata(
-    metadata,
-    paymentSplit.card,
-    'hybrid_vend_failure'
-  );
-  return {
-    metadataChanged,
-    refundIssued: true,
-    refundedAmount: paymentSplit.wallet + paymentSplit.card,
-  };
-}
-
-async function refundHybridWalletRace({
-  metadata,
-  row,
-  supabase,
-  paymentSplit,
-}: RefundBranchInput & {
-  paymentSplit: PaymentSplit;
-}): Promise<RefundBranchResult> {
-  // Wallet-only race (paymentSplit.card === 0): nothing to refund. Mark
-  // the row refunded for visibility but do NOT call the refund RPC — the
-  // wallet was never debited and no gateway charge was collected.
-  if (paymentSplit.card <= 0) {
-    const metadataChanged = applyRefundMetadata(
-      metadata,
-      0,
-      'wallet_only_race'
-    );
-    return { metadataChanged, refundIssued: true, refundedAmount: 0 };
-  }
-  const { error: raceRefundError } = await supabase.rpc(
-    'refund_customer_wallet_for_vtu',
-    {
-      p_customer_id: row.customer_id,
-      p_merchant_id: row.merchant_id,
-      p_amount: paymentSplit.card,
-      p_vtu_transaction_id: row.id,
-      p_description: `Wallet balance changed during checkout — card portion refunded for ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)}`,
-    }
-  );
-  if (raceRefundError) {
-    console.error(
-      'Failed to refund VTU card portion (wallet race) to customer wallet:',
-      {
-        amount: paymentSplit.card,
-        customerId: row.customer_id,
-        error: raceRefundError.message,
-        merchantId: row.merchant_id,
-        rpc: 'refund_customer_wallet_for_vtu',
-        transactionId: row.id,
-      }
-    );
-    return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
-  }
-  const metadataChanged = applyRefundMetadata(
-    metadata,
-    paymentSplit.card,
-    'wallet_race'
-  );
-  return {
-    metadataChanged,
-    refundIssued: true,
-    refundedAmount: paymentSplit.card,
-  };
-}
-
-async function refundCardOnly({
-  metadata,
-  row,
-  supabase,
-  totalAmount,
-}: RefundBranchInput & { totalAmount: number }): Promise<RefundBranchResult> {
-  const { error } = await supabase.rpc('refund_customer_wallet_for_vtu', {
-    p_customer_id: row.customer_id,
-    p_merchant_id: row.merchant_id,
-    p_amount: totalAmount,
-    p_vtu_transaction_id: row.id,
-    p_description: `Refund for failed ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)} purchase ₦${row.amount}`,
-  });
-  if (error) {
-    console.error('Failed to refund VTU payment to customer wallet:', {
-      amount: totalAmount,
-      customerId: row.customer_id,
-      error: error.message,
-      merchantId: row.merchant_id,
-      rpc: 'refund_customer_wallet_for_vtu',
-      transactionId: row.id,
-    });
-    return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
-  }
-  // Use the shared helper so all three refund branches write
-  // metadata (refundIssued / refundAmount / refundedAt / refundContext)
-  // the same way. Without this an ops query like "find refunds where
-  // refundContext=card_only" would miss this path's rows.
-  const metadataChanged = applyRefundMetadata(
-    metadata,
-    totalAmount,
-    'card_only'
-  );
-  return { metadataChanged, refundIssued: true, refundedAmount: totalAmount };
 }
 
 const PURCHASE_RESULT_UPDATE_MAX_ATTEMPTS = 3;
@@ -949,36 +570,6 @@ async function findExistingCustomerCashback({
   }
 
   return data;
-}
-
-async function findExistingVtuRefundLedger({
-  row,
-  supabase,
-}: {
-  row: VtuTransactionRow;
-  supabase: SupabaseClient;
-}): Promise<{ amount: number } | null> {
-  if (!row.customer_id) return null;
-  const { data, error } = await supabase
-    .from('customer_wallet_transactions')
-    .select('amount')
-    .eq('customer_id', row.customer_id)
-    .eq('merchant_id', row.merchant_id)
-    .eq('source_type', 'vtu_transaction_refund')
-    .eq('source_id', row.id)
-    .eq('type', 'refund')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) {
-    // Fail closed: if we can't verify whether a refund row already exists,
-    // do NOT proceed with a retry — that's the path that would double-credit.
-    throwVtuPersistenceError(
-      `Failed to verify VTU refund ledger before retry: ${error.message}`
-    );
-  }
-  if (!data) return null;
-  return { amount: Number(data.amount) || 0 };
 }
 
 async function findExistingMerchantCommission({
@@ -1173,7 +764,8 @@ async function claimCustomerEmailNotificationAttempt({
   if (
     (metadata[state.attemptedKey] === true &&
       !isCustomerEmailClaimLeaseExpired({ metadata, state })) ||
-    isCustomerEmailNotificationSent(metadata, state)
+    isCustomerEmailNotificationSent(metadata, state) ||
+    isCustomerEmailDeliveryOutcomeUnknown(metadata, state)
   ) {
     return null;
   }
@@ -1360,7 +952,8 @@ async function notifyVtuCustomerSuccess({
   });
   const shouldAttemptEmail =
     Boolean(customer.email) &&
-    !isCustomerEmailNotificationSent(metadata, emailNotificationState);
+    !isCustomerEmailNotificationSent(metadata, emailNotificationState) &&
+    !isCustomerEmailDeliveryOutcomeUnknown(metadata, emailNotificationState);
 
   if (!shouldAttemptPush && !shouldAttemptEmail) {
     return { metadataChanged: false };
@@ -1515,6 +1108,7 @@ async function notifyVtuCustomerSuccess({
 
       metadataChanged =
         setCustomerEmailNotificationResult({
+          deliveryOutcome: emailResult.deliveryOutcome,
           metadata,
           sent: emailResult.success,
           state: emailNotificationState,

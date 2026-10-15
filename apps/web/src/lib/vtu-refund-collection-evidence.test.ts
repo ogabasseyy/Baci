@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hasVtuCollectionEvidence } from './vtu-refund-collection-evidence';
+import {
+  hasVtuCollectionEvidence,
+  shouldSkipRefundWithoutCollectionEvidence,
+} from './vtu-refund-collection-evidence';
 
 describe('hasVtuCollectionEvidence', () => {
   const row = {
@@ -232,5 +235,39 @@ describe('hasVtuCollectionEvidence', () => {
     await expect(
       hasVtuCollectionEvidence({ metadata: {}, row, supabase: metadataDown })
     ).rejects.toThrow('Failed to verify metadata-linked collection evidence');
+  });
+
+  it('skips card-only refunds only without collection evidence', async () => {
+    // Moved with the helper from vtu-fulfillment-recovery (Codex
+    // R106 P1); exercises the real evidence check instead of a
+    // module-boundary mock.
+    const consoleWarnSpy = vi
+      .spyOn(console, 'warn')
+      .mockImplementation(() => undefined);
+    try {
+      const { supabase: debited } = buildSupabase();
+      await expect(
+        shouldSkipRefundWithoutCollectionEvidence({
+          metadata: { walletDebited: true },
+          row,
+          supabase: debited as never,
+        })
+      ).resolves.toBe(false);
+
+      const { supabase: bare } = buildSupabase();
+      await expect(
+        shouldSkipRefundWithoutCollectionEvidence({
+          metadata: {},
+          row,
+          supabase: bare as never,
+        })
+      ).resolves.toBe(true);
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('no collection evidence'),
+        expect.objectContaining({ transactionId: 'vtu-1' })
+      );
+    } finally {
+      consoleWarnSpy.mockRestore();
+    }
   });
 });

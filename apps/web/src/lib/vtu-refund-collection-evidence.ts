@@ -149,3 +149,33 @@ export async function hasVtuCollectionEvidence({
   }
   return false;
 }
+
+/**
+ * True when a legacy card-only refund must be skipped for lack of
+ * collection evidence. Legacy failures include gateway-init and
+ * declined-authorization rows that never collected — crediting
+ * those mints unearned wallet funds (Codex R51 6rqH1I). The caller
+ * records the skip; nothing here is retryable, so this never
+ * throws.
+ *
+ * Lives here (moved from vtu-fulfillment-recovery, Codex R106 P1)
+ * next to the evidence check it wraps, per the 300-line ceiling.
+ */
+export async function shouldSkipRefundWithoutCollectionEvidence({
+  metadata,
+  row,
+  supabase,
+}: {
+  metadata: Record<string, unknown>;
+  row: VtuCollectionEvidenceRow;
+  supabase: SupabaseClient;
+}): Promise<boolean> {
+  if (await hasVtuCollectionEvidence({ metadata, row, supabase })) {
+    return false;
+  }
+  console.warn(
+    'Skipping VTU refund: no collection evidence for card-only row:',
+    { transactionId: row.id }
+  );
+  return true;
+}

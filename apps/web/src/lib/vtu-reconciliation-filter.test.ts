@@ -52,10 +52,10 @@ describe('getReconciliableStatusFilter', () => {
     const gate =
       'or(metadata->>customerTokenEmailNotificationSent.is.null,metadata->>customerTokenEmailNotificationSent.neq.true)';
     expect(filter).toContain(
-      `and(metadata->>customerReceiptEmailNotificationSent.eq.false,${gate})`
+      `and(metadata->>customerReceiptEmailNotificationSent.eq.false,${gate},or(metadata->>customerReceiptEmailNotificationSentDeliveryOutcome.is.null,metadata->>customerReceiptEmailNotificationSentDeliveryOutcome.neq.unknown))`
     );
     expect(filter).toContain(
-      ',metadata->>customerTokenEmailNotificationSent.eq.false,'
+      'and(metadata->>customerTokenEmailNotificationSent.eq.false,or(metadata->>customerTokenEmailNotificationSentDeliveryOutcome.is.null,metadata->>customerTokenEmailNotificationSentDeliveryOutcome.neq.unknown))'
     );
     // R89 stuck claims (receipt gated, token ungated).
     expect(filter).toContain(
@@ -70,5 +70,22 @@ describe('getReconciliableStatusFilter', () => {
     );
     // R82: no boolean `is.true/is.false` on text extraction.
     expect(filter).not.toMatch(/->>[a-zA-Z0-9_]+(\.not)?\.is\.(true|false)/);
+  });
+
+  it('excludes unknown-delivery rows from every email-failure arm', () => {
+    // Codex R106 P2: a send ZeptoMail accepted but never
+    // acknowledged may have landed — automatic retries must skip
+    // it. Absent outcome (definite failure, legacy rows) stays
+    // retryable via the null arm.
+    const filter = getReconciliableStatusFilter(NOW);
+    for (const sentKey of [
+      'customerReceiptEmailNotificationSent',
+      'customerTokenEmailNotificationSent',
+      'customerEmailNotificationSent',
+    ]) {
+      expect(filter).toContain(
+        `or(metadata->>${sentKey}DeliveryOutcome.is.null,metadata->>${sentKey}DeliveryOutcome.neq.unknown)`
+      );
+    }
   });
 });

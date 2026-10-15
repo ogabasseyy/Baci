@@ -117,3 +117,20 @@ export function getSafeMetadataDiagnostics(
 
   return diagnostics;
 }
+
+/**
+ * Set one metadata key, reporting whether the value changed.
+ * Moved here from vtu-fulfillment (Codex R106 P1): pure, zero
+ * imports, at home in this leaf module — per the 300-line ceiling.
+ */
+export function setMetadataValue(
+  metadata: Record<string, unknown>,
+  key: string,
+  value: unknown
+) {
+  if (metadata[key] === value) {
+    return false;
+  }
+  metadata[key] = value;
+  return true;
+}

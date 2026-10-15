@@ -1263,6 +1263,118 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
+  it('records an uncertain terminal marker when delivery outcome is unknown', async () => {
+    // Codex R106 P2: ZeptoMail accepted the send but its response
+    // was lost — the email may have landed. Record sent=false AND
+    // the unknown marker so automatic retries exclude the row
+    // instead of collapsing it into a definite failure.
+    const updatePayloads: unknown[] = [];
+    mockSendEmail.mockResolvedValueOnce({
+      success: false,
+      deliveryOutcome: 'unknown',
+    });
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      merchantData: {
+        business_name: 'OgaBassey',
+        slug: 'ogabassey',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          voucherPin: 'TOKEN-READY-1234',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(updatePayloads).toContainEqual({
+      metadata: expect.objectContaining({
+        customerTokenEmailNotificationSent: false,
+        customerTokenEmailNotificationSentDeliveryOutcome: 'unknown',
+      }),
+    });
+  });
+
+  it('never re-attempts an email with unknown delivery outcome', async () => {
+    // Codex R106 P2: the uncertain marker is terminal for
+    // automatic retries — neither the in-flight gate nor the
+    // claim pre-check may touch the row again.
+    const updatePayloads: unknown[] = [];
+    const supabase = createPendingTransactionSupabaseMock({
+      customerData: {
+        user_id: null,
+        email: 'buyer@example.com',
+        first_name: 'Ada',
+        last_name: 'Lovelace',
+      },
+      merchantData: {
+        business_name: 'OgaBassey',
+        slug: 'ogabassey',
+      },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-1',
+        status: 'successful',
+        metadata: {
+          customerTokenEmailNotificationSent: false,
+          customerTokenEmailNotificationSentDeliveryOutcome: 'unknown',
+          voucherPin: 'TOKEN-READY-1234',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+      },
+      updatePayloads,
+    });
+
+    await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'claim_vtu_customer_email_notification_attempt',
+      expect.anything()
+    );
+  });
+
   it('leaves a reclaimed email lease untouched when our clear is stale', async () => {
     const updatePayloads: unknown[] = [];
     mockSendEmail.mockResolvedValueOnce({ success: false });
@@ -1432,7 +1544,7 @@ describe('fulfillPendingVtuTransaction', () => {
       // helper gives up without throwing, and the result still
       // returns success (flags re-select the row next cron tick).
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'VTU settlement metadata merge gave up after two attempts:',
+        'VTU settlement metadata merge gave up after five attempts:',
         expect.objectContaining({
           error: 'metadata write failed',
           transactionId: 'vtu-1',
@@ -2252,7 +2364,7 @@ describe('fulfillPendingVtuTransaction', () => {
       // helper gives up without throwing, and the vend result still
       // returns success (flags re-select the row next cron tick).
       expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'VTU settlement metadata merge gave up after two attempts:',
+        'VTU settlement metadata merge gave up after five attempts:',
         expect.objectContaining({
           error: 'final metadata write failed',
           transactionId: 'vtu-1',

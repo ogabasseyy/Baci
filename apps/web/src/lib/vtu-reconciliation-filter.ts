@@ -140,7 +140,16 @@ export function getReconciliableStatusFilter(now: Date) {
     cutoff,
     sentKey: 'customerTokenEmailNotificationSent',
   });
-  const retiredReceiptFailure = `and(metadata->>customerReceiptEmailNotificationSent.eq.false,${TOKEN_UNSENT_GATE})`;
-  const retiredLegacyFailure = `and(metadata->>customerEmailNotificationSent.eq.false,${TOKEN_UNSENT_GATE})`;
-  return `status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),${TOKEN_BACKFILL_ARM},and(customer_id.not.is.null,or(${retiredReceiptFailure},metadata->>customerTokenEmailNotificationSent.eq.false,${retiredLegacyFailure},${stuckReceiptClaim},${stuckTokenClaim}))))`;
+  // Unknown-delivery exclusion (Codex R106 P2): a send ZeptoMail
+  // accepted but never acknowledged must not auto-retry — it may
+  // have landed. Absent outcome (definite failure, legacy rows)
+  // stays retryable; only explicit 'unknown' retires the arm. The
+  // stuck-claim arms need no exclusion (they require the sent key
+  // absent, while unknown rows record sent=false).
+  const unknownExclusion = (sentKey: string) =>
+    `or(metadata->>${sentKey}DeliveryOutcome.is.null,metadata->>${sentKey}DeliveryOutcome.neq.unknown)`;
+  const retiredReceiptFailure = `and(metadata->>customerReceiptEmailNotificationSent.eq.false,${TOKEN_UNSENT_GATE},${unknownExclusion('customerReceiptEmailNotificationSent')})`;
+  const retiredTokenFailure = `and(metadata->>customerTokenEmailNotificationSent.eq.false,${unknownExclusion('customerTokenEmailNotificationSent')})`;
+  const retiredLegacyFailure = `and(metadata->>customerEmailNotificationSent.eq.false,${TOKEN_UNSENT_GATE},${unknownExclusion('customerEmailNotificationSent')})`;
+  return `status.eq.processing,and(status.eq.pending,or(metadata->>monnifyTransientVendError.not.is.null,metadata->>preVendInterruptedAt.not.is.null)),and(status.eq.failed,source.eq.checkout,amount.gt.0,customer_id.not.is.null,metadata->>refundIssued.is.null,metadata->>refundSkipped.is.null),and(status.eq.successful,or(and(merchant_commission.gt.0,or(metadata->>merchantWalletCredited.neq.true,metadata->>merchantWalletCredited.is.null)),and(customer_cashback.gt.0,customer_id.not.is.null,or(metadata->>customerWalletCredited.neq.true,metadata->>customerWalletCredited.is.null)),and(type.eq.airtime,customer_id.not.is.null,customer_cashback.gte.3,or(metadata->>loyaltyPointsAwarded.neq.true,metadata->>loyaltyPointsAwarded.is.null)),${TOKEN_BACKFILL_ARM},and(customer_id.not.is.null,or(${retiredReceiptFailure},${retiredTokenFailure},${retiredLegacyFailure},${stuckReceiptClaim},${stuckTokenClaim}))))`;
 }

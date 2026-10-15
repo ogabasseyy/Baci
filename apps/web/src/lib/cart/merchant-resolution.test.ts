@@ -22,6 +22,53 @@ function rpcClientReturning(rows: unknown, error: unknown = null) {
 }
 
 describe('resolveCartMerchant', () => {
+  it('fails closed for a merchant without shared-cart enrollment', async () => {
+    const request = new Request('https://ogabassey.usebaci.com/api/x', {
+      headers: { 'x-merchant-slug': 'ogabassey' },
+    });
+
+    const result = await resolveCartMerchant(request, {
+      loadMerchantFeatures: async () => ({ premium_features: [] }),
+      resolveAlias: async () => null,
+      rootDomain: 'usebaci.com',
+      rpcClient: rpcClientReturning([merchantRow()]),
+    });
+
+    expect(result).toEqual({ error: 'merchant_unavailable', ok: false });
+  });
+
+  it('resolves an enrolled merchant when the feature lookup passes', async () => {
+    const request = new Request('https://ogabassey.usebaci.com/api/x', {
+      headers: { 'x-merchant-slug': 'ogabassey' },
+    });
+
+    const result = await resolveCartMerchant(request, {
+      loadMerchantFeatures: async () => ({
+        premium_features: ['shared_cart'],
+      }),
+      resolveAlias: async () => null,
+      rootDomain: 'usebaci.com',
+      rpcClient: rpcClientReturning([merchantRow()]),
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('fails closed when the enrollment lookup finds no merchant row', async () => {
+    const request = new Request('https://ogabassey.usebaci.com/api/x', {
+      headers: { 'x-merchant-slug': 'ogabassey' },
+    });
+
+    const result = await resolveCartMerchant(request, {
+      loadMerchantFeatures: async () => null,
+      resolveAlias: async () => null,
+      rootDomain: 'usebaci.com',
+      rpcClient: rpcClientReturning([merchantRow()]),
+    });
+
+    expect(result).toEqual({ error: 'temporarily_unavailable', ok: false });
+  });
+
   it('trusts a proxy merchant header that matches the request host', async () => {
     const request = new Request('https://ogabassey.usebaci.com/api/x', {
       headers: { 'x-merchant-slug': 'ogabassey' },

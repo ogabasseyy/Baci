@@ -17,9 +17,9 @@ vi.mock('@/lib/cart/account-link', () => ({
   linkCartToCustomer: vi.fn(),
 }));
 vi.mock('@/lib/cart/session-proof', () => ({
+  cartSessionCookieMaxAge: vi.fn(() => 3600),
   issueCartSessionProof: vi.fn(),
   verifyCartSessionProof: vi.fn(),
-  CART_SESSION_PROOF_TTL_SECONDS: 86400,
 }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: vi.fn() }));
 vi.mock('@/lib/supabase/anon', () => ({ createAnonClient: () => ({}) }));
@@ -79,6 +79,9 @@ it('issues the selected rotated principal only after an atomic account choice', 
     request('{"operationId":"x","choice":"use_saved"}')
   );
   expect(response.status).toBe(200);
+  // The session cookie is capped at the (mocked) cart-expiry lifetime,
+  // never the full 24h proof TTL.
+  expect(response.headers.get('set-cookie')).toContain('Max-Age=3600');
   expect(response.headers.get('cache-control')).toContain('no-store');
   expect(issueCartSessionProof).toHaveBeenCalledWith(
     expect.objectContaining({

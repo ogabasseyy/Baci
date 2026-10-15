@@ -9,6 +9,7 @@ import {
 import {
   type CartRequestContextDeps,
   checkCartQuota,
+  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
@@ -46,6 +47,9 @@ export async function POST(request: NextRequest) {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
         rpcClient: createAnonClient(),
+        loadMerchantFeatures: createAnonMerchantFeatureLookup(
+          createAnonClient()
+        ),
       },
       requireScope: 'session',
       verify: (proof) =>

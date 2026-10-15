@@ -10,6 +10,9 @@ import { GET } from './route';
 vi.mock('@/lib/cart/request-context', () => ({
   resolveCartRequestContext: vi.fn(),
   checkCartQuota: vi.fn(),
+  createAnonMerchantFeatureLookup: vi.fn(() => async () => ({
+    premium_features: ['shared_cart'],
+  })),
 }));
 vi.mock('@/lib/cart/realtime-access', () => ({
   getCartRealtimeAccess: vi.fn(),

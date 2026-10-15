@@ -11,6 +11,7 @@ const SAFE_MESSAGES: Record<CartErrorCode, string> = {
   idempotency_conflict:
     'This change was already sent with different details. Refresh and try again.',
   invalid_item: 'One of these items is no longer available as requested.',
+  merchant_unavailable: 'This store is not available right now.',
   not_found: 'We could not find this cart.',
   rate_limited: 'Too many cart updates. Wait a moment and try again.',
   refresh_required: 'Your cart changed elsewhere. Refresh to see the latest.',

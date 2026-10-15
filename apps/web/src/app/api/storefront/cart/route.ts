@@ -3,6 +3,7 @@ import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   type CartRequestContextDeps,
   checkCartQuota,
+  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
@@ -14,8 +15,8 @@ import {
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import { createCart, getCart } from '@/lib/cart/service';
 import {
-  CART_SESSION_PROOF_TTL_SECONDS,
   CartSessionConfigError,
+  cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
@@ -32,6 +33,7 @@ function contextDeps(
     merchant: {
       resolveAlias: getCurrentSlugForAlias,
       rpcClient: createAnonClient(),
+      loadMerchantFeatures: createAnonMerchantFeatureLookup(createAnonClient()),
     },
     requireScope,
     verify: (proof) =>
@@ -156,6 +158,7 @@ export async function POST(request: NextRequest) {
         {
           cartId: result.cart.cartId,
           grantId: result.grantId,
+          grantExpiresAt: result.cart.expiresAt,
           merchantId: context.merchant.id,
           principalId: context.principal.principalId,
           scope: 'session',
@@ -179,12 +182,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 201 }
     );
-    setCartSessionCookie(
-      response,
-      context.merchant.id,
-      proof,
-      CART_SESSION_PROOF_TTL_SECONDS
-    );
+    const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
+    if (cookieMaxAge > 0) {
+      setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
+    }
     return response;
   } catch (error) {
     console.error('Unexpected error in POST /api/storefront/cart:', {

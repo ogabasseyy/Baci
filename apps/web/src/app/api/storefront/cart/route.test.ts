@@ -33,6 +33,16 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: () => ({
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          maybeSingle: vi.fn(async () => ({
+            data: { premium_features: ['shared_cart'] },
+            error: null,
+          })),
+        })),
+      })),
+    })),
     rpc: vi.fn(async () => ({
       data: mocks.merchantRows,
       error: mocks.merchantError,

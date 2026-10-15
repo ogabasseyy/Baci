@@ -8,6 +8,7 @@ import {
 import {
   type CartRequestContextDeps,
   checkCartQuota,
+  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
@@ -19,9 +20,9 @@ import {
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
-  CART_SESSION_PROOF_TTL_SECONDS,
   CART_SESSION_PROOF_VERSION,
   CartSessionConfigError,
+  cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
@@ -52,6 +53,9 @@ export async function POST(request: NextRequest) {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
         rpcClient: createAnonClient(),
+        loadMerchantFeatures: createAnonMerchantFeatureLookup(
+          createAnonClient()
+        ),
       },
       requireScope: 'any',
       verify: (proof) =>
@@ -159,13 +163,14 @@ export async function POST(request: NextRequest) {
           {
             cartId: redeemed.cart.cartId,
             grantId: redeemed.grantId,
+            grantExpiresAt: redeemed.cart.expiresAt,
             merchantId: context.merchant.id,
             principalId: principal.principalId,
             scope: 'session',
           },
           { environment: getCartProofEnvironment() }
         );
-        maxAge = CART_SESSION_PROOF_TTL_SECONDS;
+        maxAge = cartSessionCookieMaxAge(redeemed.cart.expiresAt);
       } else if (!redeemed.cart && !redeemed.grantId) {
         proof = issueCartSessionProof(
           {
@@ -195,7 +200,9 @@ export async function POST(request: NextRequest) {
       replayed: redeemed.replayed,
       warnings: redeemed.warnings,
     });
-    setCartSessionCookie(response, context.merchant.id, proof, maxAge);
+    if (maxAge > 0) {
+      setCartSessionCookie(response, context.merchant.id, proof, maxAge);
+    }
     return response;
   } catch {
     console.error(

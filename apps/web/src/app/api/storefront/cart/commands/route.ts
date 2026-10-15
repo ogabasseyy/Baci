@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   checkCartQuota,
+  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
@@ -13,8 +14,8 @@ import {
 import { createCartScopedClient } from '@/lib/cart/scoped-client';
 import { mutateCart } from '@/lib/cart/service';
 import {
-  CART_SESSION_PROOF_TTL_SECONDS,
   CartSessionConfigError,
+  cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
@@ -43,6 +44,9 @@ export async function POST(request: NextRequest) {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
         rpcClient: createAnonClient(),
+        loadMerchantFeatures: createAnonMerchantFeatureLookup(
+          createAnonClient()
+        ),
       },
       requireScope: 'session',
       verify: (proof) =>
@@ -124,10 +128,7 @@ export async function POST(request: NextRequest) {
       replayed: result.replayed,
       warnings: result.warnings,
     });
-    const maxAge = Math.min(
-      CART_SESSION_PROOF_TTL_SECONDS,
-      Math.floor((Date.parse(result.cart.expiresAt) - Date.now()) / 1000)
-    );
+    const maxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
     // A non-positive lifetime would delete the cookie the body proof just
     // renewed; omit the cookie instead and let the body proof govern.
     if (proof && maxAge > 0) {

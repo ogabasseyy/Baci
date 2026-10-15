@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CART_BOOTSTRAP_PROOF_TTL_SECONDS,
   CART_SESSION_PROOF_TTL_SECONDS,
+  cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from './session-proof';
@@ -23,6 +24,26 @@ function sessionInput() {
     scope: 'session' as const,
   };
 }
+
+describe('cartSessionCookieMaxAge', () => {
+  const now = new Date('2026-10-14T00:00:00.000Z');
+
+  it('caps the cookie at the cart expiry when it is sooner than the proof TTL', () => {
+    expect(cartSessionCookieMaxAge('2026-10-14T01:00:00.000Z', now)).toBe(3600);
+  });
+
+  it('caps the cookie at the proof TTL for long-lived carts', () => {
+    expect(cartSessionCookieMaxAge('2026-10-21T00:00:00.000Z', now)).toBe(
+      CART_SESSION_PROOF_TTL_SECONDS
+    );
+  });
+
+  it('is non-positive once the cart has expired', () => {
+    expect(
+      cartSessionCookieMaxAge('2026-10-13T23:59:00.000Z', now)
+    ).toBeLessThanOrEqual(0);
+  });
+});
 
 describe('issueCartSessionProof', () => {
   it('issues a versioned proof that verifies with the same secret', () => {

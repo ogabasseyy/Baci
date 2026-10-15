@@ -1,3 +1,8 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  type MerchantFeatureSource,
+  merchantHasFeature,
+} from '@/lib/merchant-has-feature';
 import {
   isSlugShapedIdentifier,
   isValidMerchantIdentifier,
@@ -29,6 +34,35 @@ export interface ResolveCartMerchantDeps {
   rootDomain?: string;
   /** Pre-parsed merchantSlug hint from the JSON body, if any. */
   bodyHint?: string | null;
+  /**
+   * Shared-cart enrollment lookup. When provided, resolution fails
+   * closed unless the merchant carries the shared_cart feature, so the
+   * pilot gate holds on the server even where the UI hides the feature.
+   * Cart routes always provide it; other callers may omit it.
+   */
+  loadMerchantFeatures?: (
+    merchantId: string
+  ) => Promise<MerchantFeatureSource | null>;
+}
+
+/**
+ * Enrollment lookup backed by the public merchants read (the same
+ * feature fields the storefront shell already receives client-side).
+ */
+export function createAnonMerchantFeatureLookup(
+  client: SupabaseClient
+): NonNullable<ResolveCartMerchantDeps['loadMerchantFeatures']> {
+  return async (merchantId: string) => {
+    const { data, error } = await client
+      .from('merchants')
+      .select('premium_features, plan_tier, plan_expires_at')
+      .eq('id', merchantId)
+      .maybeSingle();
+    if (error) {
+      throw new Error('merchant feature lookup failed', { cause: error });
+    }
+    return (data as MerchantFeatureSource | null) ?? null;
+  };
 }
 
 export type ResolveCartMerchantResult =
@@ -177,6 +211,17 @@ export async function resolveCartMerchant(
       return resolved;
     return { error: 'merchant_unresolved', ok: false };
   };
+  const withEnrollment = async (
+    result: ResolveCartMerchantResult
+  ): Promise<ResolveCartMerchantResult> => {
+    if (!result.ok || !deps.loadMerchantFeatures) return result;
+    const features = await deps.loadMerchantFeatures(result.merchant.id);
+    if (!features) return { error: 'temporarily_unavailable', ok: false };
+    if (!merchantHasFeature(features, 'shared_cart')) {
+      return { error: 'merchant_unavailable', ok: false };
+    }
+    return result;
+  };
   const hint =
     trusted ??
     hostIdentifier ??
@@ -189,24 +234,24 @@ export async function resolveCartMerchant(
 
   try {
     if (trusted) {
-      return await resolveForHost(trusted);
+      return await withEnrollment(await resolveForHost(trusted));
     }
     if (!isValidMerchantIdentifier(hint)) {
       if (isSlugShapedIdentifier(hint)) {
         const current = await deps.resolveAlias(hint);
         if (current && current !== hint) {
-          return await resolveForHost(current);
+          return await withEnrollment(await resolveForHost(current));
         }
       }
       return { error: 'merchant_unresolved', ok: false };
     }
-    const resolved = await resolveForHost(hint);
+    const resolved = await withEnrollment(await resolveForHost(hint));
     if (resolved.ok || resolved.error === 'merchant_unavailable') {
       return resolved;
     }
     const current = await deps.resolveAlias(hint);
     if (current && current !== hint) {
-      return await resolveForHost(current);
+      return await withEnrollment(await resolveForHost(current));
     }
     return { error: 'merchant_unresolved', ok: false };
   } catch {

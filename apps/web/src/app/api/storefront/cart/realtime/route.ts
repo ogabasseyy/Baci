@@ -3,6 +3,7 @@ import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { getCartRealtimeAccess } from '@/lib/cart/realtime-access';
 import {
   checkCartQuota,
+  createAnonMerchantFeatureLookup,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
 import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
@@ -17,6 +18,9 @@ export async function GET(request: NextRequest): Promise<Response> {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
         rpcClient: createAnonClient(),
+        loadMerchantFeatures: createAnonMerchantFeatureLookup(
+          createAnonClient()
+        ),
       },
       requireScope: 'session',
       wrongScopeError: 'not_found',

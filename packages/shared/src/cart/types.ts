@@ -101,6 +101,7 @@ export interface CreateCartInput {
 
 export type CartErrorCode =
   | 'unauthorized'
+  | 'merchant_unavailable'
   | 'not_found'
   | 'expired'
   | 'version_conflict'

@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import {
   checkCartQuota,
+  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartMerchant,
 } from '@/lib/cart/request-context';
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
       bodyHint: parsedBody.data.merchantSlug ?? null,
       resolveAlias: getCurrentSlugForAlias,
       rpcClient: createAnonClient(),
+      loadMerchantFeatures: createAnonMerchantFeatureLookup(createAnonClient()),
     });
     if (!merchant.ok) {
       return cartErrorResponse(merchant.error);

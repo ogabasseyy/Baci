@@ -56,6 +56,16 @@ BEGIN
   END IF;
   v_merchant := (v_claims ->> 'cart_merchant_id')::uuid;
   v_principal := v_claims ->> 'cart_principal_id';
+
+  -- Pilot gate (defense in depth with the route-level check): the
+  -- shared-cart RPCs refuse merchants without the shared_cart feature,
+  -- mirroring the broadcast/account predicates.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.merchants m
+    WHERE m.id = v_merchant AND m.premium_features @> '["shared_cart"]'::jsonb
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'merchant_unavailable', 'replayed', false, 'state', null, 'currentVersion', null);
+  END IF;
   v_grant := (v_claims ->> 'cart_grant_id')::uuid;
 
   IF p_token_hash IS NULL OR length(trim(p_token_hash)) = 0 OR length(p_token_hash) > 128 THEN
@@ -174,6 +184,14 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'code', 'not_found');
   END IF;
   IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'not_found');
+  END IF;
+  -- Pilot gate: unenrolled merchants disclose nothing through preview
+  -- (same not_found shape as every other preview miss).
+  IF NOT EXISTS (
+    SELECT 1 FROM public.merchants m
+    WHERE m.id = v_row.merchant_id AND m.premium_features @> '["shared_cart"]'::jsonb
+  ) THEN
     RETURN jsonb_build_object('ok', false, 'code', 'not_found');
   END IF;
   IF v_row.redeemed_at IS NOT NULL THEN
@@ -411,6 +429,16 @@ BEGIN
         RETURN jsonb_build_object('ok', false, 'code', 'not_found', 'replayed', false, 'state', null, 'currentVersion', null);
       END IF;
     END IF;
+  END IF;
+
+  -- Pilot gate (defense in depth with the route-level check), checked
+  -- only after the caller is bound to this merchant's carts so foreign
+  -- attempts keep their unauthorized/not_found shape.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.merchants m
+    WHERE m.id = v_merchant AND m.premium_features @> '["shared_cart"]'::jsonb
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'merchant_unavailable', 'replayed', false, 'state', null, 'currentVersion', null);
   END IF;
 
   IF v_incoming.state <> 'active' THEN

@@ -333,3 +333,21 @@ DO $$ DECLARE items jsonb; BEGIN
     RAISE EXCEPTION 'agentic items must be derived from the reviewed snapshot, got %', items;
   END IF;
 END $$;
+
+-- Pilot gate: with the shared_cart feature removed, the cart RPCs
+-- refuse the merchant even with otherwise-valid session claims.
+UPDATE public.merchants SET premium_features = '[]'::jsonb
+WHERE id = '11111111-1111-4111-8111-111111111111';
+SET request.jwt.claims = '{"cart_merchant_id":"11111111-1111-4111-8111-111111111111","cart_principal_id":"guest-a12","cart_scope":"session","cart_id":"cccccccc-c000-4000-8000-000000000000","cart_grant_id":"99999999-9999-4999-8999-999999999968"}';
+SET ROLE commerce_cart_shopper;
+DO $$ DECLARE result jsonb; BEGIN
+  result := public.commerce_cart_mutate('cccccccc-c000-4000-8000-000000000000', 'review-unenrolled', 2,
+    '{"type":"clear"}'::jsonb);
+  IF (result ->> 'code') <> 'merchant_unavailable' THEN
+    RAISE EXCEPTION 'unenrolled merchant must be refused, got %', result;
+  END IF;
+END $$;
+RESET ROLE;
+UPDATE public.merchants
+SET premium_features = '["shared_cart","shared_cart_accounts","shared_cart_realtime"]'::jsonb
+WHERE id = '11111111-1111-4111-8111-111111111111';

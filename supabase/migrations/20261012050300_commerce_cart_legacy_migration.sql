@@ -121,6 +121,16 @@ BEGIN
   v_merchant := (v_claims ->> 'cart_merchant_id')::uuid;
   v_principal := v_claims ->> 'cart_principal_id';
 
+  -- Pilot gate (defense in depth with the route-level check): the
+  -- shared-cart RPCs refuse merchants without the shared_cart feature,
+  -- mirroring the broadcast/account predicates.
+  IF NOT EXISTS (
+    SELECT 1 FROM public.merchants m
+    WHERE m.id = v_merchant AND m.premium_features @> '["shared_cart"]'::jsonb
+  ) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'merchant_unavailable', 'replayed', false, 'state', null, 'currentVersion', null);
+  END IF;
+
   IF p_provider NOT IN ('mcp', 'ucp')
     OR p_legacy_token_hash IS NULL
     OR p_legacy_token_hash !~ '^[a-f0-9]{64}$'

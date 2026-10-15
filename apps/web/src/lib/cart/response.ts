@@ -17,7 +17,6 @@ export type CartRouteErrorCode =
   | 'expired_proof'
   | 'merchant_unresolved'
   | 'merchant_mismatch'
-  | 'merchant_unavailable'
   | 'forbidden'
   | 'quota_exceeded';
 
@@ -54,7 +53,6 @@ const ROUTE_MESSAGES: Record<
   invalid_proof: 'Your cart session is not valid here. Reconnect to continue.',
   invalid_request: 'This cart request was malformed.',
   merchant_mismatch: 'This cart session belongs to a different store.',
-  merchant_unavailable: 'This store is not available right now.',
   merchant_unresolved: 'We could not find this store.',
   missing_proof: 'Connect to the cart before making changes.',
   quota_exceeded: 'Too many cart requests. Wait a moment and try again.',

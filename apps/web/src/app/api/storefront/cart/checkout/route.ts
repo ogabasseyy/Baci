@@ -3,6 +3,7 @@ import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { prepareCartCheckout } from '@/lib/cart/checkout-transition';
 import {
   checkCartQuota,
+  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
@@ -35,6 +36,9 @@ export async function POST(request: NextRequest) {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
         rpcClient: createAnonClient(),
+        loadMerchantFeatures: createAnonMerchantFeatureLookup(
+          createAnonClient()
+        ),
       },
       requireScope: 'session',
       verify: (proof) =>

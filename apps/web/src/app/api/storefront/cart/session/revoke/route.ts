@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { revokeCartDeviceGrants } from '@/lib/cart/device-session';
 import {
+  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
@@ -26,6 +27,9 @@ export async function POST(request: NextRequest): Promise<Response> {
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
         rpcClient: createAnonClient(),
+        loadMerchantFeatures: createAnonMerchantFeatureLookup(
+          createAnonClient()
+        ),
       },
       requireScope: 'any',
       wrongScopeError: 'not_found',

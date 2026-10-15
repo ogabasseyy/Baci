@@ -17,6 +17,10 @@ CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
 $$;
 
 -- Minimal catalog stubs exposing exactly the columns the command RPCs read.
+CREATE TABLE public.merchants (
+  id uuid PRIMARY KEY,
+  premium_features jsonb NOT NULL DEFAULT '[]'::jsonb
+);
 CREATE TABLE public.products (
   id uuid PRIMARY KEY,
   merchant_id uuid NOT NULL,
@@ -36,6 +40,10 @@ CREATE TABLE public.product_variants (
 \ir ../migrations/20261012050000_commerce_cart_core.sql
 \ir ../migrations/20261012050100_commerce_cart_roles.sql
 \ir ../migrations/20261012050200_commerce_cart_commands.sql
+
+INSERT INTO public.merchants (id, premium_features) VALUES
+  ('11111111-1111-4111-8111-111111111111', '["shared_cart","shared_cart_accounts","shared_cart_realtime"]'::jsonb),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '[]'::jsonb);
 
 INSERT INTO public.products (id, merchant_id, price, status, stock_quantity, stock, manage_stock) VALUES
   ('33333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 25.00, 'active', 10, 10, true),

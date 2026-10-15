@@ -2,8 +2,8 @@
 \set ON_ERROR_STOP on
 BEGIN;
 DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='authenticator') THEN CREATE ROLE authenticator NOLOGIN; END IF; END $$;
-CREATE TABLE public.merchants(id uuid PRIMARY KEY);
-INSERT INTO public.merchants VALUES('11111111-1111-4111-8111-111111111111');
+CREATE TABLE public.merchants(id uuid PRIMARY KEY, premium_features jsonb NOT NULL DEFAULT '[]'::jsonb);
+INSERT INTO public.merchants VALUES('11111111-1111-4111-8111-111111111111', '["shared_cart","shared_cart_accounts","shared_cart_realtime"]'::jsonb);
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claims',true),'')::jsonb $$;
 \ir ../migrations/20261012050000_commerce_cart_core.sql

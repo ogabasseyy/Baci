@@ -21,7 +21,8 @@ $$;
 -- Minimal catalog/merchant stubs exposing exactly the columns the RPCs read.
 CREATE TABLE public.merchants (
   id uuid PRIMARY KEY,
-  slug text NOT NULL
+  slug text NOT NULL,
+  premium_features jsonb NOT NULL DEFAULT '[]'::jsonb
 );
 CREATE TABLE public.products (
   id uuid PRIMARY KEY,
@@ -297,9 +298,9 @@ $$;
 \ir ../migrations/20261012050600_commerce_cart_order_binding.sql
 \ir ../migrations/20261013195818_commerce_cart_review_binding_guards.sql
 
-INSERT INTO public.merchants (id, slug) VALUES
-  ('11111111-1111-4111-8111-111111111111', 'ogabassey'),
-  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'second-store');
+INSERT INTO public.merchants (id, slug, premium_features) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'ogabassey', '["shared_cart","shared_cart_accounts","shared_cart_realtime"]'::jsonb),
+  ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'second-store', '[]'::jsonb);
 
 INSERT INTO public.products (id, merchant_id, price, status, stock_quantity, stock, manage_stock) VALUES
   ('33333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 250.00, 'active', 10, 10, true),

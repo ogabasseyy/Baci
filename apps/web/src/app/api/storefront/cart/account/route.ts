@@ -2,14 +2,18 @@ import type { NextRequest } from 'next/server';
 import { getCustomerCart, linkCartToCustomer } from '@/lib/cart/account-link';
 import { resolveAccountCartRequest } from '@/lib/cart/account-request';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
-import { checkCartQuota, readCartJsonBody } from '@/lib/cart/request-context';
+import {
+  checkCartQuota,
+  createAnonMerchantFeatureLookup,
+  readCartJsonBody,
+} from '@/lib/cart/request-context';
 import {
   cartErrorResponse,
   cartJsonResponse,
   setCartSessionCookie,
 } from '@/lib/cart/response';
 import {
-  CART_SESSION_PROOF_TTL_SECONDS,
+  cartSessionCookieMaxAge,
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
@@ -23,6 +27,7 @@ function context(request: NextRequest) {
     merchant: {
       resolveAlias: getCurrentSlugForAlias,
       rpcClient: createAnonClient(),
+      loadMerchantFeatures: createAnonMerchantFeatureLookup(createAnonClient()),
     },
     requireScope: 'any',
     wrongScopeError: 'not_found',
@@ -106,12 +111,13 @@ export async function POST(request: NextRequest): Promise<Response> {
       replayed: result.replayed,
       warnings: result.warnings,
     });
-    setCartSessionCookie(
-      response,
-      resolved.merchant.id,
-      proof,
-      CART_SESSION_PROOF_TTL_SECONDS
-    );
+    // The proof is capped at the cart expiry; the cookie must not
+    // outlive it (a non-positive lifetime would delete the cookie, so
+    // omit it and let the body proof govern until it expires).
+    const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
+    if (cookieMaxAge > 0) {
+      setCartSessionCookie(response, resolved.merchant.id, proof, cookieMaxAge);
+    }
     return response;
   } catch {
     return cartErrorResponse('temporarily_unavailable');

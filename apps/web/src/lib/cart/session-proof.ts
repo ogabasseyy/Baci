@@ -91,6 +91,22 @@ function decodePayload(payload: string): ProofPayload | null {
  * principal. The proof is opaque transport authority: database RLS and the
  * grant row still authorize every operation.
  */
+/**
+ * Cookie lifetime for a session proof: never outlive the proof TTL, and
+ * never outlive the cart whose grant the proof authenticates. A
+ * non-positive result means the cart is already expired — callers must
+ * not set the cookie at all.
+ */
+export function cartSessionCookieMaxAge(
+  cartExpiresAtIso: string,
+  now = new Date()
+): number {
+  return Math.min(
+    CART_SESSION_PROOF_TTL_SECONDS,
+    Math.floor((Date.parse(cartExpiresAtIso) - now.getTime()) / 1000)
+  );
+}
+
 export function issueCartSessionProof(
   input: CartSessionProofInput,
   options: {

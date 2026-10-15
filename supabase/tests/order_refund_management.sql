@@ -127,6 +127,12 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000016', v_merchant_id, 'REFUND-016',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000017', v_merchant_id, 'REFUND-017',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000018', v_merchant_id, 'REFUND-018',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000019', v_merchant_id, 'REFUND-019',
+      100, 100, 'paid', 'cancelled'),
+    ('9ef11000-0000-4000-8000-000000000020', v_merchant_id, 'REFUND-020',
       100, 100, 'paid', 'cancelled');
 
   -- Cancelled orders carry their cancellation timestamp; REFUND-012 is
@@ -149,7 +155,10 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000014',
       '9ef11000-0000-4000-8000-000000000015',
       '9ef11000-0000-4000-8000-000000000016',
-      '9ef11000-0000-4000-8000-000000000017');
+      '9ef11000-0000-4000-8000-000000000017',
+      '9ef11000-0000-4000-8000-000000000018',
+      '9ef11000-0000-4000-8000-000000000019',
+      '9ef11000-0000-4000-8000-000000000020');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -171,7 +180,8 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000003', 'refund', 30, 'NGN',
       'refunded', 'paystack', 'legacy-3',
       jsonb_build_object(
-        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000004')),
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000004',
+        'provider_refund_status', 'processed')),
     ('9ef12000-0000-4000-8000-000000000006', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000004', 'payment', 100, 'NGN',
       'completed', 'paystack', 'cap-4', '{}'::jsonb),
@@ -180,7 +190,8 @@ BEGIN
       'completed', 'paystack', 'cap-5', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000008', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000005', 'refund', 10, 'NGN',
-      'completed', 'paystack', '777005', '{}'::jsonb),
+      'completed', 'paystack', '777005',
+      jsonb_build_object('provider_refund_status', 'processed')),
     ('9ef12000-0000-4000-8000-000000000009', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000006', 'payment', 40, 'NGN',
       'completed', 'wallet', 'w-6', '{}'::jsonb),
@@ -242,7 +253,35 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000017', 'refund', 100, 'NGN',
       'completed', 'paystack', 'badlink-1',
       jsonb_build_object(
-        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000004'));
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000004')),
+    -- An unverified legacy Paystack refund: in-flight money, not
+    -- returned money, until the provider confirms it.
+    ('9ef12000-0000-4000-8000-000000000026', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000018', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-18', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000027', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000018', 'refund', 100, 'NGN',
+      'completed', 'paystack', 'legacy-18',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000026')),
+    -- A cash-only cancellation: no external leg at all.
+    ('9ef12000-0000-4000-8000-000000000028', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000019', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-19', '{}'::jsonb),
+    -- A mixed cancellation: verified provider money plus an
+    -- outstanding cash balance the merchant still owes.
+    ('9ef12000-0000-4000-8000-000000000029', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000020', 'payment', 60, 'NGN',
+      'completed', 'paystack', 'cap-20', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000030', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000020', 'refund', 60, 'NGN',
+      'completed', 'paystack', 'pp-20',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000029',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000031', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000020', 'payment', 40, 'NGN',
+      'completed', 'cash', 'cash-20', '{}'::jsonb);
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -251,7 +290,10 @@ BEGIN
       'failed', '9ef13000-0000-4000-8000-000000000001', 5,
       'Insufficient balance'),
     ('9ef11000-0000-4000-8000-000000000008', v_merchant_id, 'refund',
-      'claimed', '9ef13000-0000-4000-8000-000000000008', 1, NULL);
+      'claimed', '9ef13000-0000-4000-8000-000000000008', 1, NULL),
+    ('9ef11000-0000-4000-8000-000000000020', v_merchant_id, 'refund',
+      'failed', '9ef13000-0000-4000-8000-000000000020', 0,
+      'Insufficient balance');
 
   INSERT INTO public.customer_wallets (id, customer_id, merchant_id) VALUES
     ('9ef14000-0000-4000-8000-000000000001', v_customer_id, v_merchant_id);
@@ -711,6 +753,76 @@ BEGIN
     RAISE EXCEPTION 'matching-money manual blocked by foreign row';
   END IF;
 
+  -- An unverified Paystack row is in-flight, not returned: it must
+  -- not reduce the remainder (the claim still sees the leg
+  -- uncovered), must keep the payment label paid, and must block
+  -- manual recording instead of leaving room for a double-record.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000018'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 0
+    OR (v_result->>'pending')::numeric <> 100
+    OR (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'unverified row miscounted, got %/%/%',
+      v_result->>'refunded', v_result->>'pending', v_result->>'remaining';
+  END IF;
+  IF v_result->>'status' <> 'processing' THEN
+    RAISE EXCEPTION 'unverified row did not hold processing status';
+  END IF;
+  IF (v_result->>'canRecordManual')::boolean THEN
+    RAISE EXCEPTION 'manual recordable beside unverified provider money';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000018';
+  IF v_label <> 'paid' THEN
+    RAISE EXCEPTION 'unverified row flipped payment label to %', v_label;
+  END IF;
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000018', 'manual', 100,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'unverified-1',NULL,true);
+    RAISE EXCEPTION 'manual accepted beside unverified provider money';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
+  END;
+
+  -- A cash-only cancellation records and finalizes with no external
+  -- leg: the full manual creates the claimable row the claim guard
+  -- admits on manual coverage alone.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000019'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'cash leg missing from remaining, got %',
+      v_result->>'remaining';
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000019', 'manual', 100,
+    '2026-09-28T12:00:00Z', 'cash', 'cashonly-1',NULL,true
+  ) INTO v_result;
+  IF v_result->>'status' <> 'refunded' THEN
+    RAISE EXCEPTION 'cash-only manual did not complete the order';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.order_cancellation_side_effects
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000019'
+      AND step = 'refund' AND status = 'failed' AND attempts = 0
+  ) THEN
+    RAISE EXCEPTION 'cash-only manual did not create a claimable row';
+  END IF;
+
+  -- A mixed cancellation keeps its outstanding cash balance: the
+  -- verified provider money counts, the cash leg stays allocatable,
+  -- and the claim below must wait for the merchant, not finalize.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000020'
+  ) INTO v_result;
+  IF (v_result->>'refunded')::numeric <> 60
+    OR (v_result->>'remaining')::numeric <> 40 THEN
+    RAISE EXCEPTION 'mixed cash balance wrong, got %/%',
+      v_result->>'refunded', v_result->>'remaining';
+  END IF;
+
   -- Missing and foreign orders are indistinguishable to callers.
   v_rejected := false;
   BEGIN
@@ -958,8 +1070,88 @@ BEGIN
   IF v_status <> 'completed' THEN
     RAISE EXCEPTION 'created row did not finalize, got %', v_status;
   END IF;
+  -- A cash-only order with full manual coverage passes the claim
+  -- guard on that coverage alone and runs the trusted finalization.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000019', 'refund',
+    '9ef13000-0000-4000-8000-000000000019');
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'cash-only coverage did not finalize, got %', v_status;
+  END IF;
+  -- A mixed order with an outstanding cash balance stays in the
+  -- worker branch: finalizing now would close the order with money
+  -- still owed.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000020', 'refund',
+    '9ef13000-0000-4000-8000-000000000020');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'mixed cash balance finalized early, got %', v_status;
+  END IF;
+  -- The worker defers on the outstanding cash manual; mirror the
+  -- deferral so the merchant's completion below re-arms the row.
+  UPDATE public.order_cancellation_side_effects
+     SET status = 'deferred', error = NULL
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000020'
+     AND step = 'refund';
 END;
 $refund_claim_finalize$;
+
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef10000-0000-4000-8000-000000000002',
+  true
+);
+
+DO $refund_mixed_cash_manual$
+DECLARE
+  v_result jsonb;
+BEGIN
+  -- The merchant finishes the mixed order by recording the
+  -- outstanding cash balance; the claimed row re-arms as failed so
+  -- the next drain reclaims it.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000020', 'manual', 40,
+    '2026-09-28T12:00:00Z', 'cash', 'cashrest-1',NULL,true
+  ) INTO v_result;
+  IF v_result->>'status' <> 'refunded' THEN
+    RAISE EXCEPTION 'mixed cash remainder did not complete the order';
+  END IF;
+END;
+$refund_mixed_cash_manual$;
+
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
+DO $refund_mixed_cash_claim$
+DECLARE
+  v_won boolean;
+  v_status text;
+  v_label text;
+BEGIN
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000020', 'refund',
+    '9ef13000-0000-4000-8000-000000000021');
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'mixed cash coverage did not finalize, got %', v_status;
+  END IF;
+  -- Provider confirmation flips an unverified row into returned
+  -- money: the label follows on the status write.
+  UPDATE public.transactions
+     SET status = 'completed',
+         metadata = metadata || '{"provider_refund_status":"processed"}'::jsonb
+   WHERE id = '9ef12000-0000-4000-8000-000000000027';
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000018';
+  IF v_label <> 'refunded' THEN
+    RAISE EXCEPTION 'verified row did not flip payment label, got %', v_label;
+  END IF;
+END;
+$refund_mixed_cash_claim$;
 
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
@@ -1046,6 +1238,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.paystack_cancellation_refund_notifications
     WHERE order_id = '9ef11000-0000-4000-8000-000000000002') THEN
     RAISE EXCEPTION 'finalization skipped notifications';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.paystack_cancellation_refund_notifications
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000019') THEN
+    RAISE EXCEPTION 'cash-only finalization skipped notifications';
   END IF;
   SELECT payment_status INTO v_o4_status FROM public.orders
   WHERE id = '9ef11000-0000-4000-8000-000000000013';

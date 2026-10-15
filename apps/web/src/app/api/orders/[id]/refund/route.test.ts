@@ -54,10 +54,14 @@ describe('order refund route', () => {
     expect(
       (await POST(request({ action: 'manual', amount: 999 }), context)).status
     ).toBe(400);
-    expect(
-      (await GET(request(), { params: Promise.resolve({ id: 'invalid' }) }))
-        .status
-    ).toBe(400);
+    const invalidId = await GET(request(), {
+      params: Promise.resolve({ id: 'invalid' }),
+    });
+    expect(invalidId.status).toBe(400);
+    expect(await invalidId.json()).toEqual({
+      error: 'Invalid order ID',
+      code: 'invalid_order_id',
+    });
   });
   it('reads refund status through the permission-checked RPC', async () => {
     const response = await GET(request(), context);

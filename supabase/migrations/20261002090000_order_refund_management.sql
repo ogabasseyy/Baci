@@ -102,8 +102,21 @@ BEGIN
   -- Coverage counts matching money only: a foreign-currency row is an
   -- anomaly for review, and subtracting it would let the merchant
   -- record less than is owed while the order flips refunded.
-  SELECT COALESCE(sum(amount) FILTER (WHERE status IN ('completed','refunded')),0),
-    COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')),0)
+  -- A locally completed Paystack row counts as returned only after
+  -- provider verification (metadata provider_refund_status =
+  -- 'processed'), mirroring the claim gate and the executor
+  -- matcher: counting an unverified row would understate the
+  -- remainder while aggregate finalization keeps deferring.
+  -- Unverified rows are in-flight money that blocks manual
+  -- recording (like refund_pending legs) — never invisible money
+  -- the merchant could double-record beside the provider refund.
+  SELECT COALESCE(sum(amount) FILTER (WHERE status IN ('completed','refunded')
+      AND (public.normalized_gateway_name_v1(gateway)<>'PAYSTACK'
+        OR metadata->>'provider_refund_status'='processed')),0),
+    COALESCE(sum(amount) FILTER (WHERE status NOT IN ('completed','refunded','failed')
+      OR (status IN ('completed','refunded')
+        AND public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
+        AND metadata->>'provider_refund_status' IS DISTINCT FROM 'processed')),0)
     INTO v_refunded,v_pending FROM public.transactions
     WHERE order_id=p_order_id AND merchant_id=v_order.merchant_id AND transaction_type='refund'
     AND upper(btrim(currency))=upper(btrim(v_order.currency))
@@ -388,6 +401,10 @@ BEGIN
           WHERE t.order_id=o.id AND t.merchant_id=o.merchant_id
             AND t.transaction_type='refund' AND t.status IN ('completed','refunded')
             AND upper(btrim(t.currency))=upper(btrim(o.currency))
+            -- Mirror the status aggregate: unverified Paystack rows
+            -- are in-flight, not returned.
+            AND (public.normalized_gateway_name_v1(t.gateway)<>'PAYSTACK'
+              OR t.metadata->>'provider_refund_status'='processed')
             AND (t.metadata->>'payment_transaction_id' IS NULL
               OR EXISTS (SELECT 1 FROM public.transactions leg
                 WHERE leg.id::text = t.metadata->>'payment_transaction_id'

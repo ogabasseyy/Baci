@@ -2,14 +2,42 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./list-paystack-refunds', () => ({ listPaystackRefunds: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }));
+vi.mock('./quarantine-order-cancellation-refund', () => ({
+  quarantineRefund: vi.fn(),
+}));
 
 import { logger } from '@/lib/logger';
 import { checkCancellationRefundProvider } from './check-cancellation-refund-provider';
 import { listPaystackRefunds } from './list-paystack-refunds';
+import { quarantineRefund } from './quarantine-order-cancellation-refund';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from './run-order-cancellation-side-effect';
 
-const input = { reference: 'capture-1', currency: 'NGN', knownRefunds: [] };
+const leg = {
+  amount: 100,
+  currency: 'NGN',
+  gateway: 'paystack',
+  gateway_reference: 'capture-1',
+  id: 'leg-1',
+  status: 'completed',
+};
+const input = {
+  reference: 'capture-1',
+  currency: 'NGN',
+  knownRefunds: [],
+  order: { id: 'order-1', merchant_id: 'm-1', currency: 'NGN' },
+  supabase: {},
+  transaction: leg,
+} as unknown as Parameters<typeof checkCancellationRefundProvider>[0];
 describe('checkCancellationRefundProvider', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(quarantineRefund).mockImplementation(async (args) => {
+      throw new DeliveryUncertainError(args.reason);
+    });
+  });
   it('allows submission when there are no prior refunds', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([]);
     await expect(
@@ -257,5 +285,44 @@ describe('checkCancellationRefundProvider', () => {
         ],
       })
     ).resolves.toBeUndefined();
+  });
+  it('defers when the listing exhausts its budget instead of terminalizing', async () => {
+    const timeout = new Error('The operation timed out');
+    timeout.name = 'TimeoutError';
+    vi.mocked(listPaystackRefunds).mockRejectedValue(timeout);
+    await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
+      DeferredError
+    );
+    await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
+      'deferred_for_budget'
+    );
+    expect(vi.mocked(quarantineRefund)).not.toHaveBeenCalled();
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    vi.mocked(listPaystackRefunds).mockRejectedValue(abort);
+    await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
+      'deferred_for_budget'
+    );
+  });
+  it('files a review carrying the leg and provider evidence', async () => {
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 9, amount: 100, currency: 'NGN', status: 'pending' },
+    ]);
+    await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
+      'reconciliation'
+    );
+    expect(vi.mocked(quarantineRefund)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        preflight: true,
+        transactions: [leg],
+        metadata: expect.objectContaining({
+          provider: 'paystack',
+          provider_reference: 'capture-1',
+          failed_payment_transaction_id: 'leg-1',
+          payment_transaction_id: 'leg-1',
+          provider_refund_id: 9,
+        }),
+      })
+    );
   });
 });

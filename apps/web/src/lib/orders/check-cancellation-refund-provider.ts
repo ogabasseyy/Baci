@@ -1,13 +1,20 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import type { GatewayPaymentTransaction } from './gateway-payment-transaction';
 import { listPaystackRefunds } from './list-paystack-refunds';
 import { normalizeRefundMoneyField } from './normalize-refund-money-field';
-import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
+import type { CancellationOrder } from './order-cancellation-side-effect-types';
+import { quarantineRefund } from './quarantine-order-cancellation-refund';
+import { DeferredError } from './run-order-cancellation-side-effect';
 
 export async function checkCancellationRefundProvider({
   reference,
   currency,
   knownRefunds,
   deadlineMs,
+  order,
+  supabase,
+  transaction,
 }: {
   reference: string;
   currency: string;
@@ -19,7 +26,31 @@ export async function checkCancellationRefundProvider({
     metadata?: Record<string, unknown> | null;
   }>;
   deadlineMs?: number;
+  order: CancellationOrder;
+  supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
+  transaction: GatewayPaymentTransaction;
 }): Promise<void> {
+  // Every finding here files a reconciliation review before
+  // terminalizing: a bare DeliveryUncertainError would strand the step
+  // as delivery_uncertain with no row for operations to resolve.
+  const quarantine = (
+    reason: string,
+    metadata: Record<string, unknown> = {}
+  ): Promise<never> =>
+    quarantineRefund({
+      metadata: {
+        provider: 'paystack',
+        provider_reference: reference,
+        failed_payment_transaction_id: transaction.id,
+        payment_transaction_id: transaction.id,
+        ...metadata,
+      },
+      order,
+      preflight: true,
+      reason,
+      supabase,
+      transactions: [transaction],
+    });
   let rows: Awaited<ReturnType<typeof listPaystackRefunds>>;
   try {
     rows = await listPaystackRefunds(reference, { deadlineMs });
@@ -32,7 +63,18 @@ export async function checkCancellationRefundProvider({
       message: 'Cancellation refund provider verification failed',
       reference,
     });
-    throw new DeliveryUncertainError(
+    // Budget exhaustion is not provider evidence: a timed-out page
+    // says nothing about the money, so defer with a fresh budget
+    // instead of terminalizing a clean refund into reconciliation.
+    if (
+      (error as { name?: unknown } | null)?.name === 'TimeoutError' ||
+      (error as { name?: unknown } | null)?.name === 'AbortError'
+    ) {
+      throw new DeferredError(
+        'cancellation_refund_provider_verification_deferred_for_budget'
+      );
+    }
+    return quarantine(
       'Unable to verify existing Paystack refunds; review required'
     );
   }
@@ -80,9 +122,9 @@ export async function checkCancellationRefundProvider({
         normalizeRefundMoneyField(currency) ||
       (known && Math.round(Number(known.amount) * 100) !== row.amount)
     )
-      throw new DeliveryUncertainError(
-        'Paystack refund amount or currency mismatch'
-      );
+      return quarantine('Paystack refund amount or currency mismatch', {
+        provider_refund_id: row.id,
+      });
     if (
       (known?.status === 'completed' || known?.status === 'refunded') &&
       row.status === 'processed'
@@ -95,15 +137,17 @@ export async function checkCancellationRefundProvider({
         continue;
       }
     }
-    throw new DeliveryUncertainError(
-      'An existing Paystack refund requires reconciliation before retry'
+    return quarantine(
+      'An existing Paystack refund requires reconciliation before retry',
+      { provider_refund_id: row.id, provider_refund_status: row.status }
     );
   }
   // An unpaired manual candidate means the merchant claimed Paystack money
   // the provider does not confirm. That is either a mis-recorded method or
   // money that never moved — quarantine for review instead of passing.
   if (manualCandidates.length > 0)
-    throw new DeliveryUncertainError(
-      'Manual Paystack refunds exceed provider-confirmed amounts; review required'
+    return quarantine(
+      'Manual Paystack refunds exceed provider-confirmed amounts; review required',
+      { unpaired_manual_kobo: manualCandidates }
     );
 }

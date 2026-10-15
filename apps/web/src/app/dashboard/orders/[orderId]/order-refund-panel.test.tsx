@@ -275,4 +275,38 @@ describe('OrderRefundPanel', () => {
       screen.queryByText('Paystack/insufficient-balance (acquirer 51)')
     ).not.toBeInTheDocument();
   });
+  it('clears transfer fields after recording a partial manual refund', async () => {
+    vi.mocked(apiPost).mockResolvedValue({
+      ...summary,
+      refunded: 7574.83,
+      remaining: 20000,
+    });
+    render(<OrderRefundPanel orderId="order-1" />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Record manual refund' })
+    );
+    fireEvent.change(screen.getByLabelText('Refund date and time'), {
+      target: { value: '2026-09-28T13:00' },
+    });
+    fireEvent.change(screen.getByLabelText('Reference'), {
+      target: { value: 'bank-1' },
+    });
+    fireEvent.change(screen.getByLabelText('Note (optional)'), {
+      target: { value: 'first transfer' },
+    });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save manual refund' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Save manual refund' })
+      ).not.toBeInTheDocument()
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Record manual refund' })
+    );
+    expect(screen.getByLabelText('Reference')).toHaveValue('');
+    expect(screen.getByLabelText('Refund date and time')).toHaveValue('');
+    expect(screen.getByLabelText('Note (optional)')).toHaveValue('');
+    expect(screen.getByLabelText(/Amount/)).toHaveValue(20000);
+  });
 });

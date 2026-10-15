@@ -49,7 +49,10 @@ async function handle(
   }
   const { id } = await params;
   if (!z.uuid().safeParse(id).success)
-    return NextResponse.json({ error: 'Invalid order ID' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Invalid order ID', code: 'invalid_order_id' },
+      { status: 400 }
+    );
   let args: Record<string, unknown> = { p_order_id: id, p_action: 'status' };
   if (mutate) {
     const parsed = orderRefundSchema.safeParse(

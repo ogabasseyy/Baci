@@ -70,6 +70,15 @@ export async function executeOrderCancellationSideEffect({
   const transactions = (transactionRows as GatewayPaymentTransaction[]).filter(
     (transaction) => isExternalPaymentGateway(transaction.gateway)
   );
+  // Link validity spans every funded leg, not just the external ones the
+  // provider path acts on: the merchant RPC allocates manual money to
+  // cash/store-credit legs (they have no auto-reversal), so judging
+  // those links against the external-only list would misread a valid
+  // manual allocation as pointing outside the order and terminalize a
+  // recoverable refund. Matching still scopes initiation to external
+  // legs; internal legs only surface as manual-pending (defer) or
+  // malformed-manual (quarantine).
+  const allLegs = transactionRows as GatewayPaymentTransaction[];
   if (!transactions.length) {
     throw new Error('No completed gateway payment transaction found');
   }
@@ -93,7 +102,7 @@ export async function executeOrderCancellationSideEffect({
     invalidLinkReason,
     linkedPaymentId,
     unlinkedRefunds,
-  } = classifyCancellationRefundLinks(refundRows ?? [], transactions);
+  } = classifyCancellationRefundLinks(refundRows ?? [], allLegs);
   // Mirror the claim gate's sole-completed-leg attribution: an unlinked
   // legacy refund covering the only completed leg must not terminalize
   // the step while another leg's provider refund is still outstanding —
@@ -116,7 +125,7 @@ export async function executeOrderCancellationSideEffect({
     linkedPaymentId,
     refundRows,
     soleCompletedLegId: soleCompletedLeg?.id ?? null,
-    transactions,
+    transactions: allLegs,
   });
   const soleLegCovered =
     soleCompletedLeg !== undefined &&

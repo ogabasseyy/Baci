@@ -3,13 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  describeRefundManageBlocked,
-  describeRefundWorkerError,
-  orderRefundStatusLabels,
-} from '@/config/order-refund';
+import { orderRefundStatusLabels } from '@/config/order-refund';
 import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
+import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
+import { describeRefundWorkerError } from '@/lib/orders/describe-refund-worker-error';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
 import { OrderRefundManualForm } from './order-refund-manual-form';
@@ -128,6 +126,13 @@ export function OrderRefundPanel({
       setSummary(updated);
       setShowForm(false);
       setConfirmed(false);
+      // Transfer-specific fields must not carry into the next record:
+      // reopening the form after a partial manual would otherwise
+      // resubmit the old reference and collide (or replay idempotently
+      // when amount and timestamp also match).
+      setReference('');
+      setDate('');
+      setNote('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to manage refund');
     } finally {

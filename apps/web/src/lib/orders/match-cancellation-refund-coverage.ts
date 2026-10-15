@@ -138,8 +138,8 @@ export function matchCancellationRefundCoverage({
     if ((matchedRefundKobo.get(leg.id) ?? 0) >= legKobo) {
       refundedPaymentIds.add(leg.id);
     } else if (
-      completedLinkedLegIds.has(leg.id) ||
-      badManualLegIds.has(leg.id)
+      badManualLegIds.has(leg.id) ||
+      (completedLinkedLegIds.has(leg.id) && !manualLinkedLegIds.has(leg.id))
     ) {
       mismatchedTransactions.push(leg);
     } else if (manualLinkedLegIds.has(leg.id)) {

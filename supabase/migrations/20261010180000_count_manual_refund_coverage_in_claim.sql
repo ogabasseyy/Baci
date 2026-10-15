@@ -53,6 +53,36 @@ BEGIN
        AND COALESCE(public.normalized_gateway_name_v1(t.gateway), '') NOT IN (
          'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
        )
+  ) AND NOT EXISTS (
+    SELECT 1 FROM public.transactions internal_leg
+     WHERE internal_leg.order_id = p_order_id
+       AND internal_leg.merchant_id = v_order.merchant_id
+       AND internal_leg.transaction_type = 'payment'
+       -- Cash-only and similar internal-only cancellations have no
+       -- external leg, but a fully manual-covered one still needs the
+       -- trusted finalization: admit it so the claim below runs
+       -- settlement reversal, notifications, and review close instead
+       -- of rejecting a row the manager just made claimable. Wallet
+       -- and savings legs stay out: they reverse through their own
+       -- ledgers and never carry manual coverage, so admitting them
+       -- would finalize orders whose money never moved.
+       AND internal_leg.status IN ('completed', 'refund_pending', 'refunded')
+       AND internal_leg.amount > 0
+       AND COALESCE(public.normalized_gateway_name_v1(internal_leg.gateway), '') IN (
+         'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
+       )
+       AND (
+         SELECT COALESCE(SUM(refund.amount), 0)
+           FROM public.transactions refund
+          WHERE refund.order_id = p_order_id
+            AND refund.merchant_id = v_order.merchant_id
+            AND refund.transaction_type = 'refund'
+            AND refund.status IN ('completed', 'refunded')
+            AND refund.amount > 0
+            AND UPPER(BTRIM(refund.currency)) = UPPER(BTRIM(internal_leg.currency))
+            AND public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
+            AND refund.metadata->>'payment_transaction_id' = internal_leg.id::text
+       ) >= internal_leg.amount
   ) THEN
     RAISE EXCEPTION 'refund_not_required';
   END IF;
@@ -150,6 +180,34 @@ BEGIN
           -- rows sum to at least its amount, mirroring the executor rule.
           HAVING coalesce(sum(refund.amount), 0) >= payment.amount
        )
+  ) AND NOT EXISTS (
+    -- Mixed orders finalize only once their manual-only legs are
+    -- covered too: an outstanding cash balance must keep the claim
+    -- in the worker branch (where the matcher defers it as
+    -- manual-pending) instead of finalizing early with money still
+    -- owed. Wallet and savings legs stay out as before: they
+    -- reverse through their own ledgers, never through coverage.
+    SELECT 1 FROM public.transactions internal_leg
+     WHERE internal_leg.order_id = p_order_id
+       AND internal_leg.merchant_id = v_order.merchant_id
+       AND internal_leg.transaction_type = 'payment'
+       AND internal_leg.status IN ('completed', 'refund_pending')
+       AND internal_leg.amount > 0
+       AND COALESCE(public.normalized_gateway_name_v1(internal_leg.gateway), '') IN (
+         'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY'
+       )
+       AND (
+         SELECT COALESCE(SUM(refund.amount), 0)
+           FROM public.transactions refund
+          WHERE refund.order_id = p_order_id
+            AND refund.merchant_id = v_order.merchant_id
+            AND refund.transaction_type = 'refund'
+            AND refund.status IN ('completed', 'refunded')
+            AND refund.amount > 0
+            AND UPPER(BTRIM(refund.currency)) = UPPER(BTRIM(internal_leg.currency))
+            AND public.normalized_gateway_name_v1(refund.gateway) = 'MANUAL'
+            AND refund.metadata->>'payment_transaction_id' = internal_leg.id::text
+       ) < internal_leg.amount
   ) THEN
     -- Every funded leg has terminal refund evidence, but the last leg may
     -- have landed through a silent self-terminal refund no worker

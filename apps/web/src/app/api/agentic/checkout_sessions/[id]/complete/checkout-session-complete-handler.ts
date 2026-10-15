@@ -7,7 +7,6 @@ import { verifyAgenticApiKey } from '@/lib/agentic/auth';
 import { getCheckoutCompletionAuthorizationSecrets } from '@/lib/agentic/checkout-completion-authorization-response';
 import { finalizeAgenticCheckoutPayment } from '@/lib/agentic/checkout-completion-finalize';
 import { CHECKOUT_COMPLETION_IDEMPOTENCY_ROUTE } from '@/lib/agentic/checkout-completion-idempotency-route';
-import { readAgenticSharedCartBinding } from '@/lib/agentic/checkout-completion-payloads';
 import {
   getAgenticPaymentState,
   resolveExistingPaymentState,
@@ -34,6 +33,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { agenticCheckoutCompleteSchema } from '@/schemas/agentic-checkout';
 import { agenticCheckoutSessionRouteParamsSchema } from '@/schemas/agentic-checkout-session-route-params';
 import type { CheckoutSessionCompleteRouteOptions } from './checkout-session-complete-handler-types';
+import {
+  agenticCompleteFailureResponse,
+  resolveAgenticSharedCartPrincipalId,
+} from './checkout-session-complete-helpers';
 
 export async function handleAgenticCheckoutSessionComplete(
   request: NextRequest,
@@ -265,29 +268,11 @@ export async function handleAgenticCheckoutSessionComplete(
       return await respond(preparedPayment.body, preparedPayment.status);
     }
 
-    // A bound shared-cart session submits with the preparing principal
-    // from its server-side checkout-session record; the binding RPC
-    // requires it and fails closed when it cannot be resolved here.
-    const sharedCartBinding = readAgenticSharedCartBinding(
-      preparedPayment.payment.metadata
-    );
-    let sharedCartPrincipalId: string | null = null;
-    if (sharedCartBinding) {
-      const { data: bindingSession } = await bootstrap
-        .from('commerce_cart_checkout_sessions')
-        .select('principal_id, merchant_id, cart_id')
-        .eq('id', sharedCartBinding.checkout_session_id)
-        .maybeSingle();
-      if (
-        bindingSession &&
-        bindingSession.merchant_id === merchant.id &&
-        bindingSession.cart_id === sharedCartBinding.cart_id &&
-        typeof bindingSession.principal_id === 'string' &&
-        bindingSession.principal_id
-      ) {
-        sharedCartPrincipalId = bindingSession.principal_id;
-      }
-    }
+    const sharedCartPrincipalId = await resolveAgenticSharedCartPrincipalId({
+      bootstrap,
+      merchantId: merchant.id,
+      metadata: preparedPayment.payment.metadata,
+    });
 
     return await finalizeAgenticCheckoutPayment({
       agentId: mutation.agentId,
@@ -305,19 +290,10 @@ export async function handleAgenticCheckoutSessionComplete(
       supabase,
     });
   } catch (error: unknown) {
-    const body = { error: 'Internal Server Error' };
-    logger.error({
-      message: 'Agentic checkout complete failed',
-      error: sanitizeForLog(error),
+    return await agenticCompleteFailureResponse({
+      error,
+      respondWithIdempotency,
       sessionId,
     });
-    if (respondWithIdempotency) {
-      try {
-        return await respondWithIdempotency(body, 500);
-      } catch {
-        return NextResponse.json(body, { status: 500 });
-      }
-    }
-    return NextResponse.json(body, { status: 500 });
   }
 }

@@ -83,7 +83,9 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000079', v_merchant_id, 'REFUND-079',
       200, 100, 'partially_paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000080', v_merchant_id, 'REFUND-080',
-      100, 100, 'pending', 'cancelled', pg_catalog.now());
+      100, 100, 'pending', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000081', v_merchant_id, 'REFUND-081',
+      100, 100, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -103,7 +105,10 @@ BEGIN
       'completed', 'wallet', 'r48-79', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000095', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000080', 'payment', 100, 'NGN',
-      'completed', 'wallet', 'r48-80', '{}'::jsonb);
+      'completed', 'wallet', 'r48-80', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000096', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000081', 'payment', 100, 'NGN',
+      'completed', 'wallet', 'r48-81', '{}'::jsonb);
 
   INSERT INTO public.customer_wallet_transactions (
     wallet_id, customer_id, merchant_id, type, amount, balance_after,
@@ -117,6 +122,19 @@ BEGIN
       'order_reversal', '9ef11000-0000-4000-8000-000000000079'),
     (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 400,
       'order_reversal', '9ef11000-0000-4000-8000-000000000080');
+
+  -- Simulate a reversal that predates the migration: with the sync
+  -- trigger disabled the insert leaves the label stale.
+  ALTER TABLE public.customer_wallet_transactions
+    DISABLE TRIGGER sync_internal_only_refund_status_wallet;
+  INSERT INTO public.customer_wallet_transactions (
+    wallet_id, customer_id, merchant_id, type, amount, balance_after,
+    source_type, source_id
+  ) VALUES (
+    v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 500,
+    'order_reversal', '9ef11000-0000-4000-8000-000000000081');
+  ALTER TABLE public.customer_wallet_transactions
+    ENABLE TRIGGER sync_internal_only_refund_status_wallet;
 
   -- The redemption variant trigger requires the order to carry the
   -- customer and a matching order item.
@@ -185,6 +203,19 @@ BEGIN
   IF v_status IS DISTINCT FROM 'refunded' THEN
     RAISE EXCEPTION 'pending reversal left status %, want refunded',
       v_status;
+  END IF;
+  -- The predated reversal left the label stale; the shipped backfill
+  -- repairs it without touching already-correct rows.
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000081';
+  IF v_status IS DISTINCT FROM 'paid' THEN
+    RAISE EXCEPTION 'predated reversal flipped early, got %', v_status;
+  END IF;
+  PERFORM private.backfill_internal_only_refund_status();
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000081';
+  IF v_status IS DISTINCT FROM 'refunded' THEN
+    RAISE EXCEPTION 'backfill missed predated reversal, got %', v_status;
   END IF;
 END;
 $refund_round48_status$;

@@ -215,7 +215,9 @@ BEGIN
        AND anomaly.merchant_id = p_merchant_id
        AND anomaly.transaction_type = 'refund'
        AND anomaly.status IN ('completed', 'refunded')
-       AND anomaly.amount > 0
+       -- No amount filter: the pending gate floors nonpositive
+       -- anomalous rows to one unit, so excluding them here would
+       -- finalize while the manager still reports processing.
        AND (
          UPPER(BTRIM(anomaly.currency))
            IS DISTINCT FROM UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency), ''), 'NGN')))

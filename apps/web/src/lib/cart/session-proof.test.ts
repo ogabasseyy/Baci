@@ -346,7 +346,7 @@ describe('verifyCartSessionProof', () => {
     const duringRotation = verifyCartSessionProof(proof, {
       environment: ENVIRONMENT,
       now: new Date('2026-10-17T04:01:00Z'),
-      previousSecrets: [SECRET],
+      previousSecrets: [{ retireAt: '2026-10-13T04:00:00Z', secret: SECRET }],
       secret: ROTATED_SECRET,
     });
     expect(duringRotation.ok).toBe(true);
@@ -357,6 +357,39 @@ describe('verifyCartSessionProof', () => {
       secret: ROTATED_SECRET,
     });
     expect(afterRemoval).toEqual({ error: 'invalid_proof', ok: false });
+  });
+
+  it('rejects a retired secret after its bounded rotation window', () => {
+    const proof = issueCartSessionProof(sessionInput(), {
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-12T04:00:00Z'),
+      secret: SECRET,
+    });
+
+    // The key retired on 2026-10-13; one maximum proof lifetime later
+    // (2026-10-20) no proof it signed may verify, even a fresh-dated one.
+    const afterWindow = verifyCartSessionProof(proof, {
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-21T04:01:00Z'),
+      previousSecrets: [{ retireAt: '2026-10-13T04:00:00Z', secret: SECRET }],
+      secret: ROTATED_SECRET,
+    });
+    expect(afterWindow).toEqual({ error: 'invalid_proof', ok: false });
+
+    // A proof claiming issuance after the key retired is likewise not
+    // attributable to that key.
+    const forged = issueCartSessionProof(sessionInput(), {
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-14T04:00:00Z'),
+      secret: SECRET,
+    });
+    const afterRetirement = verifyCartSessionProof(forged, {
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-15T04:01:00Z'),
+      previousSecrets: [{ retireAt: '2026-10-13T04:00:00Z', secret: SECRET }],
+      secret: ROTATED_SECRET,
+    });
+    expect(afterRetirement).toEqual({ error: 'invalid_proof', ok: false });
   });
 
   it('never renews an expired proof into a valid one', () => {
@@ -474,7 +507,10 @@ it('uses configured previous keys across the runtime verifier during rotation', 
     now,
   });
   vi.stubEnv('CART_SESSION_SECRET', ROTATED_SECRET);
-  vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', JSON.stringify([SECRET]));
+  vi.stubEnv(
+    'CART_SESSION_PREVIOUS_SECRETS',
+    JSON.stringify([{ retireAt: '2026-10-16T00:00:00Z', secret: SECRET }])
+  );
   expect(
     verifyCartSessionProof(proof, { environment: ENVIRONMENT, now }).ok
   ).toBe(true);

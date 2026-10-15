@@ -167,6 +167,12 @@ export interface VerifiedCartSession {
   grantId: string | null;
   principalId: string;
   allowedOperations: CartCommand['type'][];
+  /**
+   * False when the proof predates the operations claim: its operation
+   * list is unclaimed, not a verified restriction, and the server must
+   * load the live grant's operations before authorizing mutations.
+   */
+  operationsClaimPresent?: boolean;
   expiresAt: string;
 }
 

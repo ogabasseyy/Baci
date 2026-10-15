@@ -53,25 +53,44 @@ export function getCartProofEnvironment(): string {
   return process.env.NODE_ENV?.trim() || 'development';
 }
 
-/** Optional previous signing keys for bounded, server-only rotation windows.
- * Reading configuration does not provision or authorize a production change.
+export interface CartPreviousSessionSecret {
+  secret: string;
+  /** Instant the key stopped issuing; acceptance is bounded past it. */
+  retireAt: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Previous signing keys for bounded, server-only rotation windows.
+ * Each entry must carry its retirement instant: a bare key string is
+ * not accepted, because a retired key without a bound could verify
+ * forged proofs forever. Reading configuration does not provision or
+ * authorize a production change.
  */
-export function getCartPreviousSessionSecrets(): string[] {
+export function getCartPreviousSessionSecrets(): CartPreviousSessionSecret[] {
   assertServerRuntime('CART_SESSION_PREVIOUS_SECRETS');
   try {
     const value: unknown = JSON.parse(
       process.env.CART_SESSION_PREVIOUS_SECRETS ?? '[]'
     );
-    if (
-      !Array.isArray(value) ||
-      value.length > 8 ||
-      !value.every(
-        (key): key is string =>
-          typeof key === 'string' && key.trim().length >= 32
+    if (!Array.isArray(value) || value.length > 8) return [];
+    const entries: CartPreviousSessionSecret[] = [];
+    for (const entry of value) {
+      if (!isRecord(entry)) return [];
+      const { retireAt, secret } = entry;
+      if (
+        typeof secret !== 'string' ||
+        secret.trim().length < 32 ||
+        typeof retireAt !== 'string' ||
+        !Number.isFinite(Date.parse(retireAt))
       )
-    )
-      return [];
-    return value.map((key) => key.trim());
+        return [];
+      entries.push({ retireAt, secret: secret.trim() });
+    }
+    return entries;
   } catch {
     return [];
   }

@@ -8,6 +8,7 @@ import {
 import { z } from 'zod';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import {
+  type CartPreviousSessionSecret,
   getCartPreviousSessionSecrets,
   getCartSessionSecret,
 } from './cart-runtime-env';
@@ -210,7 +211,7 @@ function verifyCartProof(
     now?: Date;
     environment: string;
     audience?: string;
-    previousSecrets?: string[];
+    previousSecrets?: readonly CartPreviousSessionSecret[];
   },
   allowExpired = false
 ): CartSessionVerification {
@@ -225,9 +226,32 @@ function verifyCartProof(
     return { error: 'invalid_proof', ok: false };
   }
 
+  const verifyNow = Math.floor((options.now ?? new Date()).getTime() / 1000);
+  const maxLifetime =
+    payload.scope === 'bootstrap'
+      ? CART_BOOTSTRAP_PROOF_TTL_SECONDS
+      : CART_SESSION_PROOF_TTL_SECONDS;
+  if (payload.exp - payload.iat > maxLifetime) {
+    return { error: 'invalid_proof', ok: false };
+  }
+  // A retired key may only authenticate proofs it could have issued:
+  // issued no later than its retirement, and only until one maximum
+  // proof lifetime past that retirement has elapsed. After that, no
+  // proof signed with the retired key verifies, however it is dated.
+  const previousCandidates = (
+    options.previousSecrets ?? getCartPreviousSessionSecrets()
+  ).filter((entry) => {
+    const retireAt = Math.floor(Date.parse(entry.retireAt) / 1000);
+    return (
+      Number.isFinite(retireAt) &&
+      entry.secret.trim().length >= MIN_SECRET_LENGTH &&
+      payload.iat <= retireAt &&
+      verifyNow <= retireAt + CART_SESSION_PROOF_TTL_SECONDS
+    );
+  });
   const candidates = [
     secret,
-    ...(options.previousSecrets ?? getCartPreviousSessionSecrets()),
+    ...previousCandidates.map((entry) => entry.secret),
   ].filter((candidate) => candidate.trim().length >= MIN_SECRET_LENGTH);
   const signed = candidates.some((candidate) =>
     constantTimeEqual(signPayload(encoded, candidate), signature)
@@ -270,6 +294,8 @@ function verifyCartProof(
     expiresAt: new Date(payload.exp * 1000).toISOString(),
     grantId: payload.grantId,
     merchantId: payload.merchantId,
+    operationsClaimPresent:
+      payload.scope === 'session' ? payload.ops !== undefined : true,
     principalId: payload.principalId,
   };
   return { ok: true, session };

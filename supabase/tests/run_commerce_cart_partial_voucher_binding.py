@@ -46,7 +46,7 @@ try:
  if '--before-empty-observation-fix' in sys.argv: repair=repair.split('-- Explicit JSON null records an observed absence.')[0]
  if '--before-checkout-add-fix' not in sys.argv: sql+=('\n'+repair)*2
  if '--baseline' not in sys.argv:
-  for name in ['20261015145000_commerce_cart_checkout_complete_vouchers.sql', '20261015150000_commerce_cart_agentic_checkout_economics.sql','20261015151000_commerce_cart_partial_voucher_binding.sql','20261015152000_commerce_cart_voucher_pair_writers.sql','20261015154000_commerce_cart_terminal_purge_schedule.sql','20261015155000_commerce_cart_handoff_partial_pairs.sql']: sql+='\n'+(root/'supabase/migrations'/name).read_text()
+  for name in ['20261015145000_commerce_cart_checkout_complete_vouchers.sql', '20261015150000_commerce_cart_agentic_checkout_economics.sql','20261015151000_commerce_cart_partial_voucher_binding.sql','20261015152000_commerce_cart_voucher_pair_writers.sql','20261015154000_commerce_cart_terminal_purge_schedule.sql','20261015155000_commerce_cart_handoff_partial_pairs.sql','20261015156000_commerce_cart_grant_operations.sql']: sql+='\n'+(root/'supabase/migrations'/name).read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_checkout_add_identity.sql').read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_voucher_pair_writers.sql').read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_account_empty_observation.sql').read_text()

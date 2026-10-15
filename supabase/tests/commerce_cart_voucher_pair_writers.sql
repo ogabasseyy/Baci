@@ -60,6 +60,26 @@ BEGIN
   END IF;
 END $$;
 
+-- The grant-operations RPC returns the live grant's stored operations
+-- for the claims-bound principal (the legacy-proof upgrade path).
+DO $$
+DECLARE
+  r jsonb;
+BEGIN
+  PERFORM pg_temp.partial_claim(
+    'aaaaaaaa-4500-4000-8000-000000000001',
+    'bbbbbbbb-4500-4000-8000-000000000001',
+    'partial-token'
+  );
+  r := public.commerce_cart_grant_operations();
+  IF r ->> 'ok' <> 'true' THEN
+    RAISE EXCEPTION 'grant operations must resolve for a live grant: %', r;
+  END IF;
+  IF r -> 'allowedOperations' <> '["add", "set_quantity", "remove", "clear", "replace", "set_assurance", "set_negotiated_price"]'::jsonb THEN
+    RAISE EXCEPTION 'grant operations must mirror the stored grant list: %', r;
+  END IF;
+END $$;
+
 -- A token-only line transferred through handoff redemption keeps its
 -- full quantity: only complete pairs pin at one.
 DO $$

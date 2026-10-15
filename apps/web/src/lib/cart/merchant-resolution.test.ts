@@ -279,7 +279,7 @@ describe('resolveCartMerchant', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('uses the merchant hint on Vercel deployment hosts', async () => {
+  it('does not let a client hint select a merchant on Vercel deployment hosts', async () => {
     const rpc = vi.fn(async () => ({ data: [merchantRow()], error: null }));
     const request = new Request(
       'https://baci-git-shared-cart-ogabassey.vercel.app/api/storefront/cart?merchantSlug=ogabassey'
@@ -291,17 +291,12 @@ describe('resolveCartMerchant', () => {
       rpcClient: { rpc },
     });
 
-    expect(result.ok).toBe(true);
-    // The deployment hostname itself is never resolved as a merchant.
-    expect(rpc).toHaveBeenCalledWith(
-      'resolve_storefront_auth_merchant',
-      expect.objectContaining({ p_identifier: 'ogabassey' })
-    );
+    // A public deployment alias is not a tenant-binding surface: the
+    // hint must not govern merchant selection there.
+    expect(result).toEqual({ error: 'merchant_unresolved', ok: false });
     expect(rpc).not.toHaveBeenCalledWith(
       'resolve_storefront_auth_merchant',
-      expect.objectContaining({
-        p_identifier: 'baci-git-shared-cart-ogabassey.vercel.app',
-      })
+      expect.objectContaining({ p_identifier: 'ogabassey' })
     );
   });
 

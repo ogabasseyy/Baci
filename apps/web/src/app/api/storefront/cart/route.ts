@@ -1,6 +1,7 @@
 import { CART_FULL_SESSION_OPERATIONS } from '@baci/shared/cart';
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
+import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
 import {
   type CartRequestContextDeps,
   checkCartQuota,
@@ -50,8 +51,11 @@ function contextDeps(
  * GET /api/storefront/cart
  *
  * Returns the authorized snapshot for a session proof. Preview-safe:
- * creates no cart, sets no cookie and mints no session. A bootstrap
- * proof (no cart yet) reads as not-found.
+ * creates no cart and mints no session. A bootstrap proof (no cart
+ * yet) reads as not-found. A legacy session proof that predates the
+ * operations claim is upgraded here: the live grant's verified
+ * operations are loaded and the proof is re-issued with them (cookie,
+ * plus body for device callers), so older carts stay editable.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -72,8 +76,9 @@ export async function GET(request: NextRequest) {
       return cartErrorResponse('quota_exceeded');
     }
 
+    const client = createCartScopedClient(context.principal);
     const result = await getCart({
-      client: createCartScopedClient(context.principal),
+      client,
       principal: context.principal,
     });
     if (!result.ok) {
@@ -82,7 +87,41 @@ export async function GET(request: NextRequest) {
         result.cart ? { cart: result.cart } : undefined
       );
     }
-    return cartJsonResponse({ cart: result.cart, warnings: result.warnings });
+    let proof: string | null = null;
+    const upgraded = await upgradeLegacySessionPrincipal(
+      client,
+      context.principal
+    );
+    if (upgraded && upgraded !== context.principal) {
+      try {
+        proof = issueCartSessionProof(
+          {
+            allowedOperations: upgraded.allowedOperations,
+            cartId: upgraded.cartId,
+            grantId: upgraded.grantId,
+            grantExpiresAt: result.cart.expiresAt,
+            merchantId: context.merchant.id,
+            principalId: upgraded.principalId,
+            scope: 'session',
+          },
+          { environment: getCartProofEnvironment() }
+        );
+      } catch (error) {
+        console.error('Legacy cart session proof upgrade failed', {
+          message: error instanceof Error ? error.message : 'unknown',
+        });
+      }
+    }
+    const response = cartJsonResponse({
+      cart: result.cart,
+      ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),
+      warnings: result.warnings,
+    });
+    const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
+    if (proof && cookieMaxAge > 0) {
+      setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
+    }
+    return response;
   } catch (error) {
     console.error('Unexpected error in GET /api/storefront/cart:', {
       message: error instanceof Error ? error.message : 'unknown',

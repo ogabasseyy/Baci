@@ -20,7 +20,10 @@ function sessionPrincipal(): CartPrincipal {
 afterEach(() => vi.unstubAllEnvs());
 it('recovers a committed issue after rotation using the previous key and exact operation', async () => {
   const previous = 'previous-fixture-signing-key-at-least-32';
-  vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', JSON.stringify([previous]));
+  vi.stubEnv(
+    'CART_SESSION_PREVIOUS_SECRETS',
+    JSON.stringify([{ retireAt: '2099-01-01T00:00:00Z', secret: previous }])
+  );
   const oldToken = createHandoffToken(
     {
       cartId: CART_ID,
@@ -68,7 +71,12 @@ it('recovers a committed issue after rotation using the previous key and exact o
 it('does not retry an indeterminate issue or a definitive expired grant across signing keys', async () => {
   vi.stubEnv(
     'CART_SESSION_PREVIOUS_SECRETS',
-    JSON.stringify(['previous-fixture-signing-key-at-least-32'])
+    JSON.stringify([
+      {
+        retireAt: '2099-01-01T00:00:00Z',
+        secret: 'previous-fixture-signing-key-at-least-32',
+      },
+    ])
   );
   for (const reply of [
     { error: null, data: { ok: false, code: 'expired' } },
@@ -102,7 +110,12 @@ it('does not retry an indeterminate issue or a definitive expired grant across s
 it('keeps changed operation bodies conflicted across the approved key ring', async () => {
   vi.stubEnv(
     'CART_SESSION_PREVIOUS_SECRETS',
-    JSON.stringify(['previous-fixture-signing-key-at-least-32'])
+    JSON.stringify([
+      {
+        retireAt: '2099-01-01T00:00:00Z',
+        secret: 'previous-fixture-signing-key-at-least-32',
+      },
+    ])
   );
   const client = {
     rpc: vi.fn(async () => ({

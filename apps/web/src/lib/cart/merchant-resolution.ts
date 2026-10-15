@@ -182,45 +182,8 @@ function isSharedPlatformHost(host: string, rootDomain: string): boolean {
     host === `api.${rootDomain}` ||
     host === `api-staging.${rootDomain}` ||
     host === 'localhost' ||
-    host === '127.0.0.1' ||
-    // Vercel deployment hosts (previews and branch deploys) are
-    // platform hosts too: no merchant lives under them, so the
-    // validated merchant hint governs, exactly as on api.*. Real
-    // storefront and custom-domain hosts never match this suffix.
-    host === 'vercel.app' ||
-    host.endsWith('.vercel.app')
-  );
-}
-
-function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
-  return (
-    host === rootDomain ||
-    host === `www.${rootDomain}` ||
-    host === `api.${rootDomain}` ||
-    host === `api-staging.${rootDomain}` ||
-    host === 'localhost' ||
     host === '127.0.0.1'
   );
-}
-
-/**
- * True when a bootstrap proof may leave in the response body rather
- * than only in the httpOnly cookie. Merchant resolution is broader:
- * Vercel deployment hosts may select a merchant by hint so previews
- * work, but arbitrary deployment hosts are not a credential-disclosure
- * surface. Body proofs are limited to the production/staging API,
- * root, and local native/programmatic hosts.
- */
-export function requestUsesSharedPlatformHost(
-  request: Request,
-  rootDomain?: string
-): boolean {
-  const resolvedRoot = (
-    rootDomain ??
-    process.env.NEXT_PUBLIC_ROOT_DOMAIN ??
-    'usebaci.com'
-  ).toLowerCase();
-  return isBodyProofPlatformHost(requestHost(request), resolvedRoot);
 }
 
 export async function resolveCartMerchant(

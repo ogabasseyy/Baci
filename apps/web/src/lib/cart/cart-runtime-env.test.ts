@@ -46,14 +46,19 @@ describe('getCartProofEnvironment', () => {
 it('reads only bounded valid previous signing keys and rejects malformed configuration', async () => {
   const { getCartPreviousSessionSecrets } = await import('./cart-runtime-env');
   const key = 'fixture-previous-cart-signing-material-0001';
-  vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', JSON.stringify([key]));
-  expect(getCartPreviousSessionSecrets()).toEqual([key]);
+  const entry = { retireAt: '2026-10-22T00:00:00Z', secret: key };
+  vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', JSON.stringify([entry]));
+  expect(getCartPreviousSessionSecrets()).toEqual([entry]);
   for (const invalid of [
     'bad-json',
     '{}',
     '[1]',
-    '["short"]',
-    JSON.stringify(Array(9).fill(key)),
+    // A bare key carries no retirement bound and is never accepted.
+    JSON.stringify([key]),
+    JSON.stringify([{ secret: key }]),
+    JSON.stringify([{ retireAt: 'not-a-date', secret: key }]),
+    JSON.stringify([{ retireAt: '2026-10-22T00:00:00Z', secret: 'short' }]),
+    JSON.stringify(Array(9).fill(entry)),
   ]) {
     vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', invalid);
     expect(getCartPreviousSessionSecrets()).toEqual([]);

@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
+import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
 import {
   checkCartQuota,
   createAnonMerchantFeatureLookup,
@@ -77,10 +78,22 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('quota_exceeded');
     }
 
+    // A proof minted before the operations claim carries no claimed
+    // authority: load the live grant's verified operations first, or
+    // every command would be rejected on an otherwise live cart.
+    const client = createCartScopedClient(context.principal);
+    const principal = await upgradeLegacySessionPrincipal(
+      client,
+      context.principal
+    );
+    if (!principal) {
+      return cartErrorResponse('temporarily_unavailable');
+    }
+
     const result = await mutateCart(
       {
-        client: createCartScopedClient(context.principal),
-        principal: context.principal,
+        client,
+        principal,
       },
       {
         command: parsedBody.data.command,
@@ -104,12 +117,12 @@ export async function POST(request: NextRequest) {
     try {
       proof = issueCartSessionProof(
         {
-          allowedOperations: context.principal.allowedOperations,
-          cartId: context.principal.cartId,
-          grantId: context.principal.grantId,
+          allowedOperations: principal.allowedOperations,
+          cartId: principal.cartId,
+          grantId: principal.grantId,
           grantExpiresAt: result.cart.expiresAt,
           merchantId: context.merchant.id,
-          principalId: context.principal.principalId,
+          principalId: principal.principalId,
           scope: 'session',
         },
         { environment: getCartProofEnvironment() }

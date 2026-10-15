@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { NextRequest } from 'next/server';
+import { requestUsesSharedPlatformHost } from '@/lib/cart/body-proof-host';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
-import { requestUsesSharedPlatformHost } from '@/lib/cart/merchant-resolution';
 import {
   cartSessionCookieName,
   readCookieFromRequest,

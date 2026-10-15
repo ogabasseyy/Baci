@@ -17,6 +17,8 @@ export interface CartPrincipal {
   principalId: string;
   scope: 'bootstrap' | 'session';
   allowedOperations: CartCommand['type'][];
+  /** False for pre-ops-claim proofs; see VerifiedCartSession. */
+  operationsClaimPresent?: boolean;
   expiresAt: string;
 }
 
@@ -125,6 +127,7 @@ export async function resolveCartPrincipal(
       expiresAt: session.expiresAt,
       grantId: session.grantId,
       merchantId: session.merchantId,
+      operationsClaimPresent: session.operationsClaimPresent,
       principalId: session.principalId,
       scope: hasCart ? 'session' : 'bootstrap',
     },

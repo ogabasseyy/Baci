@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { prepareCartCheckout } from '@/lib/cart/checkout-transition';
+import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
 import {
   checkCartQuota,
   createAnonMerchantFeatureLookup,
@@ -78,10 +79,19 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('quota_exceeded');
     }
 
+    const client = createCartScopedClient(context.principal);
+    const principal = await upgradeLegacySessionPrincipal(
+      client,
+      context.principal
+    );
+    if (!principal) {
+      return cartErrorResponse('temporarily_unavailable');
+    }
+
     const result = await prepareCartCheckout(
       {
-        client: createCartScopedClient(context.principal),
-        principal: context.principal,
+        client,
+        principal,
       },
       {
         cartId: parsedBody.data.cartId,
@@ -106,8 +116,7 @@ export async function POST(request: NextRequest) {
     // the absolute cart lifetime), so a proof never outlives the grant
     // it authenticates.
     const desiredProofExpiry =
-      Date.parse(result.sessionExpiresAt) >
-      Date.parse(context.principal.expiresAt)
+      Date.parse(result.sessionExpiresAt) > Date.parse(principal.expiresAt)
         ? result.sessionExpiresAt
         : context.principal.expiresAt;
     const proofExpiresAt =
@@ -118,12 +127,12 @@ export async function POST(request: NextRequest) {
     try {
       proof = issueCartSessionProof(
         {
-          allowedOperations: context.principal.allowedOperations,
-          cartId: context.principal.cartId,
-          grantId: context.principal.grantId,
+          allowedOperations: principal.allowedOperations,
+          cartId: principal.cartId,
+          grantId: principal.grantId,
           grantExpiresAt: proofExpiresAt,
           merchantId: context.merchant.id,
-          principalId: context.principal.principalId,
+          principalId: principal.principalId,
           scope: 'session',
         },
         { environment: getCartProofEnvironment() }

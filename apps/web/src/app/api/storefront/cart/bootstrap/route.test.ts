@@ -172,19 +172,17 @@ describe('POST /api/storefront/cart/bootstrap', () => {
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
-  it('keeps bootstrap proofs out of the body on Vercel deployment hosts', async () => {
+  it('does not resolve a merchant from a hint on Vercel deployment hosts', async () => {
     const response = await postBootstrap({
       body: {},
       url: 'https://baci-git-shared-cart-ogabassey.vercel.app/api/storefront/cart/bootstrap?merchantSlug=ogabassey',
     });
 
-    expect(response.status).toBe(201);
+    // A public deployment alias is neither a tenant-binding nor a
+    // credential-disclosure surface: no merchant, no proof, no cookie.
+    expect(response.status).toBe(404);
     expect((await response.json()).proof).toBeUndefined();
-    const cookieProof = cookieValue(
-      response.headers.get('set-cookie'),
-      'baci-cart-11111111-1111-4111-8111-111111111111'
-    );
-    expect(cookieProof).toMatch(/^cp1\./);
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 
   it('serves native clients that carry no cookies', async () => {

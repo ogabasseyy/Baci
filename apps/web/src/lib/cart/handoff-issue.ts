@@ -85,7 +85,7 @@ export async function issueCartHandoff(
       response.data.code !== 'idempotency_conflict'
     )
       break;
-    token = createHandoffToken(tokenInput, previous);
+    token = createHandoffToken(tokenInput, previous.secret);
     response = await deps.client.rpc('commerce_cart_issue_handoff', {
       ...args,
       p_token_hash: hashHandoffToken(token),

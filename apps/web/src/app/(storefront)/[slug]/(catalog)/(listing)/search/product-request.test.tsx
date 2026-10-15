@@ -179,10 +179,10 @@ it('fails closed without a CSPRNG instead of minting a weak id', async () => {
     // the shadowing own property must be deleted to restore them.
     if (uuidDescriptor)
       Object.defineProperty(crypto, 'randomUUID', uuidDescriptor);
-    else delete (crypto as Record<string, unknown>).randomUUID;
+    else delete (crypto as unknown as Record<string, unknown>).randomUUID;
     if (valuesDescriptor)
       Object.defineProperty(crypto, 'getRandomValues', valuesDescriptor);
-    else delete (crypto as Record<string, unknown>).getRandomValues;
+    else delete (crypto as unknown as Record<string, unknown>).getRandomValues;
   }
 });
 it('mints a CSRF token for cold sessions before submitting', async () => {

@@ -106,10 +106,14 @@ jobs:
 
       - name: Resolve Semgrep scope output
         id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FILTER_SEMGREP_RELEVANT: ${{ steps.filter.outputs.semgrep_relevant }}
+          FILTER_TRUSTED_CHANGED: ${{ steps.filter.outputs.trusted_changed }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "semgrep_relevant=${{ steps.filter.outputs.semgrep_relevant }}" >> "$GITHUB_OUTPUT"
-            echo "trusted_changed=${{ steps.filter.outputs.trusted_changed }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "semgrep_relevant=$FILTER_SEMGREP_RELEVANT" >> "$GITHUB_OUTPUT"
+            echo "trusted_changed=$FILTER_TRUSTED_CHANGED" >> "$GITHUB_OUTPUT"
           else
             echo "semgrep_relevant=true" >> "$GITHUB_OUTPUT"
             # Push/schedule/dispatch carry no PR diff; content
@@ -136,7 +140,7 @@ jobs:
 
     container:
       # Pin to specific version for reproducibility
-      image: semgrep/semgrep:1.104.0
+      image: semgrep/semgrep:1.181.0@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b
 
     steps:
       - name: Checkout repository
@@ -166,8 +170,8 @@ jobs:
           chmod 700 "$fetch_askpass"
           GIT_ASKPASS="$fetch_askpass" GIT_TERMINAL_PROMPT=0 \
             git -c credential.helper= fetch --no-tags origin \
-            "${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
-          diff_out="$(git diff --name-only --diff-filter=d "origin/${{ github.event.pull_request.base.ref }}...HEAD" -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml')"
+            "${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
+          diff_out="$(git diff --name-only --diff-filter=d "origin/${PR_BASE_REF}...HEAD" -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml')"
           mapfile -t changed_files < <(
             printf '%s\n' "$diff_out" |
             grep -E '^(next\.config\.ts$|apps/web/src/app/api/|apps/web/src/lib/|apps/web/src/schemas/|apps/mobile-admin/(app|hooks|lib)/|apps/mobile-storefront/(app|hooks|lib|services|stores)/|packages/shared/|supabase/migrations/|\.github/workflows/)' ||
@@ -184,6 +188,7 @@ jobs:
           # --strict also fails on warning-level analysis errors.
           semgrep scan --error --strict --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
         env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
           GITHUB_TOKEN: ${{ github.token }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
@@ -219,6 +224,23 @@ jobs:
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
+
+      # The filter invocation below is trust-sensitive; its rationale
+      # lives in .github/sarif-filter-notes.md (300-line ceiling).
+      - name: Clear base-filter collision
+        if: github.event_name == 'pull_request'
+        run: rm -rf "${GITHUB_WORKSPACE}/base-filter"
+
+      - name: Checkout base filter implementation
+        if: github.event_name == 'pull_request'
+        # Pin to full SHA for supply chain security
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.ref }}
+          path: base-filter
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
 
       - name: Verify complete Semgrep analysis and preserve raw SARIF
         if: always()
@@ -277,29 +299,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      # The filter invocation below is trust-sensitive; its rationale
-      # lives in .github/sarif-filter-notes.md (300-line ceiling).
-      - name: Clear base-filter collision
-        if: github.event_name == 'pull_request'
-        run: rm -rf "${GITHUB_WORKSPACE}/base-filter"
-
-      - name: Checkout base filter implementation
-        if: github.event_name == 'pull_request'
-        # Pin to full SHA for supply chain security
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ github.event.pull_request.base.ref }}
-          path: base-filter
-          fetch-depth: 1
-          sparse-checkout: .github/scripts
-
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
           set -euo pipefail
           filter_dir=.github/scripts
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             filter_dir="${GITHUB_WORKSPACE}/base-filter/.github/scripts"
             for f in semgrep-sarif-filter.py semgrep_sarif_agent.py semgrep_sarif_agentenv.py semgrep_sarif_alias.py semgrep_sarif_archive.py semgrep_sarif_audit.py semgrep_sarif_awk.py semgrep_sarif_bashfunc.py semgrep_sarif_cmdfile.py semgrep_sarif_binutils.py semgrep_sarif_consts.py semgrep_sarif_consumer.py semgrep_sarif_container.py semgrep_sarif_copy.py semgrep_sarif_defer.py semgrep_sarif_embeds.py semgrep_sarif_findout.py semgrep_sarif_gh.py semgrep_sarif_git.py semgrep_sarif_helpers.py semgrep_sarif_helpertree.py semgrep_sarif_heredoc.py semgrep_sarif_install.py semgrep_sarif_interp.py semgrep_sarif_jq.py semgrep_sarif_nameref.py semgrep_sarif_order.py semgrep_sarif_peel.py semgrep_sarif_perl.py semgrep_sarif_pins.py semgrep_sarif_refs.py semgrep_sarif_poison.py semgrep_sarif_programs.py semgrep_sarif_redirect.py semgrep_sarif_runner.py semgrep_sarif_scan.py semgrep_sarif_secretbind.py semgrep_sarif_sed.py semgrep_sarif_segments.py semgrep_sarif_shell.py semgrep_sarif_steps.py semgrep_sarif_subscript.py semgrep_sarif_tar.py semgrep_sarif_varcollect.py semgrep_sarif_varmap.py semgrep_sarif_words.py semgrep_sarif_xargs.py semgrep_sarif_zone.py; do
               [ -f "${filter_dir}/${f}" ] || { echo "::error::base filter copy missing ${f}; failing closed."; exit 1; }
@@ -307,6 +312,7 @@ jobs:
           fi
           python3 "${filter_dir}/semgrep-sarif-filter.py"
         env:
+          EVENT_NAME: ${{ github.event_name }}
           TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
           # Advisory mode: trusted-only drift warns instead of failing
           # this required job (hardening drift still fails; tripwire

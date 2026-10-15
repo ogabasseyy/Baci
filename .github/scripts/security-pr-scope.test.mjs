@@ -23,7 +23,8 @@ const end = workflow.indexOf('          if [ ${#changed_files[@]}', start);
 const scope = workflow
   .slice(start, end)
   .replaceAll('          ', '')
-  .replaceAll('${{ github.event.pull_request.base.ref }}', 'main');
+  .replaceAll('${{ github.event.pull_request.base.ref }}', 'main')
+  .replaceAll('${PR_BASE_REF}', 'main');
 // macOS ships bash 3 without mapfile. Preserve its line-reading semantics
 // in this harness; CI runs the original builtin under Linux bash.
 const mapfileCompatibility = `mapfile() { local line; changed_files=(); while IFS= read -r line; do changed_files+=("$line"); done; }`;

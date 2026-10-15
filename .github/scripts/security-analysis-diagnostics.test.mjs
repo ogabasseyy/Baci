@@ -57,3 +57,16 @@ test('all scan modes retain raw diagnostics and enforce warning errors', () => {
   assert.match(workflow, /if-no-files-found: error/);
   assert.match(workflow, /            semgrep\.analysis-status\.json/);
 });
+
+test('base filter checkout precedes fail-closed diagnostics validation', () => {
+  assert.ok(workflow.indexOf('- name: Checkout base filter implementation') < workflow.indexOf('- name: Verify complete Semgrep analysis'));
+  assert.ok(workflow.indexOf('- name: Verify complete Semgrep analysis') < workflow.indexOf('- name: Drop audited checkout finding from SARIF'));
+});
+
+test('shell scripts read GitHub context through environment variables', () => {
+  for (const block of workflow.split('        run: |\n').slice(1)) {
+    const script = block.split(/\n(?=        [a-z]|      - |  [a-z])/)[0];
+    assert.doesNotMatch(script, /\$\{\{/);
+  }
+  assert.match(workflow, /PR_BASE_REF: \$\{\{ github.event.pull_request.base.ref \}\}/);
+});

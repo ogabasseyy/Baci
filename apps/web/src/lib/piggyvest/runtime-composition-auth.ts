@@ -58,6 +58,8 @@ export function createRuntimeCompositionRlsFactory(
         setAll: (updates) => {
           if (request.signal.aborted) return;
           for (const { name, value, options: cookie } of updates) {
+            // FP: Next.js RequestCookies passthrough for downstream handlers, not koa response cookies; rule misfires on the same-named API. Dismissed in code-scanning (false-positive).
+            // nosemgrep: javascript.koa.web.cookies-default-koa.cookies-default-koa
             request.cookies.set(name, value);
             writes.cookies.set(name, value, {
               ...cookie,

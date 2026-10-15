@@ -205,6 +205,8 @@ async function buildDomainResults(
       try {
         return await lookupDomain(suggestion);
       } catch (error) {
+        // Audit-noise: a crafted value can only garble this server log line. Dismissed in code-scanning (false-positive).
+        // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
         console.error(`Error looking up suggestion ${suggestion}:`, error);
         return null;
       }

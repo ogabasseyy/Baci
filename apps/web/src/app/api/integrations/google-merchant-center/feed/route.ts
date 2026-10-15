@@ -174,6 +174,8 @@ export async function GET(request: NextRequest) {
     );
     redirectUrl.searchParams.set('merchant_slug', target.merchantSlug);
 
+    // FP: redirect authority is allowlisted by isAllowedRedirectHost (throws otherwise); request input selects among allowed hosts only. Dismissed in code-scanning (false-positive).
+    // nosemgrep: javascript.express.open-redirect-deepsemgrep.open-redirect-deepsemgrep
     return NextResponse.redirect(redirectUrl, 308);
   } catch (error) {
     console.error('LEGACY_GMC_FEED_REDIRECT_ERROR:', error);

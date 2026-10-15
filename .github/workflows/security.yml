@@ -179,8 +179,8 @@ jobs:
             exit 0
           fi
 
-          # --error: bare scan exits 0 with findings; the gate reads the outcome.
-          semgrep scan --error --config auto --sarif --output=semgrep.sarif "${changed_files[@]}"
+          # --error: bare scan exits 0 with findings; the gate reads the outcome. --text-output prints findings (SARIF alone is summary-only, invisible when findings match dismissed alerts).
+          semgrep scan --error --config auto --sarif --output=semgrep.sarif --text --text-output=/dev/stdout "${changed_files[@]}"
         env:
           GITHUB_TOKEN: ${{ github.token }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
@@ -190,7 +190,7 @@ jobs:
         if: github.event_name == 'push'
         id: semgrep_push
         run: |
-          semgrep scan --error --config auto --sarif --output=semgrep.sarif \
+          semgrep scan --error --config auto --sarif --output=semgrep.sarif --text --text-output=/dev/stdout \
             apps/web/src/app/api \
             apps/web/src/lib \
             apps/web/src/schemas \

@@ -33,6 +33,8 @@ export async function updateSession(
       ) {
         // Set cookies on the request for downstream middleware/handlers
         for (const { name, value } of cookiesToSet) {
+          // FP: Next.js RequestCookies passthrough for downstream handlers, not koa response cookies; rule misfires on the same-named API. Dismissed in code-scanning (false-positive).
+          // nosemgrep: javascript.koa.web.cookies-default-koa.cookies-default-koa
           request.cookies.set(name, value);
         }
         // Create a new response with updated request AND PRESERVE HEADERS

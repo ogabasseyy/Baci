@@ -705,8 +705,9 @@ async function initializeJuicyway(
           }
 
           // LOG SESSION POLLING
+          // Audit-noise: a crafted value can only garble this server log line. Dismissed in code-scanning (won't-fix).
           console.log(
-            `[Juicyway Poll #${pollAttempt}/${MAX_POLL_ATTEMPTS}] Session`,
+            `[Juicyway Poll #${pollAttempt}/${MAX_POLL_ATTEMPTS}] Session`, // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
             {
               status: polledSessionData.payment?.status,
               message: polledSessionData.message,
@@ -738,6 +739,8 @@ async function initializeJuicyway(
                     })
                   | undefined;
                 const fallbackAddr = pm?.address || pm?.params?.address;
+                // Audit-noise: a crafted value can only garble this server log line. Dismissed in code-scanning (won't-fix).
+                // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
                 console.log(`[Juicyway Poll #${pollAttempt}] Payment Check`, {
                   status: paymentDetails.status,
                   hasAddress: !!fallbackAddr,

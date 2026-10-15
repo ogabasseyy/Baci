@@ -60,6 +60,17 @@ export function loadOrCreateAttemptId(handoffId: string): string {
   return attemptId;
 }
 
+/** Redemption already committed; optional browser cleanup cannot undo success. */
+export function clearHandoffAttempt(handoffId: string): void {
+  const key = attemptStorageKey(handoffId);
+  attemptIds.delete(key);
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* Storage may be disabled. */
+  }
+}
+
 export function formatMinor(minor: number, currency: string): string {
   try {
     return new Intl.NumberFormat('en-NG', {

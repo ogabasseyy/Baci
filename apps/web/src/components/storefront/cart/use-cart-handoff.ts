@@ -5,8 +5,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { planCartMerge } from '@/lib/cart/merge';
 import { buildCsrfHeaders } from '@/lib/csrf';
 import {
-  attemptStorageKey,
   type Choice,
+  clearHandoffAttempt,
   fetchJson,
   loadOrCreateAttemptId,
   type MergeConflictView,
@@ -153,7 +153,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         conflicts?: MergeConflictView[];
       };
       if (response.ok) {
-        window.localStorage.removeItem(attemptStorageKey(handoffId));
+        clearHandoffAttempt(handoffId);
         window.location.replace(
           window.location.pathname + window.location.search
         );

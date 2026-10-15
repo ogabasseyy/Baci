@@ -1,3 +1,7 @@
+import {
+  readGuestCartMigration,
+  updateGuestCartWithCanonical,
+} from './guest-cart-canonical-delegation';
 import { createGuestCanonicalBridge } from './guest-cart-canonical-bridge';
 import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -6,8 +10,6 @@ import { z } from 'zod';
 import { guestCartLineSchema } from '../src/schemas/guest-cart-line';
 import { storedCartSchema } from '../src/schemas/guest-cart-stored-cart';
 import {
-  GuestCartBridgePendingError,
-  GuestCartCanonicalError,
   GuestCartExpiredError,
   GuestCartFullError,
   GuestCartMigratedError,
@@ -121,17 +123,6 @@ export class GuestCartStore {
     };
   }
 
-  private async getMigration(token: string): Promise<string | null> {
-    const rows = await this.rpc<{ migrated_to_cart_id: unknown }[]>(
-      'get_mcp_guest_cart_migration',
-      { p_token: token }
-    );
-    const row = Array.isArray(rows) ? rows[0] : undefined;
-    return typeof row?.migrated_to_cart_id === 'string'
-      ? row.migrated_to_cart_id
-      : null;
-  }
-
   private async deleteBestEffort(
     token: string,
     version: number | null
@@ -171,65 +162,19 @@ export class GuestCartStore {
     line: GuestCartLineInput,
     validate: (items: GuestCartLine[]) => Promise<void>
   ) {
-    if (!token && line.quantity === 0)
-      throw new Error('A guest cart is required');
-    // UUID text is case-insensitive: canonicalize before persisting,
-    // comparing, and enforcing per-product uniqueness.
-    const normalizedLine = {
-      ...line,
-      product_id:
-        typeof line.product_id === 'string'
-          ? line.product_id.toLowerCase()
-          : line.product_id,
-    };
-    if (!token) {
-      // A new cart starts empty, so its merged lines are known without
-      // I/O: validate before any write so a slow catalog lookup never
-      // costs anything. Accepted window: the catalog may change between
-      // this check and the persisted write; the website re-checks price
-      // and stock at transfer, so a line that went stale is dropped there.
-      await validate([guestCartLineSchema.parse(normalizedLine)]);
-    }
-    // Record runtime storage failures for /health (cleared by the next
-    // success) so an outage cannot keep the probe green. Only the
-    // token-free code is recorded, never the message.
-    try {
-      if (token && this.canonical) {
-        if (normalizedLine.quantity > 0)
-          await validate([guestCartLineSchema.parse(normalizedLine)]);
-        const result = await this.canonical.update(token, normalizedLine);
-        this.lastStorageErrorCode = null;
-        return result;
-      }
-      const result = token
-        ? await this.updateTokenCart(token, normalizedLine, validate)
-        : await this.createCart(normalizedLine);
-      this.lastStorageErrorCode = null;
-      if (this.canonical) {
-        try {
-          return await this.canonical.update(result.cart_token, normalizedLine);
-        } catch (error) {
-          if (error instanceof GuestCartStorageUnavailableError)
-            this.lastStorageErrorCode = error.code ?? 'bridge_unavailable';
-          if (
-            error instanceof GuestCartCanonicalError &&
-            error.code === 'temporarily_unavailable'
-          )
-            this.lastStorageErrorCode = 'bridge_unavailable';
-          throw new GuestCartBridgePendingError(result.cart_token);
-        }
-      }
-      return result;
-    } catch (error) {
-      if (error instanceof GuestCartStorageUnavailableError)
-        this.lastStorageErrorCode = error.code ?? 'unknown';
-      else if (
-        error instanceof GuestCartCanonicalError &&
-        error.code === 'temporarily_unavailable'
-      )
-        this.lastStorageErrorCode = 'bridge_unavailable';
-      throw error;
-    }
+    return updateGuestCartWithCanonical({
+      token,
+      line,
+      validate,
+      canonical: this.canonical,
+      recordStorageError: (code) => {
+        this.lastStorageErrorCode = code;
+      },
+      updateLegacy: (normalizedLine) =>
+        token
+          ? this.updateTokenCart(token, normalizedLine, validate)
+          : this.createCart(normalizedLine),
+    });
   }
 
   private async createCart(line: GuestCartLineInput) {
@@ -288,7 +233,9 @@ export class GuestCartStore {
         }
         // A migrated cart is retired: refuse the write before validation
         // or TTL extension so the canonical cart stays the only writer.
-        const migratedTo = await this.getMigration(token);
+        const migratedTo = await readGuestCartMigration(() =>
+          this.rpc('get_mcp_guest_cart_migration', { p_token: token })
+        );
         if (migratedTo) throw new GuestCartMigratedError(migratedTo);
         // Absolute quantities make a lost-response retry safe without incrementing twice.
         const items = [

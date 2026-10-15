@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 function assertServerRuntime(variable: string) {
   if (
     typeof window !== 'undefined' &&
@@ -35,7 +37,14 @@ export function getCartProofEnvironment(): string {
   const vercel = process.env.VERCEL_ENV?.trim();
   if (vercel === 'preview') {
     const deployment = process.env.VERCEL_URL?.trim();
-    if (deployment) return `preview:${deployment}`;
+    if (deployment) {
+      const identity = `preview:${deployment}`;
+      // Proof claims allow 64 characters. Keep existing short identities,
+      // and bind long hostnames with a stable 256-bit digest.
+      return identity.length <= 64
+        ? identity
+        : `preview:${createHash('sha256').update(deployment).digest('base64url')}`;
+    }
   }
   if (vercel) return vercel;
   return process.env.NODE_ENV?.trim() || 'development';

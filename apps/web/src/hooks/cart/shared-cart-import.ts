@@ -180,19 +180,40 @@ export function planLegacyImport(
     }
     return { conflicts: [], kind: 'conflicts' };
   }
-  const serverByKey = new Map(
-    server.lines.map((line) => [cartLineIdentity(line.item), line])
-  );
+  // Match the merge planner's attachment lanes only for bases with siblings.
+  // A lone conflicting offer still follows its explicit base-item resolution.
+  const siblingBases = new Set<string>();
+  for (const source of [server.lines, lines]) {
+    const seen = new Set<string>();
+    for (const line of source) {
+      const base = cartLineIdentity(line.item);
+      if (seen.has(base)) siblingBases.add(base);
+      seen.add(base);
+    }
+  }
+  const attachmentKey = (line: CartInputLine | CartLine): string =>
+    JSON.stringify([
+      cartLineIdentity(line.item),
+      line.voucherToken ?? null,
+      line.voucherAwardId ?? null,
+      line.negotiatedUnitPriceMinor ?? null,
+      line.negotiationStatus ?? null,
+    ]);
+  const keyOf = (line: CartInputLine | CartLine): string =>
+    siblingBases.has(cartLineIdentity(line.item))
+      ? attachmentKey(line)
+      : cartLineIdentity(line.item);
+  const serverByKey = new Map(server.lines.map((line) => [keyOf(line), line]));
   const adds: { line: CartInputLine; operationId: string }[] = [];
   const sets: { lineId: string; quantity: number }[] = [];
   const assurances: { lineId: string; hasAssurance: boolean }[] = [];
   for (const line of planned.lines) {
-    const key = cartLineIdentity(line.item);
+    const key = keyOf(line);
     const existing = serverByKey.get(key);
     if (!existing) {
       adds.push({
         line,
-        operationId: `import:${cartId}:${fnv1aHex(key)}`,
+        operationId: `import:${cartId}:${fnv1aHex(attachmentKey(line))}`,
       });
     } else {
       if (existing.quantity !== line.quantity)

@@ -196,3 +196,86 @@ it('persists imported coverage when its product already exists on the server', (
     assurances: [{ lineId: 'line-1', hasAssurance: true }],
   });
 });
+it('keeps quantity and coverage changes on their attachment-distinct server siblings', () => {
+  const server = snapshot({
+    lines: [
+      cartLine({ id: 'ordinary', quantity: 1, hasAssurance: false }),
+      cartLine({
+        id: 'award',
+        voucherToken: 'voucher',
+        quantity: 1,
+        hasAssurance: false,
+      }),
+    ],
+  });
+  const planned = planLegacyImport(
+    [
+      cartItem({ quantity: 3, hasAssurance: true }),
+      cartItem({ quizVoucherToken: 'voucher', quantity: 1 }),
+    ],
+    server,
+    CART_ID
+  );
+  expect(planned).toMatchObject({
+    kind: 'commands',
+    sets: [{ lineId: 'ordinary', quantity: 3 }],
+    assurances: [{ lineId: 'ordinary', hasAssurance: true }],
+    adds: [],
+  });
+});
+it('uses distinct stable add receipts for voucher and negotiation siblings', () => {
+  const local = [
+    cartItem({ id: 'prod-9' }),
+    cartItem({ id: 'prod-9', quizVoucherToken: 'voucher' }),
+    cartItem({
+      id: 'prod-9',
+      negotiatedPrice: 50,
+      negotiationStatus: 'accepted',
+    }),
+  ];
+  const first = planLegacyImport(local, snapshot(), CART_ID);
+  const retry = planLegacyImport([...local].reverse(), snapshot(), CART_ID);
+  expect(first.kind).toBe('commands');
+  expect(retry.kind).toBe('commands');
+  if (first.kind !== 'commands' || retry.kind !== 'commands') return;
+  expect(first.adds).toHaveLength(3);
+  expect(new Set(first.adds.map((add) => add.operationId)).size).toBe(3);
+  expect(first.adds.map((add) => add.operationId).sort()).toEqual(
+    retry.adds.map((add) => add.operationId).sort()
+  );
+});
+it('keeps negotiated sibling quantities and coverage independent of ordinary lines', () => {
+  const server = snapshot({
+    lines: [
+      cartLine({ id: 'ordinary', quantity: 1 }),
+      cartLine({
+        id: 'negotiated',
+        negotiatedUnitPriceMinor: 5000,
+        negotiationStatus: 'accepted',
+        quantity: 2,
+      }),
+    ],
+  });
+  const planned = planLegacyImport(
+    [
+      cartItem({ quantity: 3 }),
+      cartItem({
+        negotiatedPrice: 50,
+        negotiationStatus: 'accepted',
+        quantity: 4,
+        hasAssurance: true,
+      }),
+    ],
+    server,
+    CART_ID
+  );
+  expect(planned).toMatchObject({
+    kind: 'commands',
+    adds: [],
+    sets: [
+      { lineId: 'ordinary', quantity: 3 },
+      { lineId: 'negotiated', quantity: 4 },
+    ],
+    assurances: [{ lineId: 'negotiated', hasAssurance: true }],
+  });
+});

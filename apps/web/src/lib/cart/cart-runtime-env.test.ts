@@ -59,3 +59,14 @@ it('reads only bounded valid previous signing keys and rejects malformed configu
     expect(getCartPreviousSessionSecrets()).toEqual([]);
   }
 });
+
+it('bounds long preview deployment identifiers without sharing deployment identity', () => {
+  vi.stubEnv('CART_PROOF_ENVIRONMENT', '');
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv('VERCEL_URL', `baci-${'feature'.repeat(15)}-one.vercel.app`);
+  const first = getCartProofEnvironment();
+  expect(first.length).toBeLessThanOrEqual(64);
+  expect(getCartProofEnvironment()).toBe(first);
+  vi.stubEnv('VERCEL_URL', `baci-${'feature'.repeat(15)}-two.vercel.app`);
+  expect(getCartProofEnvironment()).not.toBe(first);
+});

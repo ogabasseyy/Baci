@@ -493,3 +493,34 @@ it('keeps a definitively invalid preview terminal rather than offering a transpo
     screen.queryByRole('button', { name: 'Try again' })
   ).not.toBeInTheDocument();
 });
+it('continues successful redemption when attempt cleanup storage throws', async () => {
+  fetchMock.mockReset();
+  mockFetchSequence(
+    {
+      merchant: { slug: 'ogabassey' },
+      snapshot: snapshot(),
+      status: 'pending',
+    },
+    { code: 'not_found' },
+    404
+  );
+  render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+  const connect = await screen.findByRole('button', { name: /connect/i });
+  fetchMock.mockImplementation(async (url: string) =>
+    String(url).includes('/redeem')
+      ? jsonResponse({ ok: true })
+      : jsonResponse({ code: 'not_found' }, 404)
+  );
+  const remove = vi
+    .spyOn(Storage.prototype, 'removeItem')
+    .mockImplementation(() => {
+      throw new Error('storage denied');
+    });
+  try {
+    fireEvent.click(connect);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalled());
+    expect(screen.queryByText(/connection|try again/i)).not.toBeInTheDocument();
+  } finally {
+    remove.mockRestore();
+  }
+});

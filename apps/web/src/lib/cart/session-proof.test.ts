@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getCartProofEnvironment } from './cart-runtime-env';
 
 afterEach(() => vi.unstubAllEnvs());
 
@@ -487,4 +488,31 @@ it('uses configured previous keys across the runtime verifier during rotation', 
   expect(
     verifyCartSessionProof(proof, { environment: ENVIRONMENT, now })
   ).toMatchObject({ ok: false, error: 'invalid_proof' });
+});
+
+it('round-trips proofs from a long preview hostname and rejects another deployment', () => {
+  vi.stubEnv('CART_PROOF_ENVIRONMENT', '');
+  vi.stubEnv('VERCEL_ENV', 'preview');
+  vi.stubEnv('VERCEL_URL', `baci-${'long-branch'.repeat(12)}-one.vercel.app`);
+  const now = new Date('2026-10-15T10:00:00Z');
+  const proof = issueCartSessionProof(sessionInput(), {
+    secret: SECRET,
+    environment: getCartProofEnvironment(),
+    now,
+  });
+  expect(
+    verifyCartSessionProof(proof, {
+      secret: SECRET,
+      environment: getCartProofEnvironment(),
+      now,
+    }).ok
+  ).toBe(true);
+  vi.stubEnv('VERCEL_URL', `baci-${'long-branch'.repeat(12)}-two.vercel.app`);
+  expect(
+    verifyCartSessionProof(proof, {
+      secret: SECRET,
+      environment: getCartProofEnvironment(),
+      now,
+    })
+  ).toEqual({ ok: false, error: 'wrong_environment' });
 });

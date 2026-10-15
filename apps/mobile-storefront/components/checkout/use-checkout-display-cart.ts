@@ -47,7 +47,14 @@ export function useCheckoutDisplayCart(
         );
   return {
     clearCart,
-    items: prizeSimulation ? [prizeSimulation.item] : reviewedItems,
+    items: prizeSimulation
+      ? [prizeSimulation.item]
+      : reviewedItems.map((item) =>
+          item.negotiationStatus === 'accepted' ||
+          item.negotiatedPrice === undefined
+            ? item
+            : { ...item, negotiatedPrice: undefined }
+        ),
     subtotal: prizeSimulation ? 0 : reviewedSubtotal,
   };
 }

@@ -25,6 +25,11 @@ flags remain disabled by default, and no merchant is enrolled.
   shopper-facing surface — and prefer constraining the role to the
   publish RPC path before enabling `shared_cart_realtime` in
   production.
+- Worker token rotation: point `COMMERCE_CART_WORKER_JWT_FILE` at a
+  rotator-managed file instead of setting `COMMERCE_CART_WORKER_JWT`
+  directly; the worker re-reads the file on every batch, so a rotated
+  token takes effect within one loop iteration without a restart.
+  Rotate well before the five-minute expiry cutoff the client enforces.
 
 ## Release sequence (requires separate authorization)
 

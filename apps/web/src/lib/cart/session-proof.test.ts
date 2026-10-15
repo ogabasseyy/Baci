@@ -353,6 +353,21 @@ it('allows an expired signed proof only for revocation, preserving signature and
   ).toBe(false);
 });
 
+it('rejects proofs issued in the future', () => {
+  const proof = issueCartSessionProof(sessionInput(), {
+    environment: ENVIRONMENT,
+    now: new Date('2026-10-12T02:00:00Z'),
+    secret: SECRET,
+  });
+  expect(
+    verifyCartSessionProof(proof, {
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-12T00:00:00Z'),
+      secret: SECRET,
+    })
+  ).toEqual({ error: 'invalid_proof', ok: false });
+});
+
 it('rejects revocation once the proof expired beyond the grace window', async () => {
   const { verifyCartSessionProofForRevocation } = await import(
     './session-proof'

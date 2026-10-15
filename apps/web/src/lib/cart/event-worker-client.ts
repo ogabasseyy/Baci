@@ -1,14 +1,28 @@
 import { Buffer } from 'node:buffer';
+import { readFileSync } from 'node:fs';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-/** No service/admin fallback; PostgREST verifies this narrowly scoped JWT. */
+/**
+ * No service/admin fallback; PostgREST verifies this narrowly scoped
+ * JWT. When COMMERCE_CART_WORKER_JWT_FILE points at a token file, the
+ * token is re-read on every construction so an external rotator can
+ * replace it without restarting a long-running --loop worker.
+ */
 export function createCartEventWorkerClient(
   env: Partial<NodeJS.ProcessEnv> = process.env,
   create: typeof createClient = createClient,
   now = new Date()
 ): SupabaseClient {
   const fail = () => new Error('Cart event worker authority unavailable');
-  const token = env.COMMERCE_CART_WORKER_JWT?.trim();
+  let token = env.COMMERCE_CART_WORKER_JWT?.trim();
+  const tokenFile = env.COMMERCE_CART_WORKER_JWT_FILE?.trim();
+  if (tokenFile) {
+    try {
+      token = readFileSync(tokenFile, 'utf8').trim();
+    } catch {
+      throw fail();
+    }
+  }
   const url = env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const anon = env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
   if (!token || !url || !anon) throw fail();

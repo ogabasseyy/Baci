@@ -461,6 +461,8 @@ export async function GET(request: NextRequest) {
 
 function sharedCartBindingFailureStatus(code: string): number {
   switch (code) {
+    case 'temporarily_unavailable':
+      return 503;
     case 'unauthorized':
       return 403;
     case 'invalid_item':
@@ -474,6 +476,12 @@ function sharedCartBindingFailureStatus(code: string): number {
 
 function sharedCartBindingFailureBody(code: string): Record<string, string> {
   switch (code) {
+    case 'temporarily_unavailable':
+      return {
+        code: 'SHARED_CART_TEMPORARILY_UNAVAILABLE',
+        error:
+          'Shared cart checkout is temporarily unavailable. Please try again.',
+      };
     case 'refresh_required':
       return {
         code: 'SHARED_CART_STALE',
@@ -2297,12 +2305,7 @@ export async function POST(request: NextRequest) {
           }
         )
       : null;
-    if (
-      bound &&
-      !bound.ok &&
-      bound.code !== 'order_rejected' &&
-      bound.code !== 'temporarily_unavailable'
-    ) {
+    if (bound && !bound.ok && bound.code !== 'order_rejected') {
       return NextResponse.json(sharedCartBindingFailureBody(bound.code), {
         status: sharedCartBindingFailureStatus(bound.code),
       });

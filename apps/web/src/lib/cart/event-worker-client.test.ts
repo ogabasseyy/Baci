@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, it, vi } from 'vitest';
 import { createCartEventWorkerClient } from './event-worker-client';
 
@@ -45,4 +48,36 @@ it('uses only the scoped cart worker token, with no persisted shopper auth', () 
     auth: { persistSession: false, autoRefreshToken: false },
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
+});
+
+it('re-reads a rotated worker token from file on each construction', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cart-worker-'));
+  const file = join(dir, 'worker.jwt');
+  const first = token('commerce_cart_worker');
+  writeFileSync(file, first);
+  const env = {
+    COMMERCE_CART_WORKER_JWT_FILE: file,
+    NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'public',
+  };
+  const create = vi.fn();
+  createCartEventWorkerClient(env, create, now);
+  expect(create).toHaveBeenLastCalledWith(
+    'https://test.supabase.co',
+    'public',
+    expect.objectContaining({
+      global: { headers: { Authorization: `Bearer ${first}` } },
+    })
+  );
+
+  const rotated = `${token('commerce_cart_worker')}x`;
+  writeFileSync(file, rotated);
+  createCartEventWorkerClient(env, create, now);
+  expect(create).toHaveBeenLastCalledWith(
+    'https://test.supabase.co',
+    'public',
+    expect.objectContaining({
+      global: { headers: { Authorization: `Bearer ${rotated}` } },
+    })
+  );
 });

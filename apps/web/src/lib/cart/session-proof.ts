@@ -13,6 +13,8 @@ export const CART_SESSION_PROOF_TTL_SECONDS = 24 * 60 * 60;
  * after expiry; beyond that a leaked proof loses revocation power too.
  */
 export const CART_REVOCATION_GRACE_SECONDS = CART_SESSION_PROOF_TTL_SECONDS;
+/** Clock-skew allowance before a future issuance time looks forged. */
+export const CART_PROOF_FUTURE_IAT_LEEWAY_SECONDS = 60;
 /** Pre-cart bootstrap proofs live only long enough to create one cart. */
 export const CART_BOOTSTRAP_PROOF_TTL_SECONDS = 15 * 60;
 export const CART_SESSION_PROOF_AUDIENCE = 'baci:cart-session';
@@ -203,6 +205,15 @@ function verifyCartProof(
     return { error: 'wrong_audience', ok: false };
   }
   const now = Math.floor((options.now ?? new Date()).getTime() / 1000);
+  // Reject proofs issued in the future (beyond clock-skew leeway) or
+  // with an issuance after their own expiry: server minting never
+  // produces either, so both mark a foreign or corrupted issuer.
+  if (
+    payload.iat > now + CART_PROOF_FUTURE_IAT_LEEWAY_SECONDS ||
+    payload.iat > payload.exp
+  ) {
+    return { error: 'invalid_proof', ok: false };
+  }
   if (!allowExpired && payload.exp <= now) {
     return { error: 'expired_proof', ok: false };
   }

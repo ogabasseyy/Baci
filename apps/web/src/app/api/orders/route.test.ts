@@ -10250,6 +10250,22 @@ describe('POST /api/orders — shared cart binding', () => {
     );
   });
 
+  it('maps a binding transport failure to a retryable 503', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { message: 'connection reset by peer' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe(
+      'SHARED_CART_TEMPORARILY_UNAVAILABLE'
+    );
+  });
+
   it('submits a bound savings order with the redemption payload', async () => {
     const savingsReceipt = {
       ...BOUND_RECEIPT,

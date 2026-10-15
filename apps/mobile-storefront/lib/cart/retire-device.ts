@@ -1,3 +1,4 @@
+import { isAllowedCartApiProtocol } from './api-origin';
 import { NativeCartError } from './native-cart-error';
 import type { CartSessionStorage } from './session-storage';
 import type { CartFetch, NativeCartConfig } from './shared-cart-client';
@@ -10,7 +11,7 @@ export async function flushRetiredCartDevice(
 ): Promise<void> {
   const base = new URL(config.apiOrigin);
   if (
-    base.protocol !== 'https:' ||
+    !isAllowedCartApiProtocol(base) ||
     base.username ||
     base.password ||
     base.search ||

@@ -8,6 +8,7 @@ import { validateCartCommand } from '@baci/shared/cart';
 import { fetch as expoFetch } from 'expo/fetch';
 import { nativeCartReplySchema } from '@/schemas/cart';
 import type { NativeCheckoutSnapshot } from '@/schemas/cart-checkout-snapshot';
+import { isAllowedCartApiProtocol } from './api-origin';
 import { previewNativeHandoff } from './handoff-preview';
 import { createNativeAccountCheckout } from './native-account-checkout';
 import { NativeCartError } from './native-cart-error';
@@ -56,7 +57,7 @@ export function createNativeCartClient(
 ) {
   const base = new URL(config.apiOrigin);
   if (
-    base.protocol !== 'https:' ||
+    !isAllowedCartApiProtocol(base) ||
     base.username ||
     base.password ||
     base.search ||

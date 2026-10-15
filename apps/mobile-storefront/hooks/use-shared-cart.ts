@@ -74,7 +74,12 @@ const defaults: Deps = {
 };
 export function useSharedCart(options: Options, deps: Deps = defaults): void {
   const latest = useRef(options);
-  latest.current = options;
+  // Async guards must observe only committed options: advance the ref
+  // in an effect, never during render, so a discarded concurrent
+  // render cannot publish an uncommitted scope.
+  useEffect(() => {
+    latest.current = options;
+  });
   useEffect(() => {
     if (!options.enabled) {
       // Enrollment turned off after canonical ownership was installed:

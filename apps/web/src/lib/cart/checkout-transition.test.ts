@@ -94,6 +94,7 @@ describe('prepareCartCheckout', () => {
       code: null,
       ok: true,
       replayed: false,
+      sessionExpiresAt: '2099-01-01T00:30:00.000Z',
       sessionReused: false,
       snapshot: rawSnapshot(),
     });
@@ -121,11 +122,33 @@ describe('prepareCartCheckout', () => {
     }
   });
 
+  it('fails closed when the RPC omits the session expiry', async () => {
+    const client = clientReturning({
+      code: null,
+      ok: true,
+      replayed: false,
+      sessionReused: false,
+      snapshot: rawSnapshot(),
+    });
+
+    const result = await prepareCartCheckout(
+      { client: client as never, principal: sessionPrincipal() },
+      { cartId: CART_ID, expectedVersion: 3, operationId: 'prep-op-1' }
+    );
+
+    expect(result).toEqual({
+      code: 'temporarily_unavailable',
+      currentVersion: null,
+      ok: false,
+    });
+  });
+
   it('surfaces reuse and replay flags without refetching', async () => {
     const client = clientReturning({
       code: null,
       ok: true,
       replayed: true,
+      sessionExpiresAt: '2099-01-01T00:30:00.000Z',
       sessionReused: true,
       snapshot: rawSnapshot(),
     });

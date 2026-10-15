@@ -21,6 +21,7 @@ import {
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { getClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { createCartRequestSchema } from '@/schemas/cart';
@@ -131,6 +132,17 @@ export async function POST(request: NextRequest) {
       subject: context.principal.principalId,
     });
     if (!quota.allowed) {
+      return cartErrorResponse('quota_exceeded');
+    }
+    // Bootstrap mints a fresh principal per call, so the per-principal
+    // budget alone can be reset by rotating bootstrap proofs; the same
+    // budget also applies per client identity.
+    const clientQuota = await checkCartQuota({
+      merchantId: context.merchant.id,
+      operation: 'create',
+      subject: getClientIdentifier(request),
+    });
+    if (!clientQuota.allowed) {
       return cartErrorResponse('quota_exceeded');
     }
 

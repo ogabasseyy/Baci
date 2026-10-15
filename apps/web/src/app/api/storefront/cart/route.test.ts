@@ -144,6 +144,19 @@ function bootstrapProof(): string {
   );
 }
 
+function bootstrapProofFor(principalId: string): string {
+  return issueCartSessionProof(
+    {
+      cartId: null,
+      grantId: null,
+      merchantId: MERCHANT.id,
+      principalId,
+      scope: 'bootstrap',
+    },
+    { environment: 'test', secret: TEST_SECRET }
+  );
+}
+
 const savedSecret = process.env.CART_SESSION_SECRET;
 
 beforeEach(() => {
@@ -498,6 +511,33 @@ describe('POST /api/storefront/cart', () => {
       expect((await attempt()).status).toBe(201);
     }
     const exhausted = await attempt();
+    expect(exhausted.status).toBe(429);
+    expect((await exhausted.json()).code).toBe('quota_exceeded');
+  });
+
+  it('does not let rotating bootstrap proofs reset the create budget', async () => {
+    mocks.cartPayload = {
+      code: null,
+      grantId: GRANT_ID,
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+    // Every attempt presents a brand-new principal (a fresh bootstrap
+    // proof), but all come from the same client identity.
+    for (let index = 0; index < 10; index++) {
+      const response = await postCart({
+        body: { operationId: `create-rot-${index}` },
+        headers: {
+          cookie: cartCookie(bootstrapProofFor(`guest-rot-${index}`)),
+        },
+      });
+      expect(response.status).toBe(201);
+    }
+    const exhausted = await postCart({
+      body: { operationId: 'create-rot-10' },
+      headers: { cookie: cartCookie(bootstrapProofFor('guest-rot-10')) },
+    });
     expect(exhausted.status).toBe(429);
     expect((await exhausted.json()).code).toBe('quota_exceeded');
   });

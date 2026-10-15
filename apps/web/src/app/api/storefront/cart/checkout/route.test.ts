@@ -279,6 +279,7 @@ describe('POST /api/storefront/cart/checkout', () => {
       code: null,
       ok: true,
       replayed: false,
+      sessionExpiresAt: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
       sessionReused: true,
       snapshot: rawSnapshot(),
     };

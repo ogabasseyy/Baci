@@ -8,6 +8,11 @@ import { getCartSessionSecret } from './cart-runtime-env';
 export const CART_SESSION_PROOF_VERSION = 'cp1';
 /** Absolute session-proof lifetime; renewal requires a live grant check. */
 export const CART_SESSION_PROOF_TTL_SECONDS = 24 * 60 * 60;
+/**
+ * Expired proofs may only retire device access for one proof lifetime
+ * after expiry; beyond that a leaked proof loses revocation power too.
+ */
+export const CART_REVOCATION_GRACE_SECONDS = CART_SESSION_PROOF_TTL_SECONDS;
 /** Pre-cart bootstrap proofs live only long enough to create one cart. */
 export const CART_BOOTSTRAP_PROOF_TTL_SECONDS = 15 * 60;
 export const CART_SESSION_PROOF_AUDIENCE = 'baci:cart-session';
@@ -201,6 +206,9 @@ function verifyCartProof(
   if (!allowExpired && payload.exp <= now) {
     return { error: 'expired_proof', ok: false };
   }
+  if (allowExpired && payload.exp < now - CART_REVOCATION_GRACE_SECONDS) {
+    return { error: 'expired_proof', ok: false };
+  }
 
   const session: VerifiedCartSession = {
     allowedOperations:
@@ -231,7 +239,11 @@ export function verifyCartSessionProof(
 ): CartSessionVerification {
   return verifyCartProof(proof, options);
 }
-/** Expired signed proofs identify access to retire, never authority to read or mutate a cart. */
+/**
+ * Expired signed proofs identify access to retire, never authority to
+ * read or mutate a cart — and only within the post-expiry grace window
+ * above, so a leaked proof cannot revoke forever.
+ */
 export function verifyCartSessionProofForRevocation(
   proof: string,
   options: Parameters<typeof verifyCartProof>[1]

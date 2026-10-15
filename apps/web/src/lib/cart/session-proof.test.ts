@@ -352,3 +352,23 @@ it('allows an expired signed proof only for revocation, preserving signature and
     }).ok
   ).toBe(false);
 });
+
+it('rejects revocation once the proof expired beyond the grace window', async () => {
+  const { verifyCartSessionProofForRevocation } = await import(
+    './session-proof'
+  );
+  const proof = issueCartSessionProof(sessionInput(), {
+    environment: ENVIRONMENT,
+    now: new Date('2026-10-12T00:00:00Z'),
+    secret: SECRET,
+  });
+  // Proof expired 2026-10-13; three days later it must no longer be
+  // able to retire device access.
+  expect(
+    verifyCartSessionProofForRevocation(proof, {
+      environment: ENVIRONMENT,
+      now: new Date('2026-10-16T00:00:01Z'),
+      secret: SECRET,
+    })
+  ).toEqual({ error: 'expired_proof', ok: false });
+});

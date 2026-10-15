@@ -73,16 +73,20 @@ export async function prepareCartCheckout(
         'Cart RPC commerce_cart_prepare_checkout returned a malformed snapshot'
       );
     }
+    if (typeof data.sessionExpiresAt !== 'string' || !data.sessionExpiresAt) {
+      // Never fabricate a session lifetime: without the authoritative
+      // expiry the renewed proof could outlive the grant. Fail closed
+      // (a mixed deploy window heals on the next database release).
+      throw new CartRepositoryError(
+        'temporarily_unavailable',
+        'Cart RPC commerce_cart_prepare_checkout omitted sessionExpiresAt'
+      );
+    }
     return {
       ok: true,
       replayed: data.replayed === true,
       sessionReused: data.sessionReused === true,
-      // Defensive fallback for a database that predates the
-      // sessionExpiresAt result field (mixed deploy window).
-      sessionExpiresAt:
-        typeof data.sessionExpiresAt === 'string'
-          ? data.sessionExpiresAt
-          : new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      sessionExpiresAt: data.sessionExpiresAt,
       snapshot,
     };
   } catch (error) {

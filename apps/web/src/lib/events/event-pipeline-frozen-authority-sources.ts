@@ -46,7 +46,7 @@ export const eventPipelineFrozenRoutes = {
   // review): discount/loyalty economics moved to the checkout helper;
   // notification and payment authority unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'f9102f8a8b294a66bee87d2e79176a5e6472e960fe50b698fe38a7f1c05f9b3a',
+    '8b17c86ac19d631a5bc96f394da0ef50656fc2dc7541be95eefad4b12ec1cfa8',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

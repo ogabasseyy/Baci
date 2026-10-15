@@ -118,16 +118,6 @@ export async function rollbackOrderStatusAfterInventoryConfirmationFailure(
      * row now); only a real query failure throws.
      */
     onlyIfPaymentStatus?: string[];
-    /**
-     * Never restore over a cancelled row: a merchant cancellation can
-     * commit while inventory confirmation is in flight (after the
-     * caller's own conditional write succeeded), and restoring the
-     * stale pre-update snapshot would move the order back out of
-     * cancelled after its cancellation side effects already ran (e.g.
-     * the loyalty claim release). Appends both cancellation spellings
-     * on both status axes; zero matching rows resolve silently.
-     */
-    notCancelled?: boolean;
   }
 ): Promise<void> {
   const guard = options?.onlyIfPaymentStatus;
@@ -146,24 +136,18 @@ export async function rollbackOrderStatusAfterInventoryConfirmationFailure(
   if (guard && guard.length > 0) {
     restore = restore.in('payment_status', guard);
   }
-  if (options?.notCancelled) {
-    for (const [column, spelling] of ORDER_CANCELLED_STATUS_SPELLINGS) {
-      restore = restore.neq(column, spelling);
-    }
+  // The cancellation fence is unconditional: a merchant cancellation
+  // can commit while inventory confirmation is in flight at ANY caller
+  // (a webhook's own write already landed), and restoring the stale
+  // pre-update snapshot would move the order back out of cancelled
+  // after its cancellation side effects already ran (e.g. the loyalty
+  // claim release). Both spellings ride on both status axes; zero
+  // matching rows resolve silently (the row moved on or is cancelled).
+  for (const [column, spelling] of ORDER_CANCELLED_STATUS_SPELLINGS) {
+    restore = restore.neq(column, spelling);
   }
 
-  if ((guard && guard.length > 0) || options?.notCancelled) {
-    const { error } = await restore.select('id').maybeSingle();
-    if (error) {
-      throw new Error(
-        `rollback_order_status_after_inventory_confirmation_failure failed: ${error.message}`
-      );
-    }
-    return;
-  }
-
-  const { error } = await restore.select('id').single();
-
+  const { error } = await restore.select('id').maybeSingle();
   if (error) {
     throw new Error(
       `rollback_order_status_after_inventory_confirmation_failure failed: ${error.message}`

@@ -25,12 +25,18 @@ function asSupabaseClient<T extends object>(client: T) {
 function createRollbackBuilder(error: { message: string } | null) {
   const builder: {
     eq: ReturnType<typeof vi.fn>;
+    neq: ReturnType<typeof vi.fn>;
     select: ReturnType<typeof vi.fn>;
     single: ReturnType<typeof vi.fn>;
+    maybeSingle: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(() => builder),
+    neq: vi.fn(() => builder),
     select: vi.fn(() => builder),
-    single: vi.fn(() => Promise.resolve({ data: { id: 'order-123' }, error })),
+    single: vi.fn(),
+    maybeSingle: vi.fn(() =>
+      Promise.resolve({ data: { id: 'order-123' }, error })
+    ),
   };
 
   return builder;
@@ -39,19 +45,16 @@ function createRollbackBuilder(error: { message: string } | null) {
 function createRollbackMissingRowBuilder() {
   const builder: {
     eq: ReturnType<typeof vi.fn>;
+    neq: ReturnType<typeof vi.fn>;
     select: ReturnType<typeof vi.fn>;
     single: ReturnType<typeof vi.fn>;
+    maybeSingle: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(() => builder),
+    neq: vi.fn(() => builder),
     select: vi.fn(() => builder),
-    single: vi.fn(() =>
-      Promise.resolve({
-        data: null,
-        error: {
-          message: 'JSON object requested, multiple (or no) rows returned',
-        },
-      })
-    ),
+    single: vi.fn(),
+    maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
   };
 
   return builder;
@@ -276,7 +279,7 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
       'merchant-123'
     );
     expect(rollbackBuilder.select).toHaveBeenCalledWith('id');
-    expect(rollbackBuilder.single).toHaveBeenCalledOnce();
+    expect(rollbackBuilder.maybeSingle).toHaveBeenCalledOnce();
   });
 
   it('restores amount_paid when the snapshot includes it', async () => {
@@ -330,7 +333,7 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
     );
   });
 
-  it('throws when no merchant-scoped order row is updated', async () => {
+  it('resolves silently when no merchant-scoped order row matches', async () => {
     const rollbackBuilder = createRollbackMissingRowBuilder();
     const updateMock = vi.fn(() => rollbackBuilder);
 
@@ -338,6 +341,8 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
       from: vi.fn(() => ({ update: updateMock })),
     };
 
+    // The unconditional cancellation fence makes a vanished, moved, or
+    // cancelled row a silent skip instead of a failure.
     await expect(
       rollbackOrderStatusAfterInventoryConfirmationFailure(
         asSupabaseClient(mockSupabase),
@@ -348,9 +353,7 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
           shipping_status: 'pending',
         }
       )
-    ).rejects.toThrow(
-      'rollback_order_status_after_inventory_confirmation_failure failed: JSON object requested, multiple (or no) rows returned'
-    );
+    ).resolves.toBeUndefined();
   });
 
   it('fences the restore to the guarded current statuses', async () => {
@@ -360,6 +363,9 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
       .mockResolvedValue({ data: { id: 'order-123' }, error: null });
     const builder = {
       eq: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      neq: vi.fn(function (this: unknown) {
         return this;
       }),
       in: inMock,
@@ -393,6 +399,9 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
   it('resolves silently when the fenced row already moved on', async () => {
     const builder = {
       eq: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      neq: vi.fn(function (this: unknown) {
         return this;
       }),
       in: vi.fn(function (this: unknown) {

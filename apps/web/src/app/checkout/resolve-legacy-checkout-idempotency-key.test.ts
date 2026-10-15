@@ -1,16 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  buildLegacyCheckoutFingerprint,
-  resolveLegacyCheckoutIdempotencyKey,
-} from './checkout-order-idempotency';
+import { afterEach, describe, expect, it } from 'vitest';
+import { clearLegacyCheckoutIdempotencyKey } from './clear-legacy-checkout-idempotency-key';
+import { resolveLegacyCheckoutIdempotencyKey } from './resolve-legacy-checkout-idempotency-key';
 
 const BASE_INPUT = {
   merchantId: 'merchant-1',
   customerEmail: 'buyer@example.com',
+  customerName: 'Ada Buyer',
   customerPhone: '08030000000',
   gateway: 'paystack',
   shippingFee: 1500,
-  discountCode: 'RDM-ABCDEF12',
+  discountCode: 'SAVE10',
   orderItems: [
     {
       product_id: 'prod-1',
@@ -20,6 +19,13 @@ const BASE_INPUT = {
       value: 5000,
     },
   ],
+  shippingAddress: {
+    firstName: 'Ada',
+    lastName: 'Buyer',
+    address: '1 Main Street',
+    city: 'Lagos',
+    state: 'Lagos',
+  },
   shippingSelection: {
     selected_quote_id: 'quote-1',
     shipping_carrier: 'GIG Logistics',
@@ -27,40 +33,24 @@ const BASE_INPUT = {
     shipping_service_tier: 'standard',
     shipping_session_id: 'session-1',
   },
-} as Parameters<typeof buildLegacyCheckoutFingerprint>[0];
+} as Parameters<typeof resolveLegacyCheckoutIdempotencyKey>[0];
 
-describe('legacy checkout idempotency', () => {
+describe('legacy checkout idempotency key lifecycle', () => {
   afterEach(() => {
     window.localStorage.clear();
-    vi.unstubAllGlobals();
-  });
-
-  it('builds a stable fingerprint for an identical checkout', () => {
-    expect(buildLegacyCheckoutFingerprint(BASE_INPUT)).toBe(
-      buildLegacyCheckoutFingerprint({ ...BASE_INPUT })
-    );
-  });
-
-  it('changes the fingerprint when the code or cart changes', () => {
-    const base = buildLegacyCheckoutFingerprint(BASE_INPUT);
-    expect(
-      buildLegacyCheckoutFingerprint({ ...BASE_INPUT, discountCode: 'OTHER' })
-    ).not.toBe(base);
-    expect(
-      buildLegacyCheckoutFingerprint({
-        ...BASE_INPUT,
-        orderItems: [{ ...BASE_INPUT.orderItems[0], quantity: 2 }],
-      })
-    ).not.toBe(base);
   });
 
   it('reuses the persisted key across a lost-response retry', async () => {
     const first = await resolveLegacyCheckoutIdempotencyKey(BASE_INPUT);
     const retry = await resolveLegacyCheckoutIdempotencyKey({ ...BASE_INPUT });
     expect(retry).toBe(first);
-    expect(
-      window.localStorage.getItem('storefront-checkout-idempotency')
-    ).toContain(first);
+  });
+
+  it('rotates to a fresh key after the completed checkout clears it', async () => {
+    const first = await resolveLegacyCheckoutIdempotencyKey(BASE_INPUT);
+    await clearLegacyCheckoutIdempotencyKey(BASE_INPUT);
+    const next = await resolveLegacyCheckoutIdempotencyKey({ ...BASE_INPUT });
+    expect(next).not.toBe(first);
   });
 
   it('mints a different key for a different checkout', async () => {

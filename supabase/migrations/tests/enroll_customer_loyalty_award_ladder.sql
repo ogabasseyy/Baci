@@ -26,6 +26,21 @@ UPDATE public.loyalty_settings
 SET tiers = DEFAULT
 WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
 
+-- 5j2. A malformed first rung must not shadow a later valid rung of
+-- the same name: only usable rungs mark their name as seen, so the
+-- valid Silver rung still governs a 1500-point member.
+UPDATE public.loyalty_settings
+SET tiers = '[{"name":"Silver","minPoints":"bad"},{"name":"Silver","minPoints":1000}]'::jsonb
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+SELECT pg_temp.assert_true(
+  public.calculate_loyalty_tier(
+    1500, '02aa0000-0000-4000-8000-000000000001') = 'Silver',
+  'malformed rung shadowed the valid same-name rung'
+);
+UPDATE public.loyalty_settings
+SET tiers = DEFAULT
+WHERE merchant_id = '02aa0000-0000-4000-8000-000000000001';
+
 -- 5k. The multiplier follows the tier derived from current lifetime,
 -- not the stored name: after a ladder edit the stored tier is stale,
 -- so a 1500-point member stored as Bronze still earns the Silver rate.

@@ -57,7 +57,14 @@ BEGIN
            AND NOT (pg_catalog.lower(v_tier->>'name') = ANY(v_seen_names)) THEN
             v_result := v_tier->>'name';
         END IF;
-        v_seen_names := v_seen_names || pg_catalog.lower(COALESCE(v_tier->>'name', ''));
+        -- Mark the name seen only for a usable rung (valid threshold
+        -- and non-blank name): a malformed first entry must not shadow
+        -- a later valid rung with the same name, or members stay on
+        -- the preceding tier while the UI ladder shows the valid rung.
+        IF (v_tier->>'minPoints') ~ '^-?[0-9]+$'
+           AND pg_catalog.btrim(COALESCE(v_tier->>'name', '')) <> '' THEN
+            v_seen_names := v_seen_names || pg_catalog.lower(v_tier->>'name');
+        END IF;
     END LOOP;
 
     RETURN v_result;

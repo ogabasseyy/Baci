@@ -177,6 +177,15 @@ BEGIN
        v_redemption.reward_type, v_redemption.reward_value) THEN
     RAISE EXCEPTION 'loyalty_code_not_applicable'; END IF;
 
+  -- A null minimum snapshot with no live reward is unknowable: the
+  -- reward was deleted before the snapshot backfill, so neither the
+  -- stamped value nor the live fallback exists. New no-minimum mints
+  -- store an explicit 0, so failing closed here only strands codes
+  -- whose purchase minimum can no longer be verified.
+  IF v_redemption.minimum_order_amount IS NULL
+     AND v_redemption.reward_id IS NULL THEN
+    RAISE EXCEPTION 'loyalty_code_not_applicable'; END IF;
+
   IF v_redemption.minimum_order_amount IS NOT NULL
      AND v_order.subtotal < v_redemption.minimum_order_amount THEN
     RAISE EXCEPTION 'minimum_purchase_not_met'; END IF;

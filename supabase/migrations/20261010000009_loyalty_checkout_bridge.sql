@@ -63,7 +63,10 @@ BEGIN
       AND NOT public.loyalty_status_is_cancelled(o.shipping_status)
       AND NOT public.loyalty_status_is_cancelled(o.payment_status),
     rr.issuance_currency,
-    rw.name::text,
+    -- Issuance-time identity: the snapshot survives a merchant rename
+    -- or deletion of the reward; the live name is only a fallback for
+    -- rows minted before the snapshot existed.
+    COALESCE(rr.reward_name, rw.name)::text,
     rr.max_redemption_percentage
   FROM public.reward_redemptions rr
   LEFT JOIN public.loyalty_rewards rw ON rw.id = rr.reward_id

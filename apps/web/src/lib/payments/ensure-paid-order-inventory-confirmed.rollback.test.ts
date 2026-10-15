@@ -18,12 +18,16 @@ function createRollbackBuilder(result: {
 }) {
   const builder: {
     eq: ReturnType<typeof vi.fn>;
+    neq: ReturnType<typeof vi.fn>;
     select: ReturnType<typeof vi.fn>;
     single: ReturnType<typeof vi.fn>;
+    maybeSingle: ReturnType<typeof vi.fn>;
   } = {
     eq: vi.fn(() => builder),
+    neq: vi.fn(() => builder),
     select: vi.fn(() => builder),
-    single: vi.fn(() => Promise.resolve(result)),
+    single: vi.fn(),
+    maybeSingle: vi.fn(() => Promise.resolve(result)),
   };
   return builder;
 }
@@ -56,7 +60,7 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
       'merchant-123'
     );
     expect(rollbackBuilder.select).toHaveBeenCalledWith('id');
-    expect(rollbackBuilder.single).toHaveBeenCalledOnce();
+    expect(rollbackBuilder.maybeSingle).toHaveBeenCalledOnce();
   });
 
   it('restores amount_paid when the snapshot includes it', async () => {
@@ -130,8 +134,7 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
       asSupabaseClient(supabase),
       'merchant-123',
       'order-123',
-      { payment_status: 'pending', shipping_status: 'pending' },
-      { notCancelled: true }
+      { payment_status: 'pending', shipping_status: 'pending' }
     );
 
     expect(builder.neq).toHaveBeenCalledWith('payment_status', 'cancelled');
@@ -167,23 +170,22 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
         asSupabaseClient(supabase),
         'merchant-123',
         'order-123',
-        { payment_status: 'pending', shipping_status: 'pending' },
-        { notCancelled: true }
+        { payment_status: 'pending', shipping_status: 'pending' }
       )
     ).resolves.toBeUndefined();
   });
 
-  it('throws when no merchant-scoped order row is updated', async () => {
+  it('resolves silently when no order row matches anymore', async () => {
     const rollbackBuilder = createRollbackBuilder({
       data: null,
-      error: {
-        message: 'JSON object requested, multiple (or no) rows returned',
-      },
+      error: null,
     });
     const supabase = {
       from: vi.fn(() => ({ update: vi.fn(() => rollbackBuilder) })),
     };
 
+    // The unconditional fence turns a vanished/moved row into a skip:
+    // there is nothing safe to restore over.
     await expect(
       rollbackOrderStatusAfterInventoryConfirmationFailure(
         asSupabaseClient(supabase),
@@ -191,8 +193,6 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
         'order-123',
         { payment_status: 'pending', shipping_status: 'pending' }
       )
-    ).rejects.toThrow(
-      'rollback_order_status_after_inventory_confirmation_failure failed: JSON object requested, multiple (or no) rows returned'
-    );
+    ).resolves.toBeUndefined();
   });
 });

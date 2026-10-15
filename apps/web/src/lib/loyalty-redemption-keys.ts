@@ -22,6 +22,21 @@ const STORAGE_PREFIX = 'loyalty-redeem-key:';
 // stakes a random claim token, then polls briefly; the lowest live
 // token wins and losers adopt the winner's minted key from storage.
 // Claims expire so a crashed claimant cannot block the intent.
+function storageIsUsable(): boolean {
+  // Private-mode / storage-disabled browsers throw or drop writes:
+  // probing once up front keeps the claim protocol from sleeping
+  // through its whole wait window on storage that can never answer.
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    const probe = `${STORAGE_PREFIX}probe`;
+    localStorage.setItem(probe, '1');
+    localStorage.removeItem(probe);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const CLAIM_POLL_INTERVAL_MS = 25;
 const CLAIM_TTL_MS = 10_000;
 // Safety valve only: a live claim always expires within CLAIM_TTL_MS of
@@ -127,6 +142,9 @@ function delay(ms: number): Promise<void> {
 // key) resume and mint a second key. Claims expire, so a crashed
 // claimant bounds the wait.
 async function coordinatedMint(intent: string): Promise<string> {
+  // Without usable storage there is nothing to coordinate through:
+  // degrade to the documented Map-only behavior immediately.
+  if (!storageIsUsable()) return mintKey(intent);
   const existing = readStored(intent);
   if (existing) return existing;
   const token = crypto.randomUUID();

@@ -68,6 +68,31 @@ describe('redemptionIdempotencyKeys fallback coordination', () => {
     redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-solo');
   });
 
+  it('mints immediately through the Map when storage is unusable', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error('storage disabled');
+      },
+      removeItem: () => {},
+    });
+
+    const startedAt = Date.now();
+    const key = await redemptionIdempotencyKeys.forReward(
+      'm',
+      'c',
+      'reward-nostorage'
+    );
+    // No 30-second claim wait: unusable storage degrades to Map-only.
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+    expect(key).toMatch(UUID_PATTERN);
+    expect(
+      await redemptionIdempotencyKeys.forReward('m', 'c', 'reward-nostorage')
+    ).toBe(key);
+
+    redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-nostorage');
+  });
+
   it('keeps waiting while another tab\u2019s claim is live, then adopts its key', async () => {
     const store = new Map<string, string>();
     vi.stubGlobal('localStorage', {

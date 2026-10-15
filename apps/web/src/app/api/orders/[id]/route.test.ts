@@ -1118,16 +1118,10 @@ describe('PATCH /api/orders/[id]', () => {
     expect(response.status).toBe(500);
     expect(
       rollbackOrderStatusAfterInventoryConfirmationFailure
-    ).toHaveBeenCalledWith(
-      supabase,
-      'merchant-1',
-      'order-1',
-      {
-        payment_status: 'pending',
-        shipping_status: 'processing',
-      },
-      { notCancelled: true }
-    );
+    ).toHaveBeenCalledWith(supabase, 'merchant-1', 'order-1', {
+      payment_status: 'pending',
+      shipping_status: 'processing',
+    });
     expect(fileInventoryConfirmationFailureReview).toHaveBeenCalledWith(
       expect.objectContaining({
         merchantId: 'merchant-1',
@@ -1190,16 +1184,10 @@ describe('PATCH /api/orders/[id]', () => {
     expect(ordersUpdate).toHaveBeenCalledWith({ payment_status: 'paid' });
     expect(
       rollbackOrderStatusAfterInventoryConfirmationFailure
-    ).toHaveBeenCalledWith(
-      supabase,
-      'merchant-1',
-      'order-1',
-      {
-        payment_status: 'pending',
-        shipping_status: 'processing',
-      },
-      { notCancelled: true }
-    );
+    ).toHaveBeenCalledWith(supabase, 'merchant-1', 'order-1', {
+      payment_status: 'pending',
+      shipping_status: 'processing',
+    });
   });
 
   it('files reconciliation review when paid-status inventory confirmation and rollback both fail', async () => {
@@ -1261,16 +1249,10 @@ describe('PATCH /api/orders/[id]', () => {
     );
     expect(
       rollbackOrderStatusAfterInventoryConfirmationFailure
-    ).toHaveBeenCalledWith(
-      supabase,
-      'merchant-1',
-      'order-1',
-      {
-        payment_status: 'pending',
-        shipping_status: 'pending',
-      },
-      { notCancelled: true }
-    );
+    ).toHaveBeenCalledWith(supabase, 'merchant-1', 'order-1', {
+      payment_status: 'pending',
+      shipping_status: 'pending',
+    });
     expect(fileInventoryConfirmationFailureReview).toHaveBeenCalledWith({
       gatewayReference: null,
       merchantId: 'merchant-1',

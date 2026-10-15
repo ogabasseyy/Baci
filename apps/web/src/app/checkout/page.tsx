@@ -63,12 +63,14 @@ import { trackServerSideBeginCheckout } from '@/lib/server-side-analytics';
 import { hasStorefrontPriceNegotiation } from '@/lib/storefront-price-negotiation';
 import { createClient } from '@/lib/supabase/client';
 import type { ShippingQuote } from '@/types/shipping-quote';
-import { resolveLegacyCheckoutIdempotencyKey } from './checkout-order-idempotency';
+import type { LegacyCheckoutKeyInput } from './build-legacy-checkout-fingerprint';
 import { buildCheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
+import { clearLegacyCheckoutIdempotencyKey } from './clear-legacy-checkout-idempotency-key';
 import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';
 import { captureLegacyCreditDirectPopup } from './legacy-credit-direct-popup';
 import { openLegacyCreditDirectPopup } from './open-legacy-credit-direct-popup';
 import { prepareLegacyCreditDirectCheckout } from './prepare-legacy-credit-direct-checkout';
+import { resolveLegacyCheckoutIdempotencyKey } from './resolve-legacy-checkout-idempotency-key';
 import { notifyLastOrderSnapshotChanged } from './success/client-page-order-snapshot';
 
 const DEFAULT_SHIPPING_FEE = Number.parseFloat(
@@ -387,20 +389,31 @@ async function prepareCheckout(
     // Resolution throws when browser storage is unavailable, failing
     // the submit closed (error kind below) rather than risking a
     // duplicate order against a single-use code.
-    const idempotencyKey = input.discountCode
-      ? await resolveLegacyCheckoutIdempotencyKey({
+    const keyInput: LegacyCheckoutKeyInput | null = input.discountCode
+      ? {
           merchantId: input.merchantId,
           customerEmail: input.data.email,
+          customerName: `${input.data.firstName} ${input.data.lastName}`,
           customerPhone: input.data.phone,
           gateway: input.selectedGateway,
           shippingFee: finalShippingFee,
           discountCode: input.discountCode,
           orderItems,
+          shippingAddress: {
+            firstName: input.data.firstName,
+            lastName: input.data.lastName,
+            address: input.data.address,
+            city: input.data.city,
+            state: input.data.state,
+          },
           shippingSelection: buildCheckoutShippingSelectionPayload(
             input.selectedShippingQuote,
             input.shippingSessionId
           ),
-        })
+        }
+      : null;
+    const idempotencyKey = keyInput
+      ? await resolveLegacyCheckoutIdempotencyKey(keyInput)
       : null;
 
     const { order, paystackAuthUrl } = await createCheckoutOrder({
@@ -461,6 +474,11 @@ async function prepareCheckout(
         };
       }
 
+      // Checkout completed: rotate the persisted key so a repeated
+      // identical cart with a reusable code creates a fresh order
+      // instead of replaying this one. Error paths above keep the key
+      // so a resubmit still replays the in-flight attempt.
+      if (keyInput) await clearLegacyCheckoutIdempotencyKey(keyInput);
       return {
         kind: 'credit_direct',
         order,
@@ -469,6 +487,7 @@ async function prepareCheckout(
       };
     }
 
+    if (keyInput) await clearLegacyCheckoutIdempotencyKey(keyInput);
     return { kind: 'redirect', order, paystackAuthUrl };
   } catch (error) {
     return {

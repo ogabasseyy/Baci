@@ -30,7 +30,7 @@ const sources = [
   {
     filename:
       '20261015215000_customer_checkout_shipping_recovery_activation_gate.sql',
-    sha256: 'e5fc8805f5f1364473aea7bd954eeb909c20e2fff8d9e39d36137b3d0961e0ad',
+    sha256: 'a0a71f98b2e5826d92f6782b1f73bf6aad82700842f6ec8b8f9b2003066012b0',
   },
 ];
 

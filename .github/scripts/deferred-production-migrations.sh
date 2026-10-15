@@ -83,3 +83,33 @@ atomic_migration_group_next_base() {
       ;;
   esac
 }
+
+# A historical prefix may already have exposed the recovery RPCs without their
+# activation gate. Do not silently finish that state as a safe atomic release.
+verify_checkout_recovery_migration_history() {
+  local history="$1" directory="$2"
+  local cursor='20261013213516_customer_checkout_shipping_recovery_context'
+  local next recorded applied=0 present=0 total=0
+  while :; do
+    total=$((total + 1))
+    if [ -f "$directory/$cursor.sql" ]; then present=$((present + 1)); fi
+    recorded="$(awk -F '\t' -v version="${cursor%%_*}" '$1 == version { print "recorded:" $2; exit }' <<<"$history")"
+    if [ -n "$recorded" ]; then
+      if [ "$recorded" != "recorded:${cursor#*_}" ]; then
+        echo "::error::recovery migration identity mismatch: ${cursor%%_*}" >&2
+        return 1
+      fi
+      applied=$((applied + 1))
+    fi
+    if ! next="$(atomic_migration_group_next_base "$cursor")"; then break; fi
+    cursor="$next"
+  done
+  if [ "$applied" -gt 0 ] && [ "$applied" -ne "$total" ]; then
+    echo "::error::partial recovery migration history ($applied/$total); reconcile before release" >&2
+    return 1
+  fi
+  if [ "$present" -gt 0 ] && [ "$present" -ne "$total" ]; then
+    echo "::error::incomplete recovery migration files ($present/$total); refusing RPC publication" >&2
+    return 1
+  fi
+}

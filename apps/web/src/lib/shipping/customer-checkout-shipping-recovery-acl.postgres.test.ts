@@ -166,7 +166,7 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
     });
     it('waits for an in-flight recovery transaction before disabling', async () => {
       database.query(
-        `UPDATE private.checkout_shipping_recovery_release_activation SET enabled=true;`
+        `UPDATE private.checkout_shipping_recovery_release_activation SET enabled=true, rollback_deployment_id='dpl_syntheticCompatible', rollback_commit_sha='8c8df7846777f714cfb573c44eb215059e09b7d4', verified_at=now();`
       );
       const holder = database.queryAsync(`BEGIN; ${recoveryActorAuth()}
         SELECT public.get_customer_checkout_shipping_recovery_context('${RECOVERY_ORDER_ID}');
@@ -193,6 +193,50 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       );
       await holder;
       expect((await disable).trim()).toBe('f');
+      expect(context).toThrow('shipping_recovery_not_activated');
+    }, 30000);
+    it('lets disable proceed while recovery is waiting for the order lock', async () => {
+      database.query(`UPDATE private.checkout_shipping_recovery_release_activation
+        SET enabled=true, rollback_deployment_id='dpl_syntheticCompatible',
+          rollback_commit_sha='8c8df7846777f714cfb573c44eb215059e09b7d4', verified_at=now();`);
+      const holder = database.queryAsync(`BEGIN;
+        SET application_name='recovery_order_lock_holder';
+        SELECT pg_advisory_xact_lock(hashtextextended('baci_order_payment:${RECOVERY_ORDER_ID}',0));
+        SELECT pg_sleep(8); COMMIT;`);
+      await recoveryWaitFor(
+        () =>
+          database
+            .query(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+        WHERE application_name='recovery_order_lock_holder' AND wait_event='PgSleep');`)
+            .trim() === 't',
+        'held order advisory lock'
+      );
+      const waiting = database
+        .queryAsync(`BEGIN; SET application_name='recovery_waiting_context';
+        ${recoveryActorAuth()} SELECT public.get_customer_checkout_shipping_recovery_context('${RECOVERY_ORDER_ID}'); ROLLBACK;`)
+        .then(
+          (output) => ({ output, error: '' }),
+          (error: Error) => ({ output: '', error: error.message })
+        );
+      try {
+        await recoveryWaitFor(
+          () =>
+            database
+              .query(`SELECT EXISTS(SELECT 1 FROM pg_stat_activity
+          WHERE application_name='recovery_waiting_context' AND wait_event='advisory');`)
+              .trim() === 't',
+          'context waiting for order'
+        );
+        // A request that has not crossed the order boundary must not hold
+        // activation open. A timeout makes the old lock order fail explicitly.
+        database.query(`BEGIN; SET LOCAL lock_timeout='500ms';
+          UPDATE private.checkout_shipping_recovery_release_activation SET enabled=false; COMMIT;`);
+      } finally {
+        await holder;
+      }
+      expect((await waiting).error).toContain(
+        'shipping_recovery_not_activated'
+      );
       expect(context).toThrow('shipping_recovery_not_activated');
     }, 30000);
     it('allows verified activation and disables new recovery again without changing orders', () => {

@@ -31,6 +31,9 @@ BEGIN
       WHERE o.id=p_order_id AND m.user_id=auth.uid()) THEN
     RAISE EXCEPTION 'forbidden_shipping_recovery' USING ERRCODE='42501';
   END IF;
+  -- Same order-payment serialization boundary as refunds and pre-submit checks.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('baci_order_payment:' || p_order_id::text,0));
   -- Hold the activation row through the transaction: disabling waits for
   -- in-flight recovery writes, and new writers fail closed after it commits.
   SELECT enabled INTO v_enabled
@@ -39,9 +42,6 @@ BEGIN
   IF v_enabled IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'shipping_recovery_not_activated' USING ERRCODE='55000';
   END IF;
-  -- Same order-payment serialization boundary as refunds and pre-submit checks.
-  PERFORM pg_catalog.pg_advisory_xact_lock(
-    pg_catalog.hashtextextended('baci_order_payment:' || p_order_id::text,0));
   SELECT * INTO v_order FROM public.orders WHERE id=p_order_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'forbidden_shipping_recovery' USING ERRCODE='42501';

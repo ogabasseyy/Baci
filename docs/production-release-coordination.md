@@ -101,8 +101,9 @@ in the same coordination protocol. Keep cancel-in-progress disabled across mutat
 
 The initial eleven recovery migrations form one atomic group in the production
 migration applier: RPC creation, grants, later guards and the closed activation
-row become visible together. Before release, require either the entire group
-pending or the entire group already applied; stop and reconcile partial history.
+row become visible together. Before any migration mutation, the applier requires either the entire group
+pending or the entire group already applied, verifies recorded identities and
+refuses incomplete group files. Stop and reconcile partial history before release.
 The recovery activation migration defaults the private release row to disabled.
 Context and preparation, and every first confirmation, enforce it inside the
 shared database assertion. Application UI state cannot enable it. Confirmed

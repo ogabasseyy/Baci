@@ -143,6 +143,8 @@ applied_versions_body="$(jq -n '{query: "SELECT version, name FROM supabase_migr
 applied_versions_response="$(api_query <<<"$applied_versions_body")"
 applied_migrations="$(jq -r '.[] | [.version, .name] | @tsv' <<<"$applied_versions_response")"
 
+verify_checkout_recovery_migration_history "$applied_migrations" "$migrations_dir" || exit 1
+
 applied_count_remote=$(printf '%s' "$applied_migrations" | grep -c . || true)
 echo "Applied versions on remote: ${applied_count_remote}"
 

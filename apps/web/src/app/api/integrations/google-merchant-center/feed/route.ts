@@ -54,45 +54,6 @@ function getManagedMerchantSlug(host: string): string | null {
 
 interface LegacyFeedTarget {
   merchantSlug: string;
-  redirectHost: string;
-}
-
-/**
- * Defence-in-depth: enforce a closed allow-list on the redirect host AFTER
- * resolution. The host must be either:
- *   1. The configured root domain or one of its subdomains (managed flow), OR
- *   2. The exact hostname returned by an active row in the `domains` table
- *      (custom-domain flow).
- *
- * This is paranoid by design — the upstream resolution already filters input,
- * but anchoring the redirect to a closed allow-list here protects against
- * regressions and silences static analyzers (Semgrep `open-redirect`) that
- * cannot follow the data flow through the DB.
- */
-function isAllowedRedirectHost(
-  host: string,
-  options: { managedRoot?: string; verifiedDbHost?: string }
-): boolean {
-  if (!isSafeHostname(host)) {
-    return false;
-  }
-
-  const { managedRoot, verifiedDbHost } = options;
-
-  if (managedRoot) {
-    if (host === managedRoot) {
-      return true;
-    }
-    if (host.endsWith(`.${managedRoot}`)) {
-      return true;
-    }
-  }
-
-  if (verifiedDbHost && host === verifiedDbHost) {
-    return true;
-  }
-
-  return false;
 }
 
 async function resolveLegacyFeedTarget(
@@ -101,16 +62,8 @@ async function resolveLegacyFeedTarget(
   const managedSlug = getManagedMerchantSlug(host);
   if (managedSlug) {
     const merchant = await resolveFeedMerchant(managedSlug, true);
-    const rootDomain = getRootDomain();
-    const redirectHost = `${merchant.slug}.${rootDomain}`;
-
-    if (!isAllowedRedirectHost(redirectHost, { managedRoot: rootDomain })) {
-      throw new MerchantNotFoundError(host);
-    }
-
     return {
       merchantSlug: merchant.slug,
-      redirectHost,
     };
   }
 
@@ -137,14 +90,9 @@ async function resolveLegacyFeedTarget(
     throw new MerchantNotFoundError(host);
   }
 
-  if (!isAllowedRedirectHost(verifiedHost, { verifiedDbHost: verifiedHost })) {
-    throw new MerchantNotFoundError(host);
-  }
-
   const merchant = await resolveFeedMerchant(domain.merchant_id, false);
   return {
     merchantSlug: merchant.slug,
-    redirectHost: verifiedHost,
   };
 }
 
@@ -168,13 +116,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const target = await resolveLegacyFeedTarget(host);
-    // Build from a fixed HTTPS origin, then assign only the verified hostname.
-    // The URL parser cannot reinterpret the host as a scheme, userinfo or path.
-    const redirectUrl = new URL('https://usebaci.com/api/feed/google-merchant');
-    redirectUrl.hostname = target.redirectHost;
-    if (redirectUrl.hostname !== target.redirectHost) {
-      throw new MerchantNotFoundError(host);
-    }
+    // Feed lookup accepts merchant_slug independently of the request host.
+    // Keep every legacy redirect on the server-configured Baci origin; an
+    // active custom domain must never become redirect authority from headers.
+    const redirectUrl = new URL(
+      '/api/feed/google-merchant',
+      `https://${getRootDomain()}`
+    );
     redirectUrl.searchParams.set('merchant_slug', target.merchantSlug);
 
     return NextResponse.redirect(redirectUrl, 308);

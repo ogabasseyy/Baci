@@ -71,9 +71,27 @@ describe('GET /api/integrations/google-merchant-center/feed', () => {
 
     expect(response.status).toBe(308);
     expect(response.headers.get('location')).toBe(
-      'https://ogabassey.com/api/feed/google-merchant?merchant_slug=ogabassey'
+      'https://usebaci.com/api/feed/google-merchant?merchant_slug=ogabassey'
     );
     expect(mockResolveFeedMerchant).toHaveBeenCalledWith('merchant-1', false);
+  });
+
+  it('uses only the Baci feed origin even for a different registered merchant domain', async () => {
+    mockDomainLookup({
+      data: { merchant_id: 'merchant-1', domain: 'registered-store.example' },
+      error: null,
+    });
+    const { GET } = await import('./route');
+    const response = await GET(
+      makeRequest(
+        'https://internal.baci.app/api/integrations/google-merchant-center/feed',
+        { host: 'registered-store.example' }
+      )
+    );
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe(
+      'https://usebaci.com/api/feed/google-merchant?merchant_slug=ogabassey'
+    );
   });
 
   it('rejects a mismatched database authority instead of redirecting to another active domain', async () => {
@@ -105,7 +123,7 @@ describe('GET /api/integrations/google-merchant-center/feed', () => {
 
     expect(response.status).toBe(308);
     expect(response.headers.get('location')).toBe(
-      'https://ogabassey.usebaci.com/api/feed/google-merchant?merchant_slug=ogabassey'
+      'https://usebaci.com/api/feed/google-merchant?merchant_slug=ogabassey'
     );
     expect(mockFrom).not.toHaveBeenCalled();
     expect(mockResolveFeedMerchant).toHaveBeenCalledWith('ogabassey', true);
@@ -149,7 +167,7 @@ describe('GET /api/integrations/google-merchant-center/feed', () => {
 
     expect(response.status).toBe(308);
     expect(response.headers.get('location')).toBe(
-      'https://ogabassey.com/api/feed/google-merchant?merchant_slug=ogabassey'
+      'https://usebaci.com/api/feed/google-merchant?merchant_slug=ogabassey'
     );
     expect(mockResolveFeedMerchant).toHaveBeenCalledWith('merchant-1', false);
   });
@@ -174,7 +192,7 @@ describe('GET /api/integrations/google-merchant-center/feed', () => {
 
     expect(response.status).toBe(308);
     expect(response.headers.get('location')).toBe(
-      'https://ogabassey.com/api/feed/google-merchant?merchant_slug=ogabassey'
+      'https://usebaci.com/api/feed/google-merchant?merchant_slug=ogabassey'
     );
   });
 
@@ -304,7 +322,7 @@ describe('GET /api/integrations/google-merchant-center/feed', () => {
 
       expect(response.status).toBe(308);
       expect(response.headers.get('location')).toBe(
-        'https://ogabassey.usebaci.com/api/feed/google-merchant?merchant_slug=ogabassey'
+        'https://usebaci.com/api/feed/google-merchant?merchant_slug=ogabassey'
       );
     });
 

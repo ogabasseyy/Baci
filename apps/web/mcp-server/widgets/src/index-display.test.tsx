@@ -186,3 +186,15 @@ describe('Ogabassey inline result presentation', () => {
     );
   });
 });
+
+it('renders all twenty accepted catalog selections', () => {
+  const selection = Array.from({ length: 20 }, (_, i) => ({ ...products[0], id: `phone-${i}`, name: `Selected phone ${i}` }));
+  window.openai = { toolOutput: { products: selection } };
+  render(<App />);
+  expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(20);
+});
+it('shows catalog failures as actionable alerts', () => {
+  window.openai = { toolOutput: { products: [], status: 'unavailable', message: 'Search again before rendering.' } };
+  render(<App />);
+  expect(screen.getByRole('alert').textContent).toBe('Search again before rendering.');
+});

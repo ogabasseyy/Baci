@@ -1,3 +1,4 @@
+import { getWidgetHost } from '../widget-host';
 import { type SetStateAction, useState } from 'react';
 import { useOpenAiGlobal } from './use-openai-global';
 
@@ -5,7 +6,7 @@ type UnknownObject = Record<string, unknown>;
 
 /**
  * Hook to manage widget state that persists across conversation turns
- * Automatically syncs with window.openai.widgetState
+ * Automatically syncs with getWidgetHost()?.widgetState
  */
 export function useWidgetState<T extends UnknownObject>(
   defaultState: T | (() => T)
@@ -30,7 +31,7 @@ export function useWidgetState<T extends UnknownObject>(
   const [prevWidgetStateFromWindow, setPrevWidgetStateFromWindow] =
     useState<T | null>(widgetStateFromWindow);
 
-  // Sync from window.openai.widgetState when it changes (e.g., from tool
+  // Sync from getWidgetHost()?.widgetState when it changes (e.g., from tool
   // responses). Adjusting state inline during render avoids the extra render
   // (and stale frame) an effect would introduce, and lets the React Compiler
   // memoize this hook.
@@ -45,9 +46,9 @@ export function useWidgetState<T extends UnknownObject>(
     _setWidgetState((prevState) => {
       const newState = typeof state === 'function' ? state(prevState) : state;
 
-      // Sync to window.openai.widgetState for persistence
+      // Sync to getWidgetHost()?.widgetState for persistence
       if (newState != null && typeof window !== 'undefined') {
-        void window.openai?.setWidgetState?.(newState);
+        void getWidgetHost()?.setWidgetState?.(newState);
       }
 
       return newState;

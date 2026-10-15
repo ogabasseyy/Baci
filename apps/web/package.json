@@ -63,7 +63,6 @@
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.4.0",
     "@imgly/background-removal": "^1.7.0",
-    "@modelcontextprotocol/sdk": "^1.31.0",
     "@mycoverai/mca-javascript-sdk": "^0.9.0",
     "@opentelemetry/api": "^1.9.1",
     "@posthog/nextjs-config": "^1.9.68",
@@ -176,7 +175,9 @@
     "zustand": "^5.0.14",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
-    "postgres": "^3.4.9"
+    "postgres": "^3.4.9",
+    "@modelcontextprotocol/server": "^2.3.1",
+    "@modelcontextprotocol/node": "^2.1.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
@@ -210,7 +211,8 @@
     "typedoc-plugin-markdown": "^4.12.0",
     "typescript": "~7.0.2",
     "vitest": "^4.1.11",
-    "esbuild": "0.28.1"
+    "esbuild": "0.28.1",
+    "@modelcontextprotocol/client": "^2.3.1"
   },
   "browserslist": [
     "last 2 Chrome versions",

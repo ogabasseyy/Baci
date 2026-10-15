@@ -20,12 +20,12 @@ describe('published category guidance parity', () => {
     const runtime = createSearchProductsToolConfig('ui://widget/test.html');
     const published = PUBLIC_MCP_TOOLS.find((tool) => tool.name === 'search_products');
     expect(runtime.description).toBe(published?.description);
-    expect(runtime.inputSchema.category.description).toBe(MCP_SEARCH_CATEGORY_GUIDANCE);
+    expect(runtime.inputSchema.shape.category.description).toBe(MCP_SEARCH_CATEGORY_GUIDANCE);
     expect(runtime._meta).not.toHaveProperty('openai/outputTemplate');
     // Published intent is required; optional transport permits the friendly invalid-intent response.
     expect(published?.inputSchema.required).toContain('intent');
-    expect(runtime.inputSchema.intent.safeParse(undefined).success).toBe(true);
-    expect(runtime.inputSchema.limit.parse(undefined)).toBe(10);
-    expect(runtime.inputSchema.limit.safeParse(21).success).toBe(false);
+    expect(runtime.inputSchema.shape.intent.safeParse(undefined).success).toBe(true);
+    expect(runtime.inputSchema.shape.limit.parse(undefined)).toBe(10);
+    expect(runtime.inputSchema.shape.limit.safeParse(21).success).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from "@modelcontextprotocol/server";
 import { cartLinkInputSchema } from '../src/schemas/cart-link-input';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { prepareCartHandoff } from './cart-handoff';
@@ -56,7 +56,7 @@ export function registerCartLinkTools(
       'Help the shopper add a public product to their Ogabassey cart. Simple products return a cart URL that adds the item when opened; products with options link to their product page for selection. This tool does not save an item inside ChatGPT or start checkout.',
     // The registration takes a shape, not an object: share the schema
     // module's shape so runtime and card stay on one contract.
-    inputSchema: cartLinkInputSchema.shape,
+    inputSchema: cartLinkInputSchema,
     _meta: {
       ui: { visibility: ['model', 'app'] },
       'openai/widgetAccessible': true, // Enable widget-initiated calls

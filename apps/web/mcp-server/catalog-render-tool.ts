@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import type { z } from 'zod';
 import {
   MCP_CATALOG_RENDER_DESCRIPTION,
@@ -23,6 +23,8 @@ export function createCatalogRenderer(lookup: Lookup) {
             result.structuredContent,
           );
           if (
+            parsed.variant_lookup_failed ||
+            parsed.offer_lookup_failed ||
             parsed.products.length !== 1 ||
             parsed.products[0].id !== id ||
             parsed.products[0].price === null
@@ -49,7 +51,12 @@ export function createCatalogRenderer(lookup: Lookup) {
             text: 'Selected products could not be loaded. Search again before rendering.',
           },
         ],
-        structuredContent: { products: [], status: 'unavailable' as const },
+        structuredContent: {
+          products: [],
+          status: 'unavailable' as const,
+          message:
+            'Selected products could not be loaded. Search again before rendering.',
+        },
       };
     }
   };
@@ -65,7 +72,7 @@ export function registerCatalogRenderer(
     {
       title: 'Show Ogabassey Product Catalog',
       description: MCP_CATALOG_RENDER_DESCRIPTION,
-      inputSchema: catalogRenderInputSchema.shape,
+      inputSchema: catalogRenderInputSchema,
       outputSchema: mcpToolOutputSchemas.get_product,
       annotations: {
         readOnlyHint: true,

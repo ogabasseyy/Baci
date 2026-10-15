@@ -2,7 +2,6 @@ import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { revokeCartDeviceGrants } from '@/lib/cart/device-session';
 import {
-  createAnonMerchantFeatureLookup,
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
@@ -24,12 +23,13 @@ export async function POST(request: NextRequest): Promise<Response> {
     // Authenticate before reading the body: protected-route work and
     // response selection must not be driven by unauthenticated payloads.
     const context = await resolveCartRequestContext(request, {
+      // Revocation stays available independently of shared-cart
+      // enrollment: sign-out calls this unconditionally, and a
+      // merchant without the flag (the default) or mid-rollback must
+      // still be able to retire device authority. No feature lookup.
       merchant: {
         resolveAlias: getCurrentSlugForAlias,
         rpcClient: createAnonClient(),
-        loadMerchantFeatures: createAnonMerchantFeatureLookup(
-          createAnonClient()
-        ),
       },
       requireScope: 'any',
       wrongScopeError: 'not_found',

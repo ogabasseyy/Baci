@@ -19,19 +19,46 @@ export function requestCarriesSharedCartSessionProof(
   request: Request,
   merchantId: string
 ): boolean {
+  // Check every presented candidate independently: a malformed or
+  // stale header must not mask a valid cookie (or vice versa).
+  const candidates = new Set<string>();
   const headerProof = request.headers.get('x-cart-proof')?.trim();
-  const proof =
-    headerProof ||
-    readCartProofFromRequest(request, cartSessionCookieName(merchantId));
-  if (!proof) return false;
-  const verified = verifyCartSessionProof(proof, {
-    environment: getCartProofEnvironment(),
-  });
-  return (
-    verified.ok &&
-    verified.session.merchantId === merchantId &&
-    verified.session.cartId !== null
-  );
+  if (headerProof) candidates.add(headerProof);
+  const authorization = request.headers.get('authorization');
+  if (authorization?.toLowerCase().startsWith('bearer ')) {
+    const bearer = authorization.slice(7).trim();
+    if (bearer) candidates.add(bearer);
+  }
+  const cookieName = cartSessionCookieName(merchantId);
+  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+    const [name, ...rest] = part.split('=');
+    if (name?.trim() === cookieName && rest.length > 0) {
+      try {
+        candidates.add(decodeURIComponent(rest.join('=').trim()));
+      } catch {
+        candidates.add(rest.join('=').trim());
+      }
+    }
+  }
+  for (const proof of candidates) {
+    let verified: ReturnType<typeof verifyCartSessionProof>;
+    try {
+      verified = verifyCartSessionProof(proof, {
+        environment: getCartProofEnvironment(),
+      });
+    } catch {
+      // Unverifiable configuration or malformed candidates simply do
+      // not establish shared-cart authority for this check.
+      continue;
+    }
+    if (
+      verified.ok &&
+      verified.session.merchantId === merchantId &&
+      verified.session.cartId !== null
+    )
+      return true;
+  }
+  return false;
 }
 
 /**

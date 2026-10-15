@@ -28,6 +28,11 @@ beforeEach(() => {
     error: 'missing_proof',
   });
 });
+it('resolves revocation context without an enrollment feature lookup', async () => {
+  await POST(request());
+  const deps = vi.mocked(resolveCartRequestContext).mock.calls[0]?.[1];
+  expect(deps?.merchant).not.toHaveProperty('loadMerchantFeatures');
+});
 it('requires CSRF and verified cart authority before revocation', async () => {
   expect((await POST(request())).status).toBe(401);
   expect(revokeCartDeviceGrants).not.toHaveBeenCalled();

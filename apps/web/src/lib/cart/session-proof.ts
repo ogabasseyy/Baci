@@ -1,17 +1,21 @@
-import { Buffer } from 'node:buffer';
 import { createHmac } from 'node:crypto';
 import {
   CART_FULL_SESSION_OPERATIONS,
   type CartCommand,
   type VerifiedCartSession,
 } from '@baci/shared/cart';
-import { z } from 'zod';
 import { constantTimeEqual } from '@/lib/constant-time-equal';
 import {
   type CartPreviousSessionSecret,
   getCartPreviousSessionSecrets,
   getCartSessionSecret,
 } from './cart-runtime-env';
+import { verificationSecretCandidates } from './session-proof-candidates';
+import {
+  decodeProofPayload,
+  encodeProofPayload,
+  type ProofPayload,
+} from './session-proof-payload';
 
 export const CART_SESSION_PROOF_VERSION = 'cp1';
 /** Absolute session-proof lifetime; renewal requires a live grant check. */
@@ -28,16 +32,6 @@ export const CART_BOOTSTRAP_PROOF_TTL_SECONDS = 15 * 60;
 export const CART_SESSION_PROOF_AUDIENCE = 'baci:cart-session';
 
 const MIN_SECRET_LENGTH = 32;
-
-const cartOperationSchema = z.enum([
-  'add',
-  'set_quantity',
-  'remove',
-  'clear',
-  'replace',
-  'set_assurance',
-  'set_negotiated_price',
-]);
 
 export interface CartSessionProofInput {
   merchantId: string;
@@ -74,25 +68,6 @@ export class CartSessionConfigError extends Error {
   }
 }
 
-const proofPayloadSchema = z.strictObject({
-  aud: z.string().min(1).max(128),
-  cartId: z.uuid().nullable(),
-  env: z.string().min(1).max(64),
-  exp: z.number().int().positive(),
-  grantId: z.uuid().nullable(),
-  iat: z.number().int().positive(),
-  merchantId: z.uuid(),
-  // Grant operations encoded at issuance; absent on proofs minted
-  // before this claim existed. Those legacy proofs fail closed with
-  // no mutation operations until the server re-issues them.
-  ops: z.array(cartOperationSchema).max(7).optional(),
-  principalId: z.string().min(1).max(128),
-  scope: z.enum(['bootstrap', 'session']),
-  v: z.literal(CART_SESSION_PROOF_VERSION),
-});
-
-type ProofPayload = z.infer<typeof proofPayloadSchema>;
-
 function requireSecret(secret: string | undefined): string {
   const normalized = secret?.trim() ? secret.trim() : getCartSessionSecret();
   if (!normalized || normalized.length < MIN_SECRET_LENGTH) {
@@ -105,22 +80,6 @@ function signPayload(payload: string, secret: string): string {
   return createHmac('sha256', secret)
     .update(`${CART_SESSION_PROOF_VERSION}.${payload}`)
     .digest('base64url');
-}
-
-function encodePayload(payload: ProofPayload): string {
-  return Buffer.from(JSON.stringify(payload)).toString('base64url');
-}
-
-function decodePayload(payload: string): ProofPayload | null {
-  try {
-    const parsed: unknown = JSON.parse(
-      Buffer.from(payload, 'base64url').toString('utf8')
-    );
-    const result = proofPayloadSchema.safeParse(parsed);
-    return result.success ? result.data : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -196,7 +155,7 @@ export function issueCartSessionProof(
     scope: input.scope,
     v: CART_SESSION_PROOF_VERSION,
   };
-  const encoded = encodePayload(payload);
+  const encoded = encodeProofPayload(payload);
   return `${CART_SESSION_PROOF_VERSION}.${encoded}.${signPayload(encoded, secret)}`;
 }
 
@@ -221,7 +180,7 @@ function verifyCartProof(
     return { error: 'invalid_proof', ok: false };
   }
   const [, encoded, signature] = parts;
-  const payload = decodePayload(encoded);
+  const payload = decodeProofPayload(encoded);
   if (!payload) {
     return { error: 'invalid_proof', ok: false };
   }
@@ -234,25 +193,13 @@ function verifyCartProof(
   if (payload.exp - payload.iat > maxLifetime) {
     return { error: 'invalid_proof', ok: false };
   }
-  // A retired key may only authenticate proofs it could have issued:
-  // issued no later than its retirement, and only until one maximum
-  // proof lifetime past that retirement has elapsed. After that, no
-  // proof signed with the retired key verifies, however it is dated.
-  const previousCandidates = (
-    options.previousSecrets ?? getCartPreviousSessionSecrets()
-  ).filter((entry) => {
-    const retireAt = Math.floor(Date.parse(entry.retireAt) / 1000);
-    return (
-      Number.isFinite(retireAt) &&
-      entry.secret.trim().length >= MIN_SECRET_LENGTH &&
-      payload.iat <= retireAt &&
-      verifyNow <= retireAt + CART_SESSION_PROOF_TTL_SECONDS
-    );
+  const candidates = verificationSecretCandidates({
+    currentSecret: secret,
+    issuedAt: payload.iat,
+    previousSecrets: options.previousSecrets ?? getCartPreviousSessionSecrets(),
+    sessionProofTtlSeconds: CART_SESSION_PROOF_TTL_SECONDS,
+    verifyNow,
   });
-  const candidates = [
-    secret,
-    ...previousCandidates.map((entry) => entry.secret),
-  ].filter((candidate) => candidate.trim().length >= MIN_SECRET_LENGTH);
   const signed = candidates.some((candidate) =>
     constantTimeEqual(signPayload(encoded, candidate), signature)
   );

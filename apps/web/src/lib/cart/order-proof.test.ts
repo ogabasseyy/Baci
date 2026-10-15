@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { verifySharedCartOrderProof } from './order-proof';
+import {
+  requestCarriesSharedCartSessionProof,
+  verifySharedCartOrderProof,
+} from './order-proof';
 import { cartSessionCookieName } from './principal';
 import { issueCartSessionProof } from './session-proof';
 
@@ -79,6 +82,30 @@ describe('verifySharedCartOrderProof', () => {
         merchantId: '99999999-9999-4999-8999-999999999999',
       })
     ).toEqual({ ok: false });
+  });
+
+  it('detects cart authority from any candidate when another is stale', () => {
+    const request = new Request('http://localhost/api/orders', {
+      headers: {
+        cookie: `${cartSessionCookieName(MERCHANT_ID)}=${proofFor(CART_ID)}`,
+        'x-cart-proof': 'cp1.stale.stale',
+      },
+    });
+    expect(requestCarriesSharedCartSessionProof(request, MERCHANT_ID)).toBe(
+      true
+    );
+    const staleOnly = new Request('http://localhost/api/orders', {
+      headers: { 'x-cart-proof': 'cp1.stale.stale' },
+    });
+    expect(requestCarriesSharedCartSessionProof(staleOnly, MERCHANT_ID)).toBe(
+      false
+    );
+    expect(
+      requestCarriesSharedCartSessionProof(
+        new Request('http://localhost/api/orders'),
+        MERCHANT_ID
+      )
+    ).toBe(false);
   });
 
   it('rejects missing and forged proofs', () => {

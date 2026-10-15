@@ -70,7 +70,8 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
 }
 
 /** Records the key (cap-enforced); false when memory-only — dropped
- * so a retry re-mints AND re-persists (R96 P1). */
+ * AND the tombstone restored so a retry re-mints AND re-persists
+ * (R96 P1, R99 P2 mobile mirror). */
 export function rememberPendingVtuPurchase(
   payloadSignature: string,
   key: string,
@@ -82,6 +83,10 @@ export function rememberPendingVtuPurchase(
   ) {
     enforcePendingVtuCap();
   }
+  // Restored on persist failure below (Codex R99 P2, mobile
+  // mirror): the old entry is only gone from storage when THIS
+  // snapshot lands.
+  const priorTombstone = forgottenScopedKeys.get(payloadSignature);
   pendingVtuPurchases.delete(payloadSignature);
   pendingVtuPurchases.set(payloadSignature, {
     key,
@@ -93,6 +98,9 @@ export function rememberPendingVtuPurchase(
   forgottenScopedKeys.delete(payloadSignature);
   if (!persistPendingVtuPurchases()) {
     pendingVtuPurchases.delete(payloadSignature);
+    if (priorTombstone !== undefined) {
+      forgottenScopedKeys.set(payloadSignature, priorTombstone);
+    }
     return false;
   }
   return true;

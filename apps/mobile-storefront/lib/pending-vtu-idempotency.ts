@@ -135,8 +135,9 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
 
 /**
  * Records the key (cap-enforced). New generations supersede the
- * scope tombstone (R94 P2); false when memory-only — dropped so a
- * retry re-mints AND re-persists (R96 P1, web mirror).
+ * scope tombstone only once durable (R94 P2, R99 P2); false when
+ * memory-only — dropped AND the tombstone restored so a retry
+ * re-mints AND re-persists (R96 P1, web mirror).
  */
 export function rememberPendingVtuPurchase(
   descriptor: string,
@@ -149,6 +150,9 @@ export function rememberPendingVtuPurchase(
   ) {
     enforcePendingVtuCap();
   }
+  // Restored on persist failure below (Codex R99 P2): the old
+  // entry is only gone from storage when THIS snapshot lands.
+  const priorTombstone = forgottenVtuScopes.get(descriptor);
   pendingPurchases.delete(descriptor);
   forgottenVtuScopes.delete(descriptor);
   pendingPurchases.set(descriptor, {
@@ -160,6 +164,9 @@ export function rememberPendingVtuPurchase(
   });
   if (!persistPendingVtuPurchases()) {
     pendingPurchases.delete(descriptor);
+    if (priorTombstone !== undefined) {
+      forgottenVtuScopes.set(descriptor, priorTombstone);
+    }
     return false;
   }
   return true;

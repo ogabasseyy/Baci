@@ -17,6 +17,7 @@ import {
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
 import { PERSISTED_VTU_KEY_TTL_MS } from './utility-pending-vtu-codec';
+import { forgottenScopedKeys } from './utility-pending-vtu-sync';
 
 describe('utility-pending-idempotency', () => {
   beforeEach(() => {
@@ -58,6 +59,35 @@ describe('utility-pending-idempotency', () => {
     const retry = getPendingVtuKey('{"amount":100}');
     expect(retry).toBeTruthy();
     expect(recallPendingVtuKey('{"amount":100}')).toBe(retry);
+  });
+
+  it('restores the tombstone when the replacement persist fails', () => {
+    // Codex R99 P2 (mobile mirror): consecutive write failures — the
+    // forget's setItem throws (old key still in the snapshot,
+    // tombstone memory-only) and the replacement's save throws too.
+    // Dropping the new entry without restoring the tombstone would
+    // let a reload hydrate the stale key and replay the previous
+    // successful vend as new, without debit or delivery.
+    rememberPendingVtuPurchase('{"tomb":"web"}', 'key-old');
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+    try {
+      forgetPendingVtuPurchase('{"tomb":"web"}');
+      expect(
+        rememberPendingVtuPurchase('{"tomb":"web"}', 'key-new')
+      ).toBe(false);
+      expect(recallPendingVtuKey('{"tomb":"web"}')).toBeUndefined();
+      expect(forgottenScopedKeys.has('{"tomb":"web"}')).toBe(true);
+    } finally {
+      setItem.mockRestore();
+    }
+    // Storage works again: the retry supersedes the tombstone.
+    expect(rememberPendingVtuPurchase('{"tomb":"web"}', 'key-ok')).toBe(true);
+    expect(recallPendingVtuKey('{"tomb":"web"}')).toBe('key-ok');
+    expect(forgottenScopedKeys.has('{"tomb":"web"}')).toBe(false);
   });
 
   it('mints distinct keys for distinct purchases', () => {

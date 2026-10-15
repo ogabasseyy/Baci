@@ -535,6 +535,40 @@ describe('pending-vtu-idempotency', () => {
     expect(recallPendingVtuKey('mob-nopersist')).toBe('key-ok');
   });
 
+  it('restores the tombstone when the replacement persist fails', () => {
+    // Codex R99 P2 (web mirror): consecutive write failures — the
+    // forget's persist failed (old key still in storage, tombstone
+    // memory-only) and now the replacement's persist fails too.
+    // Dropping the new entry without restoring the tombstone would
+    // let a restart hydrate the stale key and replay the previous
+    // successful vend as new, without debit or delivery.
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('mob-tomb', 'key-old');
+    const persistSpy = jest
+      .spyOn(vtuStore, 'persistPendingVtuEntries')
+      .mockReturnValue(false);
+    try {
+      // The forget's persist fails: storage still holds the old key
+      // and the tombstone exists only in memory (the store clears
+      // memory tombstones only after a durable write).
+      forgetPendingVtuPurchase('mob-tomb');
+      expect(rememberPendingVtuPurchase('mob-tomb', 'key-new')).toBe(false);
+      expect(recallPendingVtuKey('mob-tomb')).toBeNull();
+      // The tombstone rides the next snapshot instead of being lost.
+      const snapshot = parsePendingVtuSnapshot(serializePendingVtuPurchases());
+      expect(snapshot.entries).toHaveLength(0);
+      expect(snapshot.forgotten.map((t) => t.scoped)).toEqual(['mob-tomb']);
+    } finally {
+      persistSpy.mockRestore();
+    }
+    // Storage works again: the retry supersedes the tombstone.
+    expect(rememberPendingVtuPurchase('mob-tomb', 'key-ok')).toBe(true);
+    expect(recallPendingVtuKey('mob-tomb')).toBe('key-ok');
+    expect(
+      parsePendingVtuSnapshot(serializePendingVtuPurchases()).forgotten
+    ).toEqual([]);
+  });
+
   it('lists noted references deduped, excluding unanswered entries', () => {
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('mob-l1', 'key-l1');

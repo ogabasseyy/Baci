@@ -190,6 +190,7 @@ export async function resolveCartMerchant(
     // The native clients call the api.* origin with an explicit
     // merchantSlug hint; 'api' is a platform host, never a merchant.
     host === `api.${rootDomain}` ||
+    host === `api-staging.${rootDomain}` ||
     host === 'localhost' ||
     host === '127.0.0.1' ||
     // Vercel deployment hosts (previews and branch deploys) are

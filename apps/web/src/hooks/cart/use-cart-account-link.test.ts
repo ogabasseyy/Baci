@@ -1,10 +1,12 @@
 import type { CartSnapshot } from '@baci/shared/cart';
 import { act, renderHook } from '@testing-library/react';
+import { createElement, StrictMode, useEffect } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import {
   fetchSavedAccountCart,
   linkAccountCart,
 } from './shared-cart-account-client';
+import { bumpCartSessionGeneration } from './shared-cart-storage';
 import { useCartAccountLink } from './use-cart-account-link';
 
 vi.mock('./shared-cart-account-client', () => ({
@@ -25,6 +27,13 @@ const saved: CartSnapshot = {
 };
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(linkAccountCart).mockReset().mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+    snapshot: null,
+  });
+  vi.mocked(fetchSavedAccountCart).mockReset();
   vi.mocked(fetchSavedAccountCart).mockResolvedValue({
     ok: true,
     cart: saved,
@@ -68,11 +77,15 @@ it('retries the complete original body instead of reusing its key with a differe
   const { result } = renderHook(() =>
     useCartAccountLink({ merchantSlug: 'shop', ownerSubject: 'user-a' })
   );
+  await act(async () => result.current.loadSavedCart());
   await act(async () => {
     await result.current.link('keep_current');
   });
   await act(async () => {
-    await result.current.link('use_saved');
+    expect(await result.current.link('use_saved')).toBe(false);
+  });
+  await act(async () => {
+    await result.current.retry();
   });
   expect(vi.mocked(linkAccountCart).mock.calls[1][0]).toEqual(
     vi.mocked(linkAccountCart).mock.calls[0][0]
@@ -93,6 +106,7 @@ it('does not publish a completed link into a new merchant or shopper scope', asy
       useCartAccountLink({ merchantSlug: shop, ownerSubject: user, onLinked }),
     { initialProps: { shop: 'shop-a', user: 'user-a' } }
   );
+  await act(async () => result.current.loadSavedCart());
   let pending: Promise<boolean>;
   act(() => {
     pending = result.current.link('keep_current');
@@ -109,4 +123,167 @@ it('does not publish a completed link into a new merchant or shopper scope', asy
   });
   expect(onLinked).not.toHaveBeenCalled();
   expect(result.current.status).toBe('idle');
+});
+
+it('rejects choices before or during a delayed saved-cart read', async () => {
+  let finish: (
+    value: Awaited<ReturnType<typeof fetchSavedAccountCart>>
+  ) => void = () => {};
+  vi.mocked(fetchSavedAccountCart).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  const { result } = renderHook(() =>
+    useCartAccountLink({ merchantSlug: 'shop', ownerSubject: 'user-a' })
+  );
+  await act(async () => {
+    expect(await result.current.link('keep_current')).toBe(false);
+  });
+  let loading: Promise<void>;
+  act(() => {
+    loading = result.current.loadSavedCart();
+  });
+  await act(async () => {
+    expect(await result.current.link('keep_current')).toBe(false);
+  });
+  expect(linkAccountCart).not.toHaveBeenCalled();
+  await act(async () => {
+    finish({ ok: true, cart: null });
+    await loading;
+  });
+  expect(result.current.savedCartLoaded).toBe(true);
+});
+it('requires a successful retry after a failed read and acknowledges an explicitly empty saved cart', async () => {
+  vi.mocked(fetchSavedAccountCart)
+    .mockResolvedValueOnce({
+      ok: false,
+      code: 'temporarily_unavailable',
+      retryable: true,
+    })
+    .mockResolvedValue({ ok: true, cart: null });
+  vi.mocked(linkAccountCart).mockResolvedValue({
+    ok: false,
+    code: 'temporarily_unavailable',
+    retryable: true,
+    snapshot: null,
+  });
+  const { result } = renderHook(() =>
+    useCartAccountLink({ merchantSlug: 'shop', ownerSubject: 'user-a' })
+  );
+  await act(async () => result.current.loadSavedCart());
+  await act(async () => {
+    expect(await result.current.link('keep_current')).toBe(false);
+  });
+  expect(linkAccountCart).not.toHaveBeenCalled();
+  await act(async () => result.current.loadSavedCart());
+  await act(async () => {
+    await result.current.link('keep_current');
+  });
+  expect(linkAccountCart).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedSavedCartId: null }),
+    'shop'
+  );
+});
+it.each([
+  { shop: 'a', user: 'b' },
+  { shop: 'b', user: 'a' },
+])('does not use a delayed saved-cart observation after scope changes to %j', async (next) => {
+  let finish: (
+    value: Awaited<ReturnType<typeof fetchSavedAccountCart>>
+  ) => void = () => {};
+  vi.mocked(fetchSavedAccountCart).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  const { result, rerender } = renderHook(
+    ({ shop, user }) =>
+      useCartAccountLink({ merchantSlug: shop, ownerSubject: user }),
+    { initialProps: { shop: 'a', user: 'a' } }
+  );
+  let loading: Promise<void>;
+  act(() => {
+    loading = result.current.loadSavedCart();
+  });
+  rerender(next);
+  await act(async () => {
+    finish({ ok: true, cart: saved });
+    await loading;
+  });
+  expect(result.current.savedCartLoaded).toBe(false);
+  expect(result.current.savedCart).toBeNull();
+  await act(async () => {
+    expect(await result.current.link('keep_current')).toBe(false);
+  });
+  expect(linkAccountCart).not.toHaveBeenCalled();
+});
+
+it('passes the successfully loaded saved-cart identity when choosing the saved cart', async () => {
+  const { result } = renderHook(() =>
+    useCartAccountLink({ merchantSlug: 'shop', ownerSubject: 'user-a' })
+  );
+  await act(async () => result.current.loadSavedCart());
+  await act(async () => {
+    await result.current.link('use_saved');
+  });
+  expect(linkAccountCart).toHaveBeenCalledWith(
+    expect.objectContaining({
+      choice: 'use_saved',
+      expectedSavedCartId: 'saved',
+    }),
+    'shop'
+  );
+});
+
+function useAutoLoadedAccount(onLinked?: () => void) {
+  const account = useCartAccountLink({
+    merchantSlug: 'shop',
+    ownerSubject: 'user-a',
+    onLinked,
+  });
+  const { loadSavedCart, scopeKey } = account;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Mirror the component's authority-scope reload trigger.
+  useEffect(() => {
+    void loadSavedCart();
+  }, [loadSavedCart, scopeKey]);
+  return account;
+}
+it('reloads the saved account after successful linking resets the cart generation', async () => {
+  vi.mocked(linkAccountCart).mockResolvedValue({
+    ok: true,
+    snapshot: saved,
+    replayed: false,
+    warnings: [],
+  });
+  const { result } = renderHook(() =>
+    useAutoLoadedAccount(() => {
+      bumpCartSessionGeneration();
+    })
+  );
+  await act(async () => {});
+  expect(result.current.savedCartLoaded).toBe(true);
+  await act(async () => {
+    expect(await result.current.link('keep_current')).toBe(true);
+  });
+  expect(fetchSavedAccountCart).toHaveBeenCalledTimes(2);
+  expect(result.current.savedCartLoaded).toBe(true);
+  expect(result.current.status).toBe('ready');
+});
+it('loads successfully after StrictMode replays effect setup and cleanup', async () => {
+  const { result } = renderHook(() => useAutoLoadedAccount(), {
+    wrapper: ({ children }) => createElement(StrictMode, null, children),
+  });
+  await act(async () => {});
+  expect(result.current.savedCartLoaded).toBe(true);
+  expect(result.current.savedCart?.cartId).toBe('saved');
+  await act(async () => {
+    await result.current.link('use_saved');
+  });
+  expect(linkAccountCart).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedSavedCartId: 'saved' }),
+    'shop'
+  );
 });

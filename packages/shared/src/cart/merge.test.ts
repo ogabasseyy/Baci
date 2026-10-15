@@ -301,3 +301,33 @@ it('allows forty stored handoff references before server-side lane coalescing', 
     planCartMerge(snapshot([line(TECNO, 1)]), snapshot([]))
   ).not.toHaveProperty('lines.0.sourceLineId');
 });
+
+it('rejects a handoff whose minimum distinct item count already exceeds twenty', () => {
+  const make = (start: number, count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      ...line(
+        `00000000-0000-4000-8000-${String(start + i).padStart(12, '0')}`,
+        1
+      ),
+      id: `stored-${start + i}`,
+    }));
+  expect(
+    planCartMerge(snapshot(make(0, 11)), snapshot(make(11, 10)), [], {
+      handoffReferences: true,
+    })
+  ).toEqual({ ok: false, code: 'too_many_lines', lineCount: 21 });
+});
+it('allows forty handoff references with twenty normalized item identities', () => {
+  const make = (side: string) =>
+    Array.from({ length: 20 }, (_, i) => ({
+      ...line(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, 1),
+      id: `${side}-${i}`,
+    }));
+  const planned = planCartMerge(
+    snapshot(make('dest')),
+    snapshot(make('source')),
+    [],
+    { handoffReferences: true }
+  );
+  expect(planned.ok && planned.lines).toHaveLength(40);
+});

@@ -22,6 +22,7 @@ it('retries the original account choice and keeps other choices blocked until it
     snapshot: null,
   });
   const view = render(<NativeCartAccountPanel />);
+  await act(async () => {});
   fireEvent.press(view.getByText('Keep this cart on my account'));
   await waitFor(() =>
     expect(view.getByText('Retry the same cart choice')).toBeTruthy()
@@ -47,6 +48,7 @@ it('acknowledges the observed saved cart when keeping the current cart', async (
     snapshot: null,
   });
   const view = render(<NativeCartAccountPanel />);
+  await act(async () => {});
   fireEvent.press(view.getByText('Keep this cart on my account'));
   await waitFor(() => expect(linkAccount).toHaveBeenCalledTimes(1));
   expect(linkAccount.mock.calls[0][0]).toMatchObject({
@@ -73,6 +75,7 @@ it('does not publish a previous account choice after the shopper changes', async
     snapshot: null,
   });
   const view = render(<NativeCartAccountPanel />);
+  await act(async () => {});
   fireEvent.press(view.getByText('Keep this cart on my account'));
   act(() =>
     useNativeSharedCartStore.setState({
@@ -98,6 +101,7 @@ it('offers a fresh choice instead of a nonexistent retry after a definitive reje
     snapshot: null,
   });
   const view = render(<NativeCartAccountPanel />);
+  await act(async () => {});
   fireEvent.press(view.getByText('Keep this cart on my account'));
   await waitFor(() =>
     expect(

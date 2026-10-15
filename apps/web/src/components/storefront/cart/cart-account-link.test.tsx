@@ -1,12 +1,13 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { expect, it, vi } from 'vitest';
+import { beforeEach, expect, it, vi } from 'vitest';
 import { clearCartStorage } from '@/hooks/cart/cart-persistence';
 import { CartAccountLink } from './cart-account-link';
 
+const authState = vi.hoisted(() => ({ userId: 'user' }));
 vi.mock('@/contexts/customer-auth-context', () => ({
   useOptionalCustomerAuth: () => ({
     isAuthenticated: true,
-    user: { id: 'user' },
+    user: { id: authState.userId },
   }),
 }));
 vi.mock('@/hooks/cart', () => ({
@@ -20,6 +21,10 @@ vi.mock('@/hooks/cart', () => ({
 vi.mock('@/hooks/cart/cart-persistence', () => ({ clearCartStorage: vi.fn() }));
 const accountState = vi.hoisted(() => ({
   savedCart: null as unknown,
+  loaded: true,
+  scopeKey: 'initial',
+  status: 'ready',
+  load: vi.fn(),
   link: vi.fn(),
 }));
 vi.mock('@/hooks/cart/shared-cart-client', () => ({
@@ -32,13 +37,23 @@ vi.mock('@/hooks/cart/use-cart-account-link', () => ({
       options.onLinked();
       return true;
     },
-    loadSavedCart: vi.fn(),
+    loadSavedCart: accountState.load,
     savedCart: accountState.savedCart,
-    status: 'ready',
+    savedCartLoaded: accountState.loaded,
+    scopeKey: accountState.scopeKey,
+    status: accountState.status,
     pending: false,
     retry: vi.fn(),
   }),
 }));
+beforeEach(() => {
+  vi.clearAllMocks();
+  authState.userId = 'user';
+  accountState.savedCart = null;
+  accountState.loaded = true;
+  accountState.scopeKey = 'initial';
+  accountState.status = 'ready';
+});
 it('starts a fresh local adoption after account selection instead of comparing versions across different carts', async () => {
   render(<CartAccountLink merchantSlug="shop" />);
   fireEvent.click(
@@ -99,4 +114,51 @@ it('keeps saved and current offer labels aligned with the merge destination', as
       resolutions: [{ item: { productId: 'product' }, keep: 'incoming' }],
     })
   );
+});
+
+it.each([
+  'loading',
+  'error',
+])('blocks choices while saved-cart state is %s and exposes read retry after failure', (status) => {
+  accountState.loaded = false;
+  accountState.status = status;
+  render(<CartAccountLink merchantSlug="shop" />);
+  expect(
+    screen.getByRole('button', { name: 'Save this cart to my account' })
+  ).toBeDisabled();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Save this cart to my account' })
+  );
+  expect(accountState.link).not.toHaveBeenCalled();
+  if (status === 'error') {
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Retry loading saved cart' })
+    );
+    expect(accountState.load).toHaveBeenCalledTimes(2);
+  }
+});
+
+it.each([
+  'merchant',
+  'shopper',
+])('reloads saved-cart knowledge when the %s changes even though the loader is stable', (change) => {
+  const { rerender } = render(<CartAccountLink merchantSlug="shop" />);
+  expect(accountState.load).toHaveBeenCalledTimes(1);
+  if (change === 'shopper') authState.userId = 'another-user';
+  rerender(
+    <CartAccountLink
+      merchantSlug={change === 'merchant' ? 'another-shop' : 'shop'}
+    />
+  );
+  expect(accountState.load).toHaveBeenCalledTimes(2);
+});
+
+it('reloads after the hook reports a new cart generation with unchanged merchant and shopper', () => {
+  const { rerender } = render(<CartAccountLink merchantSlug="shop" />);
+  expect(accountState.load).toHaveBeenCalledTimes(1);
+  accountState.scopeKey = 'after-link-generation';
+  accountState.loaded = false;
+  accountState.status = 'idle';
+  rerender(<CartAccountLink merchantSlug="shop" />);
+  expect(accountState.load).toHaveBeenCalledTimes(2);
 });

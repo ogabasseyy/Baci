@@ -21,29 +21,56 @@ import { formatMinor } from './cart-handoff-support';
 export function CartAccountLink(props: { merchantSlug?: string | null }) {
   const auth = useOptionalCustomerAuth();
   const cart = useCart();
-  const { link, loadSavedCart, savedCart, status, pending, retry } =
-    useCartAccountLink({
-      merchantSlug: props.merchantSlug,
-      ownerSubject: auth?.user?.id,
-      onLinked: () => {
-        // Account selection can switch to a lower-version cart. Start a new link
-        // generation instead of polling it into the previous cart's reducer.
-        clearCartStorage(props.merchantSlug);
-      },
-    });
-  const [current, setCurrent] = useState<CartSnapshot | null>(null);
+  const {
+    link,
+    loadSavedCart,
+    savedCart,
+    savedCartLoaded,
+    scopeKey,
+    status,
+    pending,
+    retry,
+  } = useCartAccountLink({
+    merchantSlug: props.merchantSlug,
+    ownerSubject: auth?.user?.id,
+    onLinked: () => {
+      // Account selection can switch to a lower-version cart. Start a new link
+      // generation instead of polling it into the previous cart's reducer.
+      clearCartStorage(props.merchantSlug);
+    },
+  });
+  const [currentResult, setCurrent] = useState<{
+    scope: string;
+    snapshot: CartSnapshot;
+  } | null>(null);
+  const ownerScope = JSON.stringify([
+    props.merchantSlug,
+    auth?.user?.id,
+    cart.sharedCartRef?.cartId,
+  ]);
+  const current =
+    currentResult?.scope === ownerScope ? currentResult.snapshot : null;
   const [resolutions, setResolutions] = useState<CartMergeResolution[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const authenticated = Boolean(auth?.isAuthenticated);
   const sharedRef = cart.sharedCartRef;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Stable loader reads scope from refs; merchant and shopper changes must trigger a fresh saved-cart observation.
   useEffect(() => {
     if (authenticated && cart.sharedCartAccountsEnabled) void loadSavedCart();
-  }, [authenticated, cart.sharedCartAccountsEnabled, loadSavedCart]);
+  }, [
+    authenticated,
+    auth?.user?.id,
+    props.merchantSlug,
+    cart.sharedCartAccountsEnabled,
+    loadSavedCart,
+    scopeKey,
+  ]);
 
   if (!authenticated || !cart.sharedCartAccountsEnabled || !sharedRef)
     return null;
-  const choicesBlocked = pending || cart.syncStatus !== 'synced';
+  const choicesBlocked =
+    !savedCartLoaded || pending || cart.syncStatus !== 'synced';
   const saved = savedCart;
   const showChoices = Boolean(saved && saved.cartId !== sharedRef.cartId);
   const plan =
@@ -54,12 +81,15 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
     plan && !plan.ok && plan.code === 'merge_conflict' ? plan.conflicts : [];
 
   async function prepareMerge(): Promise<void> {
+    if (choicesBlocked) return;
+    const scope = ownerScope;
     const result = await fetchSharedCartSnapshot(undefined, props.merchantSlug);
     if (!result.ok) {
       setNotice('We could not refresh your cart. Please try again.');
       return;
     }
-    setCurrent(result.snapshot);
+    setCurrent({ scope, snapshot: result.snapshot });
+    setResolutions([]);
   }
 
   return (
@@ -75,6 +105,14 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
       ) : null}
       {status === 'linked' ? (
         <p className="mt-2 text-sm">This cart is saved to your account.</p>
+      ) : null}
+      {status === 'loading' ? (
+        <p role="status">Checking your saved cart…</p>
+      ) : null}
+      {!pending && status === 'error' ? (
+        <Button type="button" onClick={() => void loadSavedCart()}>
+          Retry loading saved cart
+        </Button>
       ) : null}
       {pending && status === 'error' ? (
         <Button type="button" onClick={() => void retry()}>
@@ -96,6 +134,7 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
               <Button
                 type="button"
                 variant="outline"
+                disabled={choicesBlocked}
                 onClick={() =>
                   setResolutions((existing) => [
                     ...existing.filter(
@@ -112,6 +151,7 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
               <Button
                 type="button"
                 variant="outline"
+                disabled={choicesBlocked}
                 onClick={() =>
                   setResolutions((existing) => [
                     ...existing.filter(
@@ -155,6 +195,7 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
               <Button
                 type="button"
                 variant="outline"
+                disabled={choicesBlocked}
                 onClick={() => void prepareMerge()}
               >
                 Review combining both carts
@@ -175,7 +216,9 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
       )}
       {status === 'error' ? (
         <p role="alert" className="mt-2 text-sm">
-          Linking was interrupted. Retry finishes the same request.
+          {pending
+            ? 'Linking was interrupted. Retry finishes the same request.'
+            : 'We could not check your saved cart. Retry before choosing what to keep.'}
         </p>
       ) : null}
     </section>

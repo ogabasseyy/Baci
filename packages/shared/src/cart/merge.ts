@@ -86,6 +86,14 @@ export function planCartMerge(
         code: 'too_many_lines',
         lineCount: existing.lines.length + incoming.lines.length,
       };
+    const minimumLineCount = new Set(
+      [...existing.lines, ...incoming.lines].map((line) =>
+        cartLineIdentity(line.item)
+      )
+    ).size;
+    if (minimumLineCount > SHARED_CART_MAX_LINES) {
+      return { ok: false, code: 'too_many_lines', lineCount: minimumLineCount };
+    }
     const refs = new Map<string, CartInputLine>();
     for (const line of [...existing.lines, ...incoming.lines]) {
       refs.set(line.id, {

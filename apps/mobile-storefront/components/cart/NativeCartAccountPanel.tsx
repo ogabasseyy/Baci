@@ -25,6 +25,11 @@ export function NativeCartAccountPanel() {
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [picks, setPicks] = useState<CartMergeResolution[]>([]);
+  const [savedRead, setSavedRead] = useState<{
+    scope: { userId: string | null; generation: number } | null;
+    status: 'loading' | 'ready' | 'error';
+  }>({ scope: null, status: 'loading' });
+  const [readRetry, setReadRetry] = useState(0);
   const loadSavedCart = state.loadSavedCart;
   const userId = accountUserId;
   const ownerScope = useRef({ userId, generation: 0 });
@@ -42,10 +47,25 @@ export function NativeCartAccountPanel() {
     setNotice(null);
     setPicks([]);
   }, [userId]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the retry counter explicitly restarts a failed saved-cart read.
   useEffect(() => {
     if (!userId || !loadSavedCart || !state.accountsEnabled) return;
-    void loadSavedCart().catch(() => undefined);
-  }, [userId, loadSavedCart, state.accountsEnabled]);
+    let active = true;
+    const scope = ownerScope.current;
+    setSavedRead({ scope, status: 'loading' });
+    setPicks([]);
+    void loadSavedCart().then(
+      () => {
+        if (active) setSavedRead({ scope, status: 'ready' });
+      },
+      () => {
+        if (active) setSavedRead({ scope, status: 'error' });
+      }
+    );
+    return () => {
+      active = false;
+    };
+  }, [userId, loadSavedCart, state.accountsEnabled, readRetry]);
   if (
     !state.enabled ||
     !state.accountsEnabled ||
@@ -53,6 +73,8 @@ export function NativeCartAccountPanel() {
     !state.linkAccount
   )
     return null;
+  const savedReady =
+    savedRead.scope === ownerScope.current && savedRead.status === 'ready';
   const current = state.snapshot;
   const saved = state.savedCart;
   function operationId(): string {
@@ -62,7 +84,7 @@ export function NativeCartAccountPanel() {
   async function run(
     input: Parameters<NonNullable<typeof state.linkAccount>>[0]
   ): Promise<void> {
-    if (inFlight.current) return;
+    if (inFlight.current || (!pendingInput.current && !savedReady)) return;
     const scope = ownerScope.current;
     inFlight.current = true;
     pendingInput.current ??= JSON.parse(JSON.stringify(input)) as typeof input;
@@ -102,7 +124,7 @@ export function NativeCartAccountPanel() {
   }
   const plan =
     current && saved && saved.cartId !== current.cartId
-      ? planCartMerge(saved, current, picks)
+      ? planCartMerge(current, saved, picks)
       : null;
   const conflicts =
     plan && !plan.ok && plan.code === 'merge_conflict' ? plan.conflicts : [];
@@ -115,6 +137,17 @@ export function NativeCartAccountPanel() {
         Save this cart to your account
       </Text>
       {notice ? <Text style={{ color: colors.text }}>{notice}</Text> : null}
+      {savedRead.scope === ownerScope.current &&
+      savedRead.status === 'error' ? (
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setReadRetry((value) => value + 1)}
+        >
+          <Text style={{ color: colors.primary }}>
+            Retry loading saved cart
+          </Text>
+        </Pressable>
+      ) : null}
       {pending ? (
         <Pressable
           accessibilityRole="button"
@@ -141,21 +174,7 @@ export function NativeCartAccountPanel() {
               </Text>
               <Pressable
                 accessibilityRole="button"
-                onPress={() =>
-                  setPicks((existing) => [
-                    ...existing.filter(
-                      (pick) =>
-                        JSON.stringify(pick.item) !==
-                        JSON.stringify(conflict.item)
-                    ),
-                    { item: conflict.item, keep: 'existing' },
-                  ])
-                }
-              >
-                <Text style={{ color: colors.primary }}>Keep saved offer</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
+                disabled={pending || !savedReady}
                 onPress={() =>
                   setPicks((existing) => [
                     ...existing.filter(
@@ -167,6 +186,22 @@ export function NativeCartAccountPanel() {
                   ])
                 }
               >
+                <Text style={{ color: colors.primary }}>Keep saved offer</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={pending || !savedReady}
+                onPress={() =>
+                  setPicks((existing) => [
+                    ...existing.filter(
+                      (pick) =>
+                        JSON.stringify(pick.item) !==
+                        JSON.stringify(conflict.item)
+                    ),
+                    { item: conflict.item, keep: 'existing' },
+                  ])
+                }
+              >
                 <Text style={{ color: colors.primary }}>
                   Keep this cart offer
                 </Text>
@@ -175,7 +210,7 @@ export function NativeCartAccountPanel() {
           ))}
           <Pressable
             accessibilityRole="button"
-            disabled={pending}
+            disabled={pending || !savedReady}
             onPress={() =>
               void run({
                 operationId: operationId(),
@@ -188,7 +223,7 @@ export function NativeCartAccountPanel() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            disabled={pending || !plan?.ok}
+            disabled={pending || !savedReady || !plan?.ok}
             onPress={() => {
               if (!plan?.ok) return;
               void run({
@@ -208,7 +243,7 @@ export function NativeCartAccountPanel() {
       ) : null}
       <Pressable
         accessibilityRole="button"
-        disabled={pending}
+        disabled={pending || !savedReady}
         onPress={() =>
           void run({
             operationId: operationId(),

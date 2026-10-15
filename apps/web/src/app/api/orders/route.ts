@@ -10,9 +10,11 @@ import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
 import {
   ORDER_BINDING_RPC_NAMES,
   selectOrderBindingVariant,
-  submitCartBoundOrder,
 } from '@/lib/cart/order-binding';
-import { verifySharedCartOrderProof } from '@/lib/cart/order-proof';
+import {
+  getSharedCartOrderAuthority,
+  submitSharedCartOrderBinding,
+} from '@/lib/cart/order-route-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -460,59 +462,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function sharedCartBindingFailureStatus(code: string): number {
-  switch (code) {
-    case 'temporarily_unavailable':
-      return 503;
-    case 'unauthorized':
-      return 403;
-    case 'invalid_item':
-      // A malformed or unknown-variant bound submission is shopper
-      // input, not a server fault (matches the cart API's 400).
-      return 400;
-    default:
-      return 409;
-  }
-}
-
-function sharedCartBindingFailureBody(code: string): Record<string, string> {
-  switch (code) {
-    case 'temporarily_unavailable':
-      return {
-        code: 'SHARED_CART_TEMPORARILY_UNAVAILABLE',
-        error:
-          'Shared cart checkout is temporarily unavailable. Please try again.',
-      };
-    case 'refresh_required':
-      return {
-        code: 'SHARED_CART_STALE',
-        error:
-          'Your cart changed during checkout. Refresh to review the latest cart.',
-      };
-    case 'not_found':
-      return {
-        code: 'SHARED_CART_SESSION_NOT_FOUND',
-        error:
-          'This checkout session is no longer available. Start checkout again.',
-      };
-    case 'expired':
-      return {
-        code: 'SHARED_CART_SESSION_EXPIRED',
-        error: 'This checkout session expired. Review your cart again.',
-      };
-    case 'unauthorized':
-      return {
-        code: 'SHARED_CART_BINDING_FORBIDDEN',
-        error: 'This cart cannot be submitted for checkout.',
-      };
-    default:
-      return {
-        code: 'SHARED_CART_BINDING_FAILED',
-        error: 'Failed to submit the shared cart. Please try again.',
-      };
-  }
-}
-
 // POST /api/orders - Create new order from storefront
 // CSRF exemption: This endpoint is called by unauthenticated storefront guests during checkout.
 // Guest users do not have CSRF tokens. Abuse is mitigated by rate limiting in proxy.ts,
@@ -591,27 +540,13 @@ export async function POST(request: NextRequest) {
     // Do NOT trust user_id from body if user is unauthenticated (guest).
     const resolvedUserId = user?.id || null;
 
-    // Bound submits must prove the preparing cart principal: the session
-    // id alone is never sufficient authority to close another shopper's
-    // cart or replay its receipt.
-    let sharedCartPrincipalId: string | null = null;
-    if (shared_cart) {
-      const proof = verifySharedCartOrderProof(request, {
-        cartId: shared_cart.cart_id,
-        merchantId: merchant_id,
-      });
-      if (!proof.ok) {
-        return NextResponse.json(
-          {
-            code: 'SHARED_CART_PROOF_REQUIRED',
-            error:
-              'This checkout session belongs to another shopper. Review your cart and submit again.',
-          },
-          { status: 401 }
-        );
-      }
-      sharedCartPrincipalId = proof.principalId;
-    }
+    const cartAuthority = getSharedCartOrderAuthority(
+      request,
+      shared_cart,
+      merchant_id
+    );
+    if (!cartAuthority.ok) return cartAuthority.response;
+    const sharedCartPrincipalId = cartAuthority.principalId;
 
     const hasVoucherItem = hasQuizVoucherItem(items);
     const requestIdempotencyKey = hasVoucherItem
@@ -2330,25 +2265,17 @@ export async function POST(request: NextRequest) {
     // reviewed cart generation atomically. Binding-level failures return
     // early; inner order rejections keep their message and fall through
     // to the existing mapper below.
-    const bound = shared_cart
-      ? await submitCartBoundOrder(
-          { client: orderRpcClient },
-          {
-            args: orderCreateRpcArgs as Record<string, unknown>,
-            cartId: shared_cart.cart_id,
-            cartVersion: shared_cart.cart_version,
-            generation: shared_cart.checkout_generation,
-            principalId: sharedCartPrincipalId,
-            sessionId: shared_cart.checkout_session_id,
-            variant: orderVariant,
-          }
-        )
-      : null;
-    if (bound && !bound.ok && bound.code !== 'order_rejected') {
-      return NextResponse.json(sharedCartBindingFailureBody(bound.code), {
-        status: sharedCartBindingFailureStatus(bound.code),
-      });
-    }
+    const { bound, failure: bindingFailure } =
+      await submitSharedCartOrderBinding(
+        { client: orderRpcClient },
+        {
+          args: orderCreateRpcArgs as Record<string, unknown>,
+          binding: shared_cart,
+          principalId: sharedCartPrincipalId,
+          variant: orderVariant,
+        }
+      );
+    if (bindingFailure) return bindingFailure;
     const { data: orderRows, error: orderError } = bound
       ? {
           data: bound.ok ? bound.order : null,

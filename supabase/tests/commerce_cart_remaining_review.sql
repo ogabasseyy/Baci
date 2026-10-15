@@ -24,12 +24,15 @@ DO $$ DECLARE r jsonb; BEGIN
  r:=public.commerce_cart_mutate('cccccccc-4000-4000-8000-000000000000','review-duplicates-over-cap',3,'{"type":"replace","lines":[{"item":{"productId":"44444444-4444-4444-8444-444444444444"},"quantity":6},{"item":{"productId":"44444444-4444-4444-8444-444444444444"},"quantity":6}]}');
  PERFORM pg_temp.check_review(r->>'ok'='false','replacement exceeded aggregate quantity cap');
 END $$;
--- Sliding activity expiry must survive a prepare on a cart older than a week.
+-- Historical overlong expiry must not revive authority beyond its absolute age.
 DO $$ DECLARE r jsonb; BEGIN
  UPDATE public.commerce_carts SET created_at=now()-interval '9 days',expires_at=now()+interval '2 days' WHERE id='cccccccc-4000-4000-8000-000000000000';
  UPDATE public.commerce_cart_grants SET created_at=now()-interval '9 days',expires_at=now()+interval '2 days' WHERE id='99999999-9999-4999-8999-999999999960';
  r:=public.commerce_cart_prepare_checkout('cccccccc-4000-4000-8000-000000000000',(SELECT version FROM public.commerce_carts WHERE id='cccccccc-4000-4000-8000-000000000000'),'review-sliding');
- PERFORM pg_temp.check_review(r->>'ok'='true' AND (SELECT expires_at>=now()+interval '2 days' FROM public.commerce_carts WHERE id='cccccccc-4000-4000-8000-000000000000') AND (SELECT expires_at>=now()+interval '2 days' FROM public.commerce_cart_grants WHERE id='99999999-9999-4999-8999-999999999960'),'prepare shortened sliding expiry');
+ PERFORM pg_temp.check_review(r->>'code'='expired','prepare revived authority older than absolute lifetime');
+ -- Independent subsequent pricing/binding fixtures use a live generation.
+ UPDATE public.commerce_carts SET created_at=now() WHERE id='cccccccc-4000-4000-8000-000000000000';
+ UPDATE public.commerce_cart_grants SET created_at=now() WHERE id='99999999-9999-4999-8999-999999999960';
 END $$;
 -- Reserved prizes need no remaining public stock and retain zero pricing.
 DO $$ DECLARE s jsonb; BEGIN

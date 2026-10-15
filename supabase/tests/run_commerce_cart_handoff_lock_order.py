@@ -32,7 +32,7 @@ try:
     for match in re.finditer(r'CREATE OR REPLACE FUNCTION public\.[\s\S]*?\$\$;',f.read_text()): sql+='\n'+match.group()
    else: sql+='\n\\i '+str(f)
  import json,time
- for name in ['20261015141000_commerce_cart_mutation_lifetime_cap.sql','20261015142000_commerce_cart_replace_attachment_identity.sql','20261015143000_commerce_cart_handoff_attachment_lifetime.sql']:
+ for name in ['20261015141000_commerce_cart_mutation_lifetime_cap.sql','20261015142000_commerce_cart_replace_attachment_identity.sql','20261015143000_commerce_cart_handoff_attachment_lifetime.sql','20261015144000_commerce_cart_checkout_add_identity.sql']:
   sql+='\n'+(root/'supabase/migrations'/name).read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_handoff_lock_order.sql').read_text()
  if '--without-fix' in sys.argv:

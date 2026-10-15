@@ -42,6 +42,7 @@ try:
  if '--baseline' not in sys.argv and '--before-replace-attachment-fix' not in sys.argv:
   sql+=('\n'+(root/'supabase/migrations/20261015142000_commerce_cart_replace_attachment_identity.sql').read_text())*2
  if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/migrations/20261015143000_commerce_cart_handoff_attachment_lifetime.sql').read_text()
+ if '--baseline' not in sys.argv: sql+='\n'+(root/'supabase/migrations/20261015144000_commerce_cart_checkout_add_identity.sql').read_text()
  tests=(root/'supabase/tests/commerce_cart_remaining_review.sql').read_text()
  if '--baseline' in sys.argv:
   tests=tests.split('-- Negotiation accepted')[0]+tests[tests.index('DO $$ DECLARE failures text;'):]

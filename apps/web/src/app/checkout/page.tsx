@@ -225,9 +225,11 @@ function createCheckoutOrder(
     // Code-bearing checkouts carry the persisted idempotency key so a
     // response lost after commit replays the original order instead of
     // failing against the now-claimed single-use code.
-    ...(input.idempotencyKey
-      ? { headers: { 'Idempotency-Key': input.idempotencyKey } }
-      : {})
+    {
+      ...(input.idempotencyKey
+        ? { headers: { 'Idempotency-Key': input.idempotencyKey } }
+        : {}),
+    }
   );
 }
 

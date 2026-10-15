@@ -212,6 +212,18 @@ BEGIN
       AND NOT public.loyalty_reward_fixed_value_is_dead(
         reward_type, reward_value
       )
+      -- Hide checkout discounts under an invalid program cap (same
+      -- guard as the redemption RPC; keep in sync): a non-positive or
+      -- over-100 maximum mints a worthless code and redeem answers
+      -- reward_unavailable. Manual and wallet rewards never read the
+      -- cap and stay listed.
+      AND (
+        v_settings.maximum_redemption_percentage IS NULL
+        OR (v_settings.maximum_redemption_percentage > 0
+          AND v_settings.maximum_redemption_percentage <= 100)
+        OR NOT public.loyalty_reward_is_checkout_discount(
+          reward_type, reward_value)
+      )
       -- Hide unhonorable store credit (same predicates as the
       -- redemption RPC; keep the two in sync): minimums are
       -- unenforceable without order context, and the wallet ledger

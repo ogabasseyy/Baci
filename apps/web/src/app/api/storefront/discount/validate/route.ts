@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
 import { isLoyaltyCodeCurrencyCurrent } from '@/lib/checkout/is-loyalty-code-currency-current';
 import { logger } from '@/lib/logger';
-import { formatMerchantCurrency } from '@/lib/resolve-merchant-currency';
+import { formatPayoutOnlyCurrency } from '@/lib/resolve-merchant-currency';
 import { createAnonClient } from '@/lib/supabase/anon';
 import {
   loyaltyCheckoutCodeRowSchema,
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
           const minimumAmount = Number(loyaltyCode.minimum_order_amount);
           const minimumLabel = merchantError
             ? minimumAmount.toLocaleString()
-            : formatMerchantCurrency(
+            : formatPayoutOnlyCurrency(
                 minimumAmount,
                 {
                   country: merchantRow?.country ?? null,

@@ -34,12 +34,14 @@
 \ir enroll_customer_loyalty_award_ladder.sql
 \ir enroll_customer_loyalty_referrals.sql
 \ir enroll_customer_loyalty_status.sql
+\ir enroll_customer_loyalty_status_cap.sql
 \ir enroll_customer_loyalty_status_ngn.sql
 \ir enroll_customer_loyalty_redemption.sql
 \ir enroll_customer_loyalty_redemption_snapshot.sql
 \ir enroll_customer_loyalty_redemption_limits.sql
 \ir enroll_customer_loyalty_redemption_idempotency.sql
 \ir enroll_customer_loyalty_checkout_bridge.sql
+\ir enroll_customer_loyalty_checkout_bridge_replay.sql
 \ir enroll_customer_loyalty_checkout_bridge_zero.sql
 \ir enroll_customer_loyalty_reconciliation.sql
 \ir enroll_customer_loyalty_projection.sql

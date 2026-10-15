@@ -88,6 +88,13 @@ export async function ensurePaidOrderInventoryConfirmed(
   }
 }
 
+const ORDER_CANCELLED_STATUS_SPELLINGS = [
+  ['payment_status', 'cancelled'],
+  ['payment_status', 'canceled'],
+  ['shipping_status', 'cancelled'],
+  ['shipping_status', 'canceled'],
+] as const;
+
 export interface OrderStatusRollbackSnapshot {
   payment_status: string | null;
   shipping_status: string | null;
@@ -111,10 +118,20 @@ export async function rollbackOrderStatusAfterInventoryConfirmationFailure(
      * row now); only a real query failure throws.
      */
     onlyIfPaymentStatus?: string[];
+    /**
+     * Never restore over a cancelled row: a merchant cancellation can
+     * commit while inventory confirmation is in flight (after the
+     * caller's own conditional write succeeded), and restoring the
+     * stale pre-update snapshot would move the order back out of
+     * cancelled after its cancellation side effects already ran (e.g.
+     * the loyalty claim release). Appends both cancellation spellings
+     * on both status axes; zero matching rows resolve silently.
+     */
+    notCancelled?: boolean;
   }
 ): Promise<void> {
   const guard = options?.onlyIfPaymentStatus;
-  const restore = supabase
+  let restore = supabase
     .from('orders')
     .update({
       payment_status: previousStatus.payment_status,
@@ -127,10 +144,16 @@ export async function rollbackOrderStatusAfterInventoryConfirmationFailure(
     .eq('merchant_id', merchantId);
 
   if (guard && guard.length > 0) {
-    const { error } = await restore
-      .in('payment_status', guard)
-      .select('id')
-      .maybeSingle();
+    restore = restore.in('payment_status', guard);
+  }
+  if (options?.notCancelled) {
+    for (const [column, spelling] of ORDER_CANCELLED_STATUS_SPELLINGS) {
+      restore = restore.neq(column, spelling);
+    }
+  }
+
+  if ((guard && guard.length > 0) || options?.notCancelled) {
+    const { error } = await restore.select('id').maybeSingle();
     if (error) {
       throw new Error(
         `rollback_order_status_after_inventory_confirmation_failure failed: ${error.message}`

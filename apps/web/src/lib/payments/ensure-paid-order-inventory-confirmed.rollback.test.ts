@@ -106,6 +106,73 @@ describe('rollbackOrderStatusAfterInventoryConfirmationFailure', () => {
     );
   });
 
+  it('fences the restore away from cancelled rows on both axes', async () => {
+    const builder: {
+      eq: ReturnType<typeof vi.fn>;
+      neq: ReturnType<typeof vi.fn>;
+      select: ReturnType<typeof vi.fn>;
+      single: ReturnType<typeof vi.fn>;
+      maybeSingle: ReturnType<typeof vi.fn>;
+    } = {
+      eq: vi.fn(() => builder),
+      neq: vi.fn(() => builder),
+      select: vi.fn(() => builder),
+      single: vi.fn(),
+      maybeSingle: vi.fn(() =>
+        Promise.resolve({ data: { id: 'order-123' }, error: null })
+      ),
+    };
+    const supabase = {
+      from: vi.fn(() => ({ update: vi.fn(() => builder) })),
+    };
+
+    await rollbackOrderStatusAfterInventoryConfirmationFailure(
+      asSupabaseClient(supabase),
+      'merchant-123',
+      'order-123',
+      { payment_status: 'pending', shipping_status: 'pending' },
+      { notCancelled: true }
+    );
+
+    expect(builder.neq).toHaveBeenCalledWith('payment_status', 'cancelled');
+    expect(builder.neq).toHaveBeenCalledWith('payment_status', 'canceled');
+    expect(builder.neq).toHaveBeenCalledWith('shipping_status', 'cancelled');
+    expect(builder.neq).toHaveBeenCalledWith('shipping_status', 'canceled');
+    expect(builder.maybeSingle).toHaveBeenCalledOnce();
+    expect(builder.single).not.toHaveBeenCalled();
+  });
+
+  it('resolves silently when a cancellation already owns the row', async () => {
+    const builder: {
+      eq: ReturnType<typeof vi.fn>;
+      neq: ReturnType<typeof vi.fn>;
+      select: ReturnType<typeof vi.fn>;
+      single: ReturnType<typeof vi.fn>;
+      maybeSingle: ReturnType<typeof vi.fn>;
+    } = {
+      eq: vi.fn(() => builder),
+      neq: vi.fn(() => builder),
+      select: vi.fn(() => builder),
+      single: vi.fn(),
+      maybeSingle: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    };
+    const supabase = {
+      from: vi.fn(() => ({ update: vi.fn(() => builder) })),
+    };
+
+    // The cancellation committed while confirmation was in flight:
+    // zero matching rows is a skip, not a failure.
+    await expect(
+      rollbackOrderStatusAfterInventoryConfirmationFailure(
+        asSupabaseClient(supabase),
+        'merchant-123',
+        'order-123',
+        { payment_status: 'pending', shipping_status: 'pending' },
+        { notCancelled: true }
+      )
+    ).resolves.toBeUndefined();
+  });
+
   it('throws when no merchant-scoped order row is updated', async () => {
     const rollbackBuilder = createRollbackBuilder({
       data: null,

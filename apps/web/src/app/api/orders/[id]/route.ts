@@ -404,7 +404,8 @@ export async function PATCH(
             {
               payment_status: existingOrder.payment_status,
               shipping_status: existingOrder.shipping_status,
-            }
+            },
+            { notCancelled: true }
           );
         } catch (rollbackError) {
           logger.error({
@@ -570,7 +571,8 @@ export async function PATCH(
             {
               payment_status: existingOrder.payment_status,
               shipping_status: existingOrder.shipping_status,
-            }
+            },
+            { notCancelled: true }
           );
         } catch (rollbackError) {
           logger.error({
@@ -623,7 +625,8 @@ export async function PATCH(
             {
               payment_status: existingOrder.payment_status,
               shipping_status: existingOrder.shipping_status,
-            }
+            },
+            { notCancelled: true }
           );
         } catch (rollbackError) {
           logger.error({

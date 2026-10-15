@@ -160,6 +160,20 @@ describe('RedemptionSuccessDialog', () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
+  it('renders Done with the storefront brand palette', () => {
+    render(
+      <RedemptionSuccessDialog
+        open={true}
+        onOpenChange={() => {}}
+        result={RESULT}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Done' }).className).toContain(
+      'bg-store-primary'
+    );
+  });
+
   it.each([
     { discountValue: undefined },
     { discountValue: 0 },

@@ -1,6 +1,7 @@
 'use client';
 
 import { Check, Copy } from 'lucide-react';
+import { ThemedButton } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -128,7 +129,7 @@ export function RedemptionSuccessDialog({
         )}
 
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)}>Done</Button>
+          <ThemedButton onClick={() => onOpenChange(false)}>Done</ThemedButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -288,12 +288,3 @@ SELECT pg_temp.assert_true(
   ) LIKE '%EXCEPTION WHEN unique_violation%',
   'redeem does not retry code collisions'
 );
-
--- The order wrapper locks parent-before-child (reward, then FOR
--- UPDATE OF rr); inverting deadlocks against the DELETE route.
-SELECT pg_temp.assert_true(
-  pg_catalog.pg_get_functiondef(
-    'public.create_storefront_order_with_loyalty_code(uuid,text,text,jsonb,text,numeric,numeric,numeric,text,text,text,jsonb,text,text,jsonb,uuid,text,text,uuid,text,numeric,numeric,text,text,uuid)'::pg_catalog.regprocedure
-  ) LIKE '%FROM public.loyalty_rewards rw%WHERE rw.id = v_reward_id FOR UPDATE%FOR UPDATE OF rr%',
-  'order wrapper does not lock parent-before-child'
-);

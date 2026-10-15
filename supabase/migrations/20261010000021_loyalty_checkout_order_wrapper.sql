@@ -37,6 +37,8 @@ DECLARE
   v_redemption  record;
   v_reward_id   uuid;
   v_order       record;
+  v_existing_payment_status text;
+  v_existing_shipping_status text;
   v_now         timestamptz := pg_catalog.now();
   v_expected    numeric;
   v_claim_order_status text;
@@ -78,6 +80,28 @@ BEGIN
   WHERE rr.id = p_loyalty_redemption_id AND rr.merchant_id = p_merchant_id
   FOR UPDATE OF rr;
   IF NOT FOUND THEN RAISE EXCEPTION 'loyalty_redemption_not_found'; END IF;
+
+  -- REPLAY pre-check: the base RPC reopens an existing order whose
+  -- only terminal marker is payment_status (mark_abandoned_orders),
+  -- resetting it to unpaid before any post-check could observe the
+  -- cancellation. When this call carries a checkout idempotency key,
+  -- judge the stored order first and refuse a cancelled one outright
+  -- (the route maps order_not_reusable to a refresh-checkout 409).
+  IF pg_catalog.btrim(COALESCE(p_checkout_idempotency_key, '')) <> '' THEN
+    SELECT o.payment_status, o.shipping_status
+    INTO v_existing_payment_status, v_existing_shipping_status
+    FROM public.orders o
+    WHERE o.merchant_id = p_merchant_id
+      AND o.checkout_idempotency_key
+        = pg_catalog.btrim(p_checkout_idempotency_key)
+    FOR UPDATE;
+    IF FOUND
+       AND (public.loyalty_status_is_cancelled(v_existing_payment_status)
+         OR public.loyalty_status_is_cancelled(v_existing_shipping_status))
+    THEN
+      RAISE EXCEPTION 'order_not_reusable';
+    END IF;
+  END IF;
 
   -- Create (or idempotently replay) the order via the unmodified trust-boundary RPC.
   SELECT

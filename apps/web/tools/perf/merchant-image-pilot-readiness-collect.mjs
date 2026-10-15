@@ -206,27 +206,30 @@ export async function collectSurface(page, url, surface, options = {}) {
     // Every bound slot on the page — reporting rows included, so a slot
     // that renders only a status marker fails as "not a mount" instead of
     // escaping the gate silently.
-    const slots = [...document.querySelectorAll('[data-pilot-lab-slot]')].map(
-      (section) => {
-        const img = section.querySelector('img');
-        return {
-          binding: section.getAttribute('data-pilot-lab-binding'),
-          img: img
-            ? {
-                box: rectOf(img),
-                complete: img.complete,
-                currentSrc: img.currentSrc,
-                naturalHeight: img.naturalHeight,
-                naturalWidth: img.naturalWidth,
-                objectFit: getComputedStyle(img).objectFit,
-                resourceWidth: resourceWidthOf(img),
-              }
-            : null,
-          rect: rectOf(section),
-          slotId: section.getAttribute('data-pilot-lab-slot'),
-          status: section.getAttribute('data-pilot-lab-status'),
-        };
+    const imageOf = (img) => {
+      if (!img) {
+        return null;
       }
+      const style = getComputedStyle(img);
+      return {
+        box: rectOf(img),
+        complete: img.complete,
+        currentSrc: img.currentSrc,
+        naturalHeight: img.naturalHeight,
+        naturalWidth: img.naturalWidth,
+        objectFit: style.objectFit,
+        objectPosition: style.objectPosition,
+        resourceWidth: resourceWidthOf(img),
+      };
+    };
+    const slots = [...document.querySelectorAll('[data-pilot-lab-slot]')].map(
+      (section) => ({
+        binding: section.getAttribute('data-pilot-lab-binding'),
+        img: imageOf(section.querySelector('img')),
+        rect: rectOf(section),
+        slotId: section.getAttribute('data-pilot-lab-slot'),
+        status: section.getAttribute('data-pilot-lab-status'),
+      })
     );
     const sheets = performance
       .getEntriesByType('resource')
@@ -243,17 +246,7 @@ export async function collectSurface(page, url, surface, options = {}) {
         ? getComputedStyle(selectedImg).objectFit
         : null,
       selected: rectOf(selected),
-      selectedImg: selectedImg
-        ? {
-            box: rectOf(selectedImg),
-            complete: selectedImg.complete,
-            currentSrc: selectedImg.currentSrc,
-            naturalHeight: selectedImg.naturalHeight,
-            naturalWidth: selectedImg.naturalWidth,
-            objectFit: getComputedStyle(selectedImg).objectFit,
-            resourceWidth: resourceWidthOf(selectedImg),
-          }
-        : null,
+      selectedImg: imageOf(selectedImg),
       slots,
       stylesheetBytes: sheets.reduce(
         (sum, entry) => sum + (entry.encodedBodySize ?? 0),

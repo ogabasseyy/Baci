@@ -170,9 +170,7 @@ describe('merchant-image-pilot-runner finish binding', () => {
     // fail later. The binder now reuses the gate's structural plus
     // decode validation, so the corrupt capture refuses here and
     // nothing is published.
-    const { pngCrc32 } = await import(
-      './merchant-image-pilot-settings-helpers.mjs'
-    );
+    const { crc32 } = await import('node:zlib');
     const dir = await mkdtemp(join(tmpdir(), 'pilot-runner-corrupt-'));
     await prepareRun({
       dpr: '2',
@@ -189,9 +187,7 @@ describe('merchant-image-pilot-runner finish binding', () => {
     idatLength.writeUInt32BE(garbage.length);
     const idatType = Buffer.from('IDAT');
     const idatCrc = Buffer.alloc(4);
-    idatCrc.writeUInt32BE(
-      pngCrc32(Buffer.concat([idatType, garbage]), 0, 4 + garbage.length)
-    );
+    idatCrc.writeUInt32BE(crc32(Buffer.concat([idatType, garbage])) >>> 0);
     const corruptShot = join(dir, 'corrupt.png');
     await writeFile(
       corruptShot,

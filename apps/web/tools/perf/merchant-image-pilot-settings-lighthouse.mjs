@@ -5,12 +5,12 @@
 // mismatch or unreadable artifact.
 import { MAX_LIGHTHOUSE_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
-import {
-  parseDimensions,
-  parseNonNegativeNumber,
-  parsePositiveNumber,
-  verifyLighthouseRoute,
-} from './merchant-image-pilot-settings-helpers.mjs';
+import { parseDimensions } from './merchant-image-pilot-settings-helpers.mjs';
+import { parseNumberExpectation } from './merchant-image-pilot-settings-numbers.mjs';
+import { verifyRecordedRoute } from './merchant-image-pilot-settings-route.mjs';
+
+const parseNonNegative = (value, name) =>
+  parseNumberExpectation(value, name, { allowZero: true });
 
 // Method-relevant network fields: the throttling method and CPU
 // multiplier alone cannot match evidence — two simulate runs with
@@ -23,19 +23,19 @@ const NETWORK_FIELDS = {
       'lighthouse.throttling-request-latency-ms',
       'requestLatencyMs',
       'expect-request-latency-ms',
-      parseNonNegativeNumber,
+      parseNonNegative,
     ],
     [
       'lighthouse.throttling-download-kbps',
       'downloadThroughputKbps',
       'expect-download-kbps',
-      parsePositiveNumber,
+      parseNumberExpectation,
     ],
     [
       'lighthouse.throttling-upload-kbps',
       'uploadThroughputKbps',
       'expect-upload-kbps',
-      parsePositiveNumber,
+      parseNumberExpectation,
     ],
   ],
   simulate: [
@@ -43,13 +43,13 @@ const NETWORK_FIELDS = {
       'lighthouse.throttling-rtt-ms',
       'rttMs',
       'expect-rtt-ms',
-      parseNonNegativeNumber,
+      parseNonNegative,
     ],
     [
       'lighthouse.throttling-throughput-kbps',
       'throughputKbps',
       'expect-throughput-kbps',
-      parsePositiveNumber,
+      parseNumberExpectation,
     ],
   ],
 };
@@ -70,7 +70,11 @@ export async function checkLighthouse(args, pass, fail, recorded) {
     fail('lighthouse.readable', `cannot parse ${args.lighthouse}`);
     return;
   }
-  const routeCheck = verifyLighthouseRoute(report, args['expect-route']);
+  const routeCheck = verifyRecordedRoute(
+    report,
+    args['expect-route'],
+    'lighthouse'
+  );
   if (!routeCheck.ok) {
     fail('lighthouse.route', routeCheck.error);
   } else {
@@ -135,12 +139,15 @@ export async function checkLighthouse(args, pass, fail, recorded) {
     [
       'lighthouse.dpr',
       emulation.deviceScaleFactor,
-      parsePositiveNumber(args['expect-lh-dpr'], 'expect-lh-dpr'),
+      parseNumberExpectation(args['expect-lh-dpr'], 'expect-lh-dpr'),
     ],
     [
       'lighthouse.cpu-slowdown',
       settings.throttling?.cpuSlowdownMultiplier,
-      parsePositiveNumber(args['expect-cpu-slowdown'], 'expect-cpu-slowdown'),
+      parseNumberExpectation(
+        args['expect-cpu-slowdown'],
+        'expect-cpu-slowdown'
+      ),
     ],
   ];
   for (const [name, actual, expected] of scaled) {

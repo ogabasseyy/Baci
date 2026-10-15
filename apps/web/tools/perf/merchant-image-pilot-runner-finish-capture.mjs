@@ -8,7 +8,7 @@ import { stat } from 'node:fs/promises';
 import { MAX_SCREENSHOT_BYTES } from '../../../../infra/cdn-transformer/pilot/constants.mjs';
 import { readUpToBytes } from './merchant-image-pilot-preflight-shared.mjs';
 import { assertPngDecodes } from './merchant-image-pilot-settings-har.mjs';
-import { pngDimensions } from './merchant-image-pilot-settings-helpers.mjs';
+import { pngDimensions } from './merchant-image-pilot-settings-png.mjs';
 
 // Screenshot validation reuses the settings gate's own checks: full
 // chunk/CRC structure plus a pixel decode, not just the 24-byte

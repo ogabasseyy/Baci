@@ -147,3 +147,29 @@ test('truncated file lists fail closed to pilot=true', async () => {
   assert.match(workflow, /\.changed_files/);
   assert.match(workflow, /received.*-ge.*changed/);
 });
+
+test('labSharedClosure traverses @import url(...) stylesheets and ignores asset url(...)', () => {
+  const virtualCss = 'apps/web/src/app/(storefront)/virtual-url-theme.css';
+  const virtualFont = 'apps/web/src/app/(storefront)/virtual-font.css';
+  const closure = labSharedClosure({
+    isFileFn: (candidate) =>
+      candidate.endsWith(virtualCss) ||
+      candidate.endsWith(virtualFont) ||
+      candidate.endsWith('storefront-core.css') ||
+      candidate.endsWith('layout.tsx'),
+    readSource: (file) => {
+      if (file.endsWith('layout.tsx')) {
+        return "import '../(storefront)/storefront-core.css';";
+      }
+      if (file.endsWith('storefront-core.css')) {
+        return [
+          '@import url("./virtual-url-theme.css");',
+          'body { background: url("./virtual-font.css"); }',
+        ].join('\n');
+      }
+      return '';
+    },
+  });
+  assert.equal(closure.includes(virtualCss), true);
+  assert.equal(closure.includes(virtualFont), false);
+});

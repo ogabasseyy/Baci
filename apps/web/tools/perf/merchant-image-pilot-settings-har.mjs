@@ -15,17 +15,16 @@ import {
   readBoundedText,
   readUpToBytes,
 } from './merchant-image-pilot-preflight-shared.mjs';
+import { verifyBrowserProvenance } from './merchant-image-pilot-settings-browser-provenance.mjs';
+import { inspectHarRecording } from './merchant-image-pilot-settings-har-inspect.mjs';
+import { parseDimensions } from './merchant-image-pilot-settings-helpers.mjs';
+import { parseNumberExpectation } from './merchant-image-pilot-settings-numbers.mjs';
+import { pngDimensions } from './merchant-image-pilot-settings-png.mjs';
 import {
-  findCacheHits,
-  harUserAgent,
-  parseDimensions,
-  parsePositiveInteger,
-  parsePositiveNumber,
-  pngDimensions,
-  verifyHarConnectivity,
-  verifyHarIterations,
-  verifyHarRoute,
-} from './merchant-image-pilot-settings-helpers.mjs';
+  verifyCacheProvenance,
+  verifyScreenshotProvenance,
+} from './merchant-image-pilot-settings-provenance.mjs';
+import { verifyRecordedRoute } from './merchant-image-pilot-settings-route.mjs';
 
 // IDAT presence is not evidence: a structurally valid PNG with garbage
 // compressed pixels (valid CRCs, positive IHDR) would otherwise satisfy
@@ -48,12 +47,6 @@ export async function assertPngDecodes(bytes, dimensions) {
   }
 }
 
-import { verifyBrowserProvenance } from './merchant-image-pilot-settings-browser-provenance.mjs';
-import {
-  verifyCacheProvenance,
-  verifyScreenshotProvenance,
-} from './merchant-image-pilot-settings-provenance.mjs';
-
 export async function checkHar(args, pass, fail, warn, recorded) {
   let har;
   try {
@@ -68,32 +61,36 @@ export async function checkHar(args, pass, fail, warn, recorded) {
     return;
   }
   const pages = har?.log?.pages ?? [];
-  const iterations = parsePositiveInteger(
+  const iterations = parseNumberExpectation(
     args['expect-iterations'],
-    'expect-iterations'
+    'expect-iterations',
+    { integer: true }
   );
-  const iterationsCheck = verifyHarIterations(pages, iterations);
+  const {
+    cacheHits,
+    connectivityCheck,
+    iterationsCheck,
+    userAgent: ua,
+  } = inspectHarRecording(har, {
+    expectConnectivity: args['expect-connectivity'],
+    expectIterations: iterations,
+  });
   if (!iterationsCheck.ok) {
     fail('har.iterations', iterationsCheck.error);
   } else {
     pass('har.iterations');
   }
-  const connectivityCheck = verifyHarConnectivity(
-    pages,
-    args['expect-connectivity']
-  );
   if (!connectivityCheck.ok) {
     fail('har.connectivity', connectivityCheck.error);
   } else {
     pass('har.connectivity');
   }
-  const routeCheck = verifyHarRoute(pages, args['expect-route']);
+  const routeCheck = verifyRecordedRoute(pages, args['expect-route']);
   if (!routeCheck.ok) {
     fail('har.route', routeCheck.error);
   } else {
     pass('har.route');
   }
-  const ua = harUserAgent(har);
   recorded.browser = ua;
   // The request User-Agent is emulated configuration, not independent proof
   // of the browser executable version. The required --browser-provenance
@@ -116,7 +113,7 @@ export async function checkHar(args, pass, fail, warn, recorded) {
     pass('har.browser');
   }
   const viewport = parseDimensions(args['expect-viewport'], 'expect-viewport');
-  const dpr = parsePositiveNumber(args['expect-dpr'], 'expect-dpr');
+  const dpr = parseNumberExpectation(args['expect-dpr'], 'expect-dpr');
   try {
     // The geometry check must read the artifact, but a corrupted or
     // replaced multi-gigabyte file fails by size instead of exhausting
@@ -210,7 +207,6 @@ export async function checkHar(args, pass, fail, warn, recorded) {
   // can present zero entries. The cold claim additionally requires a
   // validated runner artifact (--cache-provenance): a bare caller string
   // would let any warm run certify itself cold.
-  const cacheHits = findCacheHits(har);
   const provenancePath = args['cache-provenance'];
   let provenanceError = null;
   if (provenancePath !== undefined) {

@@ -45,6 +45,7 @@ export async function commitGeneration({
   const fsyncDir = deps.fsyncDir ?? defaultFsync;
   const assertDeadline = deps.assertDeadline ?? (() => undefined);
   const removeStaging = deps.removeOwnedStaging ?? removeOwnedStaging;
+  const writeConfined = deps.writeConfinedFile ?? writeConfinedFile;
   const parsed = parsePilotManifest(manifest);
   if (!parsed.ok) {
     throw new PilotManifestError('manifest-invalid', parsed.issues.join('; '));
@@ -115,15 +116,13 @@ export async function commitGeneration({
     await rename(stagedByName.get(name), join(commitDir, name));
   }
   const serializedManifest = `${JSON.stringify(valid, null, 2)}\n`;
-  // Confined exclusive create: a plain writeFile would follow a
-  // commit/manifest.json symlink planted after the commit-dir check and
-  // overwrite its external target — and the byte re-read below would
-  // then pass against the attacker's file. 'wx' refuses the planted
-  // name instead. Sync-unsupported filesystems keep the degraded
-  // durability verdict instead of aborting the publish.
+  // Confined exclusive create: 'wx' refuses a planted commit/manifest.json
+  // symlink instead of overwriting its external target. When file fsync
+  // fails with EINVAL/ENOSYS, writeConfinedFile unlinks the partial file,
+  // so retry with { sync: false } under the degraded-durability verdict.
   let durability = 'synced';
   try {
-    await writeConfinedFile(commitDir, 'manifest.json', serializedManifest);
+    await writeConfined(commitDir, 'manifest.json', serializedManifest);
   } catch (error) {
     if (error?.code === 'EEXIST') {
       throw new PilotManifestError(
@@ -131,11 +130,13 @@ export async function commitGeneration({
         'commit manifest appeared before the write; refusing to publish'
       );
     }
-    if (isUnsupportedSyncError(error)) {
-      durability = 'sync-unsupported';
-    } else {
+    if (!isUnsupportedSyncError(error)) {
       throw error;
     }
+    durability = 'sync-unsupported';
+    await writeConfined(commitDir, 'manifest.json', serializedManifest, {
+      sync: false,
+    });
   }
   try {
     for (const name of [...uniquePaths, 'manifest.json']) {
@@ -240,16 +241,16 @@ export async function commitGeneration({
     durability = 'sync-unsupported';
   }
   // Persist the publish-time verdict beside the manifest so reuse reports
-  // what publish proved. Best-effort and post-visibility: the durability
-  // value is only final after the renames above, and a lost sidecar must
-  // degrade reuse reports to 'unknown' — never fail an already-published
-  // job or print a false 'synced'. Exclusive confined create: a plain
-  // writeFile would follow a durability.json link planted in commit/
-  // before the rename and truncate its external target.
-  await writeConfinedFile(
-    dir,
-    'durability.json',
-    JSON.stringify({ durability })
-  ).catch(() => undefined);
+  // what publish proved. Best-effort and post-visibility.
+  const sidecar = JSON.stringify({ durability });
+  await writeConfined(dir, 'durability.json', sidecar, {
+    sync: durability !== 'sync-unsupported',
+  })
+    .catch((error) =>
+      isUnsupportedSyncError(error)
+        ? writeConfined(dir, 'durability.json', sidecar, { sync: false })
+        : undefined
+    )
+    .catch(() => undefined);
   return { durability, path: dir, reused: false };
 }

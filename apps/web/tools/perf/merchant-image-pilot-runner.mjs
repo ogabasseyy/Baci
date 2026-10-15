@@ -24,10 +24,8 @@ import { join } from 'node:path';
 import { writeJson } from './merchant-image-pilot-preflight-shared.mjs';
 import { parseArgs as parseStrictArgs } from './merchant-image-pilot-readiness-config.mjs';
 import { finishRun, required } from './merchant-image-pilot-runner-finish.mjs';
-import {
-  parseDimensions,
-  parsePositiveNumber,
-} from './merchant-image-pilot-settings-helpers.mjs';
+import { parseDimensions } from './merchant-image-pilot-settings-helpers.mjs';
+import { parseNumberExpectation } from './merchant-image-pilot-settings-numbers.mjs';
 
 const RUNNER_CLI_OPTIONS = [
   'browser-log',
@@ -61,7 +59,7 @@ export async function prepareRun({ dpr, outDir, profileDir, tool, viewport }) {
     required(viewport, 'viewport'),
     'viewport'
   );
-  const sessionDpr = parsePositiveNumber(required(dpr, 'dpr'), 'dpr');
+  const sessionDpr = parseNumberExpectation(required(dpr, 'dpr'), 'dpr');
   await mkdir(profile, { recursive: true });
   // Fresh by construction: a non-empty directory is someone else's
   // profile, never a reset. The operator removes it or picks another

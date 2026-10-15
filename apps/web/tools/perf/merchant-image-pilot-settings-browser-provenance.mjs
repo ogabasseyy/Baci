@@ -13,7 +13,7 @@
 // ceiling. No I/O, no subprocesses.
 import { CLOCK_SKEW_MS } from './merchant-image-pilot-runner-finish.mjs';
 import { SESSION_NAV_SLACK_MS } from './merchant-image-pilot-runner-finish-log.mjs';
-import { verifyBrowserVersion } from './merchant-image-pilot-settings-helpers.mjs';
+import { verifyBrowserVersion } from './merchant-image-pilot-settings-browser-version.mjs';
 
 export function verifyBrowserProvenance(text, pages, expectMajor, sourceLabel) {
   if (text === null || text === undefined) {

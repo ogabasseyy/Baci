@@ -20,6 +20,7 @@ import { JOB_TIMEOUT_MS } from './constants.mjs';
 import {
   assertMinFreeBytes,
   createStagingBudget,
+  isUnsupportedSyncError,
   ownedStagingPath,
   removeOwnedStaging,
   writeConfinedFile,
@@ -43,13 +44,9 @@ export class PilotGenerateError extends Error {
   }
 }
 
-// Phase-boundary deadline guard: the absolute job deadline previously
-// reached only the encoder, so slow claim/snapshot/staging/commit phases
-// could blow past the 120s cap (or hold a claim indefinitely while making
-// no progress). Every throw here funnels through runJob's catch, which
-// releases the claim and reports 'failed' instead of hanging or lying.
-// Residual: a truly wedged storage syscall cannot be interrupted from this
-// process; these checks bound slow phases, not hung syscalls.
+// Phase-boundary deadline guard: bounds slow claim/snapshot/staging/commit
+// phases against the 120s job cap. Every throw funnels through runJob's
+// catch, which releases the claim and reports 'failed'.
 export function assertJobDeadline(deadlineMs, phase) {
   if (Date.now() > deadlineMs) {
     throw new PilotGenerateError(
@@ -59,10 +56,8 @@ export function assertJobDeadline(deadlineMs, phase) {
   }
 }
 
-// Pre-commit guards: the deadline AND the disk floor are rechecked
-// immediately before publication. Encoding can run up to the 120s job
-// budget, and another process may consume disk meanwhile — the pre-claim
-// floor check alone cannot prove 2 GiB are still free at commit time.
+// Pre-commit guards: recheck deadline and disk floor immediately before
+// publication so concurrent disk use during encoding cannot violate the floor.
 export async function assertPreCommitGuards({
   deadlineMs,
   minFreeBytes,
@@ -72,13 +67,9 @@ export async function assertPreCommitGuards({
   await assertMinFreeBytes(outputRoot, minFreeBytes);
 }
 
-// Owned staging establishment: exclusive create plus confinement
-// verification. The run token is visible in the published claim, so a
-// pre-planted symlink must fail here instead of being followed by
-// recursive creation (whose snapshot and encoder outputs would land
-// outside the output root). EEXIST is verified, not trusted:
-// crash-recovery reruns legitimately find their own directory, but a
-// symlink, file, or escape fails closed before the first snapshot write.
+// Owned staging establishment: exclusive create plus confinement check.
+// EEXIST is verified (never trusted) so pre-planted symlinks or files fail
+// closed before the first snapshot write.
 export async function prepareOwnedStaging(outputRoot, runToken) {
   const stagingDir = ownedStagingPath(outputRoot, runToken);
   try {
@@ -113,18 +104,11 @@ export async function runJob({
 }) {
   const releaseClaimFn = deps?.releaseClaim ?? releaseClaim;
   const removeStagingFn = deps?.removeOwnedStaging ?? removeOwnedStaging;
+  const writeConfinedFn = deps?.writeConfinedFile ?? writeConfinedFile;
   const startedAt = Date.now();
   const deadlineMs = startedAt + JOB_TIMEOUT_MS;
-  // Memory accounting: parent RSS sampled at checkpoints, plus the max
-  // worker-child RSS across this job's completed ops (self-reported per
-  // op envelope; see encode-worker.mjs). SAMPLED evidence, not an upper
-  // bound: a transient peak that rises and releases between two samples
-  // never appears, so the sum can sit BELOW the true combined peak.
-  // Missed: peaks between parent samples, and spikes inside one native
-  // worker call (bounded by the worker's input pixel limits). Ops that
-  // die without an envelope (timeout/crash/kill) contribute no peak, so
-  // the envelope marks the sum incomplete instead of omitting the worst
-  // inputs from capacity evidence. Size capacity above this figure.
+  // Memory accounting: parent RSS sampled at checkpoints, plus max worker
+  // child RSS across completed ops (sampled evidence, not an upper bound).
   const startedRss = process.memoryUsage().rss;
   let sampledParentRss = startedRss;
   const sampleRss = () => {
@@ -134,13 +118,7 @@ export async function runJob({
   const runToken = createRunToken();
   let stagingDir = null;
   try {
-    // A run evicted by a steal-race loser must not claim, stage, or
-    // encode: fail this job fast instead of acting alongside the
-    // successor. The per-attempt check in encodeVariant covers
-    // evictions that land mid-job.
     await encoderLock?.assertHeld?.();
-    // Reap staging dirs stranded by earlier attempts whose removal
-    // failed after their claim released; best-effort, never fatal.
     await sweepOrphanedStaging(outputRoot).catch(() => {});
     await assertMinFreeBytes(outputRoot, minFreeBytes);
     let claim;
@@ -164,12 +142,20 @@ export async function runJob({
     }
     assertJobDeadline(deadlineMs, 'snapshot');
     stagingDir = await prepareOwnedStaging(outputRoot, claim.runToken);
-    // The run token is published in the claim, so a contender can race
-    // this freeze: a plain writeFile would follow a swapped-in parent
-    // symlink outside the output root ('wx' guards only the final
-    // component). The confined write re-binds the parent around the
-    // open and refuses when the binding breaks.
-    await writeConfinedFile(stagingDir, 'source.snapshot', snapshot.bytes);
+    // Confined write re-binds the parent around the open and retries
+    // unsynced when the filesystem returns EINVAL/ENOSYS on fsync
+    // (commitGeneration re-fsyncs all published tiers and owns the
+    // authoritative durability verdict).
+    try {
+      await writeConfinedFn(stagingDir, 'source.snapshot', snapshot.bytes);
+    } catch (error) {
+      if (!isUnsupportedSyncError(error)) {
+        throw error;
+      }
+      await writeConfinedFn(stagingDir, 'source.snapshot', snapshot.bytes, {
+        sync: false,
+      });
+    }
     const frozenCopy = join(stagingDir, 'source.snapshot');
     assertJobDeadline(deadlineMs, 'staging');
     const stagingBudget = createStagingBudget();
@@ -183,9 +169,6 @@ export async function runJob({
       expectedSha256: job.expectedSha256,
       role: job.role,
       snapshotPath: frozenCopy,
-      // Verified source body bytes for the pass-through rescue: lets a
-      // branch-compatible source smaller than the cheapest encode save
-      // its rung instead of failing the ladder on the budget floor.
       sourceBytes: snapshot.bytes.length,
       stagingBudget,
       stagingDir,
@@ -207,12 +190,14 @@ export async function runJob({
       snapshot,
       stagingBudget,
       stagingDir,
+      writeConfinedFile: writeConfinedFn,
     });
     await assertPreCommitGuards({ deadlineMs, minFreeBytes, outputRoot });
     const committed = await commitGeneration({
       deps: {
         assertDeadline: () => assertJobDeadline(deadlineMs, 'commit'),
         removeOwnedStaging: removeStagingFn,
+        writeConfinedFile: writeConfinedFn,
       },
       files,
       generationId,

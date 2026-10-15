@@ -66,6 +66,7 @@ export function stubBrowser({ selectedImg, slotImg }) {
   vi.stubGlobal('getComputedStyle', () => ({
     display: 'grid',
     objectFit: 'cover',
+    objectPosition: '50% 50%',
   }));
   vi.stubGlobal('performance', {
     getEntriesByType: () => [

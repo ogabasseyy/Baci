@@ -68,6 +68,17 @@ export function crossArmProblems(left, right, expectedMounts) {
         `slot "${mount.slotId}" object-fit differs between arms (control ${leftFit}, pilot ${rightFit})`
       );
     }
+    const leftPosition = l?.img?.objectPosition;
+    const rightPosition = r?.img?.objectPosition;
+    if (
+      typeof leftPosition === 'string' &&
+      typeof rightPosition === 'string' &&
+      leftPosition !== rightPosition
+    ) {
+      problems.push(
+        `slot "${mount.slotId}" object-position differs between arms (control ${leftPosition}, pilot ${rightPosition})`
+      );
+    }
   }
   return problems;
 }

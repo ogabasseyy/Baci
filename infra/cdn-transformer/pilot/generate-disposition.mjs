@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { applyDeliveryGuard } from './delivery.mjs';
-import { writeConfinedFile } from './disk-guards.mjs';
+import { isUnsupportedSyncError, writeConfinedFile } from './disk-guards.mjs';
 import { outputFileName } from './manifest.mjs';
 
 // Delivery disposition + manifest assembly for one encoded ladder:
@@ -15,6 +15,7 @@ export async function buildDisposition({
   snapshot,
   stagingBudget,
   stagingDir,
+  writeConfinedFile: writeConfinedFn = writeConfinedFile,
 }) {
   const sourceFacts = {
     bytes: snapshot.bytes.length,
@@ -41,8 +42,18 @@ export async function buildDisposition({
     // only the final name): reuse the confined held-descriptor path so
     // a substituted staging parent refuses instead of publishing the
     // merchant snapshot outside the output root.
-    await writeConfinedFile(stagingDir, `passthrough.${format}`, snapshot.bytes);
-    const from = join(stagingDir, `passthrough.${format}`);
+    const passthroughName = `passthrough.${format}`;
+    try {
+      await writeConfinedFn(stagingDir, passthroughName, snapshot.bytes);
+    } catch (error) {
+      if (!isUnsupportedSyncError(error)) {
+        throw error;
+      }
+      await writeConfinedFn(stagingDir, passthroughName, snapshot.bytes, {
+        sync: false,
+      });
+    }
+    const from = join(stagingDir, passthroughName);
     stagingBudget.charge(snapshot.bytes.length);
     stagedPassthrough.set(format, from);
     return from;

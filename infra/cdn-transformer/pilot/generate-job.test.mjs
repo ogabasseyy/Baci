@@ -129,3 +129,51 @@ test('runJob fails fast when the encoder lock was evicted before the job', async
   assert.equal(result.code, 'encoder-lock-evicted');
   assert.equal(released, true);
 });
+
+test('runJob retries source.snapshot and commit writes when fsync returns EINVAL', async () => {
+  const { createHash } = await import('node:crypto');
+  const { copyFile, readFile } = await import('node:fs/promises');
+  const { dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const { writeConfinedFile } = await import('./disk-guards.mjs');
+  const { base, outputRoot } = await setup();
+  const inputRoot = join(base, 'input');
+  await mkdir(inputRoot, { recursive: true });
+  await mkdir(join(outputRoot, 'claims'), { recursive: true });
+  await mkdir(join(outputRoot, 'generations'), { recursive: true });
+  const here = dirname(fileURLToPath(import.meta.url));
+  const target = join(inputRoot, 'tiny.png');
+  await copyFile(join(here, 'fixtures', 'tiny-48x48.png'), target);
+  const bytes = await readFile(target);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const calls = [];
+  const result = await runJob({
+    deps: {
+      writeConfinedFile: async (dir, name, content, options) => {
+        calls.push({ name, options });
+        if (options?.sync !== false) {
+          throw Object.assign(new Error('fsync unsupported'), {
+            code: 'EINVAL',
+          });
+        }
+        return await writeConfinedFile(dir, name, content, options);
+      },
+    },
+    inputRoot,
+    job: {
+      assetId: 'tiny-nosync',
+      expectedSha256: sha256,
+      merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+      role: 'logo',
+      sourcePath: 'tiny.png',
+    },
+    minFreeBytes: 0,
+    outputRoot,
+  });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.durability, 'sync-unsupported');
+  assert.deepEqual(calls.slice(0, 2), [
+    { name: 'source.snapshot', options: undefined },
+    { name: 'source.snapshot', options: { sync: false } },
+  ]);
+});

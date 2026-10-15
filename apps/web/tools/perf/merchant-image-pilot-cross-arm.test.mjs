@@ -63,6 +63,29 @@ describe('mounted image geometry parity', () => {
       'slot "header-logo" object-fit differs between arms (control cover, pilot contain)'
     );
   });
+  it('rejects an object-position change inside identical boxes and fit', () => {
+    const withPosition = (objectPosition) => ({
+      selected: box,
+      slots: [
+        {
+          binding: mount.binding,
+          rect: { ...box, width: 390 },
+          img: { box: { ...box }, objectFit: 'cover', objectPosition },
+          slotId: mount.slotId,
+        },
+      ],
+    });
+    expect(
+      crossArmProblems(withPosition('50% 50%'), withPosition('50% 50%'), [
+        mount,
+      ])
+    ).toEqual([]);
+    expect(
+      crossArmProblems(withPosition('50% 50%'), withPosition('0% 0%'), [mount])
+    ).toContain(
+      'slot "header-logo" object-position differs between arms (control 50% 50%, pilot 0% 0%)'
+    );
+  });
   it('refuses to compare a binding rendered under different slots', () => {
     // Same binding, same boxes — but the pilot renders under another
     // slot: equating the two would bless unaccepted geometry, so the

@@ -19,9 +19,9 @@
 //   (erased at runtime; typecheck covers them). Mixed imports stay.
 //   Bare side-effect imports (`import './x.css'`) count: stylesheets
 //   change rendering with no `from` edge.
-// - CSS files are traversed for `@import "..."` edges (quote form
-//   only — `url(...)` also matches font/image references, which are
-//   not stylesheets and must not land in the shared set). The edges
+// - CSS files are traversed for `@import "..."` and `@import url(...)`
+//   edges (anchored to `@import` so ordinary `url(...)` font/image
+//   references are ignored and never land in the shared set). The edges
 //   are depth-transparent: an `@import` is textual inclusion, so the
 //   imported rules ARE the importer's cascade and inherit its depth
 //   instead of consuming a level. Without this, a depth-2 sheet's
@@ -29,12 +29,12 @@
 //   lab-visible layout.
 // - Test/spec files are never seeds and never traversed into: test
 //   changes must not force the smoke suites.
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-export const REPO_ROOT = resolve(here, '..', '..');
+const REPO_ROOT = resolve(here, '..', '..');
 
 const SRC_PREFIX = 'apps/web/src';
 
@@ -54,6 +54,8 @@ const PROBE_EXTENSIONS = [...SOURCE_EXTENSIONS, '.css', '.json'];
 const TYPE_ONLY_LINE = /^\s*(import|export)\s+type[\s{]/;
 const SPECIFIER =
   /(?:\bfrom\s*['"]|import\s*\(\s*['"]|require\s*\(\s*['"]|import\s*['"])([^'"]+)['"]/g;
+const CSS_IMPORT_URL =
+  /@import\s+(?:[^;]*?\s+)?url\(\s*(?:['"]([^'"]+)['"]|([^'")\s]+))\s*\)/g;
 
 function listSourceFiles(dir) {
   const out = [];
@@ -82,7 +84,7 @@ function isFile(path) {
 // Resolves @/ and relative specifiers to absolute source paths.
 // Bare packages (node_modules; covered by the package.json branch)
 // and paths outside apps/web/src never resolve.
-function resolveSpecifier(fromFile, specifier) {
+function resolveSpecifier(fromFile, specifier, isFileFn = isFile) {
   const srcDir = join(REPO_ROOT, SRC_PREFIX);
   let base;
   if (specifier.startsWith('@/')) {
@@ -107,7 +109,7 @@ function resolveSpecifier(fromFile, specifier) {
   return (
     candidates.find(
       (candidate) =>
-        isFile(candidate) && !/\.(test|spec)\./.test(candidate)
+        isFileFn(candidate) && !/\.(test|spec)\./.test(candidate)
     ) || null
   );
 }
@@ -121,11 +123,18 @@ function runtimeSpecifiers(source) {
     for (const match of line.matchAll(SPECIFIER)) {
       specifiers.push(match[1]);
     }
+    for (const match of line.matchAll(CSS_IMPORT_URL)) {
+      specifiers.push(match[1] ?? match[2]);
+    }
   }
   return specifiers;
 }
 
-export function labSharedClosure({ maxDepth = 2 } = {}) {
+export function labSharedClosure({
+  isFileFn = isFile,
+  maxDepth = 2,
+  readSource = (file) => readFileSync(file, 'utf8'),
+} = {}) {
   const srcDir = join(REPO_ROOT, SRC_PREFIX);
   const seeds = [
     ...listSourceFiles(join(srcDir, 'app/pilot-lab')),
@@ -140,15 +149,13 @@ export function labSharedClosure({ maxDepth = 2 } = {}) {
     const file = queue.shift();
     const fileDepth = depth.get(file);
     if (
-      !isFile(file) ||
+      !isFileFn(file) ||
       !SOURCE_EXTENSIONS.some((ext) => file.endsWith(ext))
     ) {
       continue;
     }
-    for (const specifier of runtimeSpecifiers(
-      readFileSync(file, 'utf8')
-    )) {
-      const resolved = resolveSpecifier(file, specifier);
+    for (const specifier of runtimeSpecifiers(readSource(file))) {
+      const resolved = resolveSpecifier(file, specifier, isFileFn);
       if (resolved && !depth.has(resolved)) {
         // Depth-transparent CSS edges (see Bounds above): an
         // `@import` child shares its importer's depth.

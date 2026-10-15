@@ -97,9 +97,7 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
     // Valid signature, IHDR, CRCs, and IDAT presence — but garbage
     // compressed pixels: pngDimensions accepts it, the pixel decode must
     // not, or the gate greens with no reviewable visual artifact.
-    const { pngCrc32 } = await import(
-      './merchant-image-pilot-settings-helpers.mjs'
-    );
+    const { crc32 } = await import('node:zlib');
     const tiny = await pngBuffer(48, 48);
     const ihdr = tiny.subarray(0, 33);
     const iend = tiny.subarray(tiny.length - 12);
@@ -108,9 +106,7 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
     idatLength.writeUInt32BE(garbage.length);
     const idatType = Buffer.from('IDAT');
     const idatCrc = Buffer.alloc(4);
-    idatCrc.writeUInt32BE(
-      pngCrc32(Buffer.concat([idatType, garbage]), 0, 4 + garbage.length)
-    );
+    idatCrc.writeUInt32BE(crc32(Buffer.concat([idatType, garbage])) >>> 0);
     const corrupt = Buffer.concat([
       ihdr,
       idatLength,
@@ -120,7 +116,7 @@ describe('merchant-image-pilot-settings lighthouse route and evidence bounds', (
       iend,
     ]);
     const { pngDimensions } = await import(
-      './merchant-image-pilot-settings-helpers.mjs'
+      './merchant-image-pilot-settings-png.mjs'
     );
     expect(() => pngDimensions(corrupt)).not.toThrow();
     const rejected = await runWithReport({

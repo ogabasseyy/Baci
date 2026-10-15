@@ -36,8 +36,11 @@
 // Operators produce these artifacts with merchant-image-pilot-runner.mjs
 // (prepare before navigating, finish after) — never by hand.
 
+import {
+  parseArgs,
+  SETTINGS_CLI_OPTIONS,
+} from './merchant-image-pilot-readiness-config.mjs';
 import { checkHar } from './merchant-image-pilot-settings-har.mjs';
-import { parseArgs } from './merchant-image-pilot-settings-helpers.mjs';
 import { checkLighthouse } from './merchant-image-pilot-settings-lighthouse.mjs';
 
 async function run() {
@@ -55,7 +58,7 @@ async function run() {
   const warn = (name, detail) => warnings.push(`${name}: ${detail}`);
   let args;
   try {
-    args = parseArgs(process.argv.slice(2));
+    args = parseArgs(process.argv.slice(2), SETTINGS_CLI_OPTIONS);
   } catch (error) {
     fail('usage', error instanceof Error ? error.message : String(error));
     return { checks, failures, ok: false, recorded, warnings };

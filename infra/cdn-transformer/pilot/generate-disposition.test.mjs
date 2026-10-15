@@ -116,3 +116,41 @@ test('buildDisposition dedupes commit files shared across rungs', async () => {
   assert.equal(files.length, 1);
   assert.equal(files[0].name, outputFileName('1'.repeat(64), 'avif'));
 });
+
+test('buildDisposition retries passthrough writes with sync:false when fsync is unsupported', async () => {
+  const stagingDir = await mkdtemp(join(tmpdir(), 'pilot-disposition-nosync-'));
+  const { writeConfinedFile } = await import('./disk-guards.mjs');
+  const snapshot = { bytes: Buffer.alloc(1000, 7) };
+  const calls = [];
+  const { files } = await buildDisposition({
+    encoderIdentity: {
+      libvipsVersion: '8.18.6',
+      name: 'sharp',
+      sharpVersion: '0.35.4',
+    },
+    job: {
+      assetId: 'logo-1',
+      expectedSha256: SOURCE,
+      merchantId: MERCHANT,
+      role: 'logo',
+    },
+    ladder: ladder(),
+    recipeId: currentRecipeId(),
+    snapshot,
+    stagingBudget: createStagingBudget(),
+    stagingDir,
+    writeConfinedFile: async (dir, name, bytes, options) => {
+      calls.push({ name, options });
+      if (options?.sync !== false) {
+        throw Object.assign(new Error('fsync unsupported'), { code: 'EINVAL' });
+      }
+      return await writeConfinedFile(dir, name, bytes, options);
+    },
+  });
+  assert.deepEqual(calls, [
+    { name: 'passthrough.webp', options: undefined },
+    { name: 'passthrough.webp', options: { sync: false } },
+  ]);
+  const staged = files.find((file) => file.name.endsWith('.webp')).from;
+  assert.deepEqual(await readFile(staged), snapshot.bytes);
+});

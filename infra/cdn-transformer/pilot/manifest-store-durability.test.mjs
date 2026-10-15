@@ -168,3 +168,40 @@ test('commitGeneration never follows a planted durability sidecar link', async (
     true
   );
 });
+
+test('commitGeneration retries manifest and sidecar writes with sync:false when fsync is unsupported', async () => {
+  const fixture = await commitFixture('pilot-r1-manifest-nosync');
+  const { writeConfinedFile } = await import('./disk-guards.mjs');
+  const calls = [];
+  const result = await commitGeneration({
+    deps: {
+      writeConfinedFile: async (dir, name, bytes, options) => {
+        calls.push({ name, options });
+        if (options?.sync !== false) {
+          throw Object.assign(new Error('fsync unsupported'), {
+            code: 'ENOSYS',
+          });
+        }
+        return await writeConfinedFile(dir, name, bytes, options);
+      },
+    },
+    files: fixture.files,
+    generationId: fixture.generationId,
+    job: fixture.job,
+    manifest: fixture.manifest,
+    outputRoot: fixture.root,
+    stagingDir: fixture.stagingDir,
+  });
+  assert.equal(result.durability, 'sync-unsupported');
+  assert.deepEqual(calls, [
+    { name: 'manifest.json', options: undefined },
+    { name: 'manifest.json', options: { sync: false } },
+    { name: 'durability.json', options: { sync: false } },
+  ]);
+  const loaded = await loadGeneration(fixture.root, fixture.generationId);
+  assert.equal(loaded.manifest.assetId, fixture.job.assetId);
+  assert.deepEqual(
+    JSON.parse(await readFile(join(result.path, 'durability.json'), 'utf8')),
+    { durability: 'sync-unsupported' }
+  );
+});

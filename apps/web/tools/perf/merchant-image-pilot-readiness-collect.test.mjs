@@ -35,9 +35,11 @@ describe('collectSurface', () => {
     expect(collected.geometry.viewportHeight).toBe(844);
     expect(collected.geometry.devicePixelRatio).toBe(2);
     expect(collected.geometry.selectedImg?.resourceWidth).toBe(768);
+    expect(collected.geometry.selectedImg?.objectPosition).toBe('50% 50%');
     // Plain-src slot images keep natural pixels (no descriptor).
     expect(collected.geometry.slots).toHaveLength(1);
     expect(collected.geometry.slots[0]?.img?.resourceWidth).toBeNull();
+    expect(collected.geometry.slots[0]?.img?.objectPosition).toBe('50% 50%');
     expect(collected.geometry.slots[0]?.slotId).toBe('header-logo');
     expect(collected.geometry.stylesheetBytes).toBe(1200);
   });

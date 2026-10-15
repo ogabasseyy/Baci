@@ -1,0 +1,73 @@
+import { describe, expect, it } from 'vitest';
+import {
+  shippingCheckoutRecoveryIdSchema,
+  shippingCheckoutRecoverySchema,
+} from './shipping-checkout-recovery';
+
+const receiver = {
+  address: '12 Test Street',
+  city: 'Ikeja',
+  state: 'Lagos',
+  phone: '08000000000',
+  latitude: 0,
+  longitude: 0,
+};
+describe('checkout recovery input', () => {
+  it('validates order UUIDs without coercion', () => {
+    const id = '40000000-0000-4000-8000-000000000001';
+    expect(shippingCheckoutRecoveryIdSchema.parse(id)).toBe(id);
+    for (const invalid of [undefined, null, '', 'not-a-uuid', 123]) {
+      expect(shippingCheckoutRecoveryIdSchema.safeParse(invalid).success).toBe(
+        false
+      );
+    }
+  });
+  it('accepts an explicit zero pin', () => {
+    expect(
+      shippingCheckoutRecoverySchema.parse({ action: 'preview', receiver })
+    ).toEqual({ action: 'preview', receiver });
+  });
+  it.each([
+    { latitude: undefined },
+    { longitude: undefined },
+    { latitude: 91 },
+    { longitude: -181 },
+    { latitude: Number.NaN },
+    { longitude: '3.3' },
+    { address: '' },
+  ])('rejects incomplete or invalid destination %j', (change) => {
+    expect(
+      shippingCheckoutRecoverySchema.safeParse({
+        action: 'preview',
+        receiver: { ...receiver, ...change },
+      }).success
+    ).toBe(false);
+  });
+  it('carries an optional recovery country code', () => {
+    expect(
+      shippingCheckoutRecoverySchema.parse({
+        action: 'preview',
+        receiver: { ...receiver, countryCode: 'NG' },
+      })
+    ).toEqual({
+      action: 'preview',
+      receiver: { ...receiver, countryCode: 'NG' },
+    });
+  });
+  it('requires true confirmation and rejects caller-controlled pricing', () => {
+    expect(
+      shippingCheckoutRecoverySchema.safeParse({
+        action: 'confirm',
+        previewId: '70000000-0000-4000-8000-000000000001',
+        confirmDestination: false,
+      }).success
+    ).toBe(false);
+    expect(
+      shippingCheckoutRecoverySchema.safeParse({
+        action: 'preview',
+        receiver,
+        price: 110,
+      }).success
+    ).toBe(false);
+  });
+});

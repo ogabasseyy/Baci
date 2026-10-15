@@ -1,4 +1,4 @@
-import { fetchJsonWithDeadline } from '@baci/shared';
+import { fetchJsonWithDeadline, withTimeout } from '@baci/shared';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import { SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
@@ -51,8 +51,31 @@ export async function fetchVoucherPin({
   isViewActive: () => boolean;
   reference: string | null | undefined;
 }): Promise<BackfillObservation | null> {
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.getSession();
+  // A blank observation consumes the attempt but keeps polling: only
+  // permanent failures (non-429 4xx, broken contract) throw into the
+  // error state and halt the loop.
+  const BLANK: BackfillObservation = {
+    pin: null,
+    status: null,
+    refundPending: null,
+  };
+  // Bounded session lookup (Codex R101 P2): an unbounded getSession
+  // stall would hold this retained-settlement pass forever — the
+  // fetch deadline below only starts after this await — and the
+  // module-global pass blocks every submission while held. A stall
+  // is transient (the session exists; the lookup hung), so degrade
+  // to BLANK and keep polling, never to signed-out null.
+  let sessionResult: Awaited<ReturnType<typeof supabase.auth.getSession>>;
+  try {
+    sessionResult = await withTimeout(
+      supabase.auth.getSession(),
+      SHORT_TIMEOUT,
+      'VTU settlement session lookup timed out'
+    );
+  } catch {
+    return BLANK;
+  }
+  const { data: sessionData, error: sessionError } = sessionResult;
   if (sessionError || !sessionData.session) {
     return null;
   }
@@ -70,14 +93,6 @@ export async function fetchVoucherPin({
     params.set('reference', reference);
   }
 
-  // A blank observation consumes the attempt but keeps polling: only
-  // permanent failures (non-429 4xx, broken contract) throw into the
-  // error state and halt the loop.
-  const BLANK: BackfillObservation = {
-    pin: null,
-    status: null,
-    refundPending: null,
-  };
   // One deadline for headers + body; stalls abort the fetch
   // pre-retry (R70 6ryArL, R72 6rzq3y).
   const deadlineMs = Date.now() + SHORT_TIMEOUT;

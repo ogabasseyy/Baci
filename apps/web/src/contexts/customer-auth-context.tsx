@@ -124,18 +124,18 @@ async function loadCustomerSession(
     if (session) {
       setUser(session.user);
       setCustomer(session.customer);
-      publishCustomerIdentity(session.user, session.customer);
+      publishCustomerIdentity(session.user, session.customer, merchantSlug);
     } else {
       setUser(null);
       setCustomer(null);
-      publishCustomerIdentity(null, null);
+      publishCustomerIdentity(null, null, merchantSlug);
     }
   } catch (error) {
     if (isCancelled()) return;
     console.error('Session check error:', error);
     setUser(null);
     setCustomer(null);
-    publishCustomerIdentity(null, null);
+    publishCustomerIdentity(null, null, merchantSlug);
   } finally {
     if (!isCancelled()) setIsLoading(false);
   }
@@ -155,7 +155,7 @@ async function performCustomerLogout(
   } finally {
     setUser(null);
     setCustomer(null);
-    publishCustomerIdentity(null, null);
+    publishCustomerIdentity(null, null, merchantSlug);
     setOtpState(null);
     // Clear cart on logout to prevent cart data leakage between users
     clearCartStorage(merchantSlug);
@@ -185,7 +185,7 @@ export function CustomerAuthProvider({
     setIsLoading(true);
     setUser(null);
     setCustomer(null);
-    publishCustomerIdentity(null, null);
+    publishCustomerIdentity(null, null, merchantSlug);
     setOtpState(null);
   }
 
@@ -266,7 +266,7 @@ export function CustomerAuthProvider({
       // Set user and customer from response
       setUser(data.user);
       setCustomer(data.customer);
-      publishCustomerIdentity(data.user, data.customer);
+      publishCustomerIdentity(data.user, data.customer, merchantSlug);
       setOtpState(null);
 
       return { success: true };

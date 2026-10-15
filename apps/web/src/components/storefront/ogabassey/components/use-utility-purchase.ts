@@ -2,18 +2,16 @@
 
 import { type Dispatch, type SetStateAction, useRef, useState } from 'react';
 import type { Customer, CustomerUser } from '@/contexts/customer-auth-context';
-import { getLiveCustomerIdentity } from '@/contexts/customer-live-identity';
+import { hasUtilityPurchaseIdentityMoved } from '@/contexts/customer-live-identity';
 import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
 import { getPendingVtuSettlementPass } from './use-utility-retained-settlement';
-import { applyUtilityWalletSuccessOutcome } from './utility-purchase-wallet-success';
 import {
-  finalizeSuppressedAttempt,
-  shouldRotateVtuKeyForStatus,
   useUtilityIdempotencyKey,
   type UtilityIdempotencyAttempt,
 } from './use-utility-idempotency-key';
+import { settleUtilityPurchaseResult } from './utility-purchase-result-settlement';
 import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
 import {
   type AirtimeDataSubmit,
@@ -119,6 +117,25 @@ export function useUtilityPurchase({
     if (settlementPass) {
       await settlementPass;
       if (!isResultViewActive()) return; // R73: closed during the gate.
+      // Identity re-check after the gate await (Codex R101 P2): the
+      // pass can take seconds, and an account/storefront switch in
+      // that window would otherwise submit under stale identity.
+      // Nothing submitted yet (capture runs inside the submit
+      // below), so no key to finalize — just stop.
+      if (
+        hasUtilityPurchaseIdentityMoved({
+          customerId: customer?.id ?? null,
+          merchantSlug: merchantSlug ?? null,
+          userId: user?.id ?? null,
+        })
+      ) {
+        toast({
+          title: 'Account changed',
+          description:
+            'The signed-in account changed while the purchase was starting. Please try again.',
+        });
+        return;
+      }
     }
     // Peek signs the same payload the submit signs (shared builder).
     const submittingUserId = user?.id ?? null; // Raw auth id: route-side binding.
@@ -157,7 +174,14 @@ export function useUtilityPurchase({
     }
 
     setLoading(true);
-    const submittingIdentity = user?.id ?? customer?.id ?? null;
+    // Submitter capture (Codex R101 P2): account ids plus the store
+    // slug — the same auth user in a replacement storefront must
+    // not receive this store's result.
+    const submitter = {
+      customerId: customer?.id ?? null,
+      merchantSlug: merchantSlug ?? null,
+      userId: user?.id ?? null,
+    };
     // Pre-submit balance generation (Codex R98 P2): the success
     // effect decrements locally only while state still holds this
     // value — a refresh that lands post-debit refreshes for server
@@ -180,70 +204,29 @@ export function useUtilityPurchase({
       },
     });
 
-    if (!isResultViewActive()) {
-      // Modal closed mid-flight: preserve, don't forget (reopen replays).
-      finalizeSuppressedAttempt(captured.attempt, result);
-      return;
-    }
-
-    // LIVE identity (Codex R95 P1, web mirror of the R94 mobile
-    // fix): the auth context publishes synchronously at every
-    // mutation, so a logout/switch that lands after dispatch but
-    // before the next render still discards the stale result here.
-    // User-first like the capture: customer-first flips on hydration.
-    const liveIdentity = getLiveCustomerIdentity();
-    const liveSubmittingIdentity =
-      liveIdentity.userId ?? liveIdentity.customerId ?? null;
-    if (liveSubmittingIdentity !== submittingIdentity) {
-      // Switched mid-flight: finalize the SUBMITTER's entry, drop the result.
-      finalizeSuppressedAttempt(captured.attempt, result);
-      toast({
-        title: 'Account changed',
-        description:
-          'The signed-in account changed while the purchase was processing. The result was discarded.',
-      });
-      setLoading(false);
-      return;
-    }
-
-    if (result.kind === 'wallet-success') {
-      const stale = applyUtilityWalletSuccessOutcome({
-        activeTab,
-        appliedReferences: appliedBalanceRefs.current,
-        attempt: captured.attempt,
-        forgetScopedKey,
-        isScopedReplay,
-        isScopedStale,
-        markAttemptShown,
-        noteScopedReference,
-        clearIntent,
-        refreshWallet,
-        result,
-        setLoading,
-        setStep,
-        setSuccessAmount,
-        setTransactionRef,
-        setTransactionVoucherPin,
-        setWalletBalance,
-        submitAmount: payload.amount,
-        submitBalance,
-      });
-      if (stale) {
-        return;
-      }
-    } else if (result.kind === 'error') {
-      // 4xx rotates (fresh retry); pre-route/5xx/unknown keeps (dedupes).
-      if (captured.attempt && shouldRotateVtuKeyForStatus(result.status)) {
-        forgetScopedKey(captured.attempt.scoped);
-      }
-      refreshWallet();
-      toast({
-        title: 'Transaction Failed',
-        description: result.message,
-        variant: 'destructive',
-      });
-    }
-    setLoading(false);
+    settleUtilityPurchaseResult({
+      activeTab,
+      appliedReferences: appliedBalanceRefs.current,
+      attempt: captured.attempt,
+      clearIntent,
+      forgetScopedKey,
+      isResultViewActive,
+      isScopedReplay,
+      isScopedStale,
+      markAttemptShown,
+      noteScopedReference,
+      refreshWallet,
+      result,
+      setLoading,
+      setStep,
+      setSuccessAmount,
+      setTransactionRef,
+      setTransactionVoucherPin,
+      setWalletBalance,
+      submitAmount: payload.amount,
+      submitBalance,
+      submitter,
+    });
   };
 
   // Render-visible twin of submittingRef (Codex R81 P2): the

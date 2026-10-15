@@ -92,6 +92,30 @@ describe('fetchVoucherPin', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('returns blank when the session lookup stalls past the bound', async () => {
+    // Codex R101 P2: an unbounded getSession stall would hold the
+    // retained-settlement pass forever (the fetch deadline only
+    // starts after it), blocking every submission on the
+    // module-global pass. A stall is transient — degrade to BLANK
+    // and keep polling, never to signed-out null.
+    jest.useFakeTimers();
+    try {
+      mockGetSession.mockReturnValueOnce(new Promise(() => {}));
+
+      const pending = fetchVoucherPin(input);
+      await jest.advanceTimersByTimeAsync(5000);
+
+      await expect(pending).resolves.toEqual({
+        pin: null,
+        status: null,
+        refundPending: null,
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('returns a blank observation on transient failures', async () => {
     // Network throw, 5xx, 429, and unparseable bodies all consume
     // the attempt but keep polling (Codex R64 6rucqk).

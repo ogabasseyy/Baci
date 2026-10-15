@@ -117,7 +117,7 @@ describe('useUtilityPurchase', () => {
     clearPendingVtuKeys();
     // Live settlement identity starts as the base account (Codex R95
     // P1); switch tests re-publish to simulate the auth mutation.
-    publishCustomerIdentity(user, customer);
+    publishCustomerIdentity(user, customer, 'ogabassey');
   });
 
   it('blocks checkout and prompts sign-in when the customer is not authenticated', async () => {
@@ -207,6 +207,36 @@ describe('useUtilityPurchase', () => {
     release();
     await waitFor(() => expect(mockSubmit).toHaveBeenCalledTimes(1));
     expect(mockGetSettlementPass).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts before submitting when the storefront switches during the gate', async () => {
+    // Codex R101 P2: the settlement pass can take seconds — a
+    // storefront switch in that window must stop the submit before
+    // it posts under the stale store's identity.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mockGetSettlementPass.mockReturnValueOnce(gate);
+    const { result } = renderHook(() => useUtilityPurchase(baseParams()));
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    await act(async () => {});
+    expect(mockSubmit).not.toHaveBeenCalled();
+
+    publishCustomerIdentity(user, customer, 'store-b');
+    release();
+    await act(async () => {});
+
+    expect(mockSubmit).not.toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith({
+      title: 'Account changed',
+      description:
+        'The signed-in account changed while the purchase was starting. Please try again.',
+    });
+    expect(result.current.loading).toBe(false);
   });
 
   it('does not submit when the modal closes during the settlement gate', async () => {
@@ -1004,7 +1034,7 @@ describe('useUtilityPurchase', () => {
 
     // Shared browser switches to customer B before A's request settles.
     rerender({ customer: customerB, user: userB });
-    publishCustomerIdentity(userB, customerB);
+    publishCustomerIdentity(userB, customerB, 'ogabassey');
     await act(async () => {
       resolveSubmit({
         kind: 'wallet-success',
@@ -1015,6 +1045,69 @@ describe('useUtilityPurchase', () => {
     });
 
     // A's result is dropped: no balance write, no success screen for B.
+    expect(mockToast).toHaveBeenCalledWith({
+      title: 'Account changed',
+      description:
+        'The signed-in account changed while the purchase was processing. The result was discarded.',
+    });
+    expect(setWalletBalance).not.toHaveBeenCalled();
+    expect(result.current.step).toBe('details');
+    expect(result.current.transactionRef).toBe('');
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('discards the result when the storefront switches but the user stays', async () => {
+    // Codex R101 P2: the same auth user signs into a replacement
+    // store before A's request settles — the user-first account leg
+    // still matches, so only the merchant leg discards A's result
+    // before its reference/voucher publishes into the new store.
+    let resolveSubmit!: (value: {
+      kind: 'wallet-success';
+      reference: string;
+      amount: number;
+      processing: boolean;
+    }) => void;
+    mockSubmit.mockImplementation(
+      () =>
+        new Promise<{
+          kind: 'wallet-success';
+          reference: string;
+          amount: number;
+          processing: boolean;
+        }>((resolve) => {
+          resolveSubmit = resolve;
+        })
+    );
+    const customerB = { ...customer, id: 'customer-2' };
+    const setWalletBalance = vi.fn();
+    const { result, rerender } = renderHook(
+      (props: { customer: Customer; merchantSlug: string }) =>
+        useUtilityPurchase(
+          baseParams({
+            customer: props.customer,
+            merchantSlug: props.merchantSlug,
+            setWalletBalance,
+          })
+        ),
+      { initialProps: { customer, merchantSlug: 'ogabassey' } }
+    );
+
+    act(() => {
+      result.current.handleAirtimeDataSubmit(airtime);
+    });
+    expect(result.current.loading).toBe(true);
+
+    rerender({ customer: customerB, merchantSlug: 'store-b' });
+    publishCustomerIdentity(user, customerB, 'store-b');
+    await act(async () => {
+      resolveSubmit({
+        kind: 'wallet-success',
+        reference: 'REF-A',
+        amount: 1000,
+        processing: false,
+      });
+    });
+
     expect(mockToast).toHaveBeenCalledWith({
       title: 'Account changed',
       description:
@@ -1060,7 +1153,7 @@ describe('useUtilityPurchase', () => {
     });
 
     // Switch publishes with NO rerender: the hook's props still name A.
-    publishCustomerIdentity(userB, customerB);
+    publishCustomerIdentity(userB, customerB, 'ogabassey');
     await act(async () => {
       resolveSubmit({
         kind: 'wallet-success',
@@ -1117,7 +1210,7 @@ describe('useUtilityPurchase', () => {
 
     // Customer row hydrates before A's request settles.
     rerender({ customer });
-    publishCustomerIdentity(user, customer);
+    publishCustomerIdentity(user, customer, 'ogabassey');
     await act(async () => {
       resolveSubmit({
         kind: 'wallet-success',
@@ -1181,7 +1274,7 @@ describe('useUtilityPurchase', () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     rerender({ customer: customerB, user: userB });
-    publishCustomerIdentity(userB, customerB);
+    publishCustomerIdentity(userB, customerB, 'ogabassey');
     await act(async () => {
       resolveSubmit({
         kind: 'wallet-success',
@@ -1194,7 +1287,7 @@ describe('useUtilityPurchase', () => {
     // A switches back and repeats the same purchase: same key, the
     // original outcome reports — no second debit.
     rerender({ customer, user });
-    publishCustomerIdentity(user, customer);
+    publishCustomerIdentity(user, customer, 'ogabassey');
     await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });

@@ -1235,42 +1235,46 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     version: '1.0.0',
   });
 
-  // Widget resource
-  server.registerResource(
-    'store-widget',
-    STORE_WIDGET_URI,
-    { description: 'Ogabassey store widget' },
-    async () => ({
-      contents: [
-        {
-          uri: STORE_WIDGET_URI,
-          mimeType: 'text/html;profile=mcp-app',
-          text: premiumWidgetHtml,
-          _meta: {
-            ui: {
-              prefersBorder: true,
-              domain: MCP_PUBLIC_ORIGIN,
-              csp: {
-                connectDomains: [],
-                resourceDomains: [MCP_PUBLIC_ORIGIN],
+  // Keep the submitted review's cached v4 URI available during migration.
+  for (const uri of [STORE_WIDGET_URI, 'ui://widget/store-v4.html']) {
+    const mimeType = uri === STORE_WIDGET_URI ? 'text/html;profile=mcp-app' : 'text/html+skybridge';
+    server.registerResource(
+      uri === STORE_WIDGET_URI ? 'store-widget' : 'store-widget-v4',
+      uri,
+      { description: 'Ogabassey store widget', mimeType },
+      async () => ({
+        contents: [
+          {
+            uri,
+            mimeType,
+            text: premiumWidgetHtml,
+            _meta: {
+              ui: {
+                prefersBorder: true,
+                domain: MCP_PUBLIC_ORIGIN,
+                csp: {
+                  connectDomains: [],
+                  resourceDomains: [MCP_PUBLIC_ORIGIN],
+                },
+              },
+              'openai/widgetDescription': 'Interactive Ogabassey products with guest-cart controls and website checkout links.',
+              'openai/widgetPrefersBorder': true,
+              'openai/widgetCSP': {
+                connect_domains: [],
+                resource_domains: [MCP_PUBLIC_ORIGIN],
+                redirect_domains: ['https://ogabassey.com'],
+              },
+              'openai/widgetDomain': MCP_PUBLIC_ORIGIN,
+              'openai/ui': {
+                availableDisplayModes: ['inline', 'fullscreen'],
               },
             },
-            'openai/widgetDescription': 'Interactive Ogabassey products with guest-cart controls and website checkout links.',
-            'openai/widgetPrefersBorder': true,
-            'openai/widgetCSP': {
-              connect_domains: [],
-              resource_domains: [MCP_PUBLIC_ORIGIN],
-              redirect_domains: ['https://ogabassey.com'],
-            },
-            'openai/widgetDomain': MCP_PUBLIC_ORIGIN,
-            'openai/ui': {
-              availableDisplayModes: ['inline', 'fullscreen'],
-            },
           },
-        },
-      ],
-    })
-  );
+        ],
+      })
+    );
+
+  }
 
   // Tool: Search products
   server.registerTool(

@@ -385,9 +385,10 @@ product details; callers cannot provide prices or arbitrary product cards.
 If any product cannot be loaded, it returns an error instead of a partial
 comparison. Option selection stays on the storefront.
 
-The catalog resource uses `text/html;profile=mcp-app` and standard
+The v5 catalog resource uses `text/html;profile=mcp-app` and standard
 `ui.resourceUri`/`ui.visibility` metadata. Existing ChatGPT bridge sessions
-retain their state and behavior. Other MCP Apps hosts connect through the
+retain their state and behavior. The submitted review’s v4 resource URI stays
+registered with its legacy MIME type as a compatibility alias to the same HTML. Other MCP Apps hosts connect through the
 SDK bridge for results, deferred tool arguments, theme, sizing, links and
 cart tool calls. Standard-only hosts maintain cart UI state while mounted;
 cross-remount persistence remains host-dependent and needs host QA.

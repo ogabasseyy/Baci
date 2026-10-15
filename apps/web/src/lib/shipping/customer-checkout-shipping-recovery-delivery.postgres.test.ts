@@ -57,6 +57,7 @@ describe.skipIf(process.env.BACI_SHIPPING_QUOTE_POSTGRES !== '1')(
       for (const sql of [context, prepared.sql, recoveryConfirm(prepared.id)]) {
         expect(() =>
           database.query(`BEGIN;
+          ${sql === recoveryConfirm(prepared.id) ? `${recoveryActorAuth()} ${prepared.sql} RESET ROLE;` : ''}
           UPDATE public.orders SET delivery_method='${method}',selected_quote_id=NULL;
           ${recoveryActorAuth()} ${sql} ROLLBACK;`)
         ).toThrow(/shipping_recovery_unavailable/);

@@ -198,7 +198,8 @@ jobs:
             src/lib/shipping/prepare-checkout-shipping-recovery.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-quantity.postgres.test.ts \
             src/lib/shipping/customer-checkout-shipping-recovery-aliases.postgres.test.ts \
-            src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts
+            src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts
       - name: Run Tests
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}

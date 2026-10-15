@@ -6,16 +6,20 @@ import {
 } from './order-shipment-booking-utils';
 import type { ShipmentItem } from './types';
 
-const remaining: OrderItemRecord = {
+const remaining: OrderItemRecord & {
+  product: { dimensions: { length: number; width: number; height: number } };
+} = {
   name: 'Phone',
   quantity: 2,
   price: 1000,
+  product: { dimensions: { length: 10, width: 5, height: 3 } },
   fulfillment_data: { fulfillmentQuantity: 1 },
 };
-const refunded: OrderItemRecord = {
+const refunded: typeof remaining = {
   name: 'Phone',
   quantity: 1,
   price: 1000,
+  product: { dimensions: { length: 10, width: 5, height: 3 } },
   fulfillment_data: { fulfillmentQuantity: 0 },
 };
 const recovered: ShipmentItem = {

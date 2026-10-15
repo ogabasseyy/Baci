@@ -31,7 +31,12 @@ test('the quality gate enables real recovery PostgreSQL tests before test-plan s
     'customer-checkout-shipping-recovery-quantity.postgres.test.ts',
     'customer-checkout-shipping-recovery-aliases.postgres.test.ts',
     'customer-checkout-shipping-recovery-delivery.postgres.test.ts',
+    'customer-checkout-shipping-recovery-retry.postgres.test.ts',
   ]) assert.ok(step.run.includes(`src/lib/shipping/${suite}`), `missing ${suite}`);
+  const suiteLines = step.run.trim().split('\n').filter((line) => line.includes('.postgres.test.ts'));
+  for (const line of suiteLines.slice(0, -1)) {
+    assert.ok(line.trimEnd().endsWith('\\'), `missing shell continuation: ${line}`);
+  }
   assert.ok(step.run.includes('extract-sql-function-definition.test.mjs'));
 });
 

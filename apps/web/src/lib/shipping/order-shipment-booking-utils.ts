@@ -5,6 +5,7 @@ import type {
   ShippingProviderCode,
 } from '@/lib/shipping/types';
 import { SHIPPING_PROVIDER_CODES } from '@/lib/shipping/types';
+import { matchesQuoteItem } from './international-quote-items-match';
 import { OrderShipmentBookingError } from './order-shipment-booking-error';
 import { readPackageDimensionsCm } from './package-dimensions';
 import { survivingShipmentQuantity } from './surviving-shipment-quantity';
@@ -125,23 +126,39 @@ export function toShipmentItems(orderItems: OrderItemRecord[]): ShipmentItem[] {
 
 export function toDomesticBookingItems(
   orderItems: OrderItemRecord[],
-  quoteItems: ShipmentItem[] | undefined
+  quoteItems: ShipmentItem[] | undefined,
+  defaultWeight?: number
 ): ShipmentItem[] {
   if (!quoteItems?.length) return toShipmentItems(orderItems);
-  // Recovery quotes already contain surviving quantities. Recognize the whole
-  // surviving item set before matching rows, so an original-quantity collision
-  // cannot select a fully refunded sibling. Legacy quotes keep their old match.
+  // Match a complete surviving snapshot or preserve legacy original quantities.
+  const matches = (
+    orderItem: OrderItemRecord,
+    item: ShipmentItem,
+    original = false
+  ) => {
+    // Direct legacy callers lack the package context validated by order booking.
+    if (defaultWeight === undefined)
+      return (
+        orderItem.name === item.name &&
+        (original
+          ? orderItem.quantity
+          : survivingShipmentQuantity(orderItem)) === item.quantity &&
+        Number(orderItem.price) === item.value
+      );
+    const comparable = toQuoteComparableOrderItems([orderItem], {
+      defaultWeight,
+      quantityMode: original ? 'original' : undefined,
+    })[0];
+    return comparable !== undefined && matchesQuoteItem(comparable, item);
+  };
   const survivingItems = orderItems.filter(
     (item) => survivingShipmentQuantity(item) > 0
   );
   const usesSurvivingQuantities =
     quoteItems.length === survivingItems.length &&
     quoteItems.every((item) => {
-      const index = survivingItems.findIndex(
-        (orderItem) =>
-          orderItem.name === item.name &&
-          survivingShipmentQuantity(orderItem) === item.quantity &&
-          Number(orderItem.price) === item.value
+      const index = survivingItems.findIndex((orderItem) =>
+        matches(orderItem, item)
       );
       if (index === -1) return false;
       survivingItems.splice(index, 1);
@@ -150,14 +167,15 @@ export function toDomesticBookingItems(
   const unmatchedOrderItems = [...orderItems];
   return quoteItems
     .map((item) => {
-      const orderItemIndex = unmatchedOrderItems.findIndex(
-        (orderItem) =>
-          orderItem.name === item.name &&
-          (usesSurvivingQuantities
-            ? survivingShipmentQuantity(orderItem)
-            : orderItem.quantity) === item.quantity &&
-          Number(orderItem.price) === item.value
+      const orderItemIndex = unmatchedOrderItems.findIndex((orderItem) =>
+        matches(orderItem, item, !usesSurvivingQuantities)
       );
+      if (orderItemIndex === -1 && defaultWeight !== undefined)
+        throw new OrderShipmentBookingError(
+          'The saved shipping quote no longer matches this order.',
+          400,
+          'SHIPPING_QUOTE_ITEMS_MISMATCH'
+        );
       const matchedOrderItem =
         orderItemIndex === -1 ? item : unmatchedOrderItems[orderItemIndex];
       if (orderItemIndex !== -1) unmatchedOrderItems.splice(orderItemIndex, 1);
@@ -222,7 +240,7 @@ export function quotedShipmentItemWeight(item: {
 
 export function toQuoteComparableOrderItems(
   items: unknown,
-  options: { defaultWeight?: number } = {}
+  options: { defaultWeight?: number; quantityMode?: 'original' } = {}
 ) {
   if (!Array.isArray(items)) return [];
   return items.flatMap((item) => {
@@ -255,14 +273,13 @@ export function toQuoteComparableOrderItems(
         width: record.width,
         height: record.height,
       });
-    // Compare the units booking will actually send: after a partial refund
-    // finishes reconciliation, only surviving units remain shippable, so the
-    // saved quote must cover those — not refunded units. Fully refunded lines
-    // resolve to zero and are dropped here, mirroring the send path.
-    const quantity = survivingShipmentQuantity({
-      fulfillment_data: record.fulfillment_data,
-      quantity: record.quantity ?? null,
-    });
+    const quantity =
+      options.quantityMode === 'original'
+        ? Math.max(0, record.quantity ?? 1)
+        : survivingShipmentQuantity({
+            fulfillment_data: record.fulfillment_data,
+            quantity: record.quantity ?? null,
+          });
     if (quantity <= 0) return [];
     return [
       {

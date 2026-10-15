@@ -76,8 +76,9 @@ mobile UI: `20261013213516_customer_checkout_shipping_recovery_context.sql`,
 `20261014130000_customer_checkout_shipping_recovery_hardening.sql`,
 `20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql`,
 `20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql`,
-`20261015124602_customer_checkout_shipping_recovery_address_aliases.sql` and
-`20261015130721_customer_checkout_shipping_recovery_delivery_boundary.sql`.
+`20261015124602_customer_checkout_shipping_recovery_address_aliases.sql`,
+`20261015130721_customer_checkout_shipping_recovery_delivery_boundary.sql` and
+`20261015145945_customer_checkout_shipping_recovery_committed_retry.sql`.
 The automated migration runner applies the whole directory; a manual rollout
 must include every recovery migration or legacy scalar destinations stay
 unbookable and the context schema check fails closed. No native dependency
@@ -197,3 +198,18 @@ Carrier-only saved preferences do not distinguish delivery tiers. Recovery can
 prefer the candidate matching the paid fee in that case, while explicit saved
 tier/rate matches still take priority. Other callers without a paid-fee fallback
 keep their existing selection behavior.
+
+## Confirmation retries after later order changes
+
+An already confirmed preview returns its committed result after booking, refund,
+cancellation or reservation. The RPC independently checks the authenticated owner,
+actor-bound preview and selected quote under the order-payment lock before this
+read-only acknowledgment. New confirmations retain all current eligibility checks.
+Real PostgreSQL regressions exercise authenticated callers, redacted audit rows,
+changed ownership, stale quote links and blocked first confirmations.
+
+Domestic booking accepts either the complete original item snapshot from a
+pre-refund quote or the complete surviving snapshot from a recovery quote.
+Both validation and shipment mapping compare package weight and dimensions,
+including duplicate product names; only surviving quantities reach the carrier.
+Mixed snapshots, changed packages and zero surviving units remain blocked.

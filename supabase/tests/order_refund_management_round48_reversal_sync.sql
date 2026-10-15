@@ -81,7 +81,9 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000078', v_merchant_id, 'REFUND-078',
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000079', v_merchant_id, 'REFUND-079',
-      200, 100, 'partially_paid', 'cancelled', pg_catalog.now());
+      200, 100, 'partially_paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000080', v_merchant_id, 'REFUND-080',
+      100, 100, 'pending', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -98,7 +100,10 @@ BEGIN
       'completed', 'paystack', 'r48-78', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000094', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000079', 'payment', 100, 'NGN',
-      'completed', 'wallet', 'r48-79', '{}'::jsonb);
+      'completed', 'wallet', 'r48-79', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000095', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000080', 'payment', 100, 'NGN',
+      'completed', 'wallet', 'r48-80', '{}'::jsonb);
 
   INSERT INTO public.customer_wallet_transactions (
     wallet_id, customer_id, merchant_id, type, amount, balance_after,
@@ -109,7 +114,9 @@ BEGIN
     (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 200,
       'order_reversal', '9ef11000-0000-4000-8000-000000000078'),
     (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 300,
-      'order_reversal', '9ef11000-0000-4000-8000-000000000079');
+      'order_reversal', '9ef11000-0000-4000-8000-000000000079'),
+    (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 400,
+      'order_reversal', '9ef11000-0000-4000-8000-000000000080');
 
   -- The redemption variant trigger requires the order to carry the
   -- customer and a matching order item.
@@ -171,6 +178,12 @@ BEGIN
   WHERE id = '9ef11000-0000-4000-8000-000000000079';
   IF v_status IS DISTINCT FROM 'refunded' THEN
     RAISE EXCEPTION 'partially-paid reversal left status %, want refunded',
+      v_status;
+  END IF;
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000080';
+  IF v_status IS DISTINCT FROM 'refunded' THEN
+    RAISE EXCEPTION 'pending reversal left status %, want refunded',
       v_status;
   END IF;
 END;

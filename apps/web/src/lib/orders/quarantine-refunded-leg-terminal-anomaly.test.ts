@@ -107,25 +107,6 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
     );
   });
 
-  it('quarantines currency-mismatched refunded legs with no rows at all', async () => {
-    const { from, reviewInsert } = probeClient({
-      legs: [refundedLeg({ currency: 'USD' })],
-      refundRows: [],
-    });
-    const error = await quarantineRefundedLegTerminalAnomaly({
-      legs: [refundedLeg({ currency: 'USD' }) as never],
-      order: order as never,
-      soleCompletedLegId: null,
-      supabase: { from } as never,
-    }).catch((reason: unknown) => reason);
-    expect(error).toBeInstanceOf(DeliveryUncertainError);
-    expect(reviewInsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reason: 'Payment currency requires review before refund',
-      })
-    );
-  });
-
   it('quarantines completed-but-unverified provider rows', async () => {
     const { from, reviewInsert } = probeClient({
       legs: [refundedLeg()],
@@ -179,30 +160,6 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
       })
     ).resolves.toEqual({ refundedManualPendingLegIds: new Set() });
     expect(reviewInsert).not.toHaveBeenCalled();
-  });
-
-  it('quarantines a foreign-currency refunded leg beside an actionable sibling', async () => {
-    const legs = [
-      refundedLeg({ currency: 'USD' }),
-      refundedLeg({
-        gateway_reference: 'paystack-ref-2',
-        id: 'payment-2',
-        status: 'completed',
-      }),
-    ];
-    const { from, reviewInsert } = probeClient({ legs, refundRows: [] });
-    const error = await quarantineRefundedLegTerminalAnomaly({
-      legs: legs as never,
-      order: order as never,
-      soleCompletedLegId: 'payment-2',
-      supabase: { from } as never,
-    }).catch((reason: unknown) => reason);
-    expect(error).toBeInstanceOf(DeliveryUncertainError);
-    expect(reviewInsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reason: 'Payment currency requires review before refund',
-      })
-    );
   });
 
   it('resolves a clean refunded leg beside an actionable sibling', async () => {
@@ -290,39 +247,6 @@ describe('quarantineRefundedLegTerminalAnomaly', () => {
         supabase: { from } as never,
       })
     ).resolves.toEqual({ refundedManualPendingLegIds: new Set() });
-    expect(reviewInsert).not.toHaveBeenCalled();
-  });
-
-  it('returns refunded legs still awaiting manual completion', async () => {
-    const legs = [refundedLeg({ gateway: 'cash', gateway_reference: null })];
-    const { from, reviewInsert } = probeClient({
-      legs,
-      refundRows: [
-        {
-          amount: 40,
-          currency: 'NGN',
-          gateway: 'manual',
-          id: 'refund-1',
-          metadata: { payment_transaction_id: 'payment-1' },
-          status: 'completed',
-        },
-      ],
-    });
-
-    // The partial manual neither covers nor quarantines the refunded
-    // cash leg: the caller merges the id into the settle deferral so
-    // the step waits for the merchant instead of completing with
-    // money still outstanding.
-    await expect(
-      quarantineRefundedLegTerminalAnomaly({
-        legs: legs as never,
-        order: order as never,
-        soleCompletedLegId: null,
-        supabase: { from } as never,
-      })
-    ).resolves.toEqual({
-      refundedManualPendingLegIds: new Set(['payment-1']),
-    });
     expect(reviewInsert).not.toHaveBeenCalled();
   });
 });

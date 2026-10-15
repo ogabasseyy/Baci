@@ -56,7 +56,7 @@ BEGIN
      SET payment_status = 'refunded', updated_at = now()
    WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
      AND o.shipping_status IN ('cancelled', 'canceled')
-     AND o.payment_status IN ('paid', 'partially_paid')
+     AND o.payment_status IN ('paid', 'partially_paid', 'pending')
      AND o.amount_paid > 0
      AND o.amount_paid <= v_reversed_internal
      -- Mirror the cancel-time side-effect gate negated: any external

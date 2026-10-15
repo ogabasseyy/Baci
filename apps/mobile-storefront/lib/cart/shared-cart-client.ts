@@ -241,8 +241,16 @@ export function createNativeCartClient(
       lines?: CartInputLine[];
     }): Promise<NativeCartReply> {
       const result = await send('/handoff/redeem', 'POST', input);
-      if (!result.proof || !result.cart)
+      if (!result.proof)
         throw new NativeCartError('temporarily_unavailable', true);
+      if (!result.cart) {
+        // keep_existing with no destination cart: the handoff is
+        // consumed and the server answers with a fresh bootstrap proof.
+        // Persist it so the session can continue; dropping it would
+        // strand the shopper behind the now-consumed link.
+        await keepProof(result);
+        return result;
+      }
       await keepProof(result, true, {
         operationId: input.attemptId,
         cartId: result.cart.cartId,

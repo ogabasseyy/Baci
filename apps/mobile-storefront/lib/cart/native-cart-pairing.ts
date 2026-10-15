@@ -88,7 +88,10 @@ export async function pairNativeCart(
         }
       : {}),
   });
-  await deps.accept(result);
+  // A null snapshot means keep_existing committed without a
+  // destination cart: nothing to adopt, the session continues on the
+  // bootstrap proof the client persisted during redeem.
+  if (result) await deps.accept(result);
   deps.onMergeConflicts?.([], undefined);
   deps.onHandoffCommitted?.(link.handoffId);
 }

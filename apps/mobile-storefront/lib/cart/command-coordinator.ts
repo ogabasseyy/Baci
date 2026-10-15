@@ -48,7 +48,9 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
       throw new NativeCartError('session_changed');
     return current;
   }
-  async function transmit(request: PendingCartRequest): Promise<CartSnapshot> {
+  async function transmit(
+    request: PendingCartRequest
+  ): Promise<CartSnapshot | null> {
     const parsed = pendingCartBodySchema.safeParse(request.body);
     if (
       !parsed.success ||
@@ -108,6 +110,14 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
       throw error;
     }
     await assertActor(request.actor);
+    if (body.kind === 'handoff' && result && !result.cart) {
+      // keep_existing with no destination cart: the redemption
+      // committed and returned only a bootstrap proof, so there is no
+      // snapshot to adopt and nothing left to retry.
+      await receipts.clear(options.merchantId, request.operationId);
+      await assertActor(request.actor);
+      return null;
+    }
     if (
       !result?.cart ||
       result.cart.merchantId.toLowerCase() !== options.merchantId.toLowerCase()
@@ -179,7 +189,7 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
     options.onSnapshot(result.cart);
     return result.cart;
   }
-  async function execute(body: PendingCartBody): Promise<CartSnapshot> {
+  async function execute(body: PendingCartBody): Promise<CartSnapshot | null> {
     const actor = await assertActor();
     const parsed = pendingCartBodySchema.safeParse(body);
     if (!parsed.success) throw new NativeCartError('invalid_request');
@@ -203,11 +213,18 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
     await receipts.save(options.merchantId, request);
     return transmit(request);
   }
+  // Only handoff redemption may commit without a snapshot (see
+  // transmit); every other kind still owes the caller a cart.
+  async function executeCart(body: PendingCartBody): Promise<CartSnapshot> {
+    const snapshot = await execute(body);
+    if (!snapshot) throw new NativeCartError('invalid_cart_reply', true);
+    return snapshot;
+  }
   return {
     create: (input: CreateCartInput) =>
-      serial(() => execute({ kind: 'create', input })),
+      serial(() => executeCart({ kind: 'create', input })),
     command: (cartId: string, input: CartMutationInput) =>
-      serial(() => execute({ kind: 'command', cartId, input })),
+      serial(() => executeCart({ kind: 'command', cartId, input })),
     redeem: (input: Extract<PendingCartBody, { kind: 'handoff' }>['input']) =>
       serial(() => execute({ kind: 'handoff', input })),
     linkAccount: (
@@ -216,7 +233,7 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
       serial(() => {
         const ownerSubject = options.getOwnerSubject?.();
         if (!ownerSubject) throw new NativeCartError('unauthorized');
-        return execute({ kind: 'account', ownerSubject, input });
+        return executeCart({ kind: 'account', ownerSubject, input });
       }),
     recover: () =>
       serial(async () => {

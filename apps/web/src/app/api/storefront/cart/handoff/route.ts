@@ -128,9 +128,10 @@ const UUID_PATTERN =
 /**
  * GET /api/storefront/cart/handoff?handoff_id=<uuid>
  *
- * Unauthenticated continuation preview by public handoff id. Never
- * consumes the grant and never touches pairing secrets: the id is a
- * random capability, safe in access logs.
+ * Unauthenticated continuation preview. The handoff id only locates
+ * the grant; disclosure is authorized by the pairing token, whose hash
+ * the preview binds server-side (the x-handoff-token header). Never
+ * consumes the grant.
  */
 export async function GET(request: NextRequest) {
   try {

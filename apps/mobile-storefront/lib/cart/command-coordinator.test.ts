@@ -367,3 +367,21 @@ it('retries the same unsettled account request without replacing its durable hea
   expect(s.receipts.save).toHaveBeenCalledTimes(1);
   expect(linkAccount).toHaveBeenCalledTimes(2);
 });
+it('commits a keep_existing handoff with no destination cart without a snapshot', async () => {
+  const s = setup();
+  const redeem = jest
+    .fn()
+    .mockResolvedValue({ cart: null, proof: 'cp1.bootstrap.signature' });
+  const result = await createCartCommandCoordinator({
+    ...s.options,
+    client: { ...s.client, redeem },
+  }).redeem({
+    token: 'ch1.payload.signature',
+    handoffId: cartId,
+    attemptId: 'pair-keep-1',
+    choice: 'keep_existing',
+  });
+  expect(result).toBeNull();
+  expect(s.receipts.clear).toHaveBeenCalledWith(merchantId, 'pair-keep-1');
+  expect(s.onSnapshot).not.toHaveBeenCalled();
+});

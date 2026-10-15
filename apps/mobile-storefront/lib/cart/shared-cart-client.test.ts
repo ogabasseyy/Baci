@@ -391,3 +391,34 @@ it('does not send a saved account cart proof under a different signed-in shopper
   });
   expect(s.fetcher).not.toHaveBeenCalled();
 });
+
+it('persists the bootstrap proof from a keep_existing redemption with no destination cart', async () => {
+  const s = setup();
+  s.fetcher.mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        cart: null,
+        choice: 'keep_existing',
+        proof: 'cp1.bootstrap.signature',
+        replayed: false,
+        warnings: [],
+      })
+    )
+  );
+
+  const result = await s.client.redeem({
+    token: 'ch1.payload.signature',
+    handoffId: cart,
+    attemptId: 'pair-keep-1',
+    choice: 'keep_existing',
+  });
+
+  expect(result.cart).toBeNull();
+  expect(result.proof).toBe('cp1.bootstrap.signature');
+  // Plain proof persistence (no cart promotion): the session continues
+  // on the bootstrap proof instead of the consumed handoff.
+  expect(s.storage.set).toHaveBeenCalledWith(
+    merchant,
+    'cp1.bootstrap.signature'
+  );
+});

@@ -84,3 +84,46 @@ it('submits the complete two-cart union with both reviewed versions', async () =
     })
   );
 });
+it('completes keep_existing without a destination cart and adopts nothing', async () => {
+  const accept = jest.fn();
+  const onHandoffCommitted = jest.fn();
+  const redeem = jest.fn().mockResolvedValue(null);
+  await pairNativeCart(
+    {
+      merchantId,
+      client: {
+        context: jest.fn().mockResolvedValue({ actor: 'guest', cartId: null }),
+        bootstrap: jest.fn(),
+        previewHandoff: jest.fn().mockResolvedValue({
+          snapshot: existing,
+          expiresAt: existing.expiresAt,
+        }),
+        redeem: jest.fn(),
+      },
+      readPending: async () => null,
+      getSnapshot: () => null,
+      getItems: () => [],
+      ensureCart: async () => existing,
+      refresh: async () => {},
+      accept,
+      assertCurrent: jest.fn(),
+      pending: jest.fn(),
+      newOperationId: () => 'keep-attempt',
+      onHandoffCommitted,
+      redeem,
+    },
+    {
+      merchantId,
+      token: 'ch1.payload.signature',
+      handoffId: existing.cartId,
+      destination: 'native',
+      browserUrl: 'https://shop.example/cart',
+    },
+    'keep_existing'
+  );
+  expect(redeem).toHaveBeenCalledWith(
+    expect.objectContaining({ choice: 'keep_existing' })
+  );
+  expect(accept).not.toHaveBeenCalled();
+  expect(onHandoffCommitted).toHaveBeenCalledWith(existing.cartId);
+});

@@ -10,6 +10,7 @@ import { logKudaResponse } from '@/lib/kuda-debug-log';
 import {
   isKudaOutcomeUnknown,
   KudaApiHttpError,
+  KudaPreDispatchError,
 } from '@/lib/kuda-transport-error';
 import {
   extractKudaTransactionId,
@@ -471,20 +472,38 @@ async function getToken(): Promise<string> {
       signal,
     });
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Kuda authentication request timed out');
+    // Pre-dispatch (Codex R103 P1): no provider request was sent,
+    // so this is a known failure, not an ambiguous vend outcome.
+    // Match aborts by name across prototypes: fetch rejects with a
+    // DOMException, which is not an instanceof Error.
+    if (
+      (error instanceof Error || error instanceof DOMException) &&
+      error.name === 'AbortError'
+    ) {
+      throw new KudaPreDispatchError('Kuda authentication request timed out');
     }
 
-    throw error;
+    throw new KudaPreDispatchError(
+      error instanceof Error ? error.message : String(error)
+    );
   } finally {
     cleanup();
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to get Kuda token: ${response.statusText}`);
+    throw new KudaPreDispatchError(
+      `Failed to get Kuda token: ${response.statusText}`
+    );
   }
 
-  const token = await response.text();
+  let token: string;
+  try {
+    token = await response.text();
+  } catch (error) {
+    throw new KudaPreDispatchError(
+      error instanceof Error ? error.message : String(error)
+    );
+  }
 
   // Cache token for 55 minutes (tokens expire in 1 hour)
   cachedToken = {

@@ -460,6 +460,32 @@ function setMetadataValue(
  * lookup on (source_type='vtu_transaction_refund', source_id, type='refund').
  * Also writes metadata.refundIssued / metadata.refundAmount for visibility.
  */
+function reconstructReplayRefundTotal({
+  metadata,
+  totalAmount,
+}: {
+  metadata: Record<string, unknown>;
+  totalAmount: number;
+}): number {
+  const persisted = Number(metadata.refundAmount ?? Number.NaN);
+  if (
+    metadata.refundContext === 'hybrid_vend_failure' &&
+    Number.isFinite(persisted)
+  ) {
+    const paymentSplit = readPaymentSplit(metadata);
+    if (paymentSplit) {
+      return paymentSplit.wallet + persisted;
+    }
+  }
+  // Every other branch (card_only, wallet_race / wallet_only_race,
+  // ledger sync) persists exactly what was restored. Legacy rows
+  // refunded before refundAmount existed fall back to the total.
+  if (Number.isFinite(persisted)) {
+    return persisted;
+  }
+  return totalAmount;
+}
+
 async function refundVtuToCustomerWallet({
   metadata,
   row,
@@ -507,11 +533,17 @@ async function refundVtuToCustomerWallet({
     return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
   }
   if (metadata.refundIssued === true) {
-    // Already refunded on a prior fulfillment pass.
+    // Already refunded on a prior fulfillment pass. Reconstruct the
+    // restored total (Codex R103 P2): the hybrid kuda-failure branch
+    // persists only the card leg (the history projector sums it with
+    // the split's wallet leg), so reading the persisted value raw
+    // would serialize refundedToWallet: 0 for wallet-only splits on
+    // cached replays. Every other branch persists exactly what was
+    // restored, so only that label adds the wallet leg back.
     return {
       metadataChanged: false,
       refundIssued: true,
-      refundedAmount: Number(metadata.refundAmount ?? totalAmount),
+      refundedAmount: reconstructReplayRefundTotal({ metadata, totalAmount }),
     };
   }
 
@@ -1687,12 +1719,23 @@ async function resolveSuccessfulVtuTransaction({
   if (metadataChanged) {
     // CAS-merged (Codex R82 P2): a concurrent replay settling the
     // same row must not lose its keys to this write, nor vice versa.
-    await mergeVtuSettlementMetadata({
+    const mergeResult = await mergeVtuSettlementMetadata({
       baselineMetadata: preSettlementMetadata,
       mutatedMetadata: metadata,
       rowId: row.id,
       supabase,
     });
+    if (mergeResult === 'skipped-reread-failed') {
+      // Not a race (Codex R103 P2): the re-read failed, so the
+      // owned patch — possibly this pass's only email `sent: true`
+      // — was dropped. Fail retryable instead of succeeding
+      // silently; the lease-without-marker left behind would
+      // otherwise resend the email once it expires.
+      throw new RetryableVtuError(
+        `VTU settlement metadata re-read failed for ${row.id}`,
+        { transactionId: row.id }
+      );
+    }
   }
 
   return {
@@ -3030,12 +3073,20 @@ export async function fulfillPendingVtuTransaction({
   if (metadataChanged) {
     // CAS-merged (Codex R82 P2): same concurrent-settlement race as
     // the reconcile path above.
-    await mergeVtuSettlementMetadata({
+    const mergeResult = await mergeVtuSettlementMetadata({
       baselineMetadata: preSettlementMetadata,
       mutatedMetadata: finalMetadata,
       rowId: row.id,
       supabase,
     });
+    if (mergeResult === 'skipped-reread-failed') {
+      // Not a race (Codex R103 P2): see the reconcile path above —
+      // the dropped patch may hold this pass's only `sent: true`.
+      throw new RetryableVtuError(
+        `VTU settlement metadata re-read failed for ${row.id}`,
+        { transactionId: row.id }
+      );
+    }
   }
 
   return {

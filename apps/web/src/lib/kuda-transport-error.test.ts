@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isKudaOutcomeUnknown, KudaApiHttpError } from './kuda-transport-error';
+import {
+  isKudaOutcomeUnknown,
+  KudaApiHttpError,
+  KudaPreDispatchError,
+} from './kuda-transport-error';
 
 describe('isKudaOutcomeUnknown', () => {
   it('treats only definitive 4xx rejections as known failures', () => {
@@ -35,6 +39,22 @@ describe('isKudaOutcomeUnknown', () => {
     expect(
       isKudaOutcomeUnknown(new SyntaxError('Unexpected token in JSON'))
     ).toBe(true);
+  });
+
+  it('treats pre-dispatch auth failures as known (nothing was sent)', () => {
+    // Codex R103 P1: GetToken threw before any provider request was
+    // dispatched — no vend could have landed, so fail/refund instead
+    // of stranding the row in processing with a never-submitted ref.
+    expect(
+      isKudaOutcomeUnknown(
+        new KudaPreDispatchError('Kuda authentication request timed out')
+      )
+    ).toBe(false);
+    expect(
+      isKudaOutcomeUnknown(
+        new KudaPreDispatchError('Failed to get Kuda token: Bad Gateway')
+      )
+    ).toBe(false);
   });
 
   it('fails closed to unknown for anything else thrown post-attempt', () => {

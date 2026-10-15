@@ -21,6 +21,7 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     getWalletError: () => false,
     walletLoading: false,
     walletRefreshPending: false,
+    walletInitialReadPending: false,
     ...overrides,
   };
 }
@@ -92,6 +93,26 @@ describe('checkUtilityPurchaseReadiness', () => {
     expect(
       checkUtilityPurchaseReadiness(
         baseInput({ walletLoading: false, walletRefreshPending: true })
+      )
+    ).toBe(false);
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Checking wallet balance' })
+    );
+  });
+
+  it('blocks until the identity initial wallet read settles', () => {
+    // Codex R103 P2: the render-phase identity reset zeroes the
+    // balance a full commit before the fetch effect flips
+    // walletLoading — a funded customer's placeholder zero must
+    // block here, never report as insufficient funds.
+    expect(
+      checkUtilityPurchaseReadiness(
+        baseInput({
+          getWalletBalance: () => 0,
+          walletLoading: false,
+          walletRefreshPending: false,
+          walletInitialReadPending: true,
+        })
       )
     ).toBe(false);
     expect(mockToast).toHaveBeenCalledWith(

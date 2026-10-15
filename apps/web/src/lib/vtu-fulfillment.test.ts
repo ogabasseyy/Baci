@@ -107,6 +107,12 @@ interface PendingTransactionMockOptions {
     submissionMarker?: { message: string };
     successMetadata?: { message: string };
   };
+  /**
+   * When set, the settlement-metadata merge re-read (the only
+   * `metadata, updated_at` select) fails with this error (Codex
+   * R103 P2) — every other select is unaffected.
+   */
+  metadataRereadError?: { message: string };
   updatePayloads?: unknown[];
 }
 
@@ -211,6 +217,7 @@ function createPendingTransactionSupabaseMock({
   expectedRestoreToken,
   updateErrors = {},
   updatePayloads = [],
+  metadataRereadError,
 }: PendingTransactionMockOptions): SupabaseStub {
   let purchaseUpdateAttempt = 0;
   // The first marker-shaped write always takes the submissionMarker
@@ -280,19 +287,24 @@ function createPendingTransactionSupabaseMock({
               // Marker read-back verify (Codex R54 6rrFRC): the
               // scripted marker write truly failed, so the re-read
               // shows no marker — the error (and the caller's
-              // restore+throw) stands.
-              maybeSingle: vi.fn().mockResolvedValue({
-                data: {
-                  metadata:
-                    transactionRow.metadata &&
-                    typeof transactionRow.metadata === 'object'
-                      ? transactionRow.metadata
-                      : {},
-                  status: 'processing',
-                  transaction_id: transactionRow.transaction_id ?? null,
-                },
-                error: null,
-              }),
+              // restore+throw) stands. The settlement merge
+              // re-read (Codex R103 P2) fails when scripted.
+              maybeSingle: vi.fn().mockResolvedValue(
+                columns === 'metadata, updated_at' && metadataRereadError
+                  ? { data: null, error: metadataRereadError }
+                  : {
+                      data: {
+                        metadata:
+                          transactionRow.metadata &&
+                          typeof transactionRow.metadata === 'object'
+                            ? transactionRow.metadata
+                            : {},
+                        status: 'processing',
+                        transaction_id: transactionRow.transaction_id ?? null,
+                      },
+                      error: null,
+                    }
+              ),
             }),
           })),
           update: vi.fn((payload: unknown) => {
@@ -843,6 +855,66 @@ describe('fulfillPendingVtuTransaction', () => {
         customerTokenEmailNotificationSent: true,
       }),
     });
+  });
+
+  it('throws retryable when the settlement merge re-read fails after the email sent', async () => {
+    // Codex R103 P2 (reconcile site): the email already went out and
+    // its `sent: true` lives only in the dropped merge patch — fail
+    // retryable instead of succeeding silently, or the
+    // lease-without-marker resends once it expires.
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    try {
+      const supabase = createPendingTransactionSupabaseMock({
+        customerData: {
+          user_id: 'user-1',
+          email: 'buyer@example.com',
+          first_name: 'Ada',
+          last_name: 'Lovelace',
+        },
+        merchantData: {
+          business_name: 'OgaBassey',
+          slug: 'ogabassey',
+          support_email: 'support@oga.test',
+        },
+        transactionRow: {
+          id: 'vtu-1',
+          merchant_id: 'merchant-1',
+          customer_id: 'customer-1',
+          type: 'electricity',
+          network_provider: '',
+          phone_number: '',
+          amount: 1000,
+          request_reference: 'VTU-123',
+          transaction_id: 'kuda-1',
+          status: 'successful',
+          metadata: {
+            customerNotificationAttempted: true,
+            customerEmailNotificationSent: false,
+            voucherPin: 'TOKEN-READY-1234',
+          },
+          error_message: null,
+          merchant_commission: 0,
+          customer_cashback: 0,
+          biller_name: 'EKEDC PREPAID',
+          biller_item_code: 'KUD-ELE-EKED-002',
+          customer_identifier: '43901766923',
+        },
+        metadataRereadError: { message: 'read failed' },
+      });
+
+      await expect(
+        fulfillPendingVtuTransaction({ supabase, transactionId: 'vtu-1' })
+      ).rejects.toMatchObject({
+        name: 'RetryableVtuError',
+        message: expect.stringContaining('re-read failed'),
+      });
+      // The send happened — this is exactly the drop the throw guards.
+      expect(mockSendEmail).toHaveBeenCalled();
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
   });
 
   it('sends token-ready email after an earlier receipt email for token-backed utilities', async () => {
@@ -4526,6 +4598,69 @@ describe('fulfillPendingVtuTransaction', () => {
 
       expect(result).toMatchObject({
         refundedToWallet: 1000,
+        status: 'failed',
+      });
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.anything()
+      );
+    });
+
+    it('reconstructs the wallet+card total when replaying a hybrid kuda-failure refund', async () => {
+      // Codex R103 P2: the hybrid branch persists only the card leg
+      // (the history projector sums it with the split wallet leg), so
+      // a cached replay must add the wallet leg back — a wallet-only
+      // refund would otherwise serialize refundedToWallet: 0.
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+      const runReplay = async (metadata: Record<string, unknown>) => {
+        const supabase = createPendingTransactionSupabaseMock({
+          transactionRow: {
+            ...FAILED_ROW_BASE,
+            status: 'failed',
+            metadata,
+          },
+          rpcImpl,
+        });
+        return await fulfillPendingVtuTransaction({
+          retryFailed: false,
+          supabase,
+          transactionId: 'vtu-1',
+        });
+      };
+
+      const walletOnly = await runReplay({
+        paymentSplit: { card: 0, wallet: 1000 },
+        refundAmount: 0,
+        refundContext: 'hybrid_vend_failure',
+        refundIssued: true,
+      });
+      expect(walletOnly).toMatchObject({
+        refundedToWallet: 1000,
+        status: 'failed',
+      });
+
+      const split = await runReplay({
+        paymentSplit: { card: 400, wallet: 600 },
+        refundAmount: 400,
+        refundContext: 'hybrid_vend_failure',
+        refundIssued: true,
+      });
+      expect(split).toMatchObject({
+        refundedToWallet: 1000,
+        status: 'failed',
+      });
+
+      // Other branches persist exactly what was restored: a wallet
+      // race with the same split restored only the card leg, so the
+      // replay must NOT add the wallet leg back.
+      const race = await runReplay({
+        paymentSplit: { card: 400, wallet: 600 },
+        refundAmount: 400,
+        refundContext: 'wallet_race',
+        refundIssued: true,
+      });
+      expect(race).toMatchObject({
+        refundedToWallet: 400,
         status: 'failed',
       });
       expect(rpcImpl).not.toHaveBeenCalledWith(

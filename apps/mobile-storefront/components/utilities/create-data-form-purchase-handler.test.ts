@@ -28,9 +28,16 @@ jest.mock('@/lib/utility-wallet-readiness', () => ({
   ensureUtilityWalletReady: jest.fn(() => true),
 }));
 
+const mockGetSettlementPass = jest.fn<() => Promise<void> | null>();
+
+jest.mock('@/hooks/use-vtu-retained-settlement', () => ({
+  getPendingVtuSettlementPass: () => mockGetSettlementPass(),
+}));
+
 describe('data form purchase cashback', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetSettlementPass.mockReturnValue(null);
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
 
@@ -202,11 +209,34 @@ describe('data form purchase cashback', () => {
     await pending;
     expect(order).toEqual(['refetch-start', 'refetch-done', 'alert']);
   });
+
+  it('does not charge when the account switches during the settlement gate', async () => {
+    // Codex R103 P2: same fence as the airtime handler — a switch
+    // during the pass must not submit the previous owner's peeked
+    // attempt under the replacement session.
+    let release!: () => void;
+    mockGetSettlementPass.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+    );
+    const pending = runPurchase(jest.fn(), {
+      isSubmittingOwnerCurrent: () => false,
+    });
+    release();
+    await pending;
+    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Account Changed',
+      'The signed-in account changed while the purchase was starting. Please try again.'
+    );
+  });
 });
 
 describe('data form purchase checkout guard', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetSettlementPass.mockReturnValue(null);
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   });
 

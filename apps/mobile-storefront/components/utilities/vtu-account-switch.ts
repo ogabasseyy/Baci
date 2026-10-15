@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { getPendingVtuSettlementPass } from '@/hooks/use-vtu-retained-settlement';
 import {
   markPendingVtuCompleted,
   notePendingVtuReference,
@@ -20,6 +21,51 @@ type PaymentState = ReturnType<typeof useUtilityPayment>;
  * is suppressed (no UI over the destination screen) but wallets are
  * still invalidated and the result still discarded (Codex R37 rktSh).
  */
+/**
+ * Settle-then-submit gate with post-gate owner re-check. Returns true
+ * when the submit may proceed; false when it must stop (screen popped
+ * mid-gate, or the account switched while the pass was pending).
+ *
+ * The pass can take seconds (R60), and an account switch landing in
+ * that window would otherwise let the continuation persist or recall
+ * a key for the previous owner before token binding rejects the live
+ * replacement session (Codex R103 P2). The owner is captured before
+ * the await and compared against the live store after — the same
+ * fence as the post-dispatch guard below, but pre-submit, so there
+ * is no key to finalize on a stop. Shared by the airtime, data, and
+ * bill handlers so the gate cannot drift between them.
+ */
+export async function awaitUtilitySettlementGate({
+  getIsActive,
+  payment,
+}: {
+  getIsActive?: () => boolean;
+  payment: Pick<
+    PaymentState,
+    'captureSubmittingOwner' | 'isSubmittingOwnerCurrent'
+  >;
+}): Promise<boolean> {
+  const settlementPass = getPendingVtuSettlementPass();
+  if (!settlementPass) {
+    return true;
+  }
+  const preGateOwner = payment.captureSubmittingOwner();
+  await settlementPass;
+  // R73: popped during the gate — never submit into an abandoned
+  // view. No-pass submits stay synchronous from the tap.
+  if (getIsActive && !getIsActive()) {
+    return false;
+  }
+  if (!payment.isSubmittingOwnerCurrent(preGateOwner)) {
+    Alert.alert(
+      'Account Changed',
+      'The signed-in account changed while the purchase was starting. Please try again.'
+    );
+    return false;
+  }
+  return true;
+}
+
 export function shouldDiscardVtuResultForAccountSwitch(
   payment: PaymentState,
   submittingOwner: string | undefined,

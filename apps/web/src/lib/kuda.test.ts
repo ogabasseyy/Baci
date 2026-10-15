@@ -100,9 +100,12 @@ describe('Kuda API Client', () => {
 
       await vi.advanceTimersByTimeAsync(15000);
 
+      // Codex R103 P1: the stall hit GetToken, so nothing was
+      // dispatched — fail outright (safe refund), never pending.
       await expect(purchasePromise).resolves.toMatchObject({
         success: false,
-        message: 'Purchase failed',
+        message: 'Kuda authentication request timed out',
+        status: 'failed',
       });
     });
   });
@@ -218,6 +221,78 @@ describe('Kuda API Client', () => {
       // vend — pending routes to BILL_TSQ reconciliation instead of
       // refunding on top of delivered value.
       expect(result.status).toBe('pending');
+    });
+
+    it('fails outright when the GetToken request stalls (pre-dispatch)', async () => {
+      // Codex R103 P1: the token fetch threw before any provider
+      // request was dispatched — no vend could have landed, so fail
+      // (safe refund), never pending (which would strand the row with
+      // a never-submitted reference TSQ cannot resolve).
+      const { purchaseAirtime } = await import('./kuda');
+      vi.useFakeTimers();
+
+      globalThis.fetch = vi.fn().mockImplementation((_url, options) => {
+        const signal = options?.signal as AbortSignal;
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true }
+          );
+        });
+      });
+
+      const purchasePromise = purchaseAirtime(
+        '08030000000',
+        500,
+        NetworkProvider.MTN
+      );
+
+      await vi.advanceTimersByTimeAsync(15000);
+
+      const result = await purchasePromise;
+
+      expect(result.success).toBe(false);
+      expect(result.status).toBe('failed');
+    });
+
+    it('fails outright when GetToken rejects or the connection drops', async () => {
+      // Codex R103 P1: non-OK token responses and pre-dispatch drops
+      // are known failures — nothing was submitted.
+      const { purchaseAirtime } = await import('./kuda');
+
+      globalThis.fetch = vi.fn().mockImplementation((url) => {
+        if (url.toString().includes('GetToken')) {
+          return Promise.resolve({
+            ok: false,
+            statusText: 'Bad Gateway',
+          } as Response);
+        }
+        throw new Error('purchase must not dispatch without a token');
+      });
+      const rejected = await purchaseAirtime(
+        '08030000000',
+        500,
+        NetworkProvider.MTN
+      );
+      expect(rejected.success).toBe(false);
+      expect(rejected.status).toBe('failed');
+
+      vi.resetModules();
+      const fresh = await import('./kuda');
+      globalThis.fetch = vi.fn().mockImplementation((url) => {
+        if (url.toString().includes('GetToken')) {
+          return Promise.reject(new TypeError('fetch failed'));
+        }
+        throw new Error('purchase must not dispatch without a token');
+      });
+      const dropped = await fresh.purchaseAirtime(
+        '08030000000',
+        500,
+        NetworkProvider.MTN
+      );
+      expect(dropped.success).toBe(false);
+      expect(dropped.status).toBe('failed');
     });
 
     it('returns error for invalid network provider', async () => {

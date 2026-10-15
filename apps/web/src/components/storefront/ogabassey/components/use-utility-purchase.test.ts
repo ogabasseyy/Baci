@@ -52,6 +52,7 @@ function baseParams(overrides: Record<string, unknown> = {}) {
     merchantId: 'merchant-1',
     merchantSlug: 'ogabassey',
     isWalletRefreshPending: () => false,
+    isWalletInitialReadPending: () => false,
     refreshWallet: vi.fn(),
     setWalletBalance: vi.fn(),
     user,

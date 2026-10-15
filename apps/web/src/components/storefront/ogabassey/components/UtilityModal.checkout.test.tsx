@@ -27,6 +27,7 @@ describe('UtilityModal checkout routing', () => {
     const setWalletBalance = vi.fn();
     harness.useWallet.mockReturnValue({
       isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
       payWithWallet: true,
       setPayWithWallet: vi.fn(),
       setWalletBalance,
@@ -79,6 +80,7 @@ describe('UtilityModal checkout routing', () => {
   it('opens the funding panel on insufficient balance when bank-transfer funding is available', async () => {
     harness.useWallet.mockReturnValue({
       isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
       fundingAccount: {
         accountName: 'OGB / TEST',
         accountNumber: '9099887766',
@@ -113,6 +115,7 @@ describe('UtilityModal checkout routing', () => {
   it('opens the funding panel without auto-creating a DVA on insufficient balance (consent stays with the panel CTA)', async () => {
     harness.useWallet.mockReturnValue({
       isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
       fundingAccount: null,
       refreshWallet: vi.fn(),
       requiresFundingAccountConsent: true,
@@ -145,6 +148,7 @@ describe('UtilityModal checkout routing', () => {
   it('auto-creates a DVA only after the customer explicitly picks Pay with Bank Transfer', async () => {
     harness.useWallet.mockReturnValue({
       isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
       fundingAccount: null,
       refreshWallet: vi.fn(),
       requiresFundingAccountConsent: true,
@@ -239,6 +243,7 @@ describe('UtilityModal checkout routing', () => {
     const refreshWallet = vi.fn();
     harness.useWallet.mockReturnValue({
       isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
       payWithWallet: true,
       refreshWallet,
       setPayWithWallet: vi.fn(),
@@ -264,6 +269,7 @@ describe('UtilityModal checkout routing', () => {
   it('shows the pending screen while a checkout is processing', async () => {
     harness.useWallet.mockReturnValue({
       isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
       payWithWallet: true,
       refreshWallet: vi.fn(),
       setPayWithWallet: vi.fn(),
@@ -292,6 +298,7 @@ describe('UtilityModal checkout routing', () => {
   it('locks the utility tabs while a checkout is in flight', async () => {
     harness.useWallet.mockReturnValue({
       isWalletRefreshPending: () => false,
+      isWalletInitialReadPending: () => false,
       payWithWallet: true,
       refreshWallet: vi.fn(),
       setPayWithWallet: vi.fn(),

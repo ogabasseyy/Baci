@@ -145,7 +145,11 @@ describe('mergeVtuSettlementMetadata', () => {
     expect(mocks.from).not.toHaveBeenCalled();
   });
 
-  it('gives up without throwing when the re-read fails', async () => {
+  it('retries the re-read once, then reports re-read failure (never a silent race skip)', async () => {
+    // Codex R103 P2: a failed re-read is not a race — this pass
+    // holds the email lease and already sent, so the dropped patch
+    // may be the only `sent: true`. Retry transient blips, then a
+    // distinct code so the caller throws retryable.
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => undefined);
@@ -161,7 +165,58 @@ describe('mergeVtuSettlementMetadata', () => {
         supabase,
       });
 
+      expect(result).toBe('skipped-reread-failed');
+      expect(mocks.maybeSingleReread).toHaveBeenCalledTimes(2);
+      expect(mocks.updatePayloads).toHaveLength(0);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it('persists when the re-read succeeds on retry', async () => {
+    // Codex R103 P2: a single transient read blip must not drop
+    // the owned patch.
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const { mocks, supabase } = createSupabaseMock();
+    mocks.maybeSingleReread.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'read failed' },
+    });
+    try {
+      const result = await mergeVtuSettlementMetadata({
+        baselineMetadata: {},
+        mutatedMetadata: { merchantWalletCredited: true },
+        rowId: 'vtu-1',
+        supabase,
+      });
+
+      expect(result).toBe('persisted');
+      expect(mocks.maybeSingleReread).toHaveBeenCalledTimes(2);
+      expect(mocks.updatePayloads).toHaveLength(1);
+    } finally {
+      consoleErrorSpy.mockRestore();
+    }
+  });
+
+  it('skips quietly when the row is gone (nothing to persist to)', async () => {
+    // Codex R103 P2: a missing row is not a transient read — no
+    // retry, and no retryable throw (a deleted row never returns).
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const { mocks, supabase } = createSupabaseMock({ rereadData: null });
+    try {
+      const result = await mergeVtuSettlementMetadata({
+        baselineMetadata: {},
+        mutatedMetadata: { merchantWalletCredited: true },
+        rowId: 'vtu-1',
+        supabase,
+      });
+
       expect(result).toBe('skipped-race-lost');
+      expect(mocks.maybeSingleReread).toHaveBeenCalledTimes(1);
       expect(mocks.updatePayloads).toHaveLength(0);
     } finally {
       consoleErrorSpy.mockRestore();

@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
-import { getPendingVtuSettlementPass } from '@/hooks/use-vtu-retained-settlement';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
   isStalePendingVtuSuccess,
@@ -26,6 +25,7 @@ import {
 } from './airtime-form-controller.helpers';
 import { useMountedRef } from './use-mounted-ref';
 import {
+  awaitUtilitySettlementGate,
   preserveSuppressedVtuSuccess,
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
@@ -241,15 +241,13 @@ export function useAirtimePurchaseHandler({
     // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
     // peeking first bypasses the balance gate on entries the pass
     // then proves terminal. Sync ref guard admits no second submit.
-    const settlementPass = getPendingVtuSettlementPass();
-    if (settlementPass) {
-      await settlementPass;
-      // R73: popped during the gate — never submit into an abandoned
-      // view. No-pass submits stay synchronous from the tap.
-      if (!getIsActive()) {
-        isSubmittingRef.current = false;
-        return;
-      }
+    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
+    // peeking first bypasses the balance gate on entries the pass
+    // then proves terminal. Shared helper also re-checks the owner
+    // after the await (Codex R103 P2).
+    if (!(await awaitUtilitySettlementGate({ getIsActive, payment }))) {
+      isSubmittingRef.current = false;
+      return;
     }
     // Retained-replay peek (R65 6ru4mK): the SAME request the submit
     // signs with — a charged-but-unanswered retry must bypass the

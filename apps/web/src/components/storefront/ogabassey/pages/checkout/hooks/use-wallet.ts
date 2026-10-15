@@ -76,6 +76,15 @@ interface UseWalletReturn {
    * through on a stale balance.
    */
   isWalletRefreshPending: () => boolean;
+  /**
+   * Initial-read gate (Codex R103 P2): true from the render-phase
+   * identity reset (balance zeroed) until the new identity's first
+   * fetch settles. walletLoading flips only inside the passive
+   * fetch effect, so without this a submit between commit and
+   * effect reads the placeholder zero as a real balance. Read it
+   * at submit time like isWalletRefreshPending.
+   */
+  isWalletInitialReadPending: () => boolean;
 }
 
 export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWalletReturn {
@@ -95,6 +104,11 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   // Set synchronously in refreshWallet; cleared when the fetch
   // settles (aborted successors leave it for the winning fetch).
   const refreshPendingRef = useRef(false);
+  // Initial-read gate (Codex R103 P2): claimed synchronously in the
+  // render-phase identity reset below (a fetch effect cannot cover
+  // the commit/effect gap), cleared when the current generation's
+  // first fetch settles — success, error, or timeout alike.
+  const initialReadPendingRef = useRef(false);
   // Request generation (Codex R76 6r51Px): claimed synchronously
   // by refreshWallet, captured by each effect run. An older fetch
   // settling in the microtask window before React runs the new
@@ -126,6 +140,13 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   const [fetchedIdentity, setFetchedIdentity] = useState<string | null>(null);
   if (identity !== fetchedIdentity) {
     setFetchedIdentity(identity);
+    if (identity !== null) {
+      // A fetch is now due for an identity whose balance reads
+      // zero: block submits until it settles (see above). A null
+      // identity (signed out) schedules no fetch — upstream auth
+      // gates own that state, so leave the flag untouched.
+      initialReadPendingRef.current = true;
+    }
     // Claim the next generation NOW, not in the effect (Codex R95
     // P1, same as refreshWallet below): the old effect's cleanup
     // runs only after this render commits, so a previous-account
@@ -225,6 +246,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
           if (!isSuperseded()) {
             setWalletLoading(false);
             refreshPendingRef.current = false;
+            initialReadPendingRef.current = false;
           } else if (
             fetchTimedOut &&
             generation === fetchGenerationRef.current
@@ -235,6 +257,7 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
             // gate blocks until reload.
             setWalletLoading(false);
             refreshPendingRef.current = false;
+            initialReadPendingRef.current = false;
           }
         });
     };
@@ -276,5 +299,6 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
       setRefreshToken((token) => token + 1);
     },
     isWalletRefreshPending: () => refreshPendingRef.current,
+    isWalletInitialReadPending: () => initialReadPendingRef.current,
   };
 }

@@ -1,5 +1,4 @@
 import { Alert } from 'react-native';
-import { getPendingVtuSettlementPass } from '@/hooks/use-vtu-retained-settlement';
 import { HttpError } from '@/lib/fetch-with-timeout';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
@@ -22,6 +21,7 @@ import { getBillPaymentAmountError } from './bill-payment-amount-validation';
 import { resolveBillCustomerOfRecord } from './resolve-bill-customer-of-record';
 import { resolveBillFulfillment } from './resolve-bill-fulfillment';
 import {
+  awaitUtilitySettlementGate,
   preserveSuppressedVtuSuccess,
   refreshWalletAfterSuppressedVtuResult,
   shouldDiscardVtuResultForAccountSwitch,
@@ -134,15 +134,12 @@ export function createBillFormPurchaseHandler({
       // Settle-await BEFORE the peek (R66): peeking first bypasses the
       // balance gate on entries the pass then forgets.
       setIsSubmitting(true);
-      const settlementPass = getPendingVtuSettlementPass();
-      if (settlementPass) {
-        await settlementPass;
-        // R73: popped during the gate — never submit into an abandoned
-        // view. No-pass submits stay synchronous from the tap.
-        if (getIsActive && !getIsActive()) {
-          setIsSubmitting(false);
-          return;
-        }
+      // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
+      // shared helper also re-checks the owner after the await
+      // (Codex R103 P2).
+      if (!(await awaitUtilitySettlementGate({ getIsActive, payment }))) {
+        setIsSubmitting(false);
+        return;
       }
       // Retained-replay peek (R65 6ru4mK): the SAME request the submit
       // signs with — a charged-but-unanswered retry must bypass the

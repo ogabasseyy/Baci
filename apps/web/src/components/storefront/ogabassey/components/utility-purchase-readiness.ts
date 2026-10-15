@@ -28,6 +28,13 @@ interface CheckUtilityPurchaseReadinessInput {
   getWalletError: () => boolean;
   walletLoading: boolean;
   walletRefreshPending: boolean;
+  /**
+   * Initial-read gate snapshot (Codex R103 P2): the identity reset
+   * zeroes the balance a full commit before the fetch effect flips
+   * walletLoading, so a submit in that window would read a funded
+   * customer's placeholder zero as insufficient funds.
+   */
+  walletInitialReadPending: boolean;
 }
 
 /**
@@ -51,6 +58,7 @@ export function checkUtilityPurchaseReadiness({
   getWalletError,
   walletLoading,
   walletRefreshPending,
+  walletInitialReadPending,
 }: CheckUtilityPurchaseReadinessInput): boolean {
   if (isAuthLoading) {
     toast({
@@ -92,7 +100,7 @@ export function checkUtilityPurchaseReadiness({
   // `walletRefreshPending` covers the commit/effect race: refreshWallet()
   // sets it synchronously, before the fetch effect flips walletLoading,
   // so a click in that interval still blocks on the stale balance.
-  if (walletLoading || walletRefreshPending) {
+  if (walletLoading || walletRefreshPending || walletInitialReadPending) {
     toast({
       title: 'Checking wallet balance',
       description: 'Please wait while we confirm your wallet balance.',

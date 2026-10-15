@@ -34,6 +34,12 @@ jest.mock('@/lib/utility-wallet-readiness', () => ({
   ensureUtilityWalletReady: jest.fn(() => true),
 }));
 
+const mockGetSettlementPass = jest.fn<() => Promise<void> | null>();
+
+jest.mock('@/hooks/use-vtu-retained-settlement', () => ({
+  getPendingVtuSettlementPass: () => mockGetSettlementPass(),
+}));
+
 const mockEnsureUtilityWalletReady =
   ensureUtilityWalletReady as unknown as jest.Mock;
 
@@ -103,6 +109,7 @@ function createValidHandler(overrides: PurchaseHandlerOverrides = {}) {
 describe('createBillFormPurchaseHandler', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetSettlementPass.mockReturnValue(null);
     jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     mockChargeWalletForVtu.mockResolvedValue({
       status: 'successful',
@@ -577,5 +584,30 @@ describe('createBillFormPurchaseHandler', () => {
 
       expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
     });
+  });
+
+  it('does not charge when the account switches during the settlement gate', async () => {
+    // Codex R103 P2: same fence as the airtime handler — a switch
+    // during the pass must not submit the previous owner's peeked
+    // attempt under the replacement session.
+    let release!: () => void;
+    mockGetSettlementPass.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+    );
+    const handlePurchase = createValidHandler({
+      payment: createPaymentState({
+        isSubmittingOwnerCurrent: () => false,
+      }),
+    });
+    const pending = handlePurchase();
+    release();
+    await pending;
+    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Account Changed',
+      'The signed-in account changed while the purchase was starting. Please try again.'
+    );
   });
 });

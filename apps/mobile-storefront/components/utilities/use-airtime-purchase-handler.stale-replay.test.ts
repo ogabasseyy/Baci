@@ -698,6 +698,30 @@ describe('airtime stale success replay', () => {
     await pending;
     expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
   });
+
+  it('does not charge when the account switches during the settlement gate', async () => {
+    // Codex R103 P2: a switch during the pass must not persist or
+    // recall the previous owner's peeked attempt under the
+    // replacement session — stop before the peek, with no key to
+    // finalize.
+    let release!: () => void;
+    mockGetSettlementPass.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      })
+    );
+    const { result } = renderHandler({
+      isSubmittingOwnerCurrent: () => false,
+    });
+    const pending = result.current.handlePurchase();
+    release();
+    await pending;
+    expect(mockChargeWalletForVtu).not.toHaveBeenCalled();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Account Changed',
+      'The signed-in account changed while the purchase was starting. Please try again.'
+    );
+  });
 });
 
 describe('airtime purchase checkout guard', () => {

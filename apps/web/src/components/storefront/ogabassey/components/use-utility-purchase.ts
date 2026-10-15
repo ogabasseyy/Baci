@@ -34,6 +34,7 @@ interface UseUtilityPurchaseParams {
   merchantSlug: string | undefined;
   onInsufficientWalletBalance?: () => void;
   isWalletRefreshPending: () => boolean;
+  isWalletInitialReadPending: () => boolean;
   /** Live balance reader (R78 6sN80p): gate-time read, not pre-await snapshot. */
   getWalletBalance: () => number;
   /** Live error reader (R81 P2): gate-time read, not pre-await snapshot. */
@@ -72,6 +73,7 @@ export function useUtilityPurchase({
   merchantSlug,
   onInsufficientWalletBalance,
   isWalletRefreshPending,
+  isWalletInitialReadPending,
   getWalletBalance,
   getWalletError,
   refreshWallet,
@@ -168,6 +170,7 @@ export function useUtilityPurchase({
         getWalletError,
         walletLoading,
         walletRefreshPending: isWalletRefreshPending(),
+        walletInitialReadPending: isWalletInitialReadPending(),
       })
     ) {
       return;

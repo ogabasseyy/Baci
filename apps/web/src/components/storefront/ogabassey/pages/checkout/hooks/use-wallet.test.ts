@@ -18,9 +18,47 @@ describe('useWallet', () => {
 
     expect(result.current.walletBalance).toBe(0);
     expect(result.current.walletLoading).toBe(false);
+    expect(result.current.isWalletInitialReadPending()).toBe(false);
     expect(result.current.payWithWallet).toBe(false);
     expect(typeof result.current.setPayWithWallet).toBe('function');
     expect(typeof result.current.setWalletBalance).toBe('function');
+  });
+
+  it('marks the initial read pending from the identity reset until the first fetch settles', async () => {
+    // Codex R103 P2: the render-phase identity reset zeroes the
+    // balance a full commit before the fetch effect flips
+    // walletLoading — submits in that window must block on this
+    // flag instead of reading the placeholder zero as insufficient
+    // funds.
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ balance: 1000 }),
+    });
+    const { result, rerender } = renderHook(
+      ({ userId }) => useWallet({ userId, merchantSlug: 'test-merchant' }),
+      { initialProps: { userId: 'user-1' } }
+    );
+    await waitFor(() => expect(result.current.walletBalance).toBe(1000));
+    expect(result.current.isWalletInitialReadPending()).toBe(false);
+
+    let resolveFetch: (value: unknown) => void = () => {};
+    mockFetch.mockImplementationOnce(
+      () =>
+        new Promise<unknown>((resolve) => {
+          resolveFetch = resolve;
+        })
+    );
+    rerender({ userId: 'user-2' });
+    // New identity: balance reset to zero, first fetch still in
+    // flight — the flag must already read true.
+    expect(result.current.walletBalance).toBe(0);
+    expect(result.current.isWalletInitialReadPending()).toBe(true);
+
+    await act(async () => {
+      resolveFetch({ ok: true, json: async () => ({ balance: 2500 }) });
+    });
+    await waitFor(() => expect(result.current.walletBalance).toBe(2500));
+    expect(result.current.isWalletInitialReadPending()).toBe(false);
   });
 
   it('should not fetch when userId is undefined', () => {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Biller, PurchaseResult } from './kuda';
 import { getBillersByCategory, purchaseBill } from './kuda-bills';
-import { KudaApiHttpError } from './kuda-transport-error';
+import { KudaApiHttpError, KudaPreDispatchError } from './kuda-transport-error';
 
 const loggerMocks = vi.hoisted(() => ({
   error: vi.fn(),
@@ -251,6 +251,17 @@ describe('purchaseBill', () => {
     );
     const rejected = await purchaseBill('EKEDC-PREPAID', '1234567890', 5000);
     expect(rejected).toMatchObject({ success: false, status: 'failed' });
+  });
+
+  it('fails outright when token acquisition throws pre-dispatch', async () => {
+    // Codex R103 P1: GetToken threw before ADMIN_PURCHASE_BILL was
+    // dispatched — no vend could have landed, so fail/refund instead
+    // of stranding the row in processing with a never-submitted ref.
+    vi.mocked(kudaRequest).mockRejectedValueOnce(
+      new KudaPreDispatchError('Kuda authentication request timed out')
+    );
+    const result = await purchaseBill('EKEDC-PREPAID', '1234567890', 5000);
+    expect(result).toMatchObject({ success: false, status: 'failed' });
   });
 
   it('logs accepted pending bill purchases below warning level', async () => {

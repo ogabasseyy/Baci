@@ -129,6 +129,21 @@ describe('createCriticalCartProduct', () => {
     });
   });
 
+  it('retains the tracking policy and base pool units for the cart cap', () => {
+    const cartProduct = createCriticalCartProduct(
+      buildCriticalCartInput({
+        inventory_tracking_policy: 'serialized_strict',
+        stock: 2,
+        stock_quantity: 2,
+      })
+    );
+
+    // Offer adds overwrite stock with the selected allocation, so the
+    // aggregate pool cap reads stock_quantity, gated by the policy.
+    expect(cartProduct.inventory_tracking_policy).toBe('serialized_strict');
+    expect(cartProduct.stock_quantity).toBe(2);
+  });
+
   it('falls back to the product id when slug and mpn are missing', () => {
     const cartProduct = createCriticalCartProduct({
       ...buildCriticalCartInput(),

@@ -220,4 +220,61 @@ describe('critical commerce route offers', () => {
     expect(screen.getByText('price:100')).toBeInTheDocument();
     expect(screen.getByText('ready')).toBeInTheDocument();
   });
+
+  it('caps the pinned allocation by the strict base pool', () => {
+    const strictProduct: CartProduct = {
+      ...simpleCartProduct,
+      inventory_tracking_policy: 'serialized_strict',
+      stock: 2,
+      stock_quantity: 2,
+      offers: [
+        {
+          id: 'offer-big',
+          condition: 'used',
+          price: 60,
+          stock_quantity: 5,
+        },
+      ],
+    };
+    renderProvider(strictProduct, {
+      initialVariantSelection: { condition: 'used' },
+      initialOfferId: 'offer-big',
+    });
+
+    expect(screen.getByText('max:2')).toBeInTheDocument();
+    expect(screen.getByText('ready')).toBeInTheDocument();
+  });
+
+  it('resets the dismissal when the route offer changes', () => {
+    const renderProps = (initialOfferId: string | null) => (
+      <OgabasseyPdpCriticalCommerceProvider
+        cartProduct={simpleCartProduct}
+        initialVariantSelection={{ condition: 'used' }}
+        initialOfferId={initialOfferId}
+        variantAxes={[]}
+        variantAxisOptions={{}}
+        variantCount={0}
+      >
+        <RouteOfferProbe />
+      </OgabasseyPdpCriticalCommerceProvider>
+    );
+    const { rerender } = render(renderProps('offer-used'));
+    expect(screen.getByText('price:60')).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Select new condition' })
+    );
+    expect(screen.getByText('price:100')).toBeInTheDocument();
+
+    // Client-side navigation to a fresh deep link re-arms the pin even
+    // though the provider instance stays mounted: offer-new matches the
+    // selected condition, so the dismissal reset forwards it again.
+    rerender(renderProps('offer-new'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(cartMocks.addToCart).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      expect.objectContaining({ offerId: 'offer-new' })
+    );
+  });
 });

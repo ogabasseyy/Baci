@@ -73,12 +73,56 @@ describe('applyCriticalRouteOfferToCartProduct', () => {
       price: 100,
       stock: 10,
     } as CartProduct;
-    const applied = applyCriticalRouteOfferToCartProduct(base, offers[1]!);
+    const applied = applyCriticalRouteOfferToCartProduct(
+      base,
+      offers[1]!,
+      base
+    );
 
     expect(applied.price).toBe(60);
     expect(applied.condition).toBe('used');
     expect(applied.manage_stock).toBe(true);
     expect(applied.stock).toBe(3);
+  });
+
+  it('caps the offer allocation by the strict base pool', () => {
+    const base = {
+      inventory_tracking_policy: 'serialized_strict',
+      price: 100,
+      stock: 2,
+      stock_quantity: 2,
+    } as CartProduct;
+    const applied = applyCriticalRouteOfferToCartProduct(
+      base,
+      { id: 'offer-big', condition: 'used', price: 60, stock_quantity: 5 },
+      base
+    );
+
+    expect(applied.stock).toBe(2);
+  });
+
+  it('keeps the scalar under then-unlimited and unpolicied bases', () => {
+    const unlimited = {
+      inventory_tracking_policy: 'serialized_then_unlimited',
+      stock: 1,
+      stock_quantity: 1,
+    } as CartProduct;
+    expect(
+      applyCriticalRouteOfferToCartProduct(
+        unlimited,
+        { id: 'offer-big', condition: 'used', price: 60, stock_quantity: 5 },
+        unlimited
+      ).stock
+    ).toBe(5);
+
+    const plain = { stock: 1, stock_quantity: 1 } as CartProduct;
+    expect(
+      applyCriticalRouteOfferToCartProduct(
+        plain,
+        { id: 'offer-big', condition: 'used', price: 60, stock_quantity: 5 },
+        plain
+      ).stock
+    ).toBe(5);
   });
 });
 

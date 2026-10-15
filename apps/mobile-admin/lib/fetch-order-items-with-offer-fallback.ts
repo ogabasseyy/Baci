@@ -38,13 +38,26 @@ export async function fetchOrderItemsWithOfferFallback(
   run: (columns: string) => PromiseLike<OrderItemsFallbackResult>,
   columns: string
 ): Promise<OrderItemsFallbackResult> {
-  const first = await run(columns);
-  if (!first.error) return first;
-  const missing = ORDER_DETAILS_OFFER_COLUMNS.filter((column) =>
-    isMissingSchemaColumn(first.error, column)
-  );
-  // Non-schema errors (auth, network, RLS) and drift in columns we do
-  // not own retry-safe must keep failing loud, never degrade silently.
-  if (missing.length === 0) return first;
-  return run(stripMissingOrderOfferColumns(columns, missing));
+  // PostgREST reports only the first missing column, so one strip is
+  // not enough when the schema predates several offer columns: repeat
+  // the detect/strip/query cycle until the query succeeds or the error
+  // is no longer recognized offer-column drift. Bounded by the offer
+  // column count plus the final attempt — each pass strips at least one
+  // column, so the loop always terminates.
+  let remaining = [...ORDER_DETAILS_OFFER_COLUMNS];
+  let current = columns;
+  let result = await run(current);
+  while (result.error) {
+    const missing = remaining.filter((column) =>
+      isMissingSchemaColumn(result.error, column)
+    );
+    // Non-schema errors (auth, network, RLS) and drift in columns we
+    // do not own retry-safe must keep failing loud, never degrade
+    // silently.
+    if (missing.length === 0) return result;
+    remaining = remaining.filter((column) => !missing.includes(column));
+    current = stripMissingOrderOfferColumns(current, missing);
+    result = await run(current);
+  }
+  return result;
 }

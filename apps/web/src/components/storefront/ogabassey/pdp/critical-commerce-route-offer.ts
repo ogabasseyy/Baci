@@ -2,6 +2,8 @@ import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { useState } from 'react';
 import type { AddToCartOptions } from '@/hooks/cart/cart-types';
 import type { Product as CartProduct } from '@/lib/products';
+import { getEffectiveStock } from '@/lib/product-stock';
+import { resolveSerializedOfferStock } from '@/lib/serialized-offer-stock';
 import type { ResolvedCriticalVariantSelection } from './critical-commerce-selection';
 import {
   buildVariantCartProduct,
@@ -50,20 +52,33 @@ export function resolveCriticalActiveOffer({
 }
 
 /**
- * Prices a critical cart product from the pinned route offer. Offer
- * selections enforce their finite allocation even on unmanaged
- * parents (mirrors the full PDP offer state).
+ * Prices a critical cart product from the pinned route offer, using
+ * the same serialized offer-stock rule as the full PDP: a strict
+ * pool caps the finite advertised allocation by the retained base
+ * units, then-unlimited keeps the scalar, and other policies fall
+ * back to the scalar. Offer selections enforce their finite
+ * allocation even on unmanaged parents. The stock base is the
+ * pre-variant selection product: the priced base may already carry
+ * variant-derived stock.
  */
 export function applyCriticalRouteOfferToCartProduct(
   baseProduct: CartProduct,
-  offer: CriticalRouteOfferLike
+  offer: CriticalRouteOfferLike,
+  stockBase: Pick<
+    CartProduct,
+    'inventory_tracking_policy' | 'stock' | 'stock_quantity'
+  >
 ): CartProduct {
   return {
     ...baseProduct,
     manage_stock: true,
     price: offer.price,
     condition: offer.condition,
-    stock: offer.stock_quantity,
+    stock:
+      resolveSerializedOfferStock(offer, {
+        inventory_tracking_policy: stockBase.inventory_tracking_policy,
+        stock: getEffectiveStock(stockBase),
+      }) ?? offer.stock_quantity,
   };
 }
 
@@ -89,6 +104,18 @@ export function useCriticalRouteOfferState({
   selectedCondition: string | null | undefined;
 }) {
   const [offerDismissed, setOfferDismissed] = useState(false);
+  // Client-side navigation can swap the route offer under a mounted
+  // provider: reset the dismissal when the route input changes so a
+  // fresh deep link is never ignored because of the previous URL's
+  // explicit pick (render-time reset, React-endorsed for derived
+  // state). Consecutive missing-offer URLs share one key — an
+  // accepted residual: the second dead link reuses the dismissal.
+  const routeKey = `${initialOfferId ?? ''}|${routeOfferMissing}`;
+  const [lastRouteKey, setLastRouteKey] = useState(routeKey);
+  if (lastRouteKey !== routeKey) {
+    setLastRouteKey(routeKey);
+    setOfferDismissed(false);
+  }
   const activeRouteOffer = resolveCriticalActiveOffer({
     offers: selectionCartProduct.offers,
     initialOfferId,
@@ -104,7 +131,11 @@ export function useCriticalRouteOfferState({
     activeRouteOffer,
     dismissRouteOffer: () => setOfferDismissed(true),
     productForCart: activeRouteOffer
-      ? applyCriticalRouteOfferToCartProduct(baseProductForCart, activeRouteOffer)
+      ? applyCriticalRouteOfferToCartProduct(
+          baseProductForCart,
+          activeRouteOffer,
+          selectionCartProduct
+        )
       : baseProductForCart,
     routeOfferMissingActive: routeOfferMissing && !offerDismissed,
   };

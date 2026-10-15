@@ -983,6 +983,7 @@ export interface CachedProductLcpHint {
         url: string;
       }
   > | null;
+  inventory_tracking_policy?: string | null;
   keywords?: string[] | null;
   manage_stock?: boolean | null;
   max_variant_price?: number | string | null;

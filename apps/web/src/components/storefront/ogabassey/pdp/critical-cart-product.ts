@@ -26,6 +26,7 @@ type CriticalCartSource = Pick<
   | 'image'
   | 'imageHint'
   | 'imageLarge'
+  | 'inventory_tracking_policy'
   | 'manage_stock'
   | 'mpn'
   | 'name'
@@ -34,6 +35,7 @@ type CriticalCartSource = Pick<
   | 'slug'
   | 'status'
   | 'stock'
+  | 'stock_quantity'
   | 'variants'
 >;
 
@@ -67,6 +69,9 @@ export function createCriticalCartProduct(
     // NULL means managed (platform policy): only explicit false
     // disables the cart out-of-stock guard.
     manage_stock: product.manage_stock ?? true,
+    // Retained for the cart aggregate pool cap: offer adds overwrite
+    // stock with the selected allocation, so the cap reads stock_quantity.
+    inventory_tracking_policy: product.inventory_tracking_policy,
     mpn: product.mpn || product.slug || product.id,
     name: product.name,
     offers: product.offers,
@@ -74,6 +79,7 @@ export function createCriticalCartProduct(
     slug: product.slug,
     status: product.status,
     stock: Math.max(0, product.stock || 0),
+    stock_quantity: product.stock_quantity,
     variants: product.variants,
   };
 }

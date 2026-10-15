@@ -144,6 +144,19 @@ function createSupabaseWithUpdateChains(
 
   return {
     from: vi.fn((table: string) => {
+      if (table === 'orders') {
+        const chain = {
+          select: vi.fn(),
+          eq: vi.fn(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { payment_status: 'pending', shipping_status: 'pending' },
+            error: null,
+          }),
+        };
+        chain.select.mockReturnValue(chain);
+        chain.eq.mockReturnValue(chain);
+        return chain;
+      }
       if (table === 'products') {
         return productsChain;
       }
@@ -919,5 +932,184 @@ describe('finalizeAgenticCheckoutPayment', () => {
     expect(storeAgenticIdempotencyResponse).toHaveBeenCalledWith(
       expect.objectContaining({ status: 409 })
     );
+  });
+  it.each([
+    'marker',
+    'session',
+  ])('retains a bound order after %s failure and resumes the same receipt', async (failure) => {
+    const row = () => createUpdateChain({ session_id: 'agentic_session_1' });
+    const failed = () =>
+      createUpdateChain(null, { message: 'database unavailable' });
+    const supabase = createSupabaseWithUpdateChains(
+      failure === 'marker'
+        ? [row(), failed(), row(), row(), row(), row()]
+        : [row(), row(), failed(), row(), row(), row(), row()]
+    );
+    vi.mocked(createAgenticCheckoutOrder).mockResolvedValue({
+      ok: true,
+      orderId: 'bound-order',
+      status: 201,
+      statusText: 'Created',
+      data: { order: { id: 'bound-order' } },
+      error: undefined,
+    });
+    const input = {
+      ...finalizeInput(supabase),
+      metadata: {
+        agentic: {
+          payment_state: 'payment_account_ready',
+          shared_cart: {
+            cart_id: '223e4567-e89b-12d3-a456-426614174000',
+            cart_version: 3,
+            checkout_generation: 1,
+            checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+          },
+        },
+      },
+    };
+    const first = await finalizeAgenticCheckoutPayment(input);
+    expect(first.status).toBe(500);
+    expect(supabase.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          agentic: expect.objectContaining({
+            payment_state: 'payment_account_ready',
+          }),
+        }),
+      })
+    );
+    expect(markAgenticCheckoutOrderCanceled).not.toHaveBeenCalled();
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+    const retry = await finalizeAgenticCheckoutPayment({
+      ...input,
+      idempotencyKey: 'retry-key',
+    });
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({ order_id: 'bound-order' });
+    expect(markAgenticCheckoutOrderCanceled).not.toHaveBeenCalled();
+  });
+
+  it('refuses payment instructions for a canceled bound receipt', async () => {
+    const row = () => createUpdateChain({ session_id: 'agentic_session_1' });
+    const supabase = createSupabaseWithUpdateChains([
+      row(),
+      row(),
+      row(),
+      row(),
+      row(),
+      row(),
+    ]);
+    const originalFrom = supabase.from.getMockImplementation();
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { payment_status: 'cancelled', shipping_status: 'cancelled' },
+          error: null,
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    vi.mocked(createAgenticCheckoutOrder).mockResolvedValue({
+      ok: true,
+      orderId: 'canceled-order',
+      status: 201,
+      statusText: 'Created',
+      data: {},
+      error: undefined,
+    });
+    const input = {
+      ...finalizeInput(supabase),
+      metadata: {
+        agentic: {
+          shared_cart: {
+            cart_id: '223e4567-e89b-12d3-a456-426614174000',
+            cart_version: 3,
+            checkout_generation: 1,
+            checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+          },
+        },
+      },
+    };
+    const response = await finalizeAgenticCheckoutPayment(input);
+    expect(response.status).toBe(409);
+    expect(await response.json()).not.toHaveProperty('payment_instructions');
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+    expect(supabase.update).toHaveBeenCalledTimes(3);
+    const retry = await finalizeAgenticCheckoutPayment({
+      ...input,
+      idempotencyKey: 'canceled-retry',
+    });
+    expect(retry.status).toBe(409);
+    expect(await retry.json()).toEqual({
+      error: 'Order is no longer awaiting payment',
+    });
+    expect(supabase.update).toHaveBeenCalledTimes(6);
+    expect(markAgenticCheckoutOrderCanceled).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['pending', null, 200],
+    ['paid', null, 200],
+    ['cancelled', null, 409],
+    ['pending', { message: 'database unavailable' }, 500],
+  ] as const)('checks live %s order state before resuming a saved bound marker', async (paymentStatus, error, status) => {
+    const row = () => createUpdateChain({ session_id: 'agentic_session_1' });
+    const supabase = createSupabaseWithUpdateChains([row(), row()]);
+    const originalFrom = supabase.from.getMockImplementation();
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { payment_status: paymentStatus, shipping_status: 'pending' },
+          error,
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    const response = await finalizeAgenticCheckoutPayment({
+      ...finalizeInput(supabase),
+      metadata: {
+        agentic: {
+          finalization_order_id: 'bound-order',
+          shared_cart: {
+            cart_id: '223e4567-e89b-12d3-a456-426614174000',
+            cart_version: 3,
+            checkout_generation: 1,
+            checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+          },
+        },
+      },
+    });
+    expect(response.status).toBe(status);
+    expect(createAgenticCheckoutOrder).not.toHaveBeenCalled();
+    expect(markAgenticCheckoutOrderCanceled).not.toHaveBeenCalled();
+    expect(sendAgenticOrderCreatedWebhook).toHaveBeenCalledTimes(
+      status === 200 && paymentStatus !== 'paid' ? 1 : 0
+    );
+    if (paymentStatus === 'paid') {
+      expect(await response.json()).toEqual({
+        id: 'agentic_session_1',
+        status: 'completed',
+        order_id: 'bound-order',
+        order: { id: 'bound-order', status: 'paid' },
+      });
+      expect(supabase.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          status: 'completed',
+          metadata: expect.objectContaining({
+            agentic: expect.objectContaining({ payment_state: 'paid' }),
+          }),
+        })
+      );
+    }
   });
 });

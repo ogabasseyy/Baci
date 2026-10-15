@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import type { SharedCartOrderProofResult } from '@/lib/cart/order-proof';
 import {
   buildOrderIdempotencyPayload,
   hashOrderIdempotencyPayload,
@@ -241,7 +242,7 @@ vi.mock('@/lib/quiz-proof', () => ({
 }));
 
 const mockVerifySharedCartOrderProof = vi.hoisted(() =>
-  vi.fn(() => ({
+  vi.fn<() => SharedCartOrderProofResult>(() => ({
     ok: true as const,
     principalId: 'guest-principal-001',
   }))
@@ -1727,19 +1728,67 @@ describe('POST /api/orders — quiz voucher guard', () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it('replays an already-paid claimed voucher order without re-finalizing', async () => {
+  it.each([
+    'legacy',
+    'bound-invalid-proof',
+    'bound-valid-proof',
+    'bound-replay-success',
+  ] as const)('handles claimed voucher replay through the correct authority: %s', async (mode) => {
     // A voucher checkout that succeeded but lost its HTTP response leaves the
     // award claimed with a reserved (already paid) order. Retrying must NOT prune
     // the prize as an "invalid voucher" — return the existing order as a replayed
-    // success so the shopper reaches their order screen, and NOT touch any RPC.
+    // success. Bound retries must first verify the cart receipt in its RPC.
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'yes');
     vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'voucher-secret');
     const awardId = '11111111-1111-4111-8111-111111111111';
     const productId = '22222222-2222-4222-8222-222222222222';
     const reservedOrderId = '99999999-9999-4999-8999-999999999999';
+    const boundPaidOrder = {
+      ...baseOrderRow,
+      id: reservedOrderId,
+      order_number: 'ORD-PRIZE-1',
+      tracking_token: 'track-prize-1',
+      customer_id: CUSTOMER_ID,
+      customer_email: 'customer@example.com',
+      customer_name: 'Test Customer',
+      payment_status: 'paid',
+      shipping_status: 'pending',
+      payment_method: 'quiz_voucher',
+      merchant_id: MERCHANT_ID,
+      tax_basis: 'exclusive',
+      gift_wrapping_fee: 0,
+      shipping_fee: 0,
+      discount_amount: 0,
+      tax_amount: 0,
+      subtotal: 0,
+      total: 0,
+      idempotency_replayed: true,
+    };
+    const boundReceipt = {
+      ok: true,
+      code: null,
+      replayed: true,
+      order: boundPaidOrder,
+      binding: {
+        cartId: '223e4567-e89b-12d3-a456-426614174000',
+        cartVersionReviewed: 3,
+        checkout_generation: 1,
+        merchantId: MERCHANT_ID,
+        sessionId: '323e4567-e89b-12d3-a456-426614174000',
+        variant: 'quiz_voucher',
+      },
+    };
     const supabase = buildMockSupabase(
-      {},
+      {
+        create_storefront_order_with_cart_binding: {
+          data: mode === 'bound-replay-success' ? boundReceipt : null,
+          error:
+            mode === 'bound-replay-success'
+              ? null
+              : { code: 'P0001', message: 'cart_order_unauthorized' },
+        },
+      },
       {
         quizAwardOverrides: {
           [awardId]: {
@@ -1780,10 +1829,26 @@ describe('POST /api/orders — quiz voucher guard', () => {
       secret: 'voucher-secret',
     });
 
+    if (mode !== 'legacy')
+      mockVerifySharedCartOrderProof.mockReturnValueOnce(
+        mode === 'bound-invalid-proof'
+          ? { ok: false }
+          : { ok: true, principalId: 'owner-a' }
+      );
     const request = new NextRequest('http://localhost/api/orders', {
       method: 'POST',
       body: JSON.stringify({
         ...baseOrderPayload,
+        ...(mode !== 'legacy'
+          ? {
+              shared_cart: {
+                cart_id: '223e4567-e89b-12d3-a456-426614174000',
+                cart_version: 3,
+                checkout_generation: 1,
+                checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+              },
+            }
+          : {}),
         items: [
           {
             ...baseOrderPayload.items[0],
@@ -1799,6 +1864,44 @@ describe('POST /api/orders — quiz voucher guard', () => {
     const response = await POST(request);
     const body = await readJson(response);
 
+    if (mode === 'bound-replay-success') {
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.order.id).toBe(reservedOrderId);
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        'create_storefront_order_with_cart_binding',
+        expect.objectContaining({ p_variant: 'quiz_voucher' })
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'finalize_quiz_voucher_order_payment',
+        expect.anything()
+      );
+      return;
+    }
+    if (mode !== 'legacy') {
+      expect(response.status, JSON.stringify(body)).toBe(
+        mode === 'bound-invalid-proof' ? 401 : 403
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'finalize_quiz_voucher_order_payment',
+        expect.anything()
+      );
+      if (mode === 'bound-invalid-proof') {
+        expect(body.code).toBe('SHARED_CART_PROOF_REQUIRED');
+        expect(supabase.rpc).not.toHaveBeenCalledWith(
+          'create_storefront_order_with_cart_binding',
+          expect.anything()
+        );
+      } else {
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          'create_storefront_order_with_cart_binding',
+          expect.objectContaining({
+            p_variant: 'quiz_voucher',
+            p_args: expect.objectContaining({ p_cart_principal_id: 'owner-a' }),
+          })
+        );
+      }
+      return;
+    }
     expect(response.status).toBe(200);
     expect(response.headers.get('x-idempotency-replayed')).toBe('true');
     expect(body.idempotency).toEqual({ replayed: true });

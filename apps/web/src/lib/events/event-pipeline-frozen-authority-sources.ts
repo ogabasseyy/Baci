@@ -43,7 +43,7 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned for condition-offer validation errors as client errors;
   // payment, notification and credential authority are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    'fea89b0d17a0225d1cdff4d803631200d734520fad3520c0e041e9b701a71453',
+    'b813e7ae4aa22422d311d7cc1577abd781bafbfd5ecffdc5aa4d8ff781d699af',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

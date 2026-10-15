@@ -39,7 +39,9 @@ export function reviewedCheckoutItems(
       hasAssurance: line.hasAssurance,
       assuranceRate: line.assuranceRate ?? shell.assuranceRate,
       negotiatedPrice:
-        !line.negotiationInvalidated && line.negotiatedUnitPriceMinor !== null
+        line.negotiationStatus === 'accepted' &&
+        !line.negotiationInvalidated &&
+        line.negotiatedUnitPriceMinor !== null
           ? line.negotiatedUnitPriceMinor / 100
           : undefined,
       negotiationStatus:

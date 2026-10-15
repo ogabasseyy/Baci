@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { fetchWithCsrf } from '@/lib/api-client';
+import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 
 import {
   prepareSharedCartCheckout,
@@ -208,6 +209,28 @@ describe('reviewedCheckoutItems', () => {
       negotiatedPrice: 120,
       price: 150,
       quantity: 2,
+    });
+    expect(buildCheckoutOrderItems(items ?? [])[0]).toMatchObject({
+      price: 120,
+      value: 240,
+    });
+  });
+
+  it.each([
+    'pending',
+    'rejected',
+  ] as const)('submits catalog price without a proposal for a reviewed %s negotiation', (negotiationStatus) => {
+    const items = reviewedCheckoutItems([shell], {
+      ...review,
+      lines: [{ ...line, negotiationStatus, effectiveUnitPriceMinor: 15000 }],
+    });
+    expect(items?.[0].negotiatedPrice).toBeUndefined();
+    expect(items?.[0].negotiationStatus).toBe(negotiationStatus);
+    expect(buildCheckoutOrderItems(items ?? [])[0]).toMatchObject({
+      price: 150,
+    });
+    expect(buildCheckoutOrderItems(items ?? [])[0]).toMatchObject({
+      value: 300,
     });
   });
 

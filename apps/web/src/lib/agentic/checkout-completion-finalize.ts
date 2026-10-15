@@ -1,14 +1,17 @@
 import type { GPTTotal } from '@/lib/agentic/checkout';
 import {
+  buildAlreadyPaidFinalizationResponse,
+  readFinalizationOrderId,
+  recoverFinalizationOrderWriteFailure,
+  verifyBoundFinalizationOrder,
+  writeFinalizedOrderSession,
+} from '@/lib/agentic/checkout-bound-order-recovery';
+import {
   buildAgenticCheckoutOrderPayload,
-  buildPaymentPendingSessionUpdate,
   readAgenticSharedCartBinding,
 } from '@/lib/agentic/checkout-completion-payloads';
 import { buildPaymentPendingCheckoutResponse } from '@/lib/agentic/checkout-completion-response';
-import {
-  compensateCreatedOrderAfterFinalizationFailure,
-  releaseFinalizationClaimSafely,
-} from '@/lib/agentic/checkout-finalization-compensation';
+import { releaseFinalizationClaimSafely } from '@/lib/agentic/checkout-finalization-compensation';
 import {
   createAgenticCheckoutOrder,
   sendAgenticOrderCreatedWebhook,
@@ -104,15 +107,9 @@ export async function finalizeAgenticCheckoutPayment({
       409
     );
   }
-  const markedOrderId = metadata.agentic?.finalization_order_id;
-  let orderId =
-    typeof markedOrderId === 'string' && markedOrderId.trim().length > 0
-      ? markedOrderId.trim()
-      : null;
+  const sharedCartBinding = readAgenticSharedCartBinding(metadata);
+  let orderId = readFinalizationOrderId(metadata);
   if (!orderId) {
-    // A session with a prepared shared-cart binding submits bound; anything
-    // else stays on the legacy path.
-    const sharedCartBinding = readAgenticSharedCartBinding(metadata);
     const orderPayload = {
       ...buildAgenticCheckoutOrderPayload({
         buyer,
@@ -215,7 +212,8 @@ export async function finalizeAgenticCheckoutPayment({
         orderId: sanitizeForLog(orderId),
         sessionId: sanitizeForLog(sessionId),
       });
-      await compensateCreatedOrderAfterFinalizationFailure({
+      await recoverFinalizationOrderWriteFailure({
+        sharedCartBound: !!sharedCartBinding,
         finalizationClaim,
         merchantId,
         metadata,
@@ -228,28 +226,32 @@ export async function finalizeAgenticCheckoutPayment({
     }
   }
 
-  const updatePayload = buildPaymentPendingSessionUpdate({
-    buyer,
-    dvaAccount,
-    metadata,
-    orderId,
-  });
-  const { data: updatedSession, error: updateError } = await supabase
-    .from('checkout_sessions')
-    .update(updatePayload)
-    .eq('session_id', sessionId)
-    .eq('merchant_id', merchantId)
-    .eq('payment_reference', dvaAccount.account_number)
-    .is('order_id', null)
-    .in('status', ['pending', 'processing'])
-    .contains('metadata', {
-      agentic: {
-        finalization_claim: finalizationClaim,
-        payment_state: 'order_finalizing',
-      },
-    })
-    .select('session_id')
-    .maybeSingle();
+  let orderAlreadyPaid = false;
+  if (sharedCartBinding) {
+    const verified = await verifyBoundFinalizationOrder({
+      finalizationClaim,
+      merchantId,
+      metadata,
+      orderId,
+      sessionId,
+      supabase,
+    });
+    if (!verified.ok)
+      return respond({ error: verified.error }, verified.status);
+    orderAlreadyPaid = verified.paid;
+  }
+  const { data: updatedSession, error: updateError } =
+    await writeFinalizedOrderSession({
+      buyer,
+      dvaAccount,
+      metadata,
+      orderId,
+      orderAlreadyPaid,
+      supabase,
+      sessionId,
+      merchantId,
+      finalizationClaim,
+    });
 
   if (updateError || !updatedSession) {
     logger.error({
@@ -258,7 +260,8 @@ export async function finalizeAgenticCheckoutPayment({
       orderId: sanitizeForLog(orderId),
       sessionId: sanitizeForLog(sessionId),
     });
-    await compensateCreatedOrderAfterFinalizationFailure({
+    await recoverFinalizationOrderWriteFailure({
+      sharedCartBound: !!sharedCartBinding,
       finalizationClaim,
       merchantId,
       metadata,
@@ -270,6 +273,12 @@ export async function finalizeAgenticCheckoutPayment({
     return respond({ error: 'Database error' }, 500);
   }
 
+  if (orderAlreadyPaid) {
+    return respond(
+      buildAlreadyPaidFinalizationResponse(sessionId, orderId),
+      200
+    );
+  }
   sendAgenticOrderCreatedWebhook({
     buyer,
     currency: orderSession.currency,

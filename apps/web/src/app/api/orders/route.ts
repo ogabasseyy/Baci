@@ -591,6 +591,28 @@ export async function POST(request: NextRequest) {
     // Do NOT trust user_id from body if user is unauthenticated (guest).
     const resolvedUserId = user?.id || null;
 
+    // Bound submits must prove the preparing cart principal: the session
+    // id alone is never sufficient authority to close another shopper's
+    // cart or replay its receipt.
+    let sharedCartPrincipalId: string | null = null;
+    if (shared_cart) {
+      const proof = verifySharedCartOrderProof(request, {
+        cartId: shared_cart.cart_id,
+        merchantId: merchant_id,
+      });
+      if (!proof.ok) {
+        return NextResponse.json(
+          {
+            code: 'SHARED_CART_PROOF_REQUIRED',
+            error:
+              'This checkout session belongs to another shopper. Review your cart and submit again.',
+          },
+          { status: 401 }
+        );
+      }
+      sharedCartPrincipalId = proof.principalId;
+    }
+
     const hasVoucherItem = hasQuizVoucherItem(items);
     const requestIdempotencyKey = hasVoucherItem
       ? null
@@ -771,13 +793,19 @@ export async function POST(request: NextRequest) {
       const voucherAwardRowById = new Map(
         (voucherAwardRows ?? []).map((row) => [row.id, row] as const)
       );
-      // A redeemable award is approved AND store-credit-typed — the same gate
-      // create_storefront_order_with_quiz_voucher enforces in the DB. Anything
-      // else (claimed, void, wrong type, or missing) is a bad line, not a
+      // Bound claimed awards must reach the binding RPC, which alone may
+      // replay this cart generation. It rejects a fresh claim transaction.
+      // Unbound redeemable awards remain approved AND store-credit-typed.
+      // Fresh claims are still enforced in the voucher RPC. Void, wrong-type
+      // or missing awards remain a bad line, not a
       // "too many prizes" conflict.
       const validVoucherAwardIds = voucherAwardIds.filter((awardId) => {
         const row = voucherAwardRowById.get(awardId);
-        return row?.status === 'approved' && row.award_type === 'store_credit';
+        return (
+          (row?.status === 'approved' ||
+            (Boolean(shared_cart) && row?.status === 'claimed')) &&
+          row.award_type === 'store_credit'
+        );
       });
 
       // Validate award status BEFORE reporting a multi-voucher conflict: prune
@@ -988,28 +1016,6 @@ export async function POST(request: NextRequest) {
         { error: 'Merchant not found' },
         { status: 404 }
       );
-    }
-
-    // Bound submits must prove the preparing cart principal: the session
-    // id alone is never sufficient authority to close another shopper's
-    // cart or replay its receipt.
-    let sharedCartPrincipalId: string | null = null;
-    if (shared_cart) {
-      const proof = verifySharedCartOrderProof(request, {
-        cartId: shared_cart.cart_id,
-        merchantId: merchant_id,
-      });
-      if (!proof.ok) {
-        return NextResponse.json(
-          {
-            code: 'SHARED_CART_PROOF_REQUIRED',
-            error:
-              'This checkout session belongs to another shopper. Review your cart and submit again.',
-          },
-          { status: 401 }
-        );
-      }
-      sharedCartPrincipalId = proof.principalId;
     }
 
     // Canonical merchant currency (payout_currency -> country -> NGN). The

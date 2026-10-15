@@ -15,12 +15,21 @@ export function NativeCartAccountPanel() {
   const accountUserId = useNativeSharedCartStore(
     (state) => state.accountUserId
   );
-  const state = useNativeSharedCartStore();
+  const enabled = useNativeSharedCartStore((state) => state.enabled);
+  const accountsEnabled = useNativeSharedCartStore(
+    (state) => state.accountsEnabled
+  );
+  const linkAccount = useNativeSharedCartStore((state) => state.linkAccount);
+  const loadSavedCart = useNativeSharedCartStore(
+    (state) => state.loadSavedCart
+  );
+  const snapshot = useNativeSharedCartStore((state) => state.snapshot);
+  const savedCart = useNativeSharedCartStore((state) => state.savedCart);
   const colors = Colors[useColorScheme() ?? 'light'];
   const operationRef = useRef<string | null>(null);
   const inFlight = useRef(false);
   const pendingInput = useRef<
-    Parameters<NonNullable<typeof state.linkAccount>>[0] | null
+    Parameters<NonNullable<typeof linkAccount>>[0] | null
   >(null);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -30,15 +39,27 @@ export function NativeCartAccountPanel() {
     status: 'loading' | 'ready' | 'error';
   }>({ scope: null, status: 'loading' });
   const [readRetry, setReadRetry] = useState(0);
-  const loadSavedCart = state.loadSavedCart;
   const userId = accountUserId;
-  const ownerScope = useRef({ userId, generation: 0 });
-  if (ownerScope.current.userId !== userId) {
-    ownerScope.current = {
+  // Owner scope is state, not a ref: when the signed-in owner changes,
+  // a render-phase state update advances the generation atomically
+  // with the committed render, so a discarded concurrent render can
+  // never advance the scope past a generation that was never shown.
+  const [ownerScope, setOwnerScope] = useState({
+    userId,
+    generation: 0,
+  });
+  if (ownerScope.userId !== userId) {
+    setOwnerScope({
       userId,
-      generation: ownerScope.current.generation + 1,
-    };
+      generation: ownerScope.generation + 1,
+    });
   }
+  // Async completions compare against the last committed scope: the
+  // ref only advances in an effect, never during render.
+  const ownerScopeRef = useRef(ownerScope);
+  useEffect(() => {
+    ownerScopeRef.current = ownerScope;
+  }, [ownerScope]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset pending UI whenever the authenticated owner changes.
   useEffect(() => {
     operationRef.current = null;
@@ -49,9 +70,9 @@ export function NativeCartAccountPanel() {
   }, [userId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the retry counter explicitly restarts a failed saved-cart read.
   useEffect(() => {
-    if (!userId || !loadSavedCart || !state.accountsEnabled) return;
+    if (!userId || !loadSavedCart || !accountsEnabled) return;
     let active = true;
-    const scope = ownerScope.current;
+    const scope = ownerScope;
     setSavedRead({ scope, status: 'loading' });
     setPicks([]);
     void loadSavedCart().then(
@@ -65,39 +86,34 @@ export function NativeCartAccountPanel() {
     return () => {
       active = false;
     };
-  }, [userId, loadSavedCart, state.accountsEnabled, readRetry]);
-  if (
-    !state.enabled ||
-    !state.accountsEnabled ||
-    !accountUserId ||
-    !state.linkAccount
-  )
+  }, [userId, loadSavedCart, accountsEnabled, readRetry, ownerScope]);
+  if (!enabled || !accountsEnabled || !accountUserId || !linkAccount)
     return null;
   const savedReady =
-    savedRead.scope === ownerScope.current && savedRead.status === 'ready';
-  const current = state.snapshot;
-  const saved = state.savedCart;
+    savedRead.scope === ownerScope && savedRead.status === 'ready';
+  const current = snapshot;
+  const saved = savedCart;
   function operationId(): string {
     operationRef.current ??= Crypto.randomUUID();
     return operationRef.current;
   }
   async function run(
-    input: Parameters<NonNullable<typeof state.linkAccount>>[0]
+    input: Parameters<NonNullable<typeof linkAccount>>[0]
   ): Promise<void> {
     if (inFlight.current || (!pendingInput.current && !savedReady)) return;
-    const scope = ownerScope.current;
+    const scope = ownerScopeRef.current;
     inFlight.current = true;
     pendingInput.current ??= JSON.parse(JSON.stringify(input)) as typeof input;
     setPending(true);
     try {
-      await state.linkAccount?.(pendingInput.current);
-      if (ownerScope.current !== scope) return;
+      await linkAccount?.(pendingInput.current);
+      if (ownerScopeRef.current !== scope) return;
       pendingInput.current = null;
       setPending(false);
       operationRef.current = null;
       setNotice('Cart linked to your account.');
     } catch (error) {
-      if (ownerScope.current !== scope) return;
+      if (ownerScopeRef.current !== scope) return;
       if (
         error instanceof NativeCartError &&
         !error.indeterminate &&
@@ -140,8 +156,7 @@ export function NativeCartAccountPanel() {
         Save this cart to your account
       </Text>
       {notice ? <Text style={{ color: colors.text }}>{notice}</Text> : null}
-      {savedRead.scope === ownerScope.current &&
-      savedRead.status === 'error' ? (
+      {savedRead.scope === ownerScope && savedRead.status === 'error' ? (
         <Pressable
           accessibilityRole="button"
           onPress={() => setReadRetry((value) => value + 1)}

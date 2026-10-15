@@ -10,7 +10,11 @@ jest.mock('../lib/storage', () => ({
 
 import { useCartStore } from './cart-store';
 import type { CartItem } from './cart-store.types';
-import { formatPrice, selectCartQuantities } from './cart-store-selectors';
+import {
+  applyReprice,
+  formatPrice,
+  selectCartQuantities,
+} from './cart-store-selectors';
 
 function cartItem(id: string, productId: string, quantity: number): CartItem {
   return {
@@ -67,5 +71,60 @@ describe('selectCartQuantities', () => {
     });
 
     expect(selectCartQuantities(useCartStore.getState())).not.toBe(first);
+  });
+});
+
+describe('applyReprice', () => {
+  function offerLine(overrides: Partial<CartItem> = {}): CartItem {
+    return {
+      id: 'line-1',
+      product_id: 'p1',
+      slug: 'p1',
+      name: 'p1',
+      price: 1000,
+      quantity: 1,
+      condition: 'Used',
+      variant_attributes: { condition: 'Used', storage: '256GB' },
+      ...overrides,
+    };
+  }
+
+  it('refreshes the line and its condition attribute to the live display value', () => {
+    const { items } = applyReprice(
+      {
+        items: [offerLine()],
+        cartWideNegotiationActive: false,
+      },
+      {},
+      { 'line-1': 'open_box' }
+    );
+    expect(items[0].condition).toBe('Open Box');
+    expect(items[0].variant_attributes).toEqual({
+      condition: 'Open Box',
+      storage: '256GB',
+    });
+  });
+
+  it('leaves attributes without a condition key alone instead of inventing a label part', () => {
+    const { items } = applyReprice(
+      {
+        items: [offerLine({ variant_attributes: { storage: '256GB' } })],
+        cartWideNegotiationActive: false,
+      },
+      {},
+      { 'line-1': 'open_box' }
+    );
+    expect(items[0].condition).toBe('Open Box');
+    expect(items[0].variant_attributes).toEqual({ storage: '256GB' });
+  });
+
+  it('returns the same item when nothing drifted', () => {
+    const line = offerLine();
+    const { items } = applyReprice(
+      { items: [line], cartWideNegotiationActive: false },
+      {},
+      {}
+    );
+    expect(items[0]).toBe(line);
   });
 });

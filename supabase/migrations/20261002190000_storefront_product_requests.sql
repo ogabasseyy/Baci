@@ -13,11 +13,26 @@ CREATE INDEX IF NOT EXISTS storefront_product_requests_merchant_created_idx ON p
 ALTER TABLE public.storefront_product_requests ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.storefront_product_requests FROM anon, authenticated;
 GRANT SELECT ON public.storefront_product_requests TO authenticated;
-CREATE POLICY product_requests_owner_read ON public.storefront_product_requests FOR SELECT TO authenticated
-USING (EXISTS (SELECT 1 FROM public.merchants m WHERE m.id = merchant_id AND m.user_id = (SELECT auth.uid())));
+-- Replay-safe: a recovery database may already have the table and policy
+-- without this migration recorded as applied; CREATE POLICY has no IF NOT
+-- EXISTS, so guard through the catalog or the duplicate raises and rolls
+-- back the intake function, delivery trigger, and cron setup below.
+DO $product_requests_policy$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'storefront_product_requests'
+      AND policyname = 'product_requests_owner_read'
+  ) THEN
+    CREATE POLICY product_requests_owner_read ON public.storefront_product_requests FOR SELECT TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.merchants m WHERE m.id = merchant_id AND m.user_id = (SELECT auth.uid())));
+  END IF;
+END;
+$product_requests_policy$;
 
 -- Narrow public intake: no direct writes, private reads or notification content control.
-CREATE FUNCTION public.submit_storefront_product_request(p_merchant_slug text, p_query text, p_contact text, p_request_id uuid)
+CREATE OR REPLACE FUNCTION public.submit_storefront_product_request(p_merchant_slug text, p_query text, p_contact text, p_request_id uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_merchant uuid; v_existing public.storefront_product_requests; v_query text := btrim(p_query); v_contact text := btrim(p_contact);
 BEGIN
@@ -56,7 +71,7 @@ GRANT EXECUTE ON FUNCTION public.submit_storefront_product_request(text,text,tex
 -- the FK stays ON DELETE SET NULL so deleting a notification never removes
 -- the request itself. The intake forms disclose inbox storage before
 -- submission.
-CREATE FUNCTION private.deliver_storefront_product_requests()
+CREATE OR REPLACE FUNCTION private.deliver_storefront_product_requests()
 RETURNS integer LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE v_request record; v_notification uuid; v_count integer := 0;
 BEGIN
@@ -73,13 +88,14 @@ END; $$;
 REVOKE ALL ON FUNCTION private.deliver_storefront_product_requests() FROM PUBLIC, anon, authenticated, service_role;
 -- Privacy erasure: removing a request also removes its delivered inbox copy
 -- (merchant_notifications rows cascade from the notification delete).
-CREATE FUNCTION private.erase_storefront_product_request_inbox()
+CREATE OR REPLACE FUNCTION private.erase_storefront_product_request_inbox()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   DELETE FROM public.notifications WHERE id = OLD.notification_id;
   RETURN OLD;
 END; $$;
 REVOKE ALL ON FUNCTION private.erase_storefront_product_request_inbox() FROM PUBLIC, anon, authenticated, service_role;
+DROP TRIGGER IF EXISTS erase_storefront_product_request_inbox ON public.storefront_product_requests;
 CREATE TRIGGER erase_storefront_product_request_inbox
 AFTER DELETE ON public.storefront_product_requests
 FOR EACH ROW WHEN (OLD.notification_id IS NOT NULL)
@@ -89,7 +105,13 @@ EXECUTE FUNCTION private.erase_storefront_product_request_inbox();
 DO $schedule$
 BEGIN
   IF pg_catalog.to_regprocedure('cron.schedule(text,text,text)') IS NOT NULL THEN
-    PERFORM cron.schedule('storefront-product-request-inbox', '* * * * *', 'SELECT private.deliver_storefront_product_requests();');
+    -- Replay-safe: rescheduling an existing job name raises, so converge
+    -- when a recovery database already runs this job.
+    IF NOT EXISTS (
+      SELECT 1 FROM cron.job WHERE jobname = 'storefront-product-request-inbox'
+    ) THEN
+      PERFORM cron.schedule('storefront-product-request-inbox', '* * * * *', 'SELECT private.deliver_storefront_product_requests();');
+    END IF;
   END IF;
 END;
 $schedule$;

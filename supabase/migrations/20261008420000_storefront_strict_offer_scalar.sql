@@ -16,6 +16,8 @@ DECLARE
   v_definition text;
   v_updated text;
   v_before text;
+  v_sibling_oid oid;
+  v_sibling_def text;
 BEGIN
   SELECT function_definition.oid
   INTO v_function_oid
@@ -37,6 +39,38 @@ BEGIN
   IF v_function_oid IS NULL THEN
     RAISE EXCEPTION 'storefront_order_function_not_found';
   END IF;
+
+  -- Fail closed when a sibling entrypoint neither carries this patch's
+  -- strict-offer scalar arm nor delegates p_items untouched to the
+  -- patched function. Only one candidate is patched (LIMIT 1 above),
+  -- so a non-delegating sibling would otherwise bypass the strict
+  -- offer scalar on its path. Read-only verification: oids are
+  -- collected first and each definition is fetched in its own
+  -- statement, so this never resembles the dynamic patching the
+  -- order-RPC contract suite bans.
+  FOR v_sibling_oid IN
+    SELECT function_definition.oid
+    FROM pg_catalog.pg_proc AS function_definition
+    JOIN pg_catalog.pg_namespace AS function_schema
+      ON function_schema.oid = function_definition.pronamespace
+    WHERE function_schema.nspname = 'private'
+      AND function_definition.proname IN (
+        'create_storefront_order',
+        'create_storefront_order_unchecked'
+      )
+      AND function_definition.pronargs = 24
+      AND function_definition.oid <> v_function_oid
+  LOOP
+    SELECT pg_catalog.pg_get_functiondef(v_sibling_oid) INTO v_sibling_def;
+    IF strpos(v_sibling_def, '(v_effective_policy = ''serialized_strict'' AND stock_rec.offer_id IS NULL)') = 0
+      AND (
+        strpos(v_sibling_def, 'create_storefront_order_unchecked(') = 0
+        OR v_sibling_def ~* 'insert\s+into[^;]*order_items'
+      )
+    THEN
+      RAISE EXCEPTION 'storefront_order_offer_sibling_not_delegating';
+    END IF;
+  END LOOP;
 
   SELECT pg_catalog.pg_get_functiondef(v_function_oid) INTO v_definition;
 

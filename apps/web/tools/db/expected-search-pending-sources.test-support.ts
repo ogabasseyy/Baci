@@ -12,7 +12,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002190000_storefront_product_requests.sql',
-    sha256: 'a5552247b9501c151060a4c9ff2dc809af448a7b5fd8f6b71a2f049a2b395c62',
+    sha256: '4172e5b207a5f307c0cc87c53886e41625187065daa8576035ef8ed613f4c2bd',
   },
   {
     repositoryPath:
@@ -182,7 +182,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008310000_storefront_order_offer_economics.sql',
-    sha256: '24188da3361019522a347cf37493b198efea44f568b64785b64b8af0d140e791',
+    sha256: '9c23da93240556878ed6f4bb06df88c6e1b7f6599ca4b1d752ef8ed7af3f30e6',
   },
   {
     repositoryPath:
@@ -202,7 +202,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008350000_storefront_order_offer_line_discriminator.sql',
-    sha256: '7bce7d87ddabd71656d1a984fa2063609641e0c5bb3d34a371a05602eb95c83a',
+    sha256: '04a6a12ff6cbe5019bd45e15122c7db17096af2c81da3513cdacc22b53dc23c0',
   },
   {
     repositoryPath:
@@ -217,7 +217,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008380000_storefront_order_offer_unlimited_allocation.sql',
-    sha256: '1b85b9f2b8f6c6f5ae0ba733ed4376b263a56e9d727175ef0a1f6f9f1ecf3e29',
+    sha256: 'baa3583ce8c18fa9c74337799b2dc972250d2718d5b8eb3df4c3e0700d501bae',
   },
   {
     repositoryPath:
@@ -227,7 +227,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008400000_storefront_order_offer_managed_guard.sql',
-    sha256: '63a1cb2d882a35f90c5368dbdd3d63e51b6956d5c1e85cf93df8d66665ebab51',
+    sha256: 'b5cc60d5185a6c32ee639a24bed35e76cabf3b1a346b400378b999bd3af4eb66',
   },
   {
     repositoryPath:
@@ -237,7 +237,7 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008420000_storefront_strict_offer_scalar.sql',
-    sha256: '610334ffe03e3e7cadb8e8781ca1946725cdd167a6f94a82a6948e6dfeef7931',
+    sha256: '89463fb6cd7a4f9cb425fc5c6c65d4101dac7716ebc2a43d43aa9aee87950b06',
   },
   {
     repositoryPath:
@@ -257,17 +257,17 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261008460000_storefront_order_offer_line_integrity.sql',
-    sha256: 'a0c8810d5d2deab04a59f24540f3c32d72e26856278a3f27a995086e8544814d',
+    sha256: '7beffccfb20d84b0c668ae5d80de71b296fb40770af15a6d42fd5ec00555aa07',
   },
   {
     repositoryPath:
       'supabase/migrations/20261009320000_storefront_order_offer_label_snapshot.sql',
-    sha256: '626f481b0ce174326487239600a77e78fe2b874aa6de385a58d7548f244c76be',
+    sha256: 'f2422d5d37f9ba9bb8b94c9ec5a352c80f9ce0d65ceca3fc68efc01032a401bb',
   },
   {
     repositoryPath:
       'supabase/migrations/20261009330000_storefront_order_offer_label_snapshot_marker.sql',
-    sha256: '8217e99ebde5738bb99416ba4e92c0c7f0c9a5fe745e8418e82281e25c2f1634',
+    sha256: '947acc3d89c5ecbe66d7359bbdf8f7334ec38053f844ab6e2a7862895c843fab',
   },
   {
     repositoryPath:

@@ -16,6 +16,7 @@ const assurance = {
   smartCartProEnabled: true,
   merchantSlug: 'ogabassey',
   hasQuizVoucher: false,
+  shippingInsuranceEnabled: true,
 };
 
 const openCaps = { cappedOfferAllocation: undefined, strictPool: undefined };
@@ -172,6 +173,20 @@ describe('applyStorefrontCartLineAdd', () => {
       quantity: 1,
       caps: openCaps,
       assurance: { ...assurance, shippingInsuranceEnabled: false },
+    });
+
+    expect(result[0].hasAssurance).toBe(false);
+  });
+
+  it('leaves fresh lines unassured when the insurance setting is unknown', () => {
+    const result = applyStorefrontCartLineAdd({
+      previousCart: [],
+      product,
+      productForCart: product,
+      normalizedOptions: undefined,
+      quantity: 1,
+      caps: openCaps,
+      assurance: { ...assurance, shippingInsuranceEnabled: undefined },
     });
 
     expect(result[0].hasAssurance).toBe(false);

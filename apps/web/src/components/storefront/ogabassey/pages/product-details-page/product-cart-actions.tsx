@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { AssuranceDefaultNote } from './assurance-default-note';
 
 interface ProductCartActionsProps {
   cartHref: Route;
@@ -93,19 +94,26 @@ export function ProductCartActions({
             </Link>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={onAddToCart}
-            disabled={!canPurchase}
-            className={cn(
-              'flex h-14 w-full items-center justify-center gap-2 rounded-xl font-bold shadow-lg transition-all',
-              canPurchase
-                ? 'bg-store-primary text-store-primary-text hover:bg-store-primary/90 hover:shadow-store-primary/20'
-                : 'cursor-not-allowed bg-store-background-text/10 text-store-background-text/45 shadow-none'
-            )}
-          >
-            {canPurchase ? 'Add to Cart' : 'Unavailable'}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onAddToCart}
+              disabled={!canPurchase}
+              className={cn(
+                'flex h-14 w-full items-center justify-center gap-2 rounded-xl font-bold shadow-lg transition-all',
+                canPurchase
+                  ? 'bg-store-primary text-store-primary-text hover:bg-store-primary/90 hover:shadow-store-primary/20'
+                  : 'cursor-not-allowed bg-store-background-text/10 text-store-background-text/45 shadow-none'
+              )}
+            >
+              {canPurchase ? 'Add to Cart' : 'Unavailable'}
+            </button>
+            <AssuranceDefaultNote
+              canPurchase={canPurchase}
+              quantityInCart={quantityInCart}
+              className="mt-2 text-center text-xs text-gray-500"
+            />
+          </>
         )}
       </div>
 

@@ -17,6 +17,7 @@ const {
   getSlugForCustomDomain,
   invalidateForwardDomainCacheForSlug,
   invalidateReverseDomainCacheForDomain,
+  isRecentlyUnmappedCustomDomain,
 } = await import('./domain-cache-simple');
 
 describe('domain cache fallback', () => {
@@ -140,6 +141,34 @@ describe('domain cache fallback', () => {
     vi.advanceTimersByTime(299_999);
     await getSlugForCustomDomain('reverse-miss.test');
     expect(mockFetchSlugForDomain).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a cached reverse miss as recently unmapped within a minute', async () => {
+    mockFetchSlugForDomain.mockResolvedValue({ outcome: 'not-found' });
+
+    await expect(
+      getSlugForCustomDomain('reverse-sync-miss.test')
+    ).resolves.toBeNull();
+    expect(isRecentlyUnmappedCustomDomain('reverse-sync-miss.test')).toBe(true);
+    expect(isRecentlyUnmappedCustomDomain('never-looked-up.test')).toBe(false);
+    vi.advanceTimersByTime(59_999);
+    expect(isRecentlyUnmappedCustomDomain('reverse-sync-miss.test')).toBe(true);
+    vi.advanceTimersByTime(1);
+    expect(isRecentlyUnmappedCustomDomain('reverse-sync-miss.test')).toBe(
+      false
+    );
+  });
+
+  it('never reports a mapped domain as unmapped', async () => {
+    mockFetchSlugForDomain.mockResolvedValue({
+      outcome: 'resolved',
+      value: 'reverse-sync-mapped',
+    });
+
+    await getSlugForCustomDomain('reverse-sync-mapped.test');
+    expect(isRecentlyUnmappedCustomDomain('reverse-sync-mapped.test')).toBe(
+      false
+    );
   });
 
   it('retries an unavailable reverse resolver instead of caching a miss', async () => {

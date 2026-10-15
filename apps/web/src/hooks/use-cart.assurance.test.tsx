@@ -1,6 +1,8 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MerchantContext } from '@/hooks/merchant/merchant-context';
+import type { MerchantContextType } from '@/hooks/merchant/types';
 import { CartProvider, useCart } from './use-cart';
 
 // Mock logger to avoid console clutter
@@ -73,10 +75,19 @@ describe('useCart - Validation', () => {
     'ogabassey',
     'another-store',
   ])('defaults assurance only for Ogabassey and preserves opt-out: %s', async (merchantSlug) => {
+    const merchantValue = {
+      merchant: {
+        slug: merchantSlug,
+        feature_settings: { shipping_insurance_enabled: true },
+      },
+      loading: false,
+    } as unknown as MerchantContextType;
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <CartProvider merchantSlug={merchantSlug} enableSmartCartPro>
-        {children}
-      </CartProvider>
+      <MerchantContext.Provider value={merchantValue}>
+        <CartProvider merchantSlug={merchantSlug} enableSmartCartPro>
+          {children}
+        </CartProvider>
+      </MerchantContext.Provider>
     );
     const { result } = renderHook(() => useCart(), { wrapper });
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
@@ -94,6 +105,19 @@ describe('useCart - Validation', () => {
       expect(result.current.cart[0].hasAssurance).toBe(false);
       expect(result.current.cartTotal).toBe(200);
     }
+  });
+
+  it('fails new lines to opt-out when no merchant context is available', async () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <CartProvider merchantSlug="ogabassey" enableSmartCartPro>
+        {children}
+      </CartProvider>
+    );
+    const { result } = renderHook(() => useCart(), { wrapper });
+    await waitFor(() => expect(result.current.isHydrated).toBe(true));
+    act(() => result.current.addToCart(mockProduct));
+    expect(result.current.cart[0].hasAssurance).toBe(false);
+    expect(result.current.cartTotal).toBe(100);
   });
 
   it('respects an explicit assurance opt-out passed to addToCart', async () => {

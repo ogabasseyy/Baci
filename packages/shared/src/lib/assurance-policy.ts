@@ -16,8 +16,10 @@
  * A merchant that explicitly disabled shipping insurance never defaults
  * lines on: the line-item toggles hide when the setting is off, so a
  * default-on line would charge a fee the shopper cannot see or remove.
- * Callers without access to the live setting omit it and keep the
- * slug-scoped default.
+ * An unknown setting fails the same way: callers without access to the
+ * live value omit it and the line stays opt-out, so a paid fee can
+ * never default on without affirmative knowledge that the merchant
+ * enabled it.
  */
 export function resolveAddedLineAssurance(
   incoming: boolean | undefined,
@@ -34,7 +36,7 @@ export function resolveAddedLineAssurance(
   return incoming ?? existing.hasAssurance;
 }
 
-function resolveAssuranceDefault(policy: {
+export function resolveAssuranceDefault(policy: {
   smartCartProEnabled: boolean;
   merchantSlug: string | null | undefined;
   shippingInsuranceEnabled?: boolean;
@@ -45,6 +47,39 @@ function resolveAssuranceDefault(policy: {
   return (
     policy.smartCartProEnabled &&
     policy.merchantSlug?.toLowerCase() === 'ogabassey' &&
-    policy.shippingInsuranceEnabled !== false
+    policy.shippingInsuranceEnabled === true
   );
+}
+
+/**
+ * Resolves the effective shipping-insurance setting for an add: the live
+ * merchant-context value, except a definite cart/context slug mismatch
+ * forces it off — the line-item toggles hide on mismatch, so a
+ * default-on line would charge a fee the shopper cannot see or remove.
+ * An unknown setting stays unknown so the default fails to opt-out.
+ */
+export function resolveAssuranceMerchantSetting(input: {
+  contextSlug: string | null | undefined;
+  contextSetting: boolean | undefined;
+  cartSlug: string | null | undefined;
+}): boolean | undefined {
+  if (
+    input.contextSlug != null &&
+    input.cartSlug != null &&
+    input.contextSlug !== input.cartSlug
+  ) {
+    return false;
+  }
+  return input.contextSetting;
+}
+
+/**
+ * Display label for the assurance line, matching the cart toggle copy.
+ */
+export function resolveAssuranceLabel(
+  merchantSlug: string | null | undefined
+): string {
+  return merchantSlug?.toLowerCase() === 'ogabassey'
+    ? 'Ogabassey Assurance'
+    : 'Order Protection';
 }

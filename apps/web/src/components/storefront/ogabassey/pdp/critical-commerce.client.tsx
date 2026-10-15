@@ -18,6 +18,7 @@ import {
   type InitialCriticalVariantSelection,
 } from './critical-commerce-selection';
 import { RouteOfferMissingNotice } from '../pages/product-details-page/route-offer-missing-notice';
+import { AssuranceDefaultNote } from '../pages/product-details-page/assurance-default-note';
 import {
   OgabasseyPdpCriticalCommerceProvider,
   useOptionalOgabasseyPdpCriticalCommerce,
@@ -254,6 +255,7 @@ export function OgabasseyPdpCriticalCommerceControls({
       >
         Add to cart
       </button>
+      <AssuranceDefaultNote canPurchase={canAddToCart} />
       <Link
         data-ogabassey-pdp-commerce-secondary-action
         href={cartHref}

@@ -1,8 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { resolveAddedLineAssurance } from './assurance-policy';
+import {
+  resolveAddedLineAssurance,
+  resolveAssuranceDefault,
+  resolveAssuranceLabel,
+  resolveAssuranceMerchantSetting,
+} from './assurance-policy';
 
 describe('resolveAddedLineAssurance', () => {
-  const policy = { smartCartProEnabled: true, merchantSlug: 'ogabassey' };
+  const policy = {
+    smartCartProEnabled: true,
+    merchantSlug: 'ogabassey',
+    shippingInsuranceEnabled: true,
+  };
   it.each([
     { incoming: true, existing: undefined, expected: true },
     { incoming: undefined, existing: undefined, expected: true },
@@ -54,6 +63,7 @@ describe('resolveAddedLineAssurance', () => {
       resolveAddedLineAssurance(undefined, undefined, {
         smartCartProEnabled: true,
         merchantSlug,
+        shippingInsuranceEnabled: true,
       })
     ).toBe(true);
   });
@@ -99,15 +109,136 @@ describe('resolveAddedLineAssurance', () => {
       })
     ).toBe(expected);
   });
-  it.each([
-    true,
-    undefined,
-  ])('keeps the default when insurance is enabled or unknown: %s', (shippingInsuranceEnabled) => {
+  it('keeps the default when insurance is affirmatively enabled', () => {
     expect(
       resolveAddedLineAssurance(undefined, undefined, {
         ...policy,
-        shippingInsuranceEnabled,
+        shippingInsuranceEnabled: true,
       })
     ).toBe(true);
+  });
+  it.each([undefined, false])(
+    'fails new lines to opt-out when insurance is unknown or disabled: %s',
+    (shippingInsuranceEnabled) => {
+      expect(
+        resolveAddedLineAssurance(undefined, undefined, {
+          ...policy,
+          shippingInsuranceEnabled,
+        })
+      ).toBe(false);
+    }
+  );
+});
+
+describe('resolveAssuranceDefault', () => {
+  it('defaults on only with the flag, the slug, and an affirmative setting', () => {
+    expect(
+      resolveAssuranceDefault({
+        smartCartProEnabled: true,
+        merchantSlug: 'ogabassey',
+        shippingInsuranceEnabled: true,
+      })
+    ).toBe(true);
+  });
+
+  it.each([
+    {
+      label: 'flag off',
+      policy: {
+        smartCartProEnabled: false,
+        merchantSlug: 'ogabassey',
+        shippingInsuranceEnabled: true,
+      },
+    },
+    {
+      label: 'other slug',
+      policy: {
+        smartCartProEnabled: true,
+        merchantSlug: 'another-store',
+        shippingInsuranceEnabled: true,
+      },
+    },
+    {
+      label: 'unknown setting',
+      policy: {
+        smartCartProEnabled: true,
+        merchantSlug: 'ogabassey',
+        shippingInsuranceEnabled: undefined,
+      },
+    },
+    {
+      label: 'disabled setting',
+      policy: {
+        smartCartProEnabled: true,
+        merchantSlug: 'ogabassey',
+        shippingInsuranceEnabled: false,
+      },
+    },
+  ])('stays off when $label', ({ policy }) => {
+    expect(resolveAssuranceDefault(policy)).toBe(false);
+  });
+});
+
+describe('resolveAssuranceMerchantSetting', () => {
+  it.each([
+    {
+      label: 'matching slugs pass the live setting through',
+      input: {
+        contextSlug: 'ogabassey',
+        contextSetting: true,
+        cartSlug: 'ogabassey',
+      },
+      expected: true,
+    },
+    {
+      label: 'mismatched slugs force the setting off',
+      input: {
+        contextSlug: 'another-store',
+        contextSetting: true,
+        cartSlug: 'ogabassey',
+      },
+      expected: false,
+    },
+    {
+      label: 'an unknown context setting stays unknown',
+      input: {
+        contextSlug: 'ogabassey',
+        contextSetting: undefined,
+        cartSlug: 'ogabassey',
+      },
+      expected: undefined,
+    },
+    {
+      label: 'a missing cart slug does not force anything off',
+      input: {
+        contextSlug: 'ogabassey',
+        contextSetting: true,
+        cartSlug: null,
+      },
+      expected: true,
+    },
+    {
+      label: 'a missing context slug passes the setting through',
+      input: {
+        contextSlug: null,
+        contextSetting: true,
+        cartSlug: 'ogabassey',
+      },
+      expected: true,
+    },
+  ])('$label', ({ input, expected }) => {
+    expect(resolveAssuranceMerchantSetting(input)).toBe(expected);
+  });
+});
+
+describe('resolveAssuranceLabel', () => {
+  it.each([
+    { merchantSlug: 'ogabassey', expected: 'Ogabassey Assurance' },
+    { merchantSlug: 'OGABASSEY', expected: 'Ogabassey Assurance' },
+    { merchantSlug: 'another-store', expected: 'Order Protection' },
+    { merchantSlug: null, expected: 'Order Protection' },
+    { merchantSlug: undefined, expected: 'Order Protection' },
+  ])('labels $merchantSlug as $expected', ({ merchantSlug, expected }) => {
+    expect(resolveAssuranceLabel(merchantSlug)).toBe(expected);
   });
 });

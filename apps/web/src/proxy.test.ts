@@ -41,6 +41,7 @@ vi.mock('@/lib/supabase/middleware', () => ({
 vi.mock('@/lib/domain-cache-simple', () => ({
   getCustomDomainForSlug: vi.fn().mockResolvedValue(null),
   getSlugForCustomDomain: vi.fn().mockResolvedValue('ogabassey'),
+  isRecentlyUnmappedCustomDomain: vi.fn().mockReturnValue(false),
 }));
 
 // Retired-slug alias resolution. Defaults to null ("not a retired alias") so it

@@ -73,10 +73,19 @@ describe('StorefrontCartProvider', () => {
     'ogabassey',
     'another-store',
   ])('defaults assurance only for Ogabassey and preserves opt-out: %s', async (merchantSlug) => {
+    const merchantValue = {
+      merchant: {
+        slug: merchantSlug,
+        feature_settings: { shipping_insurance_enabled: true },
+      },
+      loading: false,
+    } as unknown as MerchantContextType;
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <StorefrontCartProvider merchantSlug={merchantSlug} enableSmartCartPro>
-        {children}
-      </StorefrontCartProvider>
+      <MerchantContext.Provider value={merchantValue}>
+        <StorefrontCartProvider merchantSlug={merchantSlug} enableSmartCartPro>
+          {children}
+        </StorefrontCartProvider>
+      </MerchantContext.Provider>
     );
     const { result } = renderHook(() => useCart(), { wrapper });
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
@@ -97,10 +106,19 @@ describe('StorefrontCartProvider', () => {
   });
 
   it('uses the explicitly switched merchant when adding in the same event', async () => {
+    const merchantValue = {
+      merchant: {
+        slug: 'ogabassey',
+        feature_settings: { shipping_insurance_enabled: true },
+      },
+      loading: false,
+    } as unknown as MerchantContextType;
     const wrapper = ({ children }: { children: ReactNode }) => (
-      <StorefrontCartProvider enableSmartCartPro>
-        {children}
-      </StorefrontCartProvider>
+      <MerchantContext.Provider value={merchantValue}>
+        <StorefrontCartProvider enableSmartCartPro>
+          {children}
+        </StorefrontCartProvider>
+      </MerchantContext.Provider>
     );
     const { result } = renderHook(() => useCart(), { wrapper });
     await waitFor(() => expect(result.current.isHydrated).toBe(true));
@@ -219,6 +237,21 @@ describe('StorefrontCartProvider', () => {
       merchant: {
         slug: 'ogabassey',
         feature_settings: { shipping_insurance_enabled: false },
+      },
+      expected: false,
+    },
+    {
+      label: 'missing setting',
+      merchant: {
+        slug: 'ogabassey',
+        feature_settings: {},
+      },
+      expected: false,
+    },
+    {
+      label: 'missing feature settings',
+      merchant: {
+        slug: 'ogabassey',
       },
       expected: false,
     },

@@ -26,6 +26,23 @@ BEGIN
   IF strpos(v_unchecked_def, 'offer_condition TEXT') = 0 THEN
     RAISE EXCEPTION 'unchecked order entry point lost its offer_condition staging';
   END IF;
+  -- The label-snapshot patch freezes the purchased offer's grade and
+  -- condition notes beside offer_id; without it, historical lines
+  -- resolve live labels that later merchant edits rewrite. The marker
+  -- patch records that the snapshot ran, so stored NULL labels read
+  -- as creation-time truth rather than missing data. Both entry
+  -- points funnel through the unchecked definition (checked must
+  -- delegate, pinned below), so asserting the markers here covers
+  -- both paths.
+  IF strpos(lower(v_unchecked_def), 'offer_grade') = 0 THEN
+    RAISE EXCEPTION 'unchecked order entry point lost its offer_grade snapshot';
+  END IF;
+  IF strpos(lower(v_unchecked_def), 'offer_condition_notes') = 0 THEN
+    RAISE EXCEPTION 'unchecked order entry point lost its offer_condition_notes snapshot';
+  END IF;
+  IF strpos(lower(v_unchecked_def), 'offer_labels_snapshotted') = 0 THEN
+    RAISE EXCEPTION 'unchecked order entry point lost its offer_labels_snapshotted marker';
+  END IF;
 
   SELECT pg_catalog.pg_get_functiondef(p.oid) INTO v_checked_def
   FROM pg_catalog.pg_proc p

@@ -1,6 +1,9 @@
 'use client';
 
-import { resolveDefaultVariantSelection } from '@baci/shared/lib';
+import {
+  resolveAssuranceMerchantSetting,
+  resolveDefaultVariantSelection,
+} from '@baci/shared/lib';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
@@ -437,17 +440,16 @@ export function StorefrontCartProvider({
     }
 
     // The add-time assurance default must match the toggle the line
-    // items render: they hide it unless the merchant context matches
-    // the cart merchant and shipping insurance is enabled, so a
-    // definite slug mismatch forces the default off rather than
-    // charging a fee with no removal control.
+    // items render (see the shared setting resolver): a definite slug
+    // mismatch forces the default off rather than charging a fee with
+    // no removal control.
     const contextMerchant = merchantContext?.merchant;
-    const shippingInsuranceEnabled =
-      contextMerchant?.slug != null &&
-      merchantSlugRef.current != null &&
-      contextMerchant.slug !== merchantSlugRef.current
-        ? false
-        : contextMerchant?.feature_settings?.shipping_insurance_enabled;
+    const shippingInsuranceEnabled = resolveAssuranceMerchantSetting({
+      contextSlug: contextMerchant?.slug,
+      contextSetting:
+        contextMerchant?.feature_settings?.shipping_insurance_enabled,
+      cartSlug: merchantSlugRef.current,
+    });
 
     const lineAddInput = {
       product,

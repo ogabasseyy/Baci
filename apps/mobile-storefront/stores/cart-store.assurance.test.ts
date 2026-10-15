@@ -35,11 +35,22 @@ jest.mock('@/lib/persist-checkout-generation', () => ({
 jest.mock('@/lib/read-persisted-checkout-generation', () => ({
   readPersistedCheckoutGeneration: jest.fn(async () => null),
 }));
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+}));
+jest.mock('@/lib/query-client', () => ({
+  queryClient: { getQueryData: jest.fn() },
+}));
 
+import { queryClient } from '@/lib/query-client';
 import { resetCartLineSequence, useCartStore } from './cart-store';
+
+const getQueryData = queryClient.getQueryData as jest.Mock;
 
 describe('cart-store', () => {
   beforeEach(() => {
+    getQueryData.mockReset();
+    getQueryData.mockReturnValue({ shipping_insurance_enabled: true });
     resetCartLineSequence();
     useCartStore.setState({
       items: [],
@@ -69,6 +80,18 @@ describe('cart-store', () => {
     });
     useCartStore.getState().toggleAssurance(line.id);
     expect(useCartStore.getState().items[0].hasAssurance).toBe(true);
+  });
+
+  it('fails new lines to opt-out when the insurance setting is unknown', () => {
+    getQueryData.mockReturnValue(undefined);
+    useCartStore.getState().addItem({
+      product_id: 'unknown-setting-phone',
+      slug: 'unknown-setting-phone',
+      name: 'Phone',
+      price: 100000,
+      quantity: 1,
+    });
+    expect(useCartStore.getState().items[0].hasAssurance).toBe(false);
   });
 
   it('respects an explicit assurance opt-out on a new line', () => {

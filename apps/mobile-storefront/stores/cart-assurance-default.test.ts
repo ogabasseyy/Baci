@@ -15,16 +15,38 @@ jest.mock('@/lib/config', () => ({
   },
 }));
 
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+}));
+jest.mock('@/lib/query-client', () => ({
+  queryClient: { getQueryData: jest.fn() },
+}));
+
+import { queryClient } from '@/lib/query-client';
 import { resolveNativeAddedLineAssurance } from './cart-assurance-default';
+
+const getQueryData = queryClient.getQueryData as jest.Mock;
 
 describe('resolveNativeAddedLineAssurance', () => {
   beforeEach(() => {
     mockConfig.merchantSlug = 'ogabassey';
     mockConfig.smartCartProEnabled = true;
+    getQueryData.mockReset();
+    getQueryData.mockReturnValue({ shipping_insurance_enabled: true });
   });
 
-  it('defaults Ogabassey lines on when Smart Cart Pro is enabled', () => {
+  it('defaults Ogabassey lines on when insurance is affirmatively enabled', () => {
     expect(resolveNativeAddedLineAssurance({})).toBe(true);
+  });
+
+  it('stays opt-out when the insurance setting is unknown', () => {
+    getQueryData.mockReturnValue(undefined);
+    expect(resolveNativeAddedLineAssurance({})).toBe(false);
+  });
+
+  it('stays opt-out when insurance is disabled', () => {
+    getQueryData.mockReturnValue({ shipping_insurance_enabled: false });
+    expect(resolveNativeAddedLineAssurance({})).toBe(false);
   });
 
   it('stays opt-in for other merchants', () => {

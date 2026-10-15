@@ -27,6 +27,13 @@ export interface PaymentSettings {
   vat_registration_status: string;
   /** VAT rate as a percentage, for example 7.5 for 7.5%. */
   vat_rate: number;
+  /**
+   * Live merchant shipping-insurance toggle. The cart assurance default
+   * reads this from the query cache: only an affirmative true defaults
+   * Ogabassey lines on, so fail-closed normalization (=== true) here
+   * keeps unknown/missing values opt-out.
+   */
+  shipping_insurance_enabled: boolean;
 }
 
 function safeNumber(value: unknown, fallback: number): number {
@@ -72,6 +79,7 @@ export function normalizePaymentSettings(
     wallet_paystack_dva_enabled: row?.wallet_paystack_dva_enabled === true,
     vat_registration_status: row?.vat_registration_status ?? 'unregistered',
     vat_rate: safeNonNegativeNumber(row?.vat_rate, fallbackVatRatePercent),
+    shipping_insurance_enabled: row?.shipping_insurance_enabled === true,
   };
 }
 

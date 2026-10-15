@@ -77,13 +77,24 @@ describe('findMatchingCartLineIndex', () => {
 });
 
 describe('resolveCartLineAssurance', () => {
-  it('defaults new Ogabassey Smart Cart Pro lines on', () => {
+  it('defaults new Ogabassey Smart Cart Pro lines on when insurance is enabled', () => {
     expect(
       resolveCartLineAssurance(undefined, undefined, {
         smartCartProEnabled: true,
         merchantSlug: 'ogabassey',
+        shippingInsuranceEnabled: true,
       })
     ).toBe(true);
+  });
+
+  it('fails new lines to opt-out when the insurance setting is unknown', () => {
+    expect(
+      resolveCartLineAssurance(undefined, undefined, {
+        smartCartProEnabled: true,
+        merchantSlug: 'ogabassey',
+        shippingInsuranceEnabled: undefined,
+      })
+    ).toBe(false);
   });
 
   it('keeps quiz-voucher lines off unless explicitly chosen', () => {

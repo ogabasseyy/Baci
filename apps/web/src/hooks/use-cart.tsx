@@ -28,7 +28,11 @@ import {
 // Re-exported so existing importers keep working; the helper lives in ./cart/cart-persistence.
 export { clearCartStorage } from '@/hooks/cart/cart-persistence';
 
-import { resolveDefaultVariantSelection } from '@baci/shared/lib';
+import {
+  resolveAssuranceMerchantSetting,
+  resolveDefaultVariantSelection,
+} from '@baci/shared/lib';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
@@ -83,6 +87,8 @@ export const CartProvider = ({
 
   // 2026 Critical Fix: Track validation state to prevent infinite loops
   const lastValidatedCartHashRef = useRef<string>('');
+
+  const merchantContext = useMerchantSafe();
 
   // Re-sync the slug/user/cart when the identifying props change after the
   // initial hydration. Adjusting during render (a prev-prop comparison) avoids
@@ -370,6 +376,17 @@ export const CartProvider = ({
       return 'rejected';
     }
 
+    // The add-time assurance default resolves against the live merchant
+    // shipping-insurance setting via the shared resolver, mirroring
+    // StorefrontCartProvider.
+    const contextMerchant = merchantContext?.merchant;
+    const shippingInsuranceEnabled = resolveAssuranceMerchantSetting({
+      contextSlug: contextMerchant?.slug,
+      contextSetting:
+        contextMerchant?.feature_settings?.shipping_insurance_enabled,
+      cartSlug: merchantSlug,
+    });
+
     setCart((prev) => {
       const cartItemId = generateCartItemId(
         productForCart.id,
@@ -396,6 +413,7 @@ export const CartProvider = ({
           hasAssurance: resolveCartLineAssurance(normalizedOptions, item, {
             smartCartProEnabled: enableSmartCartPro,
             merchantSlug,
+            shippingInsuranceEnabled,
           }),
         };
         return newCart;
@@ -426,6 +444,7 @@ export const CartProvider = ({
           hasAssurance: resolveCartLineAssurance(normalizedOptions, undefined, {
             smartCartProEnabled: enableSmartCartPro,
             merchantSlug,
+            shippingInsuranceEnabled,
           }),
           assuranceRate: DEFAULT_ASSURANCE_RATE,
         },

@@ -5,6 +5,7 @@ import { buildCheckoutOrderItems } from './build-order-items';
 const OGABASSEY_POLICY = {
   smartCartProEnabled: true,
   merchantSlug: 'ogabassey',
+  shippingInsuranceEnabled: true,
 };
 
 describe('untouched assurance line agreement', () => {

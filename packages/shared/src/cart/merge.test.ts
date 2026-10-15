@@ -247,6 +247,25 @@ it('preserves regular and voucher siblings across both carts with max quantities
   if (result.ok)
     expect(result.lines.map((line) => line.quantity)).toEqual([3, 1, 1]);
 });
+it('keeps sibling lanes intact when a base-item resolution is supplied', () => {
+  const result = planCartMerge(
+    snapshot([line(TECNO, 2), line(TECNO, 1, { voucherAwardId: 'award-a' })]),
+    snapshot([
+      line(TECNO, 3),
+      line(TECNO, 1, { voucherAwardId: 'award-a' }),
+      line(TECNO, 1, { voucherAwardId: 'award-b' }),
+    ]),
+    [{ item: { productId: TECNO }, keep: 'incoming' }]
+  );
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.lines).toHaveLength(3);
+    expect(result.lines.map((entry) => entry.quantity)).toEqual([3, 1, 1]);
+    expect(
+      result.lines.map((entry) => entry.voucherAwardId ?? null)
+    ).toEqual([null, 'award-a', 'award-b']);
+  }
+});
 it('preserves assurance for a disjoint import and overlapping identical contexts', () => {
   const a = line(TECNO, 1);
   a.hasAssurance = true;

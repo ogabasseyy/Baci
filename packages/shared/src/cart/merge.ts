@@ -200,7 +200,12 @@ export function planCartMerge(
       });
       continue;
     }
-    const keep = resolutionByKey.get(key);
+    // Sibling lanes key by their attachment lane; a shopper resolution
+    // names the base item, so fall back to the base identity when the
+    // augmented lane key has no direct entry.
+    const keep =
+      resolutionByKey.get(key) ??
+      resolutionByKey.get(cartLineIdentity(existingLine.item));
     if (!keep) {
       conflicts.push({
         existing: {

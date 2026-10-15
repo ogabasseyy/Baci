@@ -1,6 +1,5 @@
 import { getCartProofEnvironment } from './cart-runtime-env';
 import { cartSessionCookieName } from './principal';
-import { readCartProofFromRequest } from './request-context';
 import { verifyCartSessionProof } from './session-proof';
 
 export type SharedCartOrderProofResult =
@@ -8,19 +7,10 @@ export type SharedCartOrderProofResult =
   | { ok: false };
 
 /**
- * True when the request carries a verified shared-cart session proof
- * for this merchant (device header, Bearer proof, or the merchant
- * session cookie), whether or not it names a particular cart. Used to
- * fail closed when a shared-cart shopper submits an order without its
- * checkout binding: such a request must never fall through to the
- * legacy direct order RPC.
+ * Every cart proof presented with the request, checked independently:
+ * a malformed or stale candidate must not mask a valid one.
  */
-export function requestCarriesSharedCartSessionProof(
-  request: Request,
-  merchantId: string
-): boolean {
-  // Check every presented candidate independently: a malformed or
-  // stale header must not mask a valid cookie (or vice versa).
+function presentedCartProofs(request: Request, merchantId: string): string[] {
   const candidates = new Set<string>();
   const headerProof = request.headers.get('x-cart-proof')?.trim();
   if (headerProof) candidates.add(headerProof);
@@ -40,19 +30,35 @@ export function requestCarriesSharedCartSessionProof(
       }
     }
   }
-  for (const proof of candidates) {
-    let verified: ReturnType<typeof verifyCartSessionProof>;
-    try {
-      verified = verifyCartSessionProof(proof, {
-        environment: getCartProofEnvironment(),
-      });
-    } catch {
-      // Unverifiable configuration or malformed candidates simply do
-      // not establish shared-cart authority for this check.
-      continue;
-    }
+  return [...candidates];
+}
+
+function verifyCandidate(proof: string) {
+  try {
+    return verifyCartSessionProof(proof, {
+      environment: getCartProofEnvironment(),
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when the request carries a verified shared-cart session proof
+ * for this merchant (device header, Bearer proof, or the merchant
+ * session cookie), whether or not it names a particular cart. Used to
+ * fail closed when a shared-cart shopper submits an order without its
+ * checkout binding: such a request must never fall through to the
+ * legacy direct order RPC.
+ */
+export function requestCarriesSharedCartSessionProof(
+  request: Request,
+  merchantId: string
+): boolean {
+  for (const proof of presentedCartProofs(request, merchantId)) {
+    const verified = verifyCandidate(proof);
     if (
-      verified.ok &&
+      verified?.ok &&
       verified.session.merchantId === merchantId &&
       verified.session.cartId !== null
     )
@@ -72,22 +78,20 @@ export function verifySharedCartOrderProof(
   request: Request,
   input: { merchantId: string; cartId: string }
 ): SharedCartOrderProofResult {
-  const headerProof = request.headers.get('x-cart-proof')?.trim();
-  const proof =
-    headerProof ||
-    readCartProofFromRequest(request, cartSessionCookieName(input.merchantId));
-  if (!proof) return { ok: false };
-  const verified = verifyCartSessionProof(proof, {
-    environment: getCartProofEnvironment(),
-  });
-  if (!verified.ok) return { ok: false };
-  const session = verified.session;
-  if (
-    session.merchantId !== input.merchantId ||
-    session.cartId !== input.cartId ||
-    !session.principalId
-  ) {
-    return { ok: false };
+  // Accept the first candidate that verifies for the submitted cart:
+  // a stale header must not mask a valid cookie or Bearer proof.
+  for (const proof of presentedCartProofs(request, input.merchantId)) {
+    const verified = verifyCandidate(proof);
+    if (!verified?.ok) continue;
+    const session = verified.session;
+    if (
+      session.merchantId !== input.merchantId ||
+      session.cartId !== input.cartId ||
+      !session.principalId
+    ) {
+      continue;
+    }
+    return { ok: true, principalId: session.principalId };
   }
-  return { ok: true, principalId: session.principalId };
+  return { ok: false };
 }

@@ -108,6 +108,21 @@ describe('verifySharedCartOrderProof', () => {
     ).toBe(false);
   });
 
+  it('accepts a valid cookie proof when the header proof is stale', () => {
+    const request = new Request('http://localhost/api/orders', {
+      headers: {
+        cookie: `${cartSessionCookieName(MERCHANT_ID)}=${proofFor(CART_ID)}`,
+        'x-cart-proof': proofFor('99999999-9999-4999-8999-999999999999'),
+      },
+    });
+    expect(
+      verifySharedCartOrderProof(request, {
+        cartId: CART_ID,
+        merchantId: MERCHANT_ID,
+      })
+    ).toEqual({ ok: true, principalId: 'guest-principal-001' });
+  });
+
   it('rejects missing and forged proofs', () => {
     expect(
       verifySharedCartOrderProof(new Request('http://localhost/api/orders'), {

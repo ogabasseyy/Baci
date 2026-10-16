@@ -93,12 +93,14 @@ export function ProductOfferSelector({
           );
         })}
       </div>
-      {selectedOffer && selectedOffer.price != null && (
-        <p className="text-sm font-medium text-green-600">
-          Save {formatCurrency(product.price - Number(selectedOffer.price))} vs
-          New
-        </p>
-      )}
+      {selectedOffer &&
+        selectedOffer.price != null &&
+        product.price - Number(selectedOffer.price) > 0 && (
+          <p className="text-sm font-medium text-green-600">
+            Save {formatCurrency(product.price - Number(selectedOffer.price))}{' '}
+            vs New
+          </p>
+        )}
       {conditionDescriptions[selectedCondition] && (
         <p className="text-xs text-muted-foreground">
           {conditionDescriptions[selectedCondition]}

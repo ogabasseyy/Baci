@@ -733,7 +733,17 @@ const nextConfig: NextConfig = {
   },
 };
 
-function applyPostHogConfig(config: NextConfig): NextConfig {
+type NextConfigContext = { defaultConfig: NextConfig };
+type ResolvableNextConfig =
+  | NextConfig
+  | ((
+      phase: string,
+      context: NextConfigContext
+    ) => NextConfig | Promise<NextConfig>);
+
+// PostHog's declaration says NextConfig, but its enabled runtime returns
+// an async config function. Keep that callable branch explicit here.
+function applyPostHogConfig(config: NextConfig): ResolvableNextConfig {
   if (
     !POSTHOG_SOURCE_MAP_UPLOAD_ENABLED ||
     !POSTHOG_SOURCE_MAP_API_KEY ||
@@ -756,9 +766,8 @@ function applyPostHogConfig(config: NextConfig): NextConfig {
 }
 
 // Composed once at import, exactly like the object form this replaced:
-// the exported function runs only the phase-scoped gate per call and
-// returns this same object, so repeated in-process evaluations never
-// re-wrap the PostHog config.
+// the exported function runs the phase-scoped gate and resolves this
+// value, so repeated evaluations never re-wrap the PostHog config.
 const composedConfig = applyPostHogConfig(nextConfig);
 
 // Function form so the pilot gate reads Next's own phase signal:
@@ -767,17 +776,15 @@ const composedConfig = applyPostHogConfig(nextConfig);
 // this) skips the gate entirely. argv sniffing cannot cover
 // programmatic builds, and process.env.NEXT_PHASE is unset at config
 // time (Next assigns it late in the build, after loadConfig), so the
-// phase parameter is the only truthful signal here. The second
-// function-form argument ({ defaultConfig }) is accepted and ignored:
-// this config is fully specified and never spread Next's defaults,
-// same as the object form — the parameter exists to document the
-// contract for in-repo callers (all six next.config.*.test.ts resolve
-// via a typeof-function check; no programmatic object-shape consumer
-// remains).
+// phase parameter is the only truthful signal here. Forward Next's
+// context to the optional PostHog function; the default keeps direct
+// tooling callers compatible when they provide only the phase.
 export default function pilotNextConfig(
   phase: string,
-  _context?: { defaultConfig: NextConfig }
-): NextConfig {
+  context: NextConfigContext = { defaultConfig: {} }
+): NextConfig | Promise<NextConfig> {
   applyPilotPublicGate(__dirname, phase);
-  return composedConfig;
+  return typeof composedConfig === 'function'
+    ? composedConfig(phase, context)
+    : composedConfig;
 }

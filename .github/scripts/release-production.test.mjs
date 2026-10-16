@@ -52,18 +52,23 @@ test('reads raw gh --jq scalars without JSON parsing', () => {
   for (const output of ['', '   ', 'null', null, undefined]) {
     assert.throws(() => parseGhJqString(output, 'test status'), /test status unreadable/);
   }
+});
+
+test('reads nullable run conclusions after the subprocess trims its output', () => {
   const calls = [];
   const reading = readWorkflowRunStatus(
     args => {
       calls.push(args);
-      return 'queued\t\n';
+      return JSON.stringify({ status: 'queued', conclusion: null }).trim();
     },
     42
   );
   assert.deepEqual(reading, { status: 'queued', conclusion: '' });
-  assert.deepEqual(readWorkflowRunStatus(() => 'completed\taction_required\n', 42), { status: 'completed', conclusion: 'action_required' });
-  assert.ok(calls[0].join(' ').includes('[.status, .conclusion] | @tsv'));
-  for (const output of ['', 'null\t\n', 'success\n', '\tsuccess\n', 'a\tb\tc\n']) {
+  for (const [status, conclusion] of [['in_progress', null], ['completed', 'action_required'], ['completed', 'success'], ['completed', 'failure']]) {
+    assert.deepEqual(readWorkflowRunStatus(() => JSON.stringify({ status, conclusion }).trim(), 42), { status, conclusion: conclusion ?? '' });
+  }
+  assert.ok(calls[0].join(' ').includes('{status, conclusion}'));
+  for (const output of ['', 'null', '{}', '[]', '{"status":null,"conclusion":"success"}', '{"status":"null","conclusion":null}', '{"status":" ","conclusion":null}', '{"status":"queued"}', '{"status":"queued","conclusion":42}', 'queued']) {
     assert.throws(() => readWorkflowRunStatus(() => output, 42), /workflow run 42 status unreadable/);
   }
 });

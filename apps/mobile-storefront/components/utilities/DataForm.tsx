@@ -273,6 +273,7 @@ export function DataForm({
             walletBalance={payment.getWalletBalance()}
             walletError={payment.walletError}
             walletIsLoading={payment.walletIsLoading}
+            walletIsSettled={payment.isWalletSettled()}
           />
         </View>
       </ScrollView>

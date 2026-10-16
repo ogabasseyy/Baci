@@ -11,6 +11,11 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20261012232999_drop_vtu_replay_owner_policy_before_repair.sql',
+    sha256: 'da493ef87cda8ba2260404b4be7aa4f4a9b9cd45dbb1fca725b7facc6a12c00a',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261012233000_scope_vtu_replay_attributes_to_owner.sql',
     sha256: '1926b355a8bdca86e5c9743e6a93f8e3a1deccd805f70a359862d053a273d9ae',
   },
@@ -48,5 +53,10 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
     repositoryPath:
       'supabase/migrations/20261016131000_idempotent_vtu_replay_owner_policy.sql',
     sha256: '854386675b899352d302f3a2eaff2a88c374eab27d52028806ec7536161a9de0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016132000_drop_vtu_replay_owner_policy_after_repair.sql',
+    sha256: 'fff472cbedce07e61a8968d9294e03dc77c5d6ee02db625f24298f1bfe487e21',
   },
 ];

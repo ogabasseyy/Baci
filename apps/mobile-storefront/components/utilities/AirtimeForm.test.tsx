@@ -121,6 +121,7 @@ describe('AirtimeForm', () => {
       getWalletBalance: () => 5000,
       walletError: null,
       walletIsLoading: false,
+      isWalletSettled: () => true,
       getWalletIdempotencyKey: jest.fn(() => 'test-key'),
       scopePendingVtuDescriptor: (d: string) => d,
       captureSubmittingOwner: () => 'test-owner',

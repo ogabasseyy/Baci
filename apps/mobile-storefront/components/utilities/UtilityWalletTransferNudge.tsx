@@ -29,6 +29,12 @@ interface UtilityWalletTransferNudgeProps {
   walletBalance?: number;
   walletError?: Error | null;
   walletIsLoading?: boolean;
+  /**
+   * False while the wallet query is disabled with no data: the
+   * funding nudge must stay hidden (a missing balance is not a zero
+   * balance — Codex R130 P2).
+   */
+  walletIsSettled?: boolean;
 }
 
 export function UtilityWalletTransferNudge({
@@ -39,6 +45,7 @@ export function UtilityWalletTransferNudge({
   walletBalance,
   walletError,
   walletIsLoading,
+  walletIsSettled,
 }: UtilityWalletTransferNudgeProps) {
   const handlePress = () => {
     navigateToWalletFunding(returnToHref);
@@ -47,6 +54,7 @@ export function UtilityWalletTransferNudge({
   const visible =
     canFundByBankTransfer &&
     walletIsLoading !== true &&
+    walletIsSettled !== false &&
     !walletError &&
     amount > 0 &&
     (walletBalance ?? 0) < amount;

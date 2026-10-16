@@ -138,4 +138,43 @@ describe('UtilityPaymentOptions', () => {
       screen.queryByText(/transfers to your wallet account number/i)
     ).toBeNull();
   });
+
+  it('shows checking (not ₦0) while the wallet query is unsettled', () => {
+    // Codex R130 P2: a disabled query reports isLoading=false with no
+    // data during hydration/account switch — rendering that as ₦0
+    // with a full shortfall is a false empty-wallet state.
+    render(
+      <UtilityPaymentOptions
+        amount={1000}
+        canFundByBankTransfer={true}
+        returnToHref={RETURN_TO_HREF}
+        walletIsLoading={false}
+        walletIsSettled={false}
+      />
+    );
+
+    expect(screen.getByText(/checking wallet balance/i)).toBeTruthy();
+    expect(screen.queryByText('Pay with wallet')).toBeNull();
+    expect(screen.queryByText(/₦0 available/i)).toBeNull();
+    expect(
+      screen.queryByText(/transfers to your wallet account number/i)
+    ).toBeNull();
+  });
+
+  it('shows checking while unsettled even with a stale cached balance', () => {
+    // The cached figure belongs to the previous owner/session until
+    // the new identity's query settles — never render it as current.
+    render(
+      <UtilityPaymentOptions
+        amount={1000}
+        returnToHref={RETURN_TO_HREF}
+        walletBalance={5000}
+        walletIsLoading={false}
+        walletIsSettled={false}
+      />
+    );
+
+    expect(screen.getByText(/checking wallet balance/i)).toBeTruthy();
+    expect(screen.queryByText(/₦5,000 available/i)).toBeNull();
+  });
 });

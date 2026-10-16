@@ -19,6 +19,13 @@ interface UtilityPaymentOptionsProps {
   walletBalance?: number;
   walletError?: Error | null;
   walletIsLoading?: boolean;
+  /**
+   * False while the wallet query is disabled (owner resolving,
+   * session hydration, account switch): TanStack reports
+   * isLoading=false with no data in that state, which must render
+   * as checking — never as a ₦0 balance (Codex R130 P2).
+   */
+  walletIsSettled?: boolean;
 }
 
 /**
@@ -34,9 +41,14 @@ export function UtilityPaymentOptions({
   walletBalance,
   walletError,
   walletIsLoading,
+  walletIsSettled,
 }: UtilityPaymentOptionsProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+  // Unsettled (query disabled, no data yet) renders as checking even
+  // though isLoading is false — the submit gate already treats it
+  // that way (Codex R130 P2).
+  const isChecking = walletIsLoading === true || walletIsSettled === false;
   const balance = walletBalance ?? 0;
   const coversBill = amount > 0 && balance >= amount;
   const shortfall = amount > 0 ? Math.max(amount - balance, 0) : 0;
@@ -55,9 +67,10 @@ export function UtilityPaymentOptions({
         walletBalance={walletBalance}
         walletError={walletError}
         walletIsLoading={walletIsLoading}
+        walletIsSettled={walletIsSettled}
       />
 
-      {walletIsLoading === true ? (
+      {isChecking ? (
         <View
           style={[
             styles.walletRow,

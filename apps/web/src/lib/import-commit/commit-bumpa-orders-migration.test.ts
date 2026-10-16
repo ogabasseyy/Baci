@@ -158,30 +158,46 @@ describe('Bumpa imported order item RPC migration', () => {
       const escapedSignature = escapeRegExp(signature);
 
       expect(migrationSql).toMatch(
+        // SAFE (SAST-reviewed): only `escapedSignature` interpolates, and it
+        // is escapeRegExp-escaped two lines above; the `\\s+` and keywords are
+        // fixed. Inputs are two hardcoded signatures in this test — no ReDoS.
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
         new RegExp(
           `ALTER FUNCTION ${escapedSignature}\\s+OWNER TO postgres`,
           'i'
         )
       );
       expect(migrationSql).toMatch(
+        // SAFE (SAST-reviewed): interpolated part is escapeRegExp-escaped;
+        // fixed keywords only. Test-time assertion over fixed inputs.
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
         new RegExp(
           `REVOKE ALL ON FUNCTION ${escapedSignature}\\s+FROM PUBLIC`,
           'i'
         )
       );
       expect(migrationSql).toMatch(
+        // SAFE (SAST-reviewed): interpolated part is escapeRegExp-escaped;
+        // fixed keywords only. Test-time assertion over fixed inputs.
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
         new RegExp(
           `REVOKE ALL ON FUNCTION ${escapedSignature}\\s+FROM anon`,
           'i'
         )
       );
       expect(migrationSql).toMatch(
+        // SAFE (SAST-reviewed): interpolated part is escapeRegExp-escaped;
+        // fixed keywords only. Test-time assertion over fixed inputs.
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
         new RegExp(
           `REVOKE ALL ON FUNCTION ${escapedSignature}\\s+FROM authenticated`,
           'i'
         )
       );
       expect(migrationSql).toMatch(
+        // SAFE (SAST-reviewed): interpolated part is escapeRegExp-escaped;
+        // fixed keywords only. Test-time assertion over fixed inputs.
+        // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
         new RegExp(
           `GRANT EXECUTE ON FUNCTION ${escapedSignature}\\s+TO service_role`,
           'i'

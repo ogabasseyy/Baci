@@ -16,6 +16,11 @@ function uuidToBytes(uuid: string): Buffer {
  * deduplicates them into a single event.
  */
 export function deterministicEventUuid(name: string): string {
+  // SAFE (SAST-reviewed): RFC 4122 v5 UUIDs are SHA-1 by definition — the
+  // version-5 nibble set below is only meaningful over SHA-1. Upgrading the
+  // hash would break the UUID format and PostHog dedup compat. Use is
+  // telemetry event-id derivation only, never integrity or auth.
+  // nosemgrep: javascript.node-stdlib.cryptography.crypto-weak-algorithm.crypto-weak-algorithm
   const hash = createHash('sha1')
     .update(uuidToBytes(TELEMETRY_UUID_NAMESPACE))
     .update(Buffer.from(name, 'utf8'))

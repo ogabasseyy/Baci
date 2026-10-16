@@ -216,6 +216,28 @@ GRANT EXECUTE ON FUNCTION private.refund_coverage_per_leg_v1(uuid,uuid,text)
   TO service_role, authenticated;
 GRANT EXECUTE ON FUNCTION private.uncovered_refund_obligation_v1(uuid,uuid,text,numeric,numeric)
   TO service_role, authenticated;
+-- Effective paid total for legacy NULL-paid orders: amount_paid is
+-- defaulted but nullable since baseline, and completed funded legs
+-- beside a NULL total are real customer money. Treating NULL as
+-- zero strands the payment (zero remainder, already_refunded on
+-- every mutation). Derive from authoritative external funded legs
+-- in the order currency when NULL; internal legs reverse through
+-- their own ledgers, so they stay out (conservative by
+-- construction: the reconstruction can only understate, never
+-- overstate, the balance). Membership gates inside the per-leg
+-- listing, like uncovered_refund_obligation_v1.
+CREATE OR REPLACE FUNCTION private.effective_amount_paid_v1(
+  p_order_id uuid, p_merchant_id uuid, p_currency text, p_amount_paid numeric
+) RETURNS numeric LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
+  SELECT COALESCE(p_amount_paid, COALESCE((SELECT SUM(l.leg_amount)
+    FROM private.refund_coverage_per_leg_v1(
+      p_order_id, p_merchant_id, p_currency) l
+    WHERE l.is_funded AND NOT l.is_internal), 0));
+$$;
+REVOKE ALL ON FUNCTION private.effective_amount_paid_v1(uuid,uuid,text,numeric)
+  FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION private.effective_amount_paid_v1(uuid,uuid,text,numeric)
+  TO service_role, authenticated;
 -- Shared membership gate for the authenticated-granted private
 -- refund helpers (pending evidence, movement evidence, partial
 -- state): owner, orders:refund, or orders:view, with uid-less

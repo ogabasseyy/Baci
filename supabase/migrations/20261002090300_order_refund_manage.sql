@@ -32,6 +32,7 @@ DECLARE
   v_has_movement_evidence boolean;
   v_remaining numeric;
   v_reversed_internal numeric;
+  v_paid numeric;
   v_can_manage boolean;
   v_reference text;
   v_sole_external_leg boolean;
@@ -151,15 +152,15 @@ BEGIN
       AND r.metadata ? 'reversed_at'),0)
     INTO v_reversed_internal;
   v_refunded := v_refunded + v_reversed_internal;
-  -- A superseded capture (a refunded obsolete leg matching
-  -- amount_paid beside an outstanding one) zeroes the paid-minus-
-  -- coverage remainder while the executor still owes the uncovered
-  -- leg: floor at the per-leg uncovered obligation so recording
-  -- stays open and the status stays honest.
-  v_remaining := GREATEST(COALESCE(v_order.amount_paid,0)-v_refunded,
+  -- A superseded capture zeroes the paid-minus-coverage remainder
+  -- while the executor still owes the uncovered leg: floor at the
+  -- per-leg uncovered obligation so recording stays open.
+  v_paid := private.effective_amount_paid_v1(p_order_id,
+    v_order.merchant_id, v_order.currency, v_order.amount_paid);
+  v_remaining := GREATEST(v_paid-v_refunded,
     private.uncovered_refund_obligation_v1(p_order_id,
       v_order.merchant_id, v_order.currency, v_reversed_internal,
-      COALESCE(v_order.amount_paid,0)),0);
+      v_paid),0);
   -- Partial-manual state is per leg (extracted helper): a fully
   -- manually covered leg never blocks retry, but a partially
   -- covered leg still needs the merchant to finish first.
@@ -289,7 +290,7 @@ BEGIN
   END IF;
   -- Response shaping lives in the response helper (part 3).
   RETURN private.refund_status_response(p_order_id,
-    v_order.merchant_id,v_order.currency,v_order.amount_paid,
+    v_order.merchant_id,v_order.currency,v_paid,
     v_refunded,v_remaining,v_pending,v_reversed_internal,
     v_step_status,v_step_error,v_step_attempts,v_step_retry_requests,
     v_can_manage,v_manual_partial,v_has_movement_evidence,

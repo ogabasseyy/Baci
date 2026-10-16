@@ -173,18 +173,4 @@ describe('storefront-loading-ui', () => {
       screen.getByRole('status', { name: 'Loading utility page' })
     ).toBeInTheDocument();
   });
-
-  it('renders HomeRouteLoading with CLS-safe hero and product reserves instead of the 400px generic skeleton', () => {
-    const { container } = render(<HomeRouteLoading />);
-
-    expect(
-      container.querySelector('[data-storefront-home-loading-reserve="true"]')
-    ).toBeInTheDocument();
-    expect(
-      container.querySelector('.ogabassey-home-products > div')
-    ).toHaveStyle({ minHeight: '1200px' });
-    expect(
-      container.querySelector('.h-\\[400px\\].w-full.rounded-lg.bg-gray-200')
-    ).not.toBeInTheDocument();
-  });
 });

@@ -260,4 +260,43 @@ describe('OgabasseyHomeDiscoverySection', () => {
         ?.innerHTML || '{}';
     expect(json).toContain('iphone-17-pro-max');
   });
+
+  it('places the hero before the discovery section in the streamed Fizz HTML via the macrotask yield', async () => {
+    const { Suspense } = await import('react');
+    const { renderToReadableStream } = await import('react-dom/server.edge');
+    const { OgabasseyHomeDiscoverySection } = await import(
+      './ogabassey-home-discovery-section'
+    );
+
+    async function MultiMicrotaskHero() {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      return <section data-testid="streamed-hero">Hero Banner</section>;
+    }
+
+    const stream = await renderToReadableStream(
+      <div>
+        <Suspense fallback={<div data-testid="discovery-fallback" />}>
+          <OgabasseyHomeDiscoverySection
+            categoriesPromise={Promise.resolve([])}
+            launchProductsPromise={Promise.resolve([])}
+            merchant={mockSectionMerchant}
+            pathPrefix="/ogabassey"
+            productsPromise={Promise.resolve([createSectionProduct()])}
+          />
+        </Suspense>
+        <Suspense fallback={<div data-testid="hero-fallback" />}>
+          <MultiMicrotaskHero />
+        </Suspense>
+      </div>
+    );
+
+    const html = await new Response(stream).text();
+    expect(html.indexOf('Hero Banner')).toBeGreaterThan(-1);
+    expect(html.indexOf('iphone-17-pro-max')).toBeGreaterThan(-1);
+    expect(html.indexOf('Hero Banner')).toBeLessThan(
+      html.indexOf('iphone-17-pro-max')
+    );
+  });
 });

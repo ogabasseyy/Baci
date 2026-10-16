@@ -129,6 +129,8 @@ def workflow_failures(workflow_text):
     raw = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
     code = _without_block_scalars(raw)
     failures = contract_trigger_failures(workflow_text)
+    if any(re.match(r"^\s*\?", line) for line in code):
+        failures.append("contract workflow must not use explicit YAML key forms (? key bypasses structure scans)")
     if any(re.match(r"""^"[^"\n]*\\[^"\n]*"\s*:""", line) for line in code):
         failures.append("contract workflow keys must use plain spelling: escapes execute decoded")
     # Top-level permissions must be exactly read-only: a substring match

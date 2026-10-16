@@ -5,6 +5,7 @@ exactly branches: [main], a top-level PATH is a startup preload, and block
 scalars must not smuggle executable structure into the contract workflow.
 """
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
@@ -124,6 +125,23 @@ class ContractAdversarialTests(unittest.TestCase):
         failures = check.ci_failures(evil)
         self.assertTrue(failures)
         self.assertIn("with block", failures[0])
+
+    def test_explicit_env_key_form_fails(self):
+        # YAML's `? env` explicit key is still the env mapping to GitHub
+        # but invisible to `^env:` line scans: BASH_ENV would preload a
+        # workspace shim before the pinned run block.
+        text = _workflow_text()
+        pin = re.search(r"PINNED_CHECKER_SHA256: ([0-9a-f]{64})", text).group(1)
+        smuggled = text.replace("env:\n  # Baseline hash", "? env\n:\n  BASH_ENV: attacker.sh\n  # Baseline hash", 1)
+        smuggled = smuggled.replace(
+            "  gate-contract:\n",
+            "  gate-contract:\n    env:\n      PINNED_CHECKER_SHA256: %s\n" % pin,
+            1,
+        )
+        self.assertNotEqual(smuggled, text)
+        failures = check.workflow_failures(smuggled)
+        self.assertTrue(failures)
+        self.assertIn("explicit YAML key", failures[0])
 
     def test_indented_scalar_header_does_not_hide_steps(self):
         # The pinned text inside `concurrency: |2-` is scalar content while

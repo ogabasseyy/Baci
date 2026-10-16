@@ -66,8 +66,8 @@ BASE_PINS = {
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
-    ".github/scripts/capability_gate_contract_ci_checks.py": "9dff27323930f4acbd11ffbf1b79adcbca6254205d972df8d889814e00a01f8b",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "7a6c37702978bf449cbe218045bbb74e67bbc3329ef8b552dd8364152221163c",
+    ".github/scripts/capability_gate_contract_ci_checks.py": "a8b8f0add49e69a538d46f774bcc0e69d0514814c32a0419a5bc5867860bbfac",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "f0e6007592223a06e25d2374561dc987bf97f5a1f3d61bbc385f89fd7e3bdb18",
     ".github/workflows/capability-register-freshness.yml": "6e0618cc3824061f069ee5ec5f02b4e684256b88b7a0ff672fdd2c1501c06adc",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
@@ -78,7 +78,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
     "vps-workers/baci-editorial-context/test_capability_gate.py": "88815781ee49e265a1e94ee7a693340b77a53fef60a9cb08b2c3e9098c268fb8",
     "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "5007e1d3039cfd5c3007596d72a6f12a7564674be67b724d106ffe18eac896a4",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_adversarial.py": "b2069ce9100c9205b2af3bf5f55ee66741fd10a7c14509f90c33b3d024eafe48",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_adversarial.py": "903da1ee2dc6797dcc03adf55fb102566c0f411024ac9538687c847bbe5e1000",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "411de0bb193a6b7c0d75244aab9b6dbb664fae3f4a51b5f7f76a4c5a09359d5e",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "1381bd0b024f0e1780915ab1aab614093af2d5a61b718224310e542b9d77411b",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "457bf4eda235d598839a65745479ff8da116b8a5fdc0e3f2750ab8170c5b91bd",

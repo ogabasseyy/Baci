@@ -27,8 +27,8 @@ import { notFound } from 'next/navigation';
 import { getMerchantForUser } from '@/lib/merchant-server';
 import { shouldShowOrderRefundPanel } from '@/lib/orders/should-show-order-refund-panel';
 import { getOrder } from '../actions';
-import OrderDetailsPage from './page';
 import { getInitialRefundSummary } from './initial-refund-summary';
+import OrderDetailsPage from './page';
 
 const merchant = { id: 'merchant-1' };
 const order = { id: 'order-uuid-1', order_number: 'ORD-1' };
@@ -67,7 +67,9 @@ describe('OrderDetailsPage', () => {
   });
 
   it('returns notFound without a merchant', async () => {
-    vi.mocked(getMerchantForUser).mockResolvedValue({ merchant: null } as never);
+    vi.mocked(getMerchantForUser).mockResolvedValue({
+      merchant: null,
+    } as never);
     await OrderDetailsPage({ params });
     expect(notFound).toHaveBeenCalled();
     expect(getOrder).not.toHaveBeenCalled();

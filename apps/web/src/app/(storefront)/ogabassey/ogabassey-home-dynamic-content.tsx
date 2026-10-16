@@ -1,12 +1,7 @@
 import { Suspense } from 'react';
 import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics-merchant-settings';
 import { AnalyticsPixelProvider } from '@/components/analytics/analytics-pixel-provider';
-import {
-  OGABASSEY_HOME_DISCOVERY_RESERVE_MIN_HEIGHT_CLASS,
-  OGABASSEY_HOME_DISCOVERY_RESERVE_STYLE,
-  OGABASSEY_HOME_PRODUCT_RESERVE_MIN_HEIGHT_CLASS,
-  OGABASSEY_HOME_PRODUCT_RESERVE_STYLE,
-} from '@/components/storefront/ogabassey/components/home-section-reserve-geometry';
+import { OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY } from '@/components/storefront/ogabassey/components/home-section-reserve-geometry';
 import { getStorefrontNavigationCategories } from '@/lib/cached-categories';
 import {
   getCachedStorefrontHomeProducts,
@@ -73,8 +68,10 @@ export function OgabasseyHomeDynamicContent({
             data-ogabassey-product-reserve="true"
           >
             <div
-              className={OGABASSEY_HOME_PRODUCT_RESERVE_MIN_HEIGHT_CLASS}
-              style={OGABASSEY_HOME_PRODUCT_RESERVE_STYLE}
+              className={
+                OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.minHeightClass
+              }
+              style={OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.style}
             />
           </div>
         }
@@ -93,8 +90,10 @@ export function OgabasseyHomeDynamicContent({
             data-ogabassey-discovery-reserve="true"
           >
             <div
-              className={OGABASSEY_HOME_DISCOVERY_RESERVE_MIN_HEIGHT_CLASS}
-              style={OGABASSEY_HOME_DISCOVERY_RESERVE_STYLE}
+              className={
+                OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.discovery.minHeightClass
+              }
+              style={OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.discovery.style}
             />
           </div>
         }

@@ -7,8 +7,8 @@ import {
   mockSectionMerchant,
 } from './ogabassey-home-section.test-fixtures';
 
-vi.mock('@/lib/cached-data', async (importOriginal) => {
-  const actual = (await importOriginal()) as Record<string, unknown>;
+vi.mock(import('@/lib/cached-data'), async (importOriginal) => {
+  const actual = await importOriginal();
   return {
     ...actual,
     getCachedStorefrontHomeProducts: vi.fn(() => Promise.resolve([])),

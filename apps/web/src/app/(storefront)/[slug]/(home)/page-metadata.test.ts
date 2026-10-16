@@ -182,11 +182,7 @@ describe('storefront homepage metadata', () => {
 
     expect(mockResolveOgabasseyHomeHeroShell).toHaveBeenCalledOnce();
 
-    resolveMerchant(
-      baseMerchant as unknown as Awaited<
-        ReturnType<typeof getRequestScopedMerchant>
-      >
-    );
+    resolveMerchant(null);
     await metadataPromise;
   });
 });

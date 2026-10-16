@@ -8,10 +8,7 @@ import { buildLaunchSlides } from '../components/build-launch-slides';
 import { DeferredAdUnit } from '../components/deferred-ad-unit';
 import { HomeProductGridGate } from '../components/home-product-grid-gate';
 import { HomeProductGridStaticFallback } from '../components/home-product-grid-static-fallback';
-import {
-  OGABASSEY_HOME_PRODUCT_RESERVE_MIN_HEIGHT_CLASS,
-  OGABASSEY_HOME_PRODUCT_RESERVE_STYLE,
-} from '../components/home-section-reserve-geometry';
+import { OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY } from '../components/home-section-reserve-geometry';
 import { Hero } from '../components/Hero';
 import { HOMEPAGE_STRIP_AD_BOOT_DELAY_MS } from '../config/ads';
 
@@ -78,8 +75,10 @@ export const OgabasseyHomePage: React.FC<HomePageProps> = ({
             data-ogabassey-grid-gate-reserve="true"
           >
             <div
-              className={OGABASSEY_HOME_PRODUCT_RESERVE_MIN_HEIGHT_CLASS}
-              style={OGABASSEY_HOME_PRODUCT_RESERVE_STYLE}
+              className={
+                OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.minHeightClass
+              }
+              style={OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.style}
             />
           </div>
         }

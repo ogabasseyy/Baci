@@ -7,6 +7,7 @@ import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-l
 import { getHostedDraftStandaloneOutput } from './src/config/hosted-draft-standalone-output';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
 import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
+import { applyPilotPublicGate } from './src/config/pilot-next-gate';
 import { STATIC_GENERATION_LIMITS } from './src/config/static-generation';
 import {
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -21,6 +22,12 @@ import {
   getPostHogUiHost,
   isPostHogSourceMapUploadEnabled,
 } from './src/lib/posthog/config';
+
+// Public assets bypass route guards; refuse non-lab builds with staged
+// data. The gate runs inside the exported config function (below),
+// keyed on the phase Next itself passes — never at module top level,
+// so importing this file (typegen, tests, tooling) has no gate side
+// effects and programmatic builds are covered exactly like CLI ones.
 
 // Keep this as an explicit static-asset suffix list. A generic dotted-path
 // exclusion drops valid HTML routes such as `/products/iphone-v1.2`.
@@ -748,4 +755,29 @@ function applyPostHogConfig(config: NextConfig): NextConfig {
   });
 }
 
-export default applyPostHogConfig(nextConfig);
+// Composed once at import, exactly like the object form this replaced:
+// the exported function runs only the phase-scoped gate per call and
+// returns this same object, so repeated in-process evaluations never
+// re-wrap the PostHog config.
+const composedConfig = applyPostHogConfig(nextConfig);
+
+// Function form so the pilot gate reads Next's own phase signal:
+// PHASE_PRODUCTION_BUILD asserts, dev/start stash for the boot gate,
+// and every other phase (test, info, tooling imports that never call
+// this) skips the gate entirely. argv sniffing cannot cover
+// programmatic builds, and process.env.NEXT_PHASE is unset at config
+// time (Next assigns it late in the build, after loadConfig), so the
+// phase parameter is the only truthful signal here. The second
+// function-form argument ({ defaultConfig }) is accepted and ignored:
+// this config is fully specified and never spread Next's defaults,
+// same as the object form — the parameter exists to document the
+// contract for in-repo callers (all six next.config.*.test.ts resolve
+// via a typeof-function check; no programmatic object-shape consumer
+// remains).
+export default function pilotNextConfig(
+  phase: string,
+  _context?: { defaultConfig: NextConfig }
+): NextConfig {
+  applyPilotPublicGate(__dirname, phase);
+  return composedConfig;
+}

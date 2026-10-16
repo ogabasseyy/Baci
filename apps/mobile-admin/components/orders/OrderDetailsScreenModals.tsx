@@ -52,6 +52,7 @@ export function OrderDetailsScreenModals({
       />
 
       <ShipmentFlowSheet
+        recoveryOrder={order}
         canUseProvider={controller.providerBookingAvailable}
         fulfillmentDetails={controller.fulfillmentDetails}
         fulfillmentItemIndex={controller.fulfillmentItemIndex}

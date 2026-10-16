@@ -104,6 +104,7 @@ export function runTransition(scenario) {
   for (const name of [
     'vercel-error-remediator',
     'sentry-mobile-error-remediator',
+    'posthog-error-remediator',
     'remediation-codex-canary',
   ]) {
     writeJob(join(jobsDirectory, `${name}.mjs`), 'process.exitCode = 0;\n');

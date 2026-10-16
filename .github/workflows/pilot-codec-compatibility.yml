@@ -1,0 +1,204 @@
+name: Pilot codec compatibility (opt-in)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    # opened: a PR created with transformer changes must run change
+    # detection immediately, not only on a later synchronize/reopen.
+    types: [labeled, opened, synchronize, reopened]
+    # No paths filter: a workflow-level paths list rejects the
+    # pull_request:labeled event before job conditions evaluate, so the
+    # pilot-codec-check opt-in label could never request the suite on a
+    # PR outside the list. Change detection lives in the changes job
+    # instead, which every trigger reaches; jobs skip fast when neither
+    # the label nor pilot paths apply. Keep this workflow NON-REQUIRED:
+    # the changes job runs on every PR by design, and its fail-closed
+    # condition runs the suites whenever detection does not succeed —
+    # a required gate would turn unrelated PRs red/heavy on GitHub API
+    # failures rather than on their own changes.
+
+permissions:
+  contents: read
+  # The changes job lists the PR's files through the API.
+  pull-requests: read
+
+concurrency:
+  # Labeled events run in their own group: an unrelated label must
+  # neither cancel an in-flight automatic run nor take its slot and
+  # then skip the jobs (leaving the commit without coverage). The
+  # opt-in label still forces a suite run from the labeled group.
+  group: pilot-codec-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'labeled' && '-labeled' || '' }}
+  cancel-in-progress: true
+
+jobs:
+  native-no-avif-fixture:
+    needs: changes
+    # No paths filter scopes this job anymore (see the trigger above),
+    # so opened/synchronize/reopened run only when the PR touches pilot
+    # paths. Labeled runs evaluate the PR's COMPLETE label set, not
+    # just the added label: gating on the new label alone would skip
+    # while the opt-in label is still present. Fail closed like the
+    # transformer gate below: a broken detection run runs the suite.
+    if: >-
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'pilot-codec-check') ||
+      needs.changes.outputs.pilot == 'true' ||
+      needs.changes.result != 'success')
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          run_install: false
+      - name: Install isolated pinned fixture runtime
+        shell: pwsh
+        run: |
+          $runtime = Join-Path $env:RUNNER_TEMP 'pilot-codec-runtime'
+          New-Item -ItemType Directory -Force $runtime | Out-Null
+          Copy-Item .github/fixtures/pilot-codec/package.json $runtime
+          Copy-Item .github/fixtures/pilot-codec/pnpm-lock.yaml $runtime
+          pnpm --dir $runtime install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm --dir $runtime exec playwright install webkit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prove native no-AVIF, WebP fallback and intact hydration
+        env:
+          PILOT_CODEC_RUNTIME: ${{ runner.temp }}/pilot-codec-runtime
+          PILOT_CODEC_OUTPUT: ${{ runner.temp }}/pilot-codec-evidence
+        run: node apps/web/tools/perf/merchant-image-pilot-codec-smoke.mjs
+      - name: Retain synthetic fixture evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pilot-codec-fixture-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pilot-codec-evidence
+          retention-days: 7
+          # A compatibility gate with zero retained evidence is a failure,
+          # not a pass: fail when the smoke script produced nothing.
+          if-no-files-found: error
+
+  # Change detection for both suites: the label gate alone would let
+  # pilot-area PRs merge untested whenever the label is absent, so
+  # pilot code changes run the suites with no label. Detection reads
+  # the PR's file list through the API (no checkout): a workflow-level
+  # paths filter cannot do this job because it rejects the labeled
+  # event itself.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      pilot: ${{ steps.diff.outputs.pilot }}
+      transformer: ${{ steps.diff.outputs.transformer }}
+    steps:
+      - id: diff
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Fail closed: a detection failure must run the suites, never
+          # skip them silently. The pilot patterns mirror the
+          # pilot-owned tree, plus the pilot config modules the old
+          # paths filter missed (apps/web/src/config/pilot-*), plus the
+          # pilot-owned boot/build-gate and contract files outside that
+          # tree: without them a gate-only PR would skip both suites.
+          # Shared production modules the lab renders through are
+          # listed explicitly per file (grouped by directory): a
+          # shared-only PR changes lab rendering exactly as a
+          # pilot-tree PR does. The list is the depth<=2 runtime
+          # import closure computed by
+          # .github/scripts/pilot-shared-closure.mjs (type-only
+          # edges skipped; deeper state/persistence modules stay
+          # covered by their owners' unit tests plus the root turbo
+          # gates). Pinned by
+          # .github/scripts/pilot-change-detection-contract.test.mjs,
+          # which recomputes the closure and fails on any reachable
+          # file the pattern misses — add the branch, never shrink
+          # the walker.
+          # Transient GitHub API failures must not turn unrelated PRs
+          # heavy: retry before the fail-closed fallback runs the
+          # suites. Only a sustained outage goes heavy. (A
+          # workflow-level paths pre-filter cannot do this job: it
+          # would reject the labeled opt-in event itself. The per-PR
+          # detection job is the documented price of the opt-in.)
+          api_with_retry() {
+            attempt=1
+            while [ "$attempt" -le 3 ]; do
+              if result=$(gh api "$@" 2>/dev/null); then
+                printf '%s\n' "$result"
+                return 0
+              fi
+              attempt=$((attempt + 1))
+              sleep 5
+            done
+            return 1
+          }
+          if ! names=$(api_with_retry "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[].filename'); then
+            echo 'pilot=true' >> "$GITHUB_OUTPUT"
+            echo 'transformer=true' >> "$GITHUB_OUTPUT"
+          elif ! changed=$(api_with_retry "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" -q '.changed_files'); then
+            echo 'pilot=true' >> "$GITHUB_OUTPUT"
+            echo 'transformer=true' >> "$GITHUB_OUTPUT"
+          else
+            # The list-files endpoint returns at most 3,000 entries: on
+            # a huge PR a pilot path can fall outside the received
+            # window, so compare against the PR's changed_files count
+            # and run everything when truncated (or when the count is
+            # unreadable) instead of emitting a false skip.
+            received=$(printf '%s\n' "$names" | grep -c .)
+            if ! [ "$received" -ge "$changed" ] 2>/dev/null; then
+              echo 'pilot=true' >> "$GITHUB_OUTPUT"
+              echo 'transformer=true' >> "$GITHUB_OUTPUT"
+            else
+              if printf '%s\n' "$names" | grep -qE '^infra/cdn-transformer/'; then
+                echo 'transformer=true' >> "$GITHUB_OUTPUT"
+              else
+                echo 'transformer=false' >> "$GITHUB_OUTPUT"
+              fi
+              if printf '%s\n' "$names" | grep -qE '^apps/web/tools/perf/merchant-image-pilot-|^apps/web/src/lib/merchant-image-variant-pilot/|^apps/web/src/app/pilot-lab/|^apps/web/src/config/pilot-|^apps/web/src/schemas/merchant-image-variant-pilot|^apps/web/src/instrumentation|^apps/web/next\.config(\.pilot-assets)?(\.test)?\.ts$|^apps/web/src/components/storefront/product-card(\.test)?\.tsx$|^apps/web/src/lib/storefront-product-href(\.test)?\.ts$|^apps/web/package\.json$|^infra/cdn-transformer/|^.github/fixtures/pilot-codec/|^.github/workflows/pilot-codec-compatibility.yml$|^.github/scripts/pilot-|^apps/web/public/__pilot/|^apps/web/tools/perf/server-only-empty\.ts$|^apps/web/tools/perf/merchant-image-pilot-stage\.tsconfig\.json$|^apps/web/src/app/\(storefront\)/storefront-eager-full-css-layout(\.test)?\.tsx$|^apps/web/src/app/\(storefront\)/storefront-(core|full|foundation|globals|header-loading|ogabassey-dark-mode[^/]*|theme-tokens)\.css$|^apps/web/src/app/inter-naira-font\.css$|^apps/web/src/components/(logo(\.test)?\.tsx|optimized-image(\.test)?\.tsx)$|^apps/web/src/components/storefront/blocks/header-logo(\.test)?\.tsx$|^apps/web/src/components/storefront/ogabassey/components/(carousel-play-toggle(\.test)?\.tsx|carousel-progress-fill(\.test)?\.tsx|hero-mobile-carousel(\.test)?\.tsx|hero-mobile-controls-skeleton(\.test)?\.tsx|hero-mobile-geometry(\.test)?\.ts|hero-mobile-image-config(\.test)?\.ts|mobile-lcp-hero-image(\.test)?\.tsx|use-hero-swipe(\.test)?\.ts)$|^apps/web/src/components/themed/(index(\.test)?\.ts|themed-badge(\.test)?\.tsx|themed-button(\.test)?\.tsx|themed-card(\.test)?\.tsx|themed-input(\.test)?\.tsx|themed-link(\.test)?\.tsx|themed-sheet(\.test)?\.tsx)$|^apps/web/src/components/ui/(card(\.test)?\.tsx|input(\.test)?\.tsx)$|^apps/web/src/config/cdn(\.test)?\.ts$|^apps/web/src/hooks/(use-currency(\.test)?\.ts|use-merchant-client(\.test)?\.tsx)$|^apps/web/src/lib/(brand-matched-social-profiles(\.test)?\.ts|build-storefront-product-path(\.test)?\.ts|collect-product-schema-spec-properties(\.test)?\.ts|currency(\.test)?\.ts|generate-storefront-slug(\.test)?\.ts|get-storefront-product-path(\.test)?\.ts|image-loader(\.test)?\.ts|image-utils(\.test)?\.ts|meta-description(\.test)?\.ts|ogabassey-cdn-image-url(\.test)?\.ts|ogabassey-image-fallback-loader(\.test)?\.ts|product-schema-spec-vocabulary(\.test)?\.ts|product-schema-specs(\.test)?\.ts|product-url(\.test)?\.ts|products(\.test)?\.ts|resolve-merchant-currency(\.test)?\.ts|routes(\.test)?\.ts|sanitize-core(\.test)?\.ts|sanitize-json-ld(\.test)?\.ts|seo-utils(\.test)?\.ts|social(\.test)?\.ts|storefront-product-category-name(\.test)?\.ts|storefront-product-url-serialization(\.test)?\.ts|utils(\.test)?\.ts|variant-product-identifiers(\.test)?\.ts)$|^apps/web/src/lib/checkout/payment-gateway-availability(\.test)?\.ts$|^apps/web/src/lib/storefront-specs/is-unsupported-spec-value(\.test)?\.ts$|^apps/web/src/lib/storefront-trust/merchant-trust-profile-types(\.test)?\.ts$'; then
+                echo 'pilot=true' >> "$GITHUB_OUTPUT"
+              else
+                echo 'pilot=false' >> "$GITHUB_OUTPUT"
+              fi
+            fi
+          fi
+
+  # The transformer package lives outside the pnpm workspace (infra-only),
+  # so no root turbo gate can discover its suite: without this job the
+  # encoder/acceptance tests run nowhere in CI.
+  transformer-tests:
+    needs: changes
+    # Fail closed: always() keeps this gate evaluating even when change
+    # detection itself errors, so a non-success detection result runs the
+    # suite instead of comparing an empty output to 'true' and skipping.
+    # The label check reads the PR's COMPLETE label set like the native
+    # job above: gating on the added label alone would let an unrelated
+    # label skip the suite while the opt-in label is still present.
+    if: >-
+      always() &&
+      (github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'pilot-codec-check') ||
+      needs.changes.outputs.transformer == 'true' ||
+      needs.changes.result != 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          run_install: false
+      - name: Install transformer dependencies
+        run: pnpm --dir infra/cdn-transformer install --frozen-lockfile
+      - name: Run transformer checks and tests
+        run: pnpm --dir infra/cdn-transformer check

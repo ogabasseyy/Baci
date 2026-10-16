@@ -20,6 +20,42 @@ export const EXPECTED_PENDING_TAIL_SOURCES = {
     },
     {
       repositoryPath:
+        'supabase/migrations/20261013213516_customer_checkout_shipping_recovery_context.sql',
+      sha256:
+        'ae81f71311b41528d8d730d90f2824a0a848223be0e2cdafb48b0ff77f27504f',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261013213522_customer_checkout_shipping_recovery_confirmation.sql',
+      sha256:
+        'd771210edf2a907516c2c5739be97dcea90e1dbea0a15f3515802fb29b7ff48e',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261014080000_customer_checkout_shipping_recovery_scalar_address.sql',
+      sha256:
+        '112b39558139a8a4851659abc8ac6d73a4a5f1d68afd0a567d4cd0702eddf1a4',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261014120000_customer_checkout_shipping_recovery_review_followups.sql',
+      sha256:
+        '3182b0dbcc855c7a7838fb807dddcfd72c6c4bda1f8c966d0d8e210c613c8ca1',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261014130000_customer_checkout_shipping_recovery_hardening.sql',
+      sha256:
+        '7bb0c5c818d6082db126c1da3a443746a4ff0ea59ee67a44a3e2c5eaef2a7b54',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261014140000_customer_checkout_shipping_recovery_confirm_hardening.sql',
+      sha256:
+        '7e33008871585fe87dac30ca66c3e952841b099cadacab4c68cd39b4ede15059',
+    },
+    {
+      repositoryPath:
         'supabase/migrations/20261014210000_lease_vtu_customer_email_notification_attempt.sql',
       sha256:
         'e4090f77f17032a4a0adc7e639f74e3e89794bb4f4792e717ac554791899de14',
@@ -29,6 +65,30 @@ export const EXPECTED_PENDING_TAIL_SOURCES = {
         'supabase/migrations/20261015010000_fence_vtu_customer_email_notification_clear_by_lease.sql',
       sha256:
         '2112c1db75c246c7030a570434efdecfb7bbd2b95ce1b35b8a3ad37dba811a17',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql',
+      sha256:
+        'c447cf6614df344591430a14df91201ae5404b1c6413e59d307205ec66641225',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261015124602_customer_checkout_shipping_recovery_address_aliases.sql',
+      sha256:
+        '6c4e56759fea25200a28a748a848c9da213550bc678e47ba9fe7a2727823188c',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261015130721_customer_checkout_shipping_recovery_delivery_boundary.sql',
+      sha256:
+        '1c411255bf10472a71c0f38a2b744d246764453832b7a6e32091a72226f8ac6b',
+    },
+    {
+      repositoryPath:
+        'supabase/migrations/20261015145945_customer_checkout_shipping_recovery_committed_retry.sql',
+      sha256:
+        '6336d903431424e3824ab52afa21213eeeac968406b519cc8bdd0f1944734627',
     },
     {
       repositoryPath:

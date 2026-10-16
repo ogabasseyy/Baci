@@ -1,0 +1,11 @@
+{
+  "name": "baci-pilot-codec-compatibility-runtime",
+  "private": true,
+  "packageManager": "pnpm@11.7.0",
+  "dependencies": {
+    "esbuild": "0.25.10",
+    "playwright": "1.55.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  }
+}

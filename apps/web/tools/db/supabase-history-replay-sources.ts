@@ -2,6 +2,7 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
 import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
+import { CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-checkout-recovery-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
 import { EXPENSE_QUIZ_PAYSTACK_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-expense-pending-sources';
@@ -239,6 +240,7 @@ const PENDING_SOURCES = [
   '58736f2055f1d497d2b273d290658e34b2006cbd0d81015cf7749e668aa29b11 20261013172724_fix_shipment_booking_refund_probe_permissions.sql',
   '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad 20261013194440_fix_shipping_quote_proof_canonicalization.sql',
   VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS,
+  CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS,
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
   PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS,
   PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS,

@@ -1,0 +1,252 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { register } from './instrumentation';
+
+// Pilot boot-gate cases, split from instrumentation.test.ts under the
+// repo line ceiling: staged-asset refusal, lab validation, and the
+// resolved-public-dir binding register() enforces before services.
+const registerOTelMock = vi.hoisted(() => vi.fn());
+const initializeLabRuntimeMock = vi.hoisted(() => vi.fn());
+const assertPilotPublicAssetsMock = vi.hoisted(() => vi.fn());
+const resolvePilotPublicDirMock = vi.hoisted(() =>
+  vi.fn(() => '/resolved/public')
+);
+vi.mock('@/config/pilot-public-assets', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/config/pilot-public-assets')>()),
+  assertPilotPublicAssets: assertPilotPublicAssetsMock,
+}));
+const assertNoUnboundStagedContentMock = vi.hoisted(() => vi.fn());
+vi.mock('@/config/pilot-public-assets-roots', () => ({
+  assertNoUnboundStagedContent: assertNoUnboundStagedContentMock,
+  resolvePilotPublicDir: resolvePilotPublicDirMock,
+}));
+vi.mock('@/app/pilot-lab/lab-route', () => ({
+  initializeLabRuntime: initializeLabRuntimeMock,
+}));
+const assertNoUnexpectedStagedFilesMock = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/merchant-image-variant-pilot/lab-config-stage-guard', () => ({
+  assertNoUnexpectedStagedFiles: assertNoUnexpectedStagedFilesMock,
+}));
+const assertUnanchoredPublicTreesMock = vi.hoisted(() => vi.fn());
+const hasPilotIntentMock = vi.hoisted(() => vi.fn(() => true));
+vi.mock('@/config/pilot-public-assets-unanchored', () => ({
+  assertUnanchoredPublicTrees: assertUnanchoredPublicTreesMock,
+  hasPilotIntent: hasPilotIntentMock,
+}));
+const captureServerExceptionMock = vi.hoisted(() => vi.fn());
+const captureServerEventMock = vi.hoisted(() => vi.fn());
+const setRateLimitDiagnosticHookMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@vercel/otel', () => ({
+  registerOTel: registerOTelMock,
+}));
+
+vi.mock('@/lib/posthog/server', () => ({
+  captureServerEvent: captureServerEventMock,
+  captureServerException: captureServerExceptionMock,
+}));
+
+vi.mock('@/lib/rate-limit', () => ({
+  setRateLimitDiagnosticHook: setRateLimitDiagnosticHookMock,
+}));
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
+});
+
+beforeEach(() => {
+  vi.stubEnv('BACI_IMAGE_PILOT_LAB', '');
+  vi.stubEnv('NEXT_OTEL_FETCH_DISABLED', '0');
+});
+
+function anchorError(): Error {
+  const error = new Error('cannot anchor the public tree') as Error & {
+    code: string;
+  };
+  error.code = 'PILOT_PUBLIC_UNANCHORED';
+  return error;
+}
+
+function driftError(): Error {
+  const error = new Error(
+    'non-lab public pilot tree filler "x" does not match the pinned hash'
+  ) as Error & { code: string };
+  error.code = 'PILOT_FILLER_DRIFT';
+  return error;
+}
+
+describe('instrumentation pilot boot gate', () => {
+  it('rejects non-lab startup on pinned-filler drift before registering services', async () => {
+    // Drift is the non-lab runtime refusal (post-build tamper): staged
+    // content findings warn instead (see the real-runtime tests).
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    assertPilotPublicAssetsMock.mockImplementationOnce(() => {
+      throw driftError();
+    });
+    await expect(register()).rejects.toThrow(/does not match the pinned hash/);
+    expect(registerOTelMock).not.toHaveBeenCalled();
+    expect(initializeLabRuntimeMock).not.toHaveBeenCalled();
+  });
+  it('initializes the enabled pilot before completing registration', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    await register();
+    expect(initializeLabRuntimeMock).toHaveBeenCalledOnce();
+  });
+  it('banners every production lab boot, stays silent in dev', async () => {
+    // ALLOW_PROD explicitly opts a production box into serving staged
+    // bytes unauthenticated: that must be visible on every boot, so a
+    // copied env file can never enable it silently. Dev boots (the
+    // normal lab flow) stay quiet.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('BACI_IMAGE_PILOT_ALLOW_PROD', '1');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(register()).resolves.toBe(undefined);
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toMatch(/LAB ENABLED IN PRODUCTION/);
+    } finally {
+      warnSpy.mockRestore();
+    }
+    vi.stubEnv('NODE_ENV', 'development');
+    const quietSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await expect(register()).resolves.toBe(undefined);
+      expect(quietSpy).not.toHaveBeenCalled();
+    } finally {
+      quietSpy.mockRestore();
+    }
+  });
+  it('refuses boot when the staged tree drifts from the binding set', async () => {
+    // Static-namespace guard: Next serves public/__pilot without
+    // invoking lab handlers, so unbound files at boot stay fatal even
+    // though lab-runtime init failures degrade.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const stagedPaths = [{ path: '/resolved/public/__pilot/a.png' }];
+    initializeLabRuntimeMock.mockResolvedValueOnce({ stagedPaths });
+    assertNoUnexpectedStagedFilesMock.mockRejectedValueOnce(
+      new Error('staged content drifted — re-stage to reconcile')
+    );
+    await expect(register()).rejects.toThrow(/drifted/);
+    expect(assertNoUnexpectedStagedFilesMock).toHaveBeenCalledWith(
+      stagedPaths,
+      '/resolved/public/__pilot',
+      [
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-a.png',
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-b.png',
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-c.png',
+      ]
+    );
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
+
+  it('checks the staged binding set after a successful lab init', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const stagedPaths = [{ path: '/resolved/public/__pilot/a.png' }];
+    initializeLabRuntimeMock.mockResolvedValueOnce({ stagedPaths });
+    assertNoUnexpectedStagedFilesMock.mockResolvedValueOnce(undefined);
+    await expect(register()).resolves.toBe(undefined);
+    // Filler paths ride along exactly like the request path: without
+    // them the boot check never enumerates fillers/, and a fourth
+    // file planted there would stay statically servable until the
+    // first lab page render — indefinitely if none ever renders.
+    expect(assertNoUnexpectedStagedFilesMock).toHaveBeenCalledWith(
+      stagedPaths,
+      '/resolved/public/__pilot',
+      [
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-a.png',
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-b.png',
+        '/resolved/public/__pilot/fillers/grid-filler-600x400-c.png',
+      ]
+    );
+    expect(registerOTelMock).toHaveBeenCalledOnce();
+  });
+
+  it('checks candidate trees when unanchored with lab off', async () => {
+    // A lab-only feature must not brick unrelated boots on the anchor
+    // failure itself: without an anchored root and with the lab off,
+    // register checks every candidate tree it can find (content
+    // findings warn, drift refuses) instead of throwing.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    resolvePilotPublicDirMock.mockImplementationOnce(() => {
+      throw anchorError();
+    });
+    await expect(register()).resolves.toBe(undefined);
+    expect(assertUnanchoredPublicTreesMock).toHaveBeenCalledOnce();
+    expect(registerOTelMock).toHaveBeenCalledOnce();
+  });
+  it('propagates a candidate-tree drift refusal with lab off', async () => {
+    // The leniency above is anchor-only: a drift refusal from the
+    // candidate check still refuses boot even with the lab off.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    resolvePilotPublicDirMock.mockImplementationOnce(() => {
+      throw anchorError();
+    });
+    assertUnanchoredPublicTreesMock.mockImplementationOnce(() => {
+      throw driftError();
+    });
+    await expect(register()).rejects.toThrow(/does not match the pinned hash/);
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
+  it('propagates an anchored drift refusal without degrading', async () => {
+    // The catch discriminates by failure: a non-anchor throw from the
+    // anchored check (drift actually detected — coded, but not the
+    // anchor code) must propagate even with the lab off. The
+    // candidates path runs only for the coded anchor failure.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    assertPilotPublicAssetsMock.mockImplementationOnce(() => {
+      throw driftError();
+    });
+    await expect(register()).rejects.toThrow(/does not match the pinned hash/);
+    expect(assertUnanchoredPublicTreesMock).not.toHaveBeenCalled();
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
+  it('stays fatal when unanchored with lab on', async () => {
+    // Lab mode demands a verified tree: an unanchored lab boot refuses
+    // instead of inspecting a lookalike.
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    resolvePilotPublicDirMock.mockImplementationOnce(() => {
+      throw anchorError();
+    });
+    await expect(register()).rejects.toThrow(/cannot anchor/);
+    expect(assertPilotPublicAssetsMock).not.toHaveBeenCalled();
+    expect(registerOTelMock).not.toHaveBeenCalled();
+  });
+  it('boots the pilot gate against the resolved public dir, never bare cwd', async () => {
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    await register();
+    // The boot gate must inspect the same tree the build gate did: the
+    // shared resolver (config-stashed or standalone-anchored), not a
+    // cwd-joined lookalike that diverges under `next start <dir>` or a
+    // standalone server run from elsewhere. Unanchored boots take the
+    // candidate-tree path tested above.
+    expect(resolvePilotPublicDirMock).toHaveBeenCalledOnce();
+    expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
+      '/resolved/public',
+      undefined,
+      'throw'
+    );
+  });
+
+  it('warns on filler drift without pilot intent instead of bricking boot', async () => {
+    // Intent-gated drift: a box that never opted into the pilot must
+    // not brick on recompressed synthetic fixtures; the gate still
+    // runs (content findings quarantine) but drift downgrades to a
+    // warning. Lab mode always counts as intent.
+    hasPilotIntentMock.mockReturnValueOnce(false);
+    vi.stubEnv('NEXT_RUNTIME', 'nodejs');
+    await register();
+    expect(assertPilotPublicAssetsMock).toHaveBeenCalledWith(
+      '/resolved/public',
+      undefined,
+      'warn'
+    );
+    expect(registerOTelMock).toHaveBeenCalledOnce();
+  });
+});

@@ -10,7 +10,7 @@ vi.mock('@/lib/reverse-domain-cache', () => ({
   isRecentlyUnmappedCustomDomain: vi.fn().mockReturnValue(false),
 }));
 vi.mock('./host', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./host')>();
+  const actual = await importOriginal<HostModule>();
   return {
     ...actual,
     getSlugForOriginCustomDomain: vi.fn().mockResolvedValue(null),
@@ -18,6 +18,8 @@ vi.mock('./host', async (importOriginal) => {
 });
 
 import { getApiSecurityContext, runApiSecurityStage } from './api-security';
+
+type HostModule = typeof import('./host');
 
 describe('API security stage', () => {
   it('blocks foreign browser origins for sessionless search assistance', async () => {

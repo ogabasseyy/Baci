@@ -1464,6 +1464,10 @@ export async function POST(request: NextRequest) {
             isIdempotentLocalAirportReplay || isIdempotentOrderReplay
               ? null
               : resolvedShippingProvider,
+        },
+        {
+          persistAttestedCoordinates:
+            !isIdempotentLocalAirportReplay && !isIdempotentOrderReplay,
         }
       );
     } catch (error) {

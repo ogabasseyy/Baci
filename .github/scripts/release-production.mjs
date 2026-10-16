@@ -1,3 +1,4 @@
+import { readWorkflowRunStatus } from './read-workflow-run-status.mjs';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -5,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { acquireReleaseLock, assertLiveDeployment, coordinateRelease, IN_FLIGHT_RUN_STATUSES, releaseLockPath, selectCoordinatedRun } from './coordinate-production-release.mjs';
 import { assertCanonicalOriginPushUrls, assertCleanWorkerDeployEnv, CANONICAL_REPOSITORY, originRepoSlug } from './release-remote-validation.mjs';
 import { createRunner, runWorkerDeploy } from './release-subprocess.mjs';
+import { parseRecoveryReleaseApproval, recoveryReconciliationDispatchFields } from './recovery-release-approval.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const repository = CANONICAL_REPOSITORY;
@@ -89,12 +91,6 @@ export function parseGhJqString(output, label) {
   const value = String(output ?? '').trim();
   if (!value || value === 'null') throw new Error(`${label} unreadable; inspect preceding gh diagnostics`);
   return value;
-}
-
-export function readWorkflowRunStatus(ghInvoke, runId) {
-  const fields = String(ghInvoke(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '[.status, .conclusion] | @tsv']) ?? '').split('\t');
-  if (fields.length !== 2 || !fields[0].trim() || fields[0].trim() === 'null') throw new Error(`workflow run ${runId} status unreadable; inspect preceding gh diagnostics`);
-  return { status: fields[0].trim(), conclusion: fields[1].trim() };
 }
 
 export function shouldHoldReleaseLock(error) {
@@ -184,9 +180,7 @@ export function readRuns(filter, paginate = false) {
 }
 
 async function main() {
-  if (process.argv.slice(2).join(' ') !== '--approve-production --approve-prebuilt-fallback') {
-    throw new Error('requires --approve-production --approve-prebuilt-fallback; never run from a publishing workflow');
-  }
+  const reconcileLegacy = parseRecoveryReleaseApproval(process.argv.slice(2));
   const commonDirectory = command('git', ['rev-parse', '--git-common-dir']);
   const lockPath = releaseLockPath(root, commonDirectory);
   // Live-alias verification shells to `vercel api` (shipped in CLI
@@ -225,7 +219,8 @@ async function main() {
       verifyWorkers: async commit => command('ssh', ['-o', 'BatchMode=yes', workerHost,
         `BACI_EXPECTED_APP_SHA=${commit} bash /home/bassey/baci-workers/bin/verify-gigl-direct-workers-installed.sh --skip-live-smoke`], false, { timeoutMs: WORKER_STEP_TIMEOUT_MS }),
       dispatch: async commit => gh(['workflow', 'run', 'deploy.yml', '--repo', repository, '--ref', 'main',
-        '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`]),
+        '-f', `coordination_id=${coordinationId}`, '-f', `expected_release_sha=${commit}`,
+        ...recoveryReconciliationDispatchFields(reconcileLegacy)]),
       findRun: async (commit, baseline) => findProductionDispatchRun(
         () => readRuns('event=workflow_dispatch', false),
         () => readRuns('event=workflow_dispatch', true),

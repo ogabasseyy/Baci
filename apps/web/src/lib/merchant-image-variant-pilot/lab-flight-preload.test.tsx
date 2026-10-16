@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PilotLabFlightPreload } from './lab-flight-preload';
 import type { ProjectedOgabasseyMobile } from './ogabassey-mobile-adapter';
 
+type ReactDomModule = typeof import('react-dom');
+
 vi.mock('react-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-dom')>();
+  const actual = await importOriginal<ReactDomModule>();
   return { ...actual, preload: vi.fn() };
 });
 

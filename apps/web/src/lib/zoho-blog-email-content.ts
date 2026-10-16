@@ -66,7 +66,7 @@ const HTML_TEXT_TAG_PATTERN = new RegExp(
 );
 const RAW_TEXT_HTML_BLOCK_PATTERN =
   /<(script|style|xmp|iframe|noembed|noframes|textarea|title)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
-const HTML_COMMENT_PATTERN = /<!--[\s\S]*?-->/g;
+const HTML_COMMENT_PATTERN = /\x3c!--[\s\S]*?-->/g;
 
 function stripKnownHtmlTags(value: string): string {
   return value

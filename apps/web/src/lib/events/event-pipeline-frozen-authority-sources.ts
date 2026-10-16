@@ -71,7 +71,11 @@ export const eventPipelineFrozenRoutes = {
   // result destructure extracted to resolveOfferReplayForOrderRoute
   // (Boy Scout Rule); replay semantics and responses are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '48fdce1fd103e4d6a21e9680160651fa0d5c3e43a24601cf1288b78e4c9a993d',
+    '057ef3400731c43b9ac869aeebf0e1d6a487cb8330d36a14ff2026caeaa5ddb4',
+  // Re-pinned for reviewed new-order-only attested shipping coordinates.
+  // Existing-order replay, notification and payment authority are unchanged.
+  // Merge re-pin: branch extraction plus main's attested shipping
+  // coordinates; both reviewed, hash covers the union.
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

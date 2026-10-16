@@ -22,10 +22,7 @@ vi.mock('@/env', () => ({
   getPiggyvestApiConfig: () => undefined,
 }));
 vi.mock('@/lib/piggyvest/webhook-secret-union', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@/lib/piggyvest/webhook-secret-union')
-    >();
+  const actual = await importOriginal<WebhookSecretUnionModule>();
   return {
     ...actual,
     verifyPiggyvestWebhookSecrets: (input: {
@@ -67,6 +64,9 @@ vi.mock('@/lib/piggyvest/event-quarantine', () => ({
 }));
 
 import { POST } from './route';
+
+type WebhookSecretUnionModule =
+  typeof import('@/lib/piggyvest/webhook-secret-union');
 
 const event = {
   eventId: 'fixture-event',

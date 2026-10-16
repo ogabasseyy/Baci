@@ -29,6 +29,26 @@ type CheckoutQuoteLookupResponse = {
   error?: { message?: string } | null;
 };
 
+type AttestedCoordinates = { latitude?: number; longitude?: number };
+
+function readAttestedCoordinates(
+  receiver: NonNullable<ReturnType<typeof parseStoredQuoteRequest>>['receiver']
+): AttestedCoordinates {
+  const { latitude, longitude } = receiver;
+  if (latitude == null && longitude == null) return {};
+  if (
+    typeof latitude !== 'number' ||
+    !Number.isFinite(latitude) ||
+    Math.abs(latitude) > 90 ||
+    typeof longitude !== 'number' ||
+    !Number.isFinite(longitude) ||
+    Math.abs(longitude) > 180
+  ) {
+    throw new OrderQuoteDestinationMismatchError();
+  }
+  return { latitude, longitude };
+}
+
 async function lookupCheckoutQuote(
   supabase: SupabaseClient,
   selectedQuoteId: string,
@@ -52,8 +72,9 @@ export async function enrichShippingAddressWithQuoteDestination(
   supabase: SupabaseClient,
   selectedQuoteId: string | null | undefined,
   shippingAddress: OrderShippingAddressForQuote | undefined,
-  context: QuoteCheckoutContext = {}
-): Promise<OrderShippingAddressForQuote | undefined> {
+  context: QuoteCheckoutContext = {},
+  options: { persistAttestedCoordinates?: boolean } = {}
+): Promise<(OrderShippingAddressForQuote & AttestedCoordinates) | undefined> {
   if (!selectedQuoteId) {
     return shippingAddress;
   }
@@ -104,6 +125,11 @@ export async function enrichShippingAddressWithQuoteDestination(
 
   return {
     ...shippingAddress,
+    // Only new-order creation opts in. Existing paid orders must use explicit
+    // destination-confirmation recovery, never implicit booking-time repair.
+    ...(options.persistAttestedCoordinates
+      ? readAttestedCoordinates(quoteRequest.receiver)
+      : {}),
     country: quoteRequest.receiver.country ?? shippingAddress.country,
     countryCode:
       quoteRequest.receiver.countryCode ?? shippingAddress.countryCode,

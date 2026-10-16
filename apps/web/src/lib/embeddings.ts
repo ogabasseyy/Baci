@@ -61,7 +61,7 @@ export async function generateEmbedding(
     console.log('Successfully generated embedding for', type, id);
     return true;
   } catch (error) {
-    console.error(`Error generating embedding for ${type} ${id}:`, error);
+    console.error('Error generating embedding:', { type, id, error });
     return false;
   }
 }

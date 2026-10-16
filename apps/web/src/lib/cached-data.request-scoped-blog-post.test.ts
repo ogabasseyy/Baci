@@ -33,7 +33,7 @@ const { cacheRegistry } = vi.hoisted(() => ({
 // memoization only activates inside a live Next.js request/render scope,
 // which Vitest does not reproduce.
 vi.mock('react', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react')>();
+  const actual = await importOriginal<ReactModule>();
   return {
     ...actual,
     cache: <Fn extends (...args: never[]) => unknown>(fn: Fn): Fn => {
@@ -51,6 +51,8 @@ vi.mock('react', async (importOriginal) => {
 });
 
 import { getRequestScopedBlogPost } from '@/lib/cached-data';
+
+type ReactModule = typeof import('react');
 
 function createQueryBuilder({
   queryResult = { data: [], error: null },

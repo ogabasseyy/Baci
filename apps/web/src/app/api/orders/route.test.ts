@@ -11,6 +11,10 @@ import { reservePaystackDvaAssignment } from '@/lib/payments/reserve-paystack-dv
 import { createQuizVoucherToken } from '@/lib/quiz-voucher-token';
 import { POST } from './route';
 
+type PersistPaystackDvaAssignmentModule =
+  typeof import('@/lib/payments/persist-paystack-dva-assignment');
+type ServerModule = typeof import('next/server');
+
 // Hoisted mocks for fire-and-forget side effects so tests don't await emails / push.
 const {
   MockQuizProductionNotApprovedError,
@@ -117,10 +121,7 @@ const mockPersistPaystackDvaAssignment = vi.hoisted(() => vi.fn());
 vi.mock(
   '@/lib/payments/persist-paystack-dva-assignment',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/payments/persist-paystack-dva-assignment')
-      >();
+    const actual = await importOriginal<PersistPaystackDvaAssignmentModule>();
     // Default passthrough preserves the legacy RPC-less doubles every
     // invoice test relies on; individual tests override per-case (e.g. the
     // Pay for Me reservation, whose proof-bound RPC needs a live key).
@@ -192,8 +193,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/server', async () => {
-  const actual =
-    await vi.importActual<typeof import('next/server')>('next/server');
+  const actual = await vi.importActual<ServerModule>('next/server');
   return { ...actual, after: mockAfter };
 });
 
@@ -4278,10 +4278,30 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     );
   });
 
-  it('allows selected GIGL international quotes to keep quoted physical metadata when product metadata is absent', async () => {
+  it.each([
+    false,
+    true,
+  ])('preserves GIGL quote metadata and attaches pins only on new orders (replay=%s)', async (isReplay) => {
+    const destinationModule = await import(
+      '@/lib/shipping/order-quote-destination'
+    );
+    const enrichSpy = vi.spyOn(
+      destinationModule,
+      'enrichShippingAddressWithQuoteDestination'
+    );
     const supabaseMod = await import('@/lib/supabase/server');
     const supabase = buildMockSupabase(
-      {},
+      {
+        has_storefront_order_idempotency_key: { data: isReplay, error: null },
+        ...(isReplay
+          ? {
+              create_storefront_order: {
+                data: [{ ...baseOrderRow, idempotency_replayed: true }],
+                error: null,
+              },
+            }
+          : {}),
+      },
       {
         productRows: [
           {
@@ -4310,6 +4330,8 @@ describe('POST /api/orders — selected shipping quote validation', () => {
               country: 'Canada',
               countryCode: 'CA',
               postalCode: 'M5V 3L9',
+              latitude: 43.65,
+              longitude: -79.38,
             },
             items: [
               {
@@ -4334,6 +4356,7 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
+        headers: { 'Idempotency-Key': 'gigl-attested-coordinate-test' },
         body: JSON.stringify({
           ...baseOrderPayload,
           items: [
@@ -4355,17 +4378,44 @@ describe('POST /api/orders — selected shipping quote validation', () => {
             country: 'Canada',
             countryCode: 'CA',
             postalCode: 'M5V 3L9',
+            latitude: 0,
+            longitude: 0,
           },
         }),
       })
     );
 
+    expect(enrichSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      '11111111-1111-4111-8111-111111111111',
+      expect.anything(),
+      expect.anything(),
+      { persistAttestedCoordinates: !isReplay }
+    );
+    enrichSpy.mockRestore();
+    if (isReplay) {
+      // Preserve the existing fail-closed provider-context contract for an
+      // extant quote replay. No destination is written in this branch.
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: 'INTERNATIONAL_QUOTE_PROVIDER_MISMATCH',
+      });
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'create_storefront_order',
+        expect.anything()
+      );
+      return;
+    }
     expect(response.status).toBe(201);
     expect(supabase.rpc).toHaveBeenCalledWith(
       'create_storefront_order',
       expect.objectContaining({
         p_selected_quote_id: '11111111-1111-4111-8111-111111111111',
         p_shipping_provider: 'GIGL',
+        p_shipping_address: expect.objectContaining({
+          latitude: 43.65,
+          longitude: -79.38,
+        }),
       })
     );
   });

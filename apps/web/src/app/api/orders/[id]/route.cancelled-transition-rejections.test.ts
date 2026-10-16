@@ -53,7 +53,6 @@ vi.mock('@/lib/shipping/order-shipment-booking-utils', () => ({
 }));
 
 import { authenticateApiRequest } from '@/lib/api-auth';
-import { rollbackOrderStatusAfterInventoryConfirmationFailure } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { PATCH } from './route';
 import {
   createCancelledTransitionHarness,

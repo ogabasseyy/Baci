@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { beginLegacyCheckoutKey } from './begin-legacy-checkout-key';
 import { resolveLegacyCheckoutIdempotencyKey } from './resolve-legacy-checkout-idempotency-key';
 
@@ -70,6 +70,47 @@ describe('beginLegacyCheckoutKey', () => {
       discountCodeIsLoyalty: true,
     });
     expect(resumed.idempotencyKey).toBe(session.idempotencyKey);
+  });
+
+  it('proceeds keyless for a merchant code when storage is unusable', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('storage disabled');
+      },
+      setItem: () => {
+        throw new Error('storage disabled');
+      },
+      removeItem: () => {},
+      clear: () => {},
+    });
+
+    const session = await beginLegacyCheckoutKey(BASE_INPUT);
+    expect(session.idempotencyKey).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('fails closed for a loyalty code when storage is unusable', async () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('storage disabled');
+      },
+      setItem: () => {
+        throw new Error('storage disabled');
+      },
+      removeItem: () => {},
+      clear: () => {},
+    });
+
+    await expect(
+      beginLegacyCheckoutKey({
+        ...BASE_INPUT,
+        discountCode: 'RDM-ABCDEF12',
+        discountCodeIsLoyalty: true,
+      })
+    ).rejects.toThrow();
+
+    vi.unstubAllGlobals();
   });
 
   it('clears a loyalty key on completion outside BNPL', async () => {

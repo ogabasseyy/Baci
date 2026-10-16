@@ -128,3 +128,28 @@ SELECT pg_temp.assert_true(
   ) LIKE '%EXCEPTION WHEN unique_violation%',
   'redeem does not retry code collisions'
 );
+
+-- 24j. The resolver separates an unknowable minimum (null snapshot,
+-- deleted reward) from a known-absent one, so validation can fail
+-- closed exactly where the order wrapper does.
+INSERT INTO public.reward_redemptions (
+  merchant_id, customer_id, reward_id, points_spent, reward_type,
+  reward_value, discount_code, used, expires_at, minimum_order_amount
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001',
+  '01aa0000-0000-4000-8000-000000000011', NULL, 100, 'discount_fixed',
+  100, 'BRGDUNKNOWNMIN1', false, pg_catalog.now() + interval '30 days', NULL
+);
+SELECT pg_temp.assert_true(
+  (SELECT row.minimum_known = false
+   FROM public.get_loyalty_redemption_for_checkout(
+     '01aa0000-0000-4000-8000-000000000001', 'BRGDUNKNOWNMIN1'
+   ) AS row)
+  AND (SELECT row.minimum_known = true
+   FROM public.get_loyalty_redemption_for_checkout(
+     '01aa0000-0000-4000-8000-000000000001', :'fixed_code'
+   ) AS row),
+  'resolver did not separate unknowable from known-absent minimums'
+);
+DELETE FROM public.reward_redemptions
+WHERE discount_code = 'BRGDUNKNOWNMIN1';

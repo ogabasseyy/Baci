@@ -264,6 +264,18 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
 
+  it('rejects a code whose purchase minimum is unknowable', async () => {
+    mockRpc((fn) =>
+      fn === 'get_storefront_discount_code'
+        ? []
+        : [loyaltyRow({ minimum_known: false })]
+    );
+
+    const body = await (await POST(request(baseBody))).json();
+
+    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+  });
+
   it('rejects an over-100 percentage code as invalid', async () => {
     mockRpc((fn) =>
       fn === 'get_storefront_discount_code'

@@ -32,7 +32,7 @@ export interface BeginLegacyCheckoutKeyInput {
 }
 
 export interface LegacyCheckoutKeySession {
-  idempotencyKey: string;
+  idempotencyKey: string | null;
   keyInput: LegacyCheckoutKeyInput;
   completeCheckout: () => Promise<void>;
 }
@@ -52,7 +52,17 @@ export async function beginLegacyCheckoutKey(
     shippingAddress: input.shippingAddress,
     shippingSelection: input.shippingSelection,
   };
-  const idempotencyKey = await resolveLegacyCheckoutIdempotencyKey(keyInput);
+  // Loyalty codes fail closed without storage (the route requires
+  // the key and a lost response is unrecoverable without it). Reusable
+  // merchant codes do not need a persisted key, so storage-restricted
+  // browsers proceed keyless instead of being blocked entirely.
+  let idempotencyKey: string | null;
+  try {
+    idempotencyKey = await resolveLegacyCheckoutIdempotencyKey(keyInput);
+  } catch (error) {
+    if (input.discountCodeIsLoyalty) throw error;
+    idempotencyKey = null;
+  }
   const retainForBnplResume =
     input.gateway === 'credit_direct' && input.discountCodeIsLoyalty;
   return {

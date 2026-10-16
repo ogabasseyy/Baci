@@ -16320,6 +16320,7 @@ export type Database = {
           expires_at: string;
           issuance_currency: string;
           max_redemption_percentage: number;
+          minimum_known: boolean;
           minimum_order_amount: number;
           redemption_id: string;
           reward_name: string;

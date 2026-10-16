@@ -53,6 +53,14 @@ describe('legacy checkout idempotency key lifecycle', () => {
     expect(next).not.toBe(first);
   });
 
+  it('converges concurrent resolutions on the surviving key', async () => {
+    const [first, second] = await Promise.all([
+      resolveLegacyCheckoutIdempotencyKey(BASE_INPUT),
+      resolveLegacyCheckoutIdempotencyKey(BASE_INPUT),
+    ]);
+    expect(second).toBe(first);
+  });
+
   it('mints a different key for a different checkout', async () => {
     const first = await resolveLegacyCheckoutIdempotencyKey(BASE_INPUT);
     const other = await resolveLegacyCheckoutIdempotencyKey({

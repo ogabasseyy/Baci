@@ -172,7 +172,12 @@ async function coordinatedMint(intent: string): Promise<string> {
     if (claim.token === token) {
       const minted = mintKey(intent);
       clearClaim(intent, token);
-      return minted;
+      // Settle before returning: a simultaneous claimant whose token
+      // overwrote ours between the ownership read and this mint may
+      // have stored its own key in the same window. Adopt whichever
+      // key survived in storage rather than our local one.
+      await delay(CLAIM_POLL_INTERVAL_MS);
+      return readStored(intent) ?? minted;
     }
     if (token < claim.token) {
       writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });

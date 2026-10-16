@@ -102,6 +102,10 @@ export async function POST(request: NextRequest) {
           loyaltyCode.reward_type === 'discount_percentage') &&
         Number.isFinite(loyaltyValue) &&
         loyaltyValue > 0 &&
+        // The wrapper fails closed when the purchase minimum is
+        // unknowable (null snapshot, deleted reward); validation must
+        // not accept a code order creation will reject.
+        loyaltyCode.minimum_known &&
         // Mirror loyalty_reward_value_is_usable: a discount_percentage
         // above 100 can never apply at checkout (the wrapper rejects
         // the snapshot), so validation must not report it as applied.

@@ -64,6 +64,7 @@ export const loyaltyCheckoutCodeRowSchema = z.object({
   issuance_currency: z.string().nullable(),
   reward_name: z.string().nullable(),
   max_redemption_percentage: z.coerce.number().nullable(),
+  minimum_known: z.boolean(),
 });
 
 export type LoyaltyCheckoutCodeRow = z.infer<

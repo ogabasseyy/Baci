@@ -57,6 +57,26 @@ export function cancelledTerminalRejection(input: {
   return null;
 }
 
+/**
+ * True when a PATCH body carries a non-cancelled status value —
+ * including an echoed one: writing the observed 'unpaid' back over a
+ * just-committed cancellation would reopen the order after its
+ * loyalty claim was released. Metadata-only writes (no status fields,
+ * or only cancelled spellings the endpoint already owns) stay
+ * unpredicated so cancelled orders remain editable.
+ */
+export function writesNonCancelledStatusValue(input: {
+  paymentStatus: string | undefined;
+  shippingStatus: string | undefined;
+}): boolean {
+  return (
+    (input.paymentStatus !== undefined &&
+      !isCancelledStatus(input.paymentStatus)) ||
+    (input.shippingStatus !== undefined &&
+      !isCancelledStatus(input.shippingStatus))
+  );
+}
+
 export function evaluateOrderCancelledTransition(input: {
   existingPaymentStatus: string | null | undefined;
   existingShippingStatus: string | null | undefined;

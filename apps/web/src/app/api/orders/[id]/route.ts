@@ -26,11 +26,11 @@ import {
 } from '@/lib/shipping/order-shipment-booking-utils';
 import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { orderUpdateSchema } from '@/schemas/orders';
+import { appendCancelledStatusFences } from './append-cancelled-status-fences';
+import { createRacedCancellationRejection } from './create-raced-cancellation-rejection';
 import {
-  CANCELLED_STATUS_SPELLINGS,
-  cancelledTerminalRejection,
   evaluateOrderCancelledTransition,
-  isCancelledStatus,
+  writesNonCancelledStatusValue,
 } from './evaluate-order-cancelled-transition';
 import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
 
@@ -197,42 +197,19 @@ export async function PATCH(
     }
 
     // The terminal-state predicates ride on the UPDATEs below so a
-    // cancellation committing after this read cannot be resurrected.
-    // They attach whenever the write carries a non-cancelled status
-    // value — including an echoed one: writing the observed 'unpaid'
-    // back over a just-committed cancellation would reopen the order
-    // after its loyalty claim was released. Metadata-only writes (no
-    // status fields, or only cancelled spellings the endpoint already
-    // owns) stay unpredicated so cancelled orders remain editable.
-    const writesStatusValue =
-      (payment_status !== undefined && !isCancelledStatus(payment_status)) ||
-      (shipping_status !== undefined && !isCancelledStatus(shipping_status));
-
-    // A conditional update that matched zero rows (PGRST116) may mean
-    // a cancellation committed between the read above and the write:
-    // re-read the statuses and let the same policy answer, so the race
-    // surfaces as the terminal 409 instead of a generic 500.
-    const racedCancellationRejection = async () => {
-      const { data: freshOrder } = await supabase
-        .from('orders')
-        .select('payment_status, shipping_status')
-        .eq('id', id)
-        .eq('merchant_id', merchantId)
-        .single();
-      if (!freshOrder) return null;
-      return (
-        evaluateOrderCancelledTransition({
-          existingPaymentStatus: freshOrder.payment_status,
-          existingShippingStatus: freshOrder.shipping_status,
-          requestedPaymentStatus: payment_status,
-          requestedShippingStatus: shipping_status,
-        }) ??
-        cancelledTerminalRejection({
-          existingPaymentStatus: freshOrder.payment_status,
-          existingShippingStatus: freshOrder.shipping_status,
-        })
-      );
-    };
+    // cancellation committing after this read cannot be resurrected
+    // (fencing and raced-reread policy live in the extracted helpers).
+    const writesStatusValue = writesNonCancelledStatusValue({
+      paymentStatus: payment_status,
+      shippingStatus: shipping_status,
+    });
+    const racedCancellationRejection = createRacedCancellationRejection({
+      supabase,
+      merchantId,
+      orderId: id,
+      requestedPaymentStatus: payment_status,
+      requestedShippingStatus: shipping_status,
+    });
 
     // Validate: Cannot move to 'processing' unless paid or is_credit_order
     if (
@@ -363,9 +340,7 @@ export async function PATCH(
         .eq('id', id)
         .eq('merchant_id', merchantId);
       if (writesStatusValue) {
-        for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
-          paidUpdateQuery = paidUpdateQuery.neq(column, spelling);
-        }
+        paidUpdateQuery = appendCancelledStatusFences(paidUpdateQuery);
       }
       const { error: paidUpdateError } = await paidUpdateQuery
         .select('id')
@@ -532,9 +507,7 @@ export async function PATCH(
       .eq('id', id)
       .eq('merchant_id', merchantId);
     if (writesStatusValue) {
-      for (const [column, spelling] of CANCELLED_STATUS_SPELLINGS) {
-        updateQuery = updateQuery.neq(column, spelling);
-      }
+      updateQuery = appendCancelledStatusFences(updateQuery);
     }
 
     if (shipmentBookingLockToken) {

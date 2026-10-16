@@ -15,6 +15,7 @@ const ROW = {
   used: false,
   issuance_currency: 'NGN',
   max_redemption_percentage: null,
+  minimum_known: true,
   reward_name: 'Probe reward',
 };
 

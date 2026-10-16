@@ -171,6 +171,35 @@ describe('redemptionIdempotencyKeys fallback coordination', () => {
     redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-expired');
   });
 
+  it('adopts the surviving stored key after a simultaneous mint', async () => {
+    const store = new Map<string, string>();
+    let overwrote = false;
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+        // A simultaneous claimant stores its key in the same window,
+        // just after our mint lands.
+        if (key === 'loyalty-redeem-key:m:c:reward-settle' && !overwrote) {
+          overwrote = true;
+          store.set(key, '55555555-5555-4555-8555-555555555555');
+        }
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+    });
+
+    const key = await redemptionIdempotencyKeys.forReward(
+      'm',
+      'c',
+      'reward-settle'
+    );
+    expect(key).toBe('55555555-5555-4555-8555-555555555555');
+
+    redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-settle');
+  });
+
   it('coordinates through the claim protocol when locks throw', async () => {
     const store = new Map<string, string>();
     vi.stubGlobal('localStorage', {

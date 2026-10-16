@@ -168,10 +168,10 @@ describe('verifySharedCartOrderProof', () => {
         cookie: `${cartSessionCookieName(otherMerchant)}=cp1.stale.stale`,
       },
     });
-    // Presented material for any merchant blocks the legacy fall-through
-    // when the body names this merchant...
+    // A stale cp1 cookie from another store does not block an ordinary
+    // legacy guest checkout at this merchant...
     expect(requestPresentsCartProofMaterial(crossMerchant, MERCHANT_ID)).toBe(
-      true
+      false
     );
     // ...but the proof's inner merchant binding, not the cookie name,
     // decides authorization: it never authorizes the merchant named
@@ -181,6 +181,11 @@ describe('verifySharedCartOrderProof', () => {
         cookie: `${cartSessionCookieName(otherMerchant)}=${proofFor(CART_ID)}`,
       },
     });
+    // A proof verifiably minted for this merchant counts as presented
+    // material wherever it was stored.
+    expect(requestPresentsCartProofMaterial(validCross, MERCHANT_ID)).toBe(
+      true
+    );
     expect(
       requestCarriesSharedCartSessionProof(validCross, otherMerchant)
     ).toBe(false);

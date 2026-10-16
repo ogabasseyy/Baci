@@ -55,7 +55,13 @@ flags remain disabled by default, and no merchant is enrolled.
   `20261015162000` unschedules the hourly pg_cron job
   (`commerce-cart-terminal-purge`) that an earlier migration created,
   so the destructive purge only runs after the activation step below
-  schedules it explicitly.
+  schedules it explicitly. Migrations are append-only, so the earlier
+  scheduling migration stays as written; the transient window during
+  a first deployment is inert because the cart tables are empty until
+  enrollment (which happens only after the full chain, including the
+  unschedule, has applied and been verified), and the deployment
+  checklist below confirms `cron.job` has no purge job before any
+  merchant is enrolled.
 - Worker token rotation: point `COMMERCE_CART_WORKER_JWT_FILE` at a
   rotator-managed file instead of setting `COMMERCE_CART_WORKER_JWT`
   directly; the worker re-reads the file on every batch, so a rotated

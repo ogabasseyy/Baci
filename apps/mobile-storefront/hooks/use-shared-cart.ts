@@ -7,6 +7,7 @@ import type { CartProductShell } from '@/lib/cart/display';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
+import { cartSessionStorage } from '@/lib/cart/session-storage';
 import {
   createNativeCartClient,
   type NativeCartClient,
@@ -85,6 +86,11 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       // Enrollment turned off after canonical ownership was installed:
       // discard the canonical display and reference so legacy writes and
       // order creation are not fenced to a cart nothing can prepare.
+      // Also retire the secure session record for this merchant scope:
+      // a later sign-out teardown may no longer have a writer (or this
+      // merchant scope) to derive it from, and a surviving account-owned
+      // record would greet the next device owner with session_changed.
+      void cartSessionStorage.remove(options.merchantId).catch(() => undefined);
       const legacy = useCartStore.getState();
       if (legacy.sharedCartRef) {
         useCartStore.setState({ items: [], sharedCartRef: undefined });

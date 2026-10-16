@@ -2,15 +2,15 @@ import type { CartSnapshot } from '@baci/shared/cart';
 import { act, renderHook } from '@testing-library/react';
 import { createElement, StrictMode, useEffect } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import {
-  fetchSavedAccountCart,
-  linkAccountCart,
-} from './shared-cart-account-client';
+import { linkAccountCart } from './shared-cart-account-link-client';
+import { fetchSavedAccountCart } from './shared-cart-saved-cart-client';
 import { bumpCartSessionGeneration } from './shared-cart-storage';
 import { useCartAccountLink } from './use-cart-account-link';
 
-vi.mock('./shared-cart-account-client', () => ({
+vi.mock('./shared-cart-account-link-client', () => ({
   linkAccountCart: vi.fn(),
+}));
+vi.mock('./shared-cart-saved-cart-client', () => ({
   fetchSavedAccountCart: vi.fn(),
 }));
 const saved: CartSnapshot = {

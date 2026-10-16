@@ -6,10 +6,10 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
-import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-account-client';
+import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { CustomerAuthProvider, useCustomerAuth } from './customer-auth-context';
 
-vi.mock('@/hooks/cart/shared-cart-account-client', () => ({
+vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
   revokeCartDeviceSession: vi.fn(),
 }));
 vi.mock('@/hooks/use-cart', () => ({ clearCartStorage: vi.fn() }));

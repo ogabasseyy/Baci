@@ -7,6 +7,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
  * JWT. When COMMERCE_CART_WORKER_JWT_FILE points at a token file, the
  * token is re-read on every construction so an external rotator can
  * replace it without restarting a long-running --loop worker.
+ *
+ * The header/claim parsing below is shape-only (algorithm allowlist,
+ * role, expiry): the signature is deliberately not verified here
+ * because the worker holds no JWT secret/JWKS trust root. PostgREST
+ * is the verifying party; a self-signed or otherwise invalid token
+ * constructs a client whose first RPC fails authentication, which the
+ * worker surfaces as `publisher unavailable` — operators should treat
+ * that first-pass failure after a token change as a misconfiguration
+ * signal, not a transient outage.
  */
 export function createCartEventWorkerClient(
   env: Partial<NodeJS.ProcessEnv> = process.env,

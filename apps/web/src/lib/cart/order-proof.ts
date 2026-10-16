@@ -13,35 +13,47 @@ export type SharedCartOrderProofResult =
  * Every cart proof presented with the request, checked independently:
  * a malformed or stale candidate must not mask a valid one.
  */
-function presentedCartProofs(request: Request, merchantId: string): string[] {
-  const candidates = new Set<string>();
-  const headerProof = request.headers.get('x-cart-proof')?.trim();
-  if (headerProof) candidates.add(headerProof);
+function presentedCartProofCandidates(
+  request: Request,
+  merchantId: string
+): Array<{ proof: string; scoped: boolean }> {
+  const candidates: Array<{ proof: string; scoped: boolean }> = [];
+  const push = (proof: string | null, scoped: boolean) => {
+    const trimmed = proof?.trim();
+    if (!trimmed) return;
+    const existing = candidates.find((entry) => entry.proof === trimmed);
+    if (existing) {
+      existing.scoped = existing.scoped || scoped;
+    } else {
+      candidates.push({ proof: trimmed, scoped });
+    }
+  };
+  // Header and Bearer [REDACTED] are presented to this route deliberately,
+  // so they are always scoped to the submitted merchant.
+  push(request.headers.get('x-cart-proof'), true);
   const authorization = request.headers.get('authorization');
   if (authorization?.toLowerCase().startsWith('bearer ')) {
-    const bearer = authorization.slice(7).trim();
-    if (bearer) candidates.add(bearer);
+    push(authorization.slice('bearer '.length), true);
   }
   const cookieName = cartSessionCookieName(merchantId);
   for (const part of (request.headers.get('cookie') ?? '').split(';')) {
     const [name, ...rest] = part.split('=');
-    // Collect every merchant-namespaced cart session cookie, not only
-    // the submitted merchant's: a cookie scoped to merchant A presented
-    // with a body naming merchant B is still presented cart authority,
-    // and the merchant checks below (verified session merchant must
-    // equal the submitted merchant) keep it from authorizing B.
-    const isCartSessionCookie =
-      name?.trim() === cookieName ||
-      (name?.trim().startsWith('baci-cart-') ?? false);
-    if (isCartSessionCookie && rest.length > 0) {
+    if (!name || rest.length === 0) continue;
+    const trimmedName = name.trim();
+    // Collect every merchant-namespaced cart session cookie so the
+    // verification paths can find a proof stored under its own
+    // merchant's name; only the submitted merchant's cookie is scoped
+    // for the fail-closed legacy check (see
+    // requestPresentsCartProofMaterial).
+    if (trimmedName === cookieName || trimmedName.startsWith('baci-cart-')) {
       try {
-        candidates.add(decodeURIComponent(rest.join('=').trim()));
+        push(decodeURIComponent(rest.join('=')), trimmedName === cookieName);
       } catch {
-        candidates.add(rest.join('=').trim());
+        push(rest.join('='), trimmedName === cookieName);
       }
     }
   }
-  return [...candidates];
+  return candidates;
 }
 
 function verifyCandidate(proof: string) {
@@ -54,29 +66,32 @@ function verifyCandidate(proof: string) {
   }
 }
 
-/**
- * True when the request carries a verified shared-cart session proof
- * for this merchant (device header, Bearer proof, or the merchant
- * session cookie), whether or not it names a particular cart. Used to
- * fail closed when a shared-cart shopper submits an order without its
- * checkout binding: such a request must never fall through to the
- * legacy direct order RPC.
- */
-/**
- * True when the request presents cart-proof-shaped material (a cp1
- * candidate via header, Bearer, or the merchant session cookie) even
- * if it no longer verifies — expired, revoked, or forged. Presented
- * but invalid cart authority must fail closed rather than silently
- * downgrade a shared-cart shopper to the legacy order path; only a
- * request with no cart credential at all is an ordinary legacy guest.
- */
+function presentedCartProofs(request: Request, merchantId: string): string[] {
+  return presentedCartProofCandidates(request, merchantId).map(
+    (entry) => entry.proof
+  );
+}
+
 export function requestPresentsCartProofMaterial(
   request: Request,
   merchantId: string
 ): boolean {
-  return presentedCartProofs(request, merchantId).some((proof) =>
-    proof.startsWith(`${CART_SESSION_PROOF_VERSION}.`)
-  );
+  for (const { proof, scoped } of presentedCartProofCandidates(
+    request,
+    merchantId
+  )) {
+    if (!proof.startsWith(`${CART_SESSION_PROOF_VERSION}.`)) continue;
+    if (scoped) return true;
+    // Material stored under another merchant's cookie only counts
+    // when it verifiably belongs to the submitted merchant; a stale,
+    // expired, or forged cp1 cookie from another store must not block
+    // an ordinary legacy guest checkout here.
+    const verified = verifyCandidate(proof);
+    if (verified?.ok && verified.session.merchantId === merchantId) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function requestCarriesSharedCartSessionProof(

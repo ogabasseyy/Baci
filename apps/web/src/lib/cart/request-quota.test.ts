@@ -152,6 +152,21 @@ describe('checkCartQuota degraded store', () => {
     ).resolves.toMatchObject({ allowed: false });
   });
 
+  it('fails revocation closed in production without Redis', async () => {
+    __resetCartQuotaStoreForTesting();
+    vi.stubEnv('NODE_ENV', 'production');
+    // Revocation verifies credential material (including expired
+    // proofs inside their grace window), so a degraded quota store
+    // must not reopen an unbudgeted revocation path.
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'session_revoke',
+        subject: 'principal-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: false, remaining: 0 });
+  });
+
   it('fails the legacy bridge closed in production without Redis', async () => {
     __resetCartQuotaStoreForTesting();
     vi.stubEnv('NODE_ENV', 'production');

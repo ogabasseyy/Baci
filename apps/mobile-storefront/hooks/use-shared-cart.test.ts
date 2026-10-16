@@ -95,6 +95,16 @@ it('discards canonical ownership when enrollment turns off', async () => {
   renderHook(() => useSharedCart({ ...options, enabled: false }, deps));
   expect(mockLegacyCart.current.sharedCartRef).toBeUndefined();
   expect(mockLegacyCart.current.items).toEqual([]);
+  // The secure session record for this merchant scope is retired too,
+  // so a later no-writer sign-out cannot strand it for the next owner.
+  const SecureStore = jest.requireMock('expo-secure-store') as {
+    deleteItemAsync: jest.Mock;
+  };
+  await waitFor(() =>
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
+      `baci.cart.session.${options.merchantId}`
+    )
+  );
 });
 
 it('clears a pending receipt even when local retirement defers remote revocation', async () => {

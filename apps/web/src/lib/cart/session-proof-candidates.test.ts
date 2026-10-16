@@ -31,6 +31,23 @@ describe('verificationSecretCandidates', () => {
     expect(candidates({ verifyNow: 1_800_003_601 })).toEqual([CURRENT]);
   });
 
+  it('rejects backdated proofs after the short rotation grace window', () => {
+    // TTL is a week, but retired acceptance closes 24 hours after
+    // retirement even for proofs claiming pre-retirement issuance.
+    expect(
+      candidates({
+        sessionProofTtlSeconds: 7 * 24 * 3600,
+        verifyNow: 1_800_000_000 + 24 * 3600 + 1,
+      })
+    ).toEqual([CURRENT]);
+    expect(
+      candidates({
+        sessionProofTtlSeconds: 7 * 24 * 3600,
+        verifyNow: 1_800_000_000 + 3600,
+      })
+    ).toEqual([CURRENT, RETIRED]);
+  });
+
   it('excludes short or unparseable retired secrets', () => {
     expect(
       candidates({ previousSecrets: [{ retireAt, secret: 'short' }] })

@@ -249,6 +249,25 @@ describe('submitCartBoundOrder', () => {
     });
   });
 
+  it('preserves domain SQLSTATEs from inner order RPCs', async () => {
+    const client = clientReturning(null, {
+      code: '22023',
+      message: 'The selected airport delivery quote has expired',
+    });
+
+    const result = await submitCartBoundOrder(
+      { client: client as never },
+      { args: ARGS, generation: 1, sessionId: SESSION_ID, variant: 'base' }
+    );
+
+    expect(result).toMatchObject({
+      code: 'order_rejected',
+      message: 'The selected airport delivery quote has expired',
+      ok: false,
+      sqlState: '22023',
+    });
+  });
+
   it('maps transport failures to temporarily_unavailable', async () => {
     const client = clientReturning(null, {
       code: 'XX000',

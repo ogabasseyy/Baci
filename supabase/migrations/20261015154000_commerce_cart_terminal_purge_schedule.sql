@@ -1,8 +1,9 @@
--- The terminal-cart purge is never scheduled by applying migrations:
--- activation is a separate, authorized step (see
--- docs/deploy/shared-cart-rollout.md), and an interrupted deployment
--- must not leave the destructive purge running. This migration only
--- removes any schedule created by an earlier draft of this step.
+-- Schedule the terminal-cart purge added in 20261015153000: without a
+-- recurring caller the retention function would only run when an
+-- operator happened to invoke it, and terminal carts would still grow
+-- without bound. Hourly batches drain the backlog gradually. Guarded
+-- on the cron schema existing (a no-op in environments without
+-- pg_cron, e.g. a from-scratch replay) and re-runnable.
 DO $$
 BEGIN
   IF EXISTS (
@@ -14,5 +15,10 @@ BEGIN
     ) THEN
       PERFORM cron.unschedule('commerce-cart-terminal-purge');
     END IF;
+    PERFORM cron.schedule(
+      'commerce-cart-terminal-purge',
+      '37 * * * *',
+      $cron$SELECT public.commerce_cart_purge_terminal_carts(interval '90 days', 500)$cron$
+    );
   END IF;
 END $$;

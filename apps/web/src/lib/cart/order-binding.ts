@@ -50,7 +50,12 @@ export type SubmitCartBoundOrderResult =
       binding: OrderBindingReceipt;
       replayed: boolean;
     }
-  | { ok: false; code: OrderBindingErrorCode; message: string };
+  | {
+      ok: false;
+      code: OrderBindingErrorCode;
+      message: string;
+      sqlState?: string;
+    };
 
 export interface SubmitCartBoundOrderDeps {
   /** Order RPC client: route-context scoped for the storefront route. */
@@ -145,6 +150,23 @@ export async function submitCartBoundOrder(
         return { code, message, ok: false };
       }
       return { code: 'order_rejected', message, ok: false };
+    }
+    // Inner order RPCs also raise domain SQLSTATEs (for example the
+    // airport-quote trigger's 22023). Those are order rejections, not
+    // platform failures: preserve the original code and message so the
+    // orders route's existing error mapper produces the same domain
+    // response as the direct (unbound) path.
+    if (
+      typeof response.error.code === 'string' &&
+      message &&
+      (response.error.code.startsWith('22') || response.error.code === '42501')
+    ) {
+      return {
+        code: 'order_rejected',
+        message,
+        ok: false,
+        sqlState: response.error.code,
+      };
     }
     return {
       code: 'temporarily_unavailable',

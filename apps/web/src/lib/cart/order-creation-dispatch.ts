@@ -46,7 +46,9 @@ export async function dispatchOrderCreation(input: {
       orderError: bound.ok
         ? null
         : {
-            code: bound.code === 'order_rejected' ? 'P0001' : 'XX000',
+            code:
+              bound.sqlState ??
+              (bound.code === 'order_rejected' ? 'P0001' : 'XX000'),
             message: bound.message,
           },
     };

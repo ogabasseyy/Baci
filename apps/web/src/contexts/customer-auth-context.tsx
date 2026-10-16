@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, type ReactNode, use, useEffect, useState } from 'react';
-import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-account-client';
+import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { clearCartStorage } from '@/hooks/use-cart';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
 

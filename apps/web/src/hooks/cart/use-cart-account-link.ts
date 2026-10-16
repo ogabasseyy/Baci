@@ -2,10 +2,8 @@
 import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { CartAccountLinkInput } from '@/schemas/cart-account';
-import {
-  fetchSavedAccountCart,
-  linkAccountCart,
-} from './shared-cart-account-client';
+import { linkAccountCart } from './shared-cart-account-link-client';
+import { fetchSavedAccountCart } from './shared-cart-saved-cart-client';
 import {
   getCartSessionGeneration,
   subscribeCartSessionGeneration,

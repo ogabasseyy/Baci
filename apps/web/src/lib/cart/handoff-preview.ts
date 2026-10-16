@@ -1,6 +1,6 @@
 import type { CartErrorCode, CartSnapshot } from '@baci/shared/cart';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { hashHandoffToken, isRecord } from './handoff-token';
+import { isRecord } from './handoff-token';
 import { buildCartSnapshot } from './pricing';
 import { CartRepositoryError, parseRawMutationResult } from './repository';
 import { ERROR_CODES } from './repository-envelope';
@@ -42,7 +42,9 @@ export async function rpcHandoffMerchantId(
 ): Promise<string | null> {
   const response = await client.rpc('commerce_cart_handoff_merchant', {
     p_handoff_id: handoffId,
-    p_token_hash: hashHandoffToken(token),
+    // The RPC hashes the raw pairing token internally; the stored
+    // hash is never itself a credential.
+    p_token_hash: token,
   });
   if (response.error) {
     throw new CartRepositoryError(
@@ -75,7 +77,7 @@ export async function rpcPreviewHandoff(
 ): Promise<PreviewHandoffResult> {
   const response = await client.rpc('commerce_cart_preview_handoff', {
     p_handoff_id: handoffId,
-    p_token_hash: hashHandoffToken(token),
+    p_token_hash: token,
   });
   if (response.error) {
     throw new CartRepositoryError(

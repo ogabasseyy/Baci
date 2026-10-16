@@ -101,7 +101,11 @@ it('expires presented cart cookies when the proof is definitively invalid', asyn
   vi.mocked(resolveCartRequestContext).mockResolvedValue({
     ok: false,
     error: 'invalid_proof',
-    merchant: { id: '11111111-1111-4111-8111-111111111111', slug: 'shop' },
+    merchant: {
+      id: '11111111-1111-4111-8111-111111111111',
+      slug: 'shop',
+      customDomain: null,
+    },
   });
   const response = await POST(
     new Request('http://localhost/api/storefront/cart/session/revoke', {
@@ -126,7 +130,11 @@ it('preserves another merchant cookie on a shared host during invalid-proof expi
   vi.mocked(resolveCartRequestContext).mockResolvedValue({
     ok: false,
     error: 'invalid_proof',
-    merchant: { id: '11111111-1111-4111-8111-111111111111', slug: 'shop' },
+    merchant: {
+      id: '11111111-1111-4111-8111-111111111111',
+      slug: 'shop',
+      customDomain: null,
+    },
   });
   const payloadFor = (merchantId: string) =>
     `cp1.${Buffer.from(

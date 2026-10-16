@@ -1,12 +1,15 @@
-function hasCartFeature(
-  features: string[] | null | undefined,
-  feature: string
-): boolean {
-  // Match the web gate's normalization (trim + lowercase). Stored
-  // values should still be canonical exact lowercase: the SQL cart
-  // RPCs and realtime checks use exact jsonb containment.
+function hasCartFeature(features: unknown, feature: string): boolean {
+  // Match the web gate: ignore non-string entries, then normalize
+  // with trim + lowercase. Stored values should still be canonical
+  // exact lowercase: the SQL cart RPCs and realtime checks use exact
+  // jsonb containment. Malformed entitlement data disables the gate
+  // instead of crashing the storefront.
   return (
-    features?.some((value) => value.trim().toLowerCase() === feature) ?? false
+    Array.isArray(features) &&
+    features.some(
+      (value) =>
+        typeof value === 'string' && value.trim().toLowerCase() === feature
+    )
   );
 }
 

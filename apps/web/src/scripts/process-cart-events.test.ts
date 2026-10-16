@@ -84,7 +84,7 @@ it('reports only bounded publisher metrics and fails safely on outages', async (
   expect(error).toHaveBeenCalledWith('[cart-events] publisher unavailable');
 });
 
-it('continues publishing when retention fails and reports only a safe cleanup error', async () => {
+it('continues publishing when retention fails but reports the pass as degraded', async () => {
   const cleanup = vi.fn().mockResolvedValue(false);
   const logger = { info: vi.fn(), error: vi.fn() };
   const run = vi
@@ -97,7 +97,7 @@ it('continues publishing when retention fails and reports only a safe cleanup er
       cleanup,
       logger,
     })
-  ).toBe(0);
+  ).toBe(1);
   expect(cleanup).toHaveBeenCalledTimes(1);
   expect(run).toHaveBeenCalledTimes(1);
   expect(logger.error).toHaveBeenCalledWith(
@@ -146,9 +146,11 @@ it('retries failed cleanup after its backoff while keeping the publisher running
     .mockResolvedValue({ ok: true, sent: 0, failed: 0, deadLettered: 0 });
   const logger = { info: vi.fn(), error: vi.fn() };
   const env = { COMMERCE_CART_EVENTS_ENABLED: 'true' };
-  expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(0);
+  // The failed cleanup attempt degrades the pass even though the
+  // publisher succeeded.
+  expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(1);
   // The next pass is inside the failure backoff: no retry, no log spam,
-  // but the publisher still runs.
+  // but the publisher still runs and the deferred pass is not degraded.
   expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(0);
   expect(rpc).toHaveBeenCalledTimes(1);
   now += 30_000;
@@ -159,7 +161,7 @@ it('retries failed cleanup after its backoff while keeping the publisher running
     '[cart-events] retention unavailable'
   );
 });
-it('continues publishing after cleanup throws, but publisher failures still stop the worker', async () => {
+it('reports degraded after cleanup throws, and publisher failures still stop the worker', async () => {
   const cleanup = vi.fn().mockRejectedValue(new Error('private detail'));
   const run = vi
     .fn()
@@ -167,7 +169,7 @@ it('continues publishing after cleanup throws, but publisher failures still stop
     .mockResolvedValueOnce({ ok: false });
   const logger = { info: vi.fn(), error: vi.fn() };
   const env = { COMMERCE_CART_EVENTS_ENABLED: 'true' };
-  expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(0);
+  expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(1);
   expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(1);
   expect(run).toHaveBeenCalledTimes(2);
   expect(logger.error).toHaveBeenCalledWith(

@@ -23,11 +23,20 @@ export async function runCartEventsOnce({
   logger = console,
 }: WorkerOptions = {}): Promise<number> {
   if (env.COMMERCE_CART_EVENTS_ENABLED !== 'true') return 0;
+  // A due-and-failed retention pass degrades the whole pass: publishing
+  // still runs, but the result is non-zero so the loop backs off and a
+  // one-shot invocation exits as failed instead of masking a persistent
+  // cleanup/RPC failure (e.g. an expired worker JWT) as healthy.
+  // Deferred passes inside the scheduler's own backoff report success
+  // to the scheduler; only an actual failed attempt reaches this path.
+  let retentionOk = true;
   try {
     if (!(await (cleanup ?? createCartRetentionScheduler({ env }))())) {
+      retentionOk = false;
       logger.error('[cart-events] retention unavailable');
     }
   } catch {
+    retentionOk = false;
     logger.error('[cart-events] retention unavailable');
   }
   try {
@@ -43,7 +52,7 @@ export async function runCartEventsOnce({
         failed: result.failed,
         deadLettered: result.deadLettered,
       });
-    return 0;
+    return retentionOk ? 0 : 1;
   } catch {
     logger.error('[cart-events] publisher unavailable');
     return 1;

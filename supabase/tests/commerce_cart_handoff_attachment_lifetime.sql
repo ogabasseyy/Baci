@@ -103,7 +103,7 @@ BEGIN
    PERFORM pg_temp.handoff_check(r->>'ok'='true','near-deadline connect rejected '||n);
    PERFORM pg_temp.handoff_check((SELECT g.expires_at<=g.created_at+interval '7 days' AND g.expires_at<=c.created_at+interval '7 days' FROM public.commerce_cart_grants g JOIN public.commerce_carts c ON c.id=g.cart_id WHERE g.id=(r->>'grantId')::uuid),'connect grant exceeded absolute deadline '||n);
   ELSE
-   lines:=jsonb_build_array(jsonb_build_object('item',jsonb_build_object('productId',p),'quantity',3));
+   lines:=jsonb_build_array(jsonb_build_object('item',jsonb_build_object('productId',p),'quantity',CASE WHEN n=3 THEN 2 ELSE 3 END));
    IF n=4 THEN
     SELECT jsonb_agg(jsonb_build_object('item',jsonb_build_object('productId',p),'quantity',quantity,'sourceLineId',id)) INTO lines
     FROM public.commerce_cart_lines WHERE cart_id IN(source,dest);
@@ -112,7 +112,7 @@ BEGIN
    PERFORM pg_temp.handoff_check(r->>'code'='merge_conflict','lone differing attachments did not require choice');
    r:=public.commerce_cart_redeem_handoff('cap-flow-'||n,h,'cap-attempt-'||n,'merge','native',dest,1,1,lines,jsonb_build_array(jsonb_build_object('item',jsonb_build_object('productId',p),'keep',CASE WHEN n=3 THEN 'incoming' ELSE 'existing' END)));
    PERFORM pg_temp.handoff_check(r->>'ok'='true','explicit conflict choice rejected '||n);
-   PERFORM pg_temp.handoff_check((SELECT count(*)=1 AND min(negotiated_unit_price_minor)=CASE WHEN n=3 THEN 1470 ELSE 1480 END AND min(quantity)=3 FROM public.commerce_cart_lines WHERE cart_id=source),'conflict selected wrong attachment lane '||n);
+   PERFORM pg_temp.handoff_check((SELECT count(*)=1 AND min(negotiated_unit_price_minor)=CASE WHEN n=3 THEN 1470 ELSE 1480 END AND min(quantity)=CASE WHEN n=3 THEN 2 ELSE 3 END FROM public.commerce_cart_lines WHERE cart_id=source),'conflict selected wrong attachment lane '||n);
    PERFORM pg_temp.handoff_check((SELECT expires_at=created_at+interval '7 days' FROM public.commerce_carts WHERE id=source),'single-lane merge source exceeded deadline '||n);
    PERFORM pg_temp.handoff_check((SELECT g.expires_at<=c.created_at+interval '7 days' FROM public.commerce_cart_grants g JOIN public.commerce_carts c ON c.id=g.cart_id WHERE g.id=(r->>'grantId')::uuid),'new merge grant exceeded canonical cart deadline '||n);
   END IF;
@@ -150,5 +150,50 @@ BEGIN
  r:=public.commerce_cart_redeem_handoff('bounded-issue',h,'bounded-merge','merge','native',dest,1,1,lines,'[]');
  PERFORM pg_temp.handoff_check(r->>'ok'='true','40 bounded references to 20 canonical lanes rejected');
  PERFORM pg_temp.handoff_check((SELECT count(*)=20 AND min(quantity)=3 AND bool_and(has_assurance) FROM public.commerce_cart_lines WHERE cart_id=source),'ref union canonical max quantity or assurance OR failed');
+END $$;
+DO $$
+DECLARE m uuid:='11111111-1111-4111-8111-111111111111'; p uuid:='44444444-4444-4444-8444-444444444444';
+ source uuid:='aaaaaaaa-3300-4000-8000-000000000001'; dest uuid:='aaaaaaaa-3300-4000-8000-000000000002';
+ source2 uuid:='aaaaaaaa-3300-4000-8000-000000000003'; dest2 uuid:='aaaaaaaa-3300-4000-8000-000000000004';
+ sg uuid:='bbbbbbbb-3300-4000-8000-000000000001'; dg uuid:='bbbbbbbb-3300-4000-8000-000000000002';
+ sg2 uuid:='bbbbbbbb-3300-4000-8000-000000000003'; dg2 uuid:='bbbbbbbb-3300-4000-8000-000000000004';
+ h uuid:='cccccccc-3300-4000-8000-000000000001'; h2 uuid:='cccccccc-3300-4000-8000-000000000002';
+ r jsonb; lines jsonb;
+BEGIN
+ INSERT INTO public.commerce_carts(id,merchant_id,created_at,expires_at) VALUES
+  (source,m,now()-interval '1 day',now()+interval '10 minutes'),
+  (dest,m,now()-interval '1 day',now()+interval '10 minutes'),
+  (source2,m,now()-interval '1 day',now()+interval '10 minutes'),
+  (dest2,m,now()-interval '1 day',now()+interval '10 minutes');
+ INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,created_at,expires_at) VALUES
+  (sg,m,source,'chosen-origin',now()-interval '1 day',now()+interval '10 minutes'),
+  (dg,m,dest,'chosen-receiver',now()-interval '1 day',now()+interval '10 minutes'),
+  (sg2,m,source2,'chosen-origin2',now()-interval '1 day',now()+interval '10 minutes'),
+  (dg2,m,dest2,'chosen-receiver2',now()-interval '1 day',now()+interval '10 minutes');
+ INSERT INTO public.commerce_cart_lines(merchant_id,cart_id,product_id,quantity,last_unit_price_minor,negotiated_unit_price_minor,negotiation_status) VALUES
+  (m,source,p,2,1500,2000,'accepted'),
+  (m,dest,p,5,1500,2200,'accepted'),
+  (m,source2,p,2,1500,2000,'accepted'),
+  (m,dest2,p,5,1500,2200,'accepted');
+ PERFORM pg_temp.handoff_claim(source,sg,'chosen-origin');
+ r:=public.commerce_cart_issue_handoff('chosen-quantity',h,source,'chosen-issue','{"type":"native"}');
+ PERFORM pg_temp.handoff_check(r->>'ok'='true','chosen quantity issue rejected');
+ SELECT jsonb_agg(jsonb_build_object('item',jsonb_build_object('productId',p),'quantity',quantity,'sourceLineId',id)) INTO lines
+ FROM public.commerce_cart_lines WHERE cart_id=source;
+ PERFORM pg_temp.handoff_claim(dest,dg,'chosen-receiver');
+ r:=public.commerce_cart_redeem_handoff('chosen-quantity',h,'chosen-incoming','merge','native',dest,1,1,lines,
+   jsonb_build_array(jsonb_build_object('item',jsonb_build_object('productId',p),'keep','incoming')));
+ PERFORM pg_temp.handoff_check(r->>'ok'='true','keep incoming with chosen quantity 2 rejected: '||r::text);
+ PERFORM pg_temp.handoff_check((SELECT quantity=2 AND negotiated_unit_price_minor=2000 FROM public.commerce_cart_lines WHERE cart_id=source AND product_id=p),'keep incoming must keep quantity 2');
+ PERFORM pg_temp.handoff_claim(source2,sg2,'chosen-origin2');
+ r:=public.commerce_cart_issue_handoff('chosen-quantity-2',h2,source2,'chosen-issue2','{"type":"native"}');
+ PERFORM pg_temp.handoff_check(r->>'ok'='true','chosen quantity issue 2 rejected');
+ SELECT jsonb_agg(jsonb_build_object('item',jsonb_build_object('productId',p),'quantity',quantity,'sourceLineId',id)) INTO lines
+ FROM public.commerce_cart_lines WHERE cart_id=dest2;
+ PERFORM pg_temp.handoff_claim(dest2,dg2,'chosen-receiver2');
+ r:=public.commerce_cart_redeem_handoff('chosen-quantity-2',h2,'chosen-existing','merge','native',dest2,1,1,lines,
+   jsonb_build_array(jsonb_build_object('item',jsonb_build_object('productId',p),'keep','existing')));
+ PERFORM pg_temp.handoff_check(r->>'ok'='true','keep existing with chosen quantity 5 rejected: '||r::text);
+ PERFORM pg_temp.handoff_check((SELECT quantity=5 AND negotiated_unit_price_minor=2200 FROM public.commerce_cart_lines WHERE cart_id=source2 AND product_id=p),'keep existing must keep quantity 5');
 END $$;
 DO $$ DECLARE failures text; BEGIN SELECT string_agg(message,E'\n') INTO failures FROM handoff_failures; IF failures IS NOT NULL THEN RAISE EXCEPTION E'Handoff attachment/lifetime regressions:\n%',failures; END IF; END $$;

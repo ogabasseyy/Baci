@@ -84,7 +84,12 @@ BEGIN
     INSERT INTO public.order_refund_events(order_id,merchant_id,actor_id,action,details)
     VALUES (NEW.order_id,NEW.merchant_id,auth.uid(),
       CASE WHEN TG_OP='UPDATE' AND NEW.retry_requests>OLD.retry_requests
-        THEN 'retry_requested' ELSE NEW.status END,
+        THEN 'retry_requested'
+        -- A failed row without an error is the re-armed queue state
+        -- (full manuals route through trusted finalization): audit
+        -- it as queued like the status response, not failed.
+        WHEN NEW.status='failed' AND NEW.error IS NULL THEN 'queued'
+        ELSE NEW.status END,
       jsonb_build_object('attempts',NEW.attempts,
         'error',private.describe_refund_worker_error_v1(NEW.error),
         'retryRequests',NEW.retry_requests,

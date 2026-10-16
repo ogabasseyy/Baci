@@ -267,4 +267,46 @@ describe('OrderRefundPanel manual form', () => {
       'paystack'
     );
   });
+  it('reopens with the capture cap when Paystack stays selected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...summary,
+          remaining: 100,
+          legs: [
+            {
+              amount: 100,
+              gateway: 'paystack',
+              id: 'leg-1',
+              outstanding: 50,
+              reference: 'cap-1',
+            },
+          ],
+        }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    const record = await screen.findByRole('button', {
+      name: 'Record manual refund',
+    });
+    fireEvent.click(record);
+    // Switch to Paystack: the sole capture snaps the prefill to 50.
+    fireEvent.change(screen.getByLabelText('Method'), {
+      target: { value: 'paystack' },
+    });
+    expect((screen.getByLabelText(/Amount/) as HTMLInputElement).value).toBe(
+      '50.00'
+    );
+    // Close and reopen with Paystack retained: no leg change fires
+    // to snap, so the reopen prefill itself must respect the cap.
+    fireEvent.click(record);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Record manual refund' })
+    );
+    expect((screen.getByLabelText(/Amount/) as HTMLInputElement).value).toBe(
+      '50.00'
+    );
+  });
 });

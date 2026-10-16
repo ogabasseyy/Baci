@@ -90,6 +90,7 @@ SELECT pg_catalog.set_config(
 DO $refund_attestation$
 DECLARE
   v_result jsonb;
+  v_label text;
 BEGIN
   -- Recording attests money already moved: direct RPC callers must
   -- attest too, and the ledger row keeps the proof.
@@ -111,6 +112,14 @@ BEGIN
       AND metadata->>'confirmed' = 'true'
   ) THEN
     RAISE EXCEPTION 'merchant attestation not persisted on manual row';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.transactions
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+      AND gateway_reference = 'attested-1#1'
+      AND metadata ? 'recorded_by'
+  ) THEN
+    RAISE EXCEPTION 'recorder identity persisted to readable metadata';
   END IF;
 
   -- Replays attest too: the replay branch rewrites audit notes and
@@ -147,6 +156,17 @@ BEGIN
   IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_result->'events') e
     WHERE e ? 'actor') THEN
     RAISE EXCEPTION 'actor leaked into refund events';
+  END IF;
+  -- A full manual re-arms the queue: the audit action reads queued
+  -- like the status response, not failed.
+  PERFORM public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000001', 'manual', 90,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-full', NULL, true);
+  SELECT action INTO v_label FROM public.order_refund_events
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+   ORDER BY created_at DESC LIMIT 1;
+  IF v_label <> 'queued' THEN
+    RAISE EXCEPTION 're-armed queue audited as %, want queued', v_label;
   END IF;
 END;
 $refund_attestation$;

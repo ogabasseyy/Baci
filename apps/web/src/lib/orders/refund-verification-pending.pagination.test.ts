@@ -83,4 +83,30 @@ describe('isRefundVerificationPending leg pagination', () => {
 
     await expect(isRefundVerificationPending(supabase)).resolves.toBe(false);
   });
+  it('stops after the page ceiling and reports pending', async () => {
+    // Eight full pages never terminate the walk: the probe must
+    // cap its own cost (it runs before the cron deadline exists)
+    // and fail closed instead of paginating to exhaustion.
+    const pages = Array.from({ length: 8 }, (_, page) =>
+      Array.from({ length: 25 }, (_, index) => ({
+        ...leg,
+        id: `bulk-${page * 25 + index}`,
+      }))
+    );
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        chain({ data: [{ order_id: 'order-1' }], error: null })
+      )
+      .mockReturnValueOnce(chain({ data: [], error: null }));
+    for (const rows of pages) {
+      from.mockReturnValueOnce(chain({ data: rows, error: null }));
+    }
+    const supabase = { from } as never;
+
+    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
+    // Two side-effect selects plus eight leg pages: no ninth page
+    // and no refund select past the ceiling.
+    expect(from).toHaveBeenCalledTimes(10);
+  });
 });

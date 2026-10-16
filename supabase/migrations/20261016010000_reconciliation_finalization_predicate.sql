@@ -49,6 +49,16 @@ BEGIN
   ) THEN
     RETURN true;
   END IF;
+  -- Arm 2 needs the aggregate safety gates too: the scan below
+  -- checks only per-leg terminal coverage, so without them an
+  -- in-flight, anomalous, or unverified row would finalize while
+  -- provider money can still settle. Same gates as the label
+  -- flip (which finalization implies).
+  IF NOT private.refund_label_gates_clear_v1(
+    p_order_id, p_merchant_id, p_currency
+  ) THEN
+    RETURN false;
+  END IF;
   -- Every funded external payment leg needs terminal refund evidence.
   -- Refund-state legs (e.g. PayPal flips the payment row itself to
   -- refund_pending while its provider refund is pending) have no

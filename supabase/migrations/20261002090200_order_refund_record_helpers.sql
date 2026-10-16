@@ -217,7 +217,10 @@ BEGIN
           status,gateway,gateway_reference,description,metadata)
         VALUES (p_merchant_id,p_order_id,'refund',v_leg_remaining,v_payment.currency,
           'completed','manual',p_reference||'#'||v_leg_index::text,'Manual refund recorded by merchant',
-          jsonb_build_object('payment_transaction_id',v_payment.id,'recorded_by',p_actor,
+          -- No recorded_by: transactions metadata is readable by any
+          -- staff with merchant access, so peer identity lives only
+          -- in the column-protected order_refund_events.actor_id.
+          jsonb_build_object('payment_transaction_id',v_payment.id,
             'refunded_at',p_refunded_at,'method',p_method,'note',p_note,
             'reference',p_reference,'confirmed',true));
         v_allocation := v_allocation-v_leg_remaining;

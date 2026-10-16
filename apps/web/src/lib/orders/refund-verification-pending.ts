@@ -11,6 +11,12 @@ type ProbeClient = Pick<SupabaseClient, 'from'>;
 // walked to exhaustion, so every candidate leg is scanned no
 // matter how many covered rows precede the uncovered one.
 const PROBE_LEG_LIMIT = 25;
+// Page ceiling for that walk: the probe runs before the cron
+// deadline is computed, so an unbounded walk could consume the
+// invocation budget the reconcile cap is meant to protect. Past
+// 200 legs the probe stops and reports pending (the safe
+// direction: over-triggering only caps reconcile).
+const PROBE_MAX_LEG_PAGES = 8;
 // Refund-check ceiling: linked refunds are small per order, and an
 // undercount only over-triggers the cap (the safe direction).
 const PROBE_REFUND_LIMIT = 50;
@@ -97,7 +103,7 @@ export async function isRefundVerificationPending(
   // will select.
   const legs: ProbeLeg[] = [];
   let cursor: string | null = null;
-  for (;;) {
+  for (let pages = 0; ; pages += 1) {
     const page = supabase
       .from('transactions')
       .select('id, amount, currency, gateway, order_id')
@@ -117,6 +123,9 @@ export async function isRefundVerificationPending(
     legs.push(...rows);
     if (rows.length < PROBE_LEG_LIMIT) {
       break;
+    }
+    if (pages + 1 >= PROBE_MAX_LEG_PAGES) {
+      return true;
     }
     cursor = rows[rows.length - 1]?.id ?? null;
     if (cursor === null) {

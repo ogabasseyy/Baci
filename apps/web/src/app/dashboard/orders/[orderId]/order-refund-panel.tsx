@@ -243,7 +243,13 @@ export function OrderRefundPanel({
                         // Two-decimal string: a raw float conversion can
                         // carry binary artifacts (0.30000000000000004)
                         // that fail the panel's own decimal guard.
-                        setAmount(summary.remaining.toFixed(2));
+                        // Prefill the effective cap, not the remainder:
+                        // a retained Paystack method keeps its capture
+                        // ceiling, and no leg change fires to snap an
+                        // over-cap prefill on reopen.
+                        setAmount(
+                          (effectiveRemaining ?? summary.remaining).toFixed(2)
+                        );
                         setShowForm(!showForm);
                       }}
                     >

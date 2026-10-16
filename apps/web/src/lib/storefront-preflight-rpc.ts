@@ -14,14 +14,17 @@ import {
   storefrontPreflightRpcFlightKey,
   storefrontPreflightRpcFlights,
 } from './storefront-preflight-rpc-flight';
+import {
+  boundedStorefrontPreflightRpcErrorDetail,
+  classifyStorefrontPreflightRpcOutcome,
+  createStorefrontPreflightRpcAttemptRecorder,
+  getStorefrontPreflightRpcThrownErrorDetail,
+} from './storefront-preflight-rpc-telemetry';
 
-/** Direct-Supabase transport for the proxy middleware's storefront preflights.
- * One anon PostgREST RPC replaces the internal self-fetch. A short verdict memo
- * and a consecutive-failure breaker bound repeat traffic and brownouts.
- *
- * The RPCs are intentionally anon-GRANTed SECURITY DEFINER public verdict
- * reads. They remain directly callable with the public key, so platform anon
- * rate limiting and the DB statement timeout provide the outer safeguards.
+/** Direct anon PostgREST transport for middleware storefront preflights.
+ * A short verdict memo and consecutive-failure breaker bound repeat traffic.
+ * SECURITY DEFINER public verdict RPCs remain anon-callable; platform rate
+ * limiting and DB statement timeout provide outer safeguards.
  */
 
 export interface StorefrontPreflightRpcContext {
@@ -81,28 +84,7 @@ function isAbortLikeError(error: unknown): boolean {
   );
 }
 
-/**
- * Bounded, secrets-free `code message` diagnostic for a fail-open. PostgREST
- * error messages carry no secrets; bounding keeps a pathological message from
- * bloating the telemetry payload. Empty → undefined so the property is omitted.
- */
-function boundedErrorDetail(code: string, message: string): string | undefined {
-  return `${code} ${message}`.trim().slice(0, 160) || undefined;
-}
-
-/** Same diagnostic for the rare THROWN (not resolved-`{ error }`) rejection. */
-function thrownErrorDetail(error: unknown): string | undefined {
-  if (error instanceof Error || error instanceof DOMException) {
-    return boundedErrorDetail(error.name, error.message);
-  }
-  return undefined;
-}
-
-/**
- * Calls a preflight verdict RPC and returns its single row, or null after
- * logging/capturing the fail-open (callers return their surface's fail-open
- * verdict on null). Never throws.
- */
+/** Returns one verdict row, or null after logging a fail-open; never throws. */
 export async function callStorefrontPreflightRpc(
   fn: string,
   args: Record<string, string>,
@@ -174,6 +156,11 @@ async function runStorefrontPreflightRpcAttempt(
     return null;
   }
 
+  const recordAttempt = createStorefrontPreflightRpcAttemptRecorder({
+    deadlineMs: timeoutMs,
+    rpcName: fn,
+    surface: failOpenContext.surface,
+  });
   const timeout = createAbortSignalTimeout(timeoutMs);
 
   let result: StorefrontPreflightRpcResult;
@@ -181,37 +168,30 @@ async function runStorefrontPreflightRpcAttempt(
     result = await rpcImpl(fn, args, timeout.signal);
   } catch (error) {
     const reason = isAbortLikeError(error) ? 'timeout' : 'fetch-error';
-    if (reason === 'timeout') {
-      storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
-    }
-    breaker.recordFailure();
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
+    return handleRpcFailure(
+      key,
+      failOpenContext,
+      recordAttempt,
       reason,
-      detail: thrownErrorDetail(error),
-    });
-    captureBreakerOpenTransition(failOpenContext);
-    return null;
+      getStorefrontPreflightRpcThrownErrorDetail(error)
+    );
   } finally {
     timeout.clear();
   }
 
   if (result.error) {
     const reason = classifyRpcErrorReason(result.error);
-    if (reason === 'timeout') {
-      storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
-    }
-    breaker.recordFailure();
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
+    return handleRpcFailure(
+      key,
+      failOpenContext,
+      recordAttempt,
       reason,
-      detail: boundedErrorDetail(
+      boundedStorefrontPreflightRpcErrorDetail(
         result.error.code ?? '',
         result.error.message ?? ''
       ),
-    });
-    captureBreakerOpenTransition(failOpenContext);
-    return null;
+      result.error.code
+    );
   }
 
   breaker.recordSuccess();
@@ -223,21 +203,50 @@ async function runStorefrontPreflightRpcAttempt(
       Array.isArray(result.data) &&
       result.data.length === 0
     ) {
+      recordAttempt('empty-result');
       storefrontPreflightRpcMemo.write(
         key,
         storefrontPreflightRpcMemo.emptyResult
       );
       return null;
     }
-    storefrontInternalPreflight.warnFailOpen({
-      ...failOpenContext,
-      reason: 'parse',
-    });
+    const attemptContext = recordAttempt('parse-error');
+    storefrontInternalPreflight.warnRpcFailOpen(
+      failOpenContext,
+      attemptContext,
+      'parse'
+    );
     return null;
   }
 
   storefrontPreflightRpcMemo.write(key, row);
+  recordAttempt('success');
   return row;
+}
+
+function handleRpcFailure(
+  key: string,
+  failOpenContext: StorefrontPreflightRpcContext,
+  recordAttempt: ReturnType<typeof createStorefrontPreflightRpcAttemptRecorder>,
+  reason: 'timeout' | 'fetch-error' | 'has-error',
+  detail?: string,
+  databaseErrorCode?: string
+): null {
+  const attemptContext = recordAttempt(
+    classifyStorefrontPreflightRpcOutcome(reason, databaseErrorCode)
+  );
+  if (reason === 'timeout') {
+    storefrontPreflightRpcMemo.write(key, storefrontPreflightRpcMemo.timeout);
+  }
+  breaker.recordFailure();
+  storefrontInternalPreflight.warnRpcFailOpen(
+    failOpenContext,
+    attemptContext,
+    reason,
+    detail
+  );
+  captureBreakerOpenTransition(failOpenContext);
+  return null;
 }
 
 function captureBreakerOpenTransition(

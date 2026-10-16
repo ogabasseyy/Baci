@@ -1,5 +1,10 @@
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import type { StorefrontSlugSafetyReason } from '@/lib/storefront-slug-safety';
+import {
+  getRpcAttemptProperties,
+  type StorefrontPreflightRpcAttempt,
+  type StorefrontPreflightRpcAttemptProperties,
+} from './storefront-preflight-rpc-telemetry';
 
 export type StorefrontInternalPreflightFailOpenReason =
   | 'no-secret'
@@ -22,7 +27,8 @@ export type StorefrontInternalPreflightSurface =
   | 'product-canonical'
   | 'product-slug';
 
-interface StorefrontInternalPreflightContext {
+interface StorefrontInternalPreflightContext
+  extends StorefrontPreflightRpcAttemptProperties {
   surface: StorefrontInternalPreflightSurface;
   identifier: string;
   slug: string;
@@ -145,6 +151,15 @@ function resolveBaseUrl(origin: string): string | null {
   return null;
 }
 
+function warnRpcFailOpen(
+  context: Omit<StorefrontInternalPreflightContext, 'reason'>,
+  attempt: StorefrontPreflightRpcAttempt,
+  reason: StorefrontInternalPreflightFailOpenReason,
+  detail?: string
+) {
+  warnFailOpen({ ...context, ...attempt, reason, detail });
+}
+
 function warnFailOpen(context: StorefrontInternalPreflightContext) {
   console.warn('[storefront-internal-preflight] fail-open', {
     ...context,
@@ -201,6 +216,7 @@ async function captureFailOpen(context: StorefrontInternalPreflightContext) {
         slug: truncateSlugForDiagnostics(context.slug),
         status: context.status,
         surface: context.surface,
+        ...getRpcAttemptProperties(context),
       }
     );
   } catch {
@@ -278,5 +294,6 @@ export const storefrontInternalPreflight = {
   readJsonResponse,
   resolveBaseUrl,
   warnFailOpen,
+  warnRpcFailOpen,
   warnSkip,
 };

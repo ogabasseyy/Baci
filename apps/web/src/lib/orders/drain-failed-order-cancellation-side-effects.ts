@@ -15,8 +15,12 @@ import {
 } from '@/lib/orders/select-cancellation-drain-candidates';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
-const DEFAULT_LIMIT = 10;
-const MAX_ATTEMPTS = 5;
+// Per-status fetch ceiling: both cron callers bound `limit` through
+// their drain-limit helpers (max 10), and the default covers direct
+// callers. The verification probe mirrors these slices, so export
+// them rather than letting the two selection orders drift apart.
+export const CANCELLATION_DRAIN_FETCH_LIMIT = 10;
+export const CANCELLATION_DRAIN_MAX_ATTEMPTS = 5;
 const STALE_CLAIM_MINUTES = 15;
 
 export interface CancellationSideEffectDrainSummary {
@@ -41,7 +45,7 @@ export async function drainFailedOrderCancellationSideEffects({
   deadlineMs,
   emailDeadlineMs,
   refundDeadlineMs,
-  limit = DEFAULT_LIMIT,
+  limit = CANCELLATION_DRAIN_FETCH_LIMIT,
   sendCancellationEmail,
 }: {
   supabase: SupabaseClient;
@@ -81,7 +85,7 @@ export async function drainFailedOrderCancellationSideEffects({
     .from('order_cancellation_side_effects')
     .select(select)
     .eq('status', 'failed')
-    .lt('attempts', MAX_ATTEMPTS);
+    .lt('attempts', CANCELLATION_DRAIN_MAX_ATTEMPTS);
   if (emailAdmissionShort) {
     failedFetch.neq('step', 'customer_email');
   }
@@ -159,7 +163,7 @@ export async function drainFailedOrderCancellationSideEffects({
     emailDeadlineMs,
     failedRows: (failedRows ?? []) as CancellationDrainCandidateRow[],
     limit,
-    maxAttempts: MAX_ATTEMPTS,
+    maxAttempts: CANCELLATION_DRAIN_MAX_ATTEMPTS,
   });
 
   for (const candidate of candidates.values()) {

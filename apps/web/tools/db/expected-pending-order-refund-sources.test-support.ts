@@ -94,4 +94,9 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
       'supabase/migrations/20261016040000_verify_stamped_manual_paystack_refunds.sql',
     sha256: 'aa0712efbe6e9276af6f70486df84cac288943250cfd009d500f97d08852f2af',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016050000_sweep_stamped_manuals_any_status.sql',
+    sha256: '03d41bf245175afe15b84037813bb7e1b6d4be0236604f279d069f43e4aadb35',
+  },
 ];

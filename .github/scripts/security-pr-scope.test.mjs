@@ -10,26 +10,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const workflow = readFileSync(
   new URL('../workflows/security.yml', import.meta.url),
   'utf8'
 );
-const start =
-  workflow.indexOf('          diff_out=') >= 0
-    ? workflow.indexOf('          diff_out=')
-    : workflow.indexOf('          mapfile -t changed_files');
-const end = workflow.indexOf('          if [ ${#changed_files[@]}', start);
-const scope = workflow
-  .slice(start, end)
-  .replaceAll('          ', '')
-  .replaceAll('${{ github.event.pull_request.base.ref }}', 'main')
-  .replaceAll('${PR_BASE_REF}', 'main');
-// macOS ships bash 3 without mapfile. Preserve its line-reading semantics
-// in this harness; CI runs the original builtin under Linux bash.
-const mapfileCompatibility = `mapfile() { local line; changed_files=(); while IFS= read -r line; do changed_files+=("$line"); done; }`;
+const helper = fileURLToPath(new URL('./semgrep-sarif-analysis-diagnostics.py', import.meta.url));
 
-function fixture() {
+function fixture(name = 'probe.ts') {
   const root = mkdtempSync(join(tmpdir(), 'baci-security-scope-'));
   const git = (...args) => {
     const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
@@ -46,7 +35,7 @@ function fixture() {
   git('checkout', '-qb', 'feature');
   mkdirSync(join(root, 'apps/web/src/lib'), { recursive: true });
   writeFileSync(
-    join(root, 'apps/web/src/lib/probe.ts'),
+    join(root, 'apps/web/src/lib', name),
     'export const value = 1;'
   );
   git('add', '.');
@@ -54,18 +43,10 @@ function fixture() {
   return {
     root,
     git,
-    run: () =>
-      spawnSync(
-        'bash',
-        [
-          '-e',
-          '-o',
-          'pipefail',
-          '-c',
-          `${mapfileCompatibility}\n${scope}\nprintf '%s\\n' "\${changed_files[@]}"`,
-        ],
-        { cwd: root, encoding: 'utf8' }
-      ),
+    run: () => {
+      const result = spawnSync('python3', [helper, 'pr-targets', 'main'], { cwd: root, encoding: 'utf8' });
+      return { ...result, paths: result.status === 0 ? readFileSync(join(root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean) : [] };
+    },
   };
 }
 
@@ -74,7 +55,7 @@ test('security PR scope scans a changed API/library file', () => {
   try {
     const r = f.run();
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(r.stdout.trim(), 'apps/web/src/lib/probe.ts');
+    assert.deepEqual(r.paths, ['apps/web/src/lib/probe.ts']);
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }
@@ -95,4 +76,54 @@ test('security PR scope fails closed when the base ref cannot be resolved', () =
 });
 test('targeted fetch does not prune away its explicit base ref', () => {
   assert.doesNotMatch(workflow, /fetch --no-tags --prune origin/);
+});
+
+for (const name of ['evil\nname.ts', 'évil.ts', 'space name.ts']) {
+  test(`PR scope preserves ${JSON.stringify(name)}`, () => {
+    const f = fixture(name);
+    try {
+      const result = f.run();
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(result.paths, [`apps/web/src/lib/${name}`]);
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('a trusted diagnostics helper change is included in semantic scanning', () => {
+  const f = fixture('non-source.txt');
+  try {
+    mkdirSync(join(f.root, '.github/scripts'), { recursive: true });
+    const path = '.github/scripts/semgrep-sarif-analysis-diagnostics.py';
+    writeFileSync(join(f.root, path), 'print("fixture")');
+    f.git('add', '.');
+    f.git('commit', '-qm', 'diagnostics helper');
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.paths, [path]);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+test('an actual non-source change produces an empty manifest', () => {
+  const f = fixture('non-source.txt');
+  try {
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.paths, []);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('unrelated Python files retain their existing excluded PR scope', () => {
+  const f = fixture('probe.py');
+  try {
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.paths, []);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
 });

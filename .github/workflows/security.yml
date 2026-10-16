@@ -171,12 +171,8 @@ jobs:
           GIT_ASKPASS="$fetch_askpass" GIT_TERMINAL_PROMPT=0 \
             git -c credential.helper= fetch --no-tags origin \
             "${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
-          diff_out="$(git diff --name-only --diff-filter=d "origin/${PR_BASE_REF}...HEAD" -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml')"
-          mapfile -t changed_files < <(
-            printf '%s\n' "$diff_out" |
-            grep -E '^(next\.config\.ts$|apps/web/src/app/api/|apps/web/src/lib/|apps/web/src/schemas/|apps/mobile-admin/(app|hooks|lib)/|apps/mobile-storefront/(app|hooks|lib|services|stores)/|packages/shared/|supabase/migrations/|\.github/workflows/)' ||
-            true
-          )
+          python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py pr-targets "$PR_BASE_REF"
+          mapfile -d '' -t changed_files < semgrep.requested-targets
 
           if [ ${#changed_files[@]} -eq 0 ]; then
             echo "scanned=false" >> "$GITHUB_OUTPUT"
@@ -184,7 +180,6 @@ jobs:
             exit 0
           fi
 
-          printf '%s\0' "${changed_files[@]}" > semgrep.requested-targets
           echo "scanned=true" >> "$GITHUB_OUTPUT"
           # Match the existing full CI engine; use only the existing entitlement.
           semgrep install-semgrep-pro
@@ -217,21 +212,9 @@ jobs:
             supabase/migrations
             next.config.ts
             .github/workflows
+            .github/scripts/semgrep-sarif-analysis-diagnostics.py
           )
-          python3 - "${scan_targets[@]}" <<'PYTARGETS'
-          import os
-          import pathlib
-          import subprocess
-          import sys
-
-          paths = subprocess.check_output([
-              "git", "-c", f"safe.directory={os.environ['GITHUB_WORKSPACE']}",
-              "ls-files", "-z", "--", *sys.argv[1:]
-          ]).split(b"\0")
-          extensions = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".sql", ".yml", ".yaml"}
-          requested = [p for p in paths if p and pathlib.PurePosixPath(os.fsdecode(p)).suffix in extensions]
-          pathlib.Path("semgrep.requested-targets").write_bytes(b"\0".join(requested) + b"\0")
-          PYTARGETS
+          python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py push-targets "${scan_targets[@]}"
           semgrep install-semgrep-pro
           semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${scan_targets[@]}"
         env:
@@ -268,63 +251,7 @@ jobs:
         env:
           SCAN_EVENT_NAME: ${{ github.event_name }}
           EMPTY_PR_SCOPE: ${{ github.event_name == 'pull_request' && steps.semgrep_pr.outputs.scanned == 'false' }}
-        run: |
-          python3 - <<'PYTHON'
-          import json
-          import os
-          import pathlib
-          import shutil
-          import sys
-
-          if os.environ.get("EMPTY_PR_SCOPE") == "true":
-              sys.exit(0)
-          status_path = pathlib.Path("semgrep.analysis-status.json")
-          status = {"status": "incomplete", "reason": "missing-or-invalid-report"}
-          status_path.write_text(json.dumps(status))
-          sarif = pathlib.Path("semgrep.sarif")
-          if sarif.is_file():
-              shutil.copyfile(sarif, "semgrep.raw.sarif")
-          try:
-              report = json.loads(pathlib.Path("semgrep.raw.json").read_text())
-              if not isinstance(report, dict):
-                  raise ValueError("invalid report object")
-              errors = report.get("errors")
-              paths = report.get("paths")
-              if not isinstance(errors, list) or not isinstance(paths, dict):
-                  raise ValueError("missing analysis diagnostics")
-              scanned = paths.get("scanned")
-              if not isinstance(scanned, list) or not scanned:
-                  raise ValueError("no scanned paths")
-              if not all(isinstance(path, str) for path in scanned):
-                  raise ValueError("invalid scanned paths")
-              skipped = paths.get("skipped", [])
-              if not isinstance(skipped, list) or skipped:
-                  raise ValueError("reported skipped targets")
-              if os.environ.get("SCAN_EVENT_NAME") in ("pull_request", "push"):
-                  manifest = pathlib.Path("semgrep.requested-targets").read_bytes()
-                  if not manifest.endswith(b"\0") or b"\0\0" in manifest:
-                      raise ValueError("invalid requested targets")
-                  expected = {os.fsdecode(path) for path in manifest.split(b"\0") if path}
-                  if not expected:
-                      raise ValueError("empty requested targets")
-                  missing = expected.difference(scanned)
-                  if missing:
-                      status.update(reason="requested-targets-not-scanned", missing_count=len(missing))
-                      status_path.write_text(json.dumps(status))
-                      raise ValueError("requested targets were not scanned")
-              if errors:
-                  status.update(reason="analysis-errors", error_count=len(errors))
-                  status_path.write_text(json.dumps(status))
-                  print(f"::error::Semgrep reported {len(errors)} analysis errors; inspect the raw diagnostics artifact.")
-                  sys.exit(1)
-              if not sarif.is_file() or not sarif.stat().st_size:
-                  raise ValueError("missing SARIF")
-          except (OSError, ValueError, TypeError):
-              print("::error::Semgrep did not produce complete readable analysis diagnostics.")
-              sys.exit(1)
-          status_path.write_text(json.dumps({"status": "complete", "scanned_count": len(scanned)}))
-          print(f"Verified complete Semgrep analysis for {len(scanned)} paths.")
-          PYTHON
+        run: python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py validate
 
       - name: Preserve unfiltered Semgrep diagnostics
         if: always() && (github.event_name != 'pull_request' || steps.semgrep_pr.outputs.scanned != 'false')

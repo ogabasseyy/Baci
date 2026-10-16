@@ -4,11 +4,11 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { parse } from 'yaml';
+import { fileURLToPath } from 'node:url';
 
 const workflow = readFileSync(new URL('../workflows/security.yml', import.meta.url), 'utf8');
-const body = workflow.split("python3 - <<'PYTHON'\n")[1]?.split('          PYTHON')[0];
-assert.ok(body, 'execute the actual workflow validator');
-const python = body.replace(/^          /gm, '');
+const helper = fileURLToPath(new URL('./semgrep-sarif-analysis-diagnostics.py', import.meta.url));
 
 function validate(report, { empty = false, sarif = true, requested = ['probe.ts'], event = 'pull_request' } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'baci-semgrep-diagnostics-'));
@@ -16,7 +16,7 @@ function validate(report, { empty = false, sarif = true, requested = ['probe.ts'
     if (report !== undefined) writeFileSync(join(root, 'semgrep.raw.json'), typeof report === 'string' ? report : JSON.stringify(report));
     if (requested !== null) writeFileSync(join(root, 'semgrep.requested-targets'), typeof requested === 'string' ? requested : requested.join('\0') + '\0');
     if (sarif) writeFileSync(join(root, 'semgrep.sarif'), '{"runs":[]}');
-    const result = spawnSync('python3', ['-c', python], { cwd: root, encoding: 'utf8', env: { ...process.env, EMPTY_PR_SCOPE: String(empty), SCAN_EVENT_NAME: event } });
+    const result = spawnSync('python3', [helper, 'validate'], { cwd: root, encoding: 'utf8', env: { ...process.env, EMPTY_PR_SCOPE: String(empty), SCAN_EVENT_NAME: event } });
     if (sarif && !empty) assert.equal(readFileSync(join(root, 'semgrep.raw.sarif'), 'utf8'), '{"runs":[]}');
     if (!empty) {
       const status = JSON.parse(readFileSync(join(root, 'semgrep.analysis-status.json'), 'utf8'));
@@ -100,17 +100,23 @@ test('protected-branch manifest includes tracked source files with spaces', () =
   const root = mkdtempSync(join(tmpdir(), 'baci-semgrep-push-scope-'));
   try {
     assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
-    for (const path of ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/config.json', 'outside.ts']) {
+    for (const path of ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/config.json', 'apps/web/src/lib/probe.py', '.github/scripts/semgrep-sarif-analysis-diagnostics.py', 'outside.ts']) {
       mkdirSync(join(root, path, '..'), { recursive: true });
       writeFileSync(join(root, path), 'fixture');
     }
     assert.equal(spawnSync('git', ['add', '.'], { cwd: root }).status, 0);
-    const producer = workflow.split("<<'PYTARGETS'\n")[1].split('          PYTARGETS')[0].replace(/^          /gm, '');
     const targets = workflow.split('          scan_targets=(\n')[1].split('          )')[0].trim().split(/\s+/);
-    const result = spawnSync('python3', ['-c', producer, ...targets], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: root } });
+    const result = spawnSync('python3', [helper, 'push-targets', ...targets], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: root } });
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(readFileSync(join(root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean).sort(), ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts']);
+    assert.deepEqual(readFileSync(join(root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean).sort(), ['.github/scripts/semgrep-sarif-analysis-diagnostics.py', 'apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts']);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('workflow, diagnostics and scope changes trigger their regression suite', () => {
+  const filters = parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
+  for (const path of ['.github/workflows/security.yml', '.github/scripts/semgrep-sarif-analysis-diagnostics.py', '.github/scripts/security-analysis-diagnostics.test.mjs', '.github/scripts/security-pr-scope.test.mjs']) {
+    assert.ok(filters.quiz_db.includes(path), `${path} must trigger coverage regressions`);
   }
 });

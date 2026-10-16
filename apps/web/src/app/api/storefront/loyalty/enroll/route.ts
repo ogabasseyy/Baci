@@ -120,6 +120,16 @@ export async function POST(request: NextRequest) {
     }
 
     const result = data as EnrollRpcResult | null;
+    if (!result?.success && result?.error === 'already_enrolled') {
+      // Lost-response retry: the first attempt committed, so converge
+      // on that result instead of surfacing a failure. The caller
+      // refetches status on any success and renders the enrollment.
+      return NextResponse.json({
+        success: true,
+        message: 'Already enrolled in loyalty program',
+        data: { already_enrolled: true },
+      });
+    }
     if (!result?.success) {
       const code = result?.error ?? 'enrollment_failed';
       const status = RPC_ERROR_STATUS[code] ?? 500;

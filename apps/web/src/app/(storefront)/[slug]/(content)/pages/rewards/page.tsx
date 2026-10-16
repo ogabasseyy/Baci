@@ -143,7 +143,14 @@ export default function RewardsPage() {
           customerId={customerId}
           merchantName={merchantName}
           onEnrolled={handleEnrolled}
-          onReceiptDismiss={() => setShowEnrollmentReceipt(false)}
+          onReceiptDismiss={() => {
+            setShowEnrollmentReceipt(false);
+            // The child's own retry may already have recovered the
+            // enrollment while this page-level state still says
+            // not-enrolled; refetch so dismissal cannot strand the
+            // rewards area on the now-empty form branch.
+            void refetch();
+          }}
         />
       ) : (
         <div className="space-y-6">

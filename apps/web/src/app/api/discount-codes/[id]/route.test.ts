@@ -48,10 +48,17 @@ function updateChain() {
       eq: () => ({
         select: () => ({
           single: () =>
-            Promise.resolve({
-              data: updatedRow ?? { id: CODE_ID, code: currentRow?.code },
-              error: null,
-            }),
+            Promise.resolve(
+              currentRow === null
+                ? {
+                    data: null,
+                    error: { code: 'PGRST116', message: 'no rows returned' },
+                  }
+                : {
+                    data: updatedRow ?? { id: CODE_ID, code: currentRow?.code },
+                    error: null,
+                  }
+            ),
         }),
       }),
     }),
@@ -109,6 +116,15 @@ describe('PATCH /api/discount-codes/[id] RDM- reservation', () => {
       'Code prefix RDM- is reserved for loyalty redemptions'
     );
     expect(updateCall).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 instead of the reserved-prefix 400 for a missing row', async () => {
+    currentRow = null;
+
+    const response = await patchRequest({ code: 'RDM-NEW' });
+
+    expect(response.status).toBe(404);
+    expect(updateCall).toHaveBeenCalled();
   });
 
   it('allows resubmitting an unchanged legacy RDM- code', async () => {

@@ -29,6 +29,13 @@ describe('toLadderThreshold', () => {
     expect(toLadderThreshold('99999999999999999999')).toBeNull();
   });
 
+  it('preserves negative out-of-range strings like the SQL NUMERIC compare', () => {
+    // calculate_loyalty_tier casts to NUMERIC: this rung orders below
+    // every nonnegative balance and always matches there, so the
+    // status ladder must keep it instead of dropping the rung.
+    expect(toLadderThreshold('-99999999999999999999')).toBe(-1e20);
+  });
+
   it('rejects null, missing, and non-numeric values as unusable', () => {
     expect(toLadderThreshold(null)).toBeNull();
     expect(toLadderThreshold(undefined)).toBeNull();

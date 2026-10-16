@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase.rpc('consume_loyalty_redemption', {
       p_merchant_id: merchantContext.merchantId,
       p_code: parsed.data.code,
-      p_idempotency_key: parsed.data.idempotency_key ?? null,
+      p_idempotency_key: parsed.data.idempotency_key,
     });
 
     if (error) {

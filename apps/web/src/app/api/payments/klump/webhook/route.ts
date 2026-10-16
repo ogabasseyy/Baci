@@ -111,19 +111,27 @@ function updateKlumpOrder({
   orderId: string;
   supabase: ReturnType<typeof createAdminClient>;
 }) {
-  return supabase
-    .from('orders')
-    .update({
-      payment_status: 'paid',
-      shipping_status: 'processing',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId)
-    .neq('payment_status', 'paid')
-    .select(
-      'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
-    )
-    .maybeSingle<KlumpUpdatedOrder>();
+  return (
+    supabase
+      .from('orders')
+      .update({
+        payment_status: 'paid',
+        shipping_status: 'processing',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .neq('payment_status', 'paid')
+      // A payment-only cancellation (mark_abandoned_orders) is terminal
+      // too: its loyalty claim may already be released and re-claimed by
+      // another order, so a late capture must not reopen this one. The
+      // cancelled-order handler below files such payments for review.
+      .neq('payment_status', 'cancelled')
+      .neq('payment_status', 'canceled')
+      .select(
+        'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
+      )
+      .maybeSingle<KlumpUpdatedOrder>()
+  );
 }
 
 function getKlumpPlatformFee(

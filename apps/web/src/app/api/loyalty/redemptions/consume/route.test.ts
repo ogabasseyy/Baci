@@ -135,7 +135,9 @@ describe('POST /api/loyalty/redemptions/consume', () => {
   it('returns 403 when the user lacks edit permission', async () => {
     hasPermission.mockReturnValue(false);
 
-    const response = await POST(makeRequest({ code: 'RDM-ABC123' }));
+    const response = await POST(
+      makeRequest({ code: 'RDM-ABC123', idempotency_key: 'attempt-1' })
+    );
 
     expect(response.status).toBe(403);
     expect(rpc).not.toHaveBeenCalled();
@@ -150,8 +152,19 @@ describe('POST /api/loyalty/redemptions/consume', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it('rejects a consume without an idempotency key', async () => {
+    // A keyless consume stamps NULL in the RPC, so its lost-response
+    // retry could not be told apart from a re-presentation.
+    const response = await POST(makeRequest({ code: 'RDM-ABC123' }));
+
+    expect(response.status).toBe(400);
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('consumes an unused manual redemption through the RPC', async () => {
-    const response = await POST(makeRequest({ code: 'rdm-abc123' }));
+    const response = await POST(
+      makeRequest({ code: 'rdm-abc123', idempotency_key: 'attempt-1' })
+    );
     const json = await response.json();
 
     expect(response.status).toBe(200);
@@ -169,7 +182,7 @@ describe('POST /api/loyalty/redemptions/consume', () => {
     expect(rpc).toHaveBeenCalledWith('consume_loyalty_redemption', {
       p_merchant_id: 'merchant-1',
       p_code: 'rdm-abc123',
-      p_idempotency_key: null,
+      p_idempotency_key: 'attempt-1',
     });
   });
 
@@ -205,7 +218,9 @@ describe('POST /api/loyalty/redemptions/consume', () => {
   it('returns 404 when the RPC finds nothing (unknown or consumed)', async () => {
     rpcResult = { success: false, error: 'redemption_not_found' };
 
-    const response = await POST(makeRequest({ code: 'RDM-UNKNOWN' }));
+    const response = await POST(
+      makeRequest({ code: 'RDM-UNKNOWN', idempotency_key: 'attempt-1' })
+    );
     const json = await response.json();
 
     expect(response.status).toBe(404);
@@ -215,7 +230,9 @@ describe('POST /api/loyalty/redemptions/consume', () => {
   it('returns 403 when the RPC denies merchant access', async () => {
     rpcResult = { success: false, error: 'forbidden' };
 
-    const response = await POST(makeRequest({ code: 'RDM-ABC123' }));
+    const response = await POST(
+      makeRequest({ code: 'RDM-ABC123', idempotency_key: 'attempt-1' })
+    );
 
     expect(response.status).toBe(403);
   });
@@ -223,7 +240,9 @@ describe('POST /api/loyalty/redemptions/consume', () => {
   it('returns 500 when the RPC fails', async () => {
     rpcError = { message: 'db failure' };
 
-    const response = await POST(makeRequest({ code: 'RDM-ABC123' }));
+    const response = await POST(
+      makeRequest({ code: 'RDM-ABC123', idempotency_key: 'attempt-1' })
+    );
 
     expect(response.status).toBe(500);
   });

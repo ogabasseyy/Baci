@@ -1,30 +1,27 @@
 -- REGRESSION TESTS (in-gate) via two live dblink sessions.
--- Auth: documented supabase-local default (scratch-DB-only).
+-- Auth: pass -v dblink_password=... for a non-default local DB (the
+-- default is the supabase-local scratch password). dblink is dropped
+-- at the end only if this file created it.
 
 \set ON_ERROR_STOP on
 
+\if :{?dblink_password}
+\else
+\set dblink_password postgres
+\endif
+
+SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'dblink') AS loyalty_had_dblink \gset
+
 CREATE EXTENSION IF NOT EXISTS dblink;
 
-SELECT dblink_connect(
-  'loyalty_enroll_race',
-  format(
-    'host=%s port=%s dbname=%s user=%s password=postgres',
-    inet_server_addr(),
-    inet_server_port(),
-    current_database(),
-    current_user
-  )
-);
-SELECT dblink_connect(
-  'loyalty_award_race',
-  format(
-    'host=%s port=%s dbname=%s user=%s password=postgres',
-    inet_server_addr(),
-    inet_server_port(),
-    current_database(),
-    current_user
-  )
-);
+SELECT dblink_connect('loyalty_enroll_race', format(
+  'host=%s port=%s dbname=%s user=%s password=%s',
+  inet_server_addr(), inet_server_port(), current_database(),
+  current_user, :'dblink_password'));
+SELECT dblink_connect('loyalty_award_race', format(
+  'host=%s port=%s dbname=%s user=%s password=%s',
+  inet_server_addr(), inet_server_port(), current_database(),
+  current_user, :'dblink_password'));
 
 -- Committed fixtures (own namespace; deleted at the end).
 INSERT INTO auth.users (
@@ -266,8 +263,11 @@ DELETE FROM public.customers WHERE id = '01bb0000-0000-4000-8000-000000000011';
 DELETE FROM public.merchants WHERE id = '01bb0000-0000-4000-8000-000000000001';
 DELETE FROM auth.users WHERE id = '01bb0000-0000-4000-8000-000000000101';
 
--- Restore the pre-test extension set.
+-- Restore the pre-test extension set (drop only what this file made).
+\if :loyalty_had_dblink
+\else
 DROP EXTENSION IF EXISTS dblink;
+\endif
 
 -- Currency locked/gated pre-mint for currency-bound rewards: pin it.
 DO $$

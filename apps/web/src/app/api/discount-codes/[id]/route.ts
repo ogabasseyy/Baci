@@ -107,7 +107,11 @@ export async function PATCH(
       if (currentError) throw currentError;
       const codeChanged =
         currentRow?.code?.toUpperCase() !== updateData.code.toUpperCase();
-      if (codeChanged && isReservedDiscountCodePrefix(updateData.code)) {
+      if (
+        currentRow &&
+        codeChanged &&
+        isReservedDiscountCodePrefix(updateData.code)
+      ) {
         return NextResponse.json(
           { error: 'Code prefix RDM- is reserved for loyalty redemptions' },
           { status: 400 }

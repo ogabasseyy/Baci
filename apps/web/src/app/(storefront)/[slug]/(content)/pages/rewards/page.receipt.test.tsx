@@ -99,10 +99,14 @@ describe('RewardsPage enrollment receipt', () => {
     const receiptCalls = formMock.mock.calls.length;
     expect(receiptCalls).toBeGreaterThan(0);
 
-    // Dismissing the receipt finally shows the status subtree.
+    // Dismissing the receipt finally shows the status subtree, and
+    // refetches the page-level hook: the child's own retry may have
+    // recovered the enrollment while page state still says otherwise.
+    settled.refetch.mockClear();
     await act(async () => {
       lastProps().onReceiptDismiss?.();
     });
+    expect(settled.refetch).toHaveBeenCalled();
     rerender(<RewardsPage />);
 
     expect(formMock.mock.calls.length).toBe(receiptCalls);

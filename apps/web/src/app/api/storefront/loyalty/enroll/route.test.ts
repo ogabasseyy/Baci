@@ -170,7 +170,9 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(body).toEqual({ error: 'Customer not found for this merchant' });
   });
 
-  it('returns 409 when the customer is already enrolled', async () => {
+  it('returns success when the customer is already enrolled', async () => {
+    // Lost-response retry: the original enrollment committed, so the
+    // retry converges on success and the caller refetches status.
     mocks.mockRpc.mockResolvedValue({
       data: { success: false, error: 'already_enrolled' },
       error: null,
@@ -181,9 +183,11 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(409);
+    expect(response.status).toBe(200);
     expect(body).toEqual({
-      error: 'Customer is already enrolled in the loyalty program',
+      success: true,
+      message: 'Already enrolled in loyalty program',
+      data: { already_enrolled: true },
     });
   });
 

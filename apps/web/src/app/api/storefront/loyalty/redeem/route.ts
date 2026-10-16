@@ -193,9 +193,16 @@ export async function POST(request: NextRequest) {
 
     const validated = storefrontLoyaltyRedeemResultSchema.safeParse(result);
     if (!validated.success) {
+      // Never log the raw payload: it carries the newly issued
+      // spendable redemption code. Issue paths/codes identify drift.
       logger.error({
         message: 'Malformed redemption result',
-        error: { result },
+        error: {
+          issues: validated.error.issues.map((issue) => ({
+            code: issue.code,
+            path: issue.path,
+          })),
+        },
       });
       return NextResponse.json(
         { error: 'Failed to process redemption' },

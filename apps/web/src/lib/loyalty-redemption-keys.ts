@@ -170,6 +170,17 @@ async function coordinatedMint(intent: string): Promise<string> {
       continue;
     }
     if (claim.token === token) {
+      // Settle before minting: a simultaneous claimant can overwrite
+      // this claim between our write and this read, and both tabs
+      // would then observe their own token and mint competing keys.
+      // Only the token still recorded after a poll interval may mint.
+      await delay(CLAIM_POLL_INTERVAL_MS);
+      const settledStored = readStored(intent);
+      if (settledStored) {
+        clearClaim(intent, token);
+        return settledStored;
+      }
+      if (readClaim(intent)?.token !== token) continue;
       const minted = mintKey(intent);
       clearClaim(intent, token);
       // Settle before returning: a simultaneous claimant whose token

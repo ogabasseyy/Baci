@@ -50,11 +50,14 @@ export function toLadderThreshold(value: unknown): number | null {
     Number.isSafeInteger(value)
   )
     return value;
-  if (
-    typeof value === 'string' &&
-    /^-?[0-9]+$/.test(value) &&
-    Number.isSafeInteger(Number(value))
-  )
-    return Number(value);
+  if (typeof value === 'string' && /^-?[0-9]+$/.test(value)) {
+    const parsed = Number(value);
+    // SQL casts the same grammar to NUMERIC and compares it against
+    // the nonnegative lifetime balance: a negative threshold beyond
+    // the safe-integer range still orders below every balance there,
+    // so preserve it instead of dropping the rung here.
+    if (Number.isSafeInteger(parsed) || (parsed < 0 && Number.isFinite(parsed)))
+      return parsed;
+  }
   return null;
 }

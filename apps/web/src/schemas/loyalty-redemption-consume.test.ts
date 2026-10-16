@@ -5,6 +5,7 @@ describe('loyaltyRedemptionConsumeSchema', () => {
   it('accepts a presented code and trims it', () => {
     const result = loyaltyRedemptionConsumeSchema.safeParse({
       code: '  RDM-ABC123  ',
+      idempotency_key: 'attempt-1',
     });
 
     expect(result.success).toBe(true);
@@ -13,7 +14,12 @@ describe('loyaltyRedemptionConsumeSchema', () => {
     }
   });
 
-  it('accepts an optional attempt idempotency key', () => {
+  it('requires an attempt idempotency key', () => {
+    // A keyless consume stamps NULL in the RPC, so its lost-response
+    // retry is indistinguishable from a re-presentation.
+    expect(
+      loyaltyRedemptionConsumeSchema.safeParse({ code: 'RDM-ABC123' }).success
+    ).toBe(false);
     const parsed = loyaltyRedemptionConsumeSchema.safeParse({
       code: 'RDM-ABC123',
       idempotency_key: 'attempt-9',

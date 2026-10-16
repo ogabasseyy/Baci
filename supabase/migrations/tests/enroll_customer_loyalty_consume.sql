@@ -12,22 +12,25 @@ INSERT INTO public.loyalty_rewards (
 );
 INSERT INTO public.reward_redemptions (
   merchant_id, customer_id, reward_id, points_spent, reward_type,
-  reward_value, discount_code, used, expires_at
+  reward_value, discount_code, used, expires_at, minimum_order_amount
 ) VALUES
   ('01aa0000-0000-4000-8000-000000000001',
    '01aa0000-0000-4000-8000-000000000012',
    '01aa0000-0000-4000-8000-000000000501',
    50, 'free_product', NULL,
-   'RDM-CONSUME1', NULL, pg_catalog.now() + interval '30 days'),
+   'RDM-CONSUME1', NULL, pg_catalog.now() + interval '30 days', NULL),
+  -- Known-zero minimum snapshot: current mints store 0 explicitly
+  -- for no-minimum rewards (a NULL snapshot with no live reward is
+  -- the unknowable legacy shape and fails closed; see consume_minimum).
   ('01aa0000-0000-4000-8000-000000000001',
    '01aa0000-0000-4000-8000-000000000012', NULL, 50, 'discount', NULL,
-   'RDM-CONSUME2', false, pg_catalog.now() + interval '30 days'),
+   'RDM-CONSUME2', false, pg_catalog.now() + interval '30 days', 0),
   ('01aa0000-0000-4000-8000-000000000001',
    '01aa0000-0000-4000-8000-000000000012', NULL, 50, 'discount_fixed', 500,
-   'RDM-CONSUME3', false, pg_catalog.now() + interval '30 days'),
+   'RDM-CONSUME3', false, pg_catalog.now() + interval '30 days', NULL),
   ('01aa0000-0000-4000-8000-000000000001',
    '01aa0000-0000-4000-8000-000000000012', NULL, 50, 'free_shipping', NULL,
-   'RDM-CONSUME4', false, pg_catalog.now() - interval '1 day');
+   'RDM-CONSUME4', false, pg_catalog.now() - interval '1 day', NULL);
 RESET ROLE;
 
 -- The merchant owner (user 101 since the adjustment suite) consumes a
@@ -159,13 +162,14 @@ SELECT pg_temp.assert_true(
 -- Consume returns the issuance identity after the reward is deleted.
 INSERT INTO public.reward_redemptions (
   merchant_id, customer_id, reward_id, points_spent, reward_type,
-  discount_code, used, expires_at, reward_name, reward_product_id
+  discount_code, used, expires_at, reward_name, reward_product_id,
+  minimum_order_amount
 ) VALUES (
   '01aa0000-0000-4000-8000-000000000001',
   '01aa0000-0000-4000-8000-000000000012',
   '01aa0000-0000-4000-8000-000000000501', 50, 'free_product',
   'RDM-CASE9', false, pg_catalog.now() + interval '30 days',
-  'Snapshot gift', '00000000-0000-4000-8000-00000000beef'
+  'Snapshot gift', '00000000-0000-4000-8000-00000000beef', 0
 );
 
 DELETE FROM public.loyalty_rewards
@@ -185,10 +189,10 @@ SELECT pg_temp.assert_true(
 -- any other presentation reports already_consumed.
 INSERT INTO public.reward_redemptions (
   merchant_id, customer_id, reward_id, points_spent, reward_type,
-  discount_code, used, expires_at
+  discount_code, used, expires_at, minimum_order_amount
 ) VALUES (
   '01aa0000-0000-4000-8000-000000000001',
   '01aa0000-0000-4000-8000-000000000012',
   NULL, 50, 'free_product',
-  'RDM-CONSUME6', false, pg_catalog.now() + interval '30 days'
+  'RDM-CONSUME6', false, pg_catalog.now() + interval '30 days', 0
 );

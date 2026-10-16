@@ -174,9 +174,16 @@ export async function GET(request: NextRequest) {
     const validated =
       storefrontLoyaltyStatusResultSchema.safeParse(normalizedResult);
     if (!validated.success) {
+      // Never log the raw payload: it carries spendable redemption
+      // codes. Issue paths/codes identify the drift without secrets.
       logger.error({
         message: 'Malformed loyalty status result',
-        error: { result },
+        error: {
+          issues: validated.error.issues.map((issue) => ({
+            code: issue.code,
+            path: issue.path,
+          })),
+        },
       });
       return NextResponse.json(
         { error: 'Failed to fetch loyalty data' },

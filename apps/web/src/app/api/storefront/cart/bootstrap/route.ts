@@ -46,6 +46,19 @@ export async function POST(request: NextRequest) {
       return cartErrorResponse('forbidden');
     }
 
+    // Cheap pre-resolution quota keyed only by the trusted client
+    // identifier: unauthenticated callers must not drive merchant
+    // resolution DB work unbounded before the merchant-scoped
+    // bootstrap budget below can apply.
+    const preQuota = await checkCartQuota({
+      merchantId: 'pre-resolution',
+      operation: 'bootstrap',
+      subject: getTrustedClientIdentifier(request),
+    });
+    if (!preQuota.allowed) {
+      return cartErrorResponse('quota_exceeded');
+    }
+
     const rawBody = await readCartJsonBody(request);
     if (!rawBody.ok) {
       return cartErrorResponse('invalid_request');

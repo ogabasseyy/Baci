@@ -156,7 +156,14 @@ export async function POST(request: NextRequest) {
       replayed: result.replayed,
       warnings: result.warnings,
     });
-    const maxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
+    // The cookie must not outlive the proof it carries: cap its
+    // lifetime at the earlier of the grant expiry the proof was
+    // capped to and the cart expiry.
+    const cookieExpiry =
+      Date.parse(proofGrantExpiry) < Date.parse(result.cart.expiresAt)
+        ? proofGrantExpiry
+        : result.cart.expiresAt;
+    const maxAge = cartSessionCookieMaxAge(cookieExpiry);
     // A non-positive lifetime would delete the cookie the body proof just
     // renewed; omit the cookie instead and let the body proof govern.
     if (proof && maxAge > 0) {

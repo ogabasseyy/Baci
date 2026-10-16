@@ -121,7 +121,15 @@ export async function GET(request: NextRequest) {
       ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),
       warnings: result.warnings,
     });
-    const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
+    // Cap the cookie at the earlier of the grant expiry the upgraded
+    // proof was capped to and the cart expiry.
+    const cookieExpiry =
+      upgraded?.liveGrantExpiresAt &&
+      Date.parse(upgraded.liveGrantExpiresAt) <
+        Date.parse(result.cart.expiresAt)
+        ? upgraded.liveGrantExpiresAt
+        : result.cart.expiresAt;
+    const cookieMaxAge = cartSessionCookieMaxAge(cookieExpiry);
     if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, context.merchant.id, proof, cookieMaxAge);
     }

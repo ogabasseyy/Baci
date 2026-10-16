@@ -125,8 +125,13 @@ export interface CartWarning {
 }
 
 /**
- * Authoritative cart snapshot. Contains no access credential or private
- * buyer record.
+ * Authoritative cart snapshot, returned only to the verified session
+ * principal that owns the cart. Contains no cart session credential
+ * or private buyer record; line voucher references are owner-scoped
+ * line attachments (user-bound at redemption, and required by the
+ * owner to resubmit merge/import lanes), never session authority.
+ * Third-party surfaces (handoff preview, UCP) must use their redacted
+ * projections instead of this snapshot.
  */
 export interface CartSnapshot {
   cartId: string;

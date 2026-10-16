@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   alias: null as string | null,
   merchantError: null as unknown,
   merchantRows: [] as unknown[],
+  rpcCalls: 0,
 }));
 
 vi.mock('@/lib/supabase/anon', () => ({
@@ -35,10 +36,13 @@ vi.mock('@/lib/supabase/anon', () => ({
         })),
       })),
     })),
-    rpc: vi.fn(async () => ({
-      data: mocks.merchantRows,
-      error: mocks.merchantError,
-    })),
+    rpc: vi.fn(async () => {
+      mocks.rpcCalls += 1;
+      return {
+        data: mocks.merchantRows,
+        error: mocks.merchantError,
+      };
+    }),
   }),
 }));
 
@@ -69,6 +73,7 @@ beforeEach(() => {
   mocks.alias = null;
   mocks.merchantError = null;
   mocks.merchantRows = [merchantRow()];
+  mocks.rpcCalls = 0;
   process.env.CART_SESSION_SECRET = TEST_SECRET;
 });
 
@@ -272,6 +277,18 @@ describe('POST /api/storefront/cart/bootstrap', () => {
     response = await postBootstrap({ body: {} });
     expect(response.status).toBe(429);
     expect((await response.json()).code).toBe('quota_exceeded');
+  });
+
+  it('performs no merchant resolution once the pre-resolution quota is exhausted', async () => {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const response = await postBootstrap({ body: {} });
+      expect(response.status).toBe(201);
+    }
+    mocks.rpcCalls = 0;
+    const response = await postBootstrap({ body: {} });
+    expect(response.status).toBe(429);
+    expect((await response.json()).code).toBe('quota_exceeded');
+    expect(mocks.rpcCalls).toBe(0);
   });
 
   it('fails closed when the proof secret is not provisioned', async () => {

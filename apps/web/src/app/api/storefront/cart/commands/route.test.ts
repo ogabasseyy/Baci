@@ -294,6 +294,10 @@ describe('POST /api/storefront/cart/commands', () => {
         Date.parse(grantExpiry) + 1000
       );
     }
+    // The cookie carrying that proof must not outlive the grant either.
+    const maxAge = Number(setCookie.match(/Max-Age=(\d+)/)?.[1] ?? '0');
+    expect(maxAge).toBeGreaterThan(0);
+    expect(maxAge).toBeLessThanOrEqual(3600);
   });
 
   it('returns the committed cart when proof reissue hits a config failure', async () => {

@@ -17,6 +17,26 @@ export function markEnrollmentEnabled(state: EnrollmentTransition): void {
   state.wasEnabled = true;
 }
 
+/**
+ * An initial refresh failure before any snapshot must leave the
+ * loading state so the status panel can offer manual retry; later
+ * failures keep the last good snapshot visible.
+ */
+export function reportInitialRefreshFailure(
+  error: unknown,
+  deps: {
+    isCurrent: () => boolean;
+    hasSnapshot: () => boolean;
+    clearLoading: () => void;
+    setError: (code: string) => void;
+    errorCode: (error: unknown) => string | undefined;
+  }
+): void {
+  if (!deps.isCurrent() || deps.hasSnapshot()) return;
+  deps.clearLoading();
+  deps.setError(deps.errorCode(error) ?? 'temporarily_unavailable');
+}
+
 export async function retireEnrollmentSession(
   state: EnrollmentTransition,
   merchantId: string,
@@ -35,6 +55,59 @@ export async function retireEnrollmentSession(
     // sign-out teardown, whichever runs first) retries the deletion
     // instead of stranding an account-owned proof for the next owner.
   }
+}
+
+/**
+ * Legacy-cart cleanup when enrollment turns off: discarding the
+ * canonical reference also rotates its checkout generation and
+ * releases the old generation's recovery state, so the next legacy
+ * cart cannot inherit the abandoned cart's frozen credit choices or
+ * order attempt.
+ */
+export function retireLegacySharedCart(deps: {
+  getLegacy: () => {
+    sharedCartRef?: unknown;
+    checkoutGeneration: string;
+  };
+  clearLegacy: (nextGeneration: string) => void;
+  mintGeneration: () => string;
+  persistGeneration: (generation: string) => void;
+  releaseGeneration: (generation: string) => void;
+}): void {
+  const legacy = deps.getLegacy();
+  if (!legacy.sharedCartRef) return;
+  const nextGeneration = deps.mintGeneration();
+  deps.clearLegacy(nextGeneration);
+  deps.persistGeneration(nextGeneration);
+  deps.releaseGeneration(legacy.checkoutGeneration);
+}
+
+/** Publishes the controller's actions into the native shared-cart store. */
+export function bindControllerActions(
+  controller: {
+    refresh: unknown;
+    prepare: unknown;
+    pair: unknown;
+    chooseLegacy: unknown;
+    linkAccount: unknown;
+    reviewCheckout: unknown;
+    savedCart: () => Promise<unknown>;
+  },
+  isCurrent: () => boolean,
+  setState: (partial: Record<string, unknown>) => void
+): void {
+  setState({
+    refresh: controller.refresh,
+    prepare: controller.prepare,
+    pair: controller.pair,
+    chooseLegacy: controller.chooseLegacy,
+    linkAccount: controller.linkAccount,
+    prepareCheckoutReview: controller.reviewCheckout,
+    loadSavedCart: async () => {
+      const saved = await controller.savedCart();
+      if (isCurrent()) setState({ savedCart: saved ?? null });
+    },
+  });
 }
 
 /** Store reset applied when the shared-cart writer is released. */

@@ -2,6 +2,7 @@ import {
   createEnrollmentTransition,
   markEnrollmentEnabled,
   retireEnrollmentSession,
+  retireLegacySharedCart,
 } from './enrollment-transition';
 
 it('does not retire before any committed enabled period', async () => {
@@ -18,6 +19,37 @@ it('retires once after an enabled period', async () => {
   await retireEnrollmentSession(state, 'merchant-a', remove);
   await retireEnrollmentSession(state, 'merchant-a', remove);
   expect(remove).toHaveBeenCalledTimes(1);
+});
+
+it('rotates and releases the checkout generation when retiring the shared reference', () => {
+  const clearLegacy = jest.fn();
+  const persistGeneration = jest.fn();
+  const releaseGeneration = jest.fn();
+  retireLegacySharedCart({
+    getLegacy: () => ({
+      sharedCartRef: { cartId: 'cart-1' },
+      checkoutGeneration: 'generation-old',
+    }),
+    clearLegacy,
+    mintGeneration: () => 'generation-new',
+    persistGeneration,
+    releaseGeneration,
+  });
+  expect(clearLegacy).toHaveBeenCalledWith('generation-new');
+  expect(persistGeneration).toHaveBeenCalledWith('generation-new');
+  expect(releaseGeneration).toHaveBeenCalledWith('generation-old');
+});
+
+it('leaves the legacy cart untouched without a shared reference', () => {
+  const clearLegacy = jest.fn();
+  retireLegacySharedCart({
+    getLegacy: () => ({ checkoutGeneration: 'generation-old' }),
+    clearLegacy,
+    mintGeneration: () => 'generation-new',
+    persistGeneration: jest.fn(),
+    releaseGeneration: jest.fn(),
+  });
+  expect(clearLegacy).not.toHaveBeenCalled();
 });
 
 it('retries retirement after a transient storage failure', async () => {

@@ -1,14 +1,16 @@
 import * as Crypto from 'expo-crypto';
 import { useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
 import { fetchProductRow, transformProduct } from '@/hooks/product-utils';
 import { createNativeCartController } from '@/lib/cart/controller';
 import type { CartProductShell } from '@/lib/cart/display';
 import {
+  bindControllerActions,
   createEnrollmentTransition,
   DISABLED_SHARED_CART_STATE,
   markEnrollmentEnabled,
+  reportInitialRefreshFailure,
   retireEnrollmentSession,
+  retireLegacySharedCart,
 } from '@/lib/cart/enrollment-transition';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
@@ -19,6 +21,7 @@ import {
   type NativeCartClient,
   type NativeCartConfig,
 } from '@/lib/cart/shared-cart-client';
+import { startSharedCartPolling } from '@/lib/cart/shared-cart-polling';
 import { getCartShopperToken } from '@/lib/cart/shopper-token';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
@@ -84,36 +87,33 @@ const defaults: Deps = {
 export function useSharedCart(options: Options, deps: Deps = defaults): void {
   const latest = useRef(options);
   const enrollmentTransition = useRef(createEnrollmentTransition());
-  // Async guards observe only committed options (advance in an effect).
   useEffect(() => {
     latest.current = options;
   });
   useEffect(() => {
     if (!options.enabled) {
-      // Enrollment off: discard canonical ownership (see
-      // enrollment-transition) and retire its secure session record.
+      // Enrollment off: discard canonical ownership and retire the session.
       void retireEnrollmentSession(
         enrollmentTransition.current,
         options.merchantId,
         (merchantId) => cartSessionStorage.remove(merchantId)
       );
-      const legacy = useCartStore.getState();
-      if (legacy.sharedCartRef) {
-        // Retiring the canonical reference also retires its checkout
-        // generation: the next legacy cart must not inherit the
-        // abandoned cart's frozen credit choices or order attempt.
-        const nextGeneration = mintedCheckoutGenerations.register(
-          Crypto.randomUUID()
-        );
-        useCartStore.setState({
-          items: [],
-          sharedCartRef: undefined,
-          checkoutGeneration: nextGeneration,
-        });
-        persistCheckoutGenerationDetached(nextGeneration);
-        void releaseCheckoutCreditSnapshot(legacy.checkoutGeneration);
-        void releaseCodepointCheckoutItemSort(legacy.checkoutGeneration);
-      }
+      retireLegacySharedCart({
+        getLegacy: () => useCartStore.getState(),
+        clearLegacy: (checkoutGeneration) =>
+          useCartStore.setState({
+            items: [],
+            sharedCartRef: undefined,
+            checkoutGeneration,
+          }),
+        mintGeneration: () =>
+          mintedCheckoutGenerations.register(Crypto.randomUUID()),
+        persistGeneration: persistCheckoutGenerationDetached,
+        releaseGeneration: (generation) => {
+          void releaseCheckoutCreditSnapshot(generation);
+          void releaseCodepointCheckoutItemSort(generation);
+        },
+      });
       return;
     }
     markEnrollmentEnabled(enrollmentTransition.current);
@@ -241,41 +241,29 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
           useNativeSharedCartStore.setState({
             snapshot,
             metadataReady: display.metadataReady,
-            // A different cart invalidates any earlier checkout review.
             checkoutReview: changedCart
               ? null
               : useNativeSharedCartStore.getState().checkoutReview,
           });
         },
       });
-      useNativeSharedCartStore.setState({
-        refresh: controller.refresh,
-        prepare: controller.prepare,
-        pair: controller.pair,
-        chooseLegacy: controller.chooseLegacy,
-        linkAccount: controller.linkAccount,
-        prepareCheckoutReview: controller.reviewCheckout,
-        loadSavedCart: async () => {
-          const saved = await controller?.savedCart();
-          if (isCurrent())
-            useNativeSharedCartStore.setState({ savedCart: saved ?? null });
-        },
-      });
-      void controller.refresh().catch((error: unknown) => {
-        // An initial failure before any snapshot must leave the
-        // loading state so the status panel can offer manual retry;
-        // later failures keep the last good snapshot visible.
-        if (!isCurrent() || useNativeSharedCartStore.getState().snapshot)
-          return;
-        useCartStore.setState({ isLoading: false });
-        useNativeSharedCartStore.setState({
-          status: 'error',
-          code:
-            error instanceof NativeCartError
-              ? error.code
-              : 'temporarily_unavailable',
-        });
-      });
+      bindControllerActions(
+        controller,
+        isCurrent,
+        useNativeSharedCartStore.setState
+      );
+      void controller.refresh().catch((error: unknown) =>
+        reportInitialRefreshFailure(error, {
+          isCurrent,
+          hasSnapshot: () =>
+            Boolean(useNativeSharedCartStore.getState().snapshot),
+          clearLoading: () => useCartStore.setState({ isLoading: false }),
+          setError: (code) =>
+            useNativeSharedCartStore.setState({ status: 'error', code }),
+          errorCode: (failure) =>
+            failure instanceof NativeCartError ? failure.code : undefined,
+        })
+      );
     } catch {
       useCartStore.setState({ isLoading: false });
       useNativeSharedCartStore.setState({
@@ -283,22 +271,14 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
         code: 'invalid_configuration',
       });
     }
-    const poll = setInterval(() => {
-      if (
-        AppState.currentState === 'active' &&
-        controller &&
-        useNativeSharedCartStore.getState().snapshot?.cartId
-      )
-        void controller.refresh().catch(() => undefined);
-    }, 30000);
-    const foreground = AppState.addEventListener('change', (state) => {
-      if (state === 'active' && controller)
-        void controller.refresh().catch(() => undefined);
+    const stopPolling = startSharedCartPolling({
+      getController: () => controller,
+      hasSnapshot: () =>
+        Boolean(useNativeSharedCartStore.getState().snapshot?.cartId),
     });
     return () => {
       alive = false;
-      foreground.remove();
-      clearInterval(poll);
+      stopPolling();
       release();
       useCartStore.setState({ isLoading: false });
       useNativeSharedCartStore.setState({ ...DISABLED_SHARED_CART_STATE });

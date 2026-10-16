@@ -37,6 +37,15 @@ vi.mock('@/app/(storefront)/storefront-full.css', () => {
 });
 
 vi.mock(
+  '@/app/(storefront)/ogabassey/ogabassey-home-static-shell-head',
+  () => ({
+    OgabasseyHomeStaticShellHead: () => (
+      <span data-testid="ogabassey-home-static-shell-head" />
+    ),
+  })
+);
+
+vi.mock(
   '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content',
   () => ({
     OgabasseyStaticHomePageContent: (props: {
@@ -58,6 +67,14 @@ vi.mock('./ogabassey-home-committed-lcp', () => ({
   OgabasseyHomeCommittedLcp: () => (
     <div data-testid="ogabassey-home-committed-lcp" />
   ),
+}));
+
+vi.mock('@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data', () => ({
+  resolveOgabasseyHomeHeroShell: vi.fn(() => Promise.resolve(null)),
+}));
+
+vi.mock('@/lib/cached-data', () => ({
+  getRequestScopedMerchant: vi.fn(),
 }));
 
 async function renderStorefrontPage(slug: string) {

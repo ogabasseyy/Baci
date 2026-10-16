@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import { buildMerchantAnalyticsSettings } from '@/components/analytics/analytics-merchant-settings';
 import { AnalyticsPixelProvider } from '@/components/analytics/analytics-pixel-provider';
+import { OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY } from '@/components/storefront/ogabassey/components/home-section-reserve-geometry';
 import { getStorefrontNavigationCategories } from '@/lib/cached-categories';
 import {
   getCachedStorefrontHomeProducts,
@@ -14,34 +15,6 @@ import { OgabasseyHomeProductSection } from './ogabassey-home-product-section';
 type OgabasseyMerchant = NonNullable<
   Awaited<ReturnType<typeof getRequestScopedMerchant>>
 >;
-
-/**
- * Geometry reserve for the product section while the home-product feed
- * resolves. The feed is usually the fastest leg (cached), so this rarely
- * shows — but when it loses the race, the grid, strip-ad slot, and cards
- * insert at zero height and shift everything below. Sized to the median
- * full 8-card mobile grid (section header ~90 + 4 rows of square-media
- * cards ~270 each + load-more row ~110 ≈ 1200): a full catalog swaps
- * near-exact, which is the common case. An empty catalog over-reserves
- * (accepted: rare, and the alternative — no reserve — shifts the common
- * case by the full section height instead). Desktop grids run slightly
- * shorter; tall desktop viewports absorb the difference.
- */
-const PRODUCT_RESERVE_MIN_HEIGHT_CLASS = 'min-h-[1200px]';
-
-/**
- * Geometry reserve for the discovery section while its enrichment legs
- * resolve. Mirrors the section wrapper so the streamed card replaces
- * same-footprint space instead of pushing a viewport-visible footer down
- * (a CLS shift when the product feed wins the race on a short catalog).
- * Sized to the median heading + category-pills block (~280: card padding
- * and heading plus ~4 wrapping pill rows): empty catalogs (~104px of card)
- * over-reserve, and extreme full catalogs (20 pills + 24 links ≈ 980px)
- * under-reserve — both tails are rare, and the median-minimizing height
- * keeps the common case near-exact. A full catalog also implies a long
- * product grid above, which keeps the residual insertion below the fold.
- */
-const DISCOVERY_RESERVE_MIN_HEIGHT_CLASS = 'min-h-[280px]';
 
 interface OgabasseyHomeDynamicContentProps {
   merchant: OgabasseyMerchant;
@@ -94,7 +67,12 @@ export function OgabasseyHomeDynamicContent({
             className="ogabassey-home-products"
             data-ogabassey-product-reserve="true"
           >
-            <div className={PRODUCT_RESERVE_MIN_HEIGHT_CLASS} />
+            <div
+              className={
+                OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.minHeightClass
+              }
+              style={OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.style}
+            />
           </div>
         }
       >
@@ -111,7 +89,12 @@ export function OgabasseyHomeDynamicContent({
             className="mx-auto mt-8 max-w-[1400px] px-4 md:px-6"
             data-ogabassey-discovery-reserve="true"
           >
-            <div className={DISCOVERY_RESERVE_MIN_HEIGHT_CLASS} />
+            <div
+              className={
+                OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.discovery.minHeightClass
+              }
+              style={OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.discovery.style}
+            />
           </div>
         }
       >

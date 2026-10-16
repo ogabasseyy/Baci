@@ -58,6 +58,11 @@ export async function OgabasseyHomeDiscoverySection({
     categoriesPromise,
     launchProductsPromise,
   ]);
+  // Yield one macrotask after the discovery legs resolve so that when
+  // 'use cache' resolves in memory during PPR resume or SSR, the above-fold
+  // <Hero> boundary flushes to the wire before ~29 KB of JSON-LD and
+  // discovery Flight chunks are serialized.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
   const merchantProducts = mapHomeProductsToTemplateProducts(products || []);
   // Inventory (manage_stock/stock) lives only on the template rows; the display
   // -shaped launch items drop it. Map slug -> template row so the schema can

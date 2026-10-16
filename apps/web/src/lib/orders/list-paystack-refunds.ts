@@ -1,0 +1,146 @@
+import 'server-only';
+
+interface ProviderRefund {
+  id: number;
+  amount: number;
+  currency: string;
+  status: string;
+}
+
+// Paystack transaction identities arrive as safe numbers, decimal text,
+// or expanded objects carrying id/reference: collect every textual
+// identity a value asserts. Unsafe numbers assert nothing (their text
+// would already be corrupted), so those rows mismatch for review.
+function identityTexts(value: unknown): string[] {
+  if (typeof value === 'number' && Number.isSafeInteger(value))
+    return [String(value)];
+  if (typeof value === 'string') return [value];
+  if (typeof value === 'object' && value !== null) {
+    const record = value as { id?: unknown; reference?: unknown };
+    return [...identityTexts(record.id), ...identityTexts(record.reference)];
+  }
+  return [];
+}
+
+export async function listPaystackRefunds(
+  reference: string,
+  options: { deadlineMs?: number } = {}
+): Promise<ProviderRefund[]> {
+  // The reference travels only through encodeURIComponent into a query
+  // string, so punctuation is safe: reject empties, oversize values, and
+  // control characters that could smuggle log or cache-key forgeries.
+  const hasControlCharacter = [...reference].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code < 0x20 || code === 0x7f;
+  });
+  if (reference.length < 1 || reference.length > 100 || hasControlCharacter)
+    throw new Error('Invalid payment reference');
+  const secret = process.env.PAYSTACK_SECRET_KEY;
+  if (!secret) throw new Error('Paystack refund verification unavailable');
+  // Bare numeric transaction IDs above 2^53 would not survive
+  // JSON.parse: quote them on the wire text before parsing so the
+  // identity check below compares exact decimal text. Only the
+  // transaction key is rewritten, so row id/amount validation keeps
+  // its fail-closed unsafe-number behavior.
+  const quoteWireTransactionIds = (raw: string): string =>
+    raw.replace(/"transaction"\s*:\s*(\d+)/g, '"transaction":"$1"');
+  async function request(
+    path: string,
+    preprocess: (raw: string) => string = (raw) => raw
+  ): Promise<{ payload: Record<string, unknown>; raw: string }> {
+    // Recompute the cap from the absolute deadline before every
+    // request: a timeout computed once would let each of the 20
+    // list pages spend the full budget again, consuming the window
+    // initiation needs. Recomputing bounds the whole list by the
+    // remaining budget instead.
+    const timeoutMs =
+      options.deadlineMs === undefined
+        ? 15_000
+        : Math.max(1, Math.min(15_000, options.deadlineMs - Date.now()));
+    const response = await fetch(`https://api.paystack.co${path}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+      cache: 'no-store',
+      redirect: 'error',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    if (!response.ok) throw new Error('Paystack refund verification failed');
+    const raw = await response.text();
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(preprocess(raw)) as Record<string, unknown>;
+    } catch {
+      throw new Error('Paystack refund verification failed');
+    }
+    if (payload?.status !== true)
+      throw new Error('Paystack refund verification failed');
+    return { payload, raw };
+  }
+  // List Refunds filters by numeric transaction ID, not by reference: an
+  // alphanumeric reference in that filter matches zero rows, blinding the
+  // pre-check to existing provider refunds. Resolve the ID first, kept as
+  // decimal text: Paystack IDs are unsigned 64-bit, beyond the safe
+  // integer range, so a numeric parse would corrupt large IDs.
+  const verified = await request(
+    `/transaction/verify/${encodeURIComponent(reference)}`
+  );
+  // Read the ID off the wire text, not the parsed payload: JSON.parse
+  // rounds integers past 2^53, so parsing first would corrupt a large
+  // ID and then reject it as unsafe. Anchor on the data object with
+  // the ID as its first key (Paystack's documented shape); anything
+  // else fails closed like before.
+  const wireId = /"data"\s*:\s*\{\s*"id"\s*:\s*(?:"(\d+)"|(\d+))/.exec(
+    verified.raw
+  );
+  const wireText = wireId?.[1] ?? wireId?.[2] ?? null;
+  const transactionId =
+    wireText !== null && /^[1-9][0-9]*$/.test(wireText) ? wireText : null;
+  if (transactionId === null) throw new Error('Unverified refund transaction');
+  const refunds: ProviderRefund[] = [];
+  for (let page = 1; page <= 20; page++) {
+    const envelope = (
+      await request(
+        `/refund?transaction=${transactionId}&perPage=100&page=${page}`,
+        quoteWireTransactionIds
+      )
+    ).payload;
+    if (!Array.isArray(envelope.data))
+      throw new Error('Unverified refund list');
+    const rows = envelope.data;
+    for (const candidate of rows) {
+      if (
+        !candidate ||
+        !Number.isSafeInteger(candidate.id) ||
+        candidate.id <= 0 ||
+        !Number.isSafeInteger(candidate.amount) ||
+        candidate.amount <= 0 ||
+        typeof candidate.currency !== 'string' ||
+        ![
+          'processed',
+          'pending',
+          'processing',
+          'needs-attention',
+          'failed',
+        ].includes(candidate.status)
+      )
+        throw new Error('Unverified refund record');
+      // The server-side filter already scopes rows to this transaction;
+      // this identity check only guards against a provider filter fault.
+      // Rows carry the transaction as an expanded object, a bare numeric
+      // ID, or (legacy) the reference string.
+      const linked = candidate.transaction;
+      const matches = identityTexts(linked).some(
+        (text) => text === transactionId || text === reference
+      );
+      if (!matches) throw new Error('Refund transaction mismatch');
+      refunds.push({
+        id: candidate.id,
+        amount: candidate.amount,
+        currency: candidate.currency,
+        status: candidate.status,
+      });
+    }
+    // A full page is not proof that all refunds were read.
+    if (envelope.data.length < 100) return refunds;
+  }
+  throw new Error('Refund pagination requires review');
+}

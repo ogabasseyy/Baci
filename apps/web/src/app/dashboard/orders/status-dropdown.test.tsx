@@ -47,4 +47,23 @@ describe('StatusDropdown', () => {
 
     expect(onStatusUpdate).toHaveBeenCalledWith('ORD-001', 'Shipped');
   });
+
+  it.each([
+    'Canceled',
+    'Cancelled',
+  ] as const)('offers no actions for terminal status %s', async (shippingStatus) => {
+    const user = userEvent.setup();
+
+    render(
+      <StatusDropdown
+        order={makeOrder({ shippingStatus })}
+        onStatusUpdate={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button'));
+    expect(
+      await screen.findByRole('menuitem', { name: /no actions available/i })
+    ).toBeInTheDocument();
+  });
 });

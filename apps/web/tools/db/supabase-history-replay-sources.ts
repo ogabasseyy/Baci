@@ -14,11 +14,10 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
-import { PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-completion-pending-sources';
-import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
 import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
 import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
+import { REFUND_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-refund-pending-sources';
 import { REPAIR_PICKUP_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-repair-pickup-pending-sources';
 import {
   SAVINGS_ENGAGEMENT_PENDING_REPLAY_SOURCE_ROWS,
@@ -224,6 +223,7 @@ da62c84ff85648b528894dbcbb75fd344f1acfcd450e356e7018f114c6815490 20260823010000_
 38617623446eccea3a8a426ca53e2935dfbc28091ce66a7c17543cd18936ffef 20260927060000_plan_tier_authoritative_snapshot_entitlement.sql
 `; // biome-ignore format: keep the manifest at the 300-line modularity limit
 const PENDING_SOURCES = [
+  REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CONNECTOR_PENDING_REPLAY_SOURCE_ROWS,
   '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
   '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245 20260922120000_normalize_product_key_specs_gpu.sql',
@@ -239,8 +239,6 @@ const PENDING_SOURCES = [
   '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad 20261013194440_fix_shipping_quote_proof_canonicalization.sql',
   CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS,
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
-  PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS,
-  PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
   PRIMARY_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,

@@ -404,6 +404,45 @@ jobs:
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
+          --sql-check supabase/tests/order_refund_management.sql
+          --sql-check supabase/tests/order_refund_management_attestation.sql
+          --sql-check supabase/tests/order_refund_management_tenancy.sql
+          --sql-check supabase/tests/order_refund_management_owner.sql
+          --sql-check supabase/tests/order_refund_management_split_records.sql
+          --sql-check supabase/tests/order_refund_management_reversal_records.sql
+          --sql-check supabase/tests/order_refund_management_wallet_cash.sql
+          --sql-check supabase/tests/order_refund_management_pending_review.sql
+          --sql-check supabase/tests/order_refund_management_unverified_funds.sql
+          --sql-check supabase/tests/order_refund_management_gateway_attribution.sql
+          --sql-check supabase/tests/order_refund_management_round33_obligation.sql
+          --sql-check supabase/tests/order_refund_management_round33_anomalies.sql
+          --sql-check supabase/tests/order_refund_management_round33_foundation.sql
+          --sql-check supabase/tests/order_refund_management_round33_pins.sql
+          --sql-check supabase/tests/order_refund_management_round33_implicit_pins.sql
+          --sql-check supabase/tests/order_refund_management_round45_gates.sql
+          --sql-check supabase/tests/order_refund_management_retry_gating.sql
+          --sql-check supabase/tests/order_refund_management_round46_gates.sql
+          --sql-check supabase/tests/order_refund_management_round47_gates.sql
+          --sql-check supabase/tests/order_refund_management_round48_gates.sql
+          --sql-check supabase/tests/order_refund_management_round48_reversal_sync.sql
+          --sql-check supabase/tests/order_refund_management_round51_gates.sql
+          --sql-check supabase/tests/order_refund_management_round53_gates.sql
+          --sql-check supabase/tests/order_refund_management_round56_gates.sql
+          --sql-check supabase/tests/order_refund_management_round59_gates.sql
+          --sql-check supabase/tests/order_refund_management_round61_gates.sql
+          --sql-check supabase/tests/order_refund_management_round61b_gates.sql
+          --sql-check supabase/tests/order_refund_management_round62_gates.sql
+          --sql-check supabase/tests/order_refund_management_claims.sql
+          --sql-check supabase/tests/order_refund_management_claim_routing.sql
+          --sql-check supabase/tests/order_refund_management_claim_anomalies.sql
+          --sql-check supabase/tests/order_refund_management_mixed_flow.sql
+          --sql-check supabase/tests/order_refund_management_completed_flow.sql
+          --sql-check supabase/tests/order_refund_management_boundaries.sql
+          --sql-check supabase/tests/order_refund_management_per_leg_coverage.sql
+          --sql-check supabase/tests/order_refund_finalizer_internal_coverage.sql
+          --sql-check supabase/tests/order_refund_coverage_helper_confinement.sql
+          --sql-check supabase/tests/order_refund_reconciliation_manual_coverage.sql
+          --sql-check supabase/tests/order_refund_management_null_paid.sql
           --sql-check supabase/migrations/tests/search_analytics_service_role_only_insert.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
@@ -411,6 +450,10 @@ jobs:
         run: >-
           bash supabase/tests/run-cache-invalidation-outbox-test-runner.test.sh &&
           bash supabase/tests/run-cache-invalidation-outbox-test.sh
+      - name: Test order-refund claim lock serialization (Phase 1 only)
+        env:
+          MINIMAL_PHASE1: 1
+        run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
 
   quality-misc:
     name: Quality Gate - Misc

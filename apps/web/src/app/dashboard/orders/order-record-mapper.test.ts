@@ -107,6 +107,7 @@ describe('mapDashboardOrderRecord', () => {
           {
             id: 'transaction-1',
             gateway_reference: 'gateway-1',
+            transaction_type: 'payment',
             status: 'success',
             amount: 35000,
             currency: 'NGN',
@@ -122,7 +123,12 @@ describe('mapDashboardOrderRecord', () => {
         shipping_rate_id: 'rate-1',
         shipping_rate_name: 'Lagos pickup',
         payment_reference: 'pay-1',
-        transactions: [expect.objectContaining({ reference: 'gateway-1' })],
+        transactions: [
+          expect.objectContaining({
+            reference: 'gateway-1',
+            transaction_type: 'payment',
+          }),
+        ],
       })
     );
   });

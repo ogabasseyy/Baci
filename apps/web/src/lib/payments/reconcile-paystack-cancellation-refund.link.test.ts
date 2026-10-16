@@ -104,4 +104,51 @@ describe('Paystack cancellation refund link validation', () => {
     ).resolves.toBe('updated');
     expect(db.from).toHaveBeenCalled();
   });
+
+  it('rechecks a stamped manual by its stored provider refund id', async () => {
+    const db = database();
+    db.query.maybeSingle.mockResolvedValue({
+      data: {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: '11111111-1111-4111-8111-111111111111',
+        merchant_id: 'merchant-1',
+        order_id: 'order-1',
+        status: 'completed',
+      },
+      error: null,
+    });
+    provider.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: 7,
+        status: 'processed',
+        transaction: 123,
+      },
+      success: true,
+    });
+    provider.verifyTransaction.mockResolvedValue({
+      data: { amount: 10000, currency: 'NGN', id: 123, reference: 'PSK-1' },
+      success: true,
+    });
+    db.rpc.mockResolvedValue({ data: 'processed', error: null });
+
+    // Merchant reference, not a provider id: without the stored id
+    // this row would reject as an invalid local link.
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        gateway_reference: 'merchant-ref-1',
+        metadata: {
+          ...refund.metadata,
+          provider_refund_id: 7,
+          provider_refund_status: 'processed',
+        },
+      })
+    ).resolves.toBe('updated');
+    expect(provider.fetchRefund).toHaveBeenCalledWith(7, expect.anything());
+  });
 });

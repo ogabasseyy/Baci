@@ -69,7 +69,7 @@ export function OrderCard({
     ['Pending', 'Processing'].includes(order.shippingStatus) ||
     ['Unpaid', 'Pending'].includes(order.paymentStatus);
   const isCompleted =
-    ['Shipped', 'Delivered', 'Canceled', 'Returned'].includes(
+    ['Shipped', 'Delivered', 'Canceled', 'Cancelled', 'Returned'].includes(
       order.shippingStatus
     ) && ['Paid', 'Refunded'].includes(order.paymentStatus);
   const isUrgent = isActionable && !isCompleted && hoursAgo > 48;

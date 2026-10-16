@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 import {
   CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS,
+  CANCELLATION_REFUND_SETUP_ALLOWANCE_MS,
+  CAPPED_RECONCILE_PHASE_MS,
   cancellationDrainDeadlineMs,
   cancellationEmailDrainDeadlineMs,
+  cancellationRefundDrainDeadlineMs,
 } from './cancellation-drain-deadline';
 import { EMAIL_ATTEMPTS_PER_SENDER } from './execute-customer-email-cancellation-side-effect';
+import { REFUND_INITIATION_LEG_BUDGET_MS } from './initiate-paystack-cancellation-refunds';
+import { REFUND_PREFLIGHT_ADMISSION_BUDGET_MS } from './schedule-preflight-provider-verification';
 
 describe('cancellationDrainDeadlineMs', () => {
   it('ends side-effect work before the safety margin and notification reserve', () => {
@@ -35,6 +40,31 @@ describe('cancellationEmailDrainDeadlineMs', () => {
     );
     expect(
       cancellationEmailDrainDeadlineMs(0) + 150_000 + 30_000
+    ).toBeLessThanOrEqual(300_000);
+  });
+});
+
+describe('cancellationRefundDrainDeadlineMs', () => {
+  it('ends at the full phase end so verification fits after a capped reconcile', () => {
+    expect(cancellationRefundDrainDeadlineMs(1_000_000)).toBe(1_120_000);
+  });
+
+  it('keeps the preflight budget fittable with the reserve intact', () => {
+    // The capped reconcile phase ends at CAPPED_RECONCILE_PHASE_MS:
+    // the refund cutoff must leave the setup allowance plus the
+    // provider admission (verification plus one initiation leg)
+    // after it, and the 150s notification reserve plus 30s safety
+    // must still fit the 300s invocation. Fails if any shared
+    // budget drifts.
+    const refundWindow =
+      cancellationRefundDrainDeadlineMs(0) - CAPPED_RECONCILE_PHASE_MS;
+    expect(refundWindow).toBeGreaterThanOrEqual(
+      REFUND_PREFLIGHT_ADMISSION_BUDGET_MS +
+        REFUND_INITIATION_LEG_BUDGET_MS +
+        CANCELLATION_REFUND_SETUP_ALLOWANCE_MS
+    );
+    expect(
+      cancellationRefundDrainDeadlineMs(0) + 150_000 + 30_000
     ).toBeLessThanOrEqual(300_000);
   });
 });

@@ -17,6 +17,12 @@ import { DeferredError } from './run-order-cancellation-side-effect';
 // before the worker is killed.
 const REFUND_PROVIDER_CALL_WORST_MS = 30_000;
 const REFUND_AUDIT_WRITE_RESERVE_MS = 8_000;
+// Single source for the preflight admission reserve: an initiation
+// leg starts only when a full provider call plus the audit reserve
+// both fit (see the per-leg gate below), so verification must leave
+// this much room or the run verifies and then refuses to initiate.
+export const REFUND_INITIATION_LEG_BUDGET_MS =
+  REFUND_PROVIDER_CALL_WORST_MS + REFUND_AUDIT_WRITE_RESERVE_MS;
 
 /**
  * Initiate a Paystack refund for every gateway leg that has no recorded

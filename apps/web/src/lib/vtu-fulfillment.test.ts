@@ -2999,6 +2999,63 @@ describe('fulfillPendingVtuTransaction', () => {
     );
   });
 
+  it('pins the Monnify vend recipient to the row identifier even when metadata.validationReference names another meter (Muse R141)', async () => {
+    mockMonnifyPurchaseBill.mockResolvedValue({
+      success: true,
+      reference: 'VTU-123',
+      message: 'Transaction Completed Successfully',
+      transactionId: 'monnify-bill-1',
+      amount: 1000,
+      status: 'successful',
+    });
+
+    const supabase = createPendingTransactionSupabaseMock({
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'pending',
+        metadata: {
+          provider: 'monnify',
+          billerCode: 'biller1',
+          productCode: 'product1',
+          // Attacker-swapped token attesting a DIFFERENT meter. The
+          // overlay stores request attestations verbatim by design; the
+          // vend must still go to the fingerprint-bound row identifier.
+          validationReference: 'token-for-some-other-meter',
+        },
+        error_message: null,
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC',
+        biller_item_code: null,
+        customer_identifier: '43901766923',
+      },
+      updatePayloads: [],
+    });
+
+    await fulfillPendingVtuTransaction({ supabase, transactionId: 'vtu-1' });
+
+    // Recipient pinned to the row; the token rides along only as the
+    // provider-side consistency check (a mismatch fails closed).
+    expect(mockMonnifyPurchaseBill).toHaveBeenCalledWith(
+      'biller1',
+      'product1',
+      '43901766923',
+      1000,
+      'OgaBassey',
+      'VTU-123',
+      '08146978921',
+      'token-for-some-other-meter'
+    );
+  });
+
   it('falls back to Kuda airtime when Monnify rejects an airtime vend after payment', async () => {
     mockMonnifyPurchaseBill.mockResolvedValue({
       success: false,

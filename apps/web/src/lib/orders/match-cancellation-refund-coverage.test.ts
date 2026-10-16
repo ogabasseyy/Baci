@@ -41,6 +41,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('marks a leg refunded when verified rows cover it', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           metadata: {
@@ -59,6 +60,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('withholds unverified paystack rows for the verification workers', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [row({ metadata: { payment_transaction_id: 'payment-1' } })],
       transactions: [leg({})],
     });
@@ -73,6 +75,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('attributes an unlinked legacy refund to the sole completed leg', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [
         row({ gateway: 'paypal', metadata: { provider_refund_status: 'x' } }),
       ],
@@ -88,6 +91,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('leaves unlinked rows unattributed without a sole leg', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [row({})],
       transactions: [leg({}), leg({ id: 'payment-2' })],
     });
@@ -99,6 +103,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('normalizes gateway casing for attribution like the claim gate', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [row({ gateway: 'PayPal' })],
       soleCompletedLegId: 'payment-1',
       transactions: [leg({ gateway: 'paypal' })],
@@ -114,6 +119,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('attributes a padded legacy refund to its completed leg', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           gateway: 'paystack',
@@ -132,6 +138,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('waits on attributed unverified paystack rows instead of covering', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [row({ metadata: {} })],
       soleCompletedLegId: 'payment-1',
       transactions: [leg({})],
@@ -145,6 +152,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('leaves null-gateway attributions unattributed', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [row({ gateway: null })],
       soleCompletedLegId: 'payment-1',
       transactions: [leg({ gateway: null as never })],
@@ -159,6 +167,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('counts legacy refunded rows as terminal coverage', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           metadata: {
@@ -178,6 +187,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('counts provider-confirmed manual Paystack rows as coverage', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           gateway: 'manual',
@@ -198,6 +208,7 @@ describe('matchCancellationRefundCoverage', () => {
   it('counts off-provider manual rows without a declared method', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           gateway: 'manual',

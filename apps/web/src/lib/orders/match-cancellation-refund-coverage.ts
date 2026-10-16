@@ -34,14 +34,22 @@ interface CancellationRefundRow {
  * and completing before the merchant records would strand settlement
  * reversal, notifications, and review closure on a completed row the
  * drain never reselects.
+ * A terminal row prices in the order currency only: a row matching
+ * its leg's own foreign currency still counts as coverage (real
+ * money moved), but the aggregate claim and the manager veto any
+ * terminal row outside the order currency, so the leg mismatches
+ * and the step quarantines after clean siblings initiate instead
+ * of completing past evidence nothing finalizes.
  */
 export function matchCancellationRefundCoverage({
   linkedPaymentId,
+  orderCurrency,
   refundRows,
   soleCompletedLegId = null,
   transactions,
 }: {
   linkedPaymentId: (row: { metadata: unknown }) => string | null;
+  orderCurrency: string | null;
   refundRows: CancellationRefundRow[] | null;
   soleCompletedLegId?: string | null;
   transactions: GatewayPaymentTransaction[];
@@ -62,6 +70,14 @@ export function matchCancellationRefundCoverage({
   // currency or cross-gateway): anomalous even beside full valid
   // coverage, unlike partial or zero-amount rows.
   const nonCountingCompletedLegIds = new Set<string>();
+  // Terminal rows outside the order currency, even when they match
+  // their leg's own currency and count as coverage above: the claim
+  // and manager veto them, so the leg must quarantine instead of
+  // completing. Blank order currencies default to NGN like the
+  // preflight gate; rows stay strict (a blank row currency is
+  // unevaluable, never legacy), mirroring the SQL veto exactly.
+  const foreignCurrencyRowLegIds = new Set<string>();
+  const normalizedOrderCurrency = normalizeMoneyField(orderCurrency) || 'NGN';
   const manualLinkedLegIds = new Set<string>();
   // Manual-linked legs that quarantine instead of counting: wrong
   // currency, or a Paystack declaration without provider proof.
@@ -88,6 +104,9 @@ export function matchCancellationRefundCoverage({
     if (!leg) {
       if (attributed) unattributedUnlinkedCount += 1;
       continue;
+    }
+    if (normalizeMoneyField(row.currency) !== normalizedOrderCurrency) {
+      foreignCurrencyRowLegIds.add(paymentId);
     }
     const rowGateway = normalizeMoneyField(row.gateway);
     const isManualRow = rowGateway === 'MANUAL';
@@ -164,12 +183,14 @@ export function matchCancellationRefundCoverage({
     }
     // Anomalous terminal evidence reports independently of coverage:
     // a leg fully covered by valid rows plus one extra foreign,
-    // cross-gateway, or invalid-manual row must still quarantine (the
-    // SQL anomaly gate routes the same order to the worker), or the
-    // step would complete while the manager pends forever.
+    // cross-gateway, invalid-manual, or non-order-currency row must
+    // still quarantine (the SQL anomaly gate routes the same order
+    // to the worker), or the step would complete while the manager
+    // pends forever.
     if (
       manualReviewLegIds.has(leg.id) ||
-      nonCountingCompletedLegIds.has(leg.id)
+      nonCountingCompletedLegIds.has(leg.id) ||
+      foreignCurrencyRowLegIds.has(leg.id)
     ) {
       mismatchedTransactions.push(leg);
       continue;

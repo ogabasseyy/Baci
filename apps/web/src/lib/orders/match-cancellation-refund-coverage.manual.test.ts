@@ -41,6 +41,7 @@ describe('matchCancellationRefundCoverage manual rows', () => {
   it('covers legs with explicitly linked manual rows', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           amount: 100,
@@ -60,6 +61,7 @@ describe('matchCancellationRefundCoverage manual rows', () => {
   it('waits on partial manual rows instead of mismatching them', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           amount: 20,
@@ -79,6 +81,7 @@ describe('matchCancellationRefundCoverage manual rows', () => {
   it('mismatches manual rows in the wrong money', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           amount: 100,
@@ -99,6 +102,7 @@ describe('matchCancellationRefundCoverage manual rows', () => {
   it('leaves unlinked manual rows unattributed', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [row({ gateway: 'manual' })],
       soleCompletedLegId: 'payment-1',
       transactions: [leg({})],
@@ -113,6 +117,7 @@ describe('matchCancellationRefundCoverage manual rows', () => {
   it('waits on partial manuals beside earlier provider coverage', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           amount: 30,
@@ -138,6 +143,7 @@ describe('matchCancellationRefundCoverage manual rows', () => {
   it('waits on a cash-like leg with no manual row yet', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [],
       transactions: [leg({ gateway: 'cash', id: 'cash-1' })],
     });
@@ -155,6 +161,7 @@ describe('matchCancellationRefundCoverage manual rows', () => {
         : null;
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: mixedLink,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           amount: 100,
@@ -175,6 +182,7 @@ describe('matchCancellationRefundCoverage manual rows', () => {
   it('leaves bare wallet legs to their own ledgers', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [],
       transactions: [leg({ gateway: 'wallet', id: 'wallet-1' })],
     });

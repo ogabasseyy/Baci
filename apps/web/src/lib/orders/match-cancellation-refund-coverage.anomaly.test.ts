@@ -41,6 +41,7 @@ describe('matchCancellationRefundCoverage anomalies', () => {
   it('quarantines partial and foreign rows instead of skipping the balance', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           amount: 40,
@@ -60,6 +61,7 @@ describe('matchCancellationRefundCoverage anomalies', () => {
   it('mismatches null gateways instead of covering them', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           gateway: null,
@@ -81,6 +83,7 @@ describe('matchCancellationRefundCoverage anomalies', () => {
   it('counts a partial attribution as a mismatch for quarantine', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
       refundRows: [row({ amount: 40, gateway: 'paypal' })],
       soleCompletedLegId: 'payment-1',
       transactions: [leg({ gateway: 'paypal' })],
@@ -94,6 +97,7 @@ describe('matchCancellationRefundCoverage anomalies', () => {
   it('quarantines unverified manual rows declared as Paystack', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           gateway: 'manual',
@@ -118,6 +122,7 @@ describe('matchCancellationRefundCoverage anomalies', () => {
     const transactions = [leg({})];
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           metadata: {
@@ -145,10 +150,97 @@ describe('matchCancellationRefundCoverage anomalies', () => {
     expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
   });
 
+  it('mismatches a leg covered in foreign currency for its order', () => {
+    // The USD row matches its USD leg, so the money counts as
+    // returned — but the order prices in NGN, which the claim and
+    // manager veto. The leg reports both so clean siblings initiate
+    // first and the step then quarantines instead of completing
+    // past evidence nothing finalizes.
+    const transactions = [leg({ currency: 'USD' })];
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      orderCurrency: 'NGN',
+      refundRows: [
+        row({
+          currency: 'USD',
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+      ],
+      transactions,
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedTransactions).toEqual(transactions);
+    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
+  });
+
+  it('defaults a blank order currency to NGN for the anomaly check', () => {
+    const ngn = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      orderCurrency: null,
+      refundRows: [
+        row({
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+      ],
+      transactions: [leg({})],
+    });
+    expect(ngn.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(ngn.mismatchedTransactions).toEqual([]);
+
+    const usd = matchCancellationRefundCoverage({
+      linkedPaymentId,
+      orderCurrency: '',
+      refundRows: [
+        row({
+          currency: 'USD',
+          metadata: {
+            payment_transaction_id: 'payment-1',
+            provider_refund_status: 'processed',
+          },
+        }),
+      ],
+      transactions: [leg({ currency: 'USD' })],
+    });
+    expect(usd.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(usd.mismatchedIds).toEqual(new Set(['payment-1']));
+  });
+
+  it('mismatches an attributed foreign row beside sole-leg coverage', () => {
+    // Unlinked rows attribute to the sole completed leg for
+    // coverage, but the claim vetoes foreign terminal evidence over
+    // the unfiltered universe — attribution must not launder the
+    // currency anomaly.
+    const transactions = [leg({ currency: 'USD' })];
+    const coverage = matchCancellationRefundCoverage({
+      linkedPaymentId: () => null,
+      orderCurrency: 'NGN',
+      refundRows: [
+        row({
+          amount: 100,
+          currency: 'USD',
+          metadata: { provider_refund_status: 'processed' },
+        }),
+      ],
+      soleCompletedLegId: 'payment-1',
+      transactions,
+    });
+
+    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
+    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
+  });
+
   it('mismatches a covered leg that also carries a foreign row', () => {
     const transactions = [leg({})];
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId,
+      orderCurrency: 'NGN',
       refundRows: [
         row({
           metadata: {

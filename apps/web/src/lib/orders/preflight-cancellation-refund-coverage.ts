@@ -72,6 +72,7 @@ export async function preflightCancellationRefundCoverage({
     unverifiedLinkedLegIds,
   } = matchCancellationRefundCoverage({
     linkedPaymentId,
+    orderCurrency: order.currency,
     refundRows,
     soleCompletedLegId: soleCompletedLeg?.id ?? null,
     transactions: allLegs,

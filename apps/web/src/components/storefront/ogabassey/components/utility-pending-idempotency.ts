@@ -2,11 +2,14 @@ import { createWalletIdempotencyKey } from './utility-checkout';
 import { clearPendingVtuSnapshot } from './utility-pending-idempotency-store';
 import { isExpiredPendingVtuEntry } from './utility-pending-vtu-codec';
 import {
-  hasNotedPendingVtuReferenceIn,
   isStalePendingVtuSuccessIn,
-  listNotedPendingVtuReferencesFrom,
   markPendingVtuCompletedIn,
 } from './utility-pending-vtu-reference-queries';
+export {
+  hasNotedPendingVtuReference,
+  listNotedPendingVtuReferences,
+  notePendingVtuReference,
+} from './utility-pending-vtu-reference-registry';
 import {
   forgottenScopedKeys,
   noteForgottenVtuScope,
@@ -113,17 +116,6 @@ export function rememberPendingVtuPurchase(
 }
 
 /** Attaches the server reference once a non-terminal response arrives. */
-export function notePendingVtuReference(
-  payloadSignature: string,
-  reference: string
-): void {
-  const pending = pendingVtuPurchases.get(payloadSignature);
-  if (pending) {
-    pending.reference = reference;
-    persistPendingVtuPurchases();
-  }
-}
-
 /**
  * Records that terminal success was observed on a RETAINED entry (the
  * switched-success path, which notes without forgetting). Immediate
@@ -203,17 +195,6 @@ export function markSettledPendingVtuByReference(
  * callers must refresh for server truth instead of decrementing
  * locally a second time.
  */
-export function hasNotedPendingVtuReference(
-  payloadSignature: string,
-  reference: string
-): boolean {
-  return hasNotedPendingVtuReferenceIn(
-    pendingVtuPurchases,
-    payloadSignature,
-    reference
-  );
-}
-
 /** Staleness predicate (contract in isStalePendingVtuSuccessIn). Callers MUST forget and prompt fresh. */
 export function isStalePendingVtuSuccess(
   payloadSignature: string,
@@ -294,14 +275,6 @@ export function getPendingVtuKey(
  * entries for OTHER owners are excluded too — untagged (legacy)
  * entries fail open, since their owner is unknowable (R62 6rtokd).
  */
-export function listNotedPendingVtuReferences(scopeTag?: string): string[] {
-  syncPendingVtuPurchasesFromSnapshot();
-  return listNotedPendingVtuReferencesFrom(
-    pendingVtuPurchases.values(),
-    scopeTag
-  );
-}
-
 /** Test-only escape hatch: module state survives across renderHook mounts. */
 export function clearPendingVtuKeys(): void {
   pendingVtuPurchases.clear();

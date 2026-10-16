@@ -126,10 +126,17 @@ def contract_trigger_failures(workflow_text):
         for key, rest, idx in subs["push"]:
             if key in ("paths", "paths-ignore", "branches-ignore", "types"):
                 failures.append(f"contract workflow must not narrow push with {key}:")
-        # None (no branches key) is not a pass here: unlike
-        # pull_request_target, an unfiltered push fires on every branch.
-        if _ordered_branch_match(subs, "push", lines, end) is not True:
-            failures.append("contract workflow must keep an exact main match in push branches:")
+        # Exact scope, canonically spelled: inclusion globs ([main, attacker],
+        # ['*']) still match main, so merely including main is not enough.
+        lone = [(rest, idx) for key, rest, idx in subs["push"] if key == "branches"]
+        scoped = len(lone) == 1 and re.sub(r"\s+", "", _strip_comment(lone[0][0]).strip()) == "[main]"
+        if scoped:
+            j = lone[0][1] + 1
+            while j < end and (not lines[j].strip() or lines[j].strip().startswith("#")):
+                j += 1
+            scoped = j >= end or _TRIGGER_ITEM.match(lines[j]) is None
+        if not scoped:
+            failures.append("contract workflow must scope push to exactly branches: [main]:")
     return failures
 
 

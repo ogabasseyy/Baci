@@ -408,11 +408,13 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(mockPrepare).not.toHaveBeenCalled();
   });
 
-  it('rejects a missing expectedUserId with 400 (binding is required)', async () => {
-    // Muse R124: the account-switch binding must be a
-    // server-enforced invariant, not a per-client courtesy — a
-    // hand-crafted request omitting the field must not silently
-    // debit the ambient session for a foreign payload.
+  it('binds a missing expectedUserId to the session user (legacy clients)', async () => {
+    // Codex R137 P1: already-deployed mobile builds and stale web
+    // bundles call this endpoint without the pin — rejecting would
+    // 400 every legacy purchase on backend deploy. Omission binds
+    // to the session user (pre-pin behavior); only a PRESENT
+    // mismatch 403s. Omission cannot impersonate: the binding
+    // target is server-derived, it only forgoes switch detection.
     const { expectedUserId: _omitted, ...bodyWithoutBinding } = VALID_BODY;
     expect(_omitted).toBe(AUTH_USER_ID);
     const state: IdempotencyRowState = { row: null, insertCalls: 0 };
@@ -425,9 +427,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       })
     );
 
-    expect(status).toBe(400);
-    expect(mockPrepare).not.toHaveBeenCalled();
-    expect(mockFulfill).not.toHaveBeenCalled();
+    expect(status).toBe(200);
+    expect(mockPrepare).toHaveBeenCalledTimes(1);
+    expect(mockFulfill).toHaveBeenCalled();
   });
 
   it('proceeds when the captured user matches the session', async () => {

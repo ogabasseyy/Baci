@@ -24,12 +24,13 @@ export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
     // Auth user id the client captured before dispatch. The route
     // rejects a mismatch before any DB operation: a mid-flight sign-in
     // swaps the ambient cookie, and without this the POST would debit
-    // the new account for the old payload. Required (Muse R124):
-    // both first-party clients always send it (web's readiness gate
-    // requires the user; mobile's submitter binding throws without
-    // it), so an omission is a hand-crafted request that must not
-    // silently lose the binding. Never part of the fingerprint.
-    expectedUserId: z.uuid(),
+    // the new account for the old payload. Optional for rollout
+    // (Codex R137 P1): already-deployed mobile builds and stale web
+    // bundles call this endpoint without the pin, so a MISSING pin
+    // binds to the session user (pre-pin behavior) while a PRESENT
+    // pin must match exactly — required would 400 every legacy
+    // purchase on backend deploy. Never part of the fingerprint.
+    expectedUserId: z.uuid().optional(),
   })
   .omit({ orderId: true, customerId: true })
   .superRefine(applyPurchaseRequirements);

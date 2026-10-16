@@ -53,10 +53,9 @@ describe('vtuWalletOnlyChargeSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('requires expectedUserId UUID for route-side binding', () => {
-    // Muse R124: the account-switch binding is a server-enforced
-    // invariant — omission must fail closed, not silently debit
-    // the ambient session.
+  it('accepts a missing expectedUserId but rejects a malformed one', () => {
+    // Codex R137 P1: legacy clients omit the pin (binds to the
+    // session user route-side); a present pin must still be a UUID.
     const withId = vtuWalletOnlyChargeSchema.safeParse({
       ...baseAirtime,
       walletAmount: 1000,
@@ -69,7 +68,7 @@ describe('vtuWalletOnlyChargeSchema', () => {
       ...withoutIdBody,
       walletAmount: 1000,
     });
-    expect(withoutId.success).toBe(false);
+    expect(withoutId.success).toBe(true);
 
     const invalidId = vtuWalletOnlyChargeSchema.safeParse({
       ...baseAirtime,

@@ -68,7 +68,14 @@ export async function POST(request: NextRequest) {
     // operation: a sign-in between capture and POST swaps the ambient
     // cookie. 403 (not 409): nothing was recorded, so clients KEEP
     // the key — 409 would rotate it and debit twice after switch-back.
-    if (input.expectedUserId !== auth.user.id) {
+    // A missing pin (pre-binding clients) binds to the session user
+    // instead of rejecting (Codex R137 P1): omitting the pin cannot
+    // impersonate anyone (the binding target is server-derived), it
+    // only forgoes switch detection — pre-pin behavior.
+    if (
+      input.expectedUserId !== undefined &&
+      input.expectedUserId !== auth.user.id
+    ) {
       return createErrorResponse(
         'Account changed during checkout. Please try again.',
         403

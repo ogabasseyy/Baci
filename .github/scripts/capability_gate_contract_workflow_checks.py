@@ -178,9 +178,8 @@ def workflow_failures(workflow_text):
     gate = next(i for i, line in enumerate(code) if re.match(r"^  gate-contract\s*:", line))
     later = [i for i in range(len(code)) if i > gate and re.match(r"^  [A-Za-z0-9_.\-]+\s*:", code[i])]
     block = code[gate : (later[0] if later else len(code))]
-    # Each job runs exactly in its safe context; anything else (including a
-    # swapped mapping) fails. The required status is the guard's context —
-    # never the self-attested push leg — so the mapping is exact.
+    # Each job runs exactly in its safe context (guard on pull_request_target,
+    # attestation on push): anything else fails, so the required status is exact.
     for job, want in EXPECTED_JOB_CONDITIONS.items():
         at = next(i for i, line in enumerate(code) if re.match(rf"^  {job}\s*:", line))
         following = [i for i in range(len(code)) if i > at and re.match(r"^  [A-Za-z0-9_.\-]+\s*:", code[i])]
@@ -210,9 +209,8 @@ def workflow_failures(workflow_text):
     conds = [(m.group(1), m.group(2)) for line in block if (m := re.match(r"^    [\"']?(if|needs|continue-on-error)[\"']?\s*:\s*(.*)$", line))]
     if any(c in ("needs", "continue-on-error") for c, _ in conds):
         failures.append("contract workflow gate job must stay unconditional")
-    # The checker baseline must live where it propagates to the executing
-    # run step: top-level env or the gate job's env. A step-scoped entry
-    # never reaches the sibling run step and silently voids the baseline.
+    # The checker baseline must live where it propagates (top-level or gate
+    # job env): a step-scoped entry never reaches the sibling run step.
     top_env = next((i for i, line in enumerate(code) if re.match(r"""^["']?env["']?:""", line)), None)
     live_pin = False
     if top_env is not None:
@@ -268,15 +266,18 @@ def workflow_failures(workflow_text):
         body.append(stripped)
     if body != EXPECTED_RUN:
         failures.append("contract workflow run block must stay exactly the pinned base-owned sequence")
-    # Startup env preloads PR code before the checker starts (job BASH_ENV,
-    # step PYTHONPATH/sitecustomize): job env carries only the pin, steps none.
+    # Startup env preloads PR code before the checker starts: job env carries only the pin, steps none.
     for line in block:
         if _has_escaped_key(line):
             failures.append("contract workflow keys must use plain spelling (no escapes)")
             break
     env_open = False
     for line in block:
-        if re.match(r"^    [\"']?env[\"']?\s*:", line):
+        envm = re.match(r"^    [\"']?env[\"']?\s*:\s*(.*)$", line)
+        if envm:
+            if _strip_comment(envm.group(1)).strip():
+                failures.append("contract workflow job env must use block mapping (no inline filters)")
+                break
             env_open = True
             continue
         if env_open:

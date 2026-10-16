@@ -66,7 +66,7 @@ BASE_PINS = {
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
     ".github/scripts/capability_gate_contract_ci_checks.py": "57d88f206040d55179767b04a00f2a3d4150b9cd0b43c3eb56cec6ca596a0c9d",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "0ac6533a6a8c2c885fa480bca7aeee2e26f0c785b85862ef71a8cecb169f8f8a",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "ef4dc4f202332a0c397473c5d3be7cf580089d4c68786337547a3aeaab7975c9",
     ".github/workflows/capability-register-freshness.yml": "6e0618cc3824061f069ee5ec5f02b4e684256b88b7a0ff672fdd2c1501c06adc",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
@@ -87,7 +87,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/prompt_builder.py": "59997648a8c05f9fdbba5d4a9849e96a066ae4d316a2a9d465e0e1ef58aed3ae",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "5c1d9f517170f0d4528a086964655cabb849c3886c8cea8bc83693ae6c557c4e",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_scope.py": "98db2e43bb10b45cc85b6e87f41889a8d1fd1c767e2b81cf1a338df0df386551",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_scope.py": "9f9873d255350b97f54b6824b4f15ede59163f4631b1cc0ebfa1b40dba4ec8d8",
     "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }
@@ -197,7 +197,13 @@ def undeclared_suite_files(repo_root, declared):
         return ["suite directory unreadable"]
     undeclared = [f"undeclared suite file: {rel} (declare it in BASE_PINS in {CHECKER})" for rel in entries if rel.endswith(".py") and rel not in declared]
     links = [f"suite must not contain symlinks: {rel}" for rel in entries if Path(root, rel).is_symlink()]
-    return undeclared + links
+    shadows = []
+    for rel in entries:
+        p = Path(root, rel)
+        base = p.name if p.is_dir() else p.name.split(".")[0]
+        if base in _RESERVED_MODULE_NAMES:
+            shadows.append(f"suite must not shadow the interpreter: {rel}")
+    return undeclared + links + shadows
 
 
 def declared_checker_pin(workflow_text):

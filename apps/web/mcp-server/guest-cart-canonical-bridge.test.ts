@@ -61,6 +61,25 @@ describe('canonical MCP transport', () => {
     });
     expect(JSON.stringify(result)).not.toContain('proof');
   });
+  it('probes liveness with a read-only probe request', async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ exists: true }), { status: 200 })
+      );
+    const bridge = createGuestCanonicalBridge(endpoint, fetcher);
+    await expect(bridge?.hasToken(token)).resolves.toBe(true);
+    expect(fetcher).toHaveBeenCalledWith(
+      new URL(endpoint),
+      expect.objectContaining({
+        body: JSON.stringify({ probe: true }),
+        headers: expect.objectContaining({
+          Authorization: `Bearer [REDACTED]${token}`,
+        }),
+      })
+    );
+  });
+
   it('fails closed on stale-version replies without issuing legacy writes', async () => {
     const fetcher = vi.fn().mockResolvedValue(
       new Response(

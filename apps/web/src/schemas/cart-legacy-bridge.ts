@@ -40,5 +40,17 @@ export const legacyMcpBridgeRequestSchema = z
     expectedVersion: z.number().int().positive().optional(),
     operationId: z.string().trim().min(1).max(128).optional(),
     handoff: z.boolean().optional(),
+    // Read-only liveness probe: resolves the legacy owner context
+    // without migrating, mutating, or issuing any credential.
+    probe: z.literal(true).optional(),
   })
-  .refine((x) => (x.productId === undefined) === (x.quantity === undefined));
+  .refine((x) => (x.productId === undefined) === (x.quantity === undefined))
+  .refine(
+    (x) =>
+      x.probe !== true ||
+      (x.productId === undefined &&
+        x.expectedVersion === undefined &&
+        x.operationId === undefined &&
+        x.handoff !== true),
+    { error: 'A probe cannot carry a mutation or handoff' }
+  );

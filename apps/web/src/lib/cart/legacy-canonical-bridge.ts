@@ -135,6 +135,42 @@ export async function openLegacyCanonicalCart(
   };
 }
 
+/**
+ * Read-only liveness probe for a legacy capability: resolves the
+ * owner context and reports whether it names a live legacy or
+ * migrated cart. Never migrates, mutates, reads the canonical cart,
+ * or issues a credential, so probes cannot consume the one-time
+ * migration or race a first real update.
+ */
+export async function probeLegacyCanonicalCart(
+  owner: LegacyBridgeOwner,
+  deps = defaults
+): Promise<boolean> {
+  const hash = hashLegacyToken(owner.handle);
+  const principalId = `legacy:${owner.provider}:${createHash('sha256')
+    .update(`${owner.merchant.id}|${owner.agentId ?? ''}|${owner.handle}`)
+    .digest('hex')}`;
+  deps.assertConfig();
+  const client = deps.ownerClient(
+    {
+      merchantId: owner.merchant.id,
+      cartId: null,
+      grantId: null,
+      principalId,
+      scope: 'bootstrap',
+      allowedOperations: [],
+      expiresAt: new Date(Date.now() + 300000).toISOString(),
+    },
+    { provider: owner.provider, hash, agentId: owner.agentId }
+  );
+  const r = await client.rpc('commerce_cart_legacy_owner_context', {
+    p_provider: owner.provider,
+    p_hash: hash,
+  });
+  if (r.error) throw new LegacyBridgeError('temporarily_unavailable');
+  return legacyOwnerContextSchema.parse(r.data).ok;
+}
+
 export async function operateLegacyCanonicalCart(
   cart: Awaited<ReturnType<typeof openLegacyCanonicalCart>>,
   input: {

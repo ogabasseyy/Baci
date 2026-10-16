@@ -3,6 +3,7 @@ import {
   LegacyBridgeError,
   openLegacyCanonicalCart,
   operateLegacyCanonicalCart,
+  probeLegacyCanonicalCart,
 } from '@/lib/cart/legacy-canonical-bridge';
 import {
   createAnonMerchantFeatureLookup,
@@ -43,6 +44,14 @@ export async function POST(request: NextRequest) {
       body.ok ? body.body : null
     );
     if (!input.success) return cartErrorResponse('invalid_request');
+    if (input.data.probe) {
+      const exists = await probeLegacyCanonicalCart({
+        provider: 'mcp',
+        handle: token,
+        merchant: merchant.merchant,
+      });
+      return cartJsonResponse({ exists });
+    }
     const cart = await openLegacyCanonicalCart({
       provider: 'mcp',
       handle: token,

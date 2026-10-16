@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   open: vi.fn(),
   operate: vi.fn(),
+  probe: vi.fn(),
   merchant: vi.fn(),
   quota: vi.fn(),
 }));
@@ -15,6 +16,7 @@ vi.mock('@/lib/cart/legacy-canonical-bridge', () => ({
   },
   openLegacyCanonicalCart: mocks.open,
   operateLegacyCanonicalCart: mocks.operate,
+  probeLegacyCanonicalCart: mocks.probe,
 }));
 vi.mock('@/lib/cart/merchant-resolution', () => ({
   resolveCartMerchant: mocks.merchant,
@@ -40,6 +42,7 @@ beforeEach(() => {
     ok: true,
     merchant: { id: 'merchant', slug: 'shop' },
   });
+  mocks.probe.mockResolvedValue(true);
   mocks.open.mockResolvedValue({ state: { version: 1 } });
   mocks.operate.mockResolvedValue({
     ok: true,
@@ -57,6 +60,19 @@ const request = (token: string | null, body: unknown = {}) =>
     },
     body: JSON.stringify(body),
   });
+it('answers a read-only probe without opening or migrating the cart', async () => {
+  const response = await POST(request('a'.repeat(64), { probe: true }));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ exists: true });
+  expect(mocks.probe).toHaveBeenCalledWith({
+    provider: 'mcp',
+    handle: 'a'.repeat(64),
+    merchant: { id: 'merchant', slug: 'shop' },
+  });
+  expect(mocks.open).not.toHaveBeenCalled();
+  expect(mocks.operate).not.toHaveBeenCalled();
+});
+
 it('rejects missing capability before SQL or body-driven authority', async () => {
   expect((await POST(request(null))).status).toBe(401);
   expect(mocks.open).not.toHaveBeenCalled();

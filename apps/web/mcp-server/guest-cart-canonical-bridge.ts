@@ -157,9 +157,31 @@ export function createGuestCanonicalBridge(
       };
     },
     async hasToken(token) {
+      // Read-only probe: the legacy route resolves the owner context
+      // without migrating or mutating, so probing never consumes the
+      // one-time migration or races a first real update.
       try {
-        await send(token, {});
-        return true;
+        if (!/^[a-f0-9]{64}$/.test(token)) return false;
+        const response = await fetcher(url, {
+          method: 'POST',
+          redirect: 'error',
+          credentials: 'omit',
+          cache: 'no-store',
+          signal: AbortSignal.timeout(15000),
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer [REDACTED]${token}`,
+          },
+          body: JSON.stringify({ probe: true }),
+        });
+        if (!response.ok) return false;
+        const body: unknown = await response.json().catch(() => null);
+        return (
+          typeof body === 'object' &&
+          body !== null &&
+          'exists' in body &&
+          body.exists === true
+        );
       } catch {
         return false;
       }

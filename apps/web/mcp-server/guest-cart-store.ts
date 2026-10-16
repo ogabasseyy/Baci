@@ -89,7 +89,7 @@ export class GuestCartStore {
       this.canonical = createGuestCanonicalBridge();
     } catch {
       console.error(
-        '[guest-cart] canonical bridge configuration invalid; canonical carts disabled'
+        '[guest-cart] canonical bridge configuration invalid or origin not allowlisted; canonical carts disabled, serving legacy only'
       );
       this.canonical = null;
     }

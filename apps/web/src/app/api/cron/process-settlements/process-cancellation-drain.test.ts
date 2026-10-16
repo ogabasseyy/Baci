@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   drainFailedOrderCancellationSideEffects: vi.fn(),
   drainPaystackRefundNotifications: vi.fn(),
+  isRefundVerificationPending: vi.fn(),
   reconcileCompletedPaystackCancellationRefunds: vi.fn(),
   reconcilePendingPaystackCancellationRefunds: vi.fn(),
   sweepPaystackRefundRecoveryWatches: vi.fn(),
@@ -25,6 +26,9 @@ vi.mock('@/lib/zeptomail', () => ({
 vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
   drainFailedOrderCancellationSideEffects:
     mocks.drainFailedOrderCancellationSideEffects,
+}));
+vi.mock('@/lib/orders/refund-verification-pending', () => ({
+  isRefundVerificationPending: mocks.isRefundVerificationPending,
 }));
 vi.mock('@/lib/payments/drain-paystack-refund-notifications', () => ({
   drainPaystackRefundNotifications: mocks.drainPaystackRefundNotifications,
@@ -57,6 +61,7 @@ describe('processCancellationDrain', () => {
       mock.mockReset();
     }
 
+    mocks.isRefundVerificationPending.mockResolvedValue(false);
     mocks.drainFailedOrderCancellationSideEffects.mockResolvedValue({
       drained: [],
       failed: [],
@@ -107,6 +112,10 @@ describe('processCancellationDrain', () => {
         // side-effect deadline leaves no 48s sender budget after a
         // full reconcile phase.
         emailDeadlineMs: 1_120_000,
+        // Refunds verify against the full phase end for the same
+        // reason: the 90s row-start deadline leaves no 76s
+        // preflight window after a full reconcile phase.
+        refundDeadlineMs: 1_120_000,
         // Three steps fit after the margin, the reserved notification
         // share, and the handoff slack; the remainder retries on the
         // next invocation.
@@ -138,6 +147,36 @@ describe('processCancellationDrain', () => {
     );
     await expect(response.json()).resolves.toEqual(
       expect.objectContaining({ skippedDueToBudget: false, success: true })
+    );
+  });
+
+  it('caps the reconcile phase when refund verification pends', async () => {
+    mocks.isRefundVerificationPending.mockResolvedValue(true);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      await processCancellationDrain(
+        supabase,
+        mocks.sendEmail,
+        mocks.notifyMerchant
+      );
+    } finally {
+      now.mockRestore();
+    }
+
+    // The capped 44s phase ends with exactly the 76s preflight
+    // budget before the phase end; the row-start gate sits two 8s
+    // provider reads inside it.
+    expect(mocks.isRefundVerificationPending).toHaveBeenCalledWith(supabase);
+    expect(
+      mocks.reconcilePendingPaystackCancellationRefunds
+    ).toHaveBeenCalledWith(supabase, 25, 1_028_000);
+    expect(
+      mocks.reconcileCompletedPaystackCancellationRefunds
+    ).toHaveBeenCalledWith(supabase, 25, 1_028_000);
+    expect(mocks.sweepPaystackRefundRecoveryWatches).toHaveBeenCalledWith(
+      supabase,
+      25,
+      1_028_000
     );
   });
 

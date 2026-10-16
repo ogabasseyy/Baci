@@ -40,12 +40,14 @@ export async function drainFailedOrderCancellationSideEffects({
   supabase,
   deadlineMs,
   emailDeadlineMs,
+  refundDeadlineMs,
   limit = DEFAULT_LIMIT,
   sendCancellationEmail,
 }: {
   supabase: SupabaseClient;
   deadlineMs?: number;
   emailDeadlineMs?: number;
+  refundDeadlineMs?: number;
   limit?: number;
   sendCancellationEmail: CancellationEmailSender;
 }): Promise<CancellationSideEffectDrainSummary> {
@@ -59,6 +61,12 @@ export async function drainFailedOrderCancellationSideEffects({
   // deadline leaves no room after a full reconcile phase. Callers
   // that pass none keep the legacy shared-deadline behavior.
   const emailCutoff = emailDeadlineMs ?? deadlineMs;
+  // Refund verification runs against its own later cutoff for the
+  // same reason: the reconcile phase is capped whenever
+  // verification work pends, and admitted refund steps verify
+  // against the full phase end. Callers that pass none keep the
+  // legacy shared-deadline behavior.
+  const refundCutoff = refundDeadlineMs ?? deadlineMs;
   // When the email admission budget is already short, customer_email rows
   // can never be admitted this run — yet the SQL limit counts them, so a
   // limit-1 fetch returning only an old email starves the refund behind
@@ -245,7 +253,12 @@ export async function drainFailedOrderCancellationSideEffects({
         supabase,
         execute: () =>
           executeOrderCancellationSideEffect({
-            deadlineMs: step === 'customer_email' ? emailCutoff : deadlineMs,
+            deadlineMs:
+              step === 'customer_email'
+                ? emailCutoff
+                : step === 'refund'
+                  ? refundCutoff
+                  : deadlineMs,
             isLastAttempt: candidate.isLastAttempt,
             merchant,
             order,

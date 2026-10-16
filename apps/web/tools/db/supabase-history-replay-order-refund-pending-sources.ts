@@ -2,9 +2,9 @@
 // events/coverage/helpers/manager/public-access split plus the
 // authenticated-insert restriction, manual-coverage claim count, and
 // finalizer internal-coverage guard, and
-// internal-only reversal sync), extracted from the main
-// replay-source manifest to keep it under the 300-line modularity
-// limit.
+// internal-only reversal sync, and BNPL reconciliation admission),
+// extracted from the main replay-source manifest to keep it under
+// the 300-line modularity limit.
 export const ORDER_REFUND_PENDING_REPLAY_SOURCE_ROWS = `0d478e83115b801a0a7596738196ac692a5cc395d2e1ea35e6b2f6e35c961f74 20261002090000_order_refund_events.sql
 d20ddab5009028fc2afd75ea777baae391e36766432437ea08e73f069c674939 20261002090100_order_refund_coverage.sql
 4c20f5434829fd067a1e0ae84272e7a48e8358ea001afe1382b3b9fc4527a845 20261002090200_order_refund_record_helpers.sql
@@ -16,4 +16,5 @@ d20ddab5009028fc2afd75ea777baae391e36766432437ea08e73f069c674939 20261002090100_
 bfe1d87ed4fa19f46633930f7c58363e15418a6e13d205bcc2e7fa120e87f6dc 20261010170000_cancellation_refund_legs_covered.sql
 a9855c583e4a583962fe1128b40e7d2aaa1a38b72dc90d007e06ba541136f5bf 20261010180000_count_manual_refund_coverage_in_claim.sql
 f749edff620239ff94ed0daeeb6aaa09cc7a175090b0c0e215b0ff3a1206ae19 20261010190000_guard_refund_finalizer_internal_coverage.sql
-c71e997d6dfab73d9322c281e95c0f6b63ca18bd83716b3ef9904b18f902c275 20261015120000_sync_internal_only_refund_status.sql`;
+c71e997d6dfab73d9322c281e95c0f6b63ca18bd83716b3ef9904b18f902c275 20261015120000_sync_internal_only_refund_status.sql
+39baafe27ccf921602ce14c19de07c5d2fb2c369c300c74c40cd47098a337927 20261016000000_admit_bnpl_to_reconciliation_finalization.sql`;

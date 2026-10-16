@@ -190,7 +190,7 @@ export async function POST(request: NextRequest) {
       currency,
       items: normalizedItems,
       merchantId: merchant.id,
-      metadata: { source: 'ucp' },
+      metadata: { source: 'ucp', create_recovery_pending: true },
       shippingAddress,
     })
   );
@@ -225,6 +225,29 @@ export async function POST(request: NextRequest) {
     })),
     operationId: mutation.idempotencyKey,
   });
+  if (canonical && canonical.status < 400) {
+    // The full-identity replace committed, so the durable row no
+    // longer needs create recovery; clear the marker so follow-up
+    // reads never replay the original lanes over legitimate updates.
+    // Best effort: a failed clear leaves the marker set, and the
+    // read-side lane-equality check still prevents a stale replay.
+    try {
+      await supabase
+        .from('agentic_cart_sessions')
+        .update({
+          metadata: { source: 'ucp', create_recovery_pending: false },
+        })
+        .eq('cart_id', cartId)
+        .eq('merchant_id', merchant.id);
+    } catch (error) {
+      logger.error({
+        error: sanitizeForLog(error),
+        merchantId: merchant.id,
+        message: 'Failed to clear UCP create recovery marker',
+        route: CREATE_CART_ROUTE,
+      });
+    }
+  }
   if (canonical)
     return respond(
       // The legacy insert already committed. Keep its durable owner handle

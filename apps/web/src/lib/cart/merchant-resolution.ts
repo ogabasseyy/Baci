@@ -229,14 +229,32 @@ export async function resolveCartMerchant(
   };
   // Client hints may select a tenant only on the native API hosts
   // (or non-production dev hosts); on browsable shared hosts the
-  // host itself must identify the merchant.
-  const hintAllowed = isHintPlatformHost(host, rootDomain);
+  // host itself must identify the merchant — with one designed
+  // exception: path-routed storefronts (usebaci.com/<slug>) mount the
+  // cart provider same-origin, so a same-host Referer whose first
+  // path segment is the hinted slug is the tenant signal there.
+  const hintCandidate =
+    queryHint(request) ?? deps.bodyHint?.trim().toLowerCase() ?? null;
+  let hintAllowed = isHintPlatformHost(host, rootDomain);
+  if (!hintAllowed && hintCandidate && isSharedPlatformHost(host, rootDomain)) {
+    const referer = request.headers.get('referer');
+    if (referer) {
+      try {
+        const refererUrl = new URL(referer);
+        const refererSlug = refererUrl.pathname
+          .split('/')
+          .filter(Boolean)[0]
+          ?.toLowerCase();
+        hintAllowed =
+          refererUrl.host.toLowerCase() === host &&
+          refererSlug === hintCandidate;
+      } catch {
+        hintAllowed = false;
+      }
+    }
+  }
   const hint =
-    trusted ??
-    hostIdentifier ??
-    (hintAllowed
-      ? (queryHint(request) ?? deps.bodyHint?.trim().toLowerCase() ?? null)
-      : null);
+    trusted ?? hostIdentifier ?? (hintAllowed ? hintCandidate : null);
   if (!hint) {
     return { error: 'merchant_unresolved', ok: false };
   }

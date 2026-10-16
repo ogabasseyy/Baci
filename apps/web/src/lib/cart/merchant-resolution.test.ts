@@ -176,6 +176,20 @@ describe('resolveCartMerchant', () => {
     );
   });
 
+  it('resolves a hint for a path-routed storefront on the apex host', async () => {
+    const request = new Request(
+      'https://usebaci.com/api/storefront/cart?merchant_slug=ogabassey',
+      { headers: { referer: 'https://usebaci.com/ogabassey/products' } }
+    );
+    const result = await resolveCartMerchant(request, {
+      resolveAlias: async () => null,
+      rootDomain: 'usebaci.com',
+      rpcClient: rpcClientReturning([merchantRow()]),
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.merchant.slug).toBe('ogabassey');
+  });
+
   it('rejects a query hint on the browsable apex host', async () => {
     const request = new Request(
       'https://usebaci.com/api/storefront/cart?merchant_slug=ogabassey'

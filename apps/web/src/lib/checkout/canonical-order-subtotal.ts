@@ -53,11 +53,13 @@ export async function computeCanonicalOrderSubtotal({
   merchantId,
   supabase,
   allowUnavailableConditionPrices,
+  conditionPriceOverrides,
 }: {
   items: CanonicalSubtotalItem[];
   merchantId: string;
   supabase: SupabaseClient;
   allowUnavailableConditionPrices?: boolean;
+  conditionPriceOverrides?: Map<string, number>;
 }): Promise<number | null> {
   const productIds = Array.from(
     new Set(
@@ -124,7 +126,10 @@ export async function computeCanonicalOrderSubtotal({
     items,
     merchantId,
     supabase,
-    { allowUnavailable: allowUnavailableConditionPrices }
+    {
+      allowUnavailable: allowUnavailableConditionPrices,
+      priceOverrides: conditionPriceOverrides,
+    }
   );
 
   const productMap = new Map(products.map((product) => [product.id, product]));

@@ -20,6 +20,17 @@ function storedLaneLines(cart: { cart_items: unknown } | null):
     }[]
   | null {
   if (!cart) return null;
+  // Recovery is a one-shot create repair: only a row whose create
+  // replace never committed (marker still pending) may be replayed.
+  // Once the marker clears, canonical state is authoritative and
+  // legitimate updates must never be reverted to the original lanes.
+  const metadata = (cart as { metadata?: unknown }).metadata;
+  if (
+    !metadata ||
+    typeof metadata !== 'object' ||
+    (metadata as Record<string, unknown>).create_recovery_pending !== true
+  )
+    return null;
   const items = coerceUcpCartItems(cart.cart_items);
   if (
     !items.some(
@@ -36,9 +47,23 @@ function storedLaneLines(cart: { cart_items: unknown } | null):
   }));
 }
 
+function normalizeOptions(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  return JSON.stringify(
+    Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a.localeCompare(b)
+    )
+  );
+}
+
 function canonicalHasLanes(
   canonical: CanonicalResult,
-  lanes: { productId: string; variantId?: string; condition?: string }[]
+  lanes: {
+    productId: string;
+    variantId?: string;
+    condition?: string;
+    options?: Record<string, string>;
+  }[]
 ): boolean {
   const lineItems = (canonical.body as { line_items?: unknown }).line_items;
   if (!Array.isArray(lineItems)) return false;
@@ -49,6 +74,7 @@ function canonicalHasLanes(
         item.id ?? item.product_id ?? null,
         item.variant_id ?? null,
         item.condition ?? null,
+        normalizeOptions(item.variant_attributes),
       ]);
     })
   );
@@ -58,6 +84,7 @@ function canonicalHasLanes(
         lane.productId,
         lane.variantId ?? null,
         lane.condition ?? null,
+        normalizeOptions(lane.options),
       ])
     )
   );
@@ -121,10 +148,26 @@ export async function readUcpCart(
           })),
           operationId: `ucp-create-recovery:${input.cartId}`,
         });
-        if (recovered && recovered.status === 200)
+        if (recovered && recovered.status === 200) {
+          // One-shot repair complete: clear the marker so later
+          // legitimate updates are never reverted to these lanes.
+          const metadata = (cartResult.cart as { metadata?: unknown }).metadata;
+          await input.supabase
+            .from('agentic_cart_sessions')
+            .update({
+              metadata: {
+                ...(metadata && typeof metadata === 'object'
+                  ? (metadata as Record<string, unknown>)
+                  : {}),
+                create_recovery_pending: false,
+              },
+            })
+            .eq('cart_id', input.cartId)
+            .eq('merchant_id', input.merchant.id);
           return NextResponse.json(recovered.body, {
             status: recovered.status,
           });
+        }
       }
     }
     return NextResponse.json(canonical.body, { status: canonical.status });

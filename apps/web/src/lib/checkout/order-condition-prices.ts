@@ -24,7 +24,7 @@ export async function loadOrderConditionPrices(
   items: ConditionItem[],
   merchantId: string,
   client: SupabaseClient,
-  options?: { allowUnavailable?: boolean }
+  options?: { allowUnavailable?: boolean; priceOverrides?: Map<string, number> }
 ): Promise<Map<string, number>> {
   const productIds = [
     ...new Set(
@@ -66,6 +66,11 @@ export async function loadOrderConditionPrices(
     // original order and the RPC can replay it; fresh orders keep
     // failing closed above.
     prices.set(JSON.stringify([row.product_id, row.condition]), price);
+  }
+  // Immutable replay prices win over the mutable catalog rows (and
+  // cover offers deleted since the original order committed).
+  if (options?.priceOverrides) {
+    for (const [key, price] of options.priceOverrides) prices.set(key, price);
   }
   return prices;
 }

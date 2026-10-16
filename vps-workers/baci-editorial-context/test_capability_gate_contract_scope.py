@@ -6,8 +6,10 @@ symlinks, job env is job-wide wherever it sits, escaped trigger subkeys
 decode like GitHub, shadow package components are rejected, and duplicate
 pin declarations fail.
 """
+import contextlib
 import hashlib
 import importlib.util
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -132,6 +134,48 @@ class ContractScopeTests(unittest.TestCase):
             digest = hashlib.sha256(init.read_bytes()).hexdigest()
             failures, _ = check.pin_failures(root, {}, {rel: digest})
             self.assertTrue(any("shadow the interpreter" in f for f in failures))
+
+    def test_job_execution_controls_pinned(self):
+        # The pinned steps could otherwise move to a self-hosted runner or
+        # gain sidecars/matrices while the text still matches.
+        text = _workflow_text()
+        self.assertEqual(check.execution_scope_failures(text), [])
+        movers = {
+            "self-hosted": text.replace("    runs-on: ubuntu-24.04\n", "    runs-on: self-hosted\n", 1),
+            "matrix": text.replace("    timeout-minutes: 5\n    steps:\n", "    timeout-minutes: 5\n    strategy:\n      matrix:\n        x: [1]\n    steps:\n", 1),
+            "services": text.replace("    timeout-minutes: 5\n    steps:\n", "    timeout-minutes: 5\n    services:\n      db:\n        image: evil\n    steps:\n", 1),
+        }
+        for label, mutant in movers.items():
+            self.assertNotEqual(mutant, text, label)
+            self.assertTrue(check.execution_scope_failures(mutant), label)
+
+    def test_main_surfaces_execution_scope(self):
+        # execution_scope_failures is wired through main, not the workflow
+        # companion: prove the wiring with a minimal tree whose only
+        # workflow defect is the runner move.
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / ".github/workflows").mkdir(parents=True)
+            (Path(root) / ".github/workflows/ci.yml").write_text(CI)
+            text = _workflow_text()
+            mutant = text.replace("    runs-on: ubuntu-24.04\n", "    runs-on: self-hosted\n", 1)
+            self.assertNotEqual(mutant, text)
+            (Path(root) / ".github/workflows/capability-gate-contract.yml").write_text(mutant)
+            (Path(root) / ".github/scripts").mkdir(parents=True)
+            (Path(root) / ".github/scripts/capability_gate_contract_check.py").write_text("BASE_PINS = {}\n")
+            Path(root, check.SUITE_DIR).mkdir(parents=True)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = check.main(root)
+            self.assertEqual(rc, 1)
+            self.assertIn("ubuntu-24.04", buf.getvalue())
+
+    def test_no_executable_step_before_checker(self):
+        # A run step smuggled ahead of the checkout would execute PR code
+        # before the base-owned checker starts.
+        text = _workflow_text()
+        evil_first = text.replace("    steps:\n", "    steps:\n      - run: echo pwned\n", 1)
+        self.assertNotEqual(evil_first, text)
+        self.assertTrue(check.workflow_failures(evil_first))
 
     def test_inline_job_env_fails(self):
         # A job-level `env: {BASH_ENV: ...}` marks the mapping open and skips

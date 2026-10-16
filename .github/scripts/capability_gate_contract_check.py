@@ -57,6 +57,7 @@ from capability_gate_contract_ci_checks import (
     CI_YML,
     SUITE_DIR,
     WORKFLOW,
+    _strip_comment,
     ci_failures,
 )
 from capability_gate_contract_workflow_checks import workflow_failures
@@ -87,7 +88,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/prompt_builder.py": "59997648a8c05f9fdbba5d4a9849e96a066ae4d316a2a9d465e0e1ef58aed3ae",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "5c1d9f517170f0d4528a086964655cabb849c3886c8cea8bc83693ae6c557c4e",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_scope.py": "9f9873d255350b97f54b6824b4f15ede59163f4631b1cc0ebfa1b40dba4ec8d8",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_scope.py": "e162e9dc33021d262b69d3e9e0322797c2ed34a642f4a32c4d253683786b037d",
     "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }
@@ -146,17 +147,13 @@ def pin_failures(repo_root, base_pins, declared):
             )
     for rel in declared:
         if rel not in base_pins:
-            # A brand-new file has no baseline to betray: its whole content
-            # is visible in the diff, so a declaration matching the file's
-            # actual digest passes with a notice. Anything else stays a
-            # failure — an unmatched hash would let a benign file declare a
-            # future payload's digest, then land it silently later. Test
-            # modules mirror the gate's discovery pattern; non-test helpers
-            # are declarable too, so the situation in review (a helper that
-            # is neither pinned nor pinnable) cannot arise — except names
-            # that would hijack the interpreter itself (sitecustomize and
-            # stdlib shadows load without ever matching discovery), which
-            # stay undeclarable.
+            # A brand-new file has no baseline to betray: its whole content is
+            # visible in the diff, so a declaration matching the file's actual
+            # digest passes with a notice. Anything else stays a failure — an
+            # unmatched hash would let a benign file declare a future payload's
+            # digest, then land it silently later. Test modules mirror the gate's
+            # discovery pattern; non-test helpers are declarable too, except names
+            # that would hijack the interpreter itself (see the membership scan).
             in_scope = (
                 rel.startswith(SUITE_DIR + "/")
                 and rel.endswith(".py")
@@ -166,9 +163,7 @@ def pin_failures(repo_root, base_pins, declared):
             parts = Path(rel).parent.parts + (Path(rel).stem,)
             shadow = in_scope and any(p in _RESERVED_MODULE_NAMES for p in parts)
             if in_scope and not shadow:
-                kind = (
-                    "suite" if fnmatch.fnmatchcase(Path(rel).name, "test_*capabilit*.py") else "helper"
-                )
+                kind = "suite" if fnmatch.fnmatchcase(Path(rel).name, "test_*capabilit*.py") else "helper"
                 if declared[rel] == sha256_of(Path(repo_root, rel)):
                     notices.append(f"declared new {kind} file (needs review): {rel}")
                 else:
@@ -240,10 +235,15 @@ def checker_file_failures(repo_root, base_pin, declared_pin):
 
 
 def execution_scope_failures(workflow_text):
-    """The checker runs at the workspace root: an override would run a mirror tree."""
+    """The checker runs at the workspace root on GitHub-hosted runners: any override would run attacker-influenced code while the pinned text matches."""
     code = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
-    if any(re.match(r"^\s*[\"']?(working-directory|defaults)[\"']?\s*:", line) for line in code):
-        return ["contract workflow must not override working-directory or defaults"]
+    for line in code:
+        if re.match(r"^\s*[\"']?(working-directory|defaults|strategy|services|environment|outputs)[\"']?\s*:", line):
+            return ["contract workflow must not override execution context"]
+    for line in code:
+        runs = re.match(r"^    [\"']?runs-on[\"']?\s*:\s*(.*)$", line)
+        if runs and _strip_comment(runs.group(1)).strip().strip("\"'") != "ubuntu-24.04":
+            return ["contract workflow jobs must stay on ubuntu-24.04 runners"]
     return []
 
 

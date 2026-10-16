@@ -31,6 +31,11 @@ DECLARE
   v_legs jsonb;
   v_has_paystack boolean;
 BEGIN
+  -- Confinement first: EXECUTE is granted to authenticated (denial-path
+  -- rationale below), so without an in-function gate a direct call
+  -- reads another tenant's refund history. View-level, mirroring the
+  -- manager: status readers are legitimate here.
+  PERFORM private.assert_refund_helper_membership_v1(p_merchant_id);
   -- Bound like the audit events: one row per partial manual with 30s
   -- status polling would otherwise grow every response unbounded.
   SELECT COALESCE(jsonb_agg(jsonb_build_object('id',h.id,'amount',h.amount,'status',h.status,

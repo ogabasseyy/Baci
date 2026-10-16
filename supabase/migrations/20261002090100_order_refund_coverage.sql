@@ -250,13 +250,17 @@ GRANT EXECUTE ON FUNCTION private.effective_amount_paid_v1(uuid,uuid,text,numeri
   TO service_role, authenticated;
 -- Shared membership gate for the authenticated-granted private
 -- refund helpers (pending evidence, movement evidence, partial
--- state): owner, orders:refund, or orders:view, with uid-less
--- service_role bypass. One implementation so the helpers cannot
--- drift apart; the confinement suite pins each caller with USAGE
--- granted. Same EXECUTE grants as its callers (denial-path
--- rationale above); calling it directly is harmless (void).
+-- state, record, response): owner, orders:refund, or orders:view,
+-- with uid-less service_role bypass. p_require_manage drops the
+-- view leg for the write helper, mirroring the manager (manual
+-- needs owner-or-refund; status readers keep view). One
+-- implementation so the helpers cannot drift apart; the
+-- confinement suites pin each caller with USAGE granted. Same
+-- EXECUTE grants as its callers (denial-path rationale above);
+-- calling it directly is harmless (void).
+DROP FUNCTION IF EXISTS private.assert_refund_helper_membership_v1(uuid);
 CREATE OR REPLACE FUNCTION private.assert_refund_helper_membership_v1(
-  p_merchant_id uuid
+  p_merchant_id uuid, p_require_manage boolean DEFAULT false
 ) RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_actor uuid;
@@ -270,13 +274,13 @@ BEGIN
      AND NOT public.check_staff_permission(
        v_actor, p_merchant_id, 'orders', 'refund'
      )
-     AND NOT public.check_staff_permission(
+     AND (COALESCE(p_require_manage, false) OR NOT public.check_staff_permission(
        v_actor, p_merchant_id, 'orders', 'view'
-     ) THEN
+     )) THEN
     RAISE EXCEPTION 'refund_forbidden' USING ERRCODE = '42501';
   END IF;
 END; $$;
-REVOKE ALL ON FUNCTION private.assert_refund_helper_membership_v1(uuid)
+REVOKE ALL ON FUNCTION private.assert_refund_helper_membership_v1(uuid,boolean)
   FROM PUBLIC,anon,authenticated;
-GRANT EXECUTE ON FUNCTION private.assert_refund_helper_membership_v1(uuid)
+GRANT EXECUTE ON FUNCTION private.assert_refund_helper_membership_v1(uuid,boolean)
   TO service_role, authenticated;

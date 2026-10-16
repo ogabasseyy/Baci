@@ -48,6 +48,16 @@ DECLARE
   v_step_attempts integer := p_step_attempts;
   v_step_retry_requests integer := p_step_retry_requests;
 BEGIN
+    -- Confinement first: EXECUTE is granted to authenticated (denial-path
+    -- rationale below), so without an in-function gate a direct call
+    -- bypasses every manager check and inserts ledger rows. Manage-level,
+    -- mirroring the manager: viewers read status, they never record.
+    PERFORM private.assert_refund_helper_membership_v1(p_merchant_id, true);
+    -- The actor labels the audit trail: a member passing another user's
+    -- id would forge recorded_by, so the uid-ful caller must name itself.
+    IF auth.uid() IS NOT NULL AND p_actor IS DISTINCT FROM auth.uid() THEN
+      RAISE EXCEPTION 'refund_forbidden' USING ERRCODE='42501';
+    END IF;
     -- Recording attests money already moved: the UI requires the
     -- checkbox and the route validates it, but direct RPC callers
     -- must attest too, and the audit trail must keep the proof.

@@ -214,9 +214,15 @@ BEGIN
   PERFORM public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 90,
     v_refunded_at, 'bank_transfer', 'attested-full', NULL, true);
+  -- ctid breaks the created_at tie: every event in this transaction
+  -- shares the frozen clock, and the audit table is insert-only so
+  -- physical order is insertion order. Read as service_role: system
+  -- columns in ORDER BY trip the staff SELECT policy for
+  -- authenticated, and this is the block's last statement.
+  SET LOCAL ROLE service_role;
   SELECT action INTO v_label FROM public.order_refund_events
    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
-   ORDER BY created_at DESC LIMIT 1;
+   ORDER BY created_at DESC, ctid DESC LIMIT 1;
   IF v_label <> 'queued' THEN
     RAISE EXCEPTION 're-armed queue audited as %, want queued', v_label;
   END IF;

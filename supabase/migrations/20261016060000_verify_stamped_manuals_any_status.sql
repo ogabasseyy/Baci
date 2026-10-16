@@ -69,8 +69,16 @@ BEGIN
   IF v_order.merchant_id <> v_refund.merchant_id THEN
     RAISE EXCEPTION 'refund_order_mismatch';
   END IF;
+  -- A malformed link must terminalize as evidence mismatch, not raise
+  -- raw 22P02: the workers classify mismatch as deterministic review
+  -- evidence, while an invalid-cast error looks retryable and the row
+  -- rotates forever. Gate the cast on the canonical UUID shape the
+  -- TypeScript reconciler mirrors; a non-match finds no payment and
+  -- falls into the mismatch raise below.
   SELECT * INTO v_payment FROM public.transactions
-    WHERE id = (v_refund.metadata->>'payment_transaction_id')::uuid
+    WHERE id = CASE WHEN coalesce(v_refund.metadata->>'payment_transaction_id','')
+      ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN (v_refund.metadata->>'payment_transaction_id')::uuid END
       AND order_id = v_order.id AND merchant_id = v_order.merchant_id
       AND transaction_type = 'payment'
       -- Normalize like the aggregate coverage gate: a legacy `Paystack`

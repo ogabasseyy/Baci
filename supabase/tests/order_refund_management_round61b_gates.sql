@@ -71,6 +71,10 @@ BEGIN
     -- Merchant-scoping control: own outstanding leg plus alien rows
     -- that must not veto the panel flag.
     ('b6111000-0000-4000-8000-000000000096', v_merchant_id, 'FAIL-096',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    -- Malformed-link isolation: the bad-link row below must not
+    -- disturb any other order's pending or coverage sums.
+    ('b6111000-0000-4000-8000-000000000097', v_merchant_id, 'FAIL-097',
       100, 100, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
@@ -125,7 +129,17 @@ BEGIN
       'completed', 'paystack', 'alien-96-r', '{}'::jsonb),
     ('b6112000-0000-4000-8000-000000000106', v_merchant_b_id,
       'b6111000-0000-4000-8000-000000000096', 'payment', 100, 'USD',
-      'completed', 'stripe', 'alien-96-p', '{}'::jsonb);
+      'completed', 'stripe', 'alien-96-p', '{}'::jsonb),
+    -- Stamped manual with a malformed payment link: the verifier
+    -- must terminalize it as evidence mismatch, not raw 22P02.
+    ('b6112000-0000-4000-8000-000000000107', v_merchant_id,
+      'b6111000-0000-4000-8000-000000000097', 'refund', 100, 'NGN',
+      'completed', 'manual', 'merchant-97-badlink',
+      jsonb_build_object(
+        'method', 'paystack',
+        'payment_transaction_id', 'legacy-batch-7',
+        'provider_refund_status', 'processed',
+        'provider_refund_id', 9));
 END;
 $fixtures$;
 
@@ -173,6 +187,17 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'failed stamped manual missing from sweep';
   END IF;
+  -- A malformed payment link terminalizes as evidence mismatch, not
+  -- raw 22P02: workers classify mismatch as deterministic review
+  -- evidence, while a cast error looks retryable and rotates forever.
+  BEGIN
+    PERFORM public.record_verified_paystack_cancellation_refund_v1(
+      'b6112000-0000-4000-8000-000000000107', 'processed', 9,
+      10000, 'NGN');
+    RAISE EXCEPTION 'malformed link verified';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_evidence_mismatch' THEN RAISE; END IF;
+  END;
 END;
 $refund_round61_manual_contradiction$;
 

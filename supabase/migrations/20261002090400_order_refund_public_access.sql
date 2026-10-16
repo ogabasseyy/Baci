@@ -221,6 +221,16 @@ CREATE TRIGGER sync_cancelled_order_refund_status AFTER INSERT OR UPDATE OF stat
 CREATE OR REPLACE FUNCTION private.backfill_cancelled_order_refund_status()
 RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 BEGIN
+  -- Service-role only, enforced in-function like the sweep selector:
+  -- EXECUTE is withheld from authenticated (ACL below), but ACL
+  -- denial alone proved environment-sensitive in DB Replay while
+  -- in-function 42501s held, so the body re-checks the JWT role.
+  -- NULL role (migration-time and superuser connections carry no
+  -- JWT) stays allowed for the call below.
+  IF auth.role() IS NOT NULL
+    AND auth.role() IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'unauthorized' USING ERRCODE='42501';
+  END IF;
   UPDATE public.orders o SET payment_status='refunded',updated_at=now()
    WHERE o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
      AND o.payment_status IN ('paid','partially_paid','pending','bnpl_approved')

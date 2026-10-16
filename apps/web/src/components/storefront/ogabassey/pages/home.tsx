@@ -8,6 +8,7 @@ import { buildLaunchSlides } from '../components/build-launch-slides';
 import { DeferredAdUnit } from '../components/deferred-ad-unit';
 import { HomeProductGridGate } from '../components/home-product-grid-gate';
 import { HomeProductGridStaticFallback } from '../components/home-product-grid-static-fallback';
+import { OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY } from '../components/home-section-reserve-geometry';
 import { Hero } from '../components/Hero';
 import { HOMEPAGE_STRIP_AD_BOOT_DELAY_MS } from '../config/ads';
 
@@ -59,12 +60,29 @@ export const OgabasseyHomePage: React.FC<HomePageProps> = ({
         />
       </div>
 
-      {/* Suspense boundary keeps the featured-products section non-blocking.
-          The static fallback server-renders the product cards (links, names,
-          prices) with zero JS; the interactive grid module loads only when
-          the section approaches the viewport, keeping below-fold grid JS out
-          of the initial bundle. */}
-      <Suspense>
+      {/* Suspense boundary keeps the featured-products client gate chunks out
+          of <head> (~31 KB JS saved from the critical path). An explicit
+          1200px inline-styled fallback is required on <Suspense> because Fizz
+          suspends the client gate while its RSC Flight props stream; a bare
+          <Suspense> without a fallback collapses the outer 1200px product
+          reserve to 0px mid-stream and pulls the discovery section into the
+          mobile viewport for a 0.11 layout shift. */}
+      <Suspense
+        fallback={
+          <div
+            aria-hidden="true"
+            className="ogabassey-home-products"
+            data-ogabassey-grid-gate-reserve="true"
+          >
+            <div
+              className={
+                OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.minHeightClass
+              }
+              style={OGABASSEY_HOME_SECTION_RESERVE_GEOMETRY.product.style}
+            />
+          </div>
+        }
+      >
         <HomeProductGridGate
           basePath={routeBasePath}
           storeSlug={storeSlug}

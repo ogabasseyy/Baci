@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/cleanup-blog-media-tombstones",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/cleanup-checkout-shipping-recovery-previews",
+      "schedule": "11 * * * *"
     }
   ],
   "functions": {

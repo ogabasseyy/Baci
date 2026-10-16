@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import nextConfig from '../../next.config';
+import { PHASE_PRODUCTION_BUILD } from 'next/constants';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { STOREFRONT_EDGE_NEXT_REDIRECT_ROWS } from './storefront-edge-next-redirect-rows';
 
 const normalizeNextRedirectSource = (source: string) =>
@@ -20,6 +20,11 @@ const collapsePairedNextRedirectSources = (patterns: readonly string[]) => {
     )
   );
 };
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.resetModules();
+});
 
 describe('STOREFRONT_EDGE_NEXT_REDIRECT_ROWS', () => {
   it('pins every reviewed next.config redirect as a document redirect', () => {
@@ -46,9 +51,22 @@ describe('STOREFRONT_EDGE_NEXT_REDIRECT_ROWS', () => {
     ).toEqual(['ogabassey.com', 'www.ogabassey.com']);
   });
 
-  it('matches every redirect declared by the active Next configuration', async () => {
+  it.each([
+    false,
+    true,
+  ])('matches active Next redirects with source maps enabled: %s', async (sourceMapsEnabled) => {
     // Arrange
-    const redirects = await nextConfig.redirects?.();
+    vi.stubEnv(
+      'POSTHOG_API_KEY',
+      sourceMapsEnabled ? 'synthetic-source-map-key' : ''
+    );
+    vi.stubEnv('POSTHOG_PROJECT_ID', sourceMapsEnabled ? '123' : '');
+    vi.stubEnv('TURBOPACK', '1');
+    const nextConfig = (await import('../../next.config')).default;
+    // The config export is a function of Next's phase: resolve the
+    // shipped (production-build) config before reading redirects.
+    const config = await nextConfig(PHASE_PRODUCTION_BUILD);
+    const redirects = await config.redirects?.();
     if (!redirects)
       throw new Error('active Next config does not declare redirects');
 

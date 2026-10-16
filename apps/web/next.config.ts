@@ -1,12 +1,13 @@
 import path from 'node:path';
-import { withPostHogConfig } from '@posthog/nextjs-config';
 import type { NextConfig } from 'next';
 import { builderPreviewRouteHeaders } from './src/config/builder-preview-route-headers';
 import { CACHE_LIFE_PROFILES } from './src/config/cache-life-profiles';
+import { composePostHogNextConfig } from './src/config/compose-posthog-next-config';
 import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-link-header';
 import { getHostedDraftStandaloneOutput } from './src/config/hosted-draft-standalone-output';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
 import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
+import { applyPilotPublicGate } from './src/config/pilot-next-gate';
 import { STATIC_GENERATION_LIMITS } from './src/config/static-generation';
 import {
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -21,6 +22,12 @@ import {
   getPostHogUiHost,
   isPostHogSourceMapUploadEnabled,
 } from './src/lib/posthog/config';
+
+// Public assets bypass route guards; refuse non-lab builds with staged
+// data. The gate runs inside the exported config function (below),
+// keyed on the phase Next itself passes — never at module top level,
+// so importing this file (typegen, tests, tooling) has no gate side
+// effects and programmatic builds are covered exactly like CLI ones.
 
 // Keep this as an explicit static-asset suffix list. A generic dotted-path
 // exclusion drops valid HTML routes such as `/products/iphone-v1.2`.
@@ -726,26 +733,41 @@ const nextConfig: NextConfig = {
   },
 };
 
-function applyPostHogConfig(config: NextConfig): NextConfig {
-  if (
-    !POSTHOG_SOURCE_MAP_UPLOAD_ENABLED ||
-    !POSTHOG_SOURCE_MAP_API_KEY ||
-    !POSTHOG_SOURCE_MAP_PROJECT_ID
-  ) {
-    return config;
-  }
+// Composed once at import, exactly like the object form this replaced:
+// the exported function runs the phase-scoped gate and resolves this
+// value, so repeated evaluations never re-wrap the PostHog config.
+const composedConfig = composePostHogNextConfig(
+  nextConfig,
+  POSTHOG_SOURCE_MAP_UPLOAD_ENABLED &&
+    POSTHOG_SOURCE_MAP_API_KEY &&
+    POSTHOG_SOURCE_MAP_PROJECT_ID
+    ? {
+        personalApiKey: POSTHOG_SOURCE_MAP_API_KEY,
+        projectId: POSTHOG_SOURCE_MAP_PROJECT_ID,
+        host: getPostHogUiHost(),
+        sourcemaps: {
+          enabled: true,
+          releaseName: 'baci-web',
+          releaseVersion: getPostHogReleaseVersion(),
+          deleteAfterUpload: true,
+        },
+      }
+    : undefined
+);
 
-  return withPostHogConfig(config, {
-    personalApiKey: POSTHOG_SOURCE_MAP_API_KEY,
-    projectId: POSTHOG_SOURCE_MAP_PROJECT_ID,
-    host: getPostHogUiHost(),
-    sourcemaps: {
-      enabled: true,
-      releaseName: 'baci-web',
-      releaseVersion: getPostHogReleaseVersion(),
-      deleteAfterUpload: true,
-    },
-  });
+// Function form so the pilot gate reads Next's own phase signal:
+// PHASE_PRODUCTION_BUILD asserts, dev/start stash for the boot gate,
+// and every other phase (test, info, tooling imports that never call
+// this) skips the gate entirely. argv sniffing cannot cover
+// programmatic builds, and process.env.NEXT_PHASE is unset at config
+// time (Next assigns it late in the build, after loadConfig), so the
+// phase parameter is the only truthful signal here. Forward Next's
+// context to the optional PostHog function; the default keeps direct
+// tooling callers compatible when they provide only the phase.
+export default function pilotNextConfig(
+  phase: string,
+  context?: { defaultConfig: NextConfig }
+): NextConfig | Promise<NextConfig> {
+  applyPilotPublicGate(__dirname, phase);
+  return composedConfig(phase, context);
 }
-
-export default applyPostHogConfig(nextConfig);

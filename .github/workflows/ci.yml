@@ -47,6 +47,8 @@ jobs:
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test Sentry Storefront Release Provenance
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
+      - name: Test pilot change-detection contract
+        run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -186,6 +188,20 @@ jobs:
         run: |
           node --test .github/scripts/resolve-ci-test-plan.test.mjs .github/scripts/resolve-ci-test-plan-config.test.mjs .github/scripts/resolve-ci-non-web-test-filters.test.mjs .github/scripts/run-ci-non-web-tests.test.mjs
           node .github/scripts/resolve-ci-test-plan.mjs --event "$EVENT_NAME" --base "$TURBO_SCM_BASE"
+      - name: Verify authenticated shipping recovery in PostgreSQL
+        env:
+          BACI_SHIPPING_QUOTE_POSTGRES: '1'
+        run: |
+          node --test supabase/tests/extract-sql-function-definition.test.mjs
+          pnpm --filter @baci/web exec vitest run \
+            src/lib/shipping/customer-checkout-shipping-recovery-acl.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-concurrency.postgres.test.ts \
+            src/lib/shipping/prepare-checkout-shipping-recovery.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-quantity.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-aliases.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts \
+            src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts
       - name: Run Tests
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -245,7 +261,9 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run web vitest shard
-        run: pnpm --filter @baci/web exec vitest run --shard=${{ matrix.shard }}/6
+        env:
+          VITEST_SHARD: ${{ matrix.shard }}
+        run: pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6"
 
   quality-db-replay:
     name: Quality Gate - DB Replay

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import { resolveOgabasseyHomeHeroShell } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data';
 import {
   OGABASSEY_APPLE_TOUCH_ICON_URL,
   OGABASSEY_DESCRIPTION,
@@ -24,6 +25,10 @@ import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
 
 const OGABASSEY_DOMAIN_IDENTIFIER = new URL(OGABASSEY_URL).hostname;
 
+function warmOgabasseyHomeHeroShell(): void {
+  void resolveOgabasseyHomeHeroShell().catch(() => undefined);
+}
+
 export function generateStaticParams(): Array<{ slug: string }> {
   return [OGABASSEY_DOMAIN_IDENTIFIER, OGABASSEY_TEMPLATE_ID].map((slug) => ({
     slug,
@@ -47,6 +52,7 @@ async function renderGenericStorefrontHomePage(
 }
 
 async function renderOgabasseyStaticHomePage(slug: string) {
+  warmOgabasseyHomeHeroShell();
   const { OgabasseyStaticHomePage } = await import(
     './ogabassey-static-home-page'
   );
@@ -143,6 +149,11 @@ export async function generateMetadata({
   const { slug } = await params;
 
   if (isOgabasseyHomeIdentifier(slug)) {
+    // Warm the request-memoized hero shell alongside the merchant lookup so
+    // metadata-blocking renders (Lighthouse/PSI and bots) resolve both
+    // OgabasseyHomeCommittedSlideZeroPreload and OgabasseyStaticHomePageContent
+    // synchronously in the first body microtask before RSC Flight scripts flush.
+    warmOgabasseyHomeHeroShell();
     const merchant = await getRequestScopedMerchant(slug);
     const robots = toNextRobotsMetadata(
       buildHomeSeoDecision({

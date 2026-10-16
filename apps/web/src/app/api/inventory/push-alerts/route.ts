@@ -100,10 +100,10 @@ export async function GET(request: NextRequest) {
 
         sentCount++;
       } catch (pushError) {
-        console.error(
-          `[Inventory Alerts] Failed to notify for alert ${alert.id}:`,
-          pushError
-        );
+        console.error('[Inventory Alerts] Failed to notify for alert:', {
+          alertId: alert.id,
+          error: pushError,
+        });
         failedCount++;
       }
     }

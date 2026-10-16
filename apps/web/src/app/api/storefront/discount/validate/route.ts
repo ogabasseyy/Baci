@@ -11,6 +11,12 @@ import {
 } from '@/schemas/storefront-discount';
 import { lookupErrorResponse } from './lookup-error-response';
 
+// Dead/inapplicable codes collapse to generic invalid (no probing oracle).
+// All such responses are 200: the code parsed, it just does not apply.
+function invalidCodeResponse(message = 'Invalid discount code') {
+  return NextResponse.json({ valid: false, error: message }, { status: 200 });
+}
+
 /**
  * POST /api/storefront/discount/validate
  * Validates a discount code via the anon client + SECURITY DEFINER
@@ -61,10 +67,7 @@ export async function POST(request: NextRequest) {
       ? null
       : storefrontDiscountCodeRowSchema.safeParse(data);
     if (!parsedArray.success && !parsedSingle?.success) {
-      return NextResponse.json(
-        { valid: false, error: 'Invalid discount code' },
-        { status: 200 }
-      );
+      return invalidCodeResponse();
     }
     const discountCode = parsedArray.success
       ? (parsedArray.data[0] ?? null)
@@ -109,16 +112,12 @@ export async function POST(request: NextRequest) {
         (loyaltyCode.reward_type !== 'discount_percentage' ||
           loyaltyValue <= 100)
       ) {
-        // Dead codes collapse to generic invalid (no probing oracle).
         if (
           loyaltyCode.used ||
           (loyaltyCode.expires_at &&
             new Date(loyaltyCode.expires_at) < new Date())
         ) {
-          return NextResponse.json(
-            { valid: false, error: 'Invalid discount code' },
-            { status: 200 }
-          );
+          return invalidCodeResponse();
         }
         // Currency gate first (a mismatched code can never validate).
         if (
@@ -131,10 +130,7 @@ export async function POST(request: NextRequest) {
             loyaltyCode.issuance_currency
           ))
         ) {
-          return NextResponse.json(
-            { valid: false, error: 'Invalid discount code' },
-            { status: 200 }
-          );
+          return invalidCodeResponse();
         }
         // Accepted oracle (low): the minimum message stays distinct.
         if (
@@ -158,12 +154,8 @@ export async function POST(request: NextRequest) {
                 },
                 { maximumFractionDigits: 0 }
               );
-          return NextResponse.json(
-            {
-              valid: false,
-              error: `Minimum purchase of ${minimumLabel} required`,
-            },
-            { status: 200 }
+          return invalidCodeResponse(
+            `Minimum purchase of ${minimumLabel} required`
           );
         }
         const loyaltyDiscountType =
@@ -188,10 +180,7 @@ export async function POST(request: NextRequest) {
         );
         // Zero computed discount collapses to invalid (checkout rejects).
         if (loyaltyDiscountAmount <= 0) {
-          return NextResponse.json(
-            { valid: false, error: 'Invalid discount code' },
-            { status: 200 }
-          );
+          return invalidCodeResponse();
         }
         // Effective value (explicit null discount_code_id).
         const effectiveDiscountValue =
@@ -216,52 +205,36 @@ export async function POST(request: NextRequest) {
     }
 
     if (!discountCode) {
-      return NextResponse.json(
-        { valid: false, error: 'Invalid discount code' },
-        { status: 200 }
-      );
+      return invalidCodeResponse();
     }
 
     if (
       discountCode.starts_at &&
       new Date(discountCode.starts_at) > new Date()
     ) {
-      return NextResponse.json(
-        { valid: false, error: 'Discount code is not yet active' },
-        { status: 200 }
-      );
+      return invalidCodeResponse('Discount code is not yet active');
     }
 
     if (
       discountCode.expires_at &&
       new Date(discountCode.expires_at) < new Date()
     ) {
-      return NextResponse.json(
-        { valid: false, error: 'Discount code has expired' },
-        { status: 200 }
-      );
+      return invalidCodeResponse('Discount code has expired');
     }
 
     if (
       discountCode.usage_limit != null &&
       discountCode.usage_count >= discountCode.usage_limit
     ) {
-      return NextResponse.json(
-        { valid: false, error: 'Discount code usage limit reached' },
-        { status: 200 }
-      );
+      return invalidCodeResponse('Discount code usage limit reached');
     }
 
     if (
       discountCode.minimum_purchase_amount != null &&
       cart_total < Number(discountCode.minimum_purchase_amount)
     ) {
-      return NextResponse.json(
-        {
-          valid: false,
-          error: `Minimum purchase of ₦${Number(discountCode.minimum_purchase_amount).toLocaleString()} required`,
-        },
-        { status: 200 }
+      return invalidCodeResponse(
+        `Minimum purchase of ₦${Number(discountCode.minimum_purchase_amount).toLocaleString()} required`
       );
     }
 

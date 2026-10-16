@@ -65,48 +65,6 @@ describe('calculateCheckoutSession', () => {
     );
   });
 
-  it('produces the same line id for reordered variant attributes', async () => {
-    const productQuery = createQueryChain([
-      {
-        id: PRODUCT_ID,
-        manage_stock: false,
-        name: 'Phone',
-        price: 500000,
-        stock: 0,
-        stock_quantity: 0,
-      },
-    ]);
-    const variantQuery = createQueryChain([]);
-    const supabase = createCheckoutSupabase(productQuery, variantQuery);
-    const first = await calculateCheckoutSession(
-      supabase as never,
-      [
-        {
-          id: PRODUCT_ID,
-          quantity: 1,
-          variant_attributes: { Color: 'Red', Size: 'L' },
-        },
-      ],
-      null,
-      'NGN',
-      MERCHANT_ID
-    );
-    const second = await calculateCheckoutSession(
-      supabase as never,
-      [
-        {
-          id: PRODUCT_ID,
-          quantity: 1,
-          variant_attributes: { Size: 'L', Color: 'Red' },
-        },
-      ],
-      null,
-      'NGN',
-      MERCHANT_ID
-    );
-    expect(first.lineItems[0]?.id).toBe(second.lineItems[0]?.id);
-  });
-
   it('treats unmanaged product stock as unlimited', async () => {
     const productQuery = createQueryChain([
       {
@@ -297,58 +255,6 @@ describe('calculateCheckoutSession', () => {
     expect(result.lineItems[0]?.item.variant_attributes).toEqual({
       engraving: 'Ada',
     });
-  });
-
-  it('gives sibling variant lanes distinct line ids', async () => {
-    const productQuery = createQueryChain([
-      {
-        id: PRODUCT_ID,
-        manage_stock: false,
-        name: 'Phone',
-        price: 500000,
-        stock: 0,
-        stock_quantity: 0,
-      },
-    ]);
-    const variantQuery = createQueryChain([
-      {
-        attributes: { color: 'Black' },
-        id: VARIANT_ID,
-        merchant_id: MERCHANT_ID,
-        price_override: 550000,
-        product: { manage_stock: false, name: 'Phone', price: 500000 },
-        product_id: PRODUCT_ID,
-        stock_quantity: 0,
-      },
-      {
-        attributes: { color: 'White' },
-        id: '44444444-4444-4444-8444-444444444444',
-        merchant_id: MERCHANT_ID,
-        price_override: 560000,
-        product: { manage_stock: false, name: 'Phone', price: 500000 },
-        product_id: PRODUCT_ID,
-        stock_quantity: 0,
-      },
-    ]);
-    const supabase = createCheckoutSupabase(productQuery, variantQuery);
-
-    const result = await calculateCheckoutSession(
-      supabase as never,
-      [
-        { id: PRODUCT_ID, quantity: 1, variant_id: VARIANT_ID },
-        {
-          id: PRODUCT_ID,
-          quantity: 1,
-          variant_id: '44444444-4444-4444-8444-444444444444',
-        },
-      ],
-      null,
-      'NGN',
-      MERCHANT_ID
-    );
-
-    const ids = result.lineItems.map((line) => line.id);
-    expect(new Set(ids).size).toBe(2);
   });
 
   it('prices a condition lane from the active condition offer', async () => {

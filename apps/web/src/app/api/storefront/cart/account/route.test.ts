@@ -157,6 +157,16 @@ it('returns the rotated proof to native callers presenting it via the proof head
   );
   expect(response.status).toBe(200);
   expect((await response.json()).proof).toBe('cp1.rotated.signature');
+  // The internally minted merge handoff must carry the native
+  // destination for device-proof callers, not the web default.
+  expect(linkCartToCustomer).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.anything(),
+    expect.anything(),
+    expect.objectContaining({
+      destination: { type: 'native', app: 'storefront' },
+    })
+  );
 });
 it('keeps the rotated proof out of the body for cookie-only web callers', async () => {
   vi.mocked(linkCartToCustomer).mockResolvedValue({
@@ -175,6 +185,12 @@ it('keeps the rotated proof out of the body for cookie-only web callers', async 
   expect(response.status).toBe(200);
   expect((await response.json()).proof).toBeUndefined();
   expect(response.headers.get('set-cookie')).toContain('Max-Age=3600');
+  expect(linkCartToCustomer).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.anything(),
+    expect.anything(),
+    expect.objectContaining({ destination: { type: 'web' } })
+  );
 });
 it('authenticates before parsing the account-link body', async () => {
   vi.mocked(resolveAccountCartRequest).mockResolvedValue({

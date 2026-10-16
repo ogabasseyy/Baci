@@ -23,13 +23,20 @@ flags remain disabled by default, and no merchant is enrolled.
   pending).
 - Device-scoped revocation (`commerce_cart_revoke_device_grants`) used
   by native retirement and web sign-out; it never clears cart contents.
-- Worker credential boundary: the `commerce_cart_worker` role's event
-  policies are intentionally unscoped (`USING (true)`) because the
-  publisher drains every merchant's outbox. That credential must stay
-  worker-only — never provision it to web, native, or any
-  shopper-facing surface — and prefer constraining the role to the
-  publish RPC path before enabling `shared_cart_realtime` in
-  production.
+- Worker credential boundary: `20261015157000` revokes the
+  `commerce_cart_worker` role's direct `SELECT`/`UPDATE` on
+  `commerce_cart_events` and drops its policies; the publisher reaches
+  the outbox only through the `commerce_cart_publish_events` RPC, and
+  retention runs through the SECURITY DEFINER cleanup as the scheduler
+  owner. That credential must stay worker-only — never provision it to
+  web, native, or any shopper-facing surface.
+- Terminal-cart retention: applying the migration chain schedules an
+  hourly pg_cron job (`commerce-cart-terminal-purge`, where pg_cron
+  exists) that deletes terminal carts (completed, expired, canceled)
+  older than 90 days in 500-row batches. The 90-day window is the
+  explicit retention decision for this feature; the job is a no-op
+  while the cart tables are empty and never touches active carts, so
+  migration application alone starts no shopper-visible behavior.
 - Worker token rotation: point `COMMERCE_CART_WORKER_JWT_FILE` at a
   rotator-managed file instead of setting `COMMERCE_CART_WORKER_JWT`
   directly; the worker re-reads the file on every batch, so a rotated

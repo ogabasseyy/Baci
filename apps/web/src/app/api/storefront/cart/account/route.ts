@@ -93,7 +93,12 @@ export async function POST(request: NextRequest): Promise<Response> {
       parsed.data,
       {
         environment: getCartProofEnvironment(),
-        destination: { type: 'web' },
+        // The internally minted merge handoff carries the caller's
+        // destination: native device-proof callers must not be issued
+        // a web-caller handoff (SQL derives p_caller from it).
+        destination: accountRequestUsesDeviceProof(request)
+          ? { type: 'native', app: 'storefront' }
+          : { type: 'web' },
       }
     );
     if (!result.ok) return cartErrorResponse(result.code);

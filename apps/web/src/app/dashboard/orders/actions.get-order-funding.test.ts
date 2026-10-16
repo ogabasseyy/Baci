@@ -102,12 +102,10 @@ describe('getOrder funding resilience', () => {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
-                order: vi
-                  .fn()
-                  .mockResolvedValue({
-                    data: [],
-                    error: { message: 'connection reset' },
-                  }),
+                order: vi.fn().mockResolvedValue({
+                  data: [],
+                  error: { message: 'connection reset' },
+                }),
               })),
             })),
           })),

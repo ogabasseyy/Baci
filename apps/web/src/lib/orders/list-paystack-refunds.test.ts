@@ -122,9 +122,7 @@ describe('listPaystackRefunds', () => {
         text: async () => raw,
       })
       .mockResolvedValueOnce(
-        response([
-          { ...refund, transaction: { id: '9007199254740993' } },
-        ])
+        response([{ ...refund, transaction: { id: '9007199254740993' } }])
       );
     vi.stubGlobal('fetch', fetcher);
     expect(await listPaystackRefunds('capture-1')).toHaveLength(1);

@@ -27,13 +27,13 @@ describe('reconcileWorkerDeadlineMs', () => {
   });
 
   it('caps the phase when verification pends without starving the serial drain', () => {
-    // The capped phase ends with exactly the 76s preflight budget
-    // before the phase end; the row-start gate sits the same two
-    // provider timeouts inside it, and the worst-case overrun
-    // still admits the first serial steps.
+    // The capped phase ends with the setup allowance plus the 76s
+    // preflight budget before the phase end; the row-start gate
+    // sits the same two provider timeouts inside it, and the
+    // worst-case overrun still admits the first serial steps.
     expect(
       reconcileWorkerDeadlineMs(1_000_000, CAPPED_RECONCILE_PHASE_MS)
-    ).toBe(1_028_000);
+    ).toBe(1_016_000);
     const worstCaseElapsed =
       reconcileWorkerDeadlineMs(1_000_000, CAPPED_RECONCILE_PHASE_MS) +
       16_000 -

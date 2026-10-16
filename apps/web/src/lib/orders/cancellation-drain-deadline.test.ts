@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 import {
   CANCELLATION_EMAIL_CLAIM_WRITE_ALLOWANCE_MS,
+  CANCELLATION_REFUND_SETUP_ALLOWANCE_MS,
   CAPPED_RECONCILE_PHASE_MS,
   cancellationDrainDeadlineMs,
   cancellationEmailDrainDeadlineMs,
@@ -49,14 +50,15 @@ describe('cancellationRefundDrainDeadlineMs', () => {
 
   it('keeps the preflight budget fittable with the reserve intact', () => {
     // The capped reconcile phase ends at CAPPED_RECONCILE_PHASE_MS:
-    // the refund cutoff must leave the live preflight budget after
-    // it, and the 150s notification reserve plus 30s safety must
-    // still fit the 300s invocation. Fails if any shared budget
-    // drifts.
+    // the refund cutoff must leave the setup allowance plus the
+    // live preflight budget after it, and the 150s notification
+    // reserve plus 30s safety must still fit the 300s invocation.
+    // Fails if any shared budget drifts.
     const refundWindow =
       cancellationRefundDrainDeadlineMs(0) - CAPPED_RECONCILE_PHASE_MS;
     expect(refundWindow).toBeGreaterThanOrEqual(
-      REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
+      REFUND_PREFLIGHT_ADMISSION_BUDGET_MS +
+        CANCELLATION_REFUND_SETUP_ALLOWANCE_MS
     );
     expect(
       cancellationRefundDrainDeadlineMs(0) + 150_000 + 30_000

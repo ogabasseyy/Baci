@@ -109,12 +109,23 @@ export function cancellationRefundDrainDeadlineMs(startedAtMs: number): number {
   return startedAtMs + SIDE_EFFECT_PHASE_END_MS;
 }
 
+// Setup allowance ahead of the first provider check: the 76s
+// admission runs only after candidate selection, the order/merchant
+// reads, and the claim RPC, so a cap that leaves exactly the
+// preflight budget defers the first verification on any positive
+// setup latency. Sized like the email allowances (4s reads plus an
+// 8s single-write claim); shared with the capped phase below: keep
+// the invariant test in lockstep.
+export const CANCELLATION_REFUND_SETUP_ALLOWANCE_MS = 12_000;
+
 // Capped reconcile phase when refund verification pends: ends the
-// phase with exactly the preflight budget remaining before the
-// phase end, so the first refund rows verify instead of deferring
-// on every backlog invocation. Shared with
+// phase with the setup allowance plus the preflight budget
+// remaining before the phase end, so the first refund rows verify
+// instead of deferring on every backlog invocation. Shared with
 // reconcile-worker-deadline ROW_START_SLACK_MS (row starts stop
 // that interval before this) and REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
 // (single-sourced above): keep the invariant test in lockstep.
 export const CAPPED_RECONCILE_PHASE_MS =
-  SIDE_EFFECT_PHASE_END_MS - REFUND_PREFLIGHT_ADMISSION_BUDGET_MS;
+  SIDE_EFFECT_PHASE_END_MS -
+  REFUND_PREFLIGHT_ADMISSION_BUDGET_MS -
+  CANCELLATION_REFUND_SETUP_ALLOWANCE_MS;

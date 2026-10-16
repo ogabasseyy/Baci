@@ -41,6 +41,14 @@ export function OrderRefundPanel({
     summary?.currency ?? 'NGN'
   );
   const requireLeg = method === 'paystack' && legOptions.length > 1;
+  // A polling update can cover the pinned capture while the form
+  // stands open: the selector hides but the stale id would still
+  // submit and the RPC would reject it. Only a pin that remains a
+  // live option reaches validation and the payload; anything else
+  // resolves unpinned like a sole leg.
+  const pinnedLegId = legOptions.some((option) => option.id === legId)
+    ? legId
+    : null;
 
   // Only a refunded order is terminal: a failed row can still
   // transition asynchronously (drain retries, provider
@@ -102,7 +110,7 @@ export function OrderRefundPanel({
         confirmed,
         date,
         method,
-        paymentLegId: legId || null,
+        paymentLegId: pinnedLegId,
         reference,
         remaining: summary?.remaining ?? null,
         requirePaymentLeg: requireLeg,
@@ -125,7 +133,7 @@ export function OrderRefundPanel({
               date,
               method,
               note,
-              paymentLegId: legId || null,
+              paymentLegId: pinnedLegId,
               reference,
             });
       const updated = await apiPost<RefundSummary>(
@@ -250,7 +258,7 @@ export function OrderRefundPanel({
                 confirmed={confirmed}
                 currency={summary.currency}
                 date={date}
-                legId={legId}
+                legId={pinnedLegId ?? ''}
                 legOptions={requireLeg ? legOptions : []}
                 method={method}
                 note={note}

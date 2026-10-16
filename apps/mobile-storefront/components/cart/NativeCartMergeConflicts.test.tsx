@@ -6,7 +6,7 @@ import { NativeCartMergeConflicts } from './NativeCartMergeConflicts';
 const item = { productId: '11111111-1111-4111-8111-111111111111' };
 
 describe('NativeCartMergeConflicts', () => {
-  it('renders sibling lanes that share one product identity as separate rows', () => {
+  it('collapses sibling lanes that share one product identity into a single choice', () => {
     const onPick = jest.fn();
     const view = render(
       <NativeCartMergeConflicts
@@ -31,11 +31,13 @@ describe('NativeCartMergeConflicts', () => {
         onPick={onPick}
       />
     );
-    // Both lanes render their own choice buttons despite sharing the
-    // base item identity.
-    expect(view.getAllByText('Keep saved offer')).toHaveLength(2);
-    expect(view.getAllByText('Keep this cart offer')).toHaveLength(2);
-    fireEvent.press(view.getAllByText('Keep saved offer')[1]!);
+    // The planner applies one resolution per base item, so the two
+    // lanes render a single product-level choice instead of two
+    // independently-looking picks that would overwrite each other.
+    expect(view.getAllByText('Keep saved offer')).toHaveLength(1);
+    expect(view.getAllByText('Keep this cart offer')).toHaveLength(1);
+    fireEvent.press(view.getByText('Keep saved offer'));
+    expect(onPick).toHaveBeenCalledTimes(1);
     expect(onPick).toHaveBeenCalledWith({ item, keep: 'incoming' });
   });
 });

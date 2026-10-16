@@ -15,9 +15,22 @@ export function NativeCartMergeConflicts({
   disabled,
   onPick,
 }: NativeCartMergeConflictsProps) {
+  // The shared planner resolves one keep decision per base item: a
+  // resolution names the product, and every sibling lane of that
+  // product follows it. Rendering one button pair per lane would
+  // offer choices the planner cannot honor independently (later picks
+  // overwrite earlier ones), so collapse sibling lanes into the single
+  // product-level choice the contract actually applies.
+  const seenItems = new Set<string>();
+  const productConflicts = conflicts.filter((conflict) => {
+    const key = JSON.stringify(conflict.item);
+    if (seenItems.has(key)) return false;
+    seenItems.add(key);
+    return true;
+  });
   return (
     <>
-      {conflicts.map((conflict) => (
+      {productConflicts.map((conflict) => (
         // Sibling lanes share one base item identity (a shopper pick
         // names the base item in the shared planner), so the React key
         // must include the conflicting offers to stay unique per lane.

@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 
@@ -272,9 +272,7 @@ describe('OgabasseyHomePage', () => {
       : [];
     const suspenseChild = children.find(
       (child) =>
-        child &&
-        typeof child === 'object' &&
-        child.type === Symbol.for('react.suspense')
+        child && typeof child === 'object' && child.type === Suspense
     );
 
     expect(suspenseChild).toBeDefined();

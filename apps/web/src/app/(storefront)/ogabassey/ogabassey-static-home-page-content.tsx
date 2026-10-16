@@ -44,6 +44,15 @@ const ogabasseyStaticHomepageSchema = {
   },
 } as const;
 
+export function OgabasseyHomeStaticShellHead() {
+  return (
+    <>
+      <JsonLd data={ogabasseyStaticHomepageSchema} />
+      <OgabasseyHomeStyleLoader />
+    </>
+  );
+}
+
 export async function OgabasseyStaticHomePageContent({
   omitCommittedHero = false,
   pathPrefix,
@@ -81,8 +90,7 @@ export async function OgabasseyStaticHomePageContent({
 
   return (
     <>
-      <JsonLd data={ogabasseyStaticHomepageSchema} />
-      <OgabasseyHomeStyleLoader />
+      {!omitCommittedHero && <OgabasseyHomeStaticShellHead />}
       {paintCommittedHero && committedMobileLcpUrl ? (
         <>
           <div data-ogabassey-home-lcp-shell="true">

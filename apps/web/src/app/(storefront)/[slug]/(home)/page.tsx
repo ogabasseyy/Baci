@@ -22,9 +22,12 @@ import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-b
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import { isOgabasseyHomeIdentifier } from './is-ogabassey-home-identifier';
 import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
-import { OgabasseyStaticHomePage } from './ogabassey-static-home-page';
 
 const OGABASSEY_DOMAIN_IDENTIFIER = new URL(OGABASSEY_URL).hostname;
+
+function warmOgabasseyHomeHeroShell(): void {
+  void resolveOgabasseyHomeHeroShell().catch(() => undefined);
+}
 
 export function generateStaticParams(): Array<{ slug: string }> {
   return [OGABASSEY_DOMAIN_IDENTIFIER, OGABASSEY_TEMPLATE_ID].map((slug) => ({
@@ -48,7 +51,12 @@ async function renderGenericStorefrontHomePage(
   return <GenericStorefrontHomePage params={params} />;
 }
 
-function renderOgabasseyStaticHomePage(slug: string) {
+async function renderOgabasseyStaticHomePage(slug: string) {
+  warmOgabasseyHomeHeroShell();
+  const { OgabasseyStaticHomePage } = await import(
+    './ogabassey-static-home-page'
+  );
+
   return (
     <OgabasseyStaticHomePage pathPrefix={getOgabasseyHomePathPrefix(slug)} />
   );
@@ -145,7 +153,7 @@ export async function generateMetadata({
     // metadata-blocking renders (Lighthouse/PSI and bots) resolve both
     // OgabasseyHomeCommittedSlideZeroPreload and OgabasseyStaticHomePageContent
     // synchronously in the first body microtask before RSC Flight scripts flush.
-    void resolveOgabasseyHomeHeroShell().catch(() => undefined);
+    warmOgabasseyHomeHeroShell();
     const merchant = await getRequestScopedMerchant(slug);
     const robots = toNextRobotsMetadata(
       buildHomeSeoDecision({

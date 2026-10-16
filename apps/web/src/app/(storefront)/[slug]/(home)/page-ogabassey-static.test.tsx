@@ -39,6 +39,9 @@ vi.mock('@/app/(storefront)/storefront-full.css', () => {
 vi.mock(
   '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content',
   () => ({
+    OgabasseyHomeStaticShellHead: () => (
+      <span data-testid="ogabassey-home-static-shell-head" />
+    ),
     OgabasseyStaticHomePageContent: (props: {
       omitCommittedHero?: boolean;
       pathPrefix: string;
@@ -58,6 +61,10 @@ vi.mock('./ogabassey-home-committed-lcp', () => ({
   OgabasseyHomeCommittedLcp: () => (
     <div data-testid="ogabassey-home-committed-lcp" />
   ),
+}));
+
+vi.mock('@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data', () => ({
+  resolveOgabasseyHomeHeroShell: vi.fn(() => Promise.resolve(null)),
 }));
 
 async function renderStorefrontPage(slug: string) {

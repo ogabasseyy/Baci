@@ -26,6 +26,9 @@ vi.mock('@/app/(storefront)/storefront-home-critical.css', () => {
 vi.mock(
   '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content',
   () => ({
+    OgabasseyHomeStaticShellHead: () => (
+      <span data-testid="ogabassey-home-static-shell-head" />
+    ),
     OgabasseyStaticHomePageContent: (props: {
       omitCommittedHero?: boolean;
       pathPrefix: string;

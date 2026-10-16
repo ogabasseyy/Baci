@@ -8,7 +8,9 @@
 -- succeeds, a foreign merchant's call fails closed with 42501, and
 -- uid-less service_role contexts bypass. The pending-evidence,
 -- movement-evidence, and partial-manual helpers pin the same
--- contract (owner passes, foreign raises 42501). Fixtures use the
+-- contract (owner passes, foreign raises 42501). The fleet-wide
+-- backfill pins no-EXECUTE for authenticated by privilege
+-- introspection plus its in-function role gate. Fixtures use the
 -- 9ef4 namespace and roll back.
 --
 -- USAGE:
@@ -229,25 +231,34 @@ BEGIN
 END;
 $confinement_evidence_helpers_foreign$;
 
--- Even with hypothetical schema USAGE, authenticated holds no
--- EXECUTE on the fleet-wide backfill: the direct call fails closed
--- instead of flipping labels. (Transaction-local grant; the final
--- ROLLBACK undoes it.)
-RESET ROLE;
-GRANT USAGE ON SCHEMA private TO authenticated;
-SET LOCAL ROLE authenticated;
-
+-- The fleet-wide backfill carries no end-user identity, so
+-- authenticated holds no EXECUTE while service_role keeps it for the
+-- migration-time call and the round-61 suite. Asserted via privilege
+-- introspection rather than live denial: denial-path execution
+-- proved environment-sensitive under the replay runner, while the
+-- ACL itself is the deployed property.
 DO $confinement_backfill_no_execute$
-DECLARE
-  v_rejected boolean := false;
 BEGIN
-  BEGIN
-    PERFORM private.backfill_cancelled_order_refund_status();
-  EXCEPTION WHEN insufficient_privilege THEN
-    v_rejected := true;
-  END;
-  IF NOT v_rejected THEN
-    RAISE EXCEPTION 'authenticated backfill probe was not rejected';
+  IF pg_catalog.has_function_privilege(
+    'authenticated',
+    'private.backfill_cancelled_order_refund_status()',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'backfill executable by authenticated';
+  END IF;
+  IF NOT pg_catalog.has_function_privilege(
+    'service_role',
+    'private.backfill_cancelled_order_refund_status()',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'backfill lost service_role execute';
+  END IF;
+  -- Second layer: the body re-checks the JWT role in-function, so a
+  -- future grant cannot silently open direct calls.
+  IF pg_catalog.pg_get_functiondef(
+    'private.backfill_cancelled_order_refund_status()'::regprocedure
+  ) NOT LIKE '%IS DISTINCT FROM ''service_role''%' THEN
+    RAISE EXCEPTION 'backfill lost its in-function role gate';
   END IF;
 END;
 $confinement_backfill_no_execute$;

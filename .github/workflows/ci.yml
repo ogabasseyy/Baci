@@ -447,7 +447,7 @@ jobs:
         run: >-
           bash supabase/tests/run-cache-invalidation-outbox-test-runner.test.sh &&
           bash supabase/tests/run-cache-invalidation-outbox-test.sh
-      - name: Test order-refund claim/manual serialization
+      - name: Test order-refund claim lock serialization (Phase 1 only)
         env:
           MINIMAL_PHASE1: 1
         run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh

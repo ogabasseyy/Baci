@@ -128,7 +128,10 @@ describe('OrderRefundPanel status display', () => {
     });
     expect(await screen.findByText(/Date unavailable/)).toBeInTheDocument();
   });
-  it('stops polling once the refund needs review', async () => {
+  it('keeps polling while the refund needs review', async () => {
+    // Requires-review is not terminal: provider reconciliation can
+    // still complete the underlying delivery_uncertain step, so an
+    // open page must keep refreshing until it observes refunded.
     vi.useFakeTimers();
     try {
       loadWith({ ...summary, status: 'requires_review' });
@@ -138,7 +141,7 @@ describe('OrderRefundPanel status display', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(120_000);
       });
-      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(5);
     } finally {
       vi.useRealTimers();
     }

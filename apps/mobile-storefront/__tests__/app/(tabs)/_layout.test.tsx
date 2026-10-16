@@ -203,6 +203,12 @@ jest.mock('@/hooks/useTheme', () => ({
   }),
 }));
 
+// Side-effect-only warm hook (needs QueryClientProvider in prod, which these
+// structure tests don't mount); the hook itself is covered by its own suite.
+jest.mock('@/hooks/use-warm-merchant-payment-settings', () => ({
+  useWarmMerchantPaymentSettings: jest.fn(),
+}));
+
 jest.mock('@/lib/templates', () => ({
   getTemplateConfig: () => ({
     headerStyle: 'standard',

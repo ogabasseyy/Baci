@@ -302,6 +302,8 @@ jest.mock('@/services/cart-reprice', () => {
       changes: [],
       conditionChanges: [],
       unavailable: [],
+      offerIdById: {},
+      adoptions: [],
     })),
   };
 });

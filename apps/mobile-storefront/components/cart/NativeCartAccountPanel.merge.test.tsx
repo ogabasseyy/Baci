@@ -39,14 +39,25 @@ const saved = {
   ...current,
   cartId: '55555555-5555-4555-8555-555555555555',
   version: 7,
-  lines: [{ ...line, quantity: 1, voucherToken: 'saved-voucher' }],
+  lines: [
+    {
+      ...line,
+      quantity: 1,
+      voucherToken: 'saved-voucher',
+      voucherAwardId: '66666666-6666-4666-8666-666666666666',
+    },
+  ],
 };
 
 it.each([
   [
     'Keep saved offer',
     'incoming',
-    { voucherToken: 'saved-voucher', quantity: 1 },
+    {
+      voucherToken: 'saved-voucher',
+      voucherAwardId: '66666666-6666-4666-8666-666666666666',
+      quantity: 1,
+    },
   ],
   [
     'Keep this cart offer',

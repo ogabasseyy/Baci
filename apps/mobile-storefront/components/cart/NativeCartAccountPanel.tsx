@@ -6,6 +6,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { NativeCartMergeConflicts } from './NativeCartMergeConflicts';
 
 /**
  * Explicit account choice for a signed-in shopper. Guest checkout never
@@ -184,48 +185,20 @@ export function NativeCartAccountPanel() {
             You also have a saved account cart with {saved.lines.length}{' '}
             item(s). Choose which cart to keep.
           </Text>
-          {conflicts.map((conflict) => (
-            <View key={JSON.stringify(conflict.item)}>
-              <Text style={{ color: colors.text }}>
-                Item {conflict.item.productId} has different offers in each
-                cart.
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                disabled={pending || !savedReady}
-                onPress={() =>
-                  setPicks((existing) => [
-                    ...existing.filter(
-                      (pick) =>
-                        JSON.stringify(pick.item) !==
-                        JSON.stringify(conflict.item)
-                    ),
-                    { item: conflict.item, keep: 'incoming' },
-                  ])
-                }
-              >
-                <Text style={{ color: colors.primary }}>Keep saved offer</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                disabled={pending || !savedReady}
-                onPress={() =>
-                  setPicks((existing) => [
-                    ...existing.filter(
-                      (pick) =>
-                        JSON.stringify(pick.item) !==
-                        JSON.stringify(conflict.item)
-                    ),
-                    { item: conflict.item, keep: 'existing' },
-                  ])
-                }
-              >
-                <Text style={{ color: colors.primary }}>
-                  Keep this cart offer
-                </Text>
-              </Pressable>
-            </View>
-          ))}
+          <NativeCartMergeConflicts
+            conflicts={conflicts}
+            colors={colors}
+            disabled={pending || !savedReady}
+            onPick={(pick) =>
+              setPicks((existing) => [
+                ...existing.filter(
+                  (candidate) =>
+                    JSON.stringify(candidate.item) !== JSON.stringify(pick.item)
+                ),
+                pick,
+              ])
+            }
+          />
           <Pressable
             accessibilityRole="button"
             disabled={pending || !savedReady}

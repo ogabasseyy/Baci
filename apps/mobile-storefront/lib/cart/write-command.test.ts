@@ -46,11 +46,17 @@ it('maps clear and pins voucher adds to one unit', () => {
           product_id: 'prod-1',
           quantity: 5,
           voucher_token: 'tok-1',
+          voucher_award_id: 'award-1',
         } as never,
       },
       snapshot()
     )
-  ).toMatchObject({ type: 'add', quantity: 1, voucherToken: 'tok-1' });
+  ).toMatchObject({
+    type: 'add',
+    quantity: 1,
+    voucherToken: 'tok-1',
+    voucherAwardId: 'award-1',
+  });
 });
 
 it('toggles assurance from the confirmed line state', () => {

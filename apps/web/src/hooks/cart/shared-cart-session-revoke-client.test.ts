@@ -51,6 +51,13 @@ describe('shared-cart session-revoke client', () => {
     });
   });
 
+  it('allows logout when the proof expired past the revocation grace', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ code: 'expired_proof' }, 401));
+    await expect(revokeCartDeviceSession('shop')).resolves.toEqual({
+      ok: true,
+    });
+  });
+
   it('allows logout when the proof is definitively invalid', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ code: 'invalid_proof' }, 401));
     await expect(revokeCartDeviceSession('shop')).resolves.toEqual({

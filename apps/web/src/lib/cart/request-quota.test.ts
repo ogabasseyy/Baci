@@ -181,6 +181,27 @@ describe('checkCartQuota degraded store', () => {
     ).resolves.toMatchObject({ allowed: false });
   });
 
+  it('fails closed when the Redis reply is malformed but does not throw', async () => {
+    __resetCartQuotaStoreForTesting();
+    vi.stubEnv('NODE_ENV', 'production');
+    mockGetRedis.mockReturnValue({
+      createScript: () => ({ eval: async () => ['not-a-number', 5_000] }),
+    });
+    try {
+      const counter = await incrementWindowCounter('quota:malformed', 60_000);
+      expect(counter.degraded).toBe(true);
+      await expect(
+        checkCartQuota({
+          merchantId: MERCHANT_ID,
+          operation: 'bootstrap',
+          subject: 'ip-malformed',
+        })
+      ).resolves.toMatchObject({ allowed: false, remaining: 0 });
+    } finally {
+      mockGetRedis.mockReturnValue(null);
+    }
+  });
+
   it('keeps authenticated operations on the degraded memory budget', async () => {
     __resetCartQuotaStoreForTesting();
     vi.stubEnv('NODE_ENV', 'production');

@@ -18,12 +18,16 @@ export async function revokeCartDeviceSession(
     // No proof means no cart authority exists to retire (ordinary
     // legacy logout). A definitively invalid proof (for example after
     // a signing-key rotation) can never be repaired by retrying and
-    // authorizes nothing, so it is likewise already retired.
+    // authorizes nothing, so it is likewise already retired. A proof
+    // expired past the revocation grace is terminal for the same
+    // reason and must not block customer logout forever.
     return {
       ok: response.ok
         ? body?.revoked === true
         : response.status === 401 &&
-          (body?.code === 'missing_proof' || body?.code === 'invalid_proof'),
+          (body?.code === 'missing_proof' ||
+            body?.code === 'invalid_proof' ||
+            body?.code === 'expired_proof'),
     };
   } catch {
     return { ok: false };

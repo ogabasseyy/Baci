@@ -198,7 +198,10 @@ it('surfaces transport failures as typed outages and clears them on success', as
   );
   expect(result.items).toHaveLength(1);
   expect(store.lastStorageErrorCode).toBeNull();
-  expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
+  expect(describeGuestCartStoreHealth(store)).toEqual({
+    guestCarts: 'ok',
+    guestCartsCanonical: 'disabled',
+  });
 });
 
 it('keeps serving legacy carts when the canonical bridge configuration is invalid', async () => {
@@ -459,9 +462,13 @@ it('degrades bridge health only for a real outage and clears it after canonical 
   expect(describeGuestCartStoreHealth(store)).toEqual({
     guestCarts: 'degraded',
     guestCartsReason: 'guest cart write failed (bridge_unavailable)',
+    guestCartsCanonical: 'enabled',
   });
   await store.update(token, { product_id: id, quantity: 1 }, validate);
-  expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
+  expect(describeGuestCartStoreHealth(store)).toEqual({
+    guestCarts: 'ok',
+    guestCartsCanonical: 'enabled',
+  });
 });
 it.each([
   'version_conflict',
@@ -476,5 +483,8 @@ it.each([
   await expect(
     store.update(token, { product_id: id, quantity: 1 }, validate)
   ).rejects.toMatchObject({ code });
-  expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
+  expect(describeGuestCartStoreHealth(store)).toEqual({
+    guestCarts: 'ok',
+    guestCartsCanonical: 'enabled',
+  });
 });

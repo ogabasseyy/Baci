@@ -132,6 +132,15 @@ activation check must confirm database statement logging does not
 persist RPC arguments (`log_statement` must not capture the preview
 calls), since the raw token now reaches the RPC as an argument.
 
+MCP canonical bridge: the bridge targets only origins allowlisted in
+`MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS` (default
+`https://ogabassey.com`). A deployment whose configured origin is not
+allowlisted serves legacy guest carts only, and that state is
+operator-visible as `guestCartsCanonical: 'disabled'` in the MCP
+`/health` response (it does not degrade legacy carts). Confirm the
+field reads `enabled` for every deployment expected to migrate MCP
+guest carts to the canonical shared cart.
+
 ## Observability gaps to close before activation
 
 - No production dashboards/alerts exist yet for mutation latency,

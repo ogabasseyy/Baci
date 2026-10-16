@@ -101,6 +101,43 @@ it.each([
   expect(linkAccount.mock.calls[1][0]).toEqual(linkAccount.mock.calls[0][0]);
 });
 
+it('discards merge picks when the saved cart version changes before submit', async () => {
+  const linkAccount = jest.fn().mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    accountsEnabled: true,
+    accountUserId: owner,
+    linkAccount,
+    loadSavedCart: jest.fn().mockResolvedValue(undefined),
+    savedCart: saved,
+    snapshot: current,
+  });
+  const view = render(<NativeCartAccountPanel />);
+  await act(async () => {});
+  fireEvent.press(view.getByText('Keep saved offer'));
+  // The saved cart moves to a new version with a different quantity:
+  // the earlier pick no longer describes what the shopper reviewed.
+  act(() =>
+    useNativeSharedCartStore.setState({
+      savedCart: {
+        ...saved,
+        version: 8,
+        lines: [{ ...saved.lines[0], quantity: 2, lineTotalMinor: 200 }],
+      },
+    })
+  );
+  fireEvent.press(view.getByText('Combine both carts'));
+  expect(linkAccount).not.toHaveBeenCalled();
+  fireEvent.press(view.getByText('Keep saved offer'));
+  fireEvent.press(view.getByText('Combine both carts'));
+  await waitFor(() => expect(linkAccount).toHaveBeenCalledTimes(1));
+  expect(linkAccount.mock.calls[0][0]).toMatchObject({
+    expectedSavedVersion: 8,
+    expectedCurrentVersion: 3,
+    resolutions: [{ item: { productId }, keep: 'incoming' }],
+  });
+});
+
 it('blocks fresh choices until the saved-cart lookup succeeds, and offers lookup retry after failure', async () => {
   const loadSavedCart = jest
     .fn()

@@ -67,6 +67,27 @@ export function NativeCartAccountPanel() {
       generation: ownerScope.generation + 1,
     });
   }
+  // Merge picks are made against one saved/current version pair. If
+  // either cart moves (realtime refresh, a new saved-cart read), the
+  // earlier choices no longer describe what the shopper reviewed, so
+  // discard them and require a fresh pick.
+  const [picksScope, setPicksScope] = useState({
+    savedCartId: savedCart?.cartId ?? null,
+    savedVersion: savedCart?.version ?? null,
+    currentVersion: snapshot?.version ?? null,
+  });
+  if (
+    picksScope.savedCartId !== (savedCart?.cartId ?? null) ||
+    picksScope.savedVersion !== (savedCart?.version ?? null) ||
+    picksScope.currentVersion !== (snapshot?.version ?? null)
+  ) {
+    setPicksScope({
+      savedCartId: savedCart?.cartId ?? null,
+      savedVersion: savedCart?.version ?? null,
+      currentVersion: snapshot?.version ?? null,
+    });
+    setPicks([]);
+  }
   // Async completions compare against the last committed scope: the
   // ref only advances in an effect, never during render.
   const ownerScopeRef = useRef(ownerScope);

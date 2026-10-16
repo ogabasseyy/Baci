@@ -43,6 +43,27 @@ it('hides the resolution-less combine while conflicts need picks', () => {
     screen.getByRole('button', { name: 'Combine with my choices' })
   ).toBeTruthy();
 });
+it('shows update guidance instead of offer choices for duplicate conflicts', () => {
+  useNativeSharedCartStore.setState({
+    mergeConflicts: [{ productId }],
+    mergeConflictReason: 'duplicate_identity',
+    status: 'choice_required',
+    chooseLegacy: jest.fn().mockResolvedValue(undefined),
+  });
+  const screen = render(<SharedCartStatusPanel />);
+  expect(
+    screen.getByText(
+      'Update duplicate voucher items in the original cart before combining.'
+    )
+  ).toBeTruthy();
+  expect(
+    screen.queryByRole('button', { name: 'Combine with my choices' })
+  ).toBeNull();
+  expect(
+    screen.queryByRole('button', { name: 'Keep device offer' })
+  ).toBeNull();
+});
+
 it('requires a per-item offer choice before combining legacy carts', () => {
   const chooseLegacy = jest.fn().mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({

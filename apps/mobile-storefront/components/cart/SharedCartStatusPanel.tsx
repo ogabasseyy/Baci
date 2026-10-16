@@ -70,69 +70,74 @@ export function SharedCartStatusPanel() {
       {!busy && conflicts.length > 0 && state.chooseLegacy ? (
         <>
           <Text style={{ color: colors.text }}>
-            Some items have different offers in each cart. Choose which offer to
-            keep for each item, then combine.
+            {state.mergeConflictReason === 'duplicate_identity'
+              ? 'Update duplicate voucher items in the original cart before combining.'
+              : 'Some items have different offers in each cart. Choose which offer to keep for each item, then combine.'}
           </Text>
-          {conflicts.map((item) => (
-            <View key={conflictKey(item)}>
-              <Text style={{ color: colors.text }}>
-                Item {item.productId}
-                {item.variantId ? ` (${item.variantId})` : ''}
-              </Text>
+          {state.mergeConflictReason === 'duplicate_identity' ? null : (
+            <>
+              {conflicts.map((item) => (
+                <View key={conflictKey(item)}>
+                  <Text style={{ color: colors.text }}>
+                    Item {item.productId}
+                    {item.variantId ? ` (${item.variantId})` : ''}
+                  </Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() =>
+                      setPicks((current) => ({
+                        ...current,
+                        [conflictKey(item)]: 'existing',
+                      }))
+                    }
+                  >
+                    <Text style={{ color: colors.primary }}>
+                      {picks[conflictKey(item)] === 'existing'
+                        ? 'Keeping saved offer'
+                        : 'Keep saved offer'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() =>
+                      setPicks((current) => ({
+                        ...current,
+                        [conflictKey(item)]: 'incoming',
+                      }))
+                    }
+                  >
+                    <Text style={{ color: colors.primary }}>
+                      {picks[conflictKey(item)] === 'incoming'
+                        ? 'Keeping device offer'
+                        : 'Keep device offer'}
+                    </Text>
+                  </Pressable>
+                </View>
+              ))}
               <Pressable
                 accessibilityRole="button"
+                disabled={!allPicked}
                 onPress={() =>
-                  setPicks((current) => ({
-                    ...current,
-                    [conflictKey(item)]: 'existing',
-                  }))
+                  run(
+                    state.chooseLegacy
+                      ? () =>
+                          state.chooseLegacy?.(
+                            'merge',
+                            conflicts.map((item) => ({
+                              item,
+                              keep: picks[conflictKey(item)],
+                            }))
+                          ) ?? Promise.resolve()
+                      : null
+                  )
                 }
               >
                 <Text style={{ color: colors.primary }}>
-                  {picks[conflictKey(item)] === 'existing'
-                    ? 'Keeping saved offer'
-                    : 'Keep saved offer'}
+                  Combine with my choices
                 </Text>
               </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() =>
-                  setPicks((current) => ({
-                    ...current,
-                    [conflictKey(item)]: 'incoming',
-                  }))
-                }
-              >
-                <Text style={{ color: colors.primary }}>
-                  {picks[conflictKey(item)] === 'incoming'
-                    ? 'Keeping device offer'
-                    : 'Keep device offer'}
-                </Text>
-              </Pressable>
-            </View>
-          ))}
-          <Pressable
-            accessibilityRole="button"
-            disabled={!allPicked}
-            onPress={() =>
-              run(
-                state.chooseLegacy
-                  ? () =>
-                      state.chooseLegacy?.(
-                        'merge',
-                        conflicts.map((item) => ({
-                          item,
-                          keep: picks[conflictKey(item)],
-                        }))
-                      ) ?? Promise.resolve()
-                  : null
-              )
-            }
-          >
-            <Text style={{ color: colors.primary }}>
-              Combine with my choices
-            </Text>
-          </Pressable>
+            </>
+          )}
         </>
       ) : null}
       {!busy &&

@@ -23,12 +23,12 @@ BEGIN
     -- Strip the full ECMAScript trim whitespace set (not just the
     -- PostgreSQL \s class, which misses U+00A0/U+FEFF and friends) so
     -- detection matches the client gates' String.trim() + lowercase.
-    -- Canonical names contain no whitespace, so stripping everywhere
-    -- is equivalent to trimming for this comparison.
+    -- Only edge runs are stripped, matching String.trim(): interior
+    -- whitespace stays, so unrelated values remain merely disabled.
     normalized := pg_catalog.lower(
       pg_catalog.regexp_replace(
         feature,
-        '[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]',
+        '^[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+|[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]+$',
         '',
         'g'
       )

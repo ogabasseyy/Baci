@@ -59,6 +59,11 @@ export class GuestCartStore {
 
   private readonly canonical: ReturnType<typeof createGuestCanonicalBridge>;
 
+  /** Surfaced in /health so a legacy-only deployment is operator-visible. */
+  get canonicalEnabled(): boolean {
+    return this.canonical !== null;
+  }
+
   constructor(
     private readonly supabase: SupabaseClient,
     canonical?: ReturnType<typeof createGuestCanonicalBridge>

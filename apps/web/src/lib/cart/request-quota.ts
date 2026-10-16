@@ -78,6 +78,17 @@ export function parseCounter(value: unknown): number {
   return 0;
 }
 
+/** Strict Redis reply parsing: null means the reply shape is malformed. */
+function parseCounterStrict(value: unknown, min: number): number | null {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= min)
+    return value;
+  if (typeof value === 'string' && /^-?\d+$/.test(value)) {
+    const parsed = Number(value);
+    return parsed >= min ? parsed : null;
+  }
+  return null;
+}
+
 /**
  * Hard bound for the degraded in-memory store. Quota subjects include
  * per-principal ids (each anonymous bootstrap mints a fresh one), so
@@ -170,8 +181,13 @@ export async function incrementWindowCounter(
       `);
       const reply = await script.eval([key], [String(Math.max(1, windowMs))]);
       const [rawCount, rawPttl] = Array.isArray(reply) ? reply : [reply, -1];
-      const count = parseCounter(rawCount);
-      const pttl = parseCounter(rawPttl);
+      const count = parseCounterStrict(rawCount, 0);
+      const pttl = parseCounterStrict(rawPttl, -2);
+      // A malformed-but-non-throwing reply must not read as count 0
+      // with a healthy store: degrade so fail-closed operations fail
+      // closed instead of silently losing their anonymous budget.
+      if (count === null || pttl === null)
+        throw new Error('Malformed cart quota reply');
       const msRemaining = pttl > 0 ? pttl : windowMs;
       return {
         count,

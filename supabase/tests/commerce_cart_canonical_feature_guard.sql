@@ -47,6 +47,12 @@ BEGIN
     RAISE EXCEPTION 'unicode-whitespace-wrapped shared_cart value must be rejected';
   END IF;
 
+  -- Interior whitespace is not JavaScript-trimmable, so an unrelated
+  -- value stays merely disabled instead of being rejected.
+  UPDATE public.merchants
+  SET premium_features = '["shared_ cart"]'::jsonb
+  WHERE id = merchant;
+
   UPDATE public.merchants
   SET premium_features = '["shared_cart", "shared_cart_native", "Other_Feature"]'::jsonb
   WHERE id = merchant;

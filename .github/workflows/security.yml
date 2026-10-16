@@ -49,6 +49,7 @@ jobs:
           # root changes must stay in the security-relevant PR scope.
           filters: |
             semgrep_relevant:
+              - '.semgrepignore'
               - 'apps/web/src/app/api/**'
               - 'apps/web/src/lib/**'
               - 'apps/web/src/schemas/**'
@@ -197,6 +198,42 @@ jobs:
             echo "::warning::Base branch ${PR_BASE_REF} lacks ${diagnostics_helper}; using PR-head bootstrap copy (requires CODEOWNERS human review, not independent CI attestation)."
           fi
           python3 "$diagnostics_helper" pr-targets "$PR_BASE_REF"
+          # Ignore policy changes affect unchanged files as well as the diff.
+          # Apply that policy to the entire protected push scope, using the
+          # trusted base helper and retaining strict manifest completeness.
+          ignore_policy_changed="$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" -- .semgrepignore)"
+          if [ -n "$ignore_policy_changed" ]; then
+            base_pr_targets="$(mktemp)"
+            trap 'rm -f "$base_pr_targets"; if [ -n "${base_helper_dir:-}" ]; then rm -rf "$base_helper_dir"; fi' EXIT
+            cp semgrep.requested-targets "$base_pr_targets"
+            scan_targets=(
+              apps/web/src/app/api
+              apps/web/src/lib
+              apps/web/src/schemas
+              apps/mobile-admin/app
+              apps/mobile-admin/hooks
+              apps/mobile-admin/lib
+              apps/mobile-storefront/app
+              apps/mobile-storefront/hooks
+              apps/mobile-storefront/lib
+              apps/mobile-storefront/services
+              apps/mobile-storefront/stores
+              packages/shared
+              supabase/migrations
+              next.config.ts
+              .github/workflows
+              .github/scripts/semgrep-sarif-analysis-diagnostics.py
+              .github/scripts/semgrep-sarif-pg-diagnostic.py
+              .github/scripts/semgrep-sarif-pg-diagnostic.test.py
+            )
+            python3 "$diagnostics_helper" push-targets "${scan_targets[@]}"
+            # Keep all base-selected paths, including paths outside these roots.
+            cat "$base_pr_targets" >> semgrep.requested-targets
+            # Older base helpers do not yet recognize these exact Python files.
+            git ls-files -z -- \
+              .github/scripts/semgrep-sarif-pg-diagnostic.py \
+              .github/scripts/semgrep-sarif-pg-diagnostic.test.py >> semgrep.requested-targets
+          fi
           # Add exact new token-bearing diagnostics even when the trusted base
           # selector predates them. Preserve every base-selected target.
           git diff --name-only -z --diff-filter=d "origin/${PR_BASE_REF}...HEAD" -- \

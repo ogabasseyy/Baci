@@ -3,13 +3,10 @@ import { isUint8Array } from 'node:util/types';
 import { Client } from 'pg';
 import { piggyvestPostgresConfigurationSchema } from '@/schemas/piggyvest-postgres-configuration';
 import { piggyvestPostgresExecutionSchemas } from '@/schemas/piggyvest-postgres-execution';
+import { rejectLocalPostgresPassword } from './local-postgres-password';
 import { PIGGYVEST_POSTGRES_EXECUTOR as settings } from './postgres-executor.constants';
 import { PIGGYVEST_POSTGRES_STATEMENTS } from './postgres-statements';
 import type { PiggyvestProvisioningExecutor } from './provisioning-store.types';
-
-function rejectLocalPasswordAuthentication(): never {
-  throw new Error('Local database password authentication is disabled');
-}
 
 export function createPiggyvestPostgresExecutor(
   configuration: unknown
@@ -49,7 +46,7 @@ export function createPiggyvestPostgresExecutor(
         // pgpass. Trust-authenticated local sockets never invoke the provider.
         password:
           config.transport === 'local_test' && config.password === undefined
-            ? rejectLocalPasswordAuthentication
+            ? rejectLocalPostgresPassword
             : config.password,
         ssl:
           config.transport === 'local_test'

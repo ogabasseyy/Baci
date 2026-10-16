@@ -74,6 +74,7 @@ mobile_storefront:
   - '.npmrc'
   - 'pnpm-workspace.yaml'
 quiz_db:
+  - '.semgrepignore'
   - '.github/scripts/semgrep-sarif-pg-diagnostic.py'
   - '.github/scripts/semgrep-sarif-pg-diagnostic.test.py'
   - '.github/workflows/security.yml'

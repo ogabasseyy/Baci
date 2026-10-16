@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { Client } from 'pg';
 import { piggyvestPostgresConfigurationSchema } from '@/schemas/piggyvest-postgres-configuration';
+import { rejectLocalPostgresPassword } from './local-postgres-password';
 
 export const goal = (sequence: number) =>
   `30000000-0000-4000-8000-${String(sequence).padStart(12, '0')}`;
@@ -25,6 +26,7 @@ export async function query(
   const config = database();
   if (config.transport !== 'local_test') throw new Error('Local only');
   const client = new Client({
+    password: rejectLocalPostgresPassword,
     host: config.socketDirectory,
     port: config.port,
     database: config.database,

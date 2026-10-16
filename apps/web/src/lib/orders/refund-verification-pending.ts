@@ -12,20 +12,45 @@ type ProbeClient = Pick<SupabaseClient, 'from'>;
 // (values containing "paystack" that do not normalize to it)
 // ahead of a true Paystack leg.
 const PROBE_LEG_LIMIT = 25;
+// Refund-check ceiling: linked refunds are small per order, and an
+// undercount only over-triggers the cap (the safe direction).
+const PROBE_REFUND_LIMIT = 50;
+
+type ProbeLeg = {
+  amount: number;
+  currency: string | null;
+  gateway: string;
+  id: string;
+};
+
+type ProbeRefund = {
+  amount: number;
+  currency: string | null;
+  metadata: {
+    method?: string;
+    payment_transaction_id?: string;
+    provider_refund_status?: string;
+  } | null;
+};
 
 /**
- * Whether any cancelled order has an unsettled refund step with a
- * funded Paystack leg that may need provider verification. The
- * cron route caps the reconcile phase when this is true so the
- * 76s preflight budget survives: without the reservation a full
- * reconcile leaves ~30s and every verification defers on every
- * backlog invocation. Mirrors the drain's per-status selection
- * (oldest-first, same fetch ceiling, same attempts cap) so a
- * Paystack step the drain will select is always inside the probed
- * slice: an unfiltered limit could fill with manual orders and
- * miss it, permitting the full reconcile that starves it. Three
- * small indexed reads plus the leg check; fails closed (false) on
- * any read error so a probe outage never shortens reconciliation.
+ * Whether any cancelled order has a refund step with a Paystack leg
+ * that can still reach provider preflight. The cron route caps the
+ * reconcile phase when this is true so the 76s preflight budget
+ * survives: without the reservation a full reconcile leaves ~30s
+ * and every verification defers on every backlog invocation.
+ * Mirrors the drain's per-status selection (oldest-first, same
+ * fetch ceiling, same attempts cap) so a Paystack step the drain
+ * will select is always inside the probed slice: an unfiltered
+ * limit could fill with manual orders and miss it, permitting the
+ * full reconcile that starves it. Only completed, not-yet-covered
+ * legs count: an in-flight (refund_pending) leg defers in the
+ * executor's awaiting-provider branch and a covered leg is
+ * excluded from initiation, so neither ever reaches preflight —
+ * counting them would pin reconciliation at the cap indefinitely
+ * while the reserved window goes unused. Small indexed reads;
+ * fails closed (false) on any read error so a probe outage never
+ * shortens reconciliation.
  */
 export async function isRefundVerificationPending(
   supabase: ProbeClient
@@ -62,22 +87,84 @@ export async function isRefundVerificationPending(
     return false;
   }
   // Prefilter loosely (%paystack% catches padded legacy gateways);
-  // the exact normalized match below drops impostors. The limit
-  // applies after the gateway filter, so any Paystack-backed order
-  // in the slice is detected.
+  // the exact normalized match below drops impostors.
   const { data: legs, error: legsError } = await supabase
     .from('transactions')
-    .select('gateway')
+    .select('id, amount, currency, gateway')
     .in('order_id', orderIds)
     .eq('transaction_type', 'payment')
-    .in('status', ['completed', 'refund_pending', 'refunded'])
+    .eq('status', 'completed')
     .gt('amount', 0)
     .ilike('gateway', '%paystack%')
     .limit(PROBE_LEG_LIMIT);
   if (legsError || !legs) {
     return false;
   }
-  return legs.some(
+  const paystackLegs = (legs as ProbeLeg[]).filter(
     (leg) => normalizePaymentGateway(leg.gateway) === 'PAYSTACK'
   );
+  if (paystackLegs.length === 0) {
+    return false;
+  }
+  const { data: refunds, error: refundsError } = await supabase
+    .from('transactions')
+    .select('amount, currency, metadata')
+    .in('order_id', orderIds)
+    .eq('transaction_type', 'refund')
+    .in('status', ['completed', 'refunded'])
+    .gt('amount', 0)
+    .limit(PROBE_REFUND_LIMIT);
+  if (refundsError || !refunds) {
+    return false;
+  }
+  return paystackLegs.some(
+    (leg) => !isLegCovered(leg, paystackLegs, refunds as ProbeRefund[])
+  );
+}
+
+/** Whether two currency codes match like the coverage scan (nulls never match). */
+function sameCurrency(a: string | null, b: string | null): boolean {
+  return (
+    typeof a === 'string' &&
+    typeof b === 'string' &&
+    a.toUpperCase().trim() === b.toUpperCase().trim()
+  );
+}
+
+/** Whether completed refunds already cover the leg, mirroring the coverage scan. */
+function isLegCovered(
+  leg: ProbeLeg,
+  paystackLegs: ProbeLeg[],
+  refunds: ProbeRefund[]
+): boolean {
+  // An unverified Paystack attestation proves nothing: like the
+  // coverage scan, only method-gated rows count toward coverage.
+  const covering = (row: ProbeRefund): number =>
+    Number(row.amount) > 0 &&
+    sameCurrency(row.currency, leg.currency) &&
+    (row.metadata?.method !== 'paystack' ||
+      row.metadata?.provider_refund_status === 'processed')
+      ? Number(row.amount)
+      : 0;
+  let covered = 0;
+  for (const row of refunds) {
+    if (row.metadata?.payment_transaction_id === leg.id) {
+      covered += covering(row);
+    }
+  }
+  // Legacy refunds carry no payment link: attribute them to the
+  // sole Paystack leg like the scan attributes to the sole
+  // external leg (narrowed to Paystack; multi-gateway legacy
+  // shapes over-trigger, the safe direction).
+  if (paystackLegs.length === 1) {
+    for (const row of refunds) {
+      if (
+        row.metadata === null ||
+        row.metadata?.payment_transaction_id === undefined
+      ) {
+        covered += covering(row);
+      }
+    }
+  }
+  return covered >= Number(leg.amount);
 }

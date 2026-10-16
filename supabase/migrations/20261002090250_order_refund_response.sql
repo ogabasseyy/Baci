@@ -120,8 +120,30 @@ BEGIN
       AND (p_remaining>0 OR p_refunded>0) AND p_pending=0
       AND NOT p_manual_partial AND NOT p_has_movement_evidence
       AND p_cancelled_at IS NOT NULL,
+    -- Recording allocates only to the record helper's allocatable
+    -- legs (completed non-wallet/savings, or refunded cash-like)
+    -- with outstanding capacity: without a leg that can accept it,
+    -- every submission ends in payment_ledger_requires_review, so a
+    -- wallet/savings-only remainder must not advertise recovery.
+    -- Mirrors record_manual_order_refund's leg scan exactly.
     'canRecordManual',p_remaining>0 AND p_pending=0
-      AND NOT p_has_movement_evidence AND p_cancelled_at IS NOT NULL,
+      AND NOT p_has_movement_evidence AND p_cancelled_at IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM public.transactions leg
+        WHERE leg.order_id=p_order_id AND leg.merchant_id=p_merchant_id
+        AND leg.transaction_type='payment'
+        AND ((leg.status='completed'
+            AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
+              OR upper(btrim(leg.gateway)) NOT IN ('WALLET','SAVINGS')))
+          OR (leg.status='refunded'
+            AND public.normalized_gateway_name_v1(leg.gateway) IN (
+              'CASH','STORE_CREDIT','MANUAL','PAY_ON_DELIVERY')))
+        AND leg.amount>COALESCE((
+          SELECT SUM(r.amount) FROM public.transactions r
+          WHERE r.order_id=p_order_id AND r.transaction_type='refund'
+          AND r.status IN ('completed','refunded')
+          AND upper(btrim(r.currency))=upper(btrim(leg.currency))
+          AND r.metadata->>'payment_transaction_id'=leg.id::text),0)),
     'canManageRefunds',p_can_manage
       AND COALESCE(p_step_status,'') NOT IN ('claimed','delivery_uncertain'));
 END; $$;

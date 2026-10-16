@@ -5,7 +5,7 @@ import { BASE_URL } from '@/lib/api-client';
 import { useMerchant } from '../useMerchant';
 import {
   AuthenticatedFetchPreflightError,
-  createAuthenticatedFetch,
+  createAuthenticatedFetchText,
 } from './authenticated-fetch';
 import { OrderStatusUpdateError } from './order-status-update-error';
 import type { OrdersPage } from './order-types';
@@ -45,7 +45,7 @@ async function updateOrderStatus(
   let response: Response;
   let responseText: string;
   try {
-    response = await createAuthenticatedFetch(
+    const result = await createAuthenticatedFetchText(
       url,
       {
         body: JSON.stringify({
@@ -60,7 +60,8 @@ async function updateOrderStatus(
       },
       ORDER_STATUS_UPDATE_TIMEOUT_MS
     );
-    responseText = await response.text();
+    response = result.response;
+    responseText = result.text;
   } catch (error: unknown) {
     if (IS_DEV_RUNTIME) {
       const message = error instanceof Error ? error.message : String(error);

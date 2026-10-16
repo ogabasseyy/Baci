@@ -30,11 +30,42 @@ function mergeAuthorizationHeader(
   };
 }
 
-export async function createAuthenticatedFetch(
+export function createAuthenticatedFetch(
   url: string,
   options: RequestInit,
   timeoutMs: number
 ): Promise<Response> {
+  return authenticatedFetch(
+    url,
+    options,
+    timeoutMs,
+    async (response) => response
+  );
+}
+
+// Opt-in for mutations that require a complete response to establish outcome.
+// The same request deadline covers headers and text, without a second timer.
+export function createAuthenticatedFetchText(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<{ response: Response; text: string }> {
+  return authenticatedFetch(
+    url,
+    options,
+    timeoutMs,
+    async (response) => ({ response, text: await response.text() }),
+    true
+  );
+}
+
+async function authenticatedFetch<T>(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+  readResponse: (response: Response) => Promise<T>,
+  boundBody = false
+): Promise<T> {
   let requestStarted = false;
   let preflightMessage = 'Could not authenticate request. Please try again.';
   let controller: AbortController | undefined;
@@ -68,12 +99,24 @@ export async function createAuthenticatedFetch(
       );
     }
     callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
-    timeoutId = setTimeout(() => controller?.abort(), timeoutMs);
+    let rejectDeadline: ((error: Error) => void) | undefined;
+    const deadline = boundBody
+      ? new Promise<never>((_resolve, reject) => {
+          rejectDeadline = reject;
+        })
+      : null;
+    timeoutId = setTimeout(() => {
+      controller?.abort();
+      // Some native response streams do not settle after abort. The text
+      // reader must still return an indeterminate result at this deadline.
+      rejectDeadline?.(new Error(TIMEOUT_ERROR_MESSAGE));
+    }, timeoutMs);
 
     // Everything above is local preparation. After calling fetch, a failure
     // cannot prove whether the server received or committed a mutation.
     requestStarted = true;
-    return await fetch(url, requestOptions);
+    const result = fetch(url, requestOptions).then(readResponse);
+    return deadline ? await Promise.race([result, deadline]) : await result;
   } catch (error: unknown) {
     if (!requestStarted) {
       throw error instanceof AuthenticatedFetchPreflightError

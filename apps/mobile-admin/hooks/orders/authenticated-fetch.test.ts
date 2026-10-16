@@ -15,7 +15,10 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
-import { createAuthenticatedFetch } from './authenticated-fetch';
+import {
+  createAuthenticatedFetch,
+  createAuthenticatedFetchText,
+} from './authenticated-fetch';
 
 describe('createAuthenticatedFetch', () => {
   beforeEach(() => {
@@ -203,5 +206,67 @@ describe('createAuthenticatedFetch', () => {
         1000
       )
     ).resolves.toBe(response);
+  });
+});
+
+describe('createAuthenticatedFetchText body deadline', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getSession.mockResolvedValue({
+      data: { session: { access_token: 'token-1' } },
+    });
+  });
+
+  it('clears the shared deadline when a complete response arrives in time', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | null | undefined;
+    const response = {
+      text: () =>
+        new Promise<string>((resolve) => setTimeout(() => resolve('{}'), 500)),
+    } as Response;
+    mocks.fetch.mockImplementation((_url, options: RequestInit) => {
+      signal = options.signal;
+      return Promise.resolve(response);
+    });
+    try {
+      const result = createAuthenticatedFetchText(
+        'https://example.test/api',
+        {},
+        1000
+      );
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(result).resolves.toEqual({ response, text: '{}' });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(signal?.aborted).toBe(false);
+      expect(mocks.fetch).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('handles body rejection after the deadline without an unhandled rejection or retry', async () => {
+    vi.useFakeTimers();
+    let rejectBody: ((error: Error) => void) | undefined;
+    const body = new Promise<string>((_resolve, reject) => {
+      rejectBody = reject;
+    });
+    mocks.fetch.mockResolvedValue({ text: () => body });
+    try {
+      const result = createAuthenticatedFetchText(
+        'https://example.test/api',
+        {},
+        1000
+      ).catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(await result).toMatchObject({
+        message:
+          'Request timed out. Please check your connection and try again.',
+      });
+      rejectBody?.(new Error('Late body cancellation'));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mocks.fetch).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

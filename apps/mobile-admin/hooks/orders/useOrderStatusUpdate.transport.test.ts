@@ -91,6 +91,38 @@ describe('order shipping transport failures', () => {
     });
   });
 
+  it('bounds a stalled response body by the original request deadline without restarting it at headers', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | null | undefined;
+    let outcome: unknown;
+    const text = vi.fn(() => new Promise<string>(() => {}));
+    mocks.fetch.mockImplementation((_url, options: RequestInit) => {
+      signal = options.signal;
+      return new Promise((resolve) => {
+        setTimeout(() => resolve({ ok: true, text }), 10000);
+      });
+    });
+    const result = useOrderStatusMutation()
+      .mutate({ orderId: 'order-1', status: 'shipped' })
+      .catch((error: unknown) => {
+        outcome = error;
+        return error;
+      });
+
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(text).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(outcome).toMatchObject(unconfirmedOutcome);
+    expect(await result).toMatchObject(unconfirmedOutcome);
+    expect(signal?.aborted).toBe(true);
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['order', 'order-1'],
+    });
+  });
+
   it('treats response-body loss after successful headers as unconfirmed instead of exposing the native exception', async () => {
     mocks.fetch.mockResolvedValue({
       ok: true,

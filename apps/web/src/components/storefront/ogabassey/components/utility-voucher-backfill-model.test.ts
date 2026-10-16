@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isTerminalBackfill,
-  isTokenBackfillTab,
-  isUtilityBackfillTab,
-  parseUtilityVoucherBackfill,
-} from './utility-voucher-backfill-model';
+import { parseUtilityVoucherBackfill } from './utility-voucher-backfill-model';
 
 describe('parseUtilityVoucherBackfill', () => {
   it('extracts the pin for the matching reference', () => {
@@ -200,58 +195,9 @@ describe('parseUtilityVoucherBackfill', () => {
   });
 });
 
-describe('isTerminalBackfill', () => {
-  it('settles skipped failures without a refund confirmation', () => {
-    // Codex R110 P2: nothing is coming (no credit runs), so
-    // pollers stop — but refundConfirmed stays false for the copy.
-    expect(
-      isTerminalBackfill(
-        {
-          failed: true,
-          pin: null,
-          refundConfirmed: false,
-          refundSkipped: true,
-          refundedAmount: null,
-          successful: false,
-        },
-        false
-      )
-    ).toBe(true);
-    expect(
-      isTerminalBackfill(
-        {
-          failed: true,
-          pin: null,
-          refundConfirmed: false,
-          refundSkipped: false,
-          refundedAmount: null,
-          successful: false,
-        },
-        false
-      )
-    ).toBe(false);
-  });
-});
+;
 
-describe('isUtilityBackfillTab', () => {
-  it('covers every utility tab (telco rides along for settlement)', () => {
-    expect(isUtilityBackfillTab('power')).toBe(true);
-    expect(isUtilityBackfillTab('tv')).toBe(true);
-    expect(isUtilityBackfillTab('betting')).toBe(true);
-    expect(isUtilityBackfillTab('airtime')).toBe(true);
-    expect(isUtilityBackfillTab('data')).toBe(true);
-    expect(isUtilityBackfillTab('nope')).toBe(false);
-  });
-});
+;
 
-describe('isTokenBackfillTab', () => {
-  it('covers only the bill tabs whose success may gain a late token', () => {
-    expect(isTokenBackfillTab('power')).toBe(true);
-    expect(isTokenBackfillTab('tv')).toBe(true);
-    expect(isTokenBackfillTab('betting')).toBe(true);
-    expect(isTokenBackfillTab('airtime')).toBe(false);
-    expect(isTokenBackfillTab('data')).toBe(false);
-    expect(isTokenBackfillTab('nope')).toBe(false);
-  });
-});
+;
 

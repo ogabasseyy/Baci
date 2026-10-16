@@ -6,7 +6,7 @@ import { useUtilityVoucherBackfill } from './use-utility-voucher-backfill';
 import {
   isTokenBackfillTab,
   isUtilityBackfillTab,
-} from './utility-voucher-backfill-model';
+} from './utility-voucher-backfill-tabs';
 
 interface UtilitySuccessViewProps {
   activeTab: string;

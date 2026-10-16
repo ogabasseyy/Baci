@@ -5,17 +5,21 @@ import { useEffect, useState } from 'react';
 import { getLiveCustomerIdentity } from '@/contexts/customer-live-identity';
 import { forgetPendingVtuByReference } from './utility-pending-idempotency';
 import {
-  backfillPollDelayMs,
   INITIAL_UTILITY_VOUCHER_BACKFILL,
-  isTerminalBackfill,
   parseUtilityVoucherBackfill,
-  sleep,
-  TAB_TO_HISTORY_TYPE,
-  TOKEN_BACKFILL_HISTORY_TYPES,
   type UtilityVoucherBackfill,
+} from './utility-voucher-backfill-model';
+import {
+  backfillPollDelayMs,
+  sleep,
   UTILITY_VOUCHER_BACKFILL_MAX_ATTEMPTS,
   UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS,
-} from './utility-voucher-backfill-model';
+} from './utility-voucher-backfill-polling';
+import {
+  TAB_TO_HISTORY_TYPE,
+  TOKEN_BACKFILL_HISTORY_TYPES,
+} from './utility-voucher-backfill-tabs';
+import { isTerminalBackfill } from './utility-voucher-backfill-terminal';
 
 // Polls history until the voucher persists so the success view
 // surfaces it without a replay (which the stale guard would suppress

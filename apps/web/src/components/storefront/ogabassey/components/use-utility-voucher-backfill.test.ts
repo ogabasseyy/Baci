@@ -13,7 +13,7 @@ import {
   UTILITY_VOUCHER_BACKFILL_POLL_INTERVAL_MS,
   UTILITY_VOUCHER_BACKFILL_REQUEST_TIMEOUT_MS,
   UTILITY_VOUCHER_BACKFILL_SLOW_ATTEMPTS,
-} from './utility-voucher-backfill-model';
+} from './utility-voucher-backfill-polling';
 
 describe('useUtilityVoucherBackfill', () => {
   // Mutable polling account (Codex R102 P2): the hook reads the
@@ -69,6 +69,7 @@ describe('useUtilityVoucherBackfill', () => {
                   status: 'successful',
                   voucher_pin: 'PIN-1',
                   refund_pending: false,
+                  refund_skipped: false,
                 },
               ],
       };
@@ -129,6 +130,7 @@ describe('useUtilityVoucherBackfill', () => {
                 status: 'successful',
                 voucher_pin: 'PIN-1',
                 refund_pending: false,
+                refund_skipped: false,
               },
             ],
           }),
@@ -177,6 +179,7 @@ describe('useUtilityVoucherBackfill', () => {
             status: 'successful',
             voucher_pin: 'PIN-1',
             refund_pending: false,
+            refund_skipped: false,
           },
         ],
       }));
@@ -233,6 +236,7 @@ describe('useUtilityVoucherBackfill', () => {
                       status: 'successful',
                       voucher_pin: 'PIN-1',
                       refund_pending: false,
+                      refund_skipped: false,
                     },
                   ],
                 }),
@@ -292,6 +296,7 @@ describe('useUtilityVoucherBackfill', () => {
           request_reference: 'VTU-1',
           status: 'successful',
           refund_pending: false,
+          refund_skipped: false,
         },
       ],
     }));
@@ -323,11 +328,13 @@ describe('useUtilityVoucherBackfill', () => {
                 request_reference: 'VTU-1',
                 status: 'failed',
                 refund_pending: true,
+                refund_skipped: false,
               }
             : {
                 request_reference: 'VTU-1',
                 status: 'failed',
                 refund_pending: false,
+                refund_skipped: false,
                 refunded_to_wallet: 1000,
               },
         ],
@@ -348,6 +355,7 @@ describe('useUtilityVoucherBackfill', () => {
       failed: true,
       pin: null,
       refundConfirmed: true,
+      refundSkipped: false,
       refundedAmount: 1000,
       successful: false,
     });
@@ -361,6 +369,7 @@ describe('useUtilityVoucherBackfill', () => {
           request_reference: 'VTU-1',
           status: 'failed',
           refund_pending: true,
+          refund_skipped: false,
         },
       ],
     }));
@@ -378,6 +387,7 @@ describe('useUtilityVoucherBackfill', () => {
     expect(result.current).toMatchObject({
       failed: true,
       refundConfirmed: false,
+      refundSkipped: false,
     });
     expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
   });
@@ -433,6 +443,7 @@ describe('useUtilityVoucherBackfill', () => {
               status: 'successful',
               voucher_pin: 'PIN-1',
               refund_pending: false,
+              refund_skipped: false,
             },
           ],
         }),
@@ -468,6 +479,7 @@ describe('useUtilityVoucherBackfill', () => {
               status: 'successful',
               voucher_pin: 'TOKEN-1',
               refund_pending: false,
+              refund_skipped: false,
             },
           ],
         }),
@@ -538,6 +550,7 @@ describe('useUtilityVoucherBackfill', () => {
           request_reference: 'VTU-1',
           status: 'successful',
           refund_pending: false,
+          refund_skipped: false,
         },
       ],
     }));
@@ -583,6 +596,7 @@ describe('useUtilityVoucherBackfill', () => {
           request_reference: 'VTU-1',
           status: 'successful',
           refund_pending: false,
+          refund_skipped: false,
         },
       ],
     }));
@@ -626,6 +640,7 @@ describe('useUtilityVoucherBackfill', () => {
                 request_reference: 'VTU-1',
                 status: 'successful',
                 refund_pending: false,
+                refund_skipped: false,
               },
             ],
           };
@@ -681,6 +696,7 @@ describe('useUtilityVoucherBackfill', () => {
                 status: 'successful',
                 voucher_pin: 'PIN-PREVIOUS-USER',
                 refund_pending: false,
+                refund_skipped: false,
               },
             ],
           };
@@ -747,6 +763,7 @@ describe('useUtilityVoucherBackfill', () => {
             request_reference: 'VTU-1',
             status: 'successful',
             refund_pending: false,
+            refund_skipped: false,
           },
         ],
       }),
@@ -774,6 +791,7 @@ describe('useUtilityVoucherBackfill', () => {
           request_reference: 'VTU-1',
           status: 'successful',
           refund_pending: false,
+          refund_skipped: false,
         },
       ],
     }));
@@ -813,6 +831,7 @@ describe('useUtilityVoucherBackfill', () => {
                 request_reference: 'VTU-1',
                 status: 'successful',
                 refund_pending: false,
+                refund_skipped: false,
               },
             ],
           };
@@ -843,6 +862,7 @@ describe('useUtilityVoucherBackfill', () => {
           request_reference: 'VTU-1',
           status: 'successful',
           refund_pending: false,
+          refund_skipped: false,
         },
       ],
     }));
@@ -873,6 +893,7 @@ describe('useUtilityVoucherBackfill', () => {
           status: 'successful',
           voucher_pin: 'TOKEN-1',
           refund_pending: false,
+          refund_skipped: false,
         },
       ],
     }));
@@ -899,6 +920,7 @@ describe('useUtilityVoucherBackfill', () => {
           request_reference: 'VTU-1',
           status: 'failed',
           refund_pending: false,
+          refund_skipped: false,
           refunded_to_wallet: 1000,
         },
       ],

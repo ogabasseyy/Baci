@@ -33,7 +33,9 @@ export async function updateSession(
       ) {
         // Set cookies on the request for downstream middleware/handlers
         for (const { name, value } of cookiesToSet) {
-          request.cookies.set(name, value);
+          // RequestCookies updates the incoming Cookie header; browser cookie
+          // attributes are applied separately on the response below.
+          request.cookies.set({ name, value });
         }
         // Create a new response with updated request AND PRESERVE HEADERS
         // We use request.headers to ensure headers like x-nonce are passed along

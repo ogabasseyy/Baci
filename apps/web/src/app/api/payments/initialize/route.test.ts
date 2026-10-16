@@ -1996,6 +1996,9 @@ describe('POST /api/payments/initialize', () => {
     });
 
     it('returns address found during polling', { timeout: 15000 }, async () => {
+      const logged = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => undefined);
       mockInitializeJuicyway.mockResolvedValue({
         id: 'session-123',
         status: 'pending',
@@ -2048,6 +2051,19 @@ describe('POST /api/payments/initialize', () => {
       expect(json.success).toBe(true);
       expect(json.crypto_payment.address).toBe('TRX_ADDR_POLLED');
       expect(json.crypto_address_pending).toBeUndefined();
+      for (const [event, fields] of logged.mock.calls) {
+        if (typeof event === 'string' && event.startsWith('[Juicyway Poll]'))
+          expect(fields).not.toHaveProperty('raw');
+      }
+      expect(logged).toHaveBeenCalledWith(
+        '[Juicyway Poll] Session',
+        expect.objectContaining({ pollAttempt: 1, maxPollAttempts: 5 })
+      );
+      expect(logged).toHaveBeenCalledWith(
+        '[Juicyway Poll] Payment Check',
+        expect.objectContaining({ pollAttempt: 1 })
+      );
+      logged.mockRestore();
     });
 
     it('returns 502 when capture fails', async () => {

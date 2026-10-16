@@ -15,6 +15,8 @@ function definition(name, schema, functionName) {
 }
 export function createCustomerCheckoutShippingRecoveryTestDatabase({
   beforeFix = false,
+  activateRecovery = true,
+  beforeActivationGate = false,
 } = {}) {
   const database = createShippingQuoteProofTestDatabase();
   return {
@@ -64,7 +66,13 @@ export function createCustomerCheckoutShippingRecoveryTestDatabase({
             name.includes('_customer_checkout_shipping_recovery_')
           )
           .sort()) {
+          if (beforeActivationGate && name.includes('_activation_gate.')) continue;
           database.query(readFileSync(resolve(migrations, name), 'utf8'));
+        }
+        if (activateRecovery && !beforeActivationGate) {
+          database.query(`UPDATE private.checkout_shipping_recovery_release_activation
+            SET enabled=true, rollback_deployment_id='dpl_syntheticCompatible',
+              rollback_commit_sha='8c8df7846777f714cfb573c44eb215059e09b7d4', verified_at=now();`);
         }
       }
     },

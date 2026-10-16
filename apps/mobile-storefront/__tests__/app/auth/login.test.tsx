@@ -230,7 +230,7 @@ describe('LoginScreen', () => {
         );
       });
       expect(fetchMock).toHaveBeenCalledWith(
-        'https://api.usebaci.com/api/storefront/receipts/claims/token_123/login-email',
+        'https://usebaci.com/api/storefront/receipts/claims/token_123/login-email',
         { headers: { accept: 'application/json' } }
       );
     } finally {

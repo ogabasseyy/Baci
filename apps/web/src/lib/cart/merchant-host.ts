@@ -38,12 +38,20 @@ export function normalizeHeader(value: string | null): string | null {
  * bare IPv6 loopback are development hosts on both sides.
  */
 export function isPrivateLanHost(host: string): boolean {
+  // Octets are range-anchored (25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])
+  // so look-alikes such as 10.999.999.999 never classify as LAN hosts.
   return (
     host === '::1' ||
     host === '[::1]' ||
-    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
-    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host)
+    /^10\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/.test(
+      host
+    ) ||
+    /^192\.168\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/.test(
+      host
+    ) ||
+    /^172\.(?:1[6-9]|2[0-9]|3[01])\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/.test(
+      host
+    )
   );
 }
 

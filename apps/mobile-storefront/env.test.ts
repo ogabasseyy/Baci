@@ -45,7 +45,7 @@ describe('mobile env', () => {
 
     const { EXPO_PUBLIC_API_URL } = await import('./env');
 
-    expect(EXPO_PUBLIC_API_URL).toBe('https://api.usebaci.com');
+    expect(EXPO_PUBLIC_API_URL).toBe('https://usebaci.com');
   });
 
   it('reads and normalizes the Expo extra API URL when process env is unset', async () => {

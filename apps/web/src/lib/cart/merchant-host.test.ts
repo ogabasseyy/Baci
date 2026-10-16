@@ -73,6 +73,16 @@ describe('isPrivateLanHost', () => {
     ])
       expect(isPrivateLanHost(host)).toBe(false);
   });
+
+  it('rejects invalid IPv4 octets in private ranges', () => {
+    for (const host of [
+      '10.999.999.999',
+      '192.168.256.1',
+      '172.16.300.1',
+      '10.0.0.256',
+    ])
+      expect(isPrivateLanHost(host)).toBe(false);
+  });
 });
 
 describe('isSharedPlatformHost', () => {

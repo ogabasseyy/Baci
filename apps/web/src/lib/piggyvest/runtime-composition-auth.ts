@@ -58,7 +58,9 @@ export function createRuntimeCompositionRlsFactory(
         setAll: (updates) => {
           if (request.signal.aborted) return;
           for (const { name, value, options: cookie } of updates) {
-            request.cookies.set(name, value);
+            // RequestCookies updates the incoming Cookie header; browser cookie
+            // attributes are applied separately on the response below.
+            request.cookies.set({ name, value });
             writes.cookies.set(name, value, {
               ...cookie,
               domain: undefined,

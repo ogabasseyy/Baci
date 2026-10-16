@@ -9,6 +9,15 @@ export function recoveryFailure(
   const message = error?.message ?? '';
   if (message.includes('forbidden'))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (message.includes('shipping_recovery_not_activated'))
+    return NextResponse.json(
+      {
+        error:
+          'Shipping recovery is temporarily unavailable. Please try again later.',
+        code: 'SHIPPING_RECOVERY_NOT_ACTIVATED',
+      },
+      { status: 503 }
+    );
   if (message.includes('price_changed'))
     return NextResponse.json(
       {

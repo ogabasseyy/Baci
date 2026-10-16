@@ -27,6 +27,11 @@ const sources = [
       '20261015145945_customer_checkout_shipping_recovery_committed_retry.sql',
     sha256: '6336d903431424e3824ab52afa21213eeeac968406b519cc8bdd0f1944734627',
   },
+  {
+    filename:
+      '20261015215000_customer_checkout_shipping_recovery_activation_gate.sql',
+    sha256: '3131a8c8f65cc8d2a892d0e020cd67dfaaa425fa8dce6a2b8f7b605b1eddb0cc',
+  },
 ];
 
 describe('checkout recovery repair replay registration', () => {

@@ -74,6 +74,14 @@ mobile_storefront:
   - '.npmrc'
   - 'pnpm-workspace.yaml'
 quiz_db:
+  - '.github/workflows/security.yml'
+  - '.github/scripts/checkout-recovery-atomic-release.test.mjs'
+  - '.github/scripts/reconcile-checkout-recovery-legacy.sh'
+  - '.github/scripts/recovery-release-approval.mjs'
+  - '.github/scripts/recovery-release-approval.test.mjs'
+  - '.github/scripts/security-analysis-diagnostics.test.mjs'
+  - '.github/scripts/security-pr-scope.test.mjs'
+  - '.github/scripts/semgrep-sarif-analysis-diagnostics.py'
   - '.github/filters/ci.yml'
   - '.github/workflows/ci.yml'
   - '.github/actions/postdeploy-migrations/**'
@@ -145,6 +153,8 @@ cwv_runner:
   - '.github/workflows/deploy.yml'
   - '.github/actionlint.yaml'
 deploy_scripts:
+  - '.github/scripts/recovery-release-approval.mjs'
+  - '.github/scripts/recovery-release-approval.test.mjs'
   - '.dockerignore'
   - 'scripts/**'
   - '.github/filters/ci.yml'

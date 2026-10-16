@@ -1,5 +1,9 @@
 import { vi } from 'vitest';
 
+type PersistPaystackDvaAssignmentModule =
+  typeof import('@/lib/payments/persist-paystack-dva-assignment');
+type ServerModule = typeof import('next/server');
+
 // Shared module mocks for split POST /api/orders suites, mirroring the
 // coverage the monolithic route.test.ts applies so extracted suites keep
 // identical route behavior.
@@ -117,10 +121,7 @@ vi.mock('@/lib/paystack', () => ({
 vi.mock(
   '@/lib/payments/persist-paystack-dva-assignment',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/payments/persist-paystack-dva-assignment')
-      >();
+    const actual = await importOriginal<PersistPaystackDvaAssignmentModule>();
     mockPersistPaystackDvaAssignment.mockImplementation(
       (...args: Parameters<typeof actual.persistPaystackDvaAssignment>) =>
         actual.persistPaystackDvaAssignment(...args)
@@ -165,8 +166,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/server', async () => {
-  const actual =
-    await vi.importActual<typeof import('next/server')>('next/server');
+  const actual = await vi.importActual<ServerModule>('next/server');
   return { ...actual, after: mockAfter };
 });
 

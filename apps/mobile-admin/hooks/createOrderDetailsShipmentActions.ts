@@ -222,10 +222,15 @@ export function createOrderDetailsShipmentActions({
       }
       const code =
         error instanceof OrderStatusUpdateError ? error.code : undefined;
+      if (code === 'SHIPMENT_BOOKING_UNCONFIRMED') {
+        closeShipmentFlow();
+      }
       Alert.alert(
         code === 'MERCHANT_WALLET_QUOTE_RECONFIRM_REQUIRED'
           ? 'Quote updated'
-          : 'Error',
+          : code === 'SHIPMENT_BOOKING_UNCONFIRMED'
+            ? 'Check shipment status'
+            : 'Error',
         (error as Error).message || 'Failed to mark order as shipped'
       );
     }

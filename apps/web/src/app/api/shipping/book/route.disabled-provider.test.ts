@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 import { shippingQuoteEnvTestMock } from '@/lib/shipping/shipping-quote-env.test-mock';
 
+type EnvModule = typeof import('@/env');
+
 vi.mock('@/env', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/env')>();
+  const actual = await importOriginal<EnvModule>();
   return { ...actual, ...shippingQuoteEnvTestMock };
 });
 

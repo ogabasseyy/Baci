@@ -4,6 +4,7 @@ import { piggyvestPostgresConfigurationSchema } from '@/schemas/piggyvest-postgr
 import { activatePiggyvestGoalLifecycle } from './goal-lifecycle';
 import { recordPiggyvestGoalLifecycleTerms } from './goal-lifecycle-terms';
 import { createGoalPolicyStore } from './goal-policy-store';
+import { rejectLocalPostgresPassword } from './local-postgres-password';
 import { createPiggyvestPostgresExecutor } from './postgres-executor';
 
 const enabled = process.env.PIGGYVEST_RUN_LIFECYCLE_RUNTIME === '1';
@@ -19,7 +20,6 @@ function configuration(sequence: number) {
     transport: 'local_test',
     socketDirectory: process.env.PIGGYVEST_LOCAL_TEST_SOCKET,
     database: 'piggyvest_local',
-    password: 'synthetic-local-only',
     role: 'piggyvest_staging_policy_writer',
     port: 55443,
   });
@@ -78,6 +78,7 @@ async function credit(sequence: number) {
   const { database } = configuration(sequence);
   if (database.transport !== 'local_test') throw new Error('Local only');
   const client = new Client({
+    password: rejectLocalPostgresPassword,
     host: database.socketDirectory,
     port: database.port,
     database: database.database,

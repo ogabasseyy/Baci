@@ -7,13 +7,15 @@ import type {
 } from './types';
 import { verifyOrderShippingRate } from './verify-order-shipping-rate';
 
+type GetMerchantShippingRatesModule =
+  typeof import('./get-merchant-shipping-rates');
+
 const { mockGetMerchantShippingRatesOrThrow } = vi.hoisted(() => ({
   mockGetMerchantShippingRatesOrThrow: vi.fn(),
 }));
 
 vi.mock('./get-merchant-shipping-rates', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./get-merchant-shipping-rates')>();
+  const actual = await importOriginal<GetMerchantShippingRatesModule>();
   return {
     ...actual,
     getMerchantShippingRatesOrThrow: mockGetMerchantShippingRatesOrThrow,

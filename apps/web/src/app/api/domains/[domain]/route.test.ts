@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type ServerModule = typeof import('next/server');
+
 const mocks = vi.hoisted(() => ({
   after: vi.fn(),
   authenticateApiRequest: vi.fn(),
@@ -14,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('next/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next/server')>();
+  const actual = await importOriginal<ServerModule>();
   return { ...actual, after: mocks.after };
 });
 

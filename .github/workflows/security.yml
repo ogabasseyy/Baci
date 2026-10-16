@@ -12,6 +12,11 @@ on:
     # Run daily at 3:00 AM UTC
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      pg_diagnostics:
+        description: 'Run optional synthetic PostgreSQL rule diagnostics; required scans remain unchanged'
+        type: boolean
+        default: false
 
 concurrency:
   group: security-${{ github.ref }}
@@ -44,6 +49,7 @@ jobs:
           # root changes must stay in the security-relevant PR scope.
           filters: |
             semgrep_relevant:
+              - '.semgrepignore'
               - 'apps/web/src/app/api/**'
               - 'apps/web/src/lib/**'
               - 'apps/web/src/schemas/**'
@@ -192,6 +198,49 @@ jobs:
             echo "::warning::Base branch ${PR_BASE_REF} lacks ${diagnostics_helper}; using PR-head bootstrap copy (requires CODEOWNERS human review, not independent CI attestation)."
           fi
           python3 "$diagnostics_helper" pr-targets "$PR_BASE_REF"
+          # Ignore policy changes affect unchanged files as well as the diff.
+          # Apply that policy to the entire protected push scope, using the
+          # trusted base helper and retaining strict manifest completeness.
+          ignore_policy_changed="$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" -- .semgrepignore)"
+          if [ -n "$ignore_policy_changed" ]; then
+            base_pr_targets="$(mktemp)"
+            trap 'rm -f "$base_pr_targets"; if [ -n "${base_helper_dir:-}" ]; then rm -rf "$base_helper_dir"; fi' EXIT
+            cp semgrep.requested-targets "$base_pr_targets"
+            scan_targets=(
+              apps/web/src/app/api
+              apps/web/src/lib
+              apps/web/src/schemas
+              apps/mobile-admin/app
+              apps/mobile-admin/hooks
+              apps/mobile-admin/lib
+              apps/mobile-storefront/app
+              apps/mobile-storefront/hooks
+              apps/mobile-storefront/lib
+              apps/mobile-storefront/services
+              apps/mobile-storefront/stores
+              packages/shared
+              supabase/migrations
+              next.config.ts
+              .github/workflows
+              .github/scripts/semgrep-sarif-analysis-diagnostics.py
+              .github/scripts/semgrep-sarif-pg-diagnostic.py
+              .github/scripts/semgrep-sarif-pg-diagnostic.test.py
+            )
+            python3 "$diagnostics_helper" push-targets "${scan_targets[@]}"
+            # Keep all base-selected paths, including paths outside these roots.
+            cat "$base_pr_targets" >> semgrep.requested-targets
+            # Older base helpers do not yet recognize these exact Python files.
+            git ls-files -z -- \
+              .github/scripts/semgrep-sarif-pg-diagnostic.py \
+              .github/scripts/semgrep-sarif-pg-diagnostic.test.py >> semgrep.requested-targets
+          fi
+          # Add exact new token-bearing diagnostics even when the trusted base
+          # selector predates them. Preserve every base-selected target.
+          git diff --name-only -z --diff-filter=d "origin/${PR_BASE_REF}...HEAD" -- \
+            .github/scripts/semgrep-sarif-pg-diagnostic.py \
+            .github/scripts/semgrep-sarif-pg-diagnostic.test.py >> semgrep.requested-targets
+          # Preserve filename bytes and NUL framing while removing duplicate targets.
+          LC_ALL=C sort -zu -o semgrep.requested-targets semgrep.requested-targets
         env:
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
 
@@ -212,7 +261,7 @@ jobs:
           # Match the existing full CI engine; use only the existing entitlement.
           semgrep install-semgrep-pro
           # --strict also fails on warning-level analysis errors.
-          semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
+          semgrep scan --error --strict --pro-intrafile --config auto --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
@@ -239,18 +288,47 @@ jobs:
             next.config.ts
             .github/workflows
             .github/scripts/semgrep-sarif-analysis-diagnostics.py
+            .github/scripts/semgrep-sarif-pg-diagnostic.py
+            .github/scripts/semgrep-sarif-pg-diagnostic.test.py
           )
           python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py push-targets "${scan_targets[@]}"
           semgrep install-semgrep-pro
-          semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${scan_targets[@]}"
+          semgrep scan --error --strict --pro-intrafile --config auto --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${scan_targets[@]}"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
+      - name: Diagnose PostgreSQL rule with synthetic fixtures
+        if: github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true
+        id: pg_diagnostic
+        shell: bash
+        run: |
+          semgrep install-semgrep-pro
+          python3 .github/scripts/semgrep-sarif-pg-diagnostic.py "${RUNNER_TEMP}/pg-diagnostic-summary.json"
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        # Optional diagnostics never replace or exempt the required full scan.
+        continue-on-error: true
+
+      - name: Upload synthetic PostgreSQL diagnostic
+        id: pg_diagnostic_upload
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-pg-synthetic-diagnostic
+          path: ${{ runner.temp }}/pg-diagnostic-summary.json
+          if-no-files-found: error
+          retention-days: 3
+        continue-on-error: true
+
+      - name: Warn if optional PostgreSQL diagnostics failed
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true && (steps.pg_diagnostic.outcome == 'failure' || steps.pg_diagnostic_upload.outcome == 'failure')
+        run: echo "::warning::Optional PostgreSQL diagnostics failed; inspect the synthetic summary and step status. The required full Semgrep scan remains enforced."
+
       - name: Run full Semgrep on scheduled and manual scans
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         id: semgrep_full
-        run: semgrep ci --no-suppress-errors --sarif --output=semgrep.sarif --json-output=semgrep.raw.json
+        run: semgrep ci --no-suppress-errors --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true

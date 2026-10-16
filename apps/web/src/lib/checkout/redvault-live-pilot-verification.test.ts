@@ -6,12 +6,13 @@ import {
   verifyRedvaultLivePilotSnapshot,
 } from './redvault-live-pilot-verification';
 
+type RedvaultLivePilotModule = typeof import('./redvault-live-pilot');
+
 vi.mock('./get-redvault-checkout-summary', () => ({
   getRedvaultCheckoutSummary: vi.fn(),
 }));
 vi.mock('./redvault-live-pilot', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('./redvault-live-pilot')>();
+  const original = await importOriginal<RedvaultLivePilotModule>();
   return {
     ...original,
     getRedvaultLivePilotPolicy: vi.fn(),

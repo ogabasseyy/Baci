@@ -8,7 +8,7 @@ vi.mock('./blog-media-tombstone-write', () => ({
 }));
 
 vi.mock('./upload-helpers', async (importOriginal) => {
-  const original = await importOriginal<typeof import('./upload-helpers')>();
+  const original = await importOriginal<UploadHelpersModule>();
   return {
     ...original,
     cleanupUploadedPaths: (...args: unknown[]) => mockCleanup(...args),
@@ -16,6 +16,8 @@ vi.mock('./upload-helpers', async (importOriginal) => {
 });
 
 import { stageUploadedBlogMediaPaths } from './blog-media-upload-stage';
+
+type UploadHelpersModule = typeof import('./upload-helpers');
 
 describe('stageUploadedBlogMediaPaths', () => {
   it('returns null when staging succeeds', async () => {

@@ -59,6 +59,30 @@ function makeActions(
 }
 
 describe('createOrderDetailsShipmentActions', () => {
+  it('closes the booking flow and asks the merchant to check status when the shipment outcome is unconfirmed', async () => {
+    const setShowShipmentFlow = vi.fn();
+    vi.mocked(completeOrderShipment).mockRejectedValueOnce(
+      new OrderStatusUpdateError(
+        'Check the order before booking again.',
+        'SHIPMENT_BOOKING_UNCONFIRMED'
+      )
+    );
+    const actions = makeActions({
+      order: { id: 'order-1' } as never,
+      pendingShipmentMode: 'provider',
+      providerBookingAvailable: true,
+      setShowShipmentFlow,
+    });
+
+    await actions.proceedFromShipmentMethod();
+
+    expect(setShowShipmentFlow).toHaveBeenCalledWith(false);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Check shipment status',
+      'Check the order before booking again.'
+    );
+  });
+
   it('does nothing in openShipmentFlow when order is undefined', () => {
     const setShowShipmentFlow = vi.fn();
     const actions = makeActions({ setShowShipmentFlow });

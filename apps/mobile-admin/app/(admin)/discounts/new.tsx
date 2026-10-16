@@ -461,10 +461,10 @@ export default function NewDiscountScreen() {
             )}
           </View>
 
-          {/* Requirements & Limits */}
+          {/* Requirements &amp; Limits */}
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              Requirements & Limits
+              Requirements &amp; Limits
             </Text>
 
             <View style={styles.formGroup}>

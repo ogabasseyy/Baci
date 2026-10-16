@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 // getOgabasseyImageFormatProps calls the real `getImageProps` named export
 // directly, so this file restores the real module.
 vi.mock('next/image', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next/image')>();
+  const actual = await importOriginal<ImageModule>();
   return { ...actual };
 });
 
@@ -13,6 +13,8 @@ import {
   buildOgabasseyAvifSrcSet,
   getOgabasseyImageFormatProps,
 } from './ogabassey-image-format-sources';
+
+type ImageModule = typeof import('next/image');
 
 const CDN = 'https://cdn.ogabassey.com';
 

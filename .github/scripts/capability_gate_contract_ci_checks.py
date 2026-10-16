@@ -191,6 +191,8 @@ def ci_failures(ci_text):
     """Exact invocation block bound to an unconditional executing job."""
     lines = _without_block_scalars(ci_text.splitlines())
     failures = trigger_failures(ci_text)
+    if any(re.match(r"^\s*\?", line) for line in lines if line.strip() and not line.strip().startswith("#")):
+        failures.append("ci.yml must not use explicit YAML key forms (? key bypasses structure scans)")
     if any(re.match(r"""^"[^"\n]*\\[^"\n]*"\s*:""", line) for line in lines if line.strip() and not line.strip().startswith("#")):
         failures.append("ci.yml top-level keys must use plain spelling: escapes execute decoded")
     # Top-level env inherits into every job including the gate: quote spellings accepted, inline mappings rejected.

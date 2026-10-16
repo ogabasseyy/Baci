@@ -4472,6 +4472,58 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
+  it('never debits or re-vends when fulfilling a processing row: claim then reconcile-by-reference only (Muse R142)', async () => {
+    // The history-GET backfill fulfills processing rows; that path must
+    // be unable to move money out (debit) or re-drive a provider vend.
+    // The processing branch claims exclusively, then reconciles from
+    // provider truth — Phase B.5 (debit-before-vend) sits below the
+    // branch early-return and is unreachable here.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Request successful',
+      status: 'successful',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+    const supabase = createPendingTransactionSupabaseMock({
+      rpcImpl,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        network_provider: '',
+        phone_number: '08146978921',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: 'kuda-bill-1',
+        status: 'processing',
+        metadata: {},
+        error_message: 'Request successful',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: 'EKEDC NG - EKEDC PREPAID',
+        biller_item_code: 'KUD-ELE-EKED-002',
+        customer_identifier: '43901766923',
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({ reference: 'VTU-123' });
+    // Non-vacuous: the claim won and reconcile requeried provider truth.
+    expect(mockCheckTransactionStatus).toHaveBeenCalled();
+    expect(rpcImpl).not.toHaveBeenCalledWith(
+      'redeem_vtu_wallet_payment',
+      expect.anything()
+    );
+    expect(mockPurchaseBill).not.toHaveBeenCalled();
+    expect(mockMonnifyPurchaseBill).not.toHaveBeenCalled();
+  });
+
   it('settles refreshed fallback credits when a concurrent worker persisted them first', async () => {
     // Overlap: this worker read Monnify-derived credits (12.5/12.5),
     // then worker A persisted the Kuda correction (11.25/11.25) with

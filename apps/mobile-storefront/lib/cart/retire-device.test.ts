@@ -60,9 +60,36 @@ it('acknowledges an offline retired proof once the server reports its revocation
   );
 });
 
+it('acknowledges retirement on a definitive invalid_proof after key rotation', async () => {
+  const storage = {
+    getRetiredProof: jest.fn().mockResolvedValue('cp1.old.signature'),
+    acknowledgeRetirement: jest.fn(),
+  };
+  const fetcher = jest
+    .fn()
+    .mockResolvedValue(
+      new Response(JSON.stringify({ code: 'invalid_proof' }), { status: 401 })
+    );
+  await expect(
+    flushRetiredCartDevice(
+      {
+        apiOrigin: 'https://shop.test',
+        merchantSlug: 'shop',
+        merchantId: 'merchant',
+      },
+      storage as never,
+      fetcher
+    )
+  ).resolves.toBeUndefined();
+  expect(storage.acknowledgeRetirement).toHaveBeenCalledWith(
+    'merchant',
+    'cp1.old.signature'
+  );
+});
+
 it.each([
   [401, { code: 'unauthorized' }],
-  [401, { code: 'invalid_proof' }],
+  [401, { code: 'invalid_proof', revoked: false }],
   [200, { code: 'expired_proof' }],
   [503, { code: 'expired_proof' }],
   [401, { code: 'expired_proof', revoked: false }],

@@ -41,29 +41,45 @@ export function createNativeCartWrite(deps: NativeCartWriteDeps) {
       return;
     }
     if (action.type === 'clear') {
-      try {
-        await deps.accept(
-          await deps.coordinator.command(current.cartId, {
-            operationId: deps.newOperationId(),
-            expectedVersion: current.version,
-            command,
-          })
-        );
-      } catch (error) {
-        // A bound order already completed this cart server-side, so
-        // clearing it is rejected as locked. Retire the finished
-        // generation locally instead of failing the checkout that
-        // just succeeded; the next write starts a fresh session. The
-        // lock alone does not prove that outcome — carts in checkout
-        // are locked too — so only swallow it once the refreshed cart
-        // is actually terminal.
-        if (error instanceof NativeCartError && error.code === 'cart_locked') {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          await deps.accept(
+            await deps.coordinator.command(current.cartId, {
+              operationId: deps.newOperationId(),
+              expectedVersion: current.version,
+              command,
+            })
+          );
+          return;
+        } catch (error) {
+          // A bound order already completed this cart server-side, so
+          // clearing it is rejected as locked. Retire the finished
+          // generation locally instead of failing the checkout that
+          // just succeeded; the next write starts a fresh session. The
+          // lock alone does not prove that outcome — carts in checkout
+          // are locked too — so only swallow it once the refreshed cart
+          // is actually terminal.
+          if (
+            error instanceof NativeCartError &&
+            error.code === 'cart_locked'
+          ) {
+            await deps.refresh();
+            if (deps.getTerminal()) return;
+            throw error;
+          }
+          // Clear is idempotent against the current version, so a
+          // concurrent update is safely retried once after refresh,
+          // like every other native write.
+          if (
+            attempt > 0 ||
+            !(error instanceof NativeCartError) ||
+            error.code !== 'version_conflict'
+          )
+            throw error;
           await deps.refresh();
-          if (deps.getTerminal()) return;
+          current = await deps.ensureCart();
         }
-        throw error;
       }
-      return;
     }
     for (let attempt = 0; ; attempt += 1) {
       try {

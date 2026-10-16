@@ -2,7 +2,6 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
 import { CartContext } from './cart-context';
@@ -19,11 +18,8 @@ import type { AddToCartOptions, CartContextType, CartItem } from './cart-types';
 import { findMergingCartLineIndex } from './find-merging-cart-line';
 import { gateAddToCart } from './gate-add-to-cart';
 import { getMerchantCartState } from './merchant-cart-storage';
-import {
-  applyValidationResults,
-  createCartHash,
-  validateStorefrontCart,
-} from './storefront-cart-validation';
+import { useDeferredValidationActivation } from './use-deferred-validation-activation';
+import { useLegacyCartValidation } from './use-legacy-cart-validation';
 import { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 
 interface StorefrontCartProviderProps {
@@ -80,7 +76,6 @@ export function StorefrontCartProvider({
   );
   const [showUpsell, setShowUpsell] = useState(false);
   const upsellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastValidatedCartHashRef = useRef('');
   const { bumpSessionGeneration, delegated, delegatedActions, shared } =
     useStorefrontCartDelegation({
       sharedCartEnabled,
@@ -131,183 +126,23 @@ export function StorefrontCartProvider({
     setIsHydrated(true);
   }, []);
 
-  useEffect(() => {
-    if (!deferValidationUntilIdle || idleValidationActivated) {
-      return;
-    }
-
-    let cancelled = false;
-    let idleCallbackId: number | undefined;
-    let loadListenerAttached = false;
-    let cancelActivationGate: (() => void) | undefined;
-    const activateValidation = () => {
-      if (cancelled) {
-        return;
-      }
-      // A speculatively prerendered PDP (Speculation Rules `prerender`) runs
-      // this provider's JS in a hidden tab. Committing validation there would
-      // POST /api/cart/validate and persist the result to the shared cart
-      // storage for a page the shopper may never open — mutating their real
-      // cart or clearing negotiations. Defer the commit until the page is
-      // actually presented; a discarded prerender never activates, so it never
-      // runs. Outside prerender this invokes the callback synchronously, so
-      // behaviour is unchanged.
-      cancelActivationGate?.();
-      cancelActivationGate = runWhenPageActivated(() => {
-        if (!cancelled) {
-          setIdleValidationActivated(true);
-        }
-      });
-    };
-
-    const scheduleIdleActivation = () => {
-      if (cancelled || idleCallbackId !== undefined) return;
-
-      if (typeof window.requestIdleCallback === 'function') {
-        idleCallbackId = window.requestIdleCallback(activateValidation, {
-          timeout: validationActivationTimeoutMs || 1000,
-        });
-        return;
-      }
-
-      idleCallbackId = window.setTimeout(activateValidation, 0);
-    };
-
-    const handleWindowLoad = () => {
-      window.removeEventListener('load', handleWindowLoad);
-      loadListenerAttached = false;
-      scheduleIdleActivation();
-    };
-
-    const timeoutId =
-      validationActivationTimeoutMs > 0
-        ? window.setTimeout(activateValidation, validationActivationTimeoutMs)
-        : undefined;
-
-    if (document.readyState === 'complete') {
-      scheduleIdleActivation();
-    } else {
-      loadListenerAttached = true;
-      window.addEventListener('load', handleWindowLoad, { once: true });
-    }
-
-    window.addEventListener('pointerdown', activateValidation, {
-      once: true,
-      passive: true,
-    });
-    window.addEventListener('keydown', activateValidation, { once: true });
-    window.addEventListener('scroll', activateValidation, {
-      once: true,
-      passive: true,
-    });
-
-    return () => {
-      cancelled = true;
-      cancelActivationGate?.();
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-
-      if (idleCallbackId !== undefined) {
-        if (typeof window.cancelIdleCallback === 'function') {
-          window.cancelIdleCallback(idleCallbackId);
-        } else {
-          window.clearTimeout(idleCallbackId);
-        }
-      }
-
-      if (loadListenerAttached) {
-        window.removeEventListener('load', handleWindowLoad);
-      }
-
-      window.removeEventListener('pointerdown', activateValidation);
-      window.removeEventListener('keydown', activateValidation);
-      window.removeEventListener('scroll', activateValidation);
-    };
-  }, [
+  useDeferredValidationActivation({
     deferValidationUntilIdle,
     idleValidationActivated,
     validationActivationTimeoutMs,
-  ]);
+    onActivate: setIdleValidationActivated,
+  });
 
-  useEffect(() => {
-    // Server prices are authoritative while delegated; legacy validation
-    // would overwrite confirmed negotiated prices from a stale read.
-    if (delegated) return;
-    if (!isHydrated || !isValidationActivated || cart.length === 0) return;
-
-    const cartHash = createCartHash(cart);
-    if (cartHash === lastValidatedCartHashRef.current) {
-      return;
-    }
-
-    const controller = new AbortController();
-    const timer = window.setTimeout(async () => {
-      lastValidatedCartHashRef.current = cartHash;
-
-      try {
-        const validation = await validateStorefrontCart(
-          cart,
-          controller.signal
-        );
-        if (!validation || controller.signal.aborted) {
-          return;
-        }
-
-        // A cart-wide negotiation distributes one agreed total across all
-        // lines, so any validated price drift voids the whole group deal — not
-        // just the changed line. Reset the flag and clear every line's
-        // negotiated price (applyValidationResults only clears the drifted one).
-        // A drifted price OR a removed (invalid) line both change the negotiated
-        // cart composition, so either voids the whole group deal.
-        const resetGroup =
-          cartWideNegotiationActive &&
-          ((validation.priceChanges?.length ?? 0) > 0 ||
-            (validation.invalidProductIds?.length ?? 0) > 0);
-
-        setCart((previousCart) => {
-          let updatedCart = applyValidationResults(previousCart, validation);
-          if (resetGroup) {
-            updatedCart = updatedCart.map((item) =>
-              item.negotiatedPrice === undefined &&
-              item.negotiationStatus === undefined
-                ? item
-                : {
-                    ...item,
-                    negotiatedPrice: undefined,
-                    negotiationStatus: undefined,
-                  }
-            );
-          }
-          lastValidatedCartHashRef.current = createCartHash(updatedCart);
-          return updatedCart;
-        });
-
-        if (resetGroup) {
-          cartWideNegotiationActiveRef.current = false;
-          setCartWideNegotiationActiveState(false);
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
-          return;
-        }
-
-        logger.error({
-          message: 'Cart validation error',
-          error: error as Error,
-        });
-      }
-    }, 500);
-
-    return () => {
-      window.clearTimeout(timer);
-      controller.abort();
-    };
-  }, [
+  useLegacyCartValidation({
     cart,
-    isHydrated,
-    isValidationActivated,
     cartWideNegotiationActive,
     delegated,
-  ]);
+    isHydrated,
+    isValidationActivated,
+    setCart,
+    setCartWideNegotiationActiveState,
+    cartWideNegotiationActiveRef,
+  });
 
   useEffect(() => {
     // The shared hook persists its own display cache; a legacy write here

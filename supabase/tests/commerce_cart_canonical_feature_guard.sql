@@ -33,6 +33,20 @@ BEGIN
     RAISE EXCEPTION 'whitespace-wrapped shared_cart value must be rejected';
   END IF;
 
+  -- Non-breaking-space / BOM wrapping (ECMAScript-trimmable but outside
+  -- the PostgreSQL \s class) is rejected too.
+  rejected := false;
+  BEGIN
+    UPDATE public.merchants
+    SET premium_features = jsonb_build_array(chr(160) || 'shared_cart' || chr(65279))
+    WHERE id = merchant;
+  EXCEPTION WHEN invalid_parameter_value THEN
+    rejected := true;
+  END;
+  IF NOT rejected THEN
+    RAISE EXCEPTION 'unicode-whitespace-wrapped shared_cart value must be rejected';
+  END IF;
+
   UPDATE public.merchants
   SET premium_features = '["shared_cart", "shared_cart_native", "Other_Feature"]'::jsonb
   WHERE id = merchant;

@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import {
   hasSharedCartWriter,
   retireSharedCartWriter,
@@ -116,6 +117,34 @@ it('discards canonical ownership when enrollment turns off', async () => {
       `baci.cart.session.${options.merchantId}`
     )
   );
+});
+
+it('surfaces an initial refresh failure as an error state for retry', async () => {
+  const deps = {
+    client: jest.fn(() => ({
+      context: jest.fn().mockRejectedValue(new Error('offline')),
+      bootstrap: jest.fn(),
+      read: jest.fn(),
+      create: jest.fn(),
+      command: jest.fn(),
+      recoverCreation: jest.fn(),
+    })),
+    loadProduct: jest.fn().mockResolvedValue(null),
+    receipts: {
+      read: jest.fn().mockResolvedValue(null),
+      save: jest.fn(),
+      clear: jest.fn(),
+    },
+  };
+  const { unmount } = renderHook(() => useSharedCart(options, deps));
+  await waitFor(() =>
+    expect(useNativeSharedCartStore.getState().status).toBe('error')
+  );
+  expect(useNativeSharedCartStore.getState().code).toBe(
+    'temporarily_unavailable'
+  );
+  expect(useNativeSharedCartStore.getState().snapshot).toBeNull();
+  unmount();
 });
 
 it('clears a pending receipt even when local retirement defers remote revocation', async () => {

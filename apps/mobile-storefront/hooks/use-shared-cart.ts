@@ -246,7 +246,21 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
             useNativeSharedCartStore.setState({ savedCart: saved ?? null });
         },
       });
-      void controller.refresh().catch(() => undefined);
+      void controller.refresh().catch((error: unknown) => {
+        // An initial failure before any snapshot must leave the
+        // loading state so the status panel can offer manual retry;
+        // later failures keep the last good snapshot visible.
+        if (!isCurrent() || useNativeSharedCartStore.getState().snapshot)
+          return;
+        useCartStore.setState({ isLoading: false });
+        useNativeSharedCartStore.setState({
+          status: 'error',
+          code:
+            error instanceof NativeCartError
+              ? error.code
+              : 'temporarily_unavailable',
+        });
+      });
     } catch {
       useCartStore.setState({ isLoading: false });
       useNativeSharedCartStore.setState({

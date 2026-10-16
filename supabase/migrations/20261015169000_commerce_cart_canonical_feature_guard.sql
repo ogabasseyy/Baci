@@ -12,6 +12,7 @@ SET search_path = ''
 AS $$
 DECLARE
   feature text;
+  normalized text;
 BEGIN
   IF NEW.premium_features IS NULL THEN
     RETURN NEW;
@@ -19,11 +20,24 @@ BEGIN
   FOR feature IN
     SELECT value FROM pg_catalog.jsonb_array_elements_text(NEW.premium_features)
   LOOP
-    IF pg_catalog.lower(pg_catalog.regexp_replace(feature, '^\s+|\s+$', '', 'g')) IN (
+    -- Strip the full ECMAScript trim whitespace set (not just the
+    -- PostgreSQL \s class, which misses U+00A0/U+FEFF and friends) so
+    -- detection matches the client gates' String.trim() + lowercase.
+    -- Canonical names contain no whitespace, so stripping everywhere
+    -- is equivalent to trimming for this comparison.
+    normalized := pg_catalog.lower(
+      pg_catalog.regexp_replace(
+        feature,
+        '[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]',
+        '',
+        'g'
+      )
+    );
+    IF normalized IN (
         'shared_cart', 'shared_cart_realtime', 'shared_cart_accounts',
         'shared_cart_native'
       )
-      AND feature <> pg_catalog.lower(pg_catalog.regexp_replace(feature, '^\s+|\s+$', '', 'g')) THEN
+      AND feature <> normalized THEN
       RAISE EXCEPTION 'shared cart premium_features values must be exact lowercase: %', feature
         USING ERRCODE = '22023';
     END IF;

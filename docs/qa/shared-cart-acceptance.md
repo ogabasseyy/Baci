@@ -2,7 +2,11 @@
 
 Status: local implementation evidence only. No deployment, live
 migration, customer-cart mutation, order, or payment has occurred.
-CodeRabbit review is pending (unavailable in this worktree session).
+Review state at head `2ac59726e0` (round 38): Codex and Muse reviews
+completed on that head; the six Codex threads from that round are
+addressed in the following head. Fresh GitHub CI and full DB replay
+must be green on the final head before merge; activation remains
+separately gated in `docs/deploy/shared-cart-rollout.md`.
 
 ## Executed locally
 
@@ -34,7 +38,9 @@ CodeRabbit review is pending (unavailable in this worktree session).
   both reads and writes. Local regressions verify not-found responses
   without building a cart projection. Backfill requires a verified caller
   identity; absence is never treated as merchant-wide permission.
-- Full monorepo test suite and final review at a reviewed commit.
+- Fresh GitHub CI (including DB replay) green on the final reviewed
+  head; local replay converged at `2ac59726e0`, CI confirmation on the
+  final head is still required.
 
 ## Invariants checked by design
 

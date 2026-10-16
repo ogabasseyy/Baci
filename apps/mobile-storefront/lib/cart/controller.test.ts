@@ -168,6 +168,22 @@ it('clears the display for an expired cart instead of offering it for checkout',
   );
   expect(s.status).toHaveBeenCalledWith('ready');
 });
+it('retries clear once against the refreshed version after a conflict', async () => {
+  const s = setup();
+  s.connect();
+  await s.controller.refresh();
+  s.client.command
+    .mockRejectedValueOnce(new NativeCartError('version_conflict'))
+    .mockImplementation(async (input: { expectedVersion: number }) => ({
+      cart: { ...snapshot, version: input.expectedVersion + 1 },
+    }));
+  s.client.read.mockResolvedValue({ cart: { ...snapshot, version: 7 } });
+  await expect(s.controller.write({ type: 'clear' })).resolves.not.toThrow();
+  expect(
+    s.client.command.mock.calls.map(([input]) => input.expectedVersion)
+  ).toEqual([1, 7]);
+});
+
 it('does not create authority or carts during initialization without a proof', async () => {
   const s = setup();
   await s.controller.refresh();

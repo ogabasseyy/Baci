@@ -50,12 +50,21 @@ export async function flushRetiredCartDevice(
       'code' in result &&
       result.code === 'expired_proof' &&
       !('revoked' in result);
+    // A definitive invalid_proof (e.g. the signing key aged out of the
+    // rotation window) can never become revocable again; the retained
+    // proof is unusable authority, so retirement is terminal too.
+    const retirementInvalid =
+      validBody &&
+      response.status === 401 &&
+      'code' in result &&
+      result.code === 'invalid_proof' &&
+      !('revoked' in result);
     const revoked =
       validBody &&
       response.ok &&
       'revoked' in result &&
       result.revoked === true;
-    if (!revoked && !retirementExpired)
+    if (!revoked && !retirementExpired && !retirementInvalid)
       throw new NativeCartError('revocation_pending');
     await storage.acknowledgeRetirement?.(config.merchantId, proof);
   } catch {

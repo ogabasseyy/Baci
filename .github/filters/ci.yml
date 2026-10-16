@@ -221,6 +221,8 @@ deploy_scripts:
   - '.github/scripts/coordinate-publication.test.mjs'
   - '.github/scripts/release-production.mjs'
   - '.github/scripts/release-production.test.mjs'
+  - '.github/scripts/read-workflow-run-status.mjs'
+  - '.github/scripts/read-workflow-run-status.test.mjs'
   - '.github/scripts/verify-coordinated-release.sh'
   - '.github/scripts/verify-coordinated-release.test.mjs'
   - '.github/scripts/release-remote-validation.mjs'

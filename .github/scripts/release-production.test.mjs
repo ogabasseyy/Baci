@@ -1,3 +1,5 @@
+// Registered here so the existing explicit CI suite also runs the focused tests.
+import './read-workflow-run-status.test.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,7 +18,6 @@ import {
   parseGhJqString,
   parseJobsPayload,
   readRuns,
-  readWorkflowRunStatus,
   RUNS_MAX_PAGES,
   parseRunAttempt,
   shouldHoldReleaseLock,
@@ -51,20 +52,6 @@ test('reads raw gh --jq scalars without JSON parsing', () => {
   assert.equal(parseGhJqString('in_progress\n', 'test status'), 'in_progress');
   for (const output of ['', '   ', 'null', null, undefined]) {
     assert.throws(() => parseGhJqString(output, 'test status'), /test status unreadable/);
-  }
-  const calls = [];
-  const reading = readWorkflowRunStatus(
-    args => {
-      calls.push(args);
-      return 'queued\t\n';
-    },
-    42
-  );
-  assert.deepEqual(reading, { status: 'queued', conclusion: '' });
-  assert.deepEqual(readWorkflowRunStatus(() => 'completed\taction_required\n', 42), { status: 'completed', conclusion: 'action_required' });
-  assert.ok(calls[0].join(' ').includes('[.status, .conclusion] | @tsv'));
-  for (const output of ['', 'null\t\n', 'success\n', '\tsuccess\n', 'a\tb\tc\n']) {
-    assert.throws(() => readWorkflowRunStatus(() => output, 42), /workflow run 42 status unreadable/);
   }
 });
 

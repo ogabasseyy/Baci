@@ -1,3 +1,4 @@
+import { readWorkflowRunStatus } from './read-workflow-run-status.mjs';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -90,12 +91,6 @@ export function parseGhJqString(output, label) {
   const value = String(output ?? '').trim();
   if (!value || value === 'null') throw new Error(`${label} unreadable; inspect preceding gh diagnostics`);
   return value;
-}
-
-export function readWorkflowRunStatus(ghInvoke, runId) {
-  const fields = String(ghInvoke(['api', `repos/${repository}/actions/runs/${runId}`, '--jq', '[.status, .conclusion] | @tsv']) ?? '').split('\t');
-  if (fields.length !== 2 || !fields[0].trim() || fields[0].trim() === 'null') throw new Error(`workflow run ${runId} status unreadable; inspect preceding gh diagnostics`);
-  return { status: fields[0].trim(), conclusion: fields[1].trim() };
 }
 
 export function shouldHoldReleaseLock(error) {

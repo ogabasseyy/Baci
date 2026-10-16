@@ -517,6 +517,12 @@ jobs:
         env:
           QUIZ_RPC_SERVER_SECRET: ${{ secrets.QUIZ_RPC_SERVER_SECRET }}
         run: node .github/scripts/inject-prebuilt-env-secret.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
+      - name: Ensure build-time presence of runtime-only legacy Supabase JWT secret
+        # SUPABASE_JWT_SECRET is marked sensitive in Vercel Production, so it
+        # pulls as a blank placeholder after normalization. Inject a build-time
+        # stand-in so the legacy fallback and env.ts build validation pass while
+        # Vercel supplies the real secret at runtime.
+        run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_JWT_SECRET .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
       - name: Ensure build-time presence of runtime-only scoped Supabase JWT key
         # Vercel pulls sensitive runtime values as empty strings. Generate a
         # fresh build-only JWK inside the injector to satisfy build validation;

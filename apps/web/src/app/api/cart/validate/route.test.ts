@@ -890,7 +890,7 @@ describe('POST /api/cart/validate', () => {
 
     expect(response.status).toBe(200);
     expect(body.invalidProductIds).toEqual([
-      PRODUCT_ID,
+      `${PRODUCT_ID}::base`,
       `${PRODUCT_ID}::offer=${OFFER_ID}`,
     ]);
   });

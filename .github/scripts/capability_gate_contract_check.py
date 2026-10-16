@@ -68,7 +68,7 @@ BASE_PINS = {
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
     ".github/scripts/capability_gate_contract_ci_checks.py": "a8b8f0add49e69a538d46f774bcc0e69d0514814c32a0419a5bc5867860bbfac",
     ".github/scripts/capability_gate_contract_workflow_checks.py": "f0e6007592223a06e25d2374561dc987bf97f5a1f3d61bbc385f89fd7e3bdb18",
-    ".github/workflows/capability-register-freshness.yml": "6e0618cc3824061f069ee5ec5f02b4e684256b88b7a0ff672fdd2c1501c06adc",
+    ".github/workflows/capability-register-freshness.yml": "67a154a7456ac16a4c98946f74a3490cd0a7f35edf5bfd086f81b274854f2486",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
     "vps-workers/baci-editorial-context/register_digests.py": "fb42b161df30abfa27d7178bdfff75dc4fbada4d65561d14168d20f7ca70b860",

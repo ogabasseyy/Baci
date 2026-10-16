@@ -248,6 +248,27 @@ BEGIN
     RAISE EXCEPTION 'merchant attestation not persisted on manual row';
   END IF;
 
+  -- Replays attest too: the replay branch rewrites audit notes and
+  -- short-circuits to status before the record helper is reached, so
+  -- an unattested replay must fail without touching the stored note.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1', 'rewritten',
+      false);
+    RAISE EXCEPTION 'unattested replay accepted';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    IF SQLERRM <> 'refund_confirmation_required' THEN RAISE; END IF;
+  END;
+  IF EXISTS (
+    SELECT 1 FROM public.transactions
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+      AND metadata->>'reference' = 'attested-1'
+      AND metadata->>'note' = 'rewritten'
+  ) THEN
+    RAISE EXCEPTION 'unattested replay mutated the audit note';
+  END IF;
+
   -- Claimed refunds block manual writes and management.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000008'

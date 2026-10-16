@@ -216,3 +216,35 @@ GRANT EXECUTE ON FUNCTION private.refund_coverage_per_leg_v1(uuid,uuid,text)
   TO service_role, authenticated;
 GRANT EXECUTE ON FUNCTION private.uncovered_refund_obligation_v1(uuid,uuid,text,numeric,numeric)
   TO service_role, authenticated;
+-- Shared membership gate for the authenticated-granted private
+-- refund helpers (pending evidence, movement evidence, partial
+-- state): owner, orders:refund, or orders:view, with uid-less
+-- service_role bypass. One implementation so the helpers cannot
+-- drift apart; the confinement suite pins each caller with USAGE
+-- granted. Same EXECUTE grants as its callers (denial-path
+-- rationale above); calling it directly is harmless (void).
+CREATE OR REPLACE FUNCTION private.assert_refund_helper_membership_v1(
+  p_merchant_id uuid
+) RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+DECLARE
+  v_actor uuid;
+BEGIN
+  v_actor := (SELECT auth.uid());
+  IF v_actor IS NOT NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM public.merchants
+        WHERE id = p_merchant_id AND user_id = v_actor
+     )
+     AND NOT public.check_staff_permission(
+       v_actor, p_merchant_id, 'orders', 'refund'
+     )
+     AND NOT public.check_staff_permission(
+       v_actor, p_merchant_id, 'orders', 'view'
+     ) THEN
+    RAISE EXCEPTION 'refund_forbidden' USING ERRCODE = '42501';
+  END IF;
+END; $$;
+REVOKE ALL ON FUNCTION private.assert_refund_helper_membership_v1(uuid)
+  FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION private.assert_refund_helper_membership_v1(uuid)
+  TO service_role, authenticated;

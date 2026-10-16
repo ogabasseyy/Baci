@@ -6,8 +6,10 @@
 -- in-function membership gate confines the helper anyway: with
 -- private-schema USAGE granted (rolled back), the owner's call
 -- succeeds, a foreign merchant's call fails closed with 42501, and
--- uid-less service_role contexts bypass. Fixtures use the 9ef4
--- namespace and roll back.
+-- uid-less service_role contexts bypass. The pending-evidence,
+-- movement-evidence, and partial-manual helpers pin the same
+-- contract (owner passes, foreign raises 42501). Fixtures use the
+-- 9ef4 namespace and roll back.
 --
 -- USAGE:
 --   supabase test db supabase/tests/order_refund_coverage_helper_confinement.sql
@@ -67,11 +69,19 @@ BEGIN
   GRANT USAGE ON SCHEMA private TO authenticated;
   GRANT SELECT ON public.transactions TO authenticated;
   GRANT SELECT ON public.merchants TO authenticated;
+  GRANT SELECT ON public.orders TO authenticated;
+  GRANT SELECT ON public.reconciliation_review TO authenticated;
   CREATE POLICY confinement_probe_transactions
     ON public.transactions FOR SELECT TO authenticated
     USING (true);
   CREATE POLICY confinement_probe_merchants
     ON public.merchants FOR SELECT TO authenticated
+    USING (true);
+  CREATE POLICY confinement_probe_orders
+    ON public.orders FOR SELECT TO authenticated
+    USING (true);
+  CREATE POLICY confinement_probe_reconciliation_review
+    ON public.reconciliation_review FOR SELECT TO authenticated
     USING (true);
 END;
 $confinement_fixtures$;
@@ -141,5 +151,82 @@ BEGIN
   END IF;
 END;
 $confinement_foreign$;
+
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef40000-0000-4000-8000-000000000001',
+  true
+);
+
+DO $confinement_evidence_helpers_owner$
+DECLARE
+  v_pending numeric;
+  v_movement boolean;
+  v_partial boolean;
+BEGIN
+  -- The membership gates must not break legitimate owner calls.
+  SELECT private.pending_refund_evidence_v1(
+    '9ef41000-0000-4000-8000-000000000040',
+    '9ef40100-0000-4000-8000-000000000001',
+    'NGN', false, 'paystack'
+  ) INTO v_pending;
+  IF v_pending <> 0 THEN
+    RAISE EXCEPTION 'owner pending call returned %', v_pending;
+  END IF;
+  SELECT private.unresolved_order_movement_evidence_v1(
+    '9ef41000-0000-4000-8000-000000000040',
+    '9ef40100-0000-4000-8000-000000000001'
+  ) INTO v_movement;
+  IF v_movement THEN
+    RAISE EXCEPTION 'owner movement call returned true with no reviews';
+  END IF;
+  SELECT private.manual_refund_partial_v1(
+    '9ef41000-0000-4000-8000-000000000040', 100
+  ) INTO v_partial;
+  IF v_partial THEN
+    RAISE EXCEPTION 'owner partial call returned true with no manuals';
+  END IF;
+END;
+$confinement_evidence_helpers_owner$;
+
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef40000-0000-4000-8000-000000000002',
+  true
+);
+
+DO $confinement_evidence_helpers_foreign$
+DECLARE
+  v_rejected integer := 0;
+BEGIN
+  BEGIN
+    PERFORM private.pending_refund_evidence_v1(
+      '9ef41000-0000-4000-8000-000000000040',
+      '9ef40100-0000-4000-8000-000000000001',
+      'NGN', false, 'paystack'
+    );
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_rejected := v_rejected + 1;
+  END;
+  BEGIN
+    PERFORM private.unresolved_order_movement_evidence_v1(
+      '9ef41000-0000-4000-8000-000000000040',
+      '9ef40100-0000-4000-8000-000000000001'
+    );
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_rejected := v_rejected + 1;
+  END;
+  BEGIN
+    PERFORM private.manual_refund_partial_v1(
+      '9ef41000-0000-4000-8000-000000000040', 100
+    );
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_rejected := v_rejected + 1;
+  END;
+  IF v_rejected <> 3 THEN
+    RAISE EXCEPTION 'only % of 3 helper probes rejected', v_rejected;
+  END IF;
+END;
+$confinement_evidence_helpers_foreign$;
 
 ROLLBACK;

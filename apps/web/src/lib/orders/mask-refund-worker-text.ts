@@ -29,6 +29,22 @@ const REFUND_EVENT_DETAIL_KEYS = new Set([
   'previousAttempts',
   'previousError',
 ]);
+// Event keys the timeline reads. actor (the auth UUID of whoever
+// retried or recorded) is dropped: the status action serves
+// view-only staff, who have no operational need for peer identity,
+// and nothing renders it.
+const REFUND_EVENT_KEYS = new Set(['id', 'action', 'date', 'details']);
+// History keys the timeline reads. recorded_by is dropped with the
+// same reasoning as actor; reference stays (the panel renders it,
+// and it is the merchant's own data on an order they can view).
+const REFUND_HISTORY_KEYS = new Set([
+  'id',
+  'amount',
+  'status',
+  'method',
+  'reference',
+  'date',
+]);
 function maskRefundEventDetails(details: unknown): unknown {
   if (details === null || details === undefined) return details;
   if (typeof details !== 'object' || Array.isArray(details)) return {};
@@ -85,18 +101,36 @@ export function maskRefundWorkerText(data: Record<string, unknown>) {
   // keys are dropped with them).
   if (Array.isArray(masked.events)) {
     masked.events = masked.events.map((event) =>
-      event !== null &&
-      typeof event === 'object' &&
-      !Array.isArray(event) &&
-      'details' in event
-        ? {
-            ...(event as Record<string, unknown>),
-            details: maskRefundEventDetails(
-              (event as Record<string, unknown>).details
-            ),
-          }
+      event !== null && typeof event === 'object' && !Array.isArray(event)
+        ? pickMaskedEvent(event as Record<string, unknown>)
         : event
     );
   }
+  if (Array.isArray(masked.history)) {
+    masked.history = masked.history.map((entry) =>
+      entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+        ? pickAllowedKeys(entry as Record<string, unknown>, REFUND_HISTORY_KEYS)
+        : entry
+    );
+  }
   return masked;
+}
+function pickAllowedKeys(
+  source: Record<string, unknown>,
+  allowed: Set<string>
+): Record<string, unknown> {
+  const picked: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in source) picked[key] = source[key];
+  }
+  return picked;
+}
+function pickMaskedEvent(
+  event: Record<string, unknown>
+): Record<string, unknown> {
+  const picked = pickAllowedKeys(event, REFUND_EVENT_KEYS);
+  if ('details' in picked) {
+    picked.details = maskRefundEventDetails(picked.details);
+  }
+  return picked;
 }

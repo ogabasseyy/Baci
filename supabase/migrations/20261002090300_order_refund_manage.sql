@@ -36,7 +36,6 @@ DECLARE
   v_reference text;
   v_sole_external_leg boolean;
   v_sole_leg_gateway text;
-  v_replay jsonb;
 BEGIN
   IF v_actor IS NULL THEN RAISE EXCEPTION 'not_authenticated' USING ERRCODE='28000'; END IF;
   IF p_action NOT IN ('status','retry','manual') THEN
@@ -86,28 +85,20 @@ BEGIN
   v_order.currency := COALESCE(NULLIF(BTRIM(v_order.currency), ''), 'NGN');
   -- Coverage counts matching money only: a foreign-currency row is an
   -- anomaly for review, and subtracting it would let the merchant
-  -- record less than is owed while the order flips refunded.
-  -- A locally completed Paystack row counts as returned only after
-  -- provider verification (metadata provider_refund_status =
-  -- 'processed'), mirroring the claim gate and the executor
-  -- matcher: counting an unverified row would understate the
-  -- remainder while aggregate finalization keeps deferring.
-  -- The same holds for a manual row declared as Paystack
-  -- (metadata method = 'paystack'): a merchant claim about
-  -- provider money, verified or pending but never coverage.
-  -- Unverified rows are in-flight money that blocks manual
-  -- recording (like refund_pending legs) — never invisible money
-  -- the merchant could double-record beside the provider refund.
+  -- record less than is owed while the order flips refunded. A
+  -- locally completed Paystack row (or a manual row declared as
+  -- Paystack) counts only after provider verification
+  -- (provider_refund_status = 'processed'): counting an unverified
+  -- row would understate the remainder while finalization defers,
+  -- and unverified rows block manual recording like refund_pending
+  -- legs instead of turning into double-recordable invisibility.
   -- Refunds attribute to their linked leg under the claim's
   -- normalized-gateway rules, with the explicit manual-row exception
-  -- (a merchant transfer covers any leg it is allocated to):
-  -- counting a cross-gateway row would zero the balance and flip
-  -- the label while the claim rejects the evidence and the worker
-  -- quarantines, with recovery gates then blocking every manual
-  -- retry. Unlinked rows attribute only to a sole completed
-  -- external leg with a matching gateway (manual rows never
-  -- sole-attribute — the sole leg is external by construction).
-  -- Unattributable rows wait in pending instead.
+  -- (a merchant transfer covers any allocated leg): counting a
+  -- cross-gateway row would zero the balance while the claim rejects
+  -- the evidence. Unlinked rows attribute only to a sole completed
+  -- external leg with a matching gateway (manuals never
+  -- sole-attribute); unattributable rows wait in pending instead.
   SELECT count(*)=1,
     max(public.normalized_gateway_name_v1(sole.gateway))
     INTO v_sole_external_leg,v_sole_leg_gateway FROM public.transactions sole
@@ -180,6 +171,15 @@ BEGIN
       RAISE EXCEPTION 'cancelled_paid_order_required' USING ERRCODE='P0001';
     END IF;
     IF p_action='manual' THEN
+      -- Attestation gates the whole manual action, including
+      -- idempotent replays: the replay branch below rewrites audit
+      -- notes and short-circuits to status before the record helper
+      -- (the previous sole enforcement point) is ever reached, so
+      -- without this a direct RPC caller could mutate notes
+      -- unattested. Same code as the helper for one client mapping.
+      IF p_confirmed IS NOT TRUE THEN
+        RAISE EXCEPTION 'refund_confirmation_required' USING ERRCODE='22023';
+      END IF;
       v_reference := NULLIF(btrim(p_reference),'');
       IF p_amount IS NULL OR p_amount<=0 OR p_amount<>round(p_amount,2)
         OR p_refunded_at IS NULL OR p_refunded_at>now()
@@ -188,32 +188,12 @@ BEGIN
         OR COALESCE(length(p_note),0)>500 THEN
         RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
       END IF;
-      -- Replay identity normalizes like the coverage paths: a legacy
-      -- 'Manual' spelling or padded reference is the same transfer.
-      SELECT jsonb_build_object('amount',sum(amount),'method',min(metadata->>'method'),
-        'refunded_at',min(metadata->>'refunded_at'),'note',min(metadata->>'note')) INTO v_replay
-        FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
-        AND public.normalized_gateway_name_v1(gateway)='MANUAL'
-        AND btrim(metadata->>'reference')=v_reference;
-      IF (v_replay->>'amount') IS NOT NULL THEN
-        IF (v_replay->>'amount')::numeric<>p_amount OR v_replay->>'method'<>p_method
-          OR (v_replay->>'refunded_at')::timestamptz<>p_refunded_at THEN
-          RAISE EXCEPTION 'manual_reference_conflict' USING ERRCODE='P0001';
-        END IF;
-        -- Same transfer: money fields match, so no new money moves. A
-        -- differing note is an annotation correction, not a new
-        -- transfer (a new reference would double-record the money),
-        -- so refresh it on every leg row instead of keeping stale
-        -- audit text.
-        IF COALESCE(v_replay->>'note','') IS DISTINCT FROM COALESCE(p_note,'') THEN
-          UPDATE public.transactions SET metadata = metadata ||
-            jsonb_build_object('note',p_note)
-            WHERE order_id=p_order_id AND transaction_type='refund'
-              AND public.normalized_gateway_name_v1(gateway)='MANUAL'
-              AND btrim(metadata->>'reference')=v_reference;
-        END IF;
-        p_action := 'status'; -- Idempotent retry of an already recorded transfer.
-      END IF;
+      -- Idempotent replay short-circuit (extracted helper): same
+      -- transfer refreshes the note and reads back status, mismatched
+      -- money raises, and no prior rows proceed to recording.
+      p_action := private.apply_manual_refund_replay_v1(
+        p_order_id, p_amount, p_refunded_at, p_method, p_reference,
+        p_note);
     END IF;
     IF p_action <> 'status' AND (v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0
       OR v_has_movement_evidence) THEN

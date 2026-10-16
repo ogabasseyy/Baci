@@ -3,21 +3,24 @@
 -- migration stays under the 300-line limit. Called only from
 -- private.manage_order_refund, which runs SECURITY DEFINER; this
 -- stays SECURITY INVOKER.
--- LOAD-BEARING CONFINEMENT: this helper takes p_merchant_id as a
--- caller-supplied argument with no auth check of its own, and it is
--- GRANTed EXECUTE to authenticated (the grant exists only to dodge
--- the Postgres 18 denial-path segfault). It stays unreachable solely
--- because the private schema denies USAGE to authenticated — never
--- grant private USAGE for an unrelated helper without adding an
--- in-function authorization check here first. The confinement suite
+-- DEFENSE IN DEPTH: every helper in this file calls the shared
+-- membership gate first (owner, orders:refund, or orders:view, with
+-- uid-less service_role bypass). The EXECUTE grants to
+-- authenticated exist only to dodge the Postgres 18 denial-path
+-- segfault, and the private-schema USAGE denial is the outer layer
+-- (migration history toggles it, so the gates must not depend on
+-- it). The confinement suite
 -- (order_refund_coverage_helper_confinement.sql, required in CI)
--- pins the denial; keep it green.
+-- pins both layers with USAGE granted; keep it green.
 DROP FUNCTION IF EXISTS private.pending_refund_evidence_v1(uuid,uuid,text,boolean,text);
 CREATE OR REPLACE FUNCTION private.pending_refund_evidence_v1(
   p_order_id uuid, p_merchant_id uuid, p_currency text,
   p_sole_external_leg boolean, p_sole_leg_gateway text
 ) RETURNS numeric LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 BEGIN
+  -- Membership gate first: without it this helper would be a
+  -- cross-tenant pending-amount oracle under a future USAGE grant.
+  PERFORM private.assert_refund_helper_membership_v1(p_merchant_id);
   -- Pending stays a global sum: over-counting in-flight money only
   -- blocks actions safely. Nonmatching-currency rows (null or
   -- foreign) stay out of coverage but count as pending: the manager
@@ -120,6 +123,8 @@ DECLARE
   v_failed_only_nonempty boolean;
   v_failed_only_ids text[];
 BEGIN
+  -- Membership gate first (see the pending helper above).
+  PERFORM private.assert_refund_helper_membership_v1(p_merchant_id);
   FOR r IN
     SELECT rr.id, rr.issue_type, rr.txn_id, rr.candidates, rr.metadata
     FROM public.reconciliation_review rr
@@ -249,8 +254,14 @@ AS $$
 -- counts them (manual rows never sole-attribute), so the pending
 -- gate owns them before retry is ever considered.
 DECLARE
+  v_merchant uuid;
   v_partial boolean;
 BEGIN
+  -- Membership gate first: this helper takes no merchant argument,
+  -- so the order resolves it (unknown orders fail closed).
+  SELECT merchant_id INTO v_merchant FROM public.orders
+    WHERE id = p_order_id;
+  PERFORM private.assert_refund_helper_membership_v1(v_merchant);
   SELECT p_remaining > 0 AND EXISTS (
       SELECT 1
       FROM public.transactions leg

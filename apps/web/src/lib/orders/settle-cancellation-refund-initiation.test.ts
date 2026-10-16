@@ -11,11 +11,18 @@ vi.mock('@/lib/orders/quarantine-withheld-cancellation-refund-legs', () => ({
 vi.mock('@/lib/orders/reset-cancellation-side-effect-attempts', () => ({
   tryResetCancellationSideEffectAttempts: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock('@/lib/orders/quarantine-order-cancellation-refund', () => ({
+  quarantineRefund: vi.fn(),
+}));
 
 import { initiatePaystackCancellationRefunds } from '@/lib/orders/initiate-paystack-cancellation-refunds';
+import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { quarantineWithheldCancellationRefundLegs } from '@/lib/orders/quarantine-withheld-cancellation-refund-legs';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
-import { DeferredError } from '@/lib/orders/run-order-cancellation-side-effect';
+import {
+  DeferredError,
+  DeliveryUncertainError,
+} from '@/lib/orders/run-order-cancellation-side-effect';
 import {
   order,
   paystackPayment,
@@ -122,6 +129,35 @@ describe('settleCancellationRefundInitiation', () => {
     expect(quarantineWithheldCancellationRefundLegs).toHaveBeenCalledWith(
       expect.objectContaining({
         mismatchedTransactions: [paystackPayment],
+      })
+    );
+  });
+  it('quarantines a settled foreign-currency leg instead of completing silently', async () => {
+    // The settled leg never passed the initiation-time currency
+    // gate (it scopes to outstanding legs), but the SQL gates
+    // reject its terminal row as anomalous: completing would
+    // strand the order with no reclaimable side-effect row. Clean
+    // siblings initiate first then the evidence quarantines.
+    const foreignLeg = { ...paystackPayment, currency: 'USD', id: 'payment-9' };
+    vi.mocked(quarantineRefund).mockRejectedValueOnce(
+      new DeliveryUncertainError('Payment currency requires review')
+    );
+    const error = await settleCancellationRefundInitiation(
+      input({
+        initiationTransactions: [paystackPayment, foreignLeg] as never,
+        refundedPaymentIds: new Set(['payment-9']),
+      })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeliveryUncertainError);
+    expect(initiatePaystackCancellationRefunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transactions: [paystackPayment, foreignLeg],
+      })
+    );
+    expect(quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'Payment currency requires review before refund',
+        transactions: [foreignLeg],
       })
     );
   });

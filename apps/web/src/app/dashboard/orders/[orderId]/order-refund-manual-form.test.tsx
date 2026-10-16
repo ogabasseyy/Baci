@@ -22,6 +22,7 @@ function props(overrides = {}) {
     onNoteChange: vi.fn(),
     onReferenceChange: vi.fn(),
     onSubmit: vi.fn(),
+    paystackAvailable: true,
     reference: 'bank-1',
     remaining: 80,
     ...overrides,
@@ -97,5 +98,14 @@ describe('OrderRefundManualForm', () => {
       target: { value: 'leg-2' },
     });
     expect(onLegIdChange).toHaveBeenCalledWith('leg-2');
+  });
+  it('omits Paystack when no eligible capture exists', () => {
+    render(<OrderRefundManualForm {...props({ paystackAvailable: false })} />);
+    const method = screen.getByLabelText('Method') as HTMLSelectElement;
+    expect([...method.options].map((option) => option.value)).toEqual([
+      'bank_transfer',
+      'cash',
+      'other',
+    ]);
   });
 });

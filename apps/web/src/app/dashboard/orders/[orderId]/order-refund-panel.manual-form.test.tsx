@@ -236,4 +236,35 @@ describe('OrderRefundPanel manual form', () => {
       })
     );
   });
+  it('hides Paystack when no leg offers an eligible capture', async () => {
+    // A Korapay-only order can never satisfy the RPC's outstanding
+    // Paystack-leg requirement: offering the method presents a
+    // recovery path that always rejects.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...summary,
+          legs: [
+            {
+              amount: 100,
+              gateway: 'korapay',
+              id: 'leg-9',
+              outstanding: 100,
+              reference: 'ko-9',
+            },
+          ],
+        }),
+      })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Record manual refund' })
+    );
+    const method = screen.getByLabelText('Method') as HTMLSelectElement;
+    expect([...method.options].map((option) => option.value)).not.toContain(
+      'paystack'
+    );
+  });
 });

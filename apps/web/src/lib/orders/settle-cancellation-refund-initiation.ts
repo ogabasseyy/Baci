@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { initiatePaystackCancellationRefunds } from '@/lib/orders/initiate-paystack-cancellation-refunds';
+import { normalizeRefundMoneyField } from '@/lib/orders/normalize-refund-money-field';
 import type { CancellationOrder } from '@/lib/orders/order-cancellation-side-effect-types';
+import { quarantineRefund } from '@/lib/orders/quarantine-order-cancellation-refund';
 import { quarantineWithheldCancellationRefundLegs } from '@/lib/orders/quarantine-withheld-cancellation-refund-legs';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
@@ -88,6 +90,30 @@ export async function settleCancellationRefundInitiation({
     throw new DeferredError(
       'cancellation_refund_preflight_deferred_for_budget'
     );
+  }
+  // Settled legs never passed the initiation-time currency gate (it
+  // scopes to outstanding legs so a settled leg cannot strand its
+  // siblings), but the shared legs-covered gate and the manager
+  // reject foreign-currency terminal rows as anomalous: completing
+  // here would finalize the side effect while the order can never
+  // finalize, with no reclaimable row. Quarantine after clean
+  // initiation instead of completing silently. Manual and budget
+  // deferrals above take precedence: the resumed run reaches this
+  // branch once nothing else is outstanding.
+  const orderCurrency = normalizeRefundMoneyField(order.currency) || 'NGN';
+  const foreignSettledLegs = initiationTransactions.filter(
+    (transaction) =>
+      refundedPaymentIds.has(transaction.id) &&
+      (!normalizeRefundMoneyField(transaction.currency) ||
+        normalizeRefundMoneyField(transaction.currency) !== orderCurrency)
+  );
+  if (foreignSettledLegs.length > 0) {
+    await quarantineRefund({
+      order,
+      reason: 'Payment currency requires review before refund',
+      supabase,
+      transactions: foreignSettledLegs,
+    });
   }
   return { refundIds };
 }

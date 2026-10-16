@@ -65,6 +65,33 @@ describe('collectAwaitingCancellationRefundLegs', () => {
     expect([...reviewRefundPaymentIds]).toEqual(['payment-4']);
   });
 
+  it('leaves definitively rejected refunds out of review quarantine', () => {
+    // A failed row carrying the provider's failed stamp is
+    // provably dead: quarantining it would disable the retry and
+    // manual recovery the SQL manager exposes for the leg.
+    const { awaitingRefundPaymentIds, reviewRefundPaymentIds } =
+      collectAwaitingCancellationRefundLegs({
+        linkedPaymentId,
+        refundRows: [
+          {
+            gateway_reference: '48',
+            metadata: {
+              ...linked('payment-1'),
+              provider_refund_status: 'failed',
+            },
+            status: 'failed',
+          },
+          {
+            gateway_reference: '49',
+            metadata: linked('payment-2'),
+            status: 'failed',
+          },
+        ],
+      });
+    expect([...awaitingRefundPaymentIds]).toEqual([]);
+    expect([...reviewRefundPaymentIds]).toEqual(['payment-2']);
+  });
+
   it('handles a null row list', () => {
     const { awaitingRefundPaymentIds, reviewRefundPaymentIds } =
       collectAwaitingCancellationRefundLegs({

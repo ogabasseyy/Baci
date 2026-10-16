@@ -1,16 +1,9 @@
--- Reconciliation coverage override: record_verified_paystack_cancellation_refund_v1
--- keeps its main-line lookup/notify behavior, but its completion gate
--- reuses the claim's shared coverage helper instead of the legacy
--- same-gateway-only scan. The legacy rule never accepted
--- merchant-attested manual rows, so a mixed order (manual-covered leg
--- A, provider leg B) finished its side effect as completed and then
--- stranded settlement reversal, notifications, and review closure
--- when B settled: the gate never saw A as covered. The helper adds
--- the explicit-manual branch (plus the internal-leg, unverified,
--- in-flight, anomaly, and self-terminal blockers the claim
--- enforces), unifying reconciliation with claim semantics. Must sort
--- after 20261010170000 (helper definition).
-
+-- Reconciliation finalization via the extracted predicate: the
+-- per-leg same-gateway scan cannot see manual-covered external
+-- legs, so the predicate ORs in the shared legs-covered gate
+-- (manual rows in matching money count as terminal evidence).
+-- Preamble and finalizer unchanged from 20261016000000; only the
+-- IF condition calls the helper.
 CREATE OR REPLACE FUNCTION public.record_verified_paystack_cancellation_refund_v1(
   p_refund_id uuid,
   p_provider_status text,
@@ -111,6 +104,15 @@ BEGIN
       (order_id, merchant_id, event_type)
     VALUES (v_order.id, v_order.merchant_id, 'failed_merchant_push')
     ON CONFLICT (order_id, event_type) DO NOTHING;
+    -- Round-61 P1: persist the repeat verdict as the row's provider
+    -- stamp before returning. The gates treat an unstamped failed
+    -- row as live (processed can still resurrect it); without this
+    -- write a confirming verdict would never clear them.
+    UPDATE public.transactions SET
+      metadata = coalesce(metadata, '{}'::jsonb)
+        || jsonb_build_object('provider_refund_status', v_status),
+      updated_at = now()
+    WHERE id = v_refund.id;
     RETURN 'already_failed';
   END IF;
   -- A repeat verdict is a no-op only when this leg already reflects
@@ -181,28 +183,10 @@ BEGIN
   END IF;
   IF v_status <> 'processed' THEN RETURN v_status; END IF;
 
-  -- Shared coverage gate (see header): every funded leg needs
-  -- terminal refund evidence, counting explicitly linked manual rows
-  -- in matching money alongside provider rows.
-  IF private.cancellation_refund_legs_covered_v1(
-    v_order.id, v_order.merchant_id, v_order.currency
-  ) AND (
-    v_order.payment_status IN ('paid', 'partially_paid', 'refunded')
-    -- A wedged order (completed gateway legs the sweep never flipped to
-    -- paid) stays merchant-cancellable: its funded legs were just refunded,
-    -- so it must transition, reverse settlements, and notify like a paid
-    -- order. Unfunded pending orders stay out.
-    OR (
-      v_order.payment_status = 'pending'
-      AND EXISTS (
-        SELECT 1 FROM public.transactions funded
-        WHERE funded.order_id = v_order.id AND funded.merchant_id = v_order.merchant_id
-          AND funded.transaction_type = 'payment' AND funded.status = 'completed'
-          AND funded.amount > 0
-          AND coalesce(public.normalized_gateway_name_v1(funded.gateway), '') NOT IN
-            ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
-      )
-    )
+  -- Same-gateway terminal scan plus the shared legs-covered
+  -- gate for manual-covered legs (see the predicate helper).
+  IF private.reconciliation_should_finalize_v1(
+    v_order.id, v_order.merchant_id, v_order.currency, v_order.payment_status
   ) THEN
     -- Every funded leg has terminal refund evidence: run the shared
     -- aggregate finalization (order transition, settlement reversal,

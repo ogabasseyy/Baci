@@ -10,8 +10,12 @@ interface AwaitingRefundRow {
  * id) are still in flight: the reconciler completes them and the
  * drain resumes the remaining legs. Only legs without provider
  * evidence (failed or ambiguous rows) need a terminal quarantine
- * review. Terminal rows (completed or legacy refunded) and rows
- * without a resolvable link are not in flight.
+ * review — except definitive provider rejections (failed with a
+ * failed provider stamp): the SQL pending gate does not count
+ * those, so the manager exposes retry and manual recovery for the
+ * leg, and quarantining here would strand it behind review.
+ * Terminal rows (completed or legacy refunded) and rows without a
+ * resolvable link are not in flight.
  */
 export function collectAwaitingCancellationRefundLegs({
   linkedPaymentId,
@@ -29,6 +33,16 @@ export function collectAwaitingCancellationRefundLegs({
     if (row.status === 'completed' || row.status === 'refunded') continue;
     const paymentId = linkedPaymentId(row);
     if (typeof paymentId !== 'string') continue;
+    // A definitive provider rejection is provably dead: no later
+    // verdict can land on it, so it waits for nothing and needs no
+    // review — the leg retries fresh or recovers manually.
+    if (
+      row.status === 'failed' &&
+      (row.metadata as { provider_refund_status?: unknown } | null)
+        ?.provider_refund_status === 'failed'
+    ) {
+      continue;
+    }
     if (
       row.status === 'refund_pending' &&
       typeof row.gateway_reference === 'string' &&

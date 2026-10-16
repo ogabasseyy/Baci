@@ -65,7 +65,11 @@ describe('cancellation refund preflight guards', () => {
     expect(mocks.initiateRefund).not.toHaveBeenCalled();
   });
 
-  it('refunds the clean leg when only a fully-refunded leg has a foreign currency', async () => {
+  it('refunds the clean leg then quarantines a settled foreign-currency leg', async () => {
+    // The settled USD leg never passed the initiation-time currency
+    // gate, but the SQL gates reject its terminal row as anomalous:
+    // resolving here would complete the side effect while the order
+    // can never finalize. The clean sibling still refunds first.
     const supabase = refundClient({
       payments: [
         {
@@ -110,7 +114,7 @@ describe('cancellation refund preflight guards', () => {
         step: 'refund',
         supabase: supabase as never,
       })
-    ).resolves.toEqual({ refundIds: [45] });
+    ).rejects.toThrow('Payment currency requires review before refund');
     expect(mocks.initiateRefund).toHaveBeenCalledTimes(1);
     expect(mocks.initiateRefund).toHaveBeenCalledWith(
       'ref-2',

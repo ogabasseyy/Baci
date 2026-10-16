@@ -22,6 +22,7 @@ export function OrderRefundManualForm({
   onNoteChange,
   onReferenceChange,
   onSubmit,
+  paystackAvailable,
   reference,
   remaining,
 }: {
@@ -34,6 +35,7 @@ export function OrderRefundManualForm({
   legOptions: Array<{ id: string; label: string }>;
   method: string;
   note: string;
+  paystackAvailable: boolean;
   onAmountChange: (value: string) => void;
   onConfirmedChange: (value: boolean) => void;
   onDateChange: (value: string) => void;
@@ -84,7 +86,7 @@ export function OrderRefundManualForm({
         onChange={(e) => onMethodChange(e.target.value)}
       >
         <option value="bank_transfer">Bank transfer</option>
-        <option value="paystack">Paystack</option>
+        {paystackAvailable && <option value="paystack">Paystack</option>}
         <option value="cash">Cash</option>
         <option value="other">Other</option>
       </select>

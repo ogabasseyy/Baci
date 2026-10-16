@@ -4,27 +4,34 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { orderRefundStatusLabels } from '@/config/order-refund';
-import { apiPost } from '@/lib/api-client';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
-import { buildManualRefundPayload } from '@/lib/orders/build-manual-refund-payload';
 import { describeRefundManageBlocked } from '@/lib/orders/describe-refund-manage-blocked';
 import type { RefundSummary } from '@/lib/orders/refund-summary';
 import { selectRefundPinLegOptions } from '@/lib/orders/select-refund-pin-leg-options';
-import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
+import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
 import { OrderRefundManualForm } from './order-refund-manual-form';
 import { OrderRefundTimeline } from './order-refund-timeline';
+import { useOrderRefundSubmit } from './use-order-refund-submit';
 import { useRefundPinAmountCap } from './use-refund-pin-amount-cap';
 import { useRefundStatusPolling } from './use-refund-status-polling';
 
 export function OrderRefundPanel({
+  initialSummary,
   orderId,
   onRefunded,
 }: {
+  initialSummary?: RefundSummary;
   orderId: string;
   onRefunded?: () => void;
 }) {
   const revision = useRef(0);
-  const [summary, setSummary] = useState<RefundSummary | null>(null);
+  // First paint comes from the server-fetched summary when the page
+  // provided one: no mount-fetch flash, and the 30s polling below
+  // still refreshes it. Without one (server fetch failed) the hook
+  // loads client-side exactly as before.
+  const [summary, setSummary] = useState<RefundSummary | null>(
+    initialSummary ?? null
+  );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -42,6 +49,14 @@ export function OrderRefundPanel({
     summary?.currency ?? 'NGN'
   );
   const requireLeg = method === 'paystack' && legOptions.length > 1;
+  // The RPC needs an outstanding Paystack capture for a Paystack
+  // attestation (exactly one when unpinned): without one the
+  // selection always rejects, so the form hides the method instead
+  // of offering a recovery path that can never succeed.
+  const hasPaystackCapture = (summary?.legs ?? []).some(
+    (leg) =>
+      normalizePaymentGateway(leg.gateway) === 'PAYSTACK' && leg.outstanding > 0
+  );
   // A polling update can cover the pinned capture while the form
   // stands open: the selector hides but the stale id would still
   // submit and the RPC would reject it. Only a pin that remains a
@@ -112,70 +127,38 @@ export function OrderRefundPanel({
       setLegId('');
     }
   }, [canRecordManual]);
+  // Polling can cover the last Paystack capture while the form
+  // stands open: fall back to bank transfer instead of submitting
+  // a method the RPC now rejects.
+  useEffect(() => {
+    if (method === 'paystack' && !hasPaystackCapture) {
+      setMethod('bank_transfer');
+    }
+  }, [method, hasPaystackCapture]);
 
-  async function submit(action: 'retry' | 'manual') {
-    if (busy) return;
-    if (
-      action === 'retry' &&
-      !window.confirm(
-        'Retry the remaining refund? Fund your Paystack balance first.'
-      )
-    )
-      return;
-    if (action === 'manual') {
-      const validationError = validateManualRefundInput({
-        amount,
-        confirmed,
-        date,
-        method,
-        paymentLegId: pinnedLegId,
-        reference,
-        remaining: effectiveRemaining,
-        requirePaymentLeg: requireLeg,
-      });
-      if (validationError) {
-        setError(validationError);
-        return;
-      }
-    }
-    revision.current += 1;
-    setBusy(true);
-    setError(null);
-    try {
-      const payload =
-        action === 'retry'
-          ? { action }
-          : buildManualRefundPayload({
-              amount,
-              confirmed,
-              date,
-              method,
-              note,
-              paymentLegId: pinnedLegId,
-              reference,
-            });
-      const updated = await apiPost<RefundSummary>(
-        `/api/orders/${encodeURIComponent(orderId)}/refund`,
-        payload
-      );
-      setSummary(updated);
-      setShowForm(false);
-      setConfirmed(false);
-      // Transfer-specific fields must not carry into the next record:
-      // reopening the form after a partial manual would otherwise
-      // resubmit the old reference and collide (or replay idempotently
-      // when amount and timestamp also match).
-      setReference('');
-      setDate('');
-      setNote('');
-      setLegId('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unable to manage refund');
-    } finally {
-      revision.current += 1;
-      setBusy(false);
-    }
-  }
+  const submit = useOrderRefundSubmit({
+    amount,
+    busy,
+    confirmed,
+    date,
+    effectiveRemaining,
+    method,
+    note,
+    orderId,
+    pinnedLegId,
+    reference,
+    requireLeg,
+    revision,
+    setBusy,
+    setConfirmed,
+    setDate,
+    setError,
+    setLegId,
+    setNote,
+    setReference,
+    setShowForm,
+    setSummary,
+  });
   const money = (value: number) =>
     formatDisplayCurrency(value, summary?.currency || 'NGN', {
       minimumFractionDigits: 2,
@@ -288,6 +271,7 @@ export function OrderRefundPanel({
                 onNoteChange={setNote}
                 onReferenceChange={setReference}
                 onSubmit={() => void submit('manual')}
+                paystackAvailable={hasPaystackCapture}
                 reference={reference}
                 remaining={effectiveRemaining ?? summary.remaining}
               />

@@ -146,4 +146,22 @@ describe('OrderRefundPanel status display', () => {
       vi.useRealTimers();
     }
   });
+  it('paints first content from the server summary without a loading flash', async () => {
+    // The page passes its server-fetched summary down: first paint
+    // shows the status synchronously, and the mount fetch becomes a
+    // background refresh instead of a blocking loader.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => summary })
+    );
+    render(
+      <OrderRefundPanel
+        orderId="order-1"
+        initialSummary={{ ...summary, status: 'failed' } as never}
+      />
+    );
+    expect(screen.getByText('Failed')).toBeInTheDocument();
+    expect(screen.queryByText('Loading refund…')).not.toBeInTheDocument();
+    await act(async () => {});
+  });
 });

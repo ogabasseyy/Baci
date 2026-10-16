@@ -25,6 +25,7 @@ import {
   pendingPurchases,
   persistPendingVtuPurchases,
   runPendingVtuMintLocked,
+  schedulePendingVtuFlush,
   syncPendingVtuPurchasesFromSnapshot,
 } from './pending-vtu-idempotency-sync';
 import {
@@ -68,7 +69,7 @@ export function recallPendingVtuKey(
   if (!pending) return null;
   if (isExpiredPendingVtuEntry(pending, now)) {
     pendingPurchases.delete(descriptor);
-    persistPendingVtuPurchases();
+    schedulePendingVtuFlush();
     return null;
   }
   return pending.key;
@@ -94,20 +95,18 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
  * memory-only — dropped AND the tombstone restored so a retry
  * re-mints AND re-persists (R96 P1, web mirror).
  */
+/** Memory admission for a minted key (sync; durability is a scheduled locked flush — R152 P1, web mirror). */
 export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string,
   scopeTag?: string
-): boolean {
+): void {
   if (
     !pendingPurchases.has(descriptor) &&
     pendingPurchases.size >= MAX_PENDING_PURCHASES
   ) {
     enforcePendingVtuCap();
   }
-  // Restored on persist failure below (Codex R99 P2): the old
-  // entry is only gone from storage when THIS snapshot lands.
-  const priorTombstone = forgottenVtuScopes.get(descriptor);
   pendingPurchases.delete(descriptor);
   forgottenVtuScopes.delete(descriptor);
   pendingPurchases.set(descriptor, {
@@ -117,14 +116,7 @@ export function rememberPendingVtuPurchase(
     rememberedAt: Date.now(),
     completedAt: null,
   });
-  if (!persistPendingVtuPurchases()) {
-    pendingPurchases.delete(descriptor);
-    if (priorTombstone !== undefined) {
-      forgottenVtuScopes.set(descriptor, priorTombstone);
-    }
-    return false;
-  }
-  return true;
+  schedulePendingVtuFlush();
 }
 
 const PENDING_VTU_STORAGE_ERROR =
@@ -149,7 +141,15 @@ export function getPendingVtuKey(
       return recalled;
     }
     const minted = Crypto.randomUUID();
-    if (!rememberPendingVtuPurchase(descriptor, minted, scopeTag)) {
+    // Inline persist under the held lock (R152 P1) + rollback on
+    // failure (R99 P2): the save must be atomic with the recall.
+    const priorTombstone = forgottenVtuScopes.get(descriptor);
+    rememberPendingVtuPurchase(descriptor, minted, scopeTag);
+    if (!persistPendingVtuPurchases()) {
+      pendingPurchases.delete(descriptor);
+      if (priorTombstone !== undefined) {
+        forgottenVtuScopes.set(descriptor, priorTombstone);
+      }
       throw new Error(PENDING_VTU_STORAGE_ERROR);
     }
     return minted;
@@ -169,7 +169,7 @@ export function notePendingVtuReference(
   const pending = pendingPurchases.get(descriptor);
   if (pending) {
     pending.reference = reference;
-    persistPendingVtuPurchases();
+    schedulePendingVtuFlush();
   }
 }
 
@@ -229,7 +229,7 @@ export function forgetPendingVtuByReference(
     scopes.push(descriptor);
   }
   if (scopes.length > 0) {
-    persistPendingVtuPurchases();
+    schedulePendingVtuFlush();
   }
 }
 
@@ -249,7 +249,7 @@ export function markSettledPendingVtuByReference(
     touched = true;
   }
   if (touched) {
-    persistPendingVtuPurchases();
+    schedulePendingVtuFlush();
   }
 }
 
@@ -261,7 +261,7 @@ export function forgetPendingVtuPurchase(
   const live = pendingPurchases.get(descriptor);
   pendingPurchases.delete(descriptor);
   noteForgottenVtuScopes([descriptor], now, live?.key);
-  persistPendingVtuPurchases();
+  schedulePendingVtuFlush();
 }
 
 /**

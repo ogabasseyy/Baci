@@ -535,13 +535,20 @@ describe('GET /api/vtu/history', () => {
 
     await scheduledBackfillClaim();
 
-    expect(vtuTransactionUpdatePayloads).toEqual([
-      {
-        metadata: expect.objectContaining({
-          voucherPinBackfillScheduledAt: expect.any(String),
-        }),
-      },
-    ]);
+    // Single after() layer (Muse R151 M1): the drained callback ran
+    // the mark AND the inline poll — the unresolved mock pin leaves
+    // a second payload clearing the schedule with attempt 1.
+    expect(vtuTransactionUpdatePayloads).toHaveLength(2);
+    expect(vtuTransactionUpdatePayloads[0]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillScheduledAt: expect.any(String),
+      }),
+    });
+    expect(vtuTransactionUpdatePayloads[1]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillAttempts: 1,
+      }),
+    });
     expect(vtuTransactionUpdateEqCalls).toContainEqual(['id', 'tx-1']);
     const metadataFilter = vtuTransactionUpdateFilters.find(
       ([field, operator]) => field === 'metadata' && operator === 'eq'
@@ -551,17 +558,10 @@ describe('GET /api/vtu/history', () => {
       alpha: 'first',
       zeta: 'last',
     });
-    expect(mockBackfillVtuVoucherPin).not.toHaveBeenCalled();
-
-    expect(mockAfter).toHaveBeenCalledTimes(2);
-    const scheduledBackfill = mockAfter.mock.calls[1]?.[0] as
-      | (() => Promise<void>)
-      | undefined;
-    expect(scheduledBackfill).toBeDefined();
-    if (!scheduledBackfill) {
-      throw new Error('Expected voucher-pin backfill to be scheduled');
-    }
-    await scheduledBackfill();
+    // Single after() layer (Muse R151 M1): draining the route's
+    // callback runs the mark AND the provider poll inline — no
+    // nested after() is registered.
+    expect(mockAfter).toHaveBeenCalledTimes(1);
 
     expect(mockBackfillVtuVoucherPin).toHaveBeenCalledWith({
       billRequestRef: 'VTU-123',
@@ -631,13 +631,20 @@ describe('GET /api/vtu/history', () => {
     await scheduledBackfillClaim();
 
     expect(vtuTransactionUpdateEqCalls).toContainEqual(['id', 'tx-eligible']);
-    expect(vtuTransactionUpdatePayloads).toEqual([
-      {
-        metadata: expect.objectContaining({
-          voucherPinBackfillScheduledAt: expect.any(String),
-        }),
-      },
-    ]);
+    // Single after() layer (Muse R151 M1): the drained callback ran
+    // the mark AND the inline poll — the unresolved mock pin leaves
+    // a second payload clearing the schedule with attempt 1.
+    expect(vtuTransactionUpdatePayloads).toHaveLength(2);
+    expect(vtuTransactionUpdatePayloads[0]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillScheduledAt: expect.any(String),
+      }),
+    });
+    expect(vtuTransactionUpdatePayloads[1]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillAttempts: 1,
+      }),
+    });
   });
 
   it('schedules processing bill reconciliation from history polling', async () => {
@@ -692,26 +699,25 @@ describe('GET /api/vtu/history', () => {
     }
     await scheduledBackfillClaim();
 
-    expect(vtuTransactionUpdatePayloads).toEqual([
-      {
-        metadata: expect.objectContaining({
-          voucherPinBackfillScheduledAt: expect.any(String),
-        }),
-      },
-    ]);
+    // Single after() layer (Muse R151 M1): the drained callback ran
+    // the mark AND the inline poll — the still-processing mock
+    // leaves a second payload clearing the schedule marker (no
+    // attempt consumed: processing rows never consume).
+    expect(vtuTransactionUpdatePayloads).toHaveLength(2);
+    expect(vtuTransactionUpdatePayloads[0]).toEqual({
+      metadata: expect.objectContaining({
+        voucherPinBackfillScheduledAt: expect.any(String),
+      }),
+    });
+    expect(vtuTransactionUpdatePayloads[1].metadata).not.toHaveProperty(
+      'voucherPinBackfillScheduledAt'
+    );
     expect(vtuTransactionUpdatePayloads[0].metadata).not.toHaveProperty(
       'voucherPinBackfillAttempts'
     );
-    expect(mockAfter).toHaveBeenCalledTimes(2);
-
-    const scheduledReconciliation = mockAfter.mock.calls[1]?.[0] as
-      | (() => Promise<void>)
-      | undefined;
-    expect(scheduledReconciliation).toBeDefined();
-    if (!scheduledReconciliation) {
-      throw new Error('Expected processing reconciliation to be scheduled');
-    }
-    await scheduledReconciliation();
+    // Single after() layer (Muse R151 M1): the fulfill already ran
+    // inline inside the route's callback — no nested registration.
+    expect(mockAfter).toHaveBeenCalledTimes(1);
 
     expect(mockFulfillPendingVtuTransaction).toHaveBeenCalledWith({
       supabase: expect.any(Object),
@@ -865,6 +871,9 @@ describe('GET /api/vtu/history', () => {
       },
     ];
     paymentRowsData = [];
+    // Unresolved pin (mirrors the main backfill test): the inline
+    // poll runs to its clear-timestamp branch without throwing.
+    mockBackfillVtuVoucherPin.mockResolvedValue('1234-5678');
 
     const responsePromise = GET(
       makeRequest('?merchantSlug=ogabassey&type=electricity')
@@ -893,7 +902,9 @@ describe('GET /api/vtu/history', () => {
     const scheduledBackfillClaimPromise = scheduledBackfillClaim();
     // The scheduled callback reaches the mocked update builder before its
     // first awaited branch, so one microtask tick is enough to observe the
-    // claim payload while scheduledBackfillClaimPromise is still pending.
+    // claim payload while scheduledBackfillClaimPromise is still pending
+    // (the mark UPDATE is issued but unresolved — the inline poll has
+    // not run yet, so only the mark payload exists).
     await Promise.resolve();
 
     expect(vtuTransactionUpdatePayloads).toEqual([
@@ -908,8 +919,11 @@ describe('GET /api/vtu/history', () => {
 
     resolveBackfillClaim?.({ data: [{ id: 'tx-1' }], error: null });
     await scheduledBackfillClaimPromise;
-    expect(mockAfter).toHaveBeenCalledTimes(2);
-    expect(mockBackfillVtuVoucherPin).not.toHaveBeenCalled();
+    // Single after() layer (Muse R151 M1): the drained callback ran
+    // the mark and the provider poll inline — no nested after() is
+    // registered, and the poll already executed.
+    expect(mockAfter).toHaveBeenCalledTimes(1);
+    expect(mockBackfillVtuVoucherPin).toHaveBeenCalledTimes(1);
 
     const response = await responsePromise;
     const data = await response.json();

@@ -120,7 +120,7 @@ describe('fulfillReplayVtuTransaction', () => {
     ['vanished row', null],
     ['unlinked guest', { id: 'customer-1', user_id: null }],
     ['foreign owner', { id: 'customer-1', user_id: 'other-user' }],
-  ])('rejects with 400 for %s, no overlay or fulfill', async (_label, row) => {
+  ])('rejects with 425 for %s (key kept, no overlay or fulfill)', async (_label, row) => {
     const supabase = buildSupabase({ data: row, error: null });
 
     const response = await fulfillReplayVtuTransaction({
@@ -131,10 +131,14 @@ describe('fulfillReplayVtuTransaction', () => {
       user: USER,
     });
 
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: expect.stringMatching(/fresh key/i),
-    });
+    // Codex R152 P1: 425 is in both clients' no-rotation carve-out
+    // — a 400 would rotate to a fresh key whose fresh prepare
+    // could debit a second transaction. The message must never
+    // instruct a fresh key.
+    expect(response.status).toBe(425);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/same purchase instead of starting a new one/);
+    expect(body.error).not.toMatch(/fresh key/i);
     expect(mockOverlay).not.toHaveBeenCalled();
     expect(mockFulfill).not.toHaveBeenCalled();
   });

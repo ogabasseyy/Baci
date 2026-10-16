@@ -1,5 +1,8 @@
 import { createWalletIdempotencyKey } from './utility-checkout';
-import { clearPendingVtuSnapshot } from './utility-pending-idempotency-store';
+import {
+  clearPendingVtuSnapshot,
+  runPendingVtuMintLocked,
+} from './utility-pending-idempotency-store';
 import { isExpiredPendingVtuEntry } from './utility-pending-vtu-codec';
 import {
   isStalePendingVtuSuccessIn,
@@ -15,7 +18,7 @@ import {
   noteForgottenVtuScope,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
-  runPendingVtuMintLocked,
+  schedulePendingVtuFlush,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
 
@@ -58,7 +61,7 @@ export function recallPendingVtuKey(
   if (isExpiredPendingVtuEntry(pending, now)) {
     pendingVtuPurchases.delete(payloadSignature);
     noteForgottenVtuScope(payloadSignature, now, pending.key);
-    persistPendingVtuPurchases();
+    schedulePendingVtuFlush();
     return undefined;
   }
   return pending.key;
@@ -82,21 +85,18 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
 /** Records the key (cap-enforced); false when memory-only — dropped
  * AND the tombstone restored so a retry re-mints AND re-persists
  * (R96 P1, R99 P2 mobile mirror). */
+/** Memory admission for a minted key (sync; durability is a scheduled locked flush — R152 P1). */
 export function rememberPendingVtuPurchase(
   payloadSignature: string,
   key: string,
   scopeTag?: string
-): boolean {
+): void {
   if (
     !pendingVtuPurchases.has(payloadSignature) &&
     pendingVtuPurchases.size >= MAX_PENDING_PURCHASES
   ) {
     enforcePendingVtuCap();
   }
-  // Restored on persist failure below (Codex R99 P2, mobile
-  // mirror): the old entry is only gone from storage when THIS
-  // snapshot lands.
-  const priorTombstone = forgottenScopedKeys.get(payloadSignature);
   pendingVtuPurchases.delete(payloadSignature);
   pendingVtuPurchases.set(payloadSignature, {
     key,
@@ -106,14 +106,7 @@ export function rememberPendingVtuPurchase(
     completedAt: null,
   });
   forgottenScopedKeys.delete(payloadSignature);
-  if (!persistPendingVtuPurchases()) {
-    pendingVtuPurchases.delete(payloadSignature);
-    if (priorTombstone !== undefined) {
-      forgottenScopedKeys.set(payloadSignature, priorTombstone);
-    }
-    return false;
-  }
-  return true;
+  schedulePendingVtuFlush();
 }
 
 /** Attaches the server reference once a non-terminal response arrives. */
@@ -160,7 +153,7 @@ export function forgetPendingVtuByReference(
     touched = true;
   }
   if (touched) {
-    persistPendingVtuPurchases();
+    schedulePendingVtuFlush();
   }
 }
 
@@ -185,7 +178,7 @@ export function markSettledPendingVtuByReference(
     touched = true;
   }
   if (touched) {
-    persistPendingVtuPurchases();
+    schedulePendingVtuFlush();
   }
 }
 
@@ -219,7 +212,7 @@ export function forgetPendingVtuPurchase(payloadSignature: string): void {
   const pending = pendingVtuPurchases.get(payloadSignature);
   pendingVtuPurchases.delete(payloadSignature);
   noteForgottenVtuScope(payloadSignature, Date.now(), pending?.key);
-  persistPendingVtuPurchases();
+  schedulePendingVtuFlush();
 }
 
 /**
@@ -243,7 +236,7 @@ export function forgetPendingVtuPurchaseGeneration(
     pendingVtuPurchases.delete(payloadSignature);
   }
   noteForgottenVtuScope(payloadSignature, Date.now(), key);
-  persistPendingVtuPurchases();
+  schedulePendingVtuFlush();
 }
 
 const PENDING_VTU_STORAGE_ERROR =
@@ -267,7 +260,15 @@ export function getPendingVtuKey(
       return recalled;
     }
     const minted = createWalletIdempotencyKey();
-    if (!rememberPendingVtuPurchase(payloadSignature, minted, scopeTag)) {
+    // Inline persist under the held lock (R152 P1) + rollback on
+    // failure (R99 P2): the save must be atomic with the recall.
+    const priorTombstone = forgottenScopedKeys.get(payloadSignature);
+    rememberPendingVtuPurchase(payloadSignature, minted, scopeTag);
+    if (!persistPendingVtuPurchases()) {
+      pendingVtuPurchases.delete(payloadSignature);
+      if (priorTombstone !== undefined) {
+        forgottenScopedKeys.set(payloadSignature, priorTombstone);
+      }
       throw new Error(PENDING_VTU_STORAGE_ERROR);
     }
     return minted;

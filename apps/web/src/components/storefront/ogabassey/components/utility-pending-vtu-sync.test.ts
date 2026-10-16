@@ -20,24 +20,39 @@ import {
   PENDING_VTU_MINT_LOCK_NAME,
   PENDING_VTU_MINT_LOCK_TTL_MS,
   releasePendingVtuMintLock,
+  runPendingVtuMintLocked,
   savePendingVtuMintLock,
   savePendingVtuSnapshot,
 } from './utility-pending-idempotency-store';
 import { parsePendingVtuSnapshot } from './utility-pending-vtu-codec';
 import {
+  flushPendingVtuPurchases,
   forgottenScopedKeys,
   hydratePendingVtuPurchases,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
-  runPendingVtuMintLocked,
   serializePendingVtuPurchases,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
+
+// jsdom ships no navigator.locks, and the mint runner fails closed
+// in multi-tab browsers without it (Codex R152 P1) — pin an
+// immediate-grant mock so these tests exercise the locks path.
+// Fail-closed tests delete it explicitly.
+function mockNavigatorLocks(): void {
+  Object.defineProperty(navigator, 'locks', {
+    value: {
+      request: async (_name: string, callback: () => unknown) => callback(),
+    },
+    configurable: true,
+  });
+}
 
 describe('utility-pending-vtu-sync', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
     clearPendingVtuMintLock();
+    mockNavigatorLocks();
   });
 
   it('recalls the pending key after a page reload', async () => {
@@ -237,6 +252,7 @@ describe('utility-pending-vtu-sync', () => {
   it('forgetting persists a tombstone so other tabs drop the key', async () => {
     rememberPendingVtuPurchase('SIG-A', 'key-a');
     forgetPendingVtuPurchase('SIG-A');
+    await flushPendingVtuPurchases();
 
     const parsed = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
 
@@ -520,6 +536,7 @@ describe('keyed tombstones (6rrMIj)', () => {
   it('records the deleted key generation on forget', async () => {
     rememberPendingVtuPurchase('SIG-GEN', 'key-K1');
     forgetPendingVtuPurchase('SIG-GEN');
+    await flushPendingVtuPurchases();
 
     const forgotten = parsePendingVtuSnapshot(loadPendingVtuSnapshot())
       .forgotten;
@@ -569,16 +586,23 @@ describe('keyed tombstones (6rrMIj)', () => {
     expect(loadPendingVtuMintLock()).toBeNull();
   });
 
-  it('getPendingVtuKey fails closed while another tab holds the mint (Codex R148 P1)', async () => {
+  it('getPendingVtuKey fails closed without navigator.locks in a browser (Codex R152 P1)', async () => {
+    // jsdom is a multi-tab browser shape (window + document) with no
+    // locks: minting must refuse rather than risk a sibling-tab
+    // double mint through the non-atomic storage fallback. The held
+    // storage cell is irrelevant — the refusal happens first. (The
+    // storage-held → storage-error path survives only for
+    // single-threaded runtimes; see the mobile fallback tests.)
+    delete (navigator as { locks?: unknown }).locks;
     savePendingVtuMintLock('tab-a', Date.now());
-    // No key, no POST: the same storage-unavailable error as an
-    // undurable remember (the retry re-recalls the winner's key).
-    await expect(getPendingVtuKey('{"lock":"held"}')).rejects.toThrow(
-      /Could not save this purchase/
-    );
-    clearPendingVtuMintLock();
-    expect(typeof (await getPendingVtuKey('{"lock":"held"}'))).toBe('string');
-  }, 10000);
+    try {
+      await expect(getPendingVtuKey('{"lock":"held"}')).rejects.toThrow(
+        /update your browser/
+      );
+    } finally {
+      clearPendingVtuMintLock();
+    }
+  });
 
   it('runs the mint under navigator.locks when available (Muse R149 M1)', async () => {
     // Immediate-grant mock: proves the primary path delegates to a
@@ -593,7 +617,10 @@ describe('keyed tombstones (6rrMIj)', () => {
     try {
       const key = await getPendingVtuKey('{"locks":"primary"}');
       expect(typeof key).toBe('string');
-      expect(request).toHaveBeenCalledTimes(1);
+      // No exact count (R152 P1): remember() schedules a coalesced
+      // background flush that re-locks — the name pin below is the
+      // wiring proof.
+      expect(request).toHaveBeenCalled();
       expect(request).toHaveBeenCalledWith(
         PENDING_VTU_MINT_LOCK_NAME,
         expect.any(Function)
@@ -640,34 +667,38 @@ describe('keyed tombstones (6rrMIj)', () => {
       configurable: true,
     });
     try {
+      // Truly concurrent (no inner await): both triples race for the
+      // lock and must still yield one shared key.
       const [tabA, tabB] = await Promise.all([
-        await getPendingVtuKey('{"locks":"race"}'),
-        await getPendingVtuKey('{"locks":"race"}'),
+        getPendingVtuKey('{"locks":"race"}'),
+        getPendingVtuKey('{"locks":"race"}'),
       ]);
       expect(tabA).toBe(tabB);
-      expect(request).toHaveBeenCalledTimes(2);
+      // No exact count (R152 P1): each mint's scheduled background
+      // flush re-locks on its own microtask.
+      expect(request).toHaveBeenCalled();
     } finally {
       delete (navigator as { locks?: unknown }).locks;
     }
   });
 
-  it('falls back to the storage lock without navigator.locks (Muse R149 M1)', async () => {
-    expect(
-      (navigator as { locks?: unknown }).locks
-    ).toBeUndefined();
-    // Fallback held → null (caller throws); released → runs fn.
-    savePendingVtuMintLock('tab-a', Date.now());
-    await expect(runPendingVtuMintLocked(() => 'k')).resolves.toBeNull();
-    clearPendingVtuMintLock();
-    await expect(runPendingVtuMintLocked(() => 'k')).resolves.toBe('k');
-    // Fallback callback throws propagate (never retried unlocked).
-    await expect(
-      runPendingVtuMintLocked(() => {
-        throw new Error('undurable');
-      })
-    ).rejects.toThrow('undurable');
-    expect(loadPendingVtuMintLock()).toBeNull();
-  }, 10000);
+  it('rejects the mint when navigator.locks is missing in a browser (Codex R152 P1)', async () => {
+    delete (navigator as { locks?: unknown }).locks;
+    expect((navigator as { locks?: unknown }).locks).toBeUndefined();
+    // The storage fallback is unreachable here: multi-tab browsers
+    // fail closed (the fallback serves only single-threaded
+    // runtimes — protocol covered by the acquire tests above, runner
+    // branch by the mobile fallback tests). Rejection, never sync.
+    let syncThrew = false;
+    let pending: Promise<unknown> | null = null;
+    try {
+      pending = runPendingVtuMintLocked(() => 'k');
+    } catch {
+      syncThrew = true;
+    }
+    expect(syncThrew).toBe(false);
+    await expect(pending).rejects.toThrow(/update your browser/);
+  });
 
   it('yields the event loop while waiting on a held mint (Muse R151 M1)', async () => {
     // A busy-spin would block the main thread for the full ~250ms

@@ -1,6 +1,6 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { jest } from '@jest/globals';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import {
   clearPendingVtuKeys,
   isStalePendingVtuSuccess,
@@ -107,26 +107,26 @@ describe('useVtuRetainedSettlement', () => {
 
   it('skips suppressed completions so their replay presents', async () => {
     // Codex R68 6rwG9F: the terminal result was never shown — the
-    // pass must not delete it; the retry replays the unseen outcome.
+    // pass must not delete it; the retry replays the unseen outcome
+    // instead of minting fresh and debiting twice. Since R115 the
+    // reference list excludes completed entries (markSettled was a
+    // no-op for them), so the pass never fetches — same outcome,
+    // fewer reads; the replay still presents via the stale guard
+    // (web mirror; this mobile copy kept the stale fetch
+    // expectation and timed out from R115 until R152).
     rememberPendingVtuPurchase('mob-suppressed', 'key-suppressed');
     notePendingVtuReference('mob-suppressed', 'REF-SUPPRESSED');
     markPendingVtuCompleted('mob-suppressed');
-    fetchSpy.mockResolvedValue(
-      makeResponse({
-        transactions: [
-          {
-            request_reference: 'REF-SUPPRESSED',
-            status: 'successful',
-            refund_pending: false,
-          },
-        ],
-      })
-    );
 
     renderHook(() => useVtuRetainedSettlement({ enabled: true }));
+    // Flush effects: the no-fetch assertion is only meaningful
+    // once the pass has had its chance to run.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
 
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(getPendingVtuSettlementPass()).toBeNull());
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(getPendingVtuSettlementPass()).toBeNull();
     expect(recallPendingVtuKey('mob-suppressed')).toBe('key-suppressed');
     expect(isStalePendingVtuSuccess('mob-suppressed', 'REF-SUPPRESSED')).toBe(
       false

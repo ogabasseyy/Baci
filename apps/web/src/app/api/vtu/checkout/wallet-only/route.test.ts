@@ -103,7 +103,8 @@ function buildSupabase(
     /**
      * Replay owner customer row (Muse R128). Default = linked to the
      * auth user; null = vanished row; user_id null or foreign =
-     * unbound owner the read-only replay rejects to a fresh key.
+     * unbound owner the read-only replay rejects with 425 (key kept,
+     * Codex R152 P1) — never a fresh-key rotation.
      */
     customerRow?: {
       email: string | null;
@@ -1374,12 +1375,14 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 
-  it('replay: unlinked email-matched owner rejects with 400, no fulfill', async () => {
+  it('replay: unlinked email-matched owner rejects with 425 (key kept), no fulfill', async () => {
     // Muse R128 MEDIUM via Codex R129 P1: legacy/manual key rows can
     // reference an unlinked guest customer. The replay path is
     // READ-ONLY for customers (linking happens only on the fresh
-    // path inside prepare), so the replay rejects to a fresh key
-    // instead of debiting a row never linked to the caller.
+    // path inside prepare), so the replay must not debit a row never
+    // linked to the caller. 425, not 400 (Codex R152 P1): a 400
+    // would rotate to a fresh key whose fresh prepare links this
+    // same customer and can debit a second transaction.
     const state: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
@@ -1402,14 +1405,17 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       makeRequest({ idempotencyKey: VALID_KEY })
     );
 
-    expect(status).toBe(400);
+    expect(status).toBe(425);
     expect(body).toMatchObject({
-      error: expect.stringMatching(/fresh key/i),
+      error: expect.stringMatching(
+        /same purchase instead of starting a new one/
+      ),
     });
+    expect((body as { error: string }).error).not.toMatch(/fresh key/i);
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 
-  it('replay: vanished replay owner rejects with 400, no fulfill', async () => {
+  it('replay: vanished replay owner rejects with 425 (key kept), no fulfill', async () => {
     const state: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
@@ -1426,17 +1432,22 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       makeRequest({ idempotencyKey: VALID_KEY })
     );
 
-    expect(status).toBe(400);
+    expect(status).toBe(425);
     expect(body).toMatchObject({
-      error: expect.stringMatching(/fresh key/i),
+      error: expect.stringMatching(
+        /same purchase instead of starting a new one/
+      ),
     });
+    expect((body as { error: string }).error).not.toMatch(/fresh key/i);
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 
-  it('replay: owner linked to another user after the guards rejects with 400, no fulfill', async () => {
+  it('replay: owner linked to another user after the guards rejects with 425 (key kept), no fulfill', async () => {
     // Lost the post-guard race: the row was claimed by someone else
     // between ownership resolution and the presence read. Fail
-    // closed — the read-only replay never writes the link.
+    // closed — the read-only replay never writes the link — with
+    // 425 (Codex R152 P1), since a 400 rotation could debit a second
+    // transaction under a fresh key.
     const state: IdempotencyRowState = {
       row: {
         key: VALID_KEY,
@@ -1459,7 +1470,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       makeRequest({ idempotencyKey: VALID_KEY })
     );
 
-    expect(status).toBe(400);
+    expect(status).toBe(425);
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 

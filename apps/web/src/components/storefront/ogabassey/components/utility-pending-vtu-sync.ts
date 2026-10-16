@@ -7,10 +7,8 @@
  * recall/remember/note/complete/stale operations on top.
  */
 import {
-  PENDING_VTU_MINT_LOCK_NAME,
-  acquirePendingVtuMintLock,
   loadPendingVtuSnapshot,
-  releasePendingVtuMintLock,
+  runPendingVtuMintLocked,
   savePendingVtuSnapshot,
 } from './utility-pending-idempotency-store';
 import {
@@ -188,19 +186,68 @@ export function syncPendingVtuPurchasesFromSnapshot(): void {
   }
 }
 
+/**
+ * Synchronous merge + save. LOCK DISCIPLINE (Codex R152 P1): the
+ * merge-read and the snapshot write must run under the cross-tab
+ * mutex — an unlocked whole-snapshot replacement can clobber a key
+ * a sibling tab durably saved between our merge and our write, and
+ * the retry then mints a second debit. Call only from inside
+ * runPendingVtuMintLocked (the mint triple, flush below) or
+ * single-threaded unit tests — all other writers schedule a flush.
+ */
 export function persistPendingVtuPurchases(): boolean {
   syncPendingVtuPurchasesFromSnapshot();
   // Gate the tombstone clear on a durable write: if setItem throws
   // (quota/private mode), the snapshot still holds the completed
   // entries — clearing would resurrect them on the next sync.
   // Retained tombstones ride along on the next persist instead.
-  // Returns the save outcome (Codex R96 P1): remember() refuses to
-  // hand out a minted key the retry cannot recover after reload.
+  // Returns the save outcome: the mint triple refuses to hand out
+  // a minted key the retry cannot recover after reload (R96 P1).
   if (savePendingVtuSnapshot(serializePendingVtuPurchases())) {
     forgottenScopedKeys.clear();
     return true;
   }
   return false;
+}
+
+/**
+ * Locked persist (Codex R152 P1): merge + save under the cross-tab
+ * mutex, so a concurrent tab's durable key can never be clobbered
+ * by a stale-map write. False = fallback lock unacquired (caller
+ * fails closed); the locks-unavailable rejection propagates.
+ */
+export async function flushPendingVtuPurchases(): Promise<boolean> {
+  const saved = await runPendingVtuMintLocked(() =>
+    persistPendingVtuPurchases()
+  );
+  return saved ?? false;
+}
+
+let pendingVtuFlushQueued = false;
+let pendingVtuFlushChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Coalesced background persist for registry mutations (forget,
+ * complete, note, expiry): memory is already updated synchronously
+ * (same-tab reads stay exact), and one chained microtask flush
+ * drains all scheduled mutations in order under the mutex. Failures
+ * log and drop — memory retains the state for the next flush, and
+ * the mint path never relies on this (it persists inline and
+ * throws). Exported flush lets tests drain deterministically.
+ */
+export function schedulePendingVtuFlush(): void {
+  if (pendingVtuFlushQueued) {
+    return;
+  }
+  pendingVtuFlushQueued = true;
+  pendingVtuFlushChain = pendingVtuFlushChain.then(async () => {
+    pendingVtuFlushQueued = false;
+    try {
+      await flushPendingVtuPurchases();
+    } catch (error) {
+      console.error('VTU registry background flush failed:', error);
+    }
+  });
 }
 
 // Reload recovery: rehydrate before any submit runs in this browser.
@@ -210,58 +257,9 @@ export function persistPendingVtuPurchases(): boolean {
 // newer cross-tab write merges instead of being clobbered).
 // Without this an abandoned entry keeps its plaintext identifiers
 // for the full TTL despite migrate-on-read (Codex R54 6rrFRH).
-/**
- * Cross-tab mint mutex runner (Codex R148 P1, real mutex R149):
- * the recall → mint → remember triple runs under navigator.locks
- * where available — a genuine cross-tab mutex, so exactly one tab
- * mints per descriptor race and the loser re-recalls inside the
- * lock, adopting the winner's key. Where locks are unavailable
- * (SSR, old runtimes) the storage-token fallback in the store
- * module applies (best-effort: no CAS there). Sync fn, single
- * global name (holds last ~1ms; cross-descriptor contention is a
- * non-issue). Null = fallback unacquired; the caller fails closed.
- * Callback throws (e.g. undurable remember) propagate — never fall
- * back around them, or a mint could run twice.
- */
-interface VtuNavigatorLocks {
-  request<T>(name: string, callback: () => T | Promise<T>): Promise<T>;
-}
-
-function getNavigatorLocks(): VtuNavigatorLocks | undefined {
-  if (typeof navigator === 'undefined') {
-    return undefined;
-  }
-  return (navigator as Navigator & { locks?: VtuNavigatorLocks }).locks;
-}
-
-export async function runPendingVtuMintLocked<T>(
-  fn: () => T
-): Promise<T | null> {
-  const locks = getNavigatorLocks();
-  if (locks) {
-    // Deferred, not returned directly: some LockManager
-    // implementations invoke a throwing callback synchronously,
-    // which would escape as a sync throw (and can wedge the
-    // manager's queue, hanging later holders). The hop keeps the
-    // never-throws-synchronously contract on both branches.
-    return Promise.resolve().then(() =>
-      locks.request(PENDING_VTU_MINT_LOCK_NAME, () => fn())
-    );
-  }
-  const token = await acquirePendingVtuMintLock();
-  if (!token) {
-    return Promise.resolve(null);
-  }
-  // Deferred like the locks path: never throws synchronously, so
-  // callers see one async contract from both branches. The token is
-  // already held, so the microtask hop cannot interleave a rival.
-  return Promise.resolve()
-    .then(fn)
-    .finally(() => releasePendingVtuMintLock(token));
-}
 
 const initialPendingVtuSnapshot = loadPendingVtuSnapshot();
 hydratePendingVtuPurchases(initialPendingVtuSnapshot);
 if (hasLegacyVtuScopeKeys(initialPendingVtuSnapshot)) {
-  persistPendingVtuPurchases();
+  schedulePendingVtuFlush();
 }

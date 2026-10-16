@@ -4,7 +4,7 @@ import {
 } from './utility-pending-vtu-reference-queries';
 import {
   pendingVtuPurchases,
-  persistPendingVtuPurchases,
+  schedulePendingVtuFlush,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
 
@@ -22,7 +22,7 @@ export function notePendingVtuReference(
   const pending = pendingVtuPurchases.get(payloadSignature);
   if (pending) {
     pending.reference = reference;
-    persistPendingVtuPurchases();
+    schedulePendingVtuFlush();
   }
 }
 

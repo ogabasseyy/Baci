@@ -137,6 +137,14 @@ export function syncPendingVtuPurchasesFromSnapshot(
   }
 }
 
+/**
+ * Synchronous merge + save. LOCK DISCIPLINE (Codex R152 P1, web
+ * mirror): merge-read and snapshot write must run under the
+ * cross-tab mutex — an unlocked whole-snapshot replacement can
+ * clobber a key a sibling tab durably saved. Call only from inside
+ * runPendingVtuMintLocked (mint triple, flush below) or
+ * single-threaded unit tests — other writers schedule a flush.
+ */
 export function persistPendingVtuPurchases(): boolean {
   // Merge before write (Codex R143 P1): persisting the raw in-memory
   // map would drop entries a sibling tab persisted since this tab
@@ -144,6 +152,43 @@ export function persistPendingVtuPurchases(): boolean {
   // retry mints fresh and double-debits.
   syncPendingVtuPurchasesFromSnapshot();
   return persistPendingVtuEntries(pendingPurchases);
+}
+
+/**
+ * Locked persist (Codex R152 P1, web mirror): merge + save under
+ * the cross-tab mutex. False = fallback lock unacquired (caller
+ * fails closed); the locks-unavailable rejection propagates.
+ */
+export async function flushPendingVtuPurchases(): Promise<boolean> {
+  const saved = await runPendingVtuMintLocked(() =>
+    persistPendingVtuPurchases()
+  );
+  return saved ?? false;
+}
+
+let pendingVtuFlushQueued = false;
+let pendingVtuFlushChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Coalesced background persist for registry mutations (web
+ * mirror): memory updates synchronously, one chained microtask
+ * flush drains under the mutex. Failures log and drop — memory
+ * retains state for the next flush; the mint path persists inline
+ * and throws instead. Exported flush lets tests drain.
+ */
+export function schedulePendingVtuFlush(): void {
+  if (pendingVtuFlushQueued) {
+    return;
+  }
+  pendingVtuFlushQueued = true;
+  pendingVtuFlushChain = pendingVtuFlushChain.then(async () => {
+    pendingVtuFlushQueued = false;
+    try {
+      await flushPendingVtuPurchases();
+    } catch (error) {
+      console.error('VTU registry background flush failed:', error);
+    }
+  });
 }
 
 // Restart recovery: rehydrate before any submit runs in this launch.
@@ -158,10 +203,11 @@ export function persistPendingVtuPurchases(): boolean {
  * the recall → mint → remember triple runs under navigator.locks
  * on Expo web — a genuine cross-tab mutex, so exactly one tab
  * mints per descriptor race and the loser re-recalls inside the
- * lock, adopting the winner's key. Where locks are unavailable
- * (native, old runtimes) the storage-token fallback in the store
- * module applies (best-effort: no CAS there; native is also
- * single-threaded, so the fallback is uncontended there). Sync
+ * lock, adopting the winner's key. Without locks, multi-tab
+ * browsers fail closed (Codex R152 P1, web mirror) — the
+ * storage-token fallback in the store module serves only
+ * single-threaded runtimes (native, SSR), where the
+ * confirm-retry protocol is atomic. Sync
  * fn, single global name. Null = fallback unacquired; the caller
  * fails closed. Callback throws propagate — never fall back
  * around them, or a mint could run twice. Never throws
@@ -178,6 +224,19 @@ function getNavigatorLocks(): VtuNavigatorLocks | undefined {
   return (navigator as Navigator & { locks?: VtuNavigatorLocks }).locks;
 }
 
+export const PENDING_VTU_LOCKS_UNAVAILABLE_ERROR =
+  'Could not secure this purchase for retry. Please update your browser and try again.';
+
+/**
+ * True only in a real multi-tab browser (window AND document). SSR,
+ * React Native, and Node lack document — single-threaded runtimes
+ * where the storage fallback is atomic. (Web mirror: jsdom counts
+ * as a browser, which is what the browser-branch tests need.)
+ */
+function isMultiTabBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof document !== 'undefined';
+}
+
 export async function runPendingVtuMintLocked<T>(
   fn: () => T
 ): Promise<T | null> {
@@ -191,6 +250,14 @@ export async function runPendingVtuMintLocked<T>(
     return Promise.resolve().then(() =>
       locks.request(PENDING_VTU_MINT_LOCK_NAME, () => fn())
     );
+  }
+  if (isMultiTabBrowser()) {
+    // Fail closed (Codex R152 P1, web mirror): a multi-tab browser
+    // without Web Locks cannot exclude a sibling tab — the storage
+    // fallback has no compare-and-swap, so minting here could
+    // double-debit. Thrown from an async runner: a rejection, never
+    // sync.
+    throw new Error(PENDING_VTU_LOCKS_UNAVAILABLE_ERROR);
   }
   const token = await acquirePendingVtuMintLock();
   if (!token) {
@@ -206,5 +273,5 @@ export async function runPendingVtuMintLocked<T>(
 const initialPendingVtuSnapshot = loadPendingVtuSnapshot();
 hydratePendingVtuPurchases(initialPendingVtuSnapshot);
 if (hasLegacyVtuScopeKeys(initialPendingVtuSnapshot)) {
-  persistPendingVtuPurchases();
+  schedulePendingVtuFlush();
 }

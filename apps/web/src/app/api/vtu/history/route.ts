@@ -213,11 +213,17 @@ export async function GET(request: NextRequest) {
     }
 
     if (tokenBackfillCandidates.length > 0) {
+      // Single after() layer (Muse R151 M1): the mark AND the provider
+      // poll both run inside this callback — schedule is asked not to
+      // register its own after (deferPoll: false), so nothing nests.
+      // Marks stay post-response (the GET never waits for them) and
+      // failures are logged here, never failing the response.
       after(async () => {
         try {
           const tokenBackfillResults = await Promise.allSettled(
             tokenBackfillCandidates.map((candidate) =>
               scheduleVoucherPinBackfill({
+                deferPoll: false,
                 metadata: candidate.metadata,
                 originalMetadata: candidate.originalMetadata,
                 supabase,

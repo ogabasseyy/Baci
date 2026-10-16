@@ -33,6 +33,7 @@ import {
 } from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
 import { noteForgottenVtuScopes } from './pending-vtu-idempotency-store';
+import { flushPendingVtuPurchases } from './pending-vtu-idempotency-sync';
 
 describe('pending-vtu-idempotency', () => {
   // Suite-level isolation (Muse R123 low): the MMKV mock buckets
@@ -482,7 +483,7 @@ describe('pending-vtu-idempotency', () => {
     expect(recallPendingVtuKey(scoped)).toBeNull();
   });
 
-  it('clears a retained tombstone when a new generation is remembered', () => {
+  it('clears a retained tombstone when a new generation is remembered', async () => {
     // Codex R94 P2: the forget's MMKV write failed, so its tombstone
     // stayed in memory (re-noted here — writes trivially succeed
     // under jest); the gated submit then remembered a new key in the
@@ -505,25 +506,32 @@ describe('pending-vtu-idempotency', () => {
     const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
     try {
       forgetPendingVtuPurchase(scoped, now);
-      // Simulate the failed MMKV write: tombstone retained in memory.
-      noteForgottenVtuScopes([scoped], now);
+      // Persist the tombstone first (R152 P1: forget only schedules
+      // now): the re-remember's flush-time sync re-adopts it, and
+      // the adopted tombstone rides the new snapshot binding
+      // old-key — so it cannot suppress the same-millisecond new
+      // generation (Codex R143 P1).
+      await flushPendingVtuPurchases();
       rememberPendingVtuPurchase(scoped, 'new-key');
+      await flushPendingVtuPurchases();
     } finally {
       nowSpy.mockRestore();
     }
     expect(recallPendingVtuKey(scoped)).toBe('new-key');
 
-    // The remember's snapshot carries the new entry; the adopted
-    // old-generation tombstone rides along (persist-time sync,
-    // Codex R143 P1) but binds old-key, so it cannot suppress the
-    // same-millisecond new generation.
+    const snapshots = serializeSpy.mock.results.map((result) =>
+      parsePendingVtuSnapshot(result.value as string)
+    );
     const rememberSnapshot = serializeSpy.mock.results.at(-1)?.value as string;
     serializeSpy.mockRestore();
-    const written = parsePendingVtuSnapshot(rememberSnapshot);
-    expect(written.forgotten).toEqual([
+    const written = snapshots.find(
+      (snapshot) =>
+        snapshot.entries.length === 1 && snapshot.forgotten.length === 1
+    );
+    expect(written?.forgotten).toEqual([
       expect.objectContaining({ forgottenAt: now, key: 'old-key' }),
     ]);
-    expect(written.entries).toHaveLength(1);
+    expect(written?.entries).toHaveLength(1);
 
     // And a restart restores the new key instead of suppressing it.
     jest.resetModules();
@@ -534,37 +542,53 @@ describe('pending-vtu-idempotency', () => {
     expect(fresh.recallPendingVtuKey(scoped)).toBe('new-key');
   });
 
-  it('drops a remembered entry the store cannot durably persist', () => {
+  it('drops a remembered entry the store cannot durably persist', async () => {
     // Codex R96 P1 (web mirror): a failed MMKV write must not hand
     // out a memory-only key — a restart would lose it and the retry
-    // mint fresh and double-debit on ambiguous results. remember()
-    // reports false and drops the entry so the retry re-mints.
+    // mint fresh and double-debit on ambiguous results. The mint
+    // triple's inline persist fails, so it throws and rolls back the
+    // memory admission; the retry re-mints once storage works.
+    // (Durability moved from remember() to the triple, R152 P1.)
+    // Pins the fallback: this jsdom's LockManager never releases a
+    // lock whose callback throws, so a throw through the real
+    // manager would wedge every later mint in this file (R149).
     clearPendingVtuKeys();
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = {};
     const persistSpy = jest
       .spyOn(vtuStore, 'persistPendingVtuEntries')
       .mockReturnValue(false);
     try {
-      expect(rememberPendingVtuPurchase('mob-nopersist', 'key-nopersist')).toBe(
-        false
+      await expect(getPendingVtuKey('mob-nopersist')).rejects.toThrow(
+        /Could not save this purchase/
       );
       expect(recallPendingVtuKey('mob-nopersist')).toBeNull();
     } finally {
       persistSpy.mockRestore();
+      g.navigator = priorNavigator;
     }
-    // Storage works again: the retry remembers normally.
-    expect(rememberPendingVtuPurchase('mob-nopersist', 'key-ok')).toBe(true);
-    expect(recallPendingVtuKey('mob-nopersist')).toBe('key-ok');
+    // Storage works again: the retry mints normally.
+    const retry = await getPendingVtuKey('mob-nopersist');
+    expect(recallPendingVtuKey('mob-nopersist')).toBe(retry);
   });
 
-  it('restores the tombstone when the replacement persist fails', () => {
+  it('restores the tombstone when the replacement persist fails', async () => {
     // Codex R99 P2 (web mirror): consecutive write failures — the
     // forget's persist failed (old key still in storage, tombstone
-    // memory-only) and now the replacement's persist fails too.
-    // Dropping the new entry without restoring the tombstone would
-    // let a restart hydrate the stale key and replay the previous
-    // successful vend as new, without debit or delivery.
+    // memory-only) and now the replacement mint's inline save fails
+    // too. Dropping the new entry without restoring the tombstone
+    // would let a restart hydrate the stale key and replay the
+    // previous successful vend as new, without debit or delivery.
+    // (Rollback moved from remember() to the mint triple, R152 P1.)
+    // Pins the fallback (R149): this jsdom's LockManager never
+    // releases a lock whose callback throws.
     clearPendingVtuKeys();
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = {};
     rememberPendingVtuPurchase('mob-tomb', 'key-old');
+    await flushPendingVtuPurchases();
     const persistSpy = jest
       .spyOn(vtuStore, 'persistPendingVtuEntries')
       .mockReturnValue(false);
@@ -573,7 +597,9 @@ describe('pending-vtu-idempotency', () => {
       // and the tombstone exists only in memory (the store clears
       // memory tombstones only after a durable write).
       forgetPendingVtuPurchase('mob-tomb');
-      expect(rememberPendingVtuPurchase('mob-tomb', 'key-new')).toBe(false);
+      await expect(getPendingVtuKey('mob-tomb')).rejects.toThrow(
+        /Could not save this purchase/
+      );
       expect(recallPendingVtuKey('mob-tomb')).toBeNull();
       // The tombstone rides the next snapshot instead of being lost.
       const snapshot = parsePendingVtuSnapshot(serializePendingVtuPurchases());
@@ -581,10 +607,13 @@ describe('pending-vtu-idempotency', () => {
       expect(snapshot.forgotten.map((t) => t.scoped)).toEqual(['mob-tomb']);
     } finally {
       persistSpy.mockRestore();
+      g.navigator = priorNavigator;
     }
     // Storage works again: the retry supersedes the tombstone.
-    expect(rememberPendingVtuPurchase('mob-tomb', 'key-ok')).toBe(true);
-    expect(recallPendingVtuKey('mob-tomb')).toBe('key-ok');
+    const retry = await getPendingVtuKey('mob-tomb');
+    expect(recallPendingVtuKey('mob-tomb')).toBe(retry);
+    // Drain: the supersede's tombstone clear lands on flush.
+    await flushPendingVtuPurchases();
     expect(
       parsePendingVtuSnapshot(serializePendingVtuPurchases()).forgotten
     ).toEqual([]);
@@ -661,7 +690,7 @@ describe('pending-vtu-idempotency', () => {
     expect(recallPendingVtuKey(scoped)).toBe('key-sibling');
   });
 
-  it('preserves a sibling tab entry when persisting its own (Codex R143 P1)', () => {
+  it('preserves a sibling tab entry when persisting its own (Codex R143 P1)', async () => {
     const descriptorA = buildVtuPurchaseDescriptor({
       type: 'airtime',
       amount: 2,
@@ -694,6 +723,7 @@ describe('pending-vtu-idempotency', () => {
       scopePendingVtuKey('user-a', 'merchant-1', descriptorB),
       'key-b'
     );
+    await flushPendingVtuPurchases();
 
     // Without the persist-time sync the snapshot holds only key-b and
     // the sibling key is unrecoverable after a restart.

@@ -14,13 +14,26 @@ import {
   listNotedPendingVtuReferences,
   notePendingVtuReference,
 } from './utility-pending-vtu-reference-registry';
+import { flushPendingVtuPurchases } from './utility-pending-vtu-sync';
 import {
   parsePendingVtuSnapshot,
   serializePendingVtuEntries,
 } from './utility-pending-vtu-codec';
 
+/** Installs a trivial in-process Web Locks stand-in for the mint runner. */
+function installTestLockManager(): void {
+  Object.defineProperty(globalThis.navigator, 'locks', {
+    configurable: true,
+    writable: true,
+    value: {
+      request: async (_name: string, callback: () => unknown) => callback(),
+    },
+  });
+}
+
 describe('utility-pending-vtu-reference-registry', () => {
   beforeEach(() => {
+    installTestLockManager();
     clearPendingVtuKeys();
   });
 
@@ -51,7 +64,7 @@ describe('utility-pending-vtu-reference-registry', () => {
     expect(listNotedPendingVtuReferences()).toEqual([]);
   });
 
-  it('persists the noted reference to the snapshot (Codex R143 P1)', () => {
+  it('persists the noted reference to the snapshot (Codex R143 P1)', async () => {
     // Scoped (digest) signature: raw colon-bearing fixtures would
     // migrate-on-read into a second map entry on the syncing persist.
     const scoped = scopePendingVtuSignature(
@@ -61,6 +74,8 @@ describe('utility-pending-vtu-reference-registry', () => {
     );
     rememberPendingVtuPurchase(scoped, 'key-persist');
     notePendingVtuReference(scoped, 'REF-PERSIST');
+    // Drain (R152 P1): note() only schedules the locked flush now.
+    await flushPendingVtuPurchases();
 
     const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
     expect(snapshot.entries).toHaveLength(1);

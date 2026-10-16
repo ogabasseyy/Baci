@@ -22,11 +22,27 @@ import {
   PERSISTED_VTU_KEY_TTL_MS,
   parsePendingVtuSnapshot,
 } from './utility-pending-vtu-codec';
-import { forgottenScopedKeys } from './utility-pending-vtu-sync';
+import {
+  flushPendingVtuPurchases,
+  forgottenScopedKeys,
+} from './utility-pending-vtu-sync';
+
+// jsdom ships no navigator.locks, and the mint runner fails closed
+// in multi-tab browsers without it (Codex R152 P1) — pin an
+// immediate-grant mock so these tests exercise the locks path.
+function mockNavigatorLocks(): void {
+  Object.defineProperty(navigator, 'locks', {
+    value: {
+      request: async (_name: string, callback: () => unknown) => callback(),
+    },
+    configurable: true,
+  });
+}
 
 describe('utility-pending-idempotency', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
+    mockNavigatorLocks();
   });
 
   it('mints a key on first submit and recalls it for the same purchase', async () => {
@@ -40,9 +56,10 @@ describe('utility-pending-idempotency', () => {
     // Codex R96 P1: quota/private-mode setItem throws → the minted
     // key would be memory-only; a reload would lose it and the retry
     // mint fresh and double-debit on ambiguous results. Refuse
-    // (throw pre-POST) and drop the memory entry so the retry
-    // re-mints once storage works — nothing was submitted, so no
-    // server state dangles.
+    // (throw pre-POST) and roll back the memory admission so the
+    // retry re-mints once storage works — nothing was submitted, so
+    // no server state dangles. (Durability moved from remember() to
+    // the triple's inline persist under the held lock, R152 P1.)
     const setItem = vi
       .spyOn(Storage.prototype, 'setItem')
       .mockImplementation(() => {
@@ -51,10 +68,6 @@ describe('utility-pending-idempotency', () => {
     try {
       await expect(getPendingVtuKey('{"amount":100}')).rejects.toThrow(
         'Could not save this purchase for retry'
-      );
-      expect(recallPendingVtuKey('{"amount":100}')).toBeUndefined();
-      expect(rememberPendingVtuPurchase('{"amount":100}', 'key-x')).toBe(
-        false
       );
       expect(recallPendingVtuKey('{"amount":100}')).toBeUndefined();
     } finally {
@@ -69,11 +82,14 @@ describe('utility-pending-idempotency', () => {
   it('restores the tombstone when the replacement persist fails', async () => {
     // Codex R99 P2 (mobile mirror): consecutive write failures — the
     // forget's setItem throws (old key still in the snapshot,
-    // tombstone memory-only) and the replacement's save throws too.
-    // Dropping the new entry without restoring the tombstone would
-    // let a reload hydrate the stale key and replay the previous
-    // successful vend as new, without debit or delivery.
+    // tombstone memory-only) and the replacement mint's inline save
+    // throws too. Dropping the new entry without restoring the
+    // tombstone would let a reload hydrate the stale key and replay
+    // the previous successful vend as new, without debit or
+    // delivery. (Rollback moved from remember() to the mint triple,
+    // R152 P1 — same guarantee, same observation points.)
     rememberPendingVtuPurchase('{"tomb":"web"}', 'key-old');
+    await flushPendingVtuPurchases();
     const setItem = vi
       .spyOn(Storage.prototype, 'setItem')
       .mockImplementation(() => {
@@ -81,17 +97,17 @@ describe('utility-pending-idempotency', () => {
       });
     try {
       forgetPendingVtuPurchase('{"tomb":"web"}');
-      expect(
-        rememberPendingVtuPurchase('{"tomb":"web"}', 'key-new')
-      ).toBe(false);
+      await expect(getPendingVtuKey('{"tomb":"web"}')).rejects.toThrow(
+        'Could not save this purchase for retry'
+      );
       expect(recallPendingVtuKey('{"tomb":"web"}')).toBeUndefined();
       expect(forgottenScopedKeys.has('{"tomb":"web"}')).toBe(true);
     } finally {
       setItem.mockRestore();
     }
     // Storage works again: the retry supersedes the tombstone.
-    expect(rememberPendingVtuPurchase('{"tomb":"web"}', 'key-ok')).toBe(true);
-    expect(recallPendingVtuKey('{"tomb":"web"}')).toBe('key-ok');
+    const retry = await getPendingVtuKey('{"tomb":"web"}');
+    expect(recallPendingVtuKey('{"tomb":"web"}')).toBe(retry);
     expect(forgottenScopedKeys.has('{"tomb":"web"}')).toBe(false);
   });
 
@@ -470,6 +486,7 @@ describe('utility-pending-idempotency', () => {
     // one stays forgotten under its own key binding. (Scope-spelling
     // agnostic: the digest migration may dual-record raw+digest.)
     expect(recallPendingVtuKey('{"g":1}')).toBe('key-G2');
+    await flushPendingVtuPurchases();
     const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
     expect(snapshot.forgotten.length).toBeGreaterThan(0);
     for (const record of snapshot.forgotten) {
@@ -492,6 +509,7 @@ describe('utility-pending-idempotency', () => {
     forgetPendingVtuPurchaseGeneration('{"h":1}', 'key-H1');
 
     expect(recallPendingVtuKey('{"h":1}')).toBeUndefined();
+    await flushPendingVtuPurchases();
     const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
     expect(snapshot.forgotten.length).toBeGreaterThan(0);
     for (const record of snapshot.forgotten) {

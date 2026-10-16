@@ -265,6 +265,45 @@ describe('vtu-voucher-backfill', () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
+  it('runs the provider poll inline with deferPoll: false and registers no after() (Muse R151 M1)', async () => {
+    // History GET already runs inside its own after(): the mark and
+    // the poll both execute here so the schedule stays a single
+    // layer — nothing nests.
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+    mocks.backfillVtuVoucherPin.mockResolvedValue({
+      voucherPin: '1234-5678',
+      units: undefined,
+    });
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      deferPoll: false,
+      metadata: { alpha: 'first' },
+      originalMetadata: { zeta: 'last', alpha: 'first' },
+      supabase,
+      transaction: createTransaction(),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(true);
+    expect(mocks.after).not.toHaveBeenCalled();
+    expect(mocks.backfillVtuVoucherPin).toHaveBeenCalledWith({
+      billRequestRef: 'REQ-123',
+      billResponseReference: 'RESP-123',
+      metadata: {
+        alpha: 'first',
+        [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: '2026-04-29T12:00:00.000Z',
+        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: '2026-04-29T12:00:00.000Z',
+      },
+      supabase,
+      transactionId: 'tx-1',
+    });
+
+    // Pin was found — mark only, no timestamp clear
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it('clears the scheduled timestamp but keeps pacing state so retries spread across the window', async () => {
     const updateQuery = createUpdateQueryMock();
     const { supabase, update } = createSupabaseMock(updateQuery);

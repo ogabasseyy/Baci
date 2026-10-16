@@ -77,12 +77,20 @@ export function isReferenceLessProcessingTransaction(
 }
 
 export async function scheduleVoucherPinBackfill({
+  deferPoll = true,
   metadata,
   originalMetadata,
   supabase,
   transaction,
   voucherPin,
 }: {
+  /**
+   * False = run the provider poll inline instead of registering a
+   * second after(). For callers that already run inside their own
+   * after() (history GET), so the schedule stays a single layer
+   * (Muse R151 M1). Webhook/confirm keep the default.
+   */
+  deferPoll?: boolean;
   metadata: MetadataRecord;
   originalMetadata: unknown;
   supabase: ReturnType<typeof createAdminClient>;
@@ -126,7 +134,9 @@ export async function scheduleVoucherPinBackfill({
     return false;
   }
 
-  after(async () => {
+  // Named poll step (Muse R151 M1): identical body whether it runs
+  // inline (caller-owned after) or deferred (own after below).
+  const pollVoucherPinBackfill = async (): Promise<void> => {
     const currentMetadata = scheduledMetadata;
     let pinResolved = false;
 
@@ -234,6 +244,15 @@ export async function scheduleVoucherPinBackfill({
         );
       }
     }
+  };
+
+  if (!deferPoll) {
+    await pollVoucherPinBackfill();
+    return true;
+  }
+
+  after(async () => {
+    await pollVoucherPinBackfill();
   });
 
   return true;

@@ -109,6 +109,18 @@ function mockRealSignatureSubmit(seenKeys: string[]) {
   );
 }
 
+// jsdom ships no navigator.locks, and the mint runner fails closed
+// in multi-tab browsers without it (Codex R152 P1) — pin an
+// immediate-grant mock so these tests exercise the locks path.
+function mockNavigatorLocks(): void {
+  Object.defineProperty(navigator, 'locks', {
+    value: {
+      request: async (_name: string, callback: () => unknown) => callback(),
+    },
+    configurable: true,
+  });
+}
+
 describe('useUtilityPurchase', () => {
   beforeEach(() => {
     mockSubmit.mockReset();
@@ -116,6 +128,7 @@ describe('useUtilityPurchase', () => {
     mockGetSettlementPass.mockReset();
     mockGetSettlementPass.mockReturnValue(null);
     clearPendingVtuKeys();
+    mockNavigatorLocks();
     // Live settlement identity starts as the base account (Codex R95
     // P1); switch tests re-publish to simulate the auth mutation.
     publishCustomerIdentity(user, customer, 'ogabassey');

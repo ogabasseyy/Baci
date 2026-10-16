@@ -12,8 +12,22 @@ function renderOpenModal() {
   );
 }
 
+/** Installs a trivial in-process Web Locks stand-in for the mint runner. */
+function installTestLockManager(): void {
+  Object.defineProperty(globalThis.navigator, 'locks', {
+    configurable: true,
+    writable: true,
+    value: {
+      request: async (_name: string, callback: () => unknown) => callback(),
+    },
+  });
+}
+
 describe('UtilityModal', () => {
   beforeEach(() => {
+    // Locks first (R152 P1): completing a purchase mints under the
+    // runner, which fails closed in a lockless jsdom browser.
+    installTestLockManager();
     harness.reset();
   });
 

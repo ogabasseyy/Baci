@@ -48,10 +48,17 @@ export async function fulfillReplayVtuTransaction({
   // row, or a row since claimed by someone else. The replay path is
   // READ-ONLY for customers (approved exception: linking happens
   // only on the fresh path inside prepare), so an unbound owner
-  // rejects to a fresh-key 400 instead of debiting a row never
-  // linked to the caller. Lookup ERRORS throw (500, key kept): a 400
-  // would rotate the key and risk a second debit under a fresh key
-  // for an already-debited transaction.
+  // must not debit a row never linked to the caller. Lookup ERRORS
+  // throw (500, key kept): a 400 would rotate the key and risk a
+  // second debit under a fresh key for an already-debited
+  // transaction — and the same holds for an unbound owner (Codex
+  // R152 P1): the old transaction may already be debited or still
+  // processing, so a fresh-key rotation followed by a fresh prepare
+  // (which links the same customer) can debit a second transaction.
+  // Hence 425, not 400: both clients' rotation predicates carve out
+  // 425 as no-rotation (ambiguous/infrastructure), so the key is
+  // kept and the retry dedupes instead of re-debiting. The message
+  // must never instruct a fresh key.
   const { data: ownerRow, error: ownerError } = await supabase
     .from('customers')
     .select('id, user_id')
@@ -64,9 +71,9 @@ export async function fulfillReplayVtuTransaction({
     return NextResponse.json(
       {
         error:
-          'Idempotency-Key owner is unavailable. Generate a fresh key for a new purchase.',
+          'Idempotency-Key owner cannot be verified yet. Please retry this same purchase instead of starting a new one.',
       },
-      { status: 400 }
+      { status: 425 }
     );
   }
   // Current-attempt overlay: the retry carries the freshest

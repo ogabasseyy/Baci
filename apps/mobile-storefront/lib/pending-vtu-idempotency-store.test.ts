@@ -104,8 +104,28 @@ describe('pending-vtu-idempotency-store', () => {
       })
     );
 
-    jest.resetModules();
-    await import('./pending-vtu-idempotency');
+    // Immediate-grant locks (R152 P1): the migration write-back now
+    // drains through the locked flush, and the RN jest env ships no
+    // usable locks of its own.
+    const request = jest.fn(async (_name: string, callback: () => unknown) =>
+      callback()
+    );
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = { locks: { request } };
+    try {
+      jest.resetModules();
+      await import('./pending-vtu-idempotency');
+      // Drain the fresh module's scheduled migration flush (R152
+      // P1): registry load only schedules the locked write-back now.
+      const { flushPendingVtuPurchases } = await import(
+        './pending-vtu-idempotency-sync'
+      );
+      await flushPendingVtuPurchases();
+    } finally {
+      g.navigator = priorNavigator;
+      jest.resetModules();
+    }
 
     const stored = loadPendingVtuSnapshot() ?? '';
     expect(stored).not.toContain('08030000000');

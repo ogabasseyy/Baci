@@ -234,8 +234,11 @@ export const PENDING_VTU_MINT_LOCK_NAME = 'baci:vtu-mint-lock/v1';
  * cannot close it — the bucket has no compare-and-swap, so two
  * Expo web tabs loading "no lock" in the same instant can both
  * confirm and both mint. The runner in the sync module prefers
- * navigator.locks (a real mutex) and uses this only where locks
- * are unavailable. Timer-polled wait (Muse R151 M1, web mirror): a
+ * navigator.locks (a real mutex), fails closed in multi-tab
+ * browsers without it (Codex R152 P1, web mirror), and uses this
+ * only for single-threaded runtimes (native, SSR), where the
+ * confirm-retry protocol is atomic. Timer-polled wait (Muse R151
+ * M1, web mirror): a
  * busy-spin would block the JS thread for the full budget — polls
  * yield between attempts. TTL-gated steal for crashed holders.
  * Null = unacquired; the caller fails closed (no key, no POST). A

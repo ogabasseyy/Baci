@@ -115,7 +115,9 @@ export const PENDING_VTU_MINT_LOCK_NAME = 'baci:vtu-mint-lock/v1';
  * cannot close it — localStorage has no compare-and-swap, so two
  * tabs loading "no lock" in the same instant can both confirm and
  * both mint. The runner in the sync module prefers navigator.locks
- * (a real mutex) and uses this only where locks are unavailable.
+ * (a real mutex), fails closed in multi-tab browsers without it
+ * (Codex R152 P1), and uses this only for single-threaded
+ * runtimes (SSR, React Native), where it is atomic.
  * Timer-polled wait (Muse R151 M1): a busy-spin would block the
  * main thread for the full budget — polls yield between attempts.
  * TTL-gated steal for crashed holders. Null = unacquired; the
@@ -158,4 +160,78 @@ export function releasePendingVtuMintLock(token: string): void {
   if (loadPendingVtuMintLock()?.token === token) {
     clearPendingVtuMintLock();
   }
+}
+
+/**
+ * Cross-tab mint mutex runner (Codex R148 P1, real mutex R149):
+ * the recall → mint → remember triple runs under navigator.locks
+ * where available — a genuine cross-tab mutex, so exactly one tab
+ * mints per descriptor race and the loser re-recalls inside the
+ * lock, adopting the winner's key. Without locks, multi-tab
+ * browsers fail closed (Codex R152 P1) — the storage-token
+ * fallback below serves only single-threaded runtimes (SSR,
+ * React Native), where it is atomic. Sync fn, single
+ * global name (holds last ~1ms; cross-descriptor contention is a
+ * non-issue). Null = fallback unacquired; the caller fails closed.
+ * Callback throws (e.g. undurable remember) propagate — never fall
+ * back around them, or a mint could run twice.
+ */
+interface VtuNavigatorLocks {
+  request<T>(name: string, callback: () => T | Promise<T>): Promise<T>;
+}
+
+function getNavigatorLocks(): VtuNavigatorLocks | undefined {
+  if (typeof navigator === 'undefined') {
+    return undefined;
+  }
+  return (navigator as Navigator & { locks?: VtuNavigatorLocks }).locks;
+}
+
+export const PENDING_VTU_LOCKS_UNAVAILABLE_ERROR =
+  'Could not secure this purchase for retry. Please update your browser and try again.';
+
+/**
+ * True only in a real multi-tab browser (window AND document). SSR,
+ * React Native, and Node lack document — single-threaded runtimes
+ * where the storage fallback is atomic. jsdom counts as a browser
+ * (it has both), which is exactly what the browser-branch tests
+ * need.
+ */
+function isMultiTabBrowser(): boolean {
+  return typeof window !== 'undefined' && typeof document !== 'undefined';
+}
+
+export async function runPendingVtuMintLocked<T>(
+  fn: () => T
+): Promise<T | null> {
+  const locks = getNavigatorLocks();
+  if (locks) {
+    // Deferred, not returned directly: some LockManager
+    // implementations invoke a throwing callback synchronously,
+    // which would escape as a sync throw (and can wedge the
+    // manager's queue, hanging later holders). The hop keeps the
+    // never-throws-synchronously contract on both branches.
+    return Promise.resolve().then(() =>
+      locks.request(PENDING_VTU_MINT_LOCK_NAME, () => fn())
+    );
+  }
+  if (isMultiTabBrowser()) {
+    // Fail closed (Codex R152 P1): a multi-tab browser without Web
+    // Locks cannot exclude a sibling tab — the storage fallback has
+    // no compare-and-swap, so minting here could double-debit. The
+    // fallback survives only for single-threaded runtimes (SSR,
+    // React Native), where the confirm-retry protocol is atomic.
+    // Thrown from an async runner: a rejection, never sync.
+    throw new Error(PENDING_VTU_LOCKS_UNAVAILABLE_ERROR);
+  }
+  const token = await acquirePendingVtuMintLock();
+  if (!token) {
+    return Promise.resolve(null);
+  }
+  // Deferred like the locks path: never throws synchronously, so
+  // callers see one async contract from both branches. The token is
+  // already held, so the microtask hop cannot interleave a rival.
+  return Promise.resolve()
+    .then(fn)
+    .finally(() => releasePendingVtuMintLock(token));
 }

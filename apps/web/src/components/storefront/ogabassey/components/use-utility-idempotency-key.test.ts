@@ -14,9 +14,22 @@ import {
   useUtilityIdempotencyKey,
 } from './use-utility-idempotency-key';
 
+// jsdom ships no navigator.locks, and the mint runner fails closed
+// in multi-tab browsers without it (Codex R152 P1) — pin an
+// immediate-grant mock so these tests exercise the locks path.
+function mockNavigatorLocks(): void {
+  Object.defineProperty(navigator, 'locks', {
+    value: {
+      request: async (_name: string, callback: () => unknown) => callback(),
+    },
+    configurable: true,
+  });
+}
+
 describe('useUtilityIdempotencyKey', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
+    mockNavigatorLocks();
   });
 
   it('returns a stable key until the attempt is forgotten', async () => {
@@ -264,6 +277,7 @@ describe('useUtilityIdempotencyKey', () => {
 describe('finalizeSuppressedAttempt', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
+    mockNavigatorLocks();
   });
 
   it('preserves a switched terminal success so the returnee replays it', async () => {
@@ -467,6 +481,7 @@ describe('shouldRotateVtuKeyForStatus', () => {
 describe('settleShownAttempt', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
+    mockNavigatorLocks();
   });
 
   it('forgets the marked key once; a second call is a no-op', async () => {

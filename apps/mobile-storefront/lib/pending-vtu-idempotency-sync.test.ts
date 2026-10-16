@@ -189,7 +189,10 @@ describe('pending-vtu-idempotency-sync', () => {
     try {
       const key = await getPendingVtuKey('{"locks":"primary"}');
       expect(typeof key).toBe('string');
-      expect(request).toHaveBeenCalledTimes(1);
+      // No exact count (R152 P1, web mirror): remember() schedules
+      // a coalesced background flush that re-locks — the name pin
+      // below is the wiring proof.
+      expect(request).toHaveBeenCalled();
       expect(request).toHaveBeenCalledWith(
         vtuStore.PENDING_VTU_MINT_LOCK_NAME,
         expect.any(Function)
@@ -236,7 +239,9 @@ describe('pending-vtu-idempotency-sync', () => {
         getPendingVtuKey('{"locks":"race"}'),
       ]);
       expect(tabA).toBe(tabB);
-      expect(request).toHaveBeenCalledTimes(2);
+      // No exact count (R152 P1, web mirror): each mint's scheduled
+      // background flush re-locks on its own microtask.
+      expect(request).toHaveBeenCalled();
     } finally {
       (globalThis as { navigator?: unknown }).navigator = priorNavigator;
     }
@@ -265,6 +270,33 @@ describe('pending-vtu-idempotency-sync', () => {
       g.navigator = priorNavigator;
     }
   }, 10000);
+
+  it('fails closed without navigator.locks in a multi-tab browser (Codex R152 P1, web mirror)', async () => {
+    // This jest env has window but no document (native-shaped), so
+    // the fallback applies by default. Pinning document makes it
+    // browser-shaped: minting must then refuse rather than risk a
+    // sibling-tab double mint through the non-atomic fallback.
+    const g = globalThis as { navigator?: unknown; document?: unknown };
+    const priorNavigator = g.navigator;
+    const priorDocument = g.document;
+    g.navigator = {};
+    g.document = {};
+    try {
+      await expect(runPendingVtuMintLocked(() => 'k')).rejects.toThrow(
+        /update your browser/
+      );
+      await expect(getPendingVtuKey('{"locks":"missing"}')).rejects.toThrow(
+        /update your browser/
+      );
+    } finally {
+      g.navigator = priorNavigator;
+      if (priorDocument === undefined) {
+        delete g.document;
+      } else {
+        g.document = priorDocument;
+      }
+    }
+  });
 
   it('yields the event loop while waiting on a held mint (Muse R151 M1, web mirror)', async () => {
     // A busy-spin would block the JS thread for the full ~250ms

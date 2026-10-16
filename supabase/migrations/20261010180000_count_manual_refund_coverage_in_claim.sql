@@ -28,7 +28,7 @@ BEGIN
     RAISE EXCEPTION 'invalid_cancellation_side_effect';
   END IF;
 
-  SELECT o.merchant_id, o.currency, o.amount_paid
+  SELECT o.merchant_id, o.currency
     INTO v_order
     FROM public.orders o
    WHERE o.id = p_order_id
@@ -123,8 +123,13 @@ BEGIN
     -- refunded while the manager still reports an outstanding
     -- balance no leg can accept. The shared total helper (also
     -- used by the reconciliation predicate) computes returned
-    -- money the manager's way.
-    v_paid := COALESCE(v_order.amount_paid, 0);
+    -- money the manager's way. amount_paid loads here, not in
+    -- the lock SELECT above: the concurrency proof's minimal
+    -- fixture carries only the lock columns, and this branch is
+    -- unreached while the lock blocks.
+    SELECT o.amount_paid INTO v_paid FROM public.orders o
+     WHERE o.id = p_order_id AND o.merchant_id = v_order.merchant_id;
+    v_paid := COALESCE(v_paid, 0);
     v_total_returned := private.total_refund_returned_v1(
       p_order_id, v_order.merchant_id, v_order.currency);
     IF v_total_returned >= v_paid THEN

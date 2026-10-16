@@ -54,6 +54,7 @@ apply_pending_migration() {
     --arg registration "$(build_register_migration_query "$version" "$name")" \
     --arg prefix "BEGIN;
 SET LOCAL lock_timeout = '30s';
+${4:-}
 " \
     '{
        query: (

@@ -5228,6 +5228,47 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(mockPurchaseBill).not.toHaveBeenCalled();
     });
 
+    it('reconstructs the hybrid total when a cached refund blocks the retry', async () => {
+      // The hybrid arm persists the CARD leg only: a retryFailed
+      // replay must report wallet + card (Codex R118 P2), not the
+      // persisted ₦400 of a ₦1000 restoration.
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          status: 'failed',
+          metadata: {
+            paymentSplit: { card: 400, wallet: 600 },
+            refundAmount: 400,
+            refundContext: 'hybrid_vend_failure',
+            refundIssued: true,
+            refundedAt: '2026-05-05T08:00:00.000Z',
+            walletDebited: true,
+          },
+        },
+        rpcImpl,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: true,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({
+        amount: 1000,
+        reference: 'VTU-123',
+        refundedToWallet: 1000,
+        status: 'failed',
+      });
+      expect(mockCheckTransactionStatus).not.toHaveBeenCalled();
+      expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.anything()
+      );
+    });
+
     it('blocks retry via the ledger when refundIssued metadata is missing but a refund row exists', async () => {
       // Models the crash-between-RPC-and-metadata-write case: the wallet
       // was credited in a prior fulfillment, but the metadata update failed

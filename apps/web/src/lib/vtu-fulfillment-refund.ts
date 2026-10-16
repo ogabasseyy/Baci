@@ -23,7 +23,7 @@ import {
  * (Codex R106 P1) per the 300-line ceiling: cached-replay
  * reconstruction plus context dispatch over the branches.
  */
-function reconstructReplayRefundTotal({
+export function reconstructReplayRefundTotal({
   metadata,
   totalAmount,
 }: {

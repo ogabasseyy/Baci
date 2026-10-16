@@ -66,7 +66,10 @@ import {
   recoverStrandedPreVendVtuRow,
   writeVtuProviderSubmissionMarkerOrRestore,
 } from './vtu-fulfillment-recovery';
-import { refundVtuToCustomerWallet } from './vtu-fulfillment-refund';
+import {
+  reconstructReplayRefundTotal,
+  refundVtuToCustomerWallet,
+} from './vtu-fulfillment-refund';
 import {
   findExistingVtuRefundLedger,
   findExistingVtuReversalLedger,
@@ -2152,10 +2155,17 @@ export async function fulfillPendingVtuTransaction({
         ? row.error_message
         : 'Original payment was refunded to wallet — please retry as a new purchase.';
     if (cachedRefundIssued || ledgerRefund) {
+      // Hybrid kuda-failure refunds persist the CARD leg only (the
+      // history projector sums the split's wallet leg): reconstruct
+      // the restored total like the confirm-only path does, or a
+      // ₦600+₦400 replay reports only ₦400 (Codex R118 P2). The
+      // ledger hit (flag missing) still wins when present.
       const refundAmount =
-        Number(existingMetadata.refundAmount) ||
         ledgerRefund?.amount ||
-        Number(row.amount) ||
+        reconstructReplayRefundTotal({
+          metadata: existingMetadata,
+          totalAmount: Number(row.amount) || 0,
+        }) ||
         0;
       return {
         amount: Number(row.amount) || 0,

@@ -35,8 +35,16 @@ describe('stripMissingOrderOfferColumns', () => {
         ['offer_id']
       )
     ).toBe(
-      'id,product_id,offer_id_snapshot,offer_grade,offer_condition_notes,offer_labels_snapshotted,products(name,images,condition)'
+      'id,product_id,offer_id_snapshot,offer_grade,offer_condition_notes,offer_labels_snapshotted,products(name, images, condition)'
     );
+  });
+
+  it('never strips a dropped name nested inside a relation selection', () => {
+    expect(
+      stripMissingOrderOfferColumns('id, products(name, offer_id)', [
+        'offer_id',
+      ])
+    ).toBe('id,products(name, offer_id)');
   });
 });
 

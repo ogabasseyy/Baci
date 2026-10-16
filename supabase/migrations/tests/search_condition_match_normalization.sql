@@ -72,9 +72,9 @@ VALUES ('02e50000-0000-4000-8000-000000000021', '02e50000-0000-4000-8000-0000000
 DO $$
 DECLARE
   n bigint;
-  v_offer uuid;
+  v_offers uuid[];
 BEGIN
-  SELECT count(*), max(matched_offer_id) INTO n, v_offer
+  SELECT count(*), array_agg(matched_offer_id) INTO n, v_offers
   FROM public.search_storefront_products_refined(
     'foldable widget', '02e50000-0000-4000-8000-000000000001',
     NULL, NULL, 'open_box'
@@ -82,8 +82,8 @@ BEGIN
   IF n <> 1 THEN
     RAISE EXCEPTION 'refurbished offer must match the open_box filter, got %', n;
   END IF;
-  IF v_offer IS DISTINCT FROM '02e50000-0000-4000-8000-000000000021' THEN
-    RAISE EXCEPTION 'matched offer id wrong: %', v_offer;
+  IF v_offers IS DISTINCT FROM ARRAY['02e50000-0000-4000-8000-000000000021'::uuid] THEN
+    RAISE EXCEPTION 'matched offer id wrong: %', v_offers;
   END IF;
 
   SELECT count(*) INTO n

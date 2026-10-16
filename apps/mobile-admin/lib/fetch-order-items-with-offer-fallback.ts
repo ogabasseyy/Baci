@@ -23,8 +23,25 @@ export function stripMissingOrderOfferColumns(
 ): string {
   if (missing.length === 0) return selector;
   const dropped = new Set(missing);
-  return selector
-    .split(',')
+  // Split top-level commas only: a naive split would also match a
+  // stripped name inside an embedded relation selection such as
+  // `products(name, offer_id)`. Parenthesized groups pass through
+  // byte-for-byte.
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of selector) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth = Math.max(0, depth - 1);
+    if (char === ',' && depth === 0) {
+      parts.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current);
+  return parts
     .map((part) => part.trim())
     .filter((part) => part !== '' && !dropped.has(part))
     .join(',');

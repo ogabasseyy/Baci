@@ -69,4 +69,11 @@ describe('Android admin release workflow', () => {
 
     expect(workflow).toContain("- '.github/workflows/android-release.yml'");
   });
+
+  it('limits production native compilation to the Play-supported ABI', async () => {
+    const workflow = await readFile(workflowPath, 'utf8');
+    const build = getWorkflowStep(workflow, 'Build Android App Bundle');
+
+    expect(build).toContain('-PreactNativeArchitectures=arm64-v8a');
+  });
 });

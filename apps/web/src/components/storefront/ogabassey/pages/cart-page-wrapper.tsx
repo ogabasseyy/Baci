@@ -42,9 +42,17 @@ export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, 
     // After a reload the fragment is already redacted; fall back to
     // the tab-scoped locator recorded before redaction so an
     // unresolved handoff (and its persisted attempt) stays reachable.
-    setPairing(
-      parseHandoffPairing(window.location.hash) ?? loadActiveHandoff()
-    );
+    // A locator scoped to a different merchant must not restore on
+    // this merchant's cart page.
+    const locator = loadActiveHandoff();
+    const scopedLocator =
+      locator &&
+      (!merchantSlug ||
+        !locator.merchantSlug ||
+        locator.merchantSlug === merchantSlug)
+        ? locator
+        : null;
+    setPairing(parseHandoffPairing(window.location.hash) ?? scopedLocator);
     setPairingChecked(true);
   }, []);
   const processedRef = useRef(false);

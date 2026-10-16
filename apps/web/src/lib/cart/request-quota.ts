@@ -48,7 +48,8 @@ export const CART_QUOTA_BUDGETS: Record<
   handoff_preview: { limit: 120, windowMs: 60 * 1000 },
   // MCP legacy-bridge writes are token-authenticated server-to-server
   // calls: budgeted per merchant and legacy token, never by the shared
-  // broker egress identity, and not fail-closed on quota degradation.
+  // broker egress identity, and fail-closed on quota degradation
+  // (see FAIL_CLOSED_OPERATIONS).
   legacy_bridge: { limit: 120, windowMs: 60 * 1000 },
   // Checkout review preparation: per-submit plus refresh retries.
   checkout_prepare: { limit: 60, windowMs: 60 * 1000 },

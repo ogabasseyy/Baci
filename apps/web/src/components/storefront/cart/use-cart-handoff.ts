@@ -2,11 +2,9 @@
 import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { fetchDestinationCart } from './cart-handoff-destination';
-import { postHandoffRedeem } from './cart-handoff-redeem';
 import {
   type Choice,
   clearActiveHandoff,
-  clearAttemptBody,
   clearHandoffAttempt,
   fetchJson,
   loadActiveHandoff,
@@ -18,11 +16,10 @@ import {
   type PreviewResponse,
   planHandoffMerge as planMerge,
   recordActiveHandoff,
-  recordAttemptBody,
-  recordAttemptChoice,
   recordResolutionList,
   redactHandoffFragment,
 } from './cart-handoff-support';
+import { useHandoffRedeem } from './use-handoff-redeem';
 export function useCartHandoff(props: { token: string; handoffId: string }) {
   const { token, handoffId } = props;
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
@@ -35,13 +32,23 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     Record<string, 'incoming' | 'existing'>
   >({});
   const [redeeming, setRedeeming] = useState(false);
-  const [lockedChoice, setLockedChoice] = useState<Choice | null>(null);
-  const [sentBody, setSentBody] = useState<Record<string, unknown> | null>(
-    null
-  );
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const bootstrapRequired = useRef(false);
+  const redeem = useHandoffRedeem({
+    handoffId,
+    merchantSlug: preview?.merchant?.slug,
+    bootstrapRequired,
+    setRedeeming,
+    setRedeemError,
+    setConflicts,
+    setResolutions,
+    setLoadError,
+    refreshPreview: () => loadPreview(),
+  });
+  const { lockedChoice, setLockedChoice, sentBody, lockChoice, postRedeem } =
+    redeem;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: record once on mount before the fragment secret is redacted.
   useLayoutEffect(() => {
     // Preserve a tab-scoped locator before the secret leaves the URL,
     // so a reload can reconstruct this flow and replay its attempt.
@@ -56,7 +63,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     if (loadStarted.current) return;
     loadStarted.current = true;
     setLockedChoice(lockedAttemptChoice(handoffId));
-    setSentBody(loadAttemptBody(handoffId));
+    redeem.restorePersistedAttempt();
     void loadPreview();
   }, []);
 
@@ -107,8 +114,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
           // loads do not restore this dead continuation.
           clearHandoffAttempt(handoffId);
           clearActiveHandoff(handoffId);
-          setLockedChoice(null);
-          setSentBody(null);
+          redeem.clearLockedChoice();
         }
         if (payload.status === 'consumed') {
           // A link consumed by our own earlier attempt (whose success
@@ -138,48 +144,6 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       setLoadError('Could not load this cart link. Check your connection.');
       return null;
     }
-  }
-
-  function lockChoice(choice: Choice): void {
-    recordAttemptChoice(handoffId, choice);
-    setLockedChoice(choice);
-  }
-
-  function postRedeem(
-    body: Record<string, unknown>,
-    merchantSlug = preview?.merchant?.slug
-  ): Promise<boolean> {
-    // Persist the exact body before sending: retries of an unresolved
-    // attempt resend it verbatim instead of replanning from the
-    // shopper's possibly edited selections.
-    recordAttemptBody(handoffId, body);
-    setSentBody(body);
-    return postHandoffRedeem(
-      {
-        handoffId,
-        merchantSlug,
-        bootstrapRequired,
-        setRedeeming,
-        setRedeemError,
-        setConflicts,
-        setResolutions,
-        setLoadError,
-        onAttemptConsumed: () => {
-          clearHandoffAttempt(handoffId);
-          setLockedChoice(null);
-          setSentBody(null);
-        },
-        onTerminalOutcome: () => {
-          clearActiveHandoff(handoffId);
-        },
-        onMergeConflict: () => {
-          clearAttemptBody(handoffId);
-          setSentBody(null);
-        },
-        refreshPreview: loadPreview,
-      },
-      body
-    );
   }
 
   async function act(choice: Choice): Promise<void> {
@@ -304,7 +268,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     setResolutions,
     redeeming,
     lockedChoice,
-    attemptSent: sentBody !== null,
+    attemptSent: redeem.attemptSent,
     redeemError,
     destinationError,
     setDestinationError,

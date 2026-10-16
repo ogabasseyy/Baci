@@ -100,7 +100,14 @@ The handoff preview endpoint (`GET /api/storefront/cart/handoff`)
 takes the pairing secret in the `x-handoff-token` header. Proxy, APM,
 and error-reporting pipelines in front of the cart routes must redact
 that header exactly like `Authorization` before activation; in-repo
-logging never records request headers for these routes.
+logging never records request headers for these routes. This is an
+explicit pre-activation checklist item (not a documentation-only
+note): before any merchant is enrolled, verify against the deployed
+proxy and APM configuration that (1) `x-handoff-token` is on the
+header denylist alongside `Authorization`, and (2) a synthetic
+handoff preview request leaves no token value in proxy, APM, or
+error-reporting captures; record both checks in the activation
+evidence. Enrollment stays closed until they pass.
 
 ## Observability gaps to close before activation
 

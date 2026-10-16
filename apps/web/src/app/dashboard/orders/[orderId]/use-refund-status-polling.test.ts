@@ -138,4 +138,36 @@ describe('useRefundStatusPolling', () => {
     expect(screen.getByText('Unable to load refund')).toBeInTheDocument();
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
+
+  it('pauses while the tab is hidden and refreshes on return', async () => {
+    render(React.createElement(Harness, { terminal: false }));
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: true,
+    });
+    try {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(90_000);
+      });
+      await act(async () => {});
+      // Three ticks while hidden: no background RPC traffic.
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        value: false,
+      });
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await act(async () => {});
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    } finally {
+      Object.defineProperty(document, 'hidden', {
+        configurable: true,
+        value: false,
+      });
+    }
+  });
 });

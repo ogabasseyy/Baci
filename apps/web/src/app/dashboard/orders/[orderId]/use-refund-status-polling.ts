@@ -6,7 +6,12 @@ import type { RefundSummary } from '@/lib/orders/refund-summary';
 // Loads the refund status on mount and re-polls every 30s until the
 // refund reaches a terminal state: terminal summaries never change
 // without a new submission, which reloads inline, so polling past
-// them only loads a payments-adjacent RPC.
+// them only loads a payments-adjacent RPC. Hidden tabs pause:
+// refunded Paystack orders poll indefinitely by design (a later
+// contradictory verdict can re-open the balance), so without the
+// pause every background order tab would bill the refund RPC every
+// 30s forever. Returning to the tab refreshes immediately instead
+// of waiting out the interval on stale balances.
 export function useRefundStatusPolling({
   hasInitialSummary,
   onError,
@@ -82,11 +87,23 @@ export function useRefundStatusPolling({
         controller.abort();
       };
     }
-    const timer = setInterval(() => void load(), 30_000);
+    const timer = setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
+      void load();
+    }, 30_000);
+    const onVisibility = () => {
+      if (!document.hidden) {
+        void load();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       active = false;
       controller.abort();
       clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
     // The setters are stable: this reloads on route and terminal
     // transitions only (hasInitialSummary is mount-only).

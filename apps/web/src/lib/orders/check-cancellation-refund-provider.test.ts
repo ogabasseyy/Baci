@@ -40,9 +40,7 @@ describe('checkCancellationRefundProvider', () => {
   });
   it('allows submission when there are no prior refunds', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([]);
-    await expect(
-      checkCancellationRefundProvider(input)
-    ).resolves.toBeUndefined();
+    await expect(checkCancellationRefundProvider(input)).resolves.toEqual([]);
   });
   it('blocks a refund made directly in Paystack', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
@@ -83,7 +81,7 @@ describe('checkCancellationRefundProvider', () => {
           { gateway_reference: '1', amount: 1, status: 'completed' },
         ],
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([]);
     vi.mocked(listPaystackRefunds).mockResolvedValue([
       { id: 1, amount: 100, currency: 'NGN', status: 'pending' },
     ]);
@@ -111,15 +109,13 @@ describe('checkCancellationRefundProvider', () => {
           { gateway_reference: '1', amount: 1, status: 'refunded' },
         ],
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([]);
   });
   it('ignores failed provider rows before the amount gate', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
       { id: 1, amount: 999, currency: 'USD', status: 'failed' },
     ]);
-    await expect(
-      checkCancellationRefundProvider(input)
-    ).resolves.toBeUndefined();
+    await expect(checkCancellationRefundProvider(input)).resolves.toEqual([]);
   });
   it('matches padded ledger references to provider rows', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
@@ -137,7 +133,7 @@ describe('checkCancellationRefundProvider', () => {
           },
         ],
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([]);
   });
   it('compares currencies case-insensitively like the claim gate', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
@@ -156,7 +152,7 @@ describe('checkCancellationRefundProvider', () => {
           },
         ],
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([]);
   });
   it('defers when the listing exhausts its budget instead of terminalizing', async () => {
     const timeout = new Error('The operation timed out');

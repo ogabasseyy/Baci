@@ -99,6 +99,12 @@ BEGIN
     -- full coverage report refunded.
     'status',CASE WHEN p_step_status='delivery_uncertain' THEN 'requires_review'
       WHEN p_pending>0 THEN 'processing'
+      -- Open movement reviews veto both recovery flags, so any
+      -- non-worker-owned step beside one must report review, not a
+      -- terminal label: a contradictory provider verdict can
+      -- otherwise leave the panel on failed or not_started with no
+      -- guidance and no action.
+      WHEN p_has_movement_evidence THEN 'requires_review'
       WHEN p_step_status='failed' AND p_step_error IS NOT NULL THEN 'failed'
       WHEN p_step_status='failed' AND p_step_error IS NULL THEN 'queued'
       WHEN p_step_status='deferred' THEN 'queued'

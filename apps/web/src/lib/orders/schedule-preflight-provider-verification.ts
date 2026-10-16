@@ -33,12 +33,14 @@ export const REFUND_PREFLIGHT_ADMISSION_BUDGET_MS =
   PREFLIGHT_PROVIDER_CALL_WORST_MS + PREFLIGHT_FINISH_WRITE_RESERVE_MS;
 
 // Run one leg's provider verification under the admission budget.
-// Returns true when the leg verified, false when the window ran
-// short (the caller initiates its verified prefix and resumes the
-// rest). Only a window too short for any verification throws —
-// after a verified prefix exists, both a short window and a
-// deferred provider check become a shortfall, so every drain makes
-// persistent progress instead of repeating the same checks.
+// Returns verified false when the window ran short (the caller
+// initiates its verified prefix and resumes the rest), plus the
+// provider ids the check paired with manual claims (empty for
+// provider legs and shortfalls). Only a window too short for any
+// verification throws — after a verified prefix exists, both a
+// short window and a deferred provider check become a shortfall, so
+// every drain makes persistent progress instead of repeating the
+// same checks.
 export async function schedulePreflightProviderVerification({
   deadlineMs,
   hasVerifiedPrefix,
@@ -57,7 +59,7 @@ export async function schedulePreflightProviderVerification({
   reserveInitiation?: boolean;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transaction: GatewayPaymentTransaction & { gateway_reference: string };
-}): Promise<boolean> {
+}): Promise<{ verified: boolean; pairedProviderRefundIds: number[] }> {
   // Reserve this verification plus one initiation leg before
   // starting another provider check: initiation paces itself per
   // leg, so one leg of room guarantees this run converts its
@@ -71,7 +73,7 @@ export async function schedulePreflightProviderVerification({
     (reserveInitiation ? REFUND_INITIATION_LEG_BUDGET_MS : 0);
   if (deadlineMs !== undefined && deadlineMs - Date.now() < admissionBudgetMs) {
     if (hasVerifiedPrefix) {
-      return false;
+      return { verified: false, pairedProviderRefundIds: [] };
     }
     // Starvation is not failure: reset the budget the claim
     // consumed so the resume retries fresh instead of mistaking
@@ -89,7 +91,7 @@ export async function schedulePreflightProviderVerification({
       ? undefined
       : Math.min(deadlineMs, Date.now() + PREFLIGHT_PROVIDER_CALL_WORST_MS);
   try {
-    await checkCancellationRefundProvider({
+    const paired = await checkCancellationRefundProvider({
       currency: transaction.currency || order.currency || 'NGN',
       deadlineMs: listingDeadlineMs,
       knownRefunds: refundRows.filter(
@@ -100,6 +102,7 @@ export async function schedulePreflightProviderVerification({
       supabase,
       transaction,
     });
+    return { verified: true, pairedProviderRefundIds: paired ?? [] };
   } catch (error) {
     if (error instanceof DeferredError && hasVerifiedPrefix) {
       // A later check's deferral must not discard the verified
@@ -107,7 +110,7 @@ export async function schedulePreflightProviderVerification({
       // initiates verified legs and resumes the rest. Settle resets
       // the budget on the deferred resume; the prefix initiation is
       // the persistent progress.
-      return false;
+      return { verified: false, pairedProviderRefundIds: [] };
     }
     if (error instanceof DeferredError) {
       await tryResetCancellationSideEffectAttempts(
@@ -118,5 +121,4 @@ export async function schedulePreflightProviderVerification({
     }
     throw error;
   }
-  return true;
 }

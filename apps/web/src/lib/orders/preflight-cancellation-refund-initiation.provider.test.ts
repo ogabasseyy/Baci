@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
-  checkCancellationRefundProvider: vi.fn().mockResolvedValue(undefined),
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue([]),
 }));
 
 import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';

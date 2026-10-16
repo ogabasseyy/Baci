@@ -1,5 +1,5 @@
 vi.mock('./check-cancellation-refund-provider', () => ({
-  checkCancellationRefundProvider: vi.fn().mockResolvedValue(undefined),
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue([]),
 }));
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

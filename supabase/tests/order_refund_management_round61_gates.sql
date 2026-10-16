@@ -61,7 +61,9 @@ BEGIN
     ('b6111000-0000-4000-8000-000000000093', v_merchant_id, 'FAIL-093',
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('b6111000-0000-4000-8000-000000000094', v_merchant_id, 'FAIL-094',
-      100, 100, 'bnpl_approved', 'cancelled', pg_catalog.now());
+      100, 100, 'bnpl_approved', 'cancelled', pg_catalog.now()),
+    ('b6111000-0000-4000-8000-000000000095', v_merchant_id, 'FAIL-095',
+      100, 100, 'refunded', 'cancelled', pg_catalog.now());
 
   -- FAIL-093's evidence predates the sync trigger: with the
   -- trigger disabled the inserts leave its label stale for the
@@ -130,7 +132,20 @@ BEGIN
       'b6111000-0000-4000-8000-000000000094', 'refund', 100, 'NGN',
       'failed', 'paystack', '611095',
       jsonb_build_object(
-        'payment_transaction_id', 'b6112000-0000-4000-8000-000000000098'));
+        'payment_transaction_id', 'b6112000-0000-4000-8000-000000000098')),
+    -- Stamped manual on a finalized order: paired provider id 7
+    -- persisted by the proof stamp for contradiction rechecks.
+    ('b6112000-0000-4000-8000-000000000102', v_merchant_id,
+      'b6111000-0000-4000-8000-000000000095', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pay-95', '{}'::jsonb),
+    ('b6112000-0000-4000-8000-000000000103', v_merchant_id,
+      'b6111000-0000-4000-8000-000000000095', 'refund', 100, 'NGN',
+      'completed', 'manual', 'merchant-95',
+      jsonb_build_object(
+        'method', 'paystack',
+        'payment_transaction_id', 'b6112000-0000-4000-8000-000000000102',
+        'provider_refund_status', 'processed',
+        'provider_refund_id', 7));
 END;
 $fixtures$;
 
@@ -206,6 +221,36 @@ BEGIN
   END IF;
 END;
 $refund_round61_finalizer$;
+
+DO $refund_round61_manual_contradiction$
+DECLARE
+  v_verdict text;
+  v_row_status text;
+BEGIN
+  -- A later failed verdict for a stamped manual transitions the
+  -- row (not refund_not_found) and re-alerts the merchant, like a
+  -- provider-gateway row: the sweep rechecked the stored id.
+  SELECT public.record_verified_paystack_cancellation_refund_v1(
+    'b6112000-0000-4000-8000-000000000103', 'failed', 987654328,
+    10000, 'NGN'
+  ) INTO v_verdict;
+  IF v_verdict <> 'failed' THEN
+    RAISE EXCEPTION 'manual contradiction misreported, got %', v_verdict;
+  END IF;
+  SELECT status INTO v_row_status FROM public.transactions
+  WHERE id = 'b6112000-0000-4000-8000-000000000103';
+  IF v_row_status <> 'failed' THEN
+    RAISE EXCEPTION 'manual contradiction left row %, want failed',
+      v_row_status;
+  END IF;
+  PERFORM 1 FROM public.paystack_cancellation_refund_notifications
+  WHERE order_id = 'b6111000-0000-4000-8000-000000000095'
+    AND event_type = 'failed_merchant_push' AND status = 'pending';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'manual contradiction never re-alerted';
+  END IF;
+END;
+$refund_round61_manual_contradiction$;
 
 SET LOCAL ROLE authenticated;
 SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);

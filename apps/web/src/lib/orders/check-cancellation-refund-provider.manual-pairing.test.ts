@@ -51,7 +51,7 @@ describe('checkCancellationRefundProvider manual pairing', () => {
           },
         ],
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([7]);
   });
   it('still blocks when manual Paystack rows cannot cover the provider refund', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
@@ -149,7 +149,7 @@ describe('checkCancellationRefundProvider manual pairing', () => {
           manual('merchant-ref-2', 1),
         ],
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([7, 8]);
     // A combined manual cannot cover two smaller provider rows.
     vi.mocked(listPaystackRefunds).mockResolvedValue([
       { id: 7, amount: 60, currency: 'NGN', status: 'processed' },
@@ -179,7 +179,7 @@ describe('checkCancellationRefundProvider manual pairing', () => {
         ...input,
         knownRefunds: [refundedManual],
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual([7]);
     // And an empty provider listing leaves it unpaired: without this
     // the caller would stamp proof no provider row confirms.
     vi.mocked(listPaystackRefunds).mockResolvedValue([]);

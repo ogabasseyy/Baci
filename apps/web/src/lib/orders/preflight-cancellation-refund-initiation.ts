@@ -209,8 +209,8 @@ export async function preflightCancellationRefundInitiation({
   const verifyLeg = async (
     transaction: GatewayPaymentTransaction & { gateway_reference: string },
     reserveInitiation: boolean
-  ): Promise<boolean> => {
-    const verified = await schedulePreflightProviderVerification({
+  ): Promise<{ verified: boolean; pairedProviderRefundIds: number[] }> => {
+    const result = await schedulePreflightProviderVerification({
       deadlineMs,
       hasVerifiedPrefix: hasVerifiedPrefix(),
       linkedPaymentId,
@@ -220,13 +220,13 @@ export async function preflightCancellationRefundInitiation({
       supabase,
       transaction,
     });
-    if (!verified) budgetShortfall = true;
-    return verified;
+    if (!result.verified) budgetShortfall = true;
+    return result;
   };
   // Provider legs initiate in this run, so their verification
   // reserves an initiation leg; manual legs only stamp proof.
   for (const transaction of paystackLegs) {
-    if (!(await verifyLeg(transaction, true))) break;
+    if (!(await verifyLeg(transaction, true)).verified) break;
     verifiedPaystackLegIds.add(transaction.id);
   }
   // A verified manual claim persists its proof before the caller
@@ -238,7 +238,8 @@ export async function preflightCancellationRefundInitiation({
   // quarantines) their unverified claims next run.
   const budgetSkippedManualLegIds: string[] = [];
   for (const [manualIndex, transaction] of manualVerifyLegs.entries()) {
-    if (!(await verifyLeg(transaction, false))) {
+    const manualResult = await verifyLeg(transaction, false);
+    if (!manualResult.verified) {
       budgetSkippedManualLegIds.push(
         ...manualVerifyLegs.slice(manualIndex).map((skipped) => skipped.id)
       );
@@ -246,6 +247,7 @@ export async function preflightCancellationRefundInitiation({
     }
     await stampVerifiedManualPaystackRefunds({
       linkedPaymentId,
+      providerRefundIds: manualResult.pairedProviderRefundIds,
       refundRows: refundRows ?? [],
       supabase,
       transactionId: transaction.id,

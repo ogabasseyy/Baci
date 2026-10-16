@@ -82,6 +82,14 @@ describe('maskRefundWorkerText', () => {
       },
     ]);
   });
+  it('preserves the provider-backed polling flag', () => {
+    expect(
+      maskRefundWorkerText({
+        status: 'refunded',
+        hasPaystackPayment: true,
+      }).hasPaystackPayment
+    ).toBe(true);
+  });
   it('passes malformed entries through without throwing', () => {
     expect(
       maskRefundWorkerText({

@@ -95,6 +95,27 @@ describe('stampVerifiedManualPaystackRefunds', () => {
     expect(client.update).not.toHaveBeenCalled();
   });
 
+  it('persists the paired provider refund id per row', async () => {
+    const client = supabase();
+    await stampVerifiedManualPaystackRefunds({
+      linkedPaymentId,
+      providerRefundIds: [7, 8],
+      refundRows: [row(), row({ id: 'refund-2', status: 'refunded' })],
+      supabase: client as never,
+      transactionId: 'payment-1',
+    });
+    expect(client.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ provider_refund_id: 7 }),
+      })
+    );
+    expect(client.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ provider_refund_id: 8 }),
+      })
+    );
+  });
+
   it('throws when the stamp write fails', async () => {
     const client = supabase(new Error('write failed'));
     await expect(

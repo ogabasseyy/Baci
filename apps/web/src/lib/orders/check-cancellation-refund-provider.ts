@@ -29,7 +29,7 @@ export async function checkCancellationRefundProvider({
   order: CancellationOrder;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transaction: GatewayPaymentTransaction;
-}): Promise<void> {
+}): Promise<number[]> {
   // Every finding here files a reconciliation review before
   // terminalizing: a bare DeliveryUncertainError would strand the step
   // as delivery_uncertain with no row for operations to resolve.
@@ -92,6 +92,13 @@ export async function checkCancellationRefundProvider({
       .map((row) => String(row.id))
   );
   const manualCandidates: number[] = [];
+  // Provider ids consumed by manual pairings, returned so the proof
+  // stamp can persist them: the finalized-contradiction sweep
+  // rechecks stamped manuals by stored provider id (their merchant
+  // reference is not a provider id). Manuals are fungible amount
+  // claims, so set membership — not row assignment — is what the
+  // sweep needs.
+  const pairedProviderRefundIds: number[] = [];
   for (const item of knownRefunds) {
     // Both terminal statuses count, matching the preflight
     // verification set and the proof stamp: a legacy refunded-status
@@ -139,6 +146,7 @@ export async function checkCancellationRefundProvider({
       const pair = manualCandidates.indexOf(row.amount);
       if (pair !== -1) {
         manualCandidates.splice(pair, 1);
+        pairedProviderRefundIds.push(row.id);
         continue;
       }
     }
@@ -155,4 +163,5 @@ export async function checkCancellationRefundProvider({
       'Manual Paystack refunds exceed provider-confirmed amounts; review required',
       { unpaired_manual_kobo: manualCandidates }
     );
+  return pairedProviderRefundIds;
 }

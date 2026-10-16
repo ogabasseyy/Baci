@@ -83,6 +83,7 @@ const REFUND_SUMMARY_KEYS = new Set([
   'canRetry',
   'canRecordManual',
   'canManageRefunds',
+  'hasPaystackPayment',
 ]);
 export function maskRefundWorkerText(data: Record<string, unknown>) {
   const masked: Record<string, unknown> = {};

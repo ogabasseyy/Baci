@@ -33,7 +33,7 @@ function input(overrides: Record<string, unknown> = {}) {
 describe('schedulePreflightProviderVerification', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(checkCancellationRefundProvider).mockResolvedValue(undefined);
+    vi.mocked(checkCancellationRefundProvider).mockResolvedValue([]);
   });
 
   it('verifies with a listing deadline bounded by the preflight worst case', async () => {
@@ -44,7 +44,7 @@ describe('schedulePreflightProviderVerification', () => {
         schedulePreflightProviderVerification(
           input({ deadlineMs: start + 500_000 })
         )
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ verified: true, pairedProviderRefundIds: [] });
     } finally {
       vi.restoreAllMocks();
     }
@@ -68,7 +68,7 @@ describe('schedulePreflightProviderVerification', () => {
         schedulePreflightProviderVerification(
           input({ deadlineMs: start + 40_000 })
         )
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ verified: true, pairedProviderRefundIds: [] });
     } finally {
       vi.restoreAllMocks();
     }
@@ -99,7 +99,7 @@ describe('schedulePreflightProviderVerification', () => {
         schedulePreflightProviderVerification(
           input({ deadlineMs: start + 80_000, reserveInitiation: true })
         )
-      ).resolves.toBe(true);
+      ).resolves.toEqual({ verified: true, pairedProviderRefundIds: [] });
     } finally {
       vi.restoreAllMocks();
     }
@@ -127,6 +127,15 @@ describe('schedulePreflightProviderVerification', () => {
     );
   });
 
+  it('passes paired provider ids through on success', async () => {
+    vi.mocked(checkCancellationRefundProvider).mockResolvedValue([7, 8]);
+    const result = await schedulePreflightProviderVerification(input({}));
+    expect(result).toEqual({
+      verified: true,
+      pairedProviderRefundIds: [7, 8],
+    });
+  });
+
   it('shortfalls without throwing once a prefix is verified', async () => {
     const result = await schedulePreflightProviderVerification(
       input({
@@ -134,7 +143,7 @@ describe('schedulePreflightProviderVerification', () => {
         hasVerifiedPrefix: true,
       })
     );
-    expect(result).toBe(false);
+    expect(result).toEqual({ verified: false, pairedProviderRefundIds: [] });
     expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
     expect(tryResetCancellationSideEffectAttempts).not.toHaveBeenCalled();
   });
@@ -161,7 +170,7 @@ describe('schedulePreflightProviderVerification', () => {
     );
     // Settle initiates the verified prefix and resets on its own
     // deferred resume; no throw, no double reset here.
-    expect(result).toBe(false);
+    expect(result).toEqual({ verified: false, pairedProviderRefundIds: [] });
     expect(tryResetCancellationSideEffectAttempts).not.toHaveBeenCalled();
   });
 

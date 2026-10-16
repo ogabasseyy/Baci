@@ -177,6 +177,16 @@ BEGIN
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
   END;
+  -- With both recovery flags vetoed, the status itself must report
+  -- review even beside a failed step: a contradictory verdict would
+  -- otherwise strand the panel on failed with no guidance.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000055'
+  ) INTO v_result;
+  IF v_result->>'status' <> 'requires_review' THEN
+    RAISE EXCEPTION 'movement-blocked order reports %, want requires_review',
+      v_result->>'status';
+  END IF;
   -- The failed-only escape: every nested entry refused, so no money
   -- moved and the manual records.
   SELECT public.manage_order_refund(

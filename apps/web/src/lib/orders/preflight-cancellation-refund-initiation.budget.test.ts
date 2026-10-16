@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
-  checkCancellationRefundProvider: vi.fn().mockResolvedValue(undefined),
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue([]),
 }));
 
 import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
@@ -177,7 +177,7 @@ describe('preflightCancellationRefundInitiation budget deferral', () => {
     // verified leg: settle initiates the prefix and resumes the
     // rest instead of repeating the same checks every drain.
     vi.mocked(checkCancellationRefundProvider)
-      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce([])
       .mockRejectedValueOnce(
         new DeferredError('cancellation_refund_provider_verification_deferred')
       );

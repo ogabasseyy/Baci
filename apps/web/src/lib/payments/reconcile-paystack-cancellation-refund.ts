@@ -67,7 +67,16 @@ export async function reconcilePaystackCancellationRefund(
   supabase: SupabaseClient,
   refund: RefundRow
 ): Promise<'updated' | 'unchanged'> {
-  const refundId = Number(refund.gateway_reference);
+  // Stamped manuals carry a merchant reference, not the numeric
+  // provider id: recheck by the provider id the proof stamp
+  // persisted (the candidate RPC only selects stamped rows, so a
+  // stored id always means a paired manual). The link guard below
+  // validates the result either way.
+  const storedProviderRefundId = refund.metadata?.provider_refund_id;
+  const refundId =
+    storedProviderRefundId === undefined || storedProviderRefundId === null
+      ? Number(refund.gateway_reference)
+      : Number(storedProviderRefundId);
   const paymentId = refund.metadata?.payment_transaction_id;
   // A malformed link (empty string, legacy non-UUID) must fail as a
   // deterministic bad link: sending it to the UUID transactions.id filter

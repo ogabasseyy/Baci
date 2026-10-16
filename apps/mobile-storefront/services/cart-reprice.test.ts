@@ -97,6 +97,22 @@ jest.mock('@/lib/fetch-storefront-product-offers', () => ({
   getStorefrontProductOffersByProductIds: mockGetOffers,
 }));
 
+const mockGetBaseInventory =
+  jest.fn<
+    (productIds: string[]) => Promise<Record<
+      string,
+      {
+        product_id: string;
+        effective_policy?: string | null;
+        available_units?: number | null;
+      }
+    > | null>
+  >();
+jest.mock('@/lib/fetch-storefront-product-base-inventory', () => ({
+  getStorefrontProductBaseInventoryByProductIds: (...args: [string[]]) =>
+    mockGetBaseInventory(...args),
+}));
+
 function createCartItem(overrides: Partial<CartItem> = {}): CartItem {
   return {
     id: 'line-1',
@@ -118,6 +134,8 @@ describe('repriceCartItems', () => {
     mockRpc.mockReset();
     mockRange.mockReset();
     mockGetOffers.mockReset();
+    mockGetBaseInventory.mockReset();
+    mockGetBaseInventory.mockResolvedValue({});
     productQuery.in.mockResolvedValue({ data: [], error: null });
     setVariantOverrides({ data: [], error: null });
     mockRange.mockResolvedValue({ data: [], count: 0, error: null });
@@ -320,6 +338,77 @@ describe('repriceCartItems', () => {
       { id: 'offer-line-a', name: 'iPhone 13' },
       { id: 'offer-line-b', name: 'iPhone 13' },
     ]);
+  });
+
+  it('flags base and offer lines that jointly exceed a strict pool', async () => {
+    const lines = [
+      createCartItem({
+        id: 'base-line',
+        product_id: 'strict-product',
+        price: 430000,
+        quantity: 1,
+      }),
+      createCartItem({
+        id: 'offer-line',
+        product_id: 'strict-product',
+        offer_id: 'offer-7',
+        price: 300000,
+        quantity: 1,
+      }),
+    ];
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'strict-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'strict-product': [
+        { id: 'offer-7', price: 300000, condition: 'used', stock_quantity: 5 },
+      ],
+    });
+    mockGetBaseInventory.mockResolvedValue({
+      'strict-product': {
+        product_id: 'strict-product',
+        effective_policy: 'serialized_strict',
+        available_units: 1,
+      },
+    });
+
+    const result = await repriceCartItems(lines, 'merchant-1');
+
+    // Each line fits its own allocation (offer 5, unmanaged base), but
+    // the product total (2) exceeds the strict pool (1).
+    expect(result.unavailable).toEqual([
+      { id: 'base-line', name: 'iPhone 13' },
+      { id: 'offer-line', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('skips the strict pool check when the fetch fails', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 300000,
+      quantity: 1,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [
+        { id: 'offer-7', price: 300000, condition: 'used', stock_quantity: 5 },
+      ],
+    });
+    mockGetBaseInventory.mockResolvedValue(null);
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    expect(result.unavailable).toEqual([]);
   });
 
   it('keeps offer lines available when the aggregate fits the allocation', async () => {

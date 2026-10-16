@@ -16,12 +16,14 @@
  * so the reconciled cart basis matches what checkout will accept.
  */
 
+import { getStorefrontProductBaseInventoryByProductIds } from '@/lib/fetch-storefront-product-base-inventory';
 import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { CartItem } from '@/stores/cart-store';
 import {
   type OfferLineAllocation,
   reconcileOfferLineAllocations,
+  reconcileStrictBasePools,
   repriceExactOfferLine,
 } from './cart-reprice-exact-offer';
 import {
@@ -131,6 +133,13 @@ export async function repriceCartItems(
     // checkout with `invalid_offer`. Probe failure skips offer lines.
     const { eligible: offerEligibleParents, failed: offerParentFailed } =
       await fetchOfferEligibleParents(products, offerFetchProductIds);
+    // Strict base pools are product-wide: every simple (non-variant,
+    // non-voucher) line draws from them. A null fetch skips the pool
+    // check below rather than blocking checkout on a read gap.
+    const baseInventoryByProductId =
+      await getStorefrontProductBaseInventoryByProductIds(
+        items.map((item) => item.product_id)
+      );
 
     const result: RepriceResult = {
       priceById: {},
@@ -268,6 +277,7 @@ export async function repriceCartItems(
     // A merchant edit or concurrent order can deplete an offer below the
     // cart's aggregate take after the price lookup.
     reconcileOfferLineAllocations({ offerLineAllocations, offerPrice, result });
+    reconcileStrictBasePools({ baseInventoryByProductId, items, result });
 
     return result;
   } catch (error) {

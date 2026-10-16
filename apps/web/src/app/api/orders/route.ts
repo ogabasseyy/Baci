@@ -101,7 +101,7 @@ function isPayOnDelivery(paymentMethod: string): boolean {
 // random bytes encoded), but the header is attacker-controlled: a short or
 // colliding key lets one shopper replay another's pending order. Reject a
 // PRESENT-but-degenerate key fail-closed instead of downgrading it to an
-// anonymous retry. Bounds mirror the orders CHECK constraint and the replay
+// anonymous retry. Bounds mirror the orders INSERT trigger and the replay
 // probe so route, RPC, and probe agree on what a key is.
 export const CHECKOUT_IDEMPOTENCY_KEY_MIN_BYTES = 16;
 export const CHECKOUT_IDEMPOTENCY_KEY_MAX_BYTES = 128;

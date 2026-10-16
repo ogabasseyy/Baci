@@ -82,6 +82,69 @@ export function repriceExactOfferLine({
 }
 
 /**
+ * Flags lines on serialized_strict products whose shared base pool cannot
+ * cover the cart's aggregate take. Offer allocations are per-offer but the
+ * strict pool is product-wide: a base line plus an exact-offer line can
+ * each fit their own allocation while jointly exceeding the pool, and the
+ * order would then die server-side with serialized_inventory_unavailable.
+ * Mirrors the PDP's pool gate (offer line must fit its allocation AND the
+ * product total must fit the pool). Unknown pools skip the check — the
+ * order RPC arbitrates — so a read gap never blocks checkout.
+ */
+export function reconcileStrictBasePools({
+  baseInventoryByProductId,
+  items,
+  result,
+}: {
+  baseInventoryByProductId: Record<
+    string,
+    { effective_policy?: string | null; available_units?: number | null }
+  > | null;
+  items: CartItem[];
+  result: RepriceResult;
+}): void {
+  if (baseInventoryByProductId === null) {
+    return;
+  }
+  const alreadyFlagged = new Set(result.unavailable.map((line) => line.id));
+  const simpleLinesByProductId = new Map<string, CartItem[]>();
+  for (const item of items) {
+    if (item.variant_id) {
+      continue;
+    }
+    if (item.voucher_token || item.voucher_award_id) {
+      continue;
+    }
+    const siblings = simpleLinesByProductId.get(item.product_id) ?? [];
+    siblings.push(item);
+    simpleLinesByProductId.set(item.product_id, siblings);
+  }
+  for (const [productId, siblings] of simpleLinesByProductId) {
+    const inventory = baseInventoryByProductId[productId];
+    if (inventory?.effective_policy !== 'serialized_strict') {
+      continue;
+    }
+    const availableUnits = inventory.available_units;
+    if (
+      typeof availableUnits !== 'number' ||
+      !Number.isFinite(availableUnits)
+    ) {
+      continue;
+    }
+    const aggregate = siblings.reduce((sum, line) => sum + line.quantity, 0);
+    if (aggregate <= availableUnits) {
+      continue;
+    }
+    for (const line of siblings) {
+      if (!alreadyFlagged.has(line.id)) {
+        alreadyFlagged.add(line.id);
+        result.unavailable.push({ id: line.id, name: line.name });
+      }
+    }
+  }
+}
+
+/**
  * Flags exact-offer lines whose offer cannot cover the cart's aggregate
  * take. A merchant edit or concurrent order can deplete an offer below
  * the aggregate after the price lookup: without this, the line reports

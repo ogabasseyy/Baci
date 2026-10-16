@@ -17,6 +17,7 @@ import {
   mergeExistingCartItem,
 } from './cart-line';
 import type { CartItem } from './cart-store.types';
+import { createAssuranceActions } from './cart-store-assurance-actions';
 import { createCheckoutGenerationActions } from './cart-store-generation-actions';
 import {
   applyReprice,
@@ -262,44 +263,7 @@ export const useCartStore = create<CartState>()(
         );
       },
 
-      toggleAssurance: (id) => {
-        set((state) => ({
-          items: state.items.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  hasAssurance: !item.hasAssurance,
-                  // An explicit toggle wins over any later settings
-                  // reconciliation: the shopper has chosen.
-                  assurancePendingSetting: undefined,
-                }
-              : item
-          ),
-        }));
-      },
-
-      reconcilePendingAssuranceLines: (shippingInsuranceEnabled) => {
-        set((state) => {
-          if (
-            !state.items.some((item) => item.assurancePendingSetting === true)
-          ) {
-            return state;
-          }
-          return {
-            items: state.items.map((item) =>
-              item.assurancePendingSetting === true
-                ? {
-                    ...item,
-                    hasAssurance: shippingInsuranceEnabled
-                      ? true
-                      : item.hasAssurance,
-                    assurancePendingSetting: undefined,
-                  }
-                : item
-            ),
-          };
-        });
-      },
+      ...createAssuranceActions(set),
     }),
     {
       name: 'cart-storage',

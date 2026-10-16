@@ -20,10 +20,6 @@ import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { CartItem } from '@/stores/cart-store';
 import {
-  type CartConditionChange,
-  type CartOfferAdoption,
-  type CartPriceChange,
-  type CartUnavailableLine,
   collectLegacyOfferLineProductIds,
   collectOfferLineProductIds,
   fetchLiveOfferRepriceMap,
@@ -36,13 +32,20 @@ import {
   resolveLegacyOfferId,
   resolveOfferLinePrice,
 } from './cart-reprice-offer-lines';
+import type { RepriceResult } from './cart-reprice-types';
+import { EMPTY_REPRICE_RESULT } from './cart-reprice-types';
+import {
+  fetchVariantOverrides,
+  resolveVariantLinePrice,
+} from './cart-reprice-variants';
 
 export type {
   CartConditionChange,
   CartOfferAdoption,
   CartPriceChange,
   CartUnavailableLine,
-};
+  RepriceResult,
+} from './cart-reprice-types';
 export {
   pickChangedConditionById,
   pickChangedOfferIdById,
@@ -50,52 +53,6 @@ export {
 };
 
 const log = createLogger('CartReprice');
-
-export interface RepriceResult {
-  /** Live unit price keyed by cart line id (only lines we could resolve). */
-  priceById: Record<string, number>;
-  /**
-   * Live condition keyed by cart line id, for resolved offer lines whose
-   * submitted condition drifted from the live offer row. Applied together
-   * with the price so checkout no longer rejects the stale condition.
-   */
-  conditionById: Record<string, string>;
-  /** Lines whose extended line total drifted beyond tolerance. */
-  changes: CartPriceChange[];
-  /**
-   * Lines whose offer condition drifted without a price move. Tracked
-   * separately from price changes so a condition-only refresh does not
-   * render as a bogus "X to X" price move.
-   */
-  conditionChanges: CartConditionChange[];
-  /** Lines whose row vanished after a successful lookup. Failed lookups
-   * fail open and never land here; checkout must stop for these. */
-  unavailable: CartUnavailableLine[];
-  /**
-   * Adopted exact offer ids for legacy offerless lines, keyed by cart
-   * line id. The adopted line reprices from the live offer row like an
-   * exact offer line, so checkout accepts it.
-   */
-  offerIdById: Record<string, string>;
-  /** Legacy lines that adopted an unambiguous live offer this round. */
-  adoptions: CartOfferAdoption[];
-}
-
-type VariantOverrideRow = {
-  id: string;
-  product_id: string;
-  price_override: number | string | null;
-};
-
-const EMPTY_RESULT: RepriceResult = {
-  priceById: {},
-  conditionById: {},
-  changes: [],
-  conditionChanges: [],
-  unavailable: [],
-  offerIdById: {},
-  adoptions: [],
-};
 
 export async function repriceCartItems(
   items: CartItem[],
@@ -105,7 +62,7 @@ export async function repriceCartItems(
     new Set(items.map((item) => item.product_id).filter(Boolean))
   );
   if (productIds.length === 0 || !merchantId) {
-    return EMPTY_RESULT;
+    return EMPTY_REPRICE_RESULT;
   }
 
   try {
@@ -133,7 +90,7 @@ export async function repriceCartItems(
       log.warn('Reprice products lookup failed; keeping cart prices', {
         error: productsError?.message,
       });
-      return EMPTY_RESULT;
+      return EMPTY_REPRICE_RESULT;
     }
 
     const productPrice = new Map<string, number>();
@@ -147,45 +104,8 @@ export async function repriceCartItems(
       parentCondition.set(product.id, product.condition ?? null);
     }
 
-    // Variant overrides via the same RLS-safe RPC the order validation uses.
-    // Keep the owning product_id alongside the price so a stale/corrupt cart
-    // line cannot be repriced with an override that belongs to another product.
-    const variantOverride = new Map<
-      string,
-      { price: number | null; productId: string }
-    >();
-    let variantLookupFailed = false;
-    if (variantIds.length > 0) {
-      const { data: variants, error: variantsError } = (await supabase.rpc(
-        'get_order_variant_overrides',
-        { p_variant_ids: variantIds }
-      )) as unknown as {
-        data: VariantOverrideRow[] | null;
-        error: { message: string } | null;
-      };
-      if (variantsError) {
-        // Fail open, but do NOT silently fall back to base prices for variant
-        // lines — a variant with a price_override would be rewritten to the
-        // wrong unit price. Mark the failure so those lines are skipped below.
-        variantLookupFailed = true;
-        log.warn(
-          'Reprice variant override lookup failed; skipping variant lines',
-          {
-            error: variantsError.message,
-          }
-        );
-      } else {
-        for (const variant of variants ?? []) {
-          variantOverride.set(variant.id, {
-            price:
-              variant.price_override == null
-                ? null
-                : Number(variant.price_override),
-            productId: variant.product_id,
-          });
-        }
-      }
-    }
+    const { overrides: variantOverride, failed: variantLookupFailed } =
+      await fetchVariantOverrides(variantIds);
 
     // Live offer rows for exact offer lines AND legacy offerless lines on
     // offer-products (the latter need the rows for unambiguous adoption).
@@ -326,31 +246,16 @@ export async function repriceCartItems(
         result.unavailable.push({ id: item.id, name: item.name });
         continue;
       }
-      // A variant row that is missing (deleted/inactive) or belongs to
-      // another product after a successful lookup is unavailable: the
-      // order RPC joins variants with `v.product_id = p.id` and rejects
-      // the whole order with `invalid_variant`. Falling back to the base
-      // price would sail past the removal alert and fail at checkout. A
-      // row that exists with a null override still inherits the parent
-      // price below. (Lookup failure already skipped these lines above.)
-      if (item.variant_id && !variantLookupFailed) {
-        const row = variantOverride.get(item.variant_id);
-        if (!row || row.productId !== item.product_id) {
-          result.unavailable.push({ id: item.id, name: item.name });
-          continue;
-        }
-      }
       // Authoritative unit price: variant.price_override ?? product.price.
-      // Missing/wrong-product rows already resolved to unavailable above;
-      // a null override on a live row still inherits the parent price.
-      const override = item.variant_id
-        ? variantOverride.get(item.variant_id)
-        : undefined;
-      const overridePrice =
-        override && override.productId === item.product_id
-          ? override.price
-          : undefined;
-      const liveUnitPrice = overridePrice != null ? overridePrice : basePrice;
+      // (Lookup failure already skipped variant lines above, so a variant
+      // id here implies a successful lookup.)
+      const liveUnitPrice = item.variant_id
+        ? resolveVariantLinePrice(item, variantOverride, basePrice)
+        : basePrice;
+      if (liveUnitPrice == null) {
+        result.unavailable.push({ id: item.id, name: item.name });
+        continue;
+      }
       if (!Number.isFinite(liveUnitPrice) || liveUnitPrice <= 0) {
         continue;
       }
@@ -372,6 +277,6 @@ export async function repriceCartItems(
     log.warn('Reprice failed unexpectedly; keeping cart prices', {
       error: error instanceof Error ? error.message : String(error),
     });
-    return EMPTY_RESULT;
+    return EMPTY_REPRICE_RESULT;
   }
 }

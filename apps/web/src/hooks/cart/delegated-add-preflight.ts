@@ -15,15 +15,16 @@ import {
  * hook would drop as a no-op never voids the group deal first. When a
  * group deal is active, the void reprices negotiated lines into the
  * ordinary lane before the add runs, so capacity is calculated
- * against those post-void lanes.
+ * against those post-void lanes. Returns the quantity the add may
+ * send (clamped to the post-void headroom), or 0 when no unit fits.
  */
-export function delegatedAddCanBeAccepted(
+export function planDelegatedAddQuantity(
   display: readonly SharedCartDisplayItem[],
   product: Product,
   quantity: number,
   options?: AddToCartOptions,
   groupDealActive = false
-): boolean {
+): number {
   const productRecord = product as unknown as Record<string, unknown>;
   const isVoucherProduct = Boolean(
     options?.quizVoucherToken ||
@@ -32,9 +33,9 @@ export function delegatedAddCanBeAccepted(
       productRecord.isQuizPrize
   );
   if (product.manage_stock && product.stock <= 0 && !isVoucherProduct) {
-    return false;
+    return 0;
   }
-  if (options?.variantRequired && !options?.variantId) return false;
+  if (options?.variantRequired && !options?.variantId) return 0;
   const key = cartLineIdentity(
     cartItemToIdentity({
       condition: options?.condition,
@@ -75,5 +76,8 @@ export function delegatedAddCanBeAccepted(
     })
     .reduce((sum, line) => sum + line.quantity, 0);
   const requested = isVoucherProduct ? 1 : Math.max(1, Math.floor(quantity));
-  return Math.min(requested, SHARED_CART_MAX_QUANTITY_PER_LINE - existing) > 0;
+  return Math.max(
+    0,
+    Math.min(requested, SHARED_CART_MAX_QUANTITY_PER_LINE - existing)
+  );
 }

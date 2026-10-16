@@ -128,6 +128,21 @@ it('keeps the group deal when its own negotiated line is at the cap after the vo
   expect(s.shared.repriceLine).not.toHaveBeenCalled();
   expect(s.active.current).toBe(true);
 });
+it('forwards only the post-void headroom for a partially capped negotiated line', () => {
+  const s = setup();
+  s.shared.cart[0].quantity = 9;
+  const accepted = s.actions.addToCart(
+    { id: 'p', manage_stock: false, stock: 10 } as never,
+    2
+  );
+  expect(accepted).toBe(true);
+  expect(s.shared.addToCart).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'p' }),
+    1,
+    undefined
+  );
+  expect(s.calls).toEqual(['reprice:a', 'reprice:b']);
+});
 it('routes clearing to canonical state and clears the local group flag', () => {
   const s = setup();
   s.actions.clearCart();

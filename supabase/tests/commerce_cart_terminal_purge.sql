@@ -13,6 +13,19 @@ DECLARE
   live uuid := 'aaaaaaaa-4600-4000-8000-000000000003';
   purged integer;
 BEGIN
+  -- The purge definer follows the cart chain's empty-search-path
+  -- convention (recreated by 20261015159000).
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_proc
+    WHERE oid = 'public.commerce_cart_purge_terminal_carts(interval,integer)'::regprocedure
+      AND prosecdef
+      AND EXISTS (
+        SELECT 1 FROM unnest(proconfig) AS setting
+        WHERE setting IN ('search_path=""', 'search_path=')
+      )
+  ) THEN
+    RAISE EXCEPTION 'purge function must be SECURITY DEFINER with empty search_path';
+  END IF;
   -- Old expired cart with line + grant dependents.
   INSERT INTO public.commerce_carts(id, merchant_id, state, created_at, updated_at, expires_at)
   VALUES (old_terminal, m, 'expired', now() - interval '200 days', now() - interval '120 days', now() - interval '118 days');

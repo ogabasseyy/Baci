@@ -695,6 +695,67 @@ describe('GET /api/vtu/history', () => {
     expect(mockBackfillVtuVoucherPin).not.toHaveBeenCalled();
   });
 
+  it('does not amplify provider fulfillment on repeated history polls', async () => {
+    // Muse R138: the first poll schedules the processing row's
+    // fulfill; the second poll sees the schedule marker the first
+    // wrote and schedules nothing — polling/prefetch cannot
+    // amplify provider calls beyond the paced single attempt.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-processing',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'processing',
+        amount: '1000',
+        biller_name: 'EKEDC NG',
+        metadata: {},
+        request_reference: 'VTU-REQ-123',
+        transaction_id: 'kuda-bill-1',
+        customer_cashback: '0',
+      },
+    ];
+    paymentRowsData = [];
+    mockFulfillPendingVtuTransaction.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REQ-123',
+      status: 'processing',
+    });
+
+    const first = await GET(
+      makeRequest('?merchantSlug=ogabassey&type=electricity')
+    );
+    expect(first.status).toBe(200);
+    expect(mockAfter).toHaveBeenCalledTimes(1);
+
+    // Drain the first poll's claim so its schedule marker exists,
+    // then thread it back into the row as the persisted write would.
+    const [claimCallback] = mockAfter.mock.calls;
+    await (claimCallback?.[0] as () => Promise<void>)();
+    const marker = vtuTransactionUpdatePayloads[0]?.metadata as
+      | { voucherPinBackfillScheduledAt?: string }
+      | undefined;
+    expect(marker?.voucherPinBackfillScheduledAt).toEqual(expect.any(String));
+    transactionsData[0] = {
+      ...transactionsData[0],
+      metadata: {
+        voucherPinBackfillScheduledAt: String(
+          marker?.voucherPinBackfillScheduledAt
+        ),
+      },
+    };
+    mockAfter.mockClear();
+    mockFulfillPendingVtuTransaction.mockClear();
+
+    const second = await GET(
+      makeRequest('?merchantSlug=ogabassey&type=electricity')
+    );
+    expect(second.status).toBe(200);
+    expect(mockAfter).not.toHaveBeenCalled();
+    expect(mockFulfillPendingVtuTransaction).not.toHaveBeenCalled();
+  });
+
   it('never schedules fulfillment for rows outside the resolved caller', async () => {
     // Muse R138: fulfillment-level ownership assertion, not just
     // the query filter — a foreign row reaching the scheduler

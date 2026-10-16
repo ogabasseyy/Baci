@@ -42,7 +42,10 @@ async function readBodyTextCapped(
     return null;
   }
   if (!request.body) {
-    return await request.text();
+    // Some runtimes expose the body only through text(); the byte cap
+    // still applies before any parsing or schema validation runs.
+    const text = await request.text();
+    return new TextEncoder().encode(text).length > maxBytes ? null : text;
   }
   const reader = request.body.getReader();
   const decoder = new TextDecoder();

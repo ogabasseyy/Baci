@@ -134,7 +134,34 @@ export async function fetchSharedCartSnapshot(
  * sets the session cookie; the body proof is only needed by callers
  * that cannot rely on cookies.
  */
-export async function bootstrapSharedCart(
+const inFlightBootstraps = new Map<
+  string,
+  Promise<{ ok: true } | { ok: false; code: CartErrorCode; retryable: boolean }>
+>();
+
+/**
+ * Bootstrap is single-flight per merchant: two concurrent bootstraps
+ * can both leave without a live-session cookie, and whichever
+ * Set-Cookie lands last wins — a cart-less bootstrap proof arriving
+ * after provisioning would overwrite the proof bound to the
+ * just-created cart and orphan it.
+ */
+export function bootstrapSharedCart(
+  merchantSlug?: string
+): Promise<
+  { ok: true } | { ok: false; code: CartErrorCode; retryable: boolean }
+> {
+  const key = merchantSlug ?? '';
+  const inFlight = inFlightBootstraps.get(key);
+  if (inFlight) return inFlight;
+  const pending = requestBootstrap(merchantSlug).finally(() => {
+    inFlightBootstraps.delete(key);
+  });
+  inFlightBootstraps.set(key, pending);
+  return pending;
+}
+
+async function requestBootstrap(
   merchantSlug?: string
 ): Promise<
   { ok: true } | { ok: false; code: CartErrorCode; retryable: boolean }

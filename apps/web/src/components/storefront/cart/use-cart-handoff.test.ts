@@ -74,6 +74,69 @@ it('clears stale merge picks when redemption reports a version conflict', async 
   expect(result.current.lockedChoice).toBeNull();
 });
 
+it('resends the exact merge body on retry even if picks change', async () => {
+  const snapshot = {
+    cartId: 'incoming-cart',
+    currency: 'NGN',
+    estimatedTotals: false,
+    expiresAt: '2099-01-01T00:00:00Z',
+    lines: [],
+    merchantId: 'merchant-1',
+    state: 'active',
+    subtotalMinor: 0,
+    totalMinor: 0,
+    version: 1,
+  };
+  const preview = () =>
+    new Response(
+      JSON.stringify({
+        status: 'pending',
+        merchant: { id: 'merchant-1', slug: 'shop' },
+        snapshot,
+        expiresAt: '2099-01-01T00:00:00Z',
+      })
+    );
+  const destination = () =>
+    new Response(
+      JSON.stringify({ cart: { ...snapshot, cartId: 'dest-cart', version: 3 } })
+    );
+  const bodies: unknown[] = [];
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(preview())
+    .mockResolvedValueOnce(destination())
+    .mockImplementation(async (_url: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ code: 'temporarily_unavailable' }), {
+        status: 503,
+      });
+    });
+  vi.stubGlobal('fetch', fetchMock);
+  const { result } = renderHook(() =>
+    useCartHandoff({ token: 'valid', handoffId: 'public-retry' })
+  );
+  await waitFor(() => expect(result.current.destChecked).toBe(true));
+  const identityKey = JSON.stringify(['p1', null, null, []]);
+  act(() => {
+    result.current.setConflicts([
+      { item: { productId: 'p1' }, existing: {}, incoming: {} },
+    ]);
+    result.current.setResolutions({ [identityKey]: 'incoming' });
+  });
+  await act(async () => {
+    await result.current.continueMerge();
+  });
+  act(() => {
+    result.current.setResolutions({ [identityKey]: 'existing' });
+  });
+  await act(async () => {
+    await result.current.continueMerge();
+  });
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toEqual(bodies[0]);
+  expect(result.current.attemptSent).toBe(true);
+});
+
 it('does not lock the choice when merge preflight exits without sending', async () => {
   const snapshot = {
     cartId: 'incoming-cart',

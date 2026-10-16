@@ -140,14 +140,29 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
         throw new NativeCartError('session_changed');
     };
     assertOwner();
-    const recover = options.client.recoverAccountLink;
-    if (!recover || !options.client.linkAccount)
+    const recoverClient = options.client.recoverAccountLink;
+    if (!recoverClient || !options.client.linkAccount)
       throw new NativeCartError('temporarily_unavailable');
-    let result = await recover(
-      request.operationId,
-      body.ownerSubject,
-      request.actor
-    );
+    // Recovery reads can also be definitively rejected (e.g. the grant
+    // was revoked while the app was dead); the same receipt cleanup as
+    // the link call applies, or every refresh repeats the dead read.
+    const recover = async () => {
+      try {
+        return await recoverClient(
+          request.operationId,
+          body.ownerSubject,
+          request.actor
+        );
+      } catch (error) {
+        assertOwner();
+        if (isDefinitiveRejection(error)) {
+          await assertActor(request.actor);
+          await receipts.clear(options.merchantId, request.operationId);
+        }
+        throw error;
+      }
+    };
+    let result = await recover();
     assertOwner();
     if (!result) {
       await assertActor(request.actor);
@@ -162,11 +177,7 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
         throw error;
       }
       assertOwner();
-      result = await recover(
-        request.operationId,
-        body.ownerSubject,
-        request.actor
-      );
+      result = await recover();
     }
     assertOwner();
     if (

@@ -87,6 +87,27 @@ describe('readCartJsonBody', () => {
     expect(await readCartJsonBody(oversized)).toEqual({ ok: false });
   });
 
+  it('caps the null-body text() fallback at the same byte limit', async () => {
+    // Runtimes without a body stream expose only text(); an oversized
+    // payload must fail there too, before JSON parsing.
+    const oversized = {
+      body: null,
+      headers: new Headers(),
+      text: async () => JSON.stringify({ blob: 'x'.repeat(70 * 1024) }),
+    } as unknown as Request;
+    expect(await readCartJsonBody(oversized)).toEqual({ ok: false });
+
+    const small = {
+      body: null,
+      headers: new Headers(),
+      text: async () => JSON.stringify({ merchantSlug: 'ogabassey' }),
+    } as unknown as Request;
+    expect(await readCartJsonBody(small)).toEqual({
+      body: { merchantSlug: 'ogabassey' },
+      ok: true,
+    });
+  });
+
   it('rejects malformed JSON without throwing', async () => {
     const request = new Request('https://usebaci.com/api/x', {
       body: '{"merchantSlug":',

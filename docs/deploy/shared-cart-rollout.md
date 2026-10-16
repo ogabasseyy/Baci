@@ -14,10 +14,14 @@ flags remain disabled by default, and no merchant is enrolled.
   (`apps/mobile-storefront/lib/cart/enrollment.ts`), so enrolling a
   merchant for the pilot must set and verify it there, not through the
   web gate helpers.
-- Bounded retention: `cleanup_commerce_carts()` deletes only expired
-  operations/creation requests/events and flips only checkout-free
-  expired carts (`checkout_session_id IS NULL`); active checkouts and
-  unexpired retry receipts are spared.
+- Bounded retention: `cleanup_commerce_carts()` (final body in
+  `20261015163000`, batching every statement to 1000 rows per call)
+  deletes expired operations/creation requests/events, handoffs
+  expired over a day, non-submitted checkout sessions expired over a
+  day, and submitted checkout sessions older than 90 days; it flips
+  active expired carts to `expired` only when no active, unexpired
+  checkout session exists for them (`NOT EXISTS` guard). Unexpired
+  retry receipts are spared.
 - Transactional outbox publisher with leases, bounded backoff and
   dead-letter handling (local unit/SQL evidence; live qualification
   pending).
@@ -106,3 +110,13 @@ logging never records request headers for these routes.
   nonsecret metrics (no cart credentials or customer data in labels)
   during the authorized release, and qualify the outbox publisher
   against the real worker scheduler.
+- Quota degradation is an explicit pre-activation gate: when the
+  Redis quota store is degraded, anonymous/enumeration operations
+  fail closed, but authenticated operations (commands, snapshot,
+  checkout_prepare) deliberately fall back to per-instance in-memory
+  counters, so one valid proof's effective budget multiplies by the
+  instance count for the outage duration. Before any merchant is
+  enrolled, put an operator alert on the throttled
+  `Cart quota store degraded` warning and confirm the multi-instance
+  multiplication is accepted for the pilot, or keep enrollment closed
+  until the store is highly available.

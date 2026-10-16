@@ -17,6 +17,7 @@ function deps(overrides: Partial<HandoffRedeemDeps> = {}): HandoffRedeemDeps {
     setResolutions: vi.fn(),
     setLoadError: vi.fn(),
     onAttemptConsumed: vi.fn(),
+    onMergeConflict: vi.fn(),
     refreshPreview: vi.fn(async () => null),
     ...overrides,
   };
@@ -52,6 +53,22 @@ it('keeps the attempt after an indeterminate server failure', async () => {
   await expect(postHandoffRedeem(redeemDeps, {})).resolves.toBe(false);
   expect(redeemDeps.onAttemptConsumed).not.toHaveBeenCalled();
   expect(redeemDeps.refreshPreview).not.toHaveBeenCalled();
+});
+
+it('releases the attempt and requires bootstrap after a proof rejection', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ code: 'expired_proof' }), {
+        status: 401,
+      })
+    )
+  );
+  const redeemDeps = deps();
+  await expect(postHandoffRedeem(redeemDeps, {})).resolves.toBe(false);
+  expect(redeemDeps.onAttemptConsumed).toHaveBeenCalledTimes(1);
+  expect(redeemDeps.bootstrapRequired.current).toBe(true);
+  expect(redeemDeps.refreshPreview).toHaveBeenCalledTimes(1);
 });
 
 it('consumes the attempt after a consumed-handoff reply', async () => {

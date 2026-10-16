@@ -4,14 +4,17 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { postHandoffRedeem } from './cart-handoff-redeem';
 import {
   type Choice,
+  clearAttemptBody,
   clearHandoffAttempt,
   fetchJson,
+  loadAttemptBody,
   loadOrCreateAttemptId,
   lockedAttemptChoice,
   type MergeConflictView,
   mergeResolutionList,
   type PreviewResponse,
   planHandoffMerge as planMerge,
+  recordAttemptBody,
   recordAttemptChoice,
   recordResolutionList,
   redactHandoffFragment,
@@ -29,6 +32,9 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   >({});
   const [redeeming, setRedeeming] = useState(false);
   const [lockedChoice, setLockedChoice] = useState<Choice | null>(null);
+  const [sentBody, setSentBody] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const bootstrapRequired = useRef(false);
@@ -43,6 +49,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     if (loadStarted.current) return;
     loadStarted.current = true;
     setLockedChoice(lockedAttemptChoice(handoffId));
+    setSentBody(loadAttemptBody(handoffId));
     void loadPreview();
   }, []);
 
@@ -128,6 +135,11 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   }
 
   function postRedeem(body: Record<string, unknown>): Promise<boolean> {
+    // Persist the exact body before sending: retries of an unresolved
+    // attempt resend it verbatim instead of replanning from the
+    // shopper's possibly edited selections.
+    recordAttemptBody(handoffId, body);
+    setSentBody(body);
     return postHandoffRedeem(
       {
         handoffId,
@@ -141,6 +153,11 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         onAttemptConsumed: () => {
           clearHandoffAttempt(handoffId);
           setLockedChoice(null);
+          setSentBody(null);
+        },
+        onMergeConflict: () => {
+          clearAttemptBody(handoffId);
+          setSentBody(null);
         },
         refreshPreview: loadPreview,
       },
@@ -201,6 +218,13 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
 
   async function continueMerge(): Promise<void> {
     if (!preview?.snapshot || !destCart) return;
+    const persistedBody = sentBody ?? loadAttemptBody(handoffId);
+    if (persistedBody) {
+      // An earlier merge attempt may already have committed; resend
+      // its exact body so the replayed receipt matches what was sent.
+      await postRedeem(persistedBody);
+      return;
+    }
     const resolutionList = mergeResolutionList(conflicts, resolutions);
     if (resolutionList.length !== conflicts.length) {
       setRedeemError('Choose which version to keep for every listed item.');
@@ -254,6 +278,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     setResolutions,
     redeeming,
     lockedChoice,
+    attemptSent: sentBody !== null,
     redeemError,
     destinationError,
     setDestinationError,

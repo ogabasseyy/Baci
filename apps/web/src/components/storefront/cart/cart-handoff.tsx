@@ -18,6 +18,7 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
     setResolutions,
     redeeming,
     lockedChoice,
+    attemptSent,
     redeemError,
     destinationError,
     setDestinationError,
@@ -143,6 +144,7 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
                   <input
                     type="radio"
                     name={key}
+                    disabled={attemptSent}
                     checked={resolutions[key] === 'incoming'}
                     onChange={() =>
                       setResolutions((current) => ({
@@ -157,6 +159,7 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
                   <input
                     type="radio"
                     name={key}
+                    disabled={attemptSent}
                     checked={resolutions[key] === 'existing'}
                     onChange={() =>
                       setResolutions((current) => ({

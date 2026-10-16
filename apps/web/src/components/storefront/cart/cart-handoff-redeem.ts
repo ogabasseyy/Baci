@@ -12,6 +12,8 @@ export interface HandoffRedeemDeps {
   setLoadError(value: string | null): void;
   /** Attempt and its locked choice are consumed: clear both stores. */
   onAttemptConsumed(): void;
+  /** Definitive merge conflict: release the sent body for fresh picks. */
+  onMergeConflict(): void;
   refreshPreview(): Promise<unknown>;
 }
 
@@ -67,8 +69,25 @@ export async function postHandoffRedeem(
       return true;
     }
     if (response.status === 409 && payload.code === 'merge_conflict') {
+      deps.onMergeConflict();
       deps.setConflicts(payload.conflicts ?? []);
       deps.setResolutions({});
+      return false;
+    }
+    if (
+      payload.code === 'missing_proof' ||
+      payload.code === 'expired_proof' ||
+      payload.code === 'invalid_proof'
+    ) {
+      // The destination session proof died before the redemption RPC
+      // ran, so nothing was sent under this attempt: release it, mark
+      // bootstrap as required, and reload so a fresh proof is minted.
+      deps.onAttemptConsumed();
+      deps.bootstrapRequired.current = true;
+      deps.setRedeemError(
+        'Your cart session expired. Review your cart and try again.'
+      );
+      await deps.refreshPreview();
       return false;
     }
     if (response.status === 409 && payload.code === 'version_conflict') {

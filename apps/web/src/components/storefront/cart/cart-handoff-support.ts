@@ -110,14 +110,76 @@ export function recordAttemptChoice(handoffId: string, choice: Choice): void {
   }
 }
 
+function attemptBodyStorageKey(handoffId: string): string {
+  return `${attemptStorageKey(handoffId)}:body`;
+}
+
+const attemptBodies = new Map<string, Record<string, unknown>>();
+
+/**
+ * The exact redemption body sent for an unresolved attempt. Retries
+ * resend it verbatim: replaying by attempt id applies the original
+ * receipt, so rebuilding lines/resolutions after an indeterminate
+ * response could contradict what the shopper now sees selected.
+ */
+export function recordAttemptBody(
+  handoffId: string,
+  body: Record<string, unknown>
+): void {
+  const key = attemptBodyStorageKey(handoffId);
+  attemptBodies.set(key, body);
+  try {
+    window.localStorage.setItem(key, JSON.stringify(body));
+  } catch {
+    /* Use the tab cache. */
+  }
+}
+
+/**
+ * Release only the persisted body (a definitive merge_conflict asks
+ * for fresh picks); the attempt id and locked choice stay so the
+ * retry keeps its identity.
+ */
+export function clearAttemptBody(handoffId: string): void {
+  attemptBodies.delete(attemptBodyStorageKey(handoffId));
+  try {
+    window.localStorage.removeItem(attemptBodyStorageKey(handoffId));
+  } catch {
+    /* Storage may be disabled. */
+  }
+}
+
+export function loadAttemptBody(
+  handoffId: string
+): Record<string, unknown> | null {
+  const key = attemptBodyStorageKey(handoffId);
+  const cached = attemptBodies.get(key);
+  if (cached) return cached;
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (!stored) return null;
+    const parsed: unknown = JSON.parse(stored);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const body = parsed as Record<string, unknown>;
+      attemptBodies.set(key, body);
+      return body;
+    }
+  } catch {
+    /* Storage is optional; the tab cache still holds the body. */
+  }
+  return null;
+}
+
 /** Redemption already committed; optional browser cleanup cannot undo success. */
 export function clearHandoffAttempt(handoffId: string): void {
   const key = attemptStorageKey(handoffId);
   attemptIds.delete(key);
   attemptChoices.delete(attemptChoiceStorageKey(handoffId));
+  attemptBodies.delete(attemptBodyStorageKey(handoffId));
   try {
     window.localStorage.removeItem(key);
     window.localStorage.removeItem(attemptChoiceStorageKey(handoffId));
+    window.localStorage.removeItem(attemptBodyStorageKey(handoffId));
   } catch {
     /* Storage may be disabled. */
   }

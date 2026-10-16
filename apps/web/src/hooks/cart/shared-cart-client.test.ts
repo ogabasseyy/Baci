@@ -132,6 +132,30 @@ describe('shared-cart-client bootstrap and create', () => {
     });
   });
 
+  it('coalesces concurrent bootstraps for the same merchant', async () => {
+    let release: (response: Response) => void = () => {};
+    vi.mocked(fetchWithCsrf).mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          release = resolve;
+        })
+    );
+    const first = bootstrapSharedCart('ogabassey');
+    const second = bootstrapSharedCart('ogabassey');
+    expect(fetchWithCsrf).toHaveBeenCalledTimes(1);
+    release(jsonResponse({ expiresAt: 'x', merchant: {} }, 201));
+    await expect(first).resolves.toEqual({ ok: true });
+    await expect(second).resolves.toEqual({ ok: true });
+    // After settlement the next bootstrap is a fresh request.
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse({ expiresAt: 'x', merchant: {} }, 201)
+    );
+    await expect(bootstrapSharedCart('ogabassey')).resolves.toEqual({
+      ok: true,
+    });
+    expect(fetchWithCsrf).toHaveBeenCalledTimes(2);
+  });
+
   it('marks quota exhaustion retryable and validation fatal', async () => {
     vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
       jsonResponse({ code: 'quota_exceeded' }, 429)

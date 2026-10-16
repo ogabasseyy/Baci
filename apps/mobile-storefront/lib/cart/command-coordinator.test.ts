@@ -432,6 +432,27 @@ it.each([
   ).rejects.toThrow();
   expect(s.receipts.clear).toHaveBeenCalledWith(merchantId, 'link-definitive');
 });
+it('releases the account receipt when recovery is definitively rejected', async () => {
+  const s = setup();
+  const ownerSubject = '44444444-4444-4444-8444-444444444444';
+  const linkAccount = jest.fn();
+  const recoverAccountLink = jest
+    .fn()
+    .mockRejectedValue(new NativeCartError('unauthorized'));
+  const coordinator = createCartCommandCoordinator({
+    ...s.options,
+    getOwnerSubject: () => ownerSubject,
+    client: { ...s.client, linkAccount, recoverAccountLink },
+  });
+  await expect(
+    coordinator.linkAccount({
+      operationId: 'link-recovery',
+      choice: 'keep_current',
+    })
+  ).rejects.toThrow();
+  expect(s.receipts.clear).toHaveBeenCalledWith(merchantId, 'link-recovery');
+  expect(linkAccount).not.toHaveBeenCalled();
+});
 it('commits a keep_existing handoff with no destination cart without a snapshot', async () => {
   const s = setup();
   const redeem = jest

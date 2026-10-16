@@ -49,6 +49,21 @@ type ProbeRefund = {
 };
 
 /**
+ * Attach an abort signal to a query builder when one is given.
+ * postgrest cancels the in-flight request on abort, so a probe that
+ * loses its deadline race stops consuming Postgres instead of
+ * running orphaned to completion. Returns the builder for chaining.
+ */
+function abortable<T>(query: T, signal?: AbortSignal): T {
+  if (signal) {
+    (
+      query as unknown as { abortSignal: (signal: AbortSignal) => unknown }
+    ).abortSignal(signal);
+  }
+  return query;
+}
+
+/**
  * Whether any cancelled order has a refund step with a Paystack leg
  * that can still reach provider preflight. The cron route caps the
  * reconcile phase when this is true so the 76s preflight budget
@@ -70,26 +85,31 @@ type ProbeRefund = {
  * the same failure can defer the refund on every invocation.
  */
 export async function isRefundVerificationPending(
-  supabase: ProbeClient
+  supabase: ProbeClient,
+  options?: { signal?: AbortSignal }
 ): Promise<boolean> {
-  const failed = await supabase
-    .from('order_cancellation_side_effects')
-    .select('order_id')
-    .eq('step', 'refund')
-    .eq('status', 'failed')
-    .lt('attempts', CANCELLATION_DRAIN_MAX_ATTEMPTS)
-    .order('claimed_at', { ascending: true })
-    .limit(CANCELLATION_DRAIN_FETCH_LIMIT);
+  const failed = await abortable(
+    supabase
+      .from('order_cancellation_side_effects')
+      .select('order_id')
+      .eq('step', 'refund')
+      .eq('status', 'failed')
+      .lt('attempts', CANCELLATION_DRAIN_MAX_ATTEMPTS)
+      .order('claimed_at', { ascending: true }),
+    options?.signal
+  ).limit(CANCELLATION_DRAIN_FETCH_LIMIT);
   if (failed.error || !failed.data) {
     return true;
   }
-  const deferred = await supabase
-    .from('order_cancellation_side_effects')
-    .select('order_id')
-    .eq('step', 'refund')
-    .eq('status', 'deferred')
-    .order('claimed_at', { ascending: true })
-    .limit(CANCELLATION_DRAIN_FETCH_LIMIT);
+  const deferred = await abortable(
+    supabase
+      .from('order_cancellation_side_effects')
+      .select('order_id')
+      .eq('step', 'refund')
+      .eq('status', 'deferred')
+      .order('claimed_at', { ascending: true }),
+    options?.signal
+  ).limit(CANCELLATION_DRAIN_FETCH_LIMIT);
   if (deferred.error || !deferred.data) {
     return true;
   }
@@ -112,15 +132,18 @@ export async function isRefundVerificationPending(
   const legs: ProbeLeg[] = [];
   let cursor: string | null = null;
   for (let pages = 0; ; pages += 1) {
-    const page = supabase
-      .from('transactions')
-      .select('id, amount, currency, gateway, order_id')
-      .in('order_id', orderIds)
-      .eq('transaction_type', 'payment')
-      .eq('status', 'completed')
-      .gt('amount', 0)
-      .ilike('gateway', '%paystack%')
-      .order('id', { ascending: true });
+    const page = abortable(
+      supabase
+        .from('transactions')
+        .select('id, amount, currency, gateway, order_id')
+        .in('order_id', orderIds)
+        .eq('transaction_type', 'payment')
+        .eq('status', 'completed')
+        .gt('amount', 0)
+        .ilike('gateway', '%paystack%')
+        .order('id', { ascending: true }),
+      options?.signal
+    );
     const { data, error } = await (cursor === null
       ? page.limit(PROBE_LEG_LIMIT)
       : page.gt('id', cursor).limit(PROBE_LEG_LIMIT));
@@ -146,14 +169,16 @@ export async function isRefundVerificationPending(
   if (paystackLegs.length === 0) {
     return false;
   }
-  const { data: refunds, error: refundsError } = await supabase
-    .from('transactions')
-    .select('amount, currency, metadata, order_id')
-    .in('order_id', orderIds)
-    .eq('transaction_type', 'refund')
-    .in('status', ['completed', 'refunded'])
-    .gt('amount', 0)
-    .limit(PROBE_REFUND_LIMIT);
+  const { data: refunds, error: refundsError } = await abortable(
+    supabase
+      .from('transactions')
+      .select('amount, currency, metadata, order_id')
+      .in('order_id', orderIds)
+      .eq('transaction_type', 'refund')
+      .in('status', ['completed', 'refunded'])
+      .gt('amount', 0),
+    options?.signal
+  ).limit(PROBE_REFUND_LIMIT);
   if (refundsError || !refunds) {
     return true;
   }
@@ -165,9 +190,10 @@ export async function isRefundVerificationPending(
 /**
  * Probe with an overall deadline: resolves the probe result, or
  * true when the deadline passes first (expired budget fails closed
- * like a read error). The slow probe's reads are abandoned, not
- * awaited, so a degraded probe degrades to the capped phase
- * instead of consuming the invocation.
+ * like a read error). The losing probe is aborted, not merely
+ * abandoned, so a degraded probe degrades to the capped phase
+ * instead of consuming the invocation and leaving orphaned reads
+ * running against Postgres.
  */
 export async function isRefundVerificationPendingBefore(
   supabase: ProbeClient,
@@ -177,12 +203,18 @@ export async function isRefundVerificationPendingBefore(
   if (remainingMs <= 0) {
     return true;
   }
+  const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      isRefundVerificationPending(supabase).catch(() => true),
+      isRefundVerificationPending(supabase, {
+        signal: controller.signal,
+      }).catch(() => true),
       new Promise<true>((resolve) => {
-        timer = setTimeout(() => resolve(true), remainingMs);
+        timer = setTimeout(() => {
+          controller.abort();
+          resolve(true);
+        }, remainingMs);
       }),
     ]);
   } finally {

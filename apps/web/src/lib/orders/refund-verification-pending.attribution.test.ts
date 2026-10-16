@@ -3,7 +3,16 @@ import { isRefundVerificationPending } from './refund-verification-pending';
 
 function chain(result: { data: unknown; error: Error | null }) {
   const query: Record<string, ReturnType<typeof vi.fn>> = {};
-  for (const method of ['select', 'eq', 'lt', 'in', 'gt', 'ilike', 'order']) {
+  for (const method of [
+    'select',
+    'eq',
+    'lt',
+    'in',
+    'gt',
+    'ilike',
+    'order',
+    'abortSignal',
+  ]) {
     query[method] = vi.fn().mockReturnValue(query);
   }
   query.limit = vi.fn().mockResolvedValue(result);

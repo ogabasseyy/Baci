@@ -10,7 +10,16 @@ import {
 
 function chain(result: { data: unknown; error: Error | null }) {
   const query: Record<string, ReturnType<typeof vi.fn>> = {};
-  for (const method of ['select', 'eq', 'lt', 'in', 'gt', 'ilike', 'order']) {
+  for (const method of [
+    'select',
+    'eq',
+    'lt',
+    'in',
+    'gt',
+    'ilike',
+    'order',
+    'abortSignal',
+  ]) {
     query[method] = vi.fn().mockReturnValue(query);
   }
   query.limit = vi.fn().mockResolvedValue(result);
@@ -269,6 +278,7 @@ describe('isRefundVerificationPendingBefore', () => {
   it('fails closed at the deadline when reads hang instead of erroring', async () => {
     vi.useFakeTimers();
     const hanging = () => new Promise<never>(() => {});
+    const abortSignals: AbortSignal[] = [];
     const from = vi.fn().mockImplementation(() => {
       const query: Record<string, unknown> = {};
       for (const method of [
@@ -284,6 +294,10 @@ describe('isRefundVerificationPendingBefore', () => {
           .fn()
           .mockReturnValue(query);
       }
+      query.abortSignal = vi.fn().mockImplementation((signal: AbortSignal) => {
+        abortSignals.push(signal);
+        return query;
+      });
       query.limit = vi.fn().mockImplementation(hanging);
       return query;
     });
@@ -297,6 +311,13 @@ describe('isRefundVerificationPendingBefore', () => {
     // Fail closed (capped): the slow probe degrades the reconcile
     // phase instead of consuming the invocation.
     await expect(pending).resolves.toBe(true);
+    // The losing probe is aborted, not merely abandoned: every
+    // issued query carried the same signal, and the deadline
+    // aborted it so postgrest cancels the orphaned reads.
+    expect(abortSignals.length).toBeGreaterThan(0);
+    for (const signal of abortSignals) {
+      expect(signal.aborted).toBe(true);
+    }
   });
 
   it('passes through a fast probe result before the deadline', async () => {

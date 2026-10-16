@@ -6,6 +6,7 @@ quotes, or a quoted spelling silently disables the guard. Startup
 environments and custom shells preload or replace execution.
 """
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
@@ -253,6 +254,25 @@ class ContractExecTests(unittest.TestCase):
         failures = check.ci_failures(called)
         self.assertTrue(failures)
         self.assertIn("reusable workflow", " ".join(failures))
+
+    def test_blank_line_does_not_end_scalar_scrub(self):
+        # A blank line never ends a YAML block scalar: ending the scrub
+        # there shows the checker structure GitHub reads as content.
+        ci_checks = sys.modules["capability_gate_contract_ci_checks"]
+        lines = [
+            "        name: |",
+            "          - name: Test capability register binding",
+            "",
+            "          uses: ./.github/actions/capability-gate",
+        ]
+        self.assertEqual(ci_checks._without_block_scalars(lines)[1:], ["", "", ""])
+        # End to end, the blank-line decoy fails exactly like the plain one.
+        blank = CI.replace(
+            "      - name: Test capability register binding\n        uses: ./.github/actions/capability-gate\n",
+            "      - uses: ./.github/workflows/attacker.yml\n        name: |\n          - name: Test capability register binding\n\n          uses: ./.github/actions/capability-gate\n",
+            1,
+        )
+        self.assertEqual(check.ci_failures(blank), ["ci.yml must invoke the capability gate exactly once"])
 
     def test_escaped_branch_pattern_fails(self):
         # `"!m\\x61in"` decodes to `!main`: the later exclusion empties the

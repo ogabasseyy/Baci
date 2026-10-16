@@ -112,13 +112,14 @@ def _without_block_scalars(lines):
     scalar body while the job never invokes the gate: structure scans must
     not match inside scalar bodies. Literal (`|`) and folded (`>`) headers
     (with chomping/indent indicators) open a scalar; content is every
-    following non-blank line indented past the header.
+    following line indented past the header, blanks included.
     """
     scrubbed = list(lines)
     scalar_indent = None
     for i, line in enumerate(scrubbed):
         if scalar_indent is not None:
-            if line.strip() and len(line) - len(line.lstrip()) > scalar_indent:
+            if not line.strip() or len(line) - len(line.lstrip()) > scalar_indent:
+                # Blanks are body too; ending the scrub here diverges from GitHub.
                 scrubbed[i] = ""
                 continue
             scalar_indent = None

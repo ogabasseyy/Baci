@@ -268,6 +268,24 @@ describe('submitCartBoundOrder', () => {
     });
   });
 
+  it('maps permission-denied to a fixed temporarily_unavailable', async () => {
+    const client = clientReturning(null, {
+      code: '42501',
+      message: 'permission denied for function commerce_cart_bind_order',
+    });
+
+    const result = await submitCartBoundOrder(
+      { client: client as never },
+      { args: ARGS, generation: 1, sessionId: SESSION_ID, variant: 'base' }
+    );
+
+    expect(result).toEqual({
+      code: 'temporarily_unavailable',
+      message: 'Order binding request failed',
+      ok: false,
+    });
+  });
+
   it('maps transport failures to temporarily_unavailable', async () => {
     const client = clientReturning(null, {
       code: 'XX000',

@@ -42,9 +42,11 @@ export async function rpcHandoffMerchantId(
 ): Promise<string | null> {
   const response = await client.rpc('commerce_cart_handoff_merchant', {
     p_handoff_id: handoffId,
-    // The RPC hashes the raw pairing token internally; the stored
-    // hash is never itself a credential.
-    p_token_hash: token,
+    // Preview RPCs take the raw pairing token as p_token and hash it
+    // internally; the stored hash is never itself a credential. (The
+    // redeem family is the opposite convention: p_token_hash there is
+    // a precomputed hash — see handoff-redeem.ts.)
+    p_token: token,
   });
   if (response.error) {
     throw new CartRepositoryError(
@@ -77,7 +79,7 @@ export async function rpcPreviewHandoff(
 ): Promise<PreviewHandoffResult> {
   const response = await client.rpc('commerce_cart_preview_handoff', {
     p_handoff_id: handoffId,
-    p_token_hash: token,
+    p_token: token,
   });
   if (response.error) {
     throw new CartRepositoryError(

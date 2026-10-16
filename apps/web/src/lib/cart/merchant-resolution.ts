@@ -227,12 +227,12 @@ export async function resolveCartMerchant(
     }
     return result;
   };
-  // Client hints may select a tenant only on the native API hosts
-  // (or non-production dev hosts); on browsable shared hosts the
-  // host itself must identify the merchant — with one designed
-  // exception: path-routed storefronts (usebaci.com/<slug>) mount the
-  // cart provider same-origin, so a same-host Referer whose first
-  // path segment is the hinted slug is the tenant signal there.
+  // Client hints may select a tenant only on native API hosts (or dev
+  // hosts); on browsable shared hosts the host itself must identify the
+  // merchant — except path-routed storefronts (usebaci.com/<slug>), where
+  // a same-host Referer whose first segment is the slug is the signal.
+  // That is unauthenticated tenant *selection*, not trust: forging it only
+  // names a published merchant openable at /<slug>; credentials stay bound.
   const hintCandidate =
     queryHint(request) ?? deps.bodyHint?.trim().toLowerCase() ?? null;
   let hintAllowed = isHintPlatformHost(host, rootDomain);

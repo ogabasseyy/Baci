@@ -151,6 +151,16 @@ export async function submitCartBoundOrder(
       }
       return { code: 'order_rejected', message, ok: false };
     }
+    // A permission-denied failure is a server authorization or grant
+    // misconfiguration, never shopper input: surface a fixed platform
+    // failure and keep the raw database detail server-side only.
+    if (response.error.code === '42501') {
+      return {
+        code: 'temporarily_unavailable',
+        message: 'Order binding request failed',
+        ok: false,
+      };
+    }
     // Inner order RPCs also raise domain SQLSTATEs (for example the
     // airport-quote trigger's 22023). Those are order rejections, not
     // platform failures: preserve the original code and message so the
@@ -159,7 +169,7 @@ export async function submitCartBoundOrder(
     if (
       typeof response.error.code === 'string' &&
       message &&
-      (response.error.code.startsWith('22') || response.error.code === '42501')
+      response.error.code.startsWith('22')
     ) {
       return {
         code: 'order_rejected',

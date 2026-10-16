@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
-import './normalize-vercel-sensitive-placeholders.test.mjs';
 
 const SCRIPT = fileURLToPath(
   new URL('./assert-vercel-pulled-sensitive-env.mjs', import.meta.url),

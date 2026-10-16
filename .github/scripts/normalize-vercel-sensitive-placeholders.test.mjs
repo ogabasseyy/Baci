@@ -53,3 +53,13 @@ test('normalizer-only edits select deployment and its required regression suite'
     assert.ok(deploy.web.includes(path), path);
   }
 });
+
+
+test('required deployment regression suite lists the normalizer directly without a transitive test import', () => {
+  const workflow = YAML.parse(readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'));
+  const commands = Object.values(workflow.jobs).flatMap(job => job.steps ?? []).map(step => step.run ?? '').join('\n');
+  const entry = '.github/scripts/normalize-vercel-sensitive-placeholders.test.mjs';
+  assert.equal(commands.split(entry).length - 1, 1);
+  const previousEntry = readFileSync(new URL('./assert-vercel-pulled-sensitive-env.test.mjs', import.meta.url), 'utf8');
+  assert.ok(!previousEntry.includes("import './normalize-vercel-sensitive-placeholders.test.mjs'"));
+});

@@ -68,6 +68,13 @@ describe('rate-limit route matching', () => {
     }
   });
 
+  it('keeps the authenticated legacy bridge off the shared storefront IP bucket', () => {
+    expect(getRateLimitConfig('/api/storefront/cart/legacy')).toMatchObject({
+      pattern: '/api/storefront/cart/legacy',
+      config: { maxRequests: 100_000, windowMs: 60_000 },
+    });
+  });
+
   it('isolates autocomplete and place details in the Places bucket', () => {
     expect(getRateLimitConfig('/api/places').config.maxRequests).toBe(60);
     expect(getRateLimitConfig('/api/places/autocomplete')).toMatchObject({

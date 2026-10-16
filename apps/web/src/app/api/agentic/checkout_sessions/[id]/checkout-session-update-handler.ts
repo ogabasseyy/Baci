@@ -12,9 +12,6 @@ import {
   buildCheckoutSessionUpdate,
   mapCheckoutSessionStatus,
 } from '@/lib/agentic/checkout-storage';
-import { reserveAgenticIdempotencyKey } from '@/lib/agentic/idempotency';
-import { getAgenticIdempotencyErrorStatus } from '@/lib/agentic/idempotency-response';
-import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency-response-storage';
 import {
   AGENTIC_CHECKOUT_DISABLED_ERROR,
   isAgenticMerchantCheckoutEnabled,
@@ -30,8 +27,12 @@ import { buildStoreUrl } from '@/lib/store-url';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { agenticCheckoutUpdateSchema } from '@/schemas/agentic-checkout';
 import { agenticCheckoutSessionRouteParamsSchema } from '@/schemas/agentic-checkout-session-route-params';
+import {
+  CHECKOUT_SESSION_UPDATE_IDEMPOTENCY_ROUTE,
+  reserveCheckoutSessionUpdateIdempotency,
+} from './checkout-session-update-idempotency';
 
-const UPDATE_IDEMPOTENCY_ROUTE = 'checkout_sessions.update';
+const UPDATE_IDEMPOTENCY_ROUTE = CHECKOUT_SESSION_UPDATE_IDEMPOTENCY_ROUTE;
 type SessionRouteProps = { params: Promise<{ id: string }> };
 type CheckoutSessionUpdateRouteOptions = {
   requestBodyAdapter?: (body: unknown) => unknown;
@@ -102,44 +103,21 @@ export async function handleAgenticCheckoutSessionUpdate(
       merchantId: merchant.id,
       merchantSlug: merchant.slug,
     });
-    const idempotency = await reserveAgenticIdempotencyKey({
+    const idempotency = await reserveCheckoutSessionUpdateIdempotency({
       agentId: mutation.agentId,
       apiVersion: mutation.apiVersion,
-      body: mutation.rawBody,
-      key: mutation.idempotencyKey,
+      idempotencyKey: mutation.idempotencyKey,
       merchantId: merchant.id,
       method: mutation.method,
       pathname: mutation.pathname,
-      route: UPDATE_IDEMPOTENCY_ROUTE,
+      rawBody: mutation.rawBody,
+      requestId: mutation.requestId,
       supabase,
     });
-    if (!idempotency.ok) {
-      return NextResponse.json(
-        { error: idempotency.error },
-        { status: getAgenticIdempotencyErrorStatus(idempotency.error) }
-      );
+    if (idempotency.kind !== 'reserved') {
+      return idempotency.response;
     }
-    if (idempotency.state === 'replay') {
-      return NextResponse.json(idempotency.response, {
-        status: idempotency.status,
-        headers: {
-          'idempotency-key': mutation.idempotencyKey,
-          'request-id': mutation.requestId,
-        },
-      });
-    }
-    respondWithIdempotency = (response: unknown, status: number) =>
-      buildStoredAgenticIdempotencyResponse({
-        agentId: mutation.agentId,
-        idempotencyKey: mutation.idempotencyKey,
-        merchantId: merchant.id,
-        requestId: mutation.requestId,
-        response,
-        route: UPDATE_IDEMPOTENCY_ROUTE,
-        status,
-        storageFailureResponse: { error: 'Internal Server Error' },
-        supabase,
-      });
+    respondWithIdempotency = idempotency.respond;
     if (!isAgenticMerchantCheckoutEnabled(merchant)) {
       logger.warn({
         message: AGENTIC_CHECKOUT_DISABLED_ERROR,

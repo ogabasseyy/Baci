@@ -137,6 +137,71 @@ it('resends the exact merge body on retry even if picks change', async () => {
   expect(result.current.attemptSent).toBe(true);
 });
 
+it('resends the persisted body for a top-level retry after remount', async () => {
+  const snapshot = {
+    cartId: 'incoming-cart',
+    currency: 'NGN',
+    estimatedTotals: false,
+    expiresAt: '2099-01-01T00:00:00Z',
+    lines: [],
+    merchantId: 'merchant-1',
+    state: 'active',
+    subtotalMinor: 0,
+    totalMinor: 0,
+    version: 1,
+  };
+  const preview = () =>
+    new Response(
+      JSON.stringify({
+        status: 'pending',
+        merchant: { id: 'merchant-1', slug: 'shop' },
+        snapshot,
+        expiresAt: '2099-01-01T00:00:00Z',
+      })
+    );
+  const destination = (version: number) =>
+    new Response(
+      JSON.stringify({
+        cart: { ...snapshot, cartId: 'dest-cart', version },
+      })
+    );
+  const bodies: Record<string, unknown>[] = [];
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(preview())
+    .mockResolvedValueOnce(destination(3))
+    .mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ code: 'temporarily_unavailable' }), {
+        status: 503,
+      });
+    });
+  vi.stubGlobal('fetch', fetchMock);
+  const first = renderHook(() =>
+    useCartHandoff({ token: 'valid', handoffId: 'public-remount' })
+  );
+  await waitFor(() => expect(first.result.current.destChecked).toBe(true));
+  await act(async () => {
+    await first.result.current.act('connect');
+  });
+  first.unmount();
+  // After remount the destination reports a newer version; the retry
+  // must still resend the original body under the same attempt.
+  fetchMock
+    .mockResolvedValueOnce(preview())
+    .mockResolvedValueOnce(destination(9));
+  const second = renderHook(() =>
+    useCartHandoff({ token: 'valid', handoffId: 'public-remount' })
+  );
+  await waitFor(() => expect(second.result.current.destChecked).toBe(true));
+  await act(async () => {
+    await second.result.current.act('connect');
+  });
+  expect(bodies.length).toBeGreaterThanOrEqual(2);
+  expect(bodies[bodies.length - 1]).toEqual(bodies[0]);
+  expect(bodies[0]?.expectedDestVersion).toBe(3);
+});
+
 it('does not lock the choice when merge preflight exits without sending', async () => {
   const snapshot = {
     cartId: 'incoming-cart',

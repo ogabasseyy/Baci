@@ -178,6 +178,15 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       );
       return;
     }
+    const persistedBody = sentBody ?? loadAttemptBody(handoffId);
+    if (persistedBody) {
+      // A previous attempt may already have committed; every retry —
+      // including top-level choices after a remount — resends its
+      // exact body rather than rebuilding from refreshed cart
+      // versions under the old attempt id.
+      await postRedeem(persistedBody);
+      return;
+    }
     const attemptId = loadOrCreateAttemptId(handoffId);
     const base = {
       attemptId,

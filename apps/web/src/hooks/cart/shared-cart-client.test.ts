@@ -140,7 +140,9 @@ describe('shared-cart-client bootstrap and create', () => {
           release = resolve;
         })
     );
-    const first = bootstrapSharedCart('ogabassey');
+    // The account panel bootstraps without a slug (host-resolved)
+    // while provisioning passes it explicitly; both must coalesce.
+    const first = bootstrapSharedCart();
     const second = bootstrapSharedCart('ogabassey');
     expect(fetchWithCsrf).toHaveBeenCalledTimes(1);
     release(jsonResponse({ expiresAt: 'x', merchant: {} }, 201));

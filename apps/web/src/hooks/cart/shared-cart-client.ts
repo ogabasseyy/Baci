@@ -134,30 +134,30 @@ export async function fetchSharedCartSnapshot(
  * sets the session cookie; the body proof is only needed by callers
  * that cannot rely on cookies.
  */
-const inFlightBootstraps = new Map<
-  string,
-  Promise<{ ok: true } | { ok: false; code: CartErrorCode; retryable: boolean }>
->();
+type BootstrapResult =
+  | { ok: true }
+  | { ok: false; code: CartErrorCode; retryable: boolean };
+
+let inFlightBootstrap: Promise<BootstrapResult> | null = null;
 
 /**
- * Bootstrap is single-flight per merchant: two concurrent bootstraps
- * can both leave without a live-session cookie, and whichever
- * Set-Cookie lands last wins — a cart-less bootstrap proof arriving
- * after provisioning would overwrite the proof bound to the
- * just-created cart and orphan it.
+ * Bootstrap is single-flight: two concurrent bootstraps can both
+ * leave without a live-session cookie, and whichever Set-Cookie lands
+ * last wins — a cart-less bootstrap proof arriving after provisioning
+ * would overwrite the proof bound to the just-created cart and orphan
+ * it. Callers do not all name the merchant the same way (the account
+ * panel omits the slug and lets the host resolve it), so the flight
+ * is global rather than keyed by the slug argument: one page serves
+ * one merchant.
  */
 export function bootstrapSharedCart(
   merchantSlug?: string
-): Promise<
-  { ok: true } | { ok: false; code: CartErrorCode; retryable: boolean }
-> {
-  const key = merchantSlug ?? '';
-  const inFlight = inFlightBootstraps.get(key);
-  if (inFlight) return inFlight;
+): Promise<BootstrapResult> {
+  if (inFlightBootstrap) return inFlightBootstrap;
   const pending = requestBootstrap(merchantSlug).finally(() => {
-    inFlightBootstraps.delete(key);
+    if (inFlightBootstrap === pending) inFlightBootstrap = null;
   });
-  inFlightBootstraps.set(key, pending);
+  inFlightBootstrap = pending;
   return pending;
 }
 

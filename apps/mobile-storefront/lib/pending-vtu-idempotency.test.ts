@@ -28,6 +28,15 @@ import * as vtuStore from './pending-vtu-idempotency-store';
 import { noteForgottenVtuScopes } from './pending-vtu-idempotency-store';
 
 describe('pending-vtu-idempotency', () => {
+  // Suite-level isolation (Muse R123 low): the MMKV mock buckets
+  // persist across tests in a file, so a test that forgets its
+  // manual clear would leak a retained key into the next test.
+  // The escape hatch clears both the in-memory registry and the
+  // persisted snapshot; per-test manual clears stay as documentation.
+  beforeEach(() => {
+    clearPendingVtuKeys();
+  });
+
   it('recalls a remembered key and forgets it on demand', () => {
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',

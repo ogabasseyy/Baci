@@ -155,15 +155,15 @@ export function projectHistoryTransaction({
     ) === true;
   const { refund_pending, refund_skipped, refunded_to_wallet } =
     projectHistoryRefundFields({
-    metadata: transactionMetadata as Record<string, unknown> | null,
-    row: {
-      amount: transaction.amount,
-      customer_id: transaction.customer_id,
-      id: transaction.id,
-      source: transaction.source,
-    },
-    status: transaction.status,
-  });
+      metadata: transactionMetadata as Record<string, unknown> | null,
+      row: {
+        amount: transaction.amount,
+        customer_id: transaction.customer_id,
+        id: transaction.id,
+        source: transaction.source,
+      },
+      status: transaction.status,
+    });
 
   return {
     ...publicTransaction,

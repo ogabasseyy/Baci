@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  getVtuProviderLabel,
-  readPaymentSplit,
-} from './vtu-payment-split';
+import { getVtuProviderLabel, readPaymentSplit } from './vtu-payment-split';
 
 describe('readPaymentSplit', () => {
   it('reads a well-formed wallet/card split', () => {

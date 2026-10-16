@@ -55,6 +55,11 @@ export interface RawMutationResult {
    * input for this value.
    */
   grantId: string | null;
+  /**
+   * Expiry of the grant named by grantId, when the RPC surfaces it.
+   * Proof issuance caps at this, never at the later cart expiry.
+   */
+  grantExpiresAt: string | null;
 }
 
 export interface MutateCartArgs {
@@ -241,6 +246,11 @@ export function parseRawMutationResult(data: unknown): RawMutationResult {
     grantId:
       typeof data.grantId === 'string' && UUID_PATTERN.test(data.grantId)
         ? data.grantId
+        : null,
+    grantExpiresAt:
+      typeof data.grantExpiresAt === 'string' &&
+      Number.isFinite(Date.parse(data.grantExpiresAt))
+        ? data.grantExpiresAt
         : null,
     ok: data.ok,
     replayed: data.replayed === true,

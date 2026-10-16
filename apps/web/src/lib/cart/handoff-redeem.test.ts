@@ -74,6 +74,7 @@ describe('redeemCartHandoff', () => {
       code: null,
       currentVersion: 3,
       grantId: GRANT_ID,
+      grantExpiresAt: '2026-10-20T04:00:00Z',
       ok: true,
       replayed: false,
       state: rawState(),
@@ -92,6 +93,7 @@ describe('redeemCartHandoff', () => {
     if (result.ok) {
       expect(result.choice).toBe('connect');
       expect(result.grantId).toBe(GRANT_ID);
+      expect(result.grantExpiresAt).toBe('2026-10-20T04:00:00Z');
       expect(result.cart?.version).toBe(3);
       expect(result.cart?.totalMinor).toBe(1500);
     }

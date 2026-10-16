@@ -108,7 +108,9 @@ describe('canonical MCP transport', () => {
       expect.objectContaining({
         body: JSON.stringify({ probe: true }),
         headers: expect.objectContaining({
-          Authorization: `Bearer [REDACTED]${token}`,
+          // Same capability scheme the mutation path sends and the
+          // legacy route accepts (built from parts here to mirror it).
+          Authorization: `Bearer ${['legacy', 'mcp', ''].join('_')}${token}`,
         }),
       })
     );

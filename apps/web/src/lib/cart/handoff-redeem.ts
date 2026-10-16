@@ -27,6 +27,8 @@ export type RedeemHandoffResult =
       /** Null when keep-existing runs without a destination cart. */
       cart: CartSnapshot | null;
       grantId: string | null;
+      /** Expiry of the selected grant, when the RPC surfaces it. */
+      grantExpiresAt: string | null;
       choice: HandoffChoice;
       replayed: boolean;
       warnings: { code: string; message: string }[];
@@ -128,6 +130,11 @@ export async function redeemCartHandoff(
       cart: null,
       choice: input.choice,
       grantId,
+      grantExpiresAt:
+        typeof data.grantExpiresAt === 'string' &&
+        Number.isFinite(Date.parse(data.grantExpiresAt))
+          ? data.grantExpiresAt
+          : null,
       ok: true,
       replayed: data.replayed === true,
       warnings: [],
@@ -140,6 +147,7 @@ export async function redeemCartHandoff(
       cart: priced ? priced.snapshot : null,
       choice: input.choice,
       grantId: parsed.grantId,
+      grantExpiresAt: parsed.grantExpiresAt,
       ok: true,
       replayed: parsed.replayed,
       warnings: priced ? priced.warnings : [],

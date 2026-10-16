@@ -279,6 +279,45 @@ describe('POST /api/storefront/cart/handoff/redeem', () => {
     }
   });
 
+  it('caps the replacement proof and cookie at the selected grant expiry', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-12T04:00:00Z'));
+    mocks.cartPayload = {
+      choice: 'connect',
+      code: null,
+      currentVersion: 3,
+      grantId: NEW_GRANT_ID,
+      // The selected grant expires two days before the cart does.
+      grantExpiresAt: '2026-10-17T04:00:00Z',
+      ok: true,
+      replayed: false,
+      state: rawState(),
+    };
+
+    const response = await postRedeem({
+      body: connectBody(),
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${destBootstrapProof()}`,
+      },
+    });
+    expect(response.status).toBe(200);
+    const cookie = response.headers.get('set-cookie') ?? '';
+    const proof = cookie.match(/baci-cart-[^=]+=([^;]+)/)?.[1];
+    const verified = verifyCartSessionProof(decodeURIComponent(proof ?? ''), {
+      environment: 'test',
+      secret: TEST_SECRET,
+    });
+    expect(verified.ok).toBe(true);
+    if (verified.ok) {
+      expect(Date.parse(verified.session.expiresAt)).toBeLessThanOrEqual(
+        Date.parse('2026-10-17T04:00:00Z')
+      );
+    }
+    const maxAge = Number(cookie.match(/Max-Age=(\d+)/)?.[1]);
+    expect(maxAge).toBeGreaterThan(0);
+    expect(maxAge).toBeLessThanOrEqual(5 * 24 * 3600);
+  });
+
   it('connects a fresh destination and issues its session proof', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-12T04:00:00Z'));

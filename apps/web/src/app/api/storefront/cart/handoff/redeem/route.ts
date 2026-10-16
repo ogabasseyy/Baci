@@ -167,14 +167,22 @@ export async function POST(request: NextRequest) {
             allowedOperations: CART_FULL_SESSION_OPERATIONS,
             cartId: redeemed.cart.cartId,
             grantId: redeemed.grantId,
-            grantExpiresAt: redeemed.cart.expiresAt,
+            // Cap at the selected grant's expiry, never the cart's:
+            // keep_existing reuses a grant that can expire first.
+            grantExpiresAt: redeemed.grantExpiresAt ?? redeemed.cart.expiresAt,
             merchantId: context.merchant.id,
             principalId: principal.principalId,
             scope: 'session',
           },
           { environment: getCartProofEnvironment() }
         );
-        maxAge = cartSessionCookieMaxAge(redeemed.cart.expiresAt);
+        maxAge = cartSessionCookieMaxAge(
+          redeemed.grantExpiresAt &&
+            Date.parse(redeemed.grantExpiresAt) <
+              Date.parse(redeemed.cart.expiresAt)
+            ? redeemed.grantExpiresAt
+            : redeemed.cart.expiresAt
+        );
       } else if (!redeemed.cart && !redeemed.grantId) {
         proof = issueCartSessionProof(
           {

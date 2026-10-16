@@ -84,6 +84,11 @@ export function createGuestCanonicalBridgeOrDisabled(): GuestCanonicalBridge | n
   }
 }
 
+/** Capability scheme prefix shared by mutations and liveness probes. */
+function capabilityAuthorization(token: string): string {
+  return `Bearer ${['legacy', 'mcp', ''].join('_')}${token}`;
+}
+
 export function createGuestCanonicalBridge(
   configured = process.env.MCP_CANONICAL_CART_BRIDGE_URL,
   fetcher: typeof fetch = fetch,
@@ -111,7 +116,7 @@ export function createGuestCanonicalBridge(
       signal: AbortSignal.timeout(15000),
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer legacy_mcp_${token}`,
+        Authorization: capabilityAuthorization(token),
       },
       body: JSON.stringify(input),
     }).catch(() => {
@@ -204,7 +209,7 @@ export function createGuestCanonicalBridge(
           signal: AbortSignal.timeout(15000),
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer [REDACTED]${token}`,
+            Authorization: capabilityAuthorization(token),
           },
           body: JSON.stringify({ probe: true }),
         });

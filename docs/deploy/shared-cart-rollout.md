@@ -30,6 +30,14 @@ flags remain disabled by default, and no merchant is enrolled.
   retention runs through the SECURITY DEFINER cleanup as the scheduler
   owner. That credential must stay worker-only — never provision it to
   web, native, or any shopper-facing surface.
+- Client identity for unauthenticated cart quotas: production runs on
+  Vercel, where the edge sets `x-real-ip` (and `NextRequest.ip`), so
+  `getTrustedClientIdentifier` buckets preview/create quotas per client.
+  Any future non-Vercel or self-hosted deployment must front the app
+  with a proxy that overwrites `x-real-ip` with the connection address;
+  without one, callers deliberately collapse into the single shared
+  `unknown` bucket (fail-closed) rather than trusting a spoofable
+  `x-forwarded-for`.
 - Terminal-cart retention: applying the migration chain schedules an
   hourly pg_cron job (`commerce-cart-terminal-purge`, where pg_cron
   exists) that deletes terminal carts (completed, expired, canceled)

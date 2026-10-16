@@ -48,7 +48,13 @@ export function subscribeCartPairing(listener: () => void): () => void {
 export function captureCartPairingLink(path: string, config: Config): string {
   let url: URL;
   try {
-    url = new URL(path, 'https://invalid.local');
+    // Expo's redirectSystemPath delivers a path, not a guaranteed
+    // absolute URL: resolve relative deliveries against the merchant
+    // origin (an allowlisted host below) instead of dropping them.
+    // Absolute URLs keep their own origin and are validated as-is.
+    url = path.startsWith('https://')
+      ? new URL(path)
+      : new URL(path, `https://${config.merchantDomain}`);
   } catch {
     return /handoff|hid=/i.test(path) ? '/cart' : path;
   }
@@ -75,7 +81,6 @@ export function captureCartPairingLink(path: string, config: Config): string {
     if (
       !config.merchantId ||
       !config.merchantSlug ||
-      !path.startsWith('https://') ||
       url.protocol !== 'https:' ||
       url.username ||
       url.password ||

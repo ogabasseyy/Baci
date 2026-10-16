@@ -2,8 +2,11 @@ import { isPrivateLanHost, requestHost } from './merchant-resolution';
 
 function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
   return (
-    host === rootDomain ||
-    host === `www.${rootDomain}` ||
+    // Only the programmatic api.* surfaces (plus dev loopback/LAN)
+    // receive the script-readable body proof. The browsable root and
+    // www hosts serve web pages, so they stay on the httpOnly-cookie
+    // path like merchant subdomains: a bootstrap proof is a replayable
+    // Bearer [REDACTED] that upgrades into a full session proof.
     host === `api.${rootDomain}` ||
     host === `api-staging.${rootDomain}` ||
     host === 'localhost' ||

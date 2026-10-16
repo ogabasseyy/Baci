@@ -6,6 +6,13 @@ import {
   incrementMemoryCounter,
   MEMORY_COUNTER_MAX_ENTRIES,
 } from './request-context';
+import { incrementWindowCounter } from './request-quota';
+
+const mockGetRedis = vi.hoisted(() => vi.fn(() => null as unknown));
+
+vi.mock('@/lib/redis', () => ({
+  getRedis: mockGetRedis,
+}));
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -226,5 +233,19 @@ describe('quota degradation warning', () => {
       now.mockRestore();
       __resetCartQuotaStoreForTesting();
     }
+  });
+
+  it('reports the Redis window expiry from PTTL, not now + window', async () => {
+    mockGetRedis.mockReturnValue({
+      createScript: () => ({ eval: async () => 3 }),
+      pttl: async () => 5_000,
+    });
+    const before = Date.now();
+    const result = await incrementWindowCounter('quota:test', 3_600_000);
+    const after = Date.now();
+    expect(result).toMatchObject({ count: 3, degraded: false });
+    expect(result.resetTime).toBeGreaterThanOrEqual(before + 5_000);
+    expect(result.resetTime).toBeLessThanOrEqual(after + 5_000);
+    mockGetRedis.mockReturnValue(null);
   });
 });

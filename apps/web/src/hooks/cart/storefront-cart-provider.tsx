@@ -16,7 +16,6 @@ import {
   saveMerchantSlugToStorage,
 } from './cart-storage';
 import type { AddToCartOptions, CartContextType, CartItem } from './cart-types';
-import { createDelegatedCartActions } from './delegated-cart-actions';
 import { findMergingCartLineIndex } from './find-merging-cart-line';
 import { gateAddToCart } from './gate-add-to-cart';
 import { getMerchantCartState } from './merchant-cart-storage';
@@ -25,8 +24,7 @@ import {
   createCartHash,
   validateStorefrontCart,
 } from './storefront-cart-validation';
-import { useCartDelegationTransitions } from './use-cart-delegation-transitions';
-import { useSharedCartDelegation } from './use-shared-cart-delegation';
+import { useStorefrontCartDelegation } from './use-storefront-cart-delegation';
 
 interface StorefrontCartProviderProps {
   children: ReactNode;
@@ -83,28 +81,21 @@ export function StorefrontCartProvider({
   const [showUpsell, setShowUpsell] = useState(false);
   const upsellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidatedCartHashRef = useRef('');
-  const { bumpSessionGeneration, delegated, shared } = useSharedCartDelegation({
-    sharedCartEnabled,
-    sharedCartRealtimeEnabled,
-    merchantId,
-    merchantSlug,
-    initialMerchantSlug,
-  });
-
-  useCartDelegationTransitions({
-    delegated,
-    merchantSlug,
-    initialMerchantSlug,
-    merchantId,
-    sharedCartEnabled,
-    isHydrated,
-    shared,
-    bumpSessionGeneration,
-    setCart,
-    setMerchantSlugState,
-    setCartWideNegotiationActiveState,
-    setIsHydrated,
-  });
+  const { bumpSessionGeneration, delegated, delegatedActions, shared } =
+    useStorefrontCartDelegation({
+      sharedCartEnabled,
+      sharedCartRealtimeEnabled,
+      merchantId,
+      merchantSlug,
+      initialMerchantSlug,
+      isHydrated,
+      setCart,
+      setMerchantSlugState,
+      setCartWideNegotiationActiveState,
+      setIsHydrated,
+      cartWideNegotiationActiveRef,
+      setCartWideNegotiationActive,
+    });
 
   // Keep the handler-facing refs aligned with committed state. Handlers read
   // the refs to avoid stale closures; syncing here (not during render) keeps
@@ -335,12 +326,6 @@ export function StorefrontCartProvider({
       }
     };
   }, []);
-
-  const delegatedActions = createDelegatedCartActions(
-    shared,
-    cartWideNegotiationActiveRef,
-    setCartWideNegotiationActive
-  );
 
   const noteAddedProduct = (added: Product) => {
     if (enableSmartCartPro) {

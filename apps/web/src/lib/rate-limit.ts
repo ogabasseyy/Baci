@@ -186,28 +186,49 @@ const LEGACY_TOKEN_PATTERN = new RegExp(
   `^Bearer ${['legacy', 'mcp'].join('_')}_([a-f0-9]{64})$`
 );
 
-export function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
+const LEGACY_BRIDGE_IP_CEILING: RateLimitConfig = {
+  maxRequests: 3_000,
+  windowMs: 60_000,
+};
+
+export async function checkRateLimit(
+  request: NextRequest
+): Promise<RateLimitResult> {
   const pathname = request.nextUrl.pathname;
   const { config, pattern } = getRateLimitConfig(pathname);
 
   // The canonical legacy bridge is server-to-server behind one broker
-  // egress IP: keying by IP would couple every merchant/token to that
-  // address. Key by a hash of the well-formed legacy capability
+  // egress IP: keying by IP alone would couple every merchant/token to
+  // that address. Key by a hash of the well-formed legacy capability
   // instead (never the raw token), so each token gets its own
   // pre-authentication bucket; malformed callers fall back to the
-  // client IP bucket. The route still enforces its per merchant +
-  // token quota after merchant resolution.
-  let identifier = getClientIdentifier(request);
+  // client IP bucket. In parallel, a generous per-IP aggregate ceiling
+  // bounds forged-token rotation from one address without coupling
+  // legitimate broker traffic at the route's per merchant + token
+  // quota, which still applies after merchant resolution.
+  const clientIdentifier = getClientIdentifier(request);
   if (pathname === LEGACY_BRIDGE_PATH) {
     const token = request.headers
       .get('authorization')
       ?.match(LEGACY_TOKEN_PATTERN)?.[1];
     if (token) {
-      identifier = `legacy-token:${createHash('sha256').update(token).digest('hex')}`;
+      const [tokenResult, ipResult] = await Promise.all([
+        applyRateLimit(
+          `legacy-token:${createHash('sha256').update(token).digest('hex')}`,
+          pattern,
+          config
+        ),
+        applyRateLimit(
+          clientIdentifier,
+          `${pattern}:ip-ceiling`,
+          LEGACY_BRIDGE_IP_CEILING
+        ),
+      ]);
+      return ipResult.allowed ? tokenResult : ipResult;
     }
   }
 
-  return applyRateLimit(identifier, pattern, config);
+  return applyRateLimit(clientIdentifier, pattern, config);
 }
 
 async function applyRateLimit(

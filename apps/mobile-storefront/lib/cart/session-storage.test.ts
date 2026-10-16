@@ -24,6 +24,18 @@ it('keeps merchants in separate secure namespaces without using customer Auth ke
   expect(keys[1]).toContain(b);
   expect(keys.every((key) => key.startsWith('baci.cart.session.'))).toBe(true);
 });
+it('treats a corrupted stored record as absent and overwrites it on set', async () => {
+  secure.getItemAsync.mockResolvedValue('{"proof":123,schema-drift');
+  await expect(cartSessionStorage.get(a)).resolves.toBeNull();
+  await cartSessionStorage.set(a, 'cp1.fresh.signature');
+  expect(secure.setItemAsync).toHaveBeenCalledWith(
+    expect.stringContaining(a),
+    expect.stringContaining('cp1.fresh.signature')
+  );
+  secure.getItemAsync.mockResolvedValue('{"unexpected":"shape"}');
+  await expect(cartSessionStorage.get(a)).resolves.toBeNull();
+});
+
 it('does not interpret secure storage outages as a missing cart', async () => {
   secure.getItemAsync.mockRejectedValue(new Error('private native detail'));
   await expect(cartSessionStorage.get(a)).rejects.toThrow(

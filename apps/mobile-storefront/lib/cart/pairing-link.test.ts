@@ -31,6 +31,16 @@ it('captures only trusted HTTPS handoffs and removes pairing fragments before ro
   ).toBe('/cart');
   expect(peekCartPairingLink()).not.toBeNull();
 });
+it('captures the relative path shape redirectSystemPath delivers', () => {
+  const path = `/cart#handoff=${token()}&hid=${hid}`;
+  expect(captureCartPairingLink(path, config)).toBe('/cart');
+  expect(peekCartPairingLink()).toMatchObject({
+    handoffId: hid,
+    token: token(),
+    destination: 'native',
+  });
+});
+
 it('fails closed with an explicitly empty platform root', () => {
   const staging = { ...config, platformRootDomain: '' };
   expect(

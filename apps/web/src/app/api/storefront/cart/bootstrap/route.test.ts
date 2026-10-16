@@ -189,12 +189,25 @@ describe('POST /api/storefront/cart/bootstrap', () => {
     const response = await postBootstrap({
       headers: { authorization: 'Bearer native-device-token' },
       noCsrf: true,
-      url: 'https://usebaci.com/api/storefront/cart/bootstrap?merchantSlug=ogabassey',
+      url: 'https://api.usebaci.com/api/storefront/cart/bootstrap?merchantSlug=ogabassey',
     });
 
     expect(response.status).toBe(201);
     const payload = await response.json();
     expect(payload.proof.startsWith('cp1.')).toBe(true);
+  });
+
+  it('keeps the body proof off the browsable root host', async () => {
+    const response = await postBootstrap({
+      headers: { authorization: 'Bearer [REDACTED]' },
+      noCsrf: true,
+      url: 'https://usebaci.com/api/storefront/cart/bootstrap?merchantSlug=ogabassey',
+    });
+
+    expect(response.status).toBe(201);
+    const payload = await response.json();
+    expect(payload.proof).toBeUndefined();
+    expect(response.headers.get('set-cookie')).toContain('cp1.');
   });
 
   it('rejects browser requests without a CSRF token', async () => {

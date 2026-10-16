@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
 import { useCart } from '@/hooks/cart';
 import { clearCartStorage } from '@/hooks/cart/cart-persistence';
-import { fetchSharedCartSnapshot } from '@/hooks/cart/shared-cart-client';
+import {
+  bootstrapSharedCart,
+  fetchSharedCartSnapshot,
+} from '@/hooks/cart/shared-cart-client';
 import { useCartAccountLink } from '@/hooks/cart/use-cart-account-link';
 import { planCartMerge } from '@/lib/cart/merge';
 
@@ -57,7 +60,16 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Stable loader reads scope from refs; merchant and shopper changes must trigger a fresh saved-cart observation.
   useEffect(() => {
-    if (authenticated && cart.sharedCartAccountsEnabled) void loadSavedCart();
+    if (!authenticated || !cart.sharedCartAccountsEnabled) return;
+    void (async () => {
+      // A fresh browser may hold no cart proof at all: establish the
+      // bootstrap authority the account read/link requires before
+      // loading the saved cart.
+      if (!sharedRef) {
+        await bootstrapSharedCart(props.merchantSlug ?? undefined);
+      }
+      await loadSavedCart();
+    })();
   }, [
     authenticated,
     auth?.user?.id,
@@ -65,14 +77,16 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
     cart.sharedCartAccountsEnabled,
     loadSavedCart,
     scopeKey,
+    sharedRef?.cartId,
   ]);
 
-  if (!authenticated || !cart.sharedCartAccountsEnabled || !sharedRef)
-    return null;
+  if (!authenticated || !cart.sharedCartAccountsEnabled) return null;
   const choicesBlocked =
-    !savedCartLoaded || pending || cart.syncStatus !== 'synced';
+    !savedCartLoaded ||
+    pending ||
+    (sharedRef ? cart.syncStatus !== 'synced' : false);
   const saved = savedCart;
-  const showChoices = Boolean(saved && saved.cartId !== sharedRef.cartId);
+  const showChoices = Boolean(saved && saved.cartId !== sharedRef?.cartId);
   const plan =
     showChoices && saved && current
       ? planCartMerge(current, saved, resolutions)
@@ -175,35 +189,37 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
             >
               Use saved cart
             </Button>
-            {plan?.ok ? (
-              <Button
-                type="button"
-                disabled={choicesBlocked}
-                onClick={() =>
-                  void link('merge', {
-                    lines: plan.lines,
-                    resolutions,
-                    expectedSavedVersion: saved.version,
-                    expectedCurrentVersion:
-                      current?.version ?? sharedRef.version,
-                  })
-                }
-              >
-                Combine both carts
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={choicesBlocked}
-                onClick={() => void prepareMerge()}
-              >
-                Review combining both carts
-              </Button>
-            )}
+            {sharedRef ? (
+              plan?.ok ? (
+                <Button
+                  type="button"
+                  disabled={choicesBlocked}
+                  onClick={() =>
+                    void link('merge', {
+                      lines: plan.lines,
+                      resolutions,
+                      expectedSavedVersion: saved.version,
+                      expectedCurrentVersion:
+                        current?.version ?? sharedRef.version,
+                    })
+                  }
+                >
+                  Combine both carts
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={choicesBlocked}
+                  onClick={() => void prepareMerge()}
+                >
+                  Review combining both carts
+                </Button>
+              )
+            ) : null}
           </div>
         </div>
-      ) : (
+      ) : sharedRef ? (
         <div className="mt-3">
           <Button
             type="button"
@@ -213,7 +229,7 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
             Save this cart to my account
           </Button>
         </div>
-      )}
+      ) : null}
       {status === 'error' ? (
         <p role="alert" className="mt-2 text-sm">
           {pending

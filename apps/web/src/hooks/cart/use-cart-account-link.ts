@@ -53,14 +53,10 @@ export function useCartAccountLink(options: Options) {
     options.ownerSubject,
     generation,
   ]);
-  if (state.current.scope !== scope) {
-    state.current.pending = null;
-    state.current.savedCart = null;
-    state.current.loadedScope = null;
-    state.current.readRun += 1;
-    state.current.scope = scope;
-  }
-  state.current.options = options;
+  // Scope resets and options publishing happen in commit effects
+  // below, never during render: an abandoned render must not clear
+  // the committed screen's saved-cart observation or install an
+  // uncommitted scope in the shared ref.
 
   const actions = useRef<{
     loadSavedCart: () => Promise<void>;
@@ -164,8 +160,16 @@ export function useCartAccountLink(options: Options) {
       },
     };
   }
+  useEffect(() => {
+    state.current.options = options;
+  });
   // biome-ignore lint/correctness/useExhaustiveDependencies: Each authority scope invalidates prior observations and async completions.
   useEffect(() => {
+    state.current.pending = null;
+    state.current.savedCart = null;
+    state.current.loadedScope = null;
+    state.current.readRun += 1;
+    state.current.scope = scope;
     setSavedCart(null);
     setStatus('idle');
     setPending(false);

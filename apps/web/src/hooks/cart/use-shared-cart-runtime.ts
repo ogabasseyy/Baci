@@ -42,6 +42,7 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   useEffect(() => {
     stateRef.current = state;
     generationRef.current = sessionGeneration;
+    optionsRef.current = { merchantId, merchantSlug };
   });
 
   const adoptOutcomeRef = useRef<AdoptOutcome>('unknown');
@@ -73,8 +74,6 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
   const tempCounterRef = useRef(0);
 
   const optionsRef = useRef({ merchantId, merchantSlug });
-
-  optionsRef.current = { merchantId, merchantSlug };
   return {
     merchantId,
     merchantSlug,

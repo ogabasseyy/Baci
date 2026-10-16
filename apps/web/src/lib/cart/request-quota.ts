@@ -160,7 +160,17 @@ export async function incrementWindowCounter(
       const count = parseCounter(
         await script.eval([key], [String(Math.max(1, windowMs))])
       );
-      return { count, degraded: false, resetTime: Date.now() + windowMs };
+      // Report the actual fixed-window expiry, not now + windowMs:
+      // after the first request in a window the latter overstates
+      // the remaining window by up to its full length.
+      const pttl = await redis.pttl(key);
+      const msRemaining =
+        typeof pttl === 'number' && pttl > 0 ? pttl : windowMs;
+      return {
+        count,
+        degraded: false,
+        resetTime: Date.now() + msRemaining,
+      };
     } catch {
       warnQuotaDegraded();
     }

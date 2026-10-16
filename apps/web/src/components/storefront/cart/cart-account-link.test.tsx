@@ -10,11 +10,17 @@ vi.mock('@/contexts/customer-auth-context', () => ({
     user: { id: authState.userId },
   }),
 }));
+const cartState = vi.hoisted(() => ({
+  sharedCartRef: { cartId: 'old', version: 10 } as {
+    cartId: string;
+    version: number;
+  } | null,
+}));
 vi.mock('@/hooks/cart', () => ({
   useCart: () => ({
     sharedCartAccountsEnabled: true,
     sharedCartEnabled: true,
-    sharedCartRef: { cartId: 'old', version: 10 },
+    sharedCartRef: cartState.sharedCartRef,
     syncStatus: 'synced',
   }),
 }));
@@ -27,7 +33,9 @@ const accountState = vi.hoisted(() => ({
   load: vi.fn(),
   link: vi.fn(),
 }));
+const mockBootstrap = vi.hoisted(() => vi.fn(async () => ({ ok: true })));
 vi.mock('@/hooks/cart/shared-cart-client', () => ({
+  bootstrapSharedCart: mockBootstrap,
   fetchSharedCartSnapshot: vi.fn(),
 }));
 vi.mock('@/hooks/cart/use-cart-account-link', () => ({
@@ -48,6 +56,7 @@ vi.mock('@/hooks/cart/use-cart-account-link', () => ({
 }));
 beforeEach(() => {
   vi.clearAllMocks();
+  cartState.sharedCartRef = { cartId: 'old', version: 10 };
   authState.userId = 'user';
   accountState.savedCart = null;
   accountState.loaded = true;
@@ -161,4 +170,32 @@ it('reloads after the hook reports a new cart generation with unchanged merchant
   accountState.status = 'idle';
   rerender(<CartAccountLink merchantSlug="shop" />);
   expect(accountState.load).toHaveBeenCalledTimes(2);
+});
+
+it('offers saved-cart adoption before a current cart exists', async () => {
+  cartState.sharedCartRef = null;
+  accountState.savedCart = {
+    cartId: 'saved',
+    currency: 'NGN',
+    merchantId: 'm',
+    version: 2,
+    state: 'active',
+    subtotalMinor: 500,
+    totalMinor: 500,
+    estimatedTotals: false,
+    expiresAt: '2030-01-01',
+    lines: [],
+  };
+  render(<CartAccountLink merchantSlug="shop" />);
+  const useSaved = await screen.findByRole('button', {
+    name: 'Use saved cart',
+  });
+  expect(
+    screen.queryByRole('button', { name: 'Save this cart to my account' })
+  ).toBeNull();
+  expect(mockBootstrap).toHaveBeenCalledWith('shop');
+  fireEvent.click(useSaved);
+  await waitFor(() =>
+    expect(accountState.link).toHaveBeenCalledWith('use_saved')
+  );
 });

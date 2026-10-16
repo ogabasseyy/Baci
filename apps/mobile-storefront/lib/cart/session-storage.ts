@@ -58,10 +58,17 @@ async function serialized<T>(
 
 function parseRecord(value: string | null) {
   if (value === null) return null;
-  const raw: unknown = value.startsWith('cp1.')
-    ? { proof: value }
-    : JSON.parse(value);
-  return cartSessionRecordSchema.parse(raw);
+  try {
+    const raw: unknown = value.startsWith('cp1.')
+      ? { proof: value }
+      : JSON.parse(value);
+    return cartSessionRecordSchema.parse(raw);
+  } catch {
+    // A corrupted or schema-drifted record reads as absent: reads
+    // fail soft and the next write overwrites it, instead of every
+    // storage operation throwing until the app is reinstalled.
+    return null;
+  }
 }
 
 /** Proofs never enter MMKV, AsyncStorage, query caches, or customer Auth keys. */

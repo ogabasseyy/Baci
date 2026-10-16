@@ -4,10 +4,13 @@ import {
   serializePendingVtuEntries,
 } from './pending-vtu-idempotency-codec';
 import {
+  clearPendingVtuMintLock,
   forgottenVtuScopes,
+  loadPendingVtuMintLock,
   loadPendingVtuSnapshot,
   noteForgottenVtuScopes,
   persistPendingVtuEntries,
+  savePendingVtuMintLock,
 } from './pending-vtu-idempotency-store';
 
 export interface PendingVtuPurchase {
@@ -150,6 +153,56 @@ export function persistPendingVtuPurchases(): boolean {
 // (Codex R54 6rrFRH). Expo web tabs share the MMKV/localStorage
 // bucket, so recall/persist/list re-sync at runtime (Codex R143 P1) —
 // and snapshot tombstones ride along via forgottenVtuScopes.
+/**
+ * Cross-tab mint mutex (Codex R148 P1, web mirror): sync recall
+ * fixes STALE snapshots, but two Expo web tabs recalling
+ * simultaneously both miss and mint distinct keys — the server
+ * debits twice. The mint triple runs under this token lock; the
+ * loser blocks, then re-recalls inside the lock and adopts the
+ * winner's key. Fail-closed: unacquired/unavailable storage
+ * returns null and the caller throws (no key, no POST). No SSR
+ * fast path: a null bucket already fails remember() closed, and
+ * the lock follows the same semantics.
+ */
+export const PENDING_VTU_MINT_LOCK_TTL_MS = 1000;
+export const PENDING_VTU_MINT_LOCK_WAIT_MS = 250;
+
+function spinWaitMs(ms: number): number {
+  const end = Date.now() + ms;
+  let now = Date.now();
+  while (now < end) {
+    now = Date.now();
+  }
+  return now;
+}
+
+export function acquirePendingVtuMintLock(
+  now: number = Date.now()
+): string | null {
+  const token = `mint-${now}-${Math.floor(Math.random() * 2 ** 32).toString(36)}`;
+  const deadline = now + PENDING_VTU_MINT_LOCK_WAIT_MS;
+  let at = now;
+  while (at < deadline) {
+    const held = loadPendingVtuMintLock();
+    if (!held || at - held.at >= PENDING_VTU_MINT_LOCK_TTL_MS) {
+      savePendingVtuMintLock(token, at);
+      if (loadPendingVtuMintLock()?.token === token) {
+        return token;
+      }
+    }
+    at = spinWaitMs(1);
+  }
+  return null;
+}
+
+export function releasePendingVtuMintLock(token: string): void {
+  // Release only our own token: a TTL-expired successor's claim
+  // must survive our finally.
+  if (loadPendingVtuMintLock()?.token === token) {
+    clearPendingVtuMintLock();
+  }
+}
+
 const initialPendingVtuSnapshot = loadPendingVtuSnapshot();
 hydratePendingVtuPurchases(initialPendingVtuSnapshot);
 if (hasLegacyVtuScopeKeys(initialPendingVtuSnapshot)) {

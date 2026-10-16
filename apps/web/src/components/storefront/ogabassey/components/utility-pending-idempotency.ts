@@ -11,10 +11,12 @@ export {
   notePendingVtuReference,
 } from './utility-pending-vtu-reference-registry';
 import {
+  acquirePendingVtuMintLock,
   forgottenScopedKeys,
   noteForgottenVtuScope,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
+  releasePendingVtuMintLock,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
 
@@ -254,17 +256,32 @@ export function getPendingVtuKey(
   payloadSignature: string,
   scopeTag?: string
 ): string {
-  const recalled = recallPendingVtuKey(payloadSignature);
-  if (recalled) {
-    return recalled;
-  }
-  const minted = createWalletIdempotencyKey();
-  if (!rememberPendingVtuPurchase(payloadSignature, minted, scopeTag)) {
+  // Mint mutex (Codex R148 P1): two tabs recalling simultaneously
+  // both miss — without the lock both mint and the server debits
+  // twice. The loser blocks, then re-recalls inside the lock and
+  // adopts the winner's key. Unacquired → the storage error (no
+  // key, no POST): fail-closed, same as an undurable remember.
+  const lock = acquirePendingVtuMintLock();
+  if (!lock) {
     throw new Error(
       'Could not save this purchase for retry. Please check your browser storage and try again.'
     );
   }
-  return minted;
+  try {
+    const recalled = recallPendingVtuKey(payloadSignature);
+    if (recalled) {
+      return recalled;
+    }
+    const minted = createWalletIdempotencyKey();
+    if (!rememberPendingVtuPurchase(payloadSignature, minted, scopeTag)) {
+      throw new Error(
+        'Could not save this purchase for retry. Please check your browser storage and try again.'
+      );
+    }
+    return minted;
+  } finally {
+    releasePendingVtuMintLock(lock);
+  }
 }
 
 /**

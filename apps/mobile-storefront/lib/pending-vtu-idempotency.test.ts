@@ -3,10 +3,17 @@ import {
   buildVtuPurchaseDescriptor,
   scopePendingVtuKey,
 } from './pending-vtu-descriptor';
+
+let mockNextUuid = 0;
+jest.mock('expo-crypto', () => ({
+  randomUUID: () => `uuid-${++mockNextUuid}`,
+}));
+
 import {
   clearPendingVtuKeys,
   forgetPendingVtuByReference,
   forgetPendingVtuPurchase,
+  getPendingVtuKey,
   hasNotedPendingVtuReference,
   hydratePendingVtuPurchases,
   isStalePendingVtuSuccess,
@@ -35,6 +42,7 @@ describe('pending-vtu-idempotency', () => {
   // persisted snapshot; per-test manual clears stay as documentation.
   beforeEach(() => {
     clearPendingVtuKeys();
+    vtuStore.clearPendingVtuMintLock();
   });
 
   it('recalls a remembered key and forgets it on demand', () => {
@@ -697,6 +705,29 @@ describe('pending-vtu-idempotency', () => {
       'key-b',
     ]);
   });
+
+  it('getPendingVtuKey recalls retained keys and fails closed under a held mint (Codex R148 P1)', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 5,
+      phoneNumber: 'mint-lock',
+    });
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', descriptor);
+
+    const first = getPendingVtuKey(scoped);
+    expect(typeof first).toBe('string');
+    // Same descriptor recalls the retained key (no fresh mint).
+    expect(getPendingVtuKey(scoped)).toBe(first);
+
+    // Sibling tab holds the mint: fail closed with the storage
+    // error (no key, no POST) instead of minting a second key.
+    vtuStore.savePendingVtuMintLock('tab-a', Date.now());
+    expect(() => getPendingVtuKey(scoped)).toThrow(
+      /Could not save this purchase/
+    );
+    vtuStore.clearPendingVtuMintLock();
+    expect(getPendingVtuKey(scoped)).toBe(first);
+  }, 10000);
 
   it('merges sibling-tab reference knowledge into the live same-key entry (Codex R143 P1)', () => {
     const descriptor = buildVtuPurchaseDescriptor({

@@ -10,7 +10,12 @@ import {
 } from './pending-vtu-idempotency';
 import * as vtuCodec from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
-import { syncPendingVtuPurchasesFromSnapshot } from './pending-vtu-idempotency-sync';
+import {
+  acquirePendingVtuMintLock,
+  PENDING_VTU_MINT_LOCK_TTL_MS,
+  releasePendingVtuMintLock,
+  syncPendingVtuPurchasesFromSnapshot,
+} from './pending-vtu-idempotency-sync';
 
 function seedStore(
   entries: [string, { key: string; rememberedAt: number }][],
@@ -47,6 +52,7 @@ function scopedDescriptor(tag: string): string {
 describe('pending-vtu-idempotency-sync', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
+    vtuStore.clearPendingVtuMintLock();
   });
 
   it('imports a sibling-tab entry on direct sync (Codex R145 P1)', () => {
@@ -125,5 +131,45 @@ describe('pending-vtu-idempotency-sync', () => {
     syncPendingVtuPurchasesFromSnapshot(now + 1000);
 
     expect(hasNotedPendingVtuReference(scoped, 'REF-DIRECT')).toBe(true);
+  });
+
+  it('serializes mint acquisition: a second contender waits out the budget (Codex R148 P1)', () => {
+    const first = acquirePendingVtuMintLock();
+    expect(typeof first).toBe('string');
+    if (!first) {
+      throw new Error('first acquire must succeed on an empty lock');
+    }
+    // Sibling tab spins the ~250ms budget, then fails closed (null).
+    expect(acquirePendingVtuMintLock()).toBeNull();
+    releasePendingVtuMintLock(first);
+    const second = acquirePendingVtuMintLock();
+    if (!second) {
+      throw new Error('acquire must succeed after release');
+    }
+    expect(second).not.toBe(first);
+    releasePendingVtuMintLock(second);
+  }, 10000);
+
+  it('steals an expired lock immediately (Codex R148 P1)', () => {
+    vtuStore.savePendingVtuMintLock(
+      'crashed-holder',
+      Date.now() - PENDING_VTU_MINT_LOCK_TTL_MS - 50
+    );
+    const token = acquirePendingVtuMintLock();
+    if (!token) {
+      throw new Error('expired lock must be stealable');
+    }
+    releasePendingVtuMintLock(token);
+  });
+
+  it('releases only the holding token (Codex R148 P1)', () => {
+    const token = acquirePendingVtuMintLock();
+    if (!token) {
+      throw new Error('acquire must succeed on an empty lock');
+    }
+    releasePendingVtuMintLock('someone-else');
+    expect(vtuStore.loadPendingVtuMintLock()?.token).toBe(token);
+    releasePendingVtuMintLock(token);
+    expect(vtuStore.loadPendingVtuMintLock()).toBeNull();
   });
 });

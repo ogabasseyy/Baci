@@ -15,6 +15,15 @@ import type { PersistedPendingVtuPurchase } from './pending-vtu-idempotency-code
 import { serializePendingVtuEntries } from './pending-vtu-idempotency-codec';
 
 const VTU_PENDING_KEYS_STORAGE_KEY = 'baci:vtu-pending-keys/v1';
+// Single global mint lock (Codex R148 P1, web mirror): one key,
+// overwritten per acquire — no accumulation. A crashed holder leaves
+// one stale record, TTL-gated and overwritten next acquire.
+const VTU_MINT_LOCK_STORAGE_KEY = 'baci:vtu-mint-lock/v1';
+
+export interface PendingVtuMintLock {
+  token: string;
+  at: number;
+}
 
 interface PendingVtuKeyStore {
   getString: (key: string) => string | null | undefined;
@@ -172,6 +181,45 @@ export function persistPendingVtuEntries(
 export function clearPendingVtuSnapshot(): void {
   try {
     getPendingVtuStorage()?.remove(VTU_PENDING_KEYS_STORAGE_KEY);
+  } catch {
+    // Persistence is best effort.
+  }
+}
+
+/** Reads the mint lock; null when free, malformed, or unavailable. */
+export function loadPendingVtuMintLock(): PendingVtuMintLock | null {
+  try {
+    const raw = getPendingVtuStorage()?.getString(VTU_MINT_LOCK_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<PendingVtuMintLock>;
+    return typeof parsed.token === 'string' &&
+      typeof parsed.at === 'number' &&
+      Number.isFinite(parsed.at)
+      ? { token: parsed.token, at: parsed.at }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function savePendingVtuMintLock(token: string, at: number): boolean {
+  try {
+    const store = getPendingVtuStorage();
+    if (!store) {
+      return false;
+    }
+    store.set(VTU_MINT_LOCK_STORAGE_KEY, JSON.stringify({ token, at }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearPendingVtuMintLock(): void {
+  try {
+    getPendingVtuStorage()?.remove(VTU_MINT_LOCK_STORAGE_KEY);
   } catch {
     // Persistence is best effort.
   }

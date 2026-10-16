@@ -1,6 +1,5 @@
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useQueryClient } from '@tanstack/react-query';
-import * as Crypto from 'expo-crypto';
 import { CONFIG } from '@/lib/config';
 import {
   buildVtuPurchaseDescriptor,
@@ -8,8 +7,8 @@ import {
 } from '@/lib/pending-vtu-descriptor';
 import {
   forgetPendingVtuPurchase,
+  getPendingVtuKey,
   recallPendingVtuKey,
-  rememberPendingVtuPurchase,
 } from '@/lib/pending-vtu-idempotency';
 import { resolveIdempotencyScopeOwnerId } from '@/lib/utility-owner-ids';
 import { useAuthStore } from '@/stores/auth-store';
@@ -157,18 +156,15 @@ export function useUtilityPayment() {
      * finally releases the checkout guard.
      */
     getWalletIdempotencyKey: (descriptor: string) => {
-      const recalled = recallPendingVtuKey(descriptor);
-      if (recalled) return recalled;
-      const minted = Crypto.randomUUID();
       // Tag from the SAME pair the scope hashed (Codex R62 6rtokd):
       // the settle filter recomputes this for the active account.
-      const scopeTag = buildPendingVtuScopeTag(ownerId, CONFIG.MERCHANT_ID);
-      if (!rememberPendingVtuPurchase(descriptor, minted, scopeTag)) {
-        throw new Error(
-          'Could not save this purchase for retry. Please try again.'
-        );
-      }
-      return minted;
+      // Recall-or-mint runs under the mint mutex inside
+      // getPendingVtuKey (Codex R148 P1) so simultaneous Expo web
+      // tabs cannot both mint and double-debit.
+      return getPendingVtuKey(
+        descriptor,
+        buildPendingVtuScopeTag(ownerId, CONFIG.MERCHANT_ID)
+      );
     },
     /**
      * Retained-replay peek (Codex R65 6ru4mK): recall WITHOUT

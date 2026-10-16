@@ -13,6 +13,7 @@
  * ops live here.
  */
 
+import * as Crypto from 'expo-crypto';
 import { isExpiredPendingVtuEntry } from './pending-vtu-idempotency-codec';
 import {
   clearForgottenVtuScopes,
@@ -21,8 +22,10 @@ import {
   noteForgottenVtuScopes,
 } from './pending-vtu-idempotency-store';
 import {
+  acquirePendingVtuMintLock,
   pendingPurchases,
   persistPendingVtuPurchases,
+  releasePendingVtuMintLock,
   syncPendingVtuPurchasesFromSnapshot,
 } from './pending-vtu-idempotency-sync';
 import {
@@ -123,6 +126,42 @@ export function rememberPendingVtuPurchase(
     return false;
   }
   return true;
+}
+
+/**
+ * Recall-or-mint choke point (Codex R148 P1, web mirror): the whole
+ * triple runs under the mint mutex so two Expo web tabs recalling
+ * simultaneously cannot both mint (the server would debit twice).
+ * The loser re-recalls inside the lock and adopts the winner's key.
+ * Throws the storage error when the lock is unacquirable or the
+ * minted key is undurable — the throw aborts before the POST and
+ * the handler's finally releases the checkout guard.
+ */
+export function getPendingVtuKey(
+  descriptor: string,
+  scopeTag?: string
+): string {
+  const lock = acquirePendingVtuMintLock();
+  if (!lock) {
+    throw new Error(
+      'Could not save this purchase for retry. Please try again.'
+    );
+  }
+  try {
+    const recalled = recallPendingVtuKey(descriptor);
+    if (recalled) {
+      return recalled;
+    }
+    const minted = Crypto.randomUUID();
+    if (!rememberPendingVtuPurchase(descriptor, minted, scopeTag)) {
+      throw new Error(
+        'Could not save this purchase for retry. Please try again.'
+      );
+    }
+    return minted;
+  } finally {
+    releasePendingVtuMintLock(lock);
+  }
 }
 
 /** Attaches the server reference once a non-terminal response arrives. */

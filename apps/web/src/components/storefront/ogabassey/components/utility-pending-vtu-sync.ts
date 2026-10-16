@@ -7,7 +7,10 @@
  * recall/remember/note/complete/stale operations on top.
  */
 import {
+  clearPendingVtuMintLock,
+  loadPendingVtuMintLock,
   loadPendingVtuSnapshot,
+  savePendingVtuMintLock,
   savePendingVtuSnapshot,
 } from './utility-pending-idempotency-store';
 import {
@@ -207,6 +210,64 @@ export function persistPendingVtuPurchases(): boolean {
 // newer cross-tab write merges instead of being clobbered).
 // Without this an abandoned entry keeps its plaintext identifiers
 // for the full TTL despite migrate-on-read (Codex R54 6rrFRH).
+/**
+ * Cross-tab mint mutex (Codex R148 P1): sync-before-recall fixes
+ * STALE snapshots, but two tabs recalling simultaneously both miss
+ * and mint distinct keys — the server debits twice. The mint triple
+ * (recall → mint → remember) runs under this token lock so exactly
+ * one tab mints per descriptor race; the loser re-recalls and adopts
+ * the winner's key. Single global key (holds last ~1ms, so
+ * cross-descriptor contention is a non-issue).
+ *
+ * Protocol: write own token, re-read to confirm (last-writer-wins +
+ * confirmation elects exactly one holder per round); bounded 1ms
+ * spin; TTL-gated steal for crashed holders (same-device clock).
+ * Fail-closed: unacquired or unavailable storage returns null and
+ * the caller throws the storage-unavailable error (no key, no POST,
+ * no double debit). Off-DOM (SSR) holds vacuously: no tabs exist.
+ */
+export const PENDING_VTU_MINT_LOCK_TTL_MS = 1000;
+export const PENDING_VTU_MINT_LOCK_WAIT_MS = 250;
+
+function spinWaitMs(ms: number): number {
+  const end = Date.now() + ms;
+  let now = Date.now();
+  while (now < end) {
+    now = Date.now();
+  }
+  return now;
+}
+
+export function acquirePendingVtuMintLock(
+  now: number = Date.now()
+): string | null {
+  if (typeof localStorage === 'undefined') {
+    return `ssr-${now}`;
+  }
+  const token = `mint-${now}-${Math.floor(Math.random() * 2 ** 32).toString(36)}`;
+  const deadline = now + PENDING_VTU_MINT_LOCK_WAIT_MS;
+  let at = now;
+  while (at < deadline) {
+    const held = loadPendingVtuMintLock();
+    if (!held || at - held.at >= PENDING_VTU_MINT_LOCK_TTL_MS) {
+      savePendingVtuMintLock(token, at);
+      if (loadPendingVtuMintLock()?.token === token) {
+        return token;
+      }
+    }
+    at = spinWaitMs(1);
+  }
+  return null;
+}
+
+export function releasePendingVtuMintLock(token: string): void {
+  // Release only our own token: a TTL-expired successor's claim
+  // must survive our finally.
+  if (loadPendingVtuMintLock()?.token === token) {
+    clearPendingVtuMintLock();
+  }
+}
+
 const initialPendingVtuSnapshot = loadPendingVtuSnapshot();
 hydratePendingVtuPurchases(initialPendingVtuSnapshot);
 if (hasLegacyVtuScopeKeys(initialPendingVtuSnapshot)) {

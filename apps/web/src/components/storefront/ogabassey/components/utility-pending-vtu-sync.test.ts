@@ -13,15 +13,21 @@ import {
 } from './utility-pending-idempotency';
 import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import {
+  clearPendingVtuMintLock,
+  loadPendingVtuMintLock,
   loadPendingVtuSnapshot,
+  savePendingVtuMintLock,
   savePendingVtuSnapshot,
 } from './utility-pending-idempotency-store';
 import { parsePendingVtuSnapshot } from './utility-pending-vtu-codec';
 import {
+  acquirePendingVtuMintLock,
   forgottenScopedKeys,
   hydratePendingVtuPurchases,
+  PENDING_VTU_MINT_LOCK_TTL_MS,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
+  releasePendingVtuMintLock,
   serializePendingVtuPurchases,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
@@ -29,6 +35,7 @@ import {
 describe('utility-pending-vtu-sync', () => {
   beforeEach(() => {
     clearPendingVtuKeys();
+    clearPendingVtuMintLock();
   });
 
   it('recalls the pending key after a page reload', async () => {
@@ -520,4 +527,54 @@ describe('keyed tombstones (6rrMIj)', () => {
       key: 'key-K1',
     });
   });
+
+  it('serializes mint acquisition: a second contender waits out the budget (Codex R148 P1)', () => {
+    const first = acquirePendingVtuMintLock();
+    if (!first) {
+      throw new Error('first acquire must succeed on an empty lock');
+    }
+    // Tab B spins the ~250ms budget, then fails closed (null).
+    expect(acquirePendingVtuMintLock()).toBeNull();
+    releasePendingVtuMintLock(first);
+    const second = acquirePendingVtuMintLock();
+    if (!second) {
+      throw new Error('acquire must succeed after release');
+    }
+    expect(second).not.toBe(first);
+    releasePendingVtuMintLock(second);
+  }, 10000);
+
+  it('steals an expired lock immediately (Codex R148 P1)', () => {
+    savePendingVtuMintLock(
+      'crashed-holder',
+      Date.now() - PENDING_VTU_MINT_LOCK_TTL_MS - 50
+    );
+    const token = acquirePendingVtuMintLock();
+    if (!token) {
+      throw new Error('expired lock must be stealable');
+    }
+    releasePendingVtuMintLock(token);
+  });
+
+  it('releases only the holding token (Codex R148 P1)', () => {
+    const token = acquirePendingVtuMintLock();
+    if (!token) {
+      throw new Error('acquire must succeed on an empty lock');
+    }
+    releasePendingVtuMintLock('someone-else');
+    expect(loadPendingVtuMintLock()?.token).toBe(token);
+    releasePendingVtuMintLock(token);
+    expect(loadPendingVtuMintLock()).toBeNull();
+  });
+
+  it('getPendingVtuKey fails closed while another tab holds the mint (Codex R148 P1)', () => {
+    savePendingVtuMintLock('tab-a', Date.now());
+    // No key, no POST: the same storage-unavailable error as an
+    // undurable remember (the retry re-recalls the winner's key).
+    expect(() => getPendingVtuKey('{"lock":"held"}')).toThrow(
+      /Could not save this purchase/
+    );
+    clearPendingVtuMintLock();
+    expect(typeof getPendingVtuKey('{"lock":"held"}')).toBe('string');
+  }, 10000);
 });

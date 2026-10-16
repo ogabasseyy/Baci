@@ -7,7 +7,10 @@
 -- also counts legacy refunded rows as terminal evidence, matching
 -- the claim and executor rules: a mixed order with one legacy
 -- covered leg would otherwise strand finalization after the
--- remaining Paystack leg settles. All other behavior is unchanged
+-- remaining Paystack leg settles. BNPL admission additionally
+-- requires the aggregate safety gates (in-flight, anomaly, and
+-- unverified vetoes), since the local scan checks only per-leg
+-- terminal coverage. All other behavior is unchanged
 -- from 20260928184300.
 --
 CREATE OR REPLACE FUNCTION public.record_verified_paystack_cancellation_refund_v1(
@@ -243,7 +246,7 @@ BEGIN
         HAVING coalesce(sum(r.amount), 0) >= p.amount
       )
   ) AND (
-    v_order.payment_status IN ('paid', 'partially_paid', 'refunded', 'bnpl_approved')
+    v_order.payment_status IN ('paid', 'partially_paid', 'refunded')
     -- A wedged order (completed gateway legs the sweep never flipped to
     -- paid) stays merchant-cancellable: its funded legs were just refunded,
     -- so it must transition, reverse settlements, and notify like a paid
@@ -258,6 +261,16 @@ BEGIN
           AND coalesce(public.normalized_gateway_name_v1(funded.gateway), '') NOT IN
             ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
       )
+    )
+    -- BNPL admission additionally requires the aggregate safety
+    -- gates: the scan above checks only per-leg terminal coverage,
+    -- so without them an in-flight, anomalous, or unverified row
+    -- would finalize (reversing settlement and notifying) while
+    -- provider money can still settle.
+    OR (
+      v_order.payment_status = 'bnpl_approved'
+      AND private.cancellation_refund_legs_covered_v1(
+        v_order.id, v_order.merchant_id, v_order.currency)
     )
   ) THEN
     -- Every funded leg has terminal refund evidence: run the shared

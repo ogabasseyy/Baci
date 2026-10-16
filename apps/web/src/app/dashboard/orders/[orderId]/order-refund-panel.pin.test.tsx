@@ -109,4 +109,73 @@ describe('OrderRefundPanel capture pin', () => {
     >;
     expect(payload).not.toHaveProperty('paymentTransactionId');
   });
+
+  it('snaps the prefill to the selected capture and caps the amount', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ json: async () => summary, ok: true })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    const recordPromise = screen.findByRole('button', {
+      name: 'Record manual refund',
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    fireEvent.click(await recordPromise);
+    // Prefilled with the order remainder while nothing is pinned.
+    expect(screen.getByLabelText(/Amount/)).toHaveValue(200);
+    fireEvent.change(screen.getByLabelText('Method'), {
+      target: { value: 'paystack' },
+    });
+    // Picking a capture snaps the prefill to its outstanding and
+    // caps the input: a Paystack attestation cannot spill across
+    // captures, so the remainder-sized default would fail server-side.
+    fireEvent.change(screen.getByLabelText('Paystack capture'), {
+      target: { value: 'leg-1' },
+    });
+    const amount = screen.getByLabelText(/Amount/);
+    expect(amount).toHaveValue(100);
+    expect(amount).toHaveAttribute('max', '100');
+    // An over-cap amount is natively invalid, so the submit never
+    // fires; the client validation underneath enforces the same
+    // ceiling when native validation is bypassed.
+    fireEvent.change(amount, { target: { value: '200' } });
+    fireEvent.change(screen.getByLabelText(/Refund date and time/), {
+      target: { value: '2026-09-28T13:00' },
+    });
+    fireEvent.change(screen.getByLabelText('Reference'), {
+      target: { value: 'bank-1' },
+    });
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(amount).toBeInvalid();
+    fireEvent.click(screen.getByRole('button', { name: 'Save manual refund' }));
+    expect(apiPost).not.toHaveBeenCalled();
+    fireEvent.submit(amount.closest('form') as HTMLFormElement);
+    expect(
+      screen.getByText('Refund amount exceeds the remaining balance.')
+    ).toBeInTheDocument();
+    expect(apiPost).not.toHaveBeenCalled();
+  });
+
+  it('caps a sole capture when switching to Paystack', async () => {
+    const sole = { ...summary, legs: [legs[0]] };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ json: async () => sole, ok: true })
+    );
+    render(<OrderRefundPanel orderId="order-1" />);
+    const recordPromise = screen.findByRole('button', {
+      name: 'Record manual refund',
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    fireEvent.click(await recordPromise);
+    fireEvent.change(screen.getByLabelText('Method'), {
+      target: { value: 'paystack' },
+    });
+    // No selector for a sole capture (the RPC pins itself), but the
+    // ceiling still applies to the prefill and the input.
+    expect(screen.queryByLabelText('Paystack capture')).not.toBeInTheDocument();
+    const amount = screen.getByLabelText(/Amount/);
+    expect(amount).toHaveValue(100);
+    expect(amount).toHaveAttribute('max', '100');
+  });
 });

@@ -13,6 +13,7 @@ import { selectRefundPinLegOptions } from '@/lib/orders/select-refund-pin-leg-op
 import { validateManualRefundInput } from '@/lib/orders/validate-manual-refund-input';
 import { OrderRefundManualForm } from './order-refund-manual-form';
 import { OrderRefundTimeline } from './order-refund-timeline';
+import { useRefundPinAmountCap } from './use-refund-pin-amount-cap';
 import { useRefundStatusPolling } from './use-refund-status-polling';
 
 export function OrderRefundPanel({
@@ -49,6 +50,18 @@ export function OrderRefundPanel({
   const pinnedLegId = legOptions.some((option) => option.id === legId)
     ? legId
     : null;
+  const { effectiveRemaining, handleLegIdChange, handleMethodChange } =
+    useRefundPinAmountCap({
+      amount,
+      legOptions,
+      legs: summary?.legs ?? [],
+      method,
+      pinnedLegId,
+      remaining: summary?.remaining ?? null,
+      setAmount,
+      setLegId,
+      setMethod,
+    });
 
   // Only a refunded order is terminal: a failed row can still
   // transition asynchronously (drain retries, provider
@@ -112,7 +125,7 @@ export function OrderRefundPanel({
         method,
         paymentLegId: pinnedLegId,
         reference,
-        remaining: summary?.remaining ?? null,
+        remaining: effectiveRemaining,
         requirePaymentLeg: requireLeg,
       });
       if (validationError) {
@@ -265,16 +278,13 @@ export function OrderRefundPanel({
                 onAmountChange={setAmount}
                 onConfirmedChange={setConfirmed}
                 onDateChange={setDate}
-                onLegIdChange={setLegId}
-                onMethodChange={(value) => {
-                  setMethod(value);
-                  setLegId('');
-                }}
+                onLegIdChange={handleLegIdChange}
+                onMethodChange={handleMethodChange}
                 onNoteChange={setNote}
                 onReferenceChange={setReference}
                 onSubmit={() => void submit('manual')}
                 reference={reference}
-                remaining={summary.remaining}
+                remaining={effectiveRemaining ?? summary.remaining}
               />
             )}
             <OrderRefundTimeline

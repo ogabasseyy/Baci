@@ -87,3 +87,49 @@ REVOKE ALL ON FUNCTION private.sync_cancelled_order_refund_status() FROM PUBLIC,
 DROP TRIGGER IF EXISTS sync_cancelled_order_refund_status ON public.transactions;
 CREATE TRIGGER sync_cancelled_order_refund_status AFTER INSERT OR UPDATE OF status
   ON public.transactions FOR EACH ROW EXECUTE FUNCTION private.sync_cancelled_order_refund_status();
+
+-- Round-59 P2: the trigger above only fires for terminal rows that
+-- land after this migration. Cancelled orders whose terminal
+-- refund evidence predates it (a fully covered cash/manual or
+-- non-Paystack order still storing a paid-family label) would stay
+-- stale for reports and other database consumers even though the
+-- status read computes refunded, so repair them once here with the
+-- trigger's own coverage predicate. Label-only like the trigger:
+-- the money is already provably home.
+CREATE OR REPLACE FUNCTION private.backfill_cancelled_order_refund_status()
+RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+BEGIN
+  UPDATE public.orders o SET payment_status='refunded',updated_at=now()
+   WHERE o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
+     AND o.payment_status IN ('paid','partially_paid','pending','bnpl_approved')
+     AND o.amount_paid <= private.capped_refund_coverage_v1(
+           o.id, o.merchant_id, o.currency)
+       + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
+            WHERE p.order_id=o.id AND p.merchant_id=o.merchant_id
+              AND p.transaction_type='payment' AND p.status='refunded' AND p.amount>0
+              AND upper(btrim(p.currency))=upper(COALESCE(NULLIF(BTRIM(o.currency),''),'NGN'))
+              AND COALESCE(public.normalized_gateway_name_v1(p.gateway),'') NOT IN (
+                'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'))
+       + (SELECT COALESCE(sum(w.amount),0)
+            FROM public.customer_wallet_transactions w
+           WHERE w.source_id=o.id AND w.merchant_id=o.merchant_id
+             AND w.source_type='order_reversal')
+       + (SELECT COALESCE(sum(r.amount),0)
+            FROM public.customer_savings_redemptions r
+           WHERE r.order_id=o.id AND r.merchant_id=o.merchant_id
+             AND r.metadata ? 'reversed_at')
+     AND private.uncovered_refund_obligation_v1(o.id, o.merchant_id,
+       o.currency,
+       (SELECT COALESCE(sum(w.amount),0)
+          FROM public.customer_wallet_transactions w
+         WHERE w.source_id=o.id AND w.merchant_id=o.merchant_id
+           AND w.source_type='order_reversal')
+       + (SELECT COALESCE(sum(r.amount),0)
+          FROM public.customer_savings_redemptions r
+         WHERE r.order_id=o.id AND r.merchant_id=o.merchant_id
+           AND r.metadata ? 'reversed_at'),
+       o.amount_paid) <= 0;
+END; $$;
+REVOKE ALL ON FUNCTION private.backfill_cancelled_order_refund_status()
+  FROM PUBLIC,anon,authenticated;
+SELECT private.backfill_cancelled_order_refund_status();

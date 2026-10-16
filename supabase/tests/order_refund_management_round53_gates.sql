@@ -8,8 +8,9 @@
 -- aggregate finalization for BNPL orders; a nonterminal verdict
 -- must still leave them untouched. The coverage scan also counts
 -- legacy refunded rows as terminal evidence like the claim and
--- executor rules. Self-contained fixtures use the b531 namespace
--- and roll back.
+-- executor rules, and BNPL admission requires the aggregate
+-- safety gates (an in-flight sibling row vetoes finalization).
+-- Self-contained fixtures use the b531 namespace and roll back.
 --
 -- USAGE:
 --   supabase test db supabase/tests/order_refund_management_round53_gates.sql
@@ -47,7 +48,9 @@ BEGIN
     ('b5311000-0000-4000-8000-000000000092', v_merchant_id, 'BNPL-092',
       100, 100, 'bnpl_approved', 'cancelled', pg_catalog.now()),
     ('b5311000-0000-4000-8000-000000000093', v_merchant_id, 'BNPL-093',
-      200, 200, 'bnpl_approved', 'cancelled', pg_catalog.now());
+      200, 200, 'bnpl_approved', 'cancelled', pg_catalog.now()),
+    ('b5311000-0000-4000-8000-000000000094', v_merchant_id, 'BNPL-094',
+      100, 100, 'bnpl_approved', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -85,7 +88,20 @@ BEGIN
       'b5311000-0000-4000-8000-000000000093', 'refund', 100, 'NGN',
       'refund_pending', 'paystack', '123459',
       jsonb_build_object(
-        'payment_transaction_id', 'b5312000-0000-4000-8000-000000000096'));
+        'payment_transaction_id', 'b5312000-0000-4000-8000-000000000096')),
+    ('b5312000-0000-4000-8000-000000000099', v_merchant_id,
+      'b5311000-0000-4000-8000-000000000094', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pay-94', '{}'::jsonb),
+    ('b5312000-0000-4000-8000-000000000100', v_merchant_id,
+      'b5311000-0000-4000-8000-000000000094', 'refund', 100, 'NGN',
+      'refund_pending', 'paystack', '123460',
+      jsonb_build_object(
+        'payment_transaction_id', 'b5312000-0000-4000-8000-000000000099')),
+    ('b5312000-0000-4000-8000-000000000101', v_merchant_id,
+      'b5311000-0000-4000-8000-000000000094', 'refund', 100, 'NGN',
+      'refund_pending', 'paystack', '123461',
+      jsonb_build_object(
+        'payment_transaction_id', 'b5312000-0000-4000-8000-000000000099'));
 END;
 $fixtures$;
 
@@ -168,6 +184,49 @@ BEGIN
   IF v_notifications <> 2 THEN
     RAISE EXCEPTION 'legacy finalization stranded, notifications got %',
       v_notifications;
+  END IF;
+
+  -- A second in-flight refund vetoes BNPL finalization even
+  -- though the settled leg is covered: the aggregate gates run
+  -- before the finalizer reverses settlement and notifies. The
+  -- label still flips on zero obligation (the coverage trigger's
+  -- job); only the effects wait for clean evidence.
+  SELECT public.record_verified_paystack_cancellation_refund_v1(
+    'b5312000-0000-4000-8000-000000000100', 'processed', 987654324,
+    10000, 'NGN'
+  ) INTO v_verdict;
+  IF v_verdict <> 'processed' THEN
+    RAISE EXCEPTION 'vetoed verdict misreported, got %', v_verdict;
+  END IF;
+  SELECT count(*) INTO v_notifications
+  FROM public.paystack_cancellation_refund_notifications
+  WHERE order_id = 'b5311000-0000-4000-8000-000000000094'
+    AND event_type IN ('processed_customer_email', 'processed_merchant_push');
+  IF v_notifications <> 0 THEN
+    RAISE EXCEPTION 'vetoed finalization notified, got %', v_notifications;
+  END IF;
+  -- Once the sibling refund fails, the gates pass on the repeat
+  -- verdict and the finalizer runs: the veto defers, never strands.
+  SELECT public.record_verified_paystack_cancellation_refund_v1(
+    'b5312000-0000-4000-8000-000000000101', 'failed', 987654325,
+    10000, 'NGN'
+  ) INTO v_verdict;
+  IF v_verdict <> 'failed' THEN
+    RAISE EXCEPTION 'sibling verdict misreported, got %', v_verdict;
+  END IF;
+  SELECT public.record_verified_paystack_cancellation_refund_v1(
+    'b5312000-0000-4000-8000-000000000100', 'processed', 987654324,
+    10000, 'NGN'
+  ) INTO v_verdict;
+  IF v_verdict <> 'processed' THEN
+    RAISE EXCEPTION 'unblocked verdict misreported, got %', v_verdict;
+  END IF;
+  SELECT count(*) INTO v_notifications
+  FROM public.paystack_cancellation_refund_notifications
+  WHERE order_id = 'b5311000-0000-4000-8000-000000000094'
+    AND event_type IN ('processed_customer_email', 'processed_merchant_push');
+  IF v_notifications <> 2 THEN
+    RAISE EXCEPTION 'unblocked finalization missing, got %', v_notifications;
   END IF;
 END;
 $refund_round53_gates$;

@@ -57,8 +57,14 @@ export function isPrivateLanHost(host: string): boolean {
 
 export function isSharedPlatformHost(
   host: string,
-  rootDomain: string
+  rootDomain: string,
+  environment: string | undefined = process.env.NODE_ENV
 ): boolean {
+  // Loopback and private-LAN hosts are shared platform hosts only
+  // outside production, matching the body-proof host boundary: in
+  // production a slug hint must never select a merchant on them.
+  const isLocalHost =
+    host === 'localhost' || host === '127.0.0.1' || isPrivateLanHost(host);
   return (
     host === rootDomain ||
     host === `www.${rootDomain}` ||
@@ -66,8 +72,6 @@ export function isSharedPlatformHost(
     // merchantSlug hint; 'api' is a platform host, never a merchant.
     host === `api.${rootDomain}` ||
     host === `api-staging.${rootDomain}` ||
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    isPrivateLanHost(host)
+    (environment !== 'production' && isLocalHost)
   );
 }

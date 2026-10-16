@@ -102,6 +102,14 @@ describe('isSharedPlatformHost', () => {
       expect(isSharedPlatformHost(host, root)).toBe(true);
   });
 
+  it('does not treat loopback or LAN hosts as platform hosts in production', () => {
+    for (const host of ['localhost', '127.0.0.1', '192.168.1.20', '[::1]'])
+      expect(isSharedPlatformHost(host, root, 'production')).toBe(false);
+    // The programmatic production surfaces still classify.
+    expect(isSharedPlatformHost(`api.${root}`, root, 'production')).toBe(true);
+    expect(isSharedPlatformHost(root, root, 'production')).toBe(true);
+  });
+
   it('rejects tenant and look-alike hosts', () => {
     for (const host of [
       `shop.${root}`,

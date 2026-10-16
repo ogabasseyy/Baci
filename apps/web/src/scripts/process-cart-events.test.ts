@@ -1,8 +1,42 @@
 import { expect, it, vi } from 'vitest';
 import {
   cartEventsRetryDelayMs,
+  createAbortableSleep,
   runCartEventsOnce,
 } from './process-cart-events';
+
+it('wakes a backoff sleep immediately when stopped', async () => {
+  vi.useFakeTimers();
+  try {
+    const backoff = createAbortableSleep();
+    let resolved = false;
+    const sleeping = backoff.sleep(60_000).then(() => {
+      resolved = true;
+    });
+    backoff.wake();
+    await sleeping;
+    expect(resolved).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it('lets a backoff sleep elapse normally without a wake', async () => {
+  vi.useFakeTimers();
+  try {
+    const backoff = createAbortableSleep();
+    let resolved = false;
+    const sleeping = backoff.sleep(5_000).then(() => {
+      resolved = true;
+    });
+    await vi.advanceTimersByTimeAsync(5_000);
+    await sleeping;
+    expect(resolved).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 it('backs off exponentially after failed passes, capped at one minute', () => {
   expect(cartEventsRetryDelayMs(0)).toBe(1_000);

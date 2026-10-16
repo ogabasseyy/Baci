@@ -49,7 +49,9 @@ flags remain disabled by default, and no merchant is enrolled.
   rotator-managed file instead of setting `COMMERCE_CART_WORKER_JWT`
   directly; the worker re-reads the file on every batch, so a rotated
   token takes effect within one loop iteration without a restart.
-  Rotate well before the five-minute expiry cutoff the client enforces.
+  The client accepts a token until its actual `exp` (no early cutoff,
+  so a near-expiry token can finish a batch); rotation must therefore
+  complete before that instant, with margin for an in-flight batch.
 
 ## Release sequence (requires separate authorization)
 

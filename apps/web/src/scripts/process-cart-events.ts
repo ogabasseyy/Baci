@@ -65,6 +65,39 @@ export function cartEventsRetryDelayMs(consecutiveFailures: number): number {
   );
 }
 
+/**
+ * Sleep that the stop signal can cut short: backoff can reach
+ * CART_EVENTS_RETRY_MAX_MS (60s), far beyond the systemd unit's
+ * TimeoutStopSec, so waiting out the full delay would get the worker
+ * SIGKILLed mid-shutdown instead of exiting on the flag.
+ */
+export function createAbortableSleep(): {
+  sleep: (ms: number) => Promise<void>;
+  wake: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let resolveSleep: (() => void) | undefined;
+  return {
+    sleep(ms: number) {
+      return new Promise<void>((resolve) => {
+        resolveSleep = resolve;
+        timer = setTimeout(() => {
+          timer = undefined;
+          resolveSleep = undefined;
+          resolve();
+        }, ms);
+      });
+    },
+    wake() {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+      const resolve = resolveSleep;
+      resolveSleep = undefined;
+      resolve?.();
+    },
+  };
+}
+
 async function main(): Promise<void> {
   await import('dotenv/config');
   const args = process.argv.slice(2);
@@ -79,8 +112,10 @@ async function main(): Promise<void> {
   const loop = args.includes('--loop');
   let stopped = false;
   const cleanup = createCartRetentionScheduler();
+  const backoff = createAbortableSleep();
   const stop = () => {
     stopped = true;
+    backoff.wake();
   };
   process.once('SIGTERM', stop);
   process.once('SIGINT', stop);
@@ -98,9 +133,7 @@ async function main(): Promise<void> {
     // misconfigured worker does not spin at one pass per second.
     consecutiveFailures = status === 0 ? 0 : consecutiveFailures + 1;
     if (loop && !stopped)
-      await new Promise((resolve) =>
-        setTimeout(resolve, cartEventsRetryDelayMs(consecutiveFailures))
-      );
+      await backoff.sleep(cartEventsRetryDelayMs(consecutiveFailures));
   } while (loop && !stopped);
 }
 if (

@@ -81,9 +81,11 @@ def validate():
         if not all(isinstance(path, str) for path in scanned):
             raise ValueError("invalid scanned paths")
         skipped = paths.get("skipped", [])
-        if not isinstance(skipped, list) or skipped:
-            raise ValueError("reported skipped targets")
+        if not isinstance(skipped, list):
+            raise ValueError("invalid skipped targets")
         if os.environ.get("SCAN_EVENT_NAME") in ("pull_request", "push"):
+            if skipped:
+                raise ValueError("reported skipped targets")
             manifest = pathlib.Path("semgrep.requested-targets").read_bytes()
             if not manifest.endswith(b"\0") or b"\0\0" in manifest:
                 raise ValueError("invalid requested targets")

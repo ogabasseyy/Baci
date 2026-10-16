@@ -35,7 +35,8 @@ test('complete zero-error analysis passes and preserves unfiltered SARIF', () =>
 for (const [name, report] of [
   ['missing', undefined], ['malformed', '{'], ['null', null],
   ['missing diagnostics', {}], ['missing results', { errors: [], paths: { scanned: ['probe.ts'] } }],
-  ['non-list results', { ...complete, results: {} }], ['no scanned files', { results: [], errors: [], paths: { scanned: [] } }],
+  ['non-list results', { ...complete, results: {} }], ['non-list skipped', { ...complete, paths: { ...complete.paths, skipped: {} } }],
+  ['no scanned files', { results: [], errors: [], paths: { scanned: [] } }],
   ['warning parse error', { ...complete, errors: [{ level: 'warn', type: 'PartialParsing', message: 'PRIVATE_SOURCE_SNIPPET' }] }],
   ['internal scanner error', { ...complete, errors: [{ level: 'error', type: 'InternalError' }] }],
 ]) {
@@ -99,8 +100,11 @@ test('protected-branch scans require coverage of every requested source path', (
 test('missing requested-target manifest fails closed on targeted scans', () => {
   assert.notEqual(validate(complete, { requested: null }).status, 0);
 });
-test('reported skipped targets fail closed', () => {
+test('reported skipped targets fail closed on manifest-verified scans', () => {
   assert.notEqual(validate({ ...complete, paths: { ...complete.paths, skipped: [{ path: 'oversized.ts', reason: 'exceeded_size_limit' }] } }).status, 0);
+});
+test('scheduled full scans allow skipped non-manifest files when diagnostics and SARIF are complete', () => {
+  assert.equal(validate({ ...complete, paths: { ...complete.paths, skipped: [{ path: 'vendor/bundle.min.js', reason: 'semgrepignore_patterns_match' }] } }, { requested: null, event: 'schedule' }).status, 0);
 });
 test('a complete requested set including whitespace paths passes', () => {
   assert.equal(validate({ results: [], errors: [], paths: { scanned: ['probe.ts', 'space name.ts'] } }, { requested: ['probe.ts', 'space name.ts'] }).status, 0);

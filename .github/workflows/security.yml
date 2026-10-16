@@ -185,6 +185,11 @@ jobs:
             trap 'rm -rf "$base_helper_dir"' EXIT
             git show "origin/${PR_BASE_REF}:${diagnostics_helper}" > "${base_helper_dir}/semgrep-sarif-analysis-diagnostics.py"
             diagnostics_helper="${base_helper_dir}/semgrep-sarif-analysis-diagnostics.py"
+          else
+            # Bootstrap fallback before the helper lands on the base branch:
+            # exercises the PR-head helper rather than providing independent
+            # base-pinned attestation; CODEOWNERS review + tripwire govern trust.
+            echo "::warning::Base branch ${PR_BASE_REF} lacks ${diagnostics_helper}; using PR-head bootstrap copy (requires CODEOWNERS human review, not independent CI attestation)."
           fi
           python3 "$diagnostics_helper" pr-targets "$PR_BASE_REF"
         env:
@@ -274,8 +279,12 @@ jobs:
           EMPTY_PR_SCOPE: ${{ github.event_name == 'pull_request' && steps.semgrep_pr.outputs.scanned == 'false' }}
         run: |
           diagnostics_helper=.github/scripts/semgrep-sarif-analysis-diagnostics.py
-          if [ "$SCAN_EVENT_NAME" = "pull_request" ] && [ -f "${GITHUB_WORKSPACE}/base-filter/${diagnostics_helper}" ]; then
-            diagnostics_helper="${GITHUB_WORKSPACE}/base-filter/${diagnostics_helper}"
+          if [ "$SCAN_EVENT_NAME" = "pull_request" ]; then
+            if [ -f "${GITHUB_WORKSPACE}/base-filter/${diagnostics_helper}" ]; then
+              diagnostics_helper="${GITHUB_WORKSPACE}/base-filter/${diagnostics_helper}"
+            else
+              echo "::warning::base-filter lacks ${diagnostics_helper}; using PR-head bootstrap copy (requires CODEOWNERS human review, not independent CI attestation)."
+            fi
           fi
           python3 "$diagnostics_helper" validate
           if [ "$EMPTY_PR_SCOPE" != "true" ]; then

@@ -25,6 +25,10 @@ name: Capability Gate Contract
 # only hashed/parsed (never executed) and the running checker is always
 # base-owned, but the checkout/git machinery itself touches the
 # attacker-controlled tree. No head-code execution path was found.
+# Declared pin updates pass with a notice on purpose (the pins are
+# tamper-evidence for reviewers, not tamper-proof): enforcement-path
+# changes still need owner review, and a green check alone is not
+# sufficient to merge them.
 
 on:
   pull_request_target:

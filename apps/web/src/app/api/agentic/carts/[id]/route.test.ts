@@ -90,6 +90,15 @@ function createSupabaseMock({
   const selectChain = createChain(cartResult);
   const updateChain = createChain(updateResult);
   const from = vi.fn((table: string) => {
+    if (table === 'product_variants') {
+      return {
+        select: vi.fn(() => ({
+          in: vi.fn(() => ({
+            eq: vi.fn(async () => ({ data: [], error: null })),
+          })),
+        })),
+      };
+    }
     if (table !== 'agentic_cart_sessions') {
       throw new Error(`Unexpected table ${table}`);
     }
@@ -530,7 +539,17 @@ describe('/api/agentic/carts/[id]', () => {
     // used as a fallback. A read may still load the session row for
     // the one-shot create-recovery check, which finds no pending
     // marker here and leaves the canonical response untouched.
-    const from = vi.fn(() => {
+    const from = vi.fn((table: string) => {
+      // Catalog lane normalization may read product_variants; the
+      // legacy session row itself must stay untouched.
+      if (table === 'product_variants') {
+        const query = {
+          select: vi.fn(() => query),
+          in: vi.fn(() => query),
+          eq: vi.fn(async () => ({ data: [], error: null })),
+        };
+        return query;
+      }
       if (action === 'read') {
         const query = {
           select: vi.fn(() => query),
@@ -566,6 +585,7 @@ describe('/api/agentic/carts/[id]', () => {
         cartId: 'cart_123',
       })
     );
-    if (action === 'update') expect(from).not.toHaveBeenCalled();
+    if (action === 'update')
+      expect(from).not.toHaveBeenCalledWith('agentic_cart_sessions');
   });
 });

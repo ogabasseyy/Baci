@@ -224,6 +224,39 @@ describe('calculateCheckoutSession', () => {
     );
   });
 
+  it('preserves requested option-only attributes without a variant lane', async () => {
+    const productQuery = createQueryChain([
+      {
+        id: PRODUCT_ID,
+        manage_stock: false,
+        name: 'Phone',
+        price: 500000,
+        stock: 0,
+        stock_quantity: 0,
+      },
+    ]);
+    const variantQuery = createQueryChain([]);
+    const supabase = createCheckoutSupabase(productQuery, variantQuery);
+
+    const result = await calculateCheckoutSession(
+      supabase as never,
+      [
+        {
+          id: PRODUCT_ID,
+          quantity: 1,
+          variant_attributes: { engraving: 'Ada' },
+        },
+      ],
+      null,
+      'NGN',
+      MERCHANT_ID
+    );
+
+    expect(result.lineItems[0]?.item.variant_attributes).toEqual({
+      engraving: 'Ada',
+    });
+  });
+
   it('prices a condition lane from the active condition offer', async () => {
     const productQuery = createQueryChain([
       {

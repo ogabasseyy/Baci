@@ -84,7 +84,7 @@ function mockMutation(body: unknown) {
   });
 }
 
-function mockCalculation() {
+function mockCalculation(lane = false) {
   vi.mocked(calculateCheckoutSession).mockResolvedValue({
     fulfillmentOptions: [],
     lineItems: [
@@ -97,6 +97,13 @@ function mockCalculation() {
           product_id: 'product-1',
           quantity: 1,
           title: 'Phone',
+          ...(lane
+            ? {
+                condition: 'used',
+                variant_attributes: { storage: '128GB' },
+                variant_id: 'variant-1',
+              }
+            : {}),
         },
         subtotal: 500000,
         tax: 0,
@@ -272,7 +279,7 @@ describe('POST /api/agentic/carts', () => {
     );
   });
   it('migrates an enrolled newly created cart and returns its actual continuation', async () => {
-    mockCalculation();
+    mockCalculation(true);
     mockMutation({
       line_items: [
         {

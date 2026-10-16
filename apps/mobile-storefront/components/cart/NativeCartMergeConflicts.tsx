@@ -35,16 +35,9 @@ export function NativeCartMergeConflicts({
   return (
     <>
       {productConflicts.map((conflict) => (
-        // Sibling lanes share one base item identity (a shopper pick
-        // names the base item in the shared planner), so the React key
-        // must include the conflicting offers to stay unique per lane.
-        <View
-          key={JSON.stringify([
-            conflict.item,
-            conflict.existing,
-            conflict.incoming,
-          ])}
-        >
+        // productConflicts is deduped to one entry per line identity
+        // above, so the identity itself is a stable unique key.
+        <View key={cartLineIdentity(conflict.item)}>
           <Text style={{ color: colors.text }}>
             Item {conflict.item.productId} has different offers in each cart.
           </Text>

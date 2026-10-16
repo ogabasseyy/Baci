@@ -12,6 +12,7 @@ import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
 import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
 import {
+  resolveCanonicalVariantLines,
   toCanonicalLaneLine,
   toCheckoutLaneItem,
 } from '@/lib/agentic/ucp-cart-lane-items';
@@ -166,17 +167,15 @@ export async function POST(request: NextRequest, props: RouteProps) {
       parsed.data.currency !== undefined,
     operationId: mutation.idempotencyKey,
     expectedVersion: parsed.data.expectedVersion,
-    lines: parsed.data.line_items?.map((line) => ({
-      item: {
-        productId: line.item.id,
-        ...(line.item.variant_id ? { variantId: line.item.variant_id } : {}),
-        ...(line.item.condition ? { condition: line.item.condition } : {}),
-        ...(line.item.variant_attributes
-          ? { options: line.item.variant_attributes }
-          : {}),
-      },
-      quantity: line.quantity,
-    })),
+    lines: parsed.data.line_items
+      ? await resolveCanonicalVariantLines(
+          context.supabase as never,
+          context.merchant.id,
+          parsed.data.line_items.map((line) =>
+            toCanonicalLaneLine(toCheckoutLaneItem(line))
+          )
+        )
+      : undefined,
   });
   if (canonical) return respond(canonical.body, canonical.status);
 

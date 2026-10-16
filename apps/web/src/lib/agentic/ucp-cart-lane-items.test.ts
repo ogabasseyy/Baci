@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { toCanonicalLaneLine, toCheckoutLaneItem } from './ucp-cart-lane-items';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  resolveCanonicalVariantLines,
+  toCanonicalLaneLine,
+  toCheckoutLaneItem,
+} from './ucp-cart-lane-items';
 
 describe('UCP lane item mapping', () => {
   it('carries the full lane identity into the checkout calculator item', () => {
@@ -46,5 +50,40 @@ describe('UCP lane item mapping', () => {
       },
       quantity: 1,
     });
+  });
+});
+
+describe('resolveCanonicalVariantLines', () => {
+  it('rewrites a variant UUID id into the resolved product pair', async () => {
+    const client = {
+      from: vi.fn(() => ({
+        select: vi.fn(() => ({
+          in: vi.fn(() => ({
+            eq: vi.fn(async () => ({
+              data: [{ id: 'variant-1', product_id: 'product-1' }],
+              error: null,
+            })),
+          })),
+        })),
+      })),
+    };
+    const lines = await resolveCanonicalVariantLines(client as never, 'm-1', [
+      { item: { productId: 'variant-1' }, quantity: 1 },
+    ]);
+    expect(lines).toEqual([
+      { item: { productId: 'product-1', variantId: 'variant-1' }, quantity: 1 },
+    ]);
+  });
+
+  it('leaves lines untouched when the lookup fails', async () => {
+    const client = {
+      from: vi.fn(() => {
+        throw new Error('no table');
+      }),
+    };
+    const lines = [{ item: { productId: 'variant-1' }, quantity: 1 }];
+    await expect(
+      resolveCanonicalVariantLines(client as never, 'm-1', lines)
+    ).resolves.toEqual(lines);
   });
 });

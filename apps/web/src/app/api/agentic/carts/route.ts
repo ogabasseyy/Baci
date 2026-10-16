@@ -173,7 +173,10 @@ export async function POST(request: NextRequest) {
   // drops an invalid lane, a positional match would attach that lane's
   // metadata to the next accepted line.
   const normalizedItems = calculation.lineItems.map((lineItem) => ({
-    id: lineItem.item.id,
+    // The calculator resolves the parent product for variant-id lines;
+    // persist that pair, never the raw variant UUID as the product id.
+    id: lineItem.item.product_id,
+
     quantity: lineItem.item.quantity,
     ...(lineItem.item.variant_id
       ? { variant_id: lineItem.item.variant_id }
@@ -213,13 +216,19 @@ export async function POST(request: NextRequest) {
     // parsed lane identity (variant, attributes, condition) and issues
     // the website continuation, unlike a plain read.
     action: 'create',
-    lines: parsed.data.line_items.map((line) => ({
+    lines: normalizedItems.map((line) => ({
       item: {
-        productId: line.item.id,
-        ...(line.item.variant_id ? { variantId: line.item.variant_id } : {}),
-        ...(line.item.condition ? { condition: line.item.condition } : {}),
-        ...(line.item.variant_attributes
-          ? { options: line.item.variant_attributes }
+        productId: line.id,
+        ...(line.variant_id ? { variantId: line.variant_id } : {}),
+        ...(line.condition
+          ? {
+              condition: line.condition as NonNullable<
+                (typeof parsed.data.line_items)[number]['item']['condition']
+              >,
+            }
+          : {}),
+        ...(line.variant_attributes
+          ? { options: line.variant_attributes }
           : {}),
       },
       quantity: line.quantity,

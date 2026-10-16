@@ -1,12 +1,14 @@
 // --- Interfaces based on Spec ---
 import type { SupabaseClient } from '@supabase/supabase-js';
-import {
-  loadOrderConditionPrices,
-  OrderConditionUnavailableError,
-  orderConditionPrice,
-} from '@/lib/checkout/order-condition-prices';
+import { orderConditionPrice } from '@/lib/checkout/order-condition-prices';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { coerceStorefrontManageStock } from '@/lib/storefront-agent-availability';
+import { loadCheckoutCatalog } from './checkout-catalog';
+import {
+  conditionLaneKey,
+  loadConditionPricesIsolated,
+} from './checkout-condition-prices';
+import { buildCheckoutFulfillment } from './checkout-fulfillment';
 
 export interface GPTLineItem {
   id: string; // "line_item_123"
@@ -72,33 +74,6 @@ export interface CheckoutItem {
   variant_attributes?: Record<string, string>;
 }
 
-interface AgenticProduct {
-  id: string;
-  name: string;
-  price: number;
-  stock: number;
-  stock_quantity?: number;
-  manage_stock?: boolean | null;
-  weight_value?: number;
-  weight_unit?: string;
-}
-
-interface AgenticVariant {
-  id: string;
-  merchant_id: string;
-  product_id: string;
-  price_override?: number;
-  stock_quantity: number;
-  attributes?: Record<string, string>;
-  product?: {
-    manage_stock?: boolean | null;
-    name: string;
-    price?: number;
-    weight_unit?: string;
-    weight_value?: number;
-  };
-}
-
 // --- Helpers ---
 
 const POSTGRES_UUID_PATTERN =
@@ -111,76 +86,22 @@ export async function calculateCheckoutSession(
   _currency: string,
   merchantId: string
 ) {
-  // 1. Fetch products
-  // We need to handle both Product IDs and Variant IDs.
-  // Our new setup uses `id` for both (variants have unique UUIDs usually, or SKU).
-  // Ideally we query `products` and `product_variants`.
+  const { products: foundProducts, variants: foundVariants } =
+    await loadCheckoutCatalog(supabase, items, merchantId);
 
-  // Product and variant IDs are Postgres UUIDs. External IDs are left to the
-  // per-item validation path below instead of being sent through UUID filters.
-  const productIds = items.flatMap((i) =>
-    i.variant_id ? [i.id, i.variant_id] : [i.id]
-  );
-  const lookupProductIds = Array.from(
-    new Set(productIds.filter((id) => POSTGRES_UUID_PATTERN.test(id)))
-  );
-
-  let foundProducts: AgenticProduct[] = [];
-  let foundVariants: AgenticVariant[] = [];
-
-  if (lookupProductIds.length > 0) {
-    // Try fetching from products first (parents)
-    const { data: products, error: productsError } = await supabase
-      .from('products')
-      .select(
-        'id, name, price, stock, stock_quantity, manage_stock, weight_value, weight_unit'
-      )
-      .in('id', lookupProductIds)
-      .eq('merchant_id', merchantId)
-      .returns<AgenticProduct[]>();
-    if (productsError) {
-      throw new Error('Failed to load checkout products');
-    }
-
-    // Try fetching from variants
-    const { data: variants, error: variantsError } = await supabase
-      .from('product_variants')
-      .select(
-        'id, merchant_id, product_id, price_override, stock_quantity, attributes, product:products!product_variants_product_id_fkey(name, price, manage_stock, weight_value, weight_unit)'
-      )
-      .in('id', lookupProductIds)
-      .eq('merchant_id', merchantId)
-      .returns<AgenticVariant[]>();
-    if (variantsError) {
-      throw new Error('Failed to load checkout product variants');
-    }
-
-    foundProducts = products || [];
-    foundVariants = variants || [];
-  }
-
-  // Condition offers are product-level lanes (no variant): resolve their
-  // prices up front so a lane request is never silently quoted as the
-  // generic product. An unavailable offer fails the line closed below.
-  let conditionPrices = new Map<string, number>();
-  let conditionUnavailable = false;
-  try {
-    conditionPrices = await loadOrderConditionPrices(
+  // Condition offers are product-level lanes (no variant): resolve
+  // their prices up front so a lane request is never silently quoted
+  // as the generic product, with per-line availability isolation.
+  const { prices: conditionPrices, unavailable: conditionUnavailable } =
+    await loadConditionPricesIsolated(
+      supabase,
+      merchantId,
       items.map((item) => ({
         condition: item.condition === 'new' ? undefined : item.condition,
         product_id: item.id,
         variant_id: item.variant_id,
-      })),
-      merchantId,
-      supabase
+      }))
     );
-  } catch (error) {
-    if (error instanceof OrderConditionUnavailableError) {
-      conditionUnavailable = true;
-    } else {
-      throw error;
-    }
-  }
 
   const lineItems: GPTLineItem[] = [];
   const messages: GPTMessage[] = [];
@@ -224,7 +145,8 @@ export async function calculateCheckoutSession(
       // It's a variant
       productId = variant.product_id;
       variantId = variant.id;
-      variantAttributes = variant.attributes;
+      variantAttributes =
+        requestedItem.variant_attributes ?? variant.attributes;
       const variantPrice = variant.price_override ?? variant.product?.price;
       if (variantPrice == null || !Number.isFinite(Number(variantPrice))) {
         messages.push({
@@ -243,9 +165,10 @@ export async function calculateCheckoutSession(
         : null;
       // Variant weight? Assume parent weight (complex logic, skip for MVP)
     } else if (product) {
-      // It's a parent
+      // It's a parent; option-only lanes keep their requested options.
       price = product.price;
       title = product.name;
+      variantAttributes = requestedItem.variant_attributes;
       stock = coerceStorefrontManageStock(product.manage_stock)
         ? getEffectiveStock(product)
         : null;
@@ -276,7 +199,12 @@ export async function calculateCheckoutSession(
         product_id: productId,
         variant_id: variantId,
       });
-      if (conditionUnavailable || conditionPrice === undefined) {
+      if (
+        conditionUnavailable.has(
+          conditionLaneKey(productId, requestedItem.condition)
+        ) ||
+        conditionPrice === undefined
+      ) {
         messages.push({
           type: 'error',
           code: 'invalid',
@@ -328,65 +256,8 @@ export async function calculateCheckoutSession(
     });
   }
 
-  // Fulfillment Options
-  // Default: Pickup and Standard Shipping
-  const fulfillmentOptions: GPTFulfillmentOption[] = [];
+  const { fulfillmentOptions, selectedOptionId, totals } =
+    buildCheckoutFulfillment(fulfillmentOptionId, itemsBaseAmount);
 
-  // 1. Pickup
-  fulfillmentOptions.push({
-    type: 'pickup',
-    id: 'pickup_store_1',
-    title: 'Store Pickup',
-    subtitle: 'Pick up at Ogabassey Ikeja Store',
-    subtotal: 0,
-    tax: 0,
-    total: 0,
-  });
-
-  // 2. Standard Shipping (GIGL / Flat Rate approximation for MVP)
-  // Real GIGL calc requires address. If address missing, show estimate?
-  // Spec: "If no fulfillment address is provided... checkout cannot be completed."
-  // But we can return options?
-  // Let's return a flat rate fallback if address missing, or calc if present.
-  const flatShippingRate = 2500; // NGN
-  fulfillmentOptions.push({
-    type: 'shipping',
-    id: 'shipping_standard',
-    title: 'Standard Delivery',
-    subtitle: 'Delivery within Lagos',
-    // carrier: 'GIGL',
-    subtotal: flatShippingRate,
-    tax: 0,
-    total: flatShippingRate,
-  });
-
-  // Select fulfillment
-  let selectedOption = fulfillmentOptions.find(
-    (o) => o.id === fulfillmentOptionId
-  );
-  if (!selectedOption && fulfillmentOptions.length > 0) {
-    selectedOption = fulfillmentOptions[0]; // Default
-  }
-
-  const fulfillmentCost = selectedOption ? selectedOption.total : 0;
-  const grandTotal = itemsBaseAmount + fulfillmentCost;
-
-  // Totals
-  const totals: GPTTotal[] = [
-    {
-      type: 'items_base_amount',
-      display_text: 'Items Subtotal',
-      amount: itemsBaseAmount,
-    },
-    { type: 'fulfillment', display_text: 'Shipping', amount: fulfillmentCost },
-    { type: 'total', display_text: 'Total Due', amount: grandTotal },
-  ];
-
-  return {
-    lineItems,
-    totals,
-    fulfillmentOptions,
-    selectedOptionId: selectedOption?.id,
-    messages,
-  };
+  return { lineItems, totals, fulfillmentOptions, selectedOptionId, messages };
 }

@@ -71,7 +71,14 @@ it('replays stored lane identity when the canonical cart lost it at create', asy
   const supabase = {
     from: vi.fn(() => ({
       update: vi.fn(() => ({
-        eq: vi.fn(() => ({ eq: vi.fn(async () => ({})) })),
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            select: vi.fn(async () => ({
+              data: [{ cart_id: 'cart-a' }],
+              error: null,
+            })),
+          })),
+        })),
       })),
     })),
   };
@@ -224,7 +231,14 @@ it('recovers an option-only lane the canonical cart configured differently', asy
   const supabase = {
     from: vi.fn(() => ({
       update: vi.fn(() => ({
-        eq: vi.fn(() => ({ eq: vi.fn(async () => ({})) })),
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            select: vi.fn(async () => ({
+              data: [{ cart_id: 'cart-a' }],
+              error: null,
+            })),
+          })),
+        })),
       })),
     })),
   };
@@ -248,4 +262,53 @@ it('recovers an option-only lane the canonical cart configured differently', asy
       },
     ],
   });
+});
+
+it('scopes the recovery marker clear to the loaded row version', async () => {
+  const cart = {
+    agent_id: 'agent-a',
+    status: 'active',
+    updated_at: '2026-10-16T00:00:00.000Z',
+    metadata: { source: 'ucp', create_recovery_pending: true },
+    cart_items: [{ id: 'prod-1', quantity: 1, variant_id: 'variant-1' }],
+  };
+  const canonical = vi
+    .fn()
+    .mockResolvedValueOnce({
+      status: 200,
+      body: {
+        id: 'cart-a',
+        line_items: [{ item: { id: 'prod-1', quantity: 1 } }],
+      },
+    })
+    .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } });
+  const eqCalls: unknown[][] = [];
+  const recordEq =
+    (next: unknown) =>
+    (...args: unknown[]) => {
+      eqCalls.push(args);
+      return next;
+    };
+  const select = vi.fn(async () => ({ data: [], error: null }));
+  const supabase = {
+    from: vi.fn(() => ({
+      update: vi.fn(() => ({
+        eq: recordEq({
+          eq: recordEq({ eq: recordEq({ select }), select }),
+        }),
+      })),
+    })),
+  };
+  const deps = {
+    canonical,
+    load: vi.fn().mockResolvedValue({ cart, error: null }),
+    respond: vi.fn(),
+  };
+  const response = await readUcpCart(
+    { ...input, supabase: supabase as never },
+    deps
+  );
+  expect(response.status).toBe(200);
+  expect(eqCalls).toContainEqual(['updated_at', '2026-10-16T00:00:00.000Z']);
+  expect(select).toHaveBeenCalledWith('cart_id');
 });

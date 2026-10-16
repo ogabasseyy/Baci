@@ -197,6 +197,11 @@ jobs:
             echo "::warning::Base branch ${PR_BASE_REF} lacks ${diagnostics_helper}; using PR-head bootstrap copy (requires CODEOWNERS human review, not independent CI attestation)."
           fi
           python3 "$diagnostics_helper" pr-targets "$PR_BASE_REF"
+          # Add exact new token-bearing diagnostics even when the trusted base
+          # selector predates them. Preserve every base-selected target.
+          git diff --name-only -z --diff-filter=d "origin/${PR_BASE_REF}...HEAD" -- \
+            .github/scripts/semgrep-sarif-pg-diagnostic.py \
+            .github/scripts/semgrep-sarif-pg-diagnostic.test.py >> semgrep.requested-targets
         env:
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
 
@@ -244,6 +249,8 @@ jobs:
             next.config.ts
             .github/workflows
             .github/scripts/semgrep-sarif-analysis-diagnostics.py
+            .github/scripts/semgrep-sarif-pg-diagnostic.py
+            .github/scripts/semgrep-sarif-pg-diagnostic.test.py
           )
           python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py push-targets "${scan_targets[@]}"
           semgrep install-semgrep-pro
@@ -265,6 +272,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload synthetic PostgreSQL diagnostic
+        id: pg_diagnostic_upload
         if: always() && github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -273,6 +281,10 @@ jobs:
           if-no-files-found: error
           retention-days: 3
         continue-on-error: true
+
+      - name: Warn if optional PostgreSQL diagnostics failed
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true && (steps.pg_diagnostic.outcome == 'failure' || steps.pg_diagnostic_upload.outcome == 'failure')
+        run: echo "::warning::Optional PostgreSQL diagnostics failed; inspect the synthetic summary and step status. The required full Semgrep scan remains enforced."
 
       - name: Run full Semgrep on scheduled and manual scans
         if: github.event_name != 'pull_request' && github.event_name != 'push'

@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { parse } from 'yaml';
 import { fileURLToPath } from 'node:url';
 
 const workflow = readFileSync(
@@ -18,7 +19,7 @@ const workflow = readFileSync(
 );
 const helper = fileURLToPath(new URL('./semgrep-sarif-analysis-diagnostics.py', import.meta.url));
 
-function fixture(name = 'probe.ts', directory = 'apps/web/src/lib') {
+function fixture(name = 'probe.ts', directory = 'apps/web/src/lib', baseHelper) {
   const root = mkdtempSync(join(tmpdir(), 'baci-security-scope-'));
   const git = (...args) => {
     const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
@@ -29,6 +30,10 @@ function fixture(name = 'probe.ts', directory = 'apps/web/src/lib') {
   git('config', 'user.name', 'Synthetic Test');
   git('config', 'user.email', 'test@example.test');
   writeFileSync(join(root, 'README.md'), 'base');
+  if (baseHelper) {
+    mkdirSync(join(root, '.github/scripts'), { recursive: true });
+    writeFileSync(join(root, '.github/scripts/semgrep-sarif-analysis-diagnostics.py'), baseHelper);
+  }
   git('add', '.');
   git('commit', '-qm', 'base');
   git('update-ref', 'refs/remotes/origin/main', git('rev-parse', 'HEAD'));
@@ -91,21 +96,23 @@ for (const name of ['evil\nname.ts', 'évil.ts', 'space name.ts']) {
   });
 }
 
-test('a trusted diagnostics helper change is included in semantic scanning', () => {
-  const f = fixture('non-source.txt');
-  try {
-    mkdirSync(join(f.root, '.github/scripts'), { recursive: true });
-    const path = '.github/scripts/semgrep-sarif-analysis-diagnostics.py';
-    writeFileSync(join(f.root, path), 'print("fixture")');
-    f.git('add', '.');
-    f.git('commit', '-qm', 'diagnostics helper');
-    const result = f.run();
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.paths, [path]);
-  } finally {
-    rmSync(f.root, { recursive: true, force: true });
-  }
-});
+for (const path of ['.github/scripts/semgrep-sarif-analysis-diagnostics.py', '.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py']) {
+  test(`trusted helper ${path} is included in semantic scanning`, () => {
+    const f = fixture('non-source.txt');
+    try {
+      mkdirSync(join(f.root, '.github/scripts'), { recursive: true });
+      writeFileSync(join(f.root, path), 'print("fixture")');
+      f.git('add', '.');
+      f.git('commit', '-qm', 'diagnostics helper');
+      const result = f.run();
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(result.paths, [path]);
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
+}
+
 test('an actual non-source change produces an empty manifest', () => {
   const f = fixture('non-source.txt');
   try {
@@ -134,6 +141,29 @@ test('a root Next config change remains in targeted PR scope', () => {
     const result = f.run();
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.paths, ['next.config.ts']);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+
+test('base-pinned selection adds exact new diagnostics without dropping base-selected paths', () => {
+  const oldBaseHelper = 'import pathlib\npathlib.Path("semgrep.requested-targets").write_bytes(b"apps/web/src/lib/probe.ts\\0")\n';
+  const f = fixture('probe.ts', 'apps/web/src/lib', oldBaseHelper);
+  try {
+    const diagnosticPaths = ['.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py'];
+    for (const path of [...diagnosticPaths, '.github/scripts/unrelated.py']) {
+      writeFileSync(join(f.root, path), 'print("synthetic")');
+    }
+    f.git('add', '.');
+    f.git('commit', '-qm', 'new diagnostics');
+    const selector = parse(workflow).jobs.semgrep.steps.find((step) => step.id === 'semgrep_pr_targets');
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', selector.run], {
+      cwd: f.root, encoding: 'utf8', env: { ...process.env, PR_BASE_REF: 'main', GITHUB_WORKSPACE: f.root },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const paths = readFileSync(join(f.root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean);
+    assert.deepEqual([...new Set(paths)].sort(), ['apps/web/src/lib/probe.ts', ...diagnosticPaths].sort());
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }

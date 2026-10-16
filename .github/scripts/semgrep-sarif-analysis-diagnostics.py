@@ -17,6 +17,11 @@ PREFIXES = (
     ".github/workflows/",
 )
 SELF_PATH = ".github/scripts/semgrep-sarif-analysis-diagnostics.py"
+PYTHON_TARGETS = frozenset({
+    SELF_PATH,
+    ".github/scripts/semgrep-sarif-pg-diagnostic.py",
+    ".github/scripts/semgrep-sarif-pg-diagnostic.test.py",
+})
 
 
 def git_paths(arguments):
@@ -35,7 +40,7 @@ def write_targets(paths):
 
 def is_source_path(path):
     name = os.fsdecode(path)
-    return name == SELF_PATH or pathlib.PurePosixPath(name).suffix in EXTENSIONS
+    return name in PYTHON_TARGETS or pathlib.PurePosixPath(name).suffix in EXTENSIONS
 
 
 def collect_pr_targets(base_ref):
@@ -43,7 +48,8 @@ def collect_pr_targets(base_ref):
                        f"origin/{base_ref}...HEAD", "--"])
     write_targets(path for path in paths if path and
                   is_source_path(path) and
-                  (os.fsdecode(path) in ("next.config.ts", SELF_PATH) or
+                  (os.fsdecode(path) == "next.config.ts" or
+                   os.fsdecode(path) in PYTHON_TARGETS or
                    os.fsdecode(path).startswith(PREFIXES)))
 
 

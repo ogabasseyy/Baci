@@ -133,4 +133,61 @@ describe('order shipping transport failures', () => {
     ).rejects.toMatchObject(unconfirmedOutcome);
     expect(mocks.fetch).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    [502, '<html>Bad gateway</html>'],
+    [503, '{"error":"Service unavailable"}'],
+    [504, '{"error":"Gateway timed out"}'],
+  ])('treats an untyped gateway %i as an unconfirmed shipping outcome without retrying', async (status, body) => {
+    mocks.fetch.mockResolvedValue(new Response(body, { status }));
+
+    await expect(
+      useOrderStatusMutation().mutate({ orderId: 'order-1', status: 'shipped' })
+    ).rejects.toMatchObject(unconfirmedOutcome);
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+    expect(mocks.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['order', 'order-1'],
+    });
+  });
+
+  it.each([
+    [400, 'SHIPPING_QUOTE_RECEIVER_MISMATCH'],
+    [401, 'UNAUTHORIZED'],
+    [504, 'GIGL_AUTHENTICATION_FAILED'],
+    [502, 'GIGL_INTERNATIONAL_COUNTRY_LOOKUP_FAILED'],
+  ])('preserves the explicit server business code for HTTP %i', async (status, code) => {
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: 'Explicit server rejection', code }),
+        { status }
+      )
+    );
+
+    await expect(
+      useOrderStatusMutation().mutate({ orderId: 'order-1', status: 'shipped' })
+    ).rejects.toMatchObject({
+      name: 'OrderStatusUpdateError',
+      code,
+      message: 'Explicit server rejection',
+    });
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('preserves an untyped gateway failure for a non-shipping status update', async () => {
+    mocks.fetch.mockResolvedValue(
+      new Response('{"error":"Service unavailable"}', { status: 503 })
+    );
+
+    await expect(
+      useOrderStatusMutation().mutate({
+        orderId: 'order-1',
+        status: 'processing',
+      })
+    ).rejects.toMatchObject({
+      name: 'OrderStatusUpdateError',
+      code: undefined,
+      message: 'Service unavailable',
+    });
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+  });
 });

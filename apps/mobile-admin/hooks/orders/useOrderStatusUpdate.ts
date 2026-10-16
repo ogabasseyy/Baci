@@ -86,6 +86,19 @@ async function updateOrderStatus(
   const payload = parseResponsePayload(responseText);
 
   if (!response.ok) {
+    const errorCode =
+      payload && typeof payload === 'object' && typeof payload.code === 'string'
+        ? payload.code
+        : undefined;
+    // Gateway failures can replace a response after the carrier accepted the
+    // request. Keep explicit API codes on their existing business-error path.
+    if (
+      status === 'shipped' &&
+      [502, 503, 504].includes(response.status) &&
+      !errorCode?.trim()
+    ) {
+      throw unconfirmedShippingResult();
+    }
     const errorMessage =
       payload &&
       typeof payload === 'object' &&
@@ -105,9 +118,7 @@ async function updateOrderStatus(
 
     throw new OrderStatusUpdateError(
       errorMessage,
-      payload && typeof payload === 'object' && typeof payload.code === 'string'
-        ? payload.code
-        : undefined,
+      errorCode,
       payload && typeof payload === 'object' ? payload : undefined
     );
   }

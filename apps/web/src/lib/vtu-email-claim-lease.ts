@@ -41,11 +41,18 @@ export interface CustomerEmailClaimLease {
   priorSent: Array<{ key: string; present: boolean; value: unknown }>;
 }
 
-/** Sent-result keys the clear outcome governs (primary + mirrors). */
+/**
+ * Sent-result keys the clear/finalize outcome governs (primary +
+ * mirrors). Includes each key's `DeliveryOutcome` marker (Codex R127
+ * P2): a stale finalizer must also revert its `unknown` write —
+ * otherwise the settlement merge stamps it over the reclaiming
+ * owner's lease and the owner's legitimate retry is suppressed.
+ */
 export function getCustomerEmailSentKeys(
   state: CustomerEmailNotificationState
 ): string[] {
-  return [state.sentKey, ...(state.sentWriteKeys ?? [])];
+  const sentKeys = [state.sentKey, ...(state.sentWriteKeys ?? [])];
+  return [...sentKeys, ...sentKeys.map((key) => `${key}DeliveryOutcome`)];
 }
 
 /**

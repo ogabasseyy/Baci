@@ -75,3 +75,43 @@ describe('VTU customer email notification key-pair migration', () => {
     expect(sql).toContain('ROLLBACK;');
   });
 });
+
+describe('VTU customer email notification finalize migration', () => {
+  const finalizeMigrationPath = resolve(
+    __dirname,
+    '../../../../supabase/migrations/20261016120000_finalize_vtu_customer_email_notification_attempt.sql'
+  );
+  const finalizeRegressionPath = resolve(
+    __dirname,
+    '../../../../supabase/migrations/tests/vtu_customer_email_notification_finalize.sql'
+  );
+
+  it('persists the outcome and releases the lease under one fence', () => {
+    const sql = readFileSync(finalizeMigrationPath, 'utf8');
+
+    expect(sql).toContain(
+      'CREATE OR REPLACE FUNCTION public.finalize_vtu_customer_email_notification_attempt'
+    );
+    expect(sql).toContain('p_delivery_outcome text');
+    expect(sql).toContain('Mismatched VTU customer email metadata key pair');
+    expect(sql).toContain('Invalid VTU customer email delivery outcome');
+    expect(sql).toContain("p_sent_key || 'DeliveryOutcome'");
+    expect(sql).toContain('customerEmailNotificationSent');
+    expect(sql).toContain(
+      'GRANT EXECUTE ON FUNCTION public.finalize_vtu_customer_email_notification_attempt(uuid, text, text, text, text)'
+    );
+    expect(sql).toContain('TO service_role;');
+  });
+
+  it('ships a finalize live regression', () => {
+    const sql = readFileSync(finalizeRegressionPath, 'utf8');
+
+    expect(sql).toContain('EMAIL-FINALIZE-REGRESSION');
+    expect(sql).toContain('mismatched finalize did not raise');
+    expect(sql).toContain('outcome=sent finalize did not raise');
+    expect(sql).toContain('finalize did not persist the unknown marker');
+    expect(sql).toContain('stale-generation finalize did not return null');
+    expect(sql).toContain('failed finalize wrote an outcome key');
+    expect(sql).toContain('ROLLBACK;');
+  });
+});

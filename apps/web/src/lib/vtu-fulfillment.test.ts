@@ -85,6 +85,12 @@ interface PendingTransactionMockOptions {
    * must leave the owner's lease untouched).
    */
   emailClearData?: { id: string } | null;
+  /**
+   * When null, the email-finalize RPC resolves null (Codex R127 P2:
+   * same stale-generation semantics as the fenced clear — our merge
+   * must revert the outcome keys too).
+   */
+  emailFinalizeData?: { id: string } | null;
   notificationClaimData?: { id: string } | null;
   purchaseUpdateData?: { id: string; updated_at?: string } | null;
   purchaseUpdateErrors?: Array<{ message: string } | null>;
@@ -224,6 +230,7 @@ function createPendingTransactionSupabaseMock({
   completedGatewayTransactions = [],
   emailClaimData = { id: 'vtu-1' },
   emailClearData = { id: 'vtu-1' },
+  emailFinalizeData = { id: 'vtu-1' },
   notificationClaimData = { id: 'vtu-1' },
   purchaseUpdateData = { id: 'vtu-1' },
   purchaseUpdateErrors,
@@ -559,6 +566,27 @@ function createPendingTransactionSupabaseMock({
                   ? (transactionRow.metadata as Record<string, unknown>)
                   : {}),
                 [String(args?.p_attempt_key)]: false,
+              }
+            : null,
+          error: null,
+        });
+      }
+
+      if (name === 'finalize_vtu_customer_email_notification_attempt') {
+        return Promise.resolve({
+          data: emailFinalizeData
+            ? {
+                ...(transactionRow.metadata &&
+                typeof transactionRow.metadata === 'object'
+                  ? (transactionRow.metadata as Record<string, unknown>)
+                  : {}),
+                [String(args?.p_attempt_key)]: false,
+                [String(args?.p_sent_key)]: false,
+                ...(args?.p_delivery_outcome === 'unknown'
+                  ? {
+                      [`${String(args?.p_sent_key)}DeliveryOutcome`]: 'unknown',
+                    }
+                  : {}),
               }
             : null,
           error: null,
@@ -1241,7 +1269,9 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(mockSendEmail).not.toHaveBeenCalled();
   });
 
-  it('durably clears a claimed token email attempt when email delivery fails', async () => {
+  it('durably finalizes a claimed token email attempt when email delivery fails', async () => {
+    // Codex R127 P2: the failure outcome AND the lease release must
+    // persist in one fenced write — after the send, before the merge.
     const updatePayloads: unknown[] = [];
     mockSendEmail.mockResolvedValueOnce({ success: false });
     const supabase = createPendingTransactionSupabaseMock({
@@ -1288,13 +1318,26 @@ describe('fulfillPendingVtuTransaction', () => {
     });
 
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'clear_vtu_customer_email_notification_attempt',
+      'finalize_vtu_customer_email_notification_attempt',
       {
         p_attempt_at: '2026-10-15T00:00:00.000Z',
         p_attempt_key: 'customerTokenEmailNotificationAttempted',
+        p_delivery_outcome: 'failed',
         p_sent_key: 'customerTokenEmailNotificationSent',
         p_transaction_id: 'vtu-1',
       }
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'clear_vtu_customer_email_notification_attempt',
+      expect.anything()
+    );
+    const rpcMock = vi.mocked(supabase.rpc);
+    const finalizeCall = rpcMock.mock.calls.findIndex(
+      (call) => call[0] === 'finalize_vtu_customer_email_notification_attempt'
+    );
+    expect(finalizeCall).toBeGreaterThanOrEqual(0);
+    expect(mockSendEmail.mock.invocationCallOrder[0]).toBeLessThan(
+      rpcMock.mock.invocationCallOrder[finalizeCall]
     );
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
@@ -1354,6 +1397,16 @@ describe('fulfillPendingVtuTransaction', () => {
       transactionId: 'vtu-1',
     });
 
+    // Codex R127 P2: the unknown marker reaches the row in the same
+    // fenced write that releases the lease — never staged-only.
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'finalize_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_at: '2026-10-15T00:00:00.000Z',
+        p_attempt_key: 'customerTokenEmailNotificationAttempted',
+        p_delivery_outcome: 'unknown',
+      })
+    );
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
         customerTokenEmailNotificationSent: false,
@@ -1484,9 +1537,12 @@ describe('fulfillPendingVtuTransaction', () => {
     });
   });
 
-  it('leaves a reclaimed email lease untouched when our clear is stale', async () => {
+  it('leaves a reclaimed email lease untouched when our finalize is stale', async () => {
     const updatePayloads: unknown[] = [];
-    mockSendEmail.mockResolvedValueOnce({ success: false });
+    mockSendEmail.mockResolvedValueOnce({
+      success: false,
+      deliveryOutcome: 'unknown',
+    });
     const supabase = createPendingTransactionSupabaseMock({
       customerData: {
         user_id: null,
@@ -1494,7 +1550,7 @@ describe('fulfillPendingVtuTransaction', () => {
         first_name: 'Ada',
         last_name: 'Lovelace',
       },
-      emailClearData: null,
+      emailFinalizeData: null,
       merchantData: {
         business_name: 'OgaBassey',
         slug: 'ogabassey',
@@ -1532,15 +1588,16 @@ describe('fulfillPendingVtuTransaction', () => {
     });
 
     expect(supabase.rpc).toHaveBeenCalledWith(
-      'clear_vtu_customer_email_notification_attempt',
+      'finalize_vtu_customer_email_notification_attempt',
       expect.objectContaining({
         p_attempt_at: '2026-10-15T00:00:00.000Z',
       })
     );
-    // Neither lease key nor sent-result key may be persisted: the
-    // row now belongs to the reclaiming owner, so our merge must not
-    // write our stale flag, stamp, or `sent: false` over theirs
-    // (Codex R102 P2: that would double-send their email).
+    // Neither lease key, sent-result key, nor outcome marker may be
+    // persisted: the row now belongs to the reclaiming owner, so our
+    // merge must not write our stale flag, stamp, `sent: false`, or
+    // `unknown` over theirs (Codex R102 P2: that would double-send
+    // their email; R127: a stale `unknown` would suppress a retry).
     for (const payload of updatePayloads) {
       const metadata = (payload as { metadata?: Record<string, unknown> })
         .metadata;
@@ -1553,6 +1610,9 @@ describe('fulfillPendingVtuTransaction', () => {
         );
         expect(metadata).not.toHaveProperty(
           'customerTokenEmailNotificationSent'
+        );
+        expect(metadata).not.toHaveProperty(
+          'customerTokenEmailNotificationSentDeliveryOutcome'
         );
       }
     }

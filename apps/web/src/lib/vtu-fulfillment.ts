@@ -901,6 +901,60 @@ async function clearCustomerEmailNotificationAttempt({
   return true;
 }
 
+async function finalizeCustomerEmailNotificationAttempt({
+  deliveryOutcome,
+  lease,
+  metadata,
+  row,
+  state,
+  supabase,
+}: {
+  deliveryOutcome: 'failed' | 'unknown';
+  lease: CustomerEmailClaimLease;
+  metadata: Record<string, unknown>;
+  row: VtuTransactionRow;
+  state: CustomerEmailNotificationState;
+  supabase: SupabaseClient;
+}) {
+  // Failure/unknown outcomes (Codex R127 P2): the outcome AND the
+  // lease release persist in one fenced UPDATE, so a crash between
+  // the send and the settlement merge can neither lose the outcome
+  // nor free the lease for a duplicate send.
+  const { data, error } = await supabase.rpc(
+    'finalize_vtu_customer_email_notification_attempt',
+    {
+      p_attempt_at: lease.generation,
+      p_attempt_key: state.attemptedKey,
+      p_delivery_outcome: deliveryOutcome,
+      p_sent_key: state.sentKey,
+      p_transaction_id: row.id,
+    }
+  );
+
+  if (error) {
+    console.error(
+      'Failed to finalize VTU customer email notification attempt:',
+      {
+        error: error.message,
+        transactionId: row.id,
+      }
+    );
+    revertStaleEmailClaimLease({ lease, metadata, state });
+    return false;
+  }
+
+  const finalizedMetadata = readMetadataRecord(data);
+  if (Object.keys(finalizedMetadata).length === 0) {
+    revertStaleEmailClaimLease({ lease, metadata, state });
+    return false;
+  }
+
+  for (const [key, value] of Object.entries(finalizedMetadata)) {
+    setMetadataValue(metadata, key, value);
+  }
+  return true;
+}
+
 async function notifyVtuCustomerSuccess({
   cashbackAmount,
   customerWalletCredited,
@@ -1124,8 +1178,13 @@ async function notifyVtuCustomerSuccess({
           state: emailNotificationState,
         }) || metadataChanged;
       if (!emailResult.success && claimedEmailNotification) {
+        // Finalize (not clear): the staged outcome above is only
+        // local, so the outcome must reach the row in the SAME fenced
+        // write that releases the lease (Codex R127 P2).
         metadataChanged =
-          (await clearCustomerEmailNotificationAttempt({
+          (await finalizeCustomerEmailNotificationAttempt({
+            deliveryOutcome:
+              emailResult.deliveryOutcome === 'unknown' ? 'unknown' : 'failed',
             lease: claimedEmailNotification,
             metadata,
             row,
@@ -1146,6 +1205,9 @@ async function notifyVtuCustomerSuccess({
           state: emailNotificationState,
         }) || metadataChanged;
       if (claimedEmailNotification) {
+        // Clear-only (not finalize): a throw means the send was never
+        // accepted, so there is no outcome to persist — just release
+        // the lease for retry (Codex R127 P2 scope).
         metadataChanged =
           (await clearCustomerEmailNotificationAttempt({
             lease: claimedEmailNotification,

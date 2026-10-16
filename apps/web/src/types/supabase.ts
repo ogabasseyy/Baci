@@ -16971,6 +16971,16 @@ export type Database = {
         };
         Returns: Json;
       };
+      finalize_vtu_customer_email_notification_attempt: {
+        Args: {
+          p_attempt_at: string;
+          p_attempt_key: string;
+          p_delivery_outcome: string;
+          p_sent_key: string;
+          p_transaction_id: string;
+        };
+        Returns: Json;
+      };
       close_due_product_quiz_events: { Args: never; Returns: number };
       compact_product_search_text: {
         Args: { search_text: string };

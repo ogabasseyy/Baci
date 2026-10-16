@@ -13,13 +13,19 @@ export type HistoryMerchantCustomerResolution =
  * lookup is alias-aware and strict (mirrors checkout): a processing
  * tab open across a store rename polls with the stale slug, and an
  * alias-DB failure is a retryable 500, never a 404 the backfill
- * would treat as terminal. The customer resolves by auth user id,
- * then by email — but the email fallback only accepts a row already
- * linked to THIS auth user (tenant isolation: the email claim alone
- * proves nothing, and linking on a GET would let an attacker claim
- * a victim's guest history). Unlinked and mismatched rows resolve
- * to noCustomer (empty list). Extracted from the history route per
- * the Boy Scout Rule.
+ * would treat as terminal. Unverified sessions resolve to noCustomer
+ * BEFORE any customer lookup (Muse R150 M2, mirrors checkout's R109
+ * gate): the gate covers the byUserId hit too, so a row linked
+ * before R109 (or through any unverified path) stays unreadable —
+ * history carries prepaid voucher PINs, unspendable must also mean
+ * unreadable. Verified email OR verified phone opens the lookup
+ * (phone-auth logins carry no email). The customer then resolves by
+ * auth user id, then by email — but the email fallback only accepts
+ * a row already linked to THIS auth user (tenant isolation: the
+ * email claim alone proves nothing, and linking on a GET would let
+ * an attacker claim a victim's guest history). Unlinked and
+ * mismatched rows resolve to noCustomer (empty list). Extracted
+ * from the history route per the Boy Scout Rule.
  */
 export async function resolveHistoryMerchantCustomer({
   supabase,
@@ -32,6 +38,8 @@ export async function resolveHistoryMerchantCustomer({
     id: string;
     email?: string | null;
     email_confirmed_at?: string | null;
+    phone?: string | null;
+    phone_confirmed_at?: string | null;
   };
 }): Promise<HistoryMerchantCustomerResolution> {
   // Alias-aware (mirrors checkout): a processing tab open across a
@@ -60,6 +68,16 @@ export async function resolveHistoryMerchantCustomer({
 
   if (!merchant) {
     return { kind: 'noMerchant' };
+  }
+
+  // Verified-identifier gate (Muse R150 M2, mirrors checkout R109):
+  // an unverified session reads nothing, even when a row is already
+  // linked to its user id — unspendable must mean unreadable while
+  // the projection carries prepaid voucher PINs.
+  const emailVerified = Boolean(user.email_confirmed_at && user.email);
+  const phoneVerified = Boolean(user.phone_confirmed_at && user.phone);
+  if (!emailVerified && !phoneVerified) {
+    return { kind: 'noCustomer' };
   }
 
   // Customer lookups are strict like the merchant lookup above: a

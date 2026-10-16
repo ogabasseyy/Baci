@@ -155,7 +155,7 @@ export function useUtilityPayment() {
      * mirror): the throw aborts before the POST and the handler's
      * finally releases the checkout guard.
      */
-    getWalletIdempotencyKey: async (descriptor: string) => {
+    getWalletIdempotencyKey: (descriptor: string): Promise<string> => {
       // Tag from the SAME pair the scope hashed (Codex R62 6rtokd):
       // the settle filter recomputes this for the active account.
       // Recall-or-mint runs under the navigator.locks mint mutex

@@ -358,6 +358,31 @@ describe('GET /api/vtu/history', () => {
     expect(transactionEqCalls).toEqual([]);
   });
 
+  it('returns no history for an unverified session even with a linked row (Muse R150 M2)', async () => {
+    // Mirrors checkout's R109 gate: a row linked before R109 stays
+    // unreadable to an unverified session — unspendable must mean
+    // unreadable while the projection carries voucher PINs. The
+    // default byUserId fixture stays linked; the gate refuses before
+    // any customer lookup, so no transaction query runs either.
+    const { GET } = await import('./route');
+    mockAuthenticateApiRequest.mockResolvedValue({
+      user: {
+        id: 'user-1',
+        email: 'customer@example.com',
+        email_confirmed_at: null,
+      },
+      error: null,
+      supabase: {},
+    });
+
+    const response = await GET(makeRequest('?merchantSlug=ogabassey'));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.transactions).toEqual([]);
+    expect(transactionEqCalls).toEqual([]);
+  });
+
   it('scopes by exact reference when the backfill passes one', async () => {
     const { GET } = await import('./route');
 

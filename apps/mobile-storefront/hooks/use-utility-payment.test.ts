@@ -207,12 +207,10 @@ describe('useUtilityPayment', () => {
   it('returns a stable wallet idempotency key until it is reset', async () => {
     const { result } = renderHook(() => useUtilityPayment());
 
-    const first = await result.current.getWalletIdempotencyKey(
-      'stable-descriptor'
-    );
-    const second = await result.current.getWalletIdempotencyKey(
-      'stable-descriptor'
-    );
+    const first =
+      await result.current.getWalletIdempotencyKey('stable-descriptor');
+    const second =
+      await result.current.getWalletIdempotencyKey('stable-descriptor');
     expect(first).toBe(second);
 
     result.current.resetWalletIdempotencyKey('stable-descriptor');
@@ -253,9 +251,10 @@ describe('useUtilityPayment', () => {
     // fresh hook instance; retrying the same purchase MUST reuse the
     // pending key or the server debits a second transaction.
     const firstMount = renderHook(() => useUtilityPayment());
-    const key = await firstMount.result.current.getWalletIdempotencyKey(
-      'remount-descriptor'
-    );
+    const key =
+      await firstMount.result.current.getWalletIdempotencyKey(
+        'remount-descriptor'
+      );
     firstMount.unmount();
 
     const secondMount = renderHook(() => useUtilityPayment());
@@ -291,7 +290,8 @@ describe('useUtilityPayment', () => {
   it('mints distinct keys for distinct purchases', async () => {
     const { result } = renderHook(() => useUtilityPayment());
 
-    const airtime = await result.current.getWalletIdempotencyKey('airtime-0801');
+    const airtime =
+      await result.current.getWalletIdempotencyKey('airtime-0801');
     const data = await result.current.getWalletIdempotencyKey('data-0801');
     expect(airtime).not.toBe(data);
   });
@@ -306,7 +306,9 @@ describe('useUtilityPayment', () => {
     const scopedBefore =
       beforeHydration.result.current.scopePendingVtuDescriptor('hydration-key');
     const key =
-      await beforeHydration.result.current.getWalletIdempotencyKey(scopedBefore);
+      await beforeHydration.result.current.getWalletIdempotencyKey(
+        scopedBefore
+      );
     beforeHydration.unmount();
 
     mockAuthState.customer = { id: 'customer-a' };
@@ -331,7 +333,9 @@ describe('useUtilityPayment', () => {
         'merchant-hydration-key'
       );
     const key =
-      await beforeHydration.result.current.getWalletIdempotencyKey(scopedBefore);
+      await beforeHydration.result.current.getWalletIdempotencyKey(
+        scopedBefore
+      );
     beforeHydration.unmount();
 
     mockAuthState.merchantId = 'merchant-1';
@@ -353,7 +357,8 @@ describe('useUtilityPayment', () => {
     const scopedA = firstOwner.result.current.scopePendingVtuDescriptor(
       'owner-scoped-descriptor'
     );
-    const keyA = await firstOwner.result.current.getWalletIdempotencyKey(scopedA);
+    const keyA =
+      await firstOwner.result.current.getWalletIdempotencyKey(scopedA);
     firstOwner.unmount();
 
     mockAuthState.customer = { id: 'customer-b' };
@@ -363,12 +368,13 @@ describe('useUtilityPayment', () => {
       'owner-scoped-descriptor'
     );
     expect(scopedB).not.toBe(scopedA);
-    const keyB = await secondOwner.result.current.getWalletIdempotencyKey(scopedB);
+    const keyB =
+      await secondOwner.result.current.getWalletIdempotencyKey(scopedB);
 
     expect(keyB).not.toBe(keyA);
-    expect(await secondOwner.result.current.getWalletIdempotencyKey(scopedB)).toBe(
-      keyB
-    );
+    expect(
+      await secondOwner.result.current.getWalletIdempotencyKey(scopedB)
+    ).toBe(keyB);
   });
 
   it('captures the submitting owner so a mid-flight switch cannot redirect completion', async () => {
@@ -388,9 +394,9 @@ describe('useUtilityPayment', () => {
 
     const afterSwitch = renderHook(() => useUtilityPayment());
     // A’s captured scope still recalls A’s key after the switch…
-    expect(await afterSwitch.result.current.getWalletIdempotencyKey(scopedA)).toBe(
-      keyA
-    );
+    expect(
+      await afterSwitch.result.current.getWalletIdempotencyKey(scopedA)
+    ).toBe(keyA);
     // …while B’s own scoping addresses a different entry.
     expect(
       afterSwitch.result.current.scopePendingVtuDescriptor('mid-flight-key')

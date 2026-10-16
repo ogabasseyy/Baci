@@ -4,11 +4,11 @@ import {
   serializePendingVtuEntries,
 } from './pending-vtu-idempotency-codec';
 import {
-  PENDING_VTU_MINT_LOCK_NAME,
   acquirePendingVtuMintLock,
   forgottenVtuScopes,
   loadPendingVtuSnapshot,
   noteForgottenVtuScopes,
+  PENDING_VTU_MINT_LOCK_NAME,
   persistPendingVtuEntries,
   releasePendingVtuMintLock,
 } from './pending-vtu-idempotency-store';

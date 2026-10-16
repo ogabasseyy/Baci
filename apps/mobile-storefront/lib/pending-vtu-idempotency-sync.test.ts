@@ -181,8 +181,8 @@ describe('pending-vtu-idempotency-sync', () => {
   it('runs the mint under navigator.locks when available (Muse R149 M1, web mirror)', async () => {
     // Immediate-grant mock: proves the primary path delegates to a
     // real mutex (bypassing the runner leaves request uncalled).
-    const request = jest.fn(
-      async (_name: string, callback: () => string) => callback()
+    const request = jest.fn(async (_name: string, callback: () => string) =>
+      callback()
     );
     const priorNavigator = (globalThis as { navigator?: unknown }).navigator;
     (globalThis as { navigator?: unknown }).navigator = { locks: { request } };
@@ -219,15 +219,14 @@ describe('pending-vtu-idempotency-sync', () => {
         }
       }
     };
-    const request = jest.fn(
-      (_name: string, callback: () => string) =>
-        new Promise<string>((resolve) => {
-          queue.push(() => resolve(callback()));
-          pump();
-        }).finally(() => {
-          running = false;
-          pump();
-        })
+    const request = jest.fn((_name: string, callback: () => string) =>
+      new Promise<string>((resolve) => {
+        queue.push(() => resolve(callback()));
+        pump();
+      }).finally(() => {
+        running = false;
+        pump();
+      })
     );
     const priorNavigator = (globalThis as { navigator?: unknown }).navigator;
     (globalThis as { navigator?: unknown }).navigator = { locks: { request } };

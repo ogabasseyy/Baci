@@ -45,7 +45,13 @@ describe('resolveHistoryMerchantCustomer', () => {
     const result = await resolveHistoryMerchantCustomer({
       merchantSlug: 'ogabassey',
       supabase,
-      user: { email: 'customer@example.com', id: 'user-1' },
+      // Verified (Muse R150 M2): unverified sessions resolve to
+      // noCustomer before any customer lookup runs.
+      user: {
+        email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
+        id: 'user-1',
+      },
     });
 
     expect(result).toEqual({
@@ -81,6 +87,53 @@ describe('resolveHistoryMerchantCustomer', () => {
 
     expect(result).toEqual({
       customerId: 'customer-9',
+      kind: 'ok',
+      merchantId: 'merchant-1',
+    });
+  });
+
+  it('resolves nothing for an unverified session even with a linked row (Muse R150 M2)', async () => {
+    // Mirrors checkout's R109 gate: a row linked before R109 (or
+    // through any unverified path) stays unreadable — the error
+    // slotted for the byUserId lookup proves the query never runs.
+    const { supabase } = buildSupabase([
+      { data: { id: 'merchant-1' }, error: null },
+      { data: null, error: { message: 'must not run' } },
+    ]);
+
+    const result = await resolveHistoryMerchantCustomer({
+      merchantSlug: 'ogabassey',
+      supabase,
+      user: {
+        email: 'customer@example.com',
+        email_confirmed_at: null,
+        id: 'user-1',
+      },
+    });
+
+    expect(result).toEqual({ kind: 'noCustomer' });
+  });
+
+  it('opens the lookup for a phone-verified session without email (Muse R150 M2)', async () => {
+    // Phone-auth storefront logins carry no email (mirrors
+    // checkout: verified phone opens the user_id lookup).
+    const { supabase } = buildSupabase([
+      { data: { id: 'merchant-1' }, error: null },
+      { data: { id: 'customer-1', user_id: 'user-1' }, error: null },
+    ]);
+
+    const result = await resolveHistoryMerchantCustomer({
+      merchantSlug: 'ogabassey',
+      supabase,
+      user: {
+        id: 'user-1',
+        phone: '+2348012345678',
+        phone_confirmed_at: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    expect(result).toEqual({
+      customerId: 'customer-1',
       kind: 'ok',
       merchantId: 'merchant-1',
     });

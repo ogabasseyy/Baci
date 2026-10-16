@@ -131,21 +131,16 @@ describe('OrderRefundPanel status display', () => {
   it('keeps polling a Paystack-backed refund past refunded', async () => {
     // A later contradictory provider verdict can re-open the
     // balance after completion, so provider-backed pages never
-    // treat refunded as terminal.
+    // treat refunded as terminal. RPC-true shape: at full refund
+    // the outstanding-leg list is empty and only the durable flag
+    // carries the provider-backed signal.
     vi.useFakeTimers();
     try {
       loadWith({
         ...summary,
         status: 'refunded',
-        legs: [
-          {
-            amount: 100,
-            gateway: 'paystack',
-            id: 'leg-1',
-            outstanding: 0,
-            reference: 'ps-1',
-          },
-        ],
+        legs: [],
+        hasPaystackPayment: true,
       });
       await act(async () => {});
       expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
@@ -157,10 +152,15 @@ describe('OrderRefundPanel status display', () => {
       vi.useRealTimers();
     }
   });
-  it('stops polling a refunded order without provider legs', async () => {
+  it('stops polling a refunded order without a Paystack payment', async () => {
     vi.useFakeTimers();
     try {
-      loadWith({ ...summary, status: 'refunded' });
+      loadWith({
+        ...summary,
+        status: 'refunded',
+        legs: [],
+        hasPaystackPayment: false,
+      });
       await act(async () => {});
       expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
       await act(async () => {

@@ -17,7 +17,7 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002090250_order_refund_response.sql',
-    sha256: '5b29d02f072a26edea31ecedd84ea03b0d5d308a3c20492526f9e9adfac6fa34',
+    sha256: '31028223ac397590432b90988362a4450b2c5e1c4585e369a9c17ddc8bf517b1',
   },
   {
     repositoryPath:

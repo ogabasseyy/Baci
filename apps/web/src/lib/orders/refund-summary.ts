@@ -58,4 +58,9 @@ export interface RefundSummary {
     gateway: string | null;
     reference: string | null;
   }>;
+  // Durable provider-backed signal: legs lists only outstanding
+  // captures, so this stays true after a full Paystack refund while
+  // a later contradictory provider verdict can still re-open the
+  // balance. The panel keeps polling on it past refunded.
+  hasPaystackPayment: boolean;
 }

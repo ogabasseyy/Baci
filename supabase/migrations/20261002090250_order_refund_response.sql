@@ -29,6 +29,7 @@ CREATE OR REPLACE FUNCTION private.refund_status_response(
 DECLARE
   v_history jsonb;
   v_legs jsonb;
+  v_has_paystack boolean;
 BEGIN
   -- Bound like the audit events: one row per partial manual with 30s
   -- status polling would otherwise grow every response unbounded.
@@ -65,9 +66,18 @@ BEGIN
       AND p.transaction_type='payment' AND p.status='completed' AND p.amount>0
       AND upper(btrim(p.gateway))='PAYSTACK'
     ) l WHERE l.outstanding>0;
+  -- Durable provider-backed signal for polling: legs lists only
+  -- outstanding captures, so a fully refunded Paystack order shows
+  -- legs [] while a later contradictory provider verdict can still
+  -- re-open the balance. The panel keeps polling on this flag.
+  SELECT EXISTS(SELECT 1 FROM public.transactions p
+    WHERE p.order_id=p_order_id AND p.merchant_id=p_merchant_id
+      AND p.transaction_type='payment' AND p.status='completed' AND p.amount>0
+      AND upper(btrim(p.gateway))='PAYSTACK') INTO v_has_paystack;
   RETURN jsonb_build_object('currency',p_currency,'amountPaid',p_amount_paid,
     'refunded',p_refunded,'remaining',p_remaining,'pending',p_pending,
     'reversedInternal',p_reversed_internal,
+    'hasPaystackPayment',v_has_paystack,
     -- A terminal quarantined step reports review before anything
     -- else: delivery_uncertain rows never resume, so pending
     -- evidence (or even full coverage) must not relabel them as

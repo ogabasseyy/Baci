@@ -89,6 +89,11 @@ BEGIN
   IF (v_result->>'canRecordManual')::boolean IS NOT TRUE THEN
     RAISE EXCEPTION 'NULL-paid order not manually recordable';
   END IF;
+  -- Durable provider-backed polling signal: true while a completed
+  -- Paystack capture exists, independent of the outstanding list.
+  IF (v_result->>'hasPaystackPayment')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'paystack order missing provider-backed flag';
+  END IF;
   -- Cash-like legs refund through the manual allocator, not the
   -- wallet/savings ledgers, so a cash-only NULL-paid order derives
   -- its balance too instead of stranding at zero.
@@ -98,6 +103,9 @@ BEGIN
   IF (v_result->>'remaining')::numeric <> 75 THEN
     RAISE EXCEPTION 'NULL-paid cash remaining = %, want 75',
       v_result->>'remaining';
+  END IF;
+  IF (v_result->>'hasPaystackPayment')::boolean IS NOT FALSE THEN
+    RAISE EXCEPTION 'cash-only order wrongly flagged provider-backed';
   END IF;
 END;
 $null_paid_derivation$;

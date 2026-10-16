@@ -78,16 +78,16 @@ export function OrderRefundPanel({
       setMethod,
     });
 
-  // Only a refunded order without provider legs is terminal: other
-  // rows can still transition asynchronously (drain retries, provider
-  // reconciliation), and the ledger-derived balance would go stale
-  // without the poll. A Paystack-backed refund can even flip after
-  // completion when a later contradictory provider verdict re-opens
-  // the balance, so those pages keep polling past refunded.
-  const hasPaystackLeg = (summary?.legs ?? []).some(
-    (leg) => normalizePaymentGateway(leg.gateway) === 'PAYSTACK'
-  );
-  const terminal = summary?.status === 'refunded' && !hasPaystackLeg;
+  // Only a refunded order without a Paystack payment is terminal:
+  // other rows can still transition asynchronously (drain retries,
+  // provider reconciliation), and the ledger-derived balance would
+  // go stale without the poll. A Paystack-backed refund can even
+  // flip after completion when a later contradictory provider
+  // verdict re-opens the balance, so those pages keep polling past
+  // refunded. The flag (not the outstanding-leg list, which empties
+  // exactly at full refund) carries the provider-backed signal.
+  const terminal =
+    summary?.status === 'refunded' && !summary?.hasPaystackPayment;
   useRefundStatusPolling({
     hasInitialSummary: initialSummary !== undefined,
     onError: setError,

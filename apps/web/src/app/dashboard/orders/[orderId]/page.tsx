@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getMerchantForUser } from '@/lib/merchant-server';
+import { shouldShowOrderRefundPanel } from '@/lib/orders/should-show-order-refund-panel';
 import { getOrder, type Order } from '../actions';
 import OrderDetailsClientPage from './client-page';
 import { getInitialRefundSummary } from './initial-refund-summary';
@@ -22,25 +23,28 @@ export default async function OrderDetailsPage({ params }: Props) {
 
   let order: Order | null;
   try {
-    // The refund summary rides alongside the order fetch (parallel,
-    // not chained): the panel paints first content from it instead
-    // of flashing a loader while its mount fetch resolves.
-    const [fetchedOrder, initialRefundSummary] = await Promise.all([
-      getOrder(merchant.id, orderId),
-      getInitialRefundSummary(orderId),
-    ]);
-    order = fetchedOrder;
-    if (!order) {
-      return notFound();
-    }
-    return (
-      <OrderDetailsClientPage
-        initialOrder={order}
-        initialRefundSummary={initialRefundSummary}
-      />
-    );
+    order = await getOrder(merchant.id, orderId);
   } catch (error) {
     console.error('Failed to fetch order:', error);
     return notFound();
   }
+
+  if (!order) {
+    return notFound();
+  }
+
+  // The summary fetch chains after the order (never parallel): most
+  // orders cannot show the panel, and getOrder resolves order_number
+  // identifiers to the canonical UUID the uuid-typed RPC needs. The
+  // gate mirrors the section exactly, so a shown panel always paints
+  // first content from the server instead of flashing a loader.
+  const initialRefundSummary = shouldShowOrderRefundPanel(order)
+    ? await getInitialRefundSummary(order.id)
+    : null;
+  return (
+    <OrderDetailsClientPage
+      initialOrder={order}
+      initialRefundSummary={initialRefundSummary}
+    />
+  );
 }

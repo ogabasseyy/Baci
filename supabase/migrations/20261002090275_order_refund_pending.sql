@@ -3,6 +3,15 @@
 -- migration stays under the 300-line limit. Called only from
 -- private.manage_order_refund, which runs SECURITY DEFINER; this
 -- stays SECURITY INVOKER.
+-- LOAD-BEARING CONFINEMENT: this helper takes p_merchant_id as a
+-- caller-supplied argument with no auth check of its own, and it is
+-- GRANTed EXECUTE to authenticated (the grant exists only to dodge
+-- the Postgres 18 denial-path segfault). It stays unreachable solely
+-- because the private schema denies USAGE to authenticated — never
+-- grant private USAGE for an unrelated helper without adding an
+-- in-function authorization check here first. The confinement suite
+-- (order_refund_coverage_helper_confinement.sql, required in CI)
+-- pins the denial; keep it green.
 DROP FUNCTION IF EXISTS private.pending_refund_evidence_v1(uuid,uuid,text,boolean,text);
 CREATE OR REPLACE FUNCTION private.pending_refund_evidence_v1(
   p_order_id uuid, p_merchant_id uuid, p_currency text,

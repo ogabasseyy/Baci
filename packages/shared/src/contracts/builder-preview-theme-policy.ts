@@ -66,11 +66,17 @@ const cssBorderLengthValue =
   '(?:0|(?:0|[1-9][0-9]{0,3})(?:\\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax))';
 const cssFunctionalLength = (length: string) =>
   `(?:calc\\(${length}(?:\\s+[+-]\\s+${length})+\\)|clamp\\(${length},\\s*${length},\\s*${length}\\))`;
+// SAFE (SAST-reviewed): composed solely of module-constant fragments above —
+// no user input reaches the pattern. A literal would be unmaintainable.
+// nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
 const cssLengthPattern = new RegExp(
   `^(?:${cssLengthValue}|${cssFunctionalLength(cssLengthValue)})$`
 );
 const cssSignedLengthPattern =
   /^(?:0|-?(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax))$/;
+// SAFE (SAST-reviewed): composed solely of module-constant fragments above —
+// no user input reaches the pattern. A literal would be unmaintainable.
+// nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp
 const cssBorderWidthPattern = new RegExp(
   `^(?:${cssBorderLengthValue}|${cssFunctionalLength(cssBorderLengthValue)}|thin|medium|thick)$`
 );

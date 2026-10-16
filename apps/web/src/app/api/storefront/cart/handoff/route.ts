@@ -153,6 +153,11 @@ export async function GET(request: NextRequest) {
       return cartErrorResponse('quota_exceeded');
     }
 
+    // The pairing secret travels in a dedicated header, never in the
+    // URL: application logging must never record request headers for
+    // this route (and proxy/APM pipelines must redact x-handoff-token
+    // like an Authorization header) so the secret stays out of
+    // telemetry. See docs/deploy/shared-cart-rollout.md.
     const handoffToken = request.headers.get('x-handoff-token')?.trim();
     if (!handoffToken?.startsWith('ch1.')) {
       return cartErrorResponse('not_found');

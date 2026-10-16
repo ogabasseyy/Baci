@@ -68,6 +68,14 @@ only with enrollment drained or accept re-issuing live handoff links.
   drain. Native/web clients retain foreground HTTP recovery when
   realtime is disabled.
 
+## Telemetry redaction
+
+The handoff preview endpoint (`GET /api/storefront/cart/handoff`)
+takes the pairing secret in the `x-handoff-token` header. Proxy, APM,
+and error-reporting pipelines in front of the cart routes must redact
+that header exactly like `Authorization` before activation; in-repo
+logging never records request headers for these routes.
+
 ## Observability gaps to close before activation
 
 - No production dashboards/alerts exist yet for mutation latency,

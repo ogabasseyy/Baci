@@ -149,6 +149,49 @@ it('lets a new owner act while a previous owner attempt is still in flight', asy
   );
 });
 
+it('acts for the new owner when the switch and the tap land in the same commit', async () => {
+  let finishFirst: () => void = () => undefined;
+  const linkAccount = jest
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishFirst = resolve;
+        })
+    )
+    .mockResolvedValue(undefined);
+  useNativeSharedCartStore.setState({
+    enabled: true,
+    accountsEnabled: true,
+    accountUserId: '44444444-4444-4444-8444-444444444444',
+    linkAccount,
+    loadSavedCart: jest.fn().mockResolvedValue(undefined),
+    savedCart: null,
+    snapshot: currentSnapshot,
+  });
+  const view = render(<NativeCartAccountPanel />);
+  await act(async () => {});
+  fireEvent.press(view.getByText('Keep this cart on my account'));
+  expect(linkAccount).toHaveBeenCalledTimes(1);
+  // Switch owner and tap again without an intervening awaited flush:
+  // the tap must not submit under the stale owner's scope, and once
+  // the new owner's saved-cart read settles the same choice submits
+  // for the new owner instead of staying blocked by the old flight.
+  act(() => {
+    useNativeSharedCartStore.setState({
+      accountUserId: '55555555-5555-4555-8555-555555555555',
+    });
+    fireEvent.press(view.getByText('Keep this cart on my account'));
+  });
+  expect(linkAccount).toHaveBeenCalledTimes(1);
+  await act(async () => {});
+  fireEvent.press(view.getByText('Keep this cart on my account'));
+  expect(linkAccount).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    finishFirst();
+  });
+});
+
 it('offers saved-cart adoption when the native cart is empty', async () => {
   const linkAccount = jest.fn().mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({

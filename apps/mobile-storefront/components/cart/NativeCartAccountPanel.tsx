@@ -107,7 +107,11 @@ export function NativeCartAccountPanel() {
   async function run(
     input: Parameters<NonNullable<typeof linkAccount>>[0]
   ): Promise<void> {
-    const scope = ownerScopeRef.current;
+    // The interacting render's scope governs the guard: the ref only
+    // advances in a post-commit effect and can lag the render the
+    // shopper is acting on. Completion checks below still compare
+    // against the ref, which tracks the latest committed scope.
+    const scope = ownerScope;
     if (inFlight.current === scope || (!pendingInput.current && !savedReady))
       return;
     inFlight.current = scope;

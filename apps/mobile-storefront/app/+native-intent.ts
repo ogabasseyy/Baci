@@ -2,22 +2,29 @@ import { EXPO_PUBLIC_API_URL, EXPO_PUBLIC_ROOT_DOMAIN } from '@/env';
 import { captureCartPairingLink } from '@/lib/cart/pairing-link';
 import { CONFIG } from '@/lib/config';
 
+/** Platform API hosts whose root is derivable without configuration. */
+const PLATFORM_API_ROOTS: Record<string, string> = {
+  'api.usebaci.com': 'usebaci.com',
+  'api-staging.usebaci.com': 'usebaci.com',
+};
+
 /**
  * Root domain the web issuer mints continuation URLs under
  * (<slug>.<root>, mirroring NEXT_PUBLIC_ROOT_DOMAIN). Prefer the
- * explicit mobile mirror; otherwise derive only from known API host
- * shapes — an api./api-staging. prefix or a bare root host. Any other
- * API host shape (staging-api.*, regional hosts) cannot be derived
- * safely, so pairing capture falls back to its default and operators
- * must set EXPO_PUBLIC_ROOT_DOMAIN for those deployments.
+ * explicit mobile mirror; otherwise derive only from the known
+ * platform API hosts or a bare root host. Any other API host shape
+ * (a custom api.<merchant-domain>, staging-api.*, regional hosts)
+ * cannot be derived safely and fails closed, so operators must set
+ * EXPO_PUBLIC_ROOT_DOMAIN for those deployments.
  */
 export function derivePlatformRootDomain(
   apiHostname: string,
   explicitRootDomain?: string
 ): string | undefined {
   if (explicitRootDomain) return explicitRootDomain;
-  const stripped = apiHostname.replace(/^(?:api-staging|api)\./, '');
-  if (stripped !== apiHostname) return stripped;
+  const platformRoot = PLATFORM_API_ROOTS[apiHostname];
+  if (platformRoot) return platformRoot;
+  if (/^(?:api-staging|api)\./.test(apiHostname)) return undefined;
   return apiHostname.split('.').length <= 2 ? apiHostname : undefined;
 }
 

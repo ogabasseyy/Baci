@@ -16,6 +16,14 @@ export interface CartPairingLink {
   token: string;
   handoffId: string;
   destination: 'web' | 'native';
+  /**
+   * Web-destination continuation, opened only in the external browser
+   * when the shopper chooses web: it necessarily carries the pairing
+   * secret in its fragment, because the web surface redeems from that
+   * fragment. It lives only in this ephemeral in-memory link (never
+   * persisted or logged), and the token is single-use and short-lived;
+   * treat the browser copy as a second, equally bounded bearer copy.
+   */
   browserUrl: string;
 }
 let pending: CartPairingLink | null = null;

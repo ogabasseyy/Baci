@@ -83,6 +83,16 @@ describe('redirectSystemPath', () => {
     );
   });
 
+  it('does not derive a platform root from a custom api.* merchant domain', () => {
+    mockEnv.apiUrl = 'https://api.shop.example.com';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: '' })
+    );
+  });
+
   it('uses a bare root API host as the root itself', () => {
     mockEnv.apiUrl = 'https://usebaci.com';
     redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });

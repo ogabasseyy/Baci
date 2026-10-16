@@ -1745,6 +1745,9 @@ async function reconcileProcessingVtuTransaction({
         metadata: failedMetadata,
         row: currentRow,
         supabase,
+        // The failure persist above flipped the row to failed but the
+        // in-memory snapshot still reads processing (Codex R115 P1).
+        expectedStatus: 'failed',
       });
       if (refund.metadataChanged) {
         const { error: refundMetadataUpdateError } = await supabase
@@ -2315,6 +2318,10 @@ export async function fulfillPendingVtuTransaction({
           row,
           supabase,
           refundContext: 'wallet_race',
+          // The claim above flipped the row to processing (the failed
+          // persist runs after this refund); the in-memory snapshot
+          // still reads pending (Codex R115 P1).
+          expectedStatus: 'processing',
         });
         const failedPayload: {
           error_message: string;
@@ -2642,6 +2649,9 @@ export async function fulfillPendingVtuTransaction({
       metadata: refundMetadata,
       row,
       supabase,
+      // The purchase persist above flipped the row to failed but the
+      // in-memory snapshot still reads pending (Codex R115 P1).
+      expectedStatus: 'failed',
     });
     if (refund.metadataChanged) {
       const { error: refundMetadataUpdateError } = await supabase

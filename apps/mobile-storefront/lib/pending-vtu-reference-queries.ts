@@ -10,6 +10,11 @@
 export interface PendingVtuQueryEntry {
   reference: string | null;
   scopeTag?: string;
+  /**
+   * Absent on legacy projections: those fail open (listed), like
+   * untagged scope. Live registry entries always carry it.
+   */
+  completedAt?: number | null;
 }
 
 export interface PendingVtuCompletionQueryEntry {
@@ -29,6 +34,9 @@ export function hasNotedPendingVtuReferenceIn(
 /**
  * Noted references across live entries, deduped. With a scope tag,
  * other owners' tagged entries are excluded; untagged fail open.
+ * Completed entries are excluded: the settlement pass refetches
+ * history per reference, and terminal purchases need no refetch
+ * (web mirror, Codex R115 P2).
  */
 export function listNotedPendingVtuReferencesFrom(
   entries: Iterable<PendingVtuQueryEntry>,
@@ -38,6 +46,7 @@ export function listNotedPendingVtuReferencesFrom(
   for (const entry of entries) {
     if (
       entry.reference !== null &&
+      (entry.completedAt === undefined || entry.completedAt === null) &&
       (scopeTag === undefined ||
         entry.scopeTag === undefined ||
         entry.scopeTag === scopeTag)

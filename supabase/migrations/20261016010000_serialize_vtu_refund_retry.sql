@@ -210,6 +210,28 @@ BEGIN
     ('x' || substr(md5(p_vtu_transaction_id::text), 1, 16))::bit(64)::bigint
   );
 
+  -- Lost-update guard (same contract as refund_customer_wallet_for_vtu):
+  -- refuse when the VTU row moved off the caller-observed status, so a
+  -- retry that already re-claimed the row is never reversed under. This
+  -- MUST run before the wallet-row SELECT below: both refund RPCs must
+  -- acquire row locks in the same order (VTU row, then wallet row) —
+  -- they use different advisory keys, so opposite ordering can deadlock
+  -- two concurrent workers (Codex R115 P2). A reversed row can never
+  -- move again (the retry-claim RPC refuses ledger-credited rows), so
+  -- checking before the idempotency early-return cannot misfire.
+  IF p_expected_status IS NOT NULL THEN
+    SELECT t.status INTO v_tx_status
+    FROM public.vtu_transactions t
+    WHERE t.id = p_vtu_transaction_id
+    FOR UPDATE;
+
+    IF v_tx_status IS DISTINCT FROM p_expected_status THEN
+      RAISE EXCEPTION 'VTU transaction status changed under reversal (expected %, found %)',
+        p_expected_status, v_tx_status
+        USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
   SELECT t.*, w.available_balance AS current_balance
   INTO v_original_tx
   FROM public.customer_wallet_transactions t
@@ -247,22 +269,6 @@ BEGIN
   ) THEN
     RETURN QUERY SELECT false, 0::numeric, v_original_tx.current_balance, NULL::uuid;
     RETURN;
-  END IF;
-
-  -- Lost-update guard (same contract as refund_customer_wallet_for_vtu):
-  -- refuse when the VTU row moved off the caller-observed status, so a
-  -- retry that already re-claimed the row is never reversed under.
-  IF p_expected_status IS NOT NULL THEN
-    SELECT t.status INTO v_tx_status
-    FROM public.vtu_transactions t
-    WHERE t.id = p_vtu_transaction_id
-    FOR UPDATE;
-
-    IF v_tx_status IS DISTINCT FROM p_expected_status THEN
-      RAISE EXCEPTION 'VTU transaction status changed under reversal (expected %, found %)',
-        p_expected_status, v_tx_status
-        USING ERRCODE = '42501';
-    END IF;
   END IF;
 
   v_new_balance := v_original_tx.current_balance + v_original_tx.amount;

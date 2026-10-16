@@ -51,6 +51,19 @@ describe('pending-vtu-reference-queries', () => {
     ]);
   });
 
+  it('excludes completed entries but fails open absent completion', () => {
+    const entries = [
+      { reference: 'REF-OPEN', completedAt: null },
+      { reference: 'REF-DONE', completedAt: 1_700_000_000_000 },
+      { reference: 'REF-LEGACY' },
+    ];
+
+    expect(listNotedPendingVtuReferencesFrom(entries)).toEqual([
+      'REF-OPEN',
+      'REF-LEGACY',
+    ]);
+  });
+
   it('keys staleness off completion time, never submit time', () => {
     const entries = new Map([
       ['old', { reference: 'REF-OLD', completedAt: 1000 }],

@@ -34,6 +34,22 @@ describe('VTU refund/retry serialization migration', () => {
     expect(sql).toContain('idx_customer_wallet_transactions_vtu_refund_source');
   });
 
+  it('locks the VTU row before the wallet row in the reversal RPC', () => {
+    const sql = readFileSync(migrationPath, 'utf8');
+    const reverseBody = sql.slice(
+      sql.indexOf(
+        'CREATE OR REPLACE FUNCTION public.reverse_vtu_wallet_payment'
+      )
+    );
+
+    // Deadlock order (Codex R115 P2): both refund RPCs must acquire VTU
+    // row then wallet row, since they use different advisory keys.
+    expect(reverseBody.indexOf('changed under reversal')).toBeGreaterThan(-1);
+    expect(reverseBody.indexOf('changed under reversal')).toBeLessThan(
+      reverseBody.indexOf('FOR UPDATE OF w')
+    );
+  });
+
   it('ships a live serialization regression', () => {
     const sql = readFileSync(regressionPath, 'utf8');
 

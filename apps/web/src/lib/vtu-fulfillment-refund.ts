@@ -78,6 +78,7 @@ export async function refundVtuToCustomerWallet({
   supabase,
   refundContext = 'kuda_failure',
   requireCollectionEvidence = false,
+  expectedStatus,
 }: {
   metadata: Record<string, unknown>;
   row: VtuTransactionRow;
@@ -105,6 +106,14 @@ export async function refundVtuToCustomerWallet({
    * with no gateway charge produce no ledger row at all).
    */
   refundContext?: 'kuda_failure' | 'wallet_race';
+  /**
+   * Caller-known persisted status for the refund RPCs'
+   * expected-status guard (Codex R115 P1). Defaults to row.status;
+   * callers whose in-memory snapshot predates the persist they gated
+   * on MUST pass the persisted value (fresh-failure persists pass
+   * 'failed'; the just-claimed wallet race passes 'processing').
+   */
+  expectedStatus?: string;
 }): Promise<{
   metadataChanged: boolean;
   refundIssued: boolean;
@@ -148,6 +157,7 @@ export async function refundVtuToCustomerWallet({
       metadata,
       row,
       supabase,
+      expectedStatus,
       paymentSplit,
     });
   }
@@ -156,6 +166,7 @@ export async function refundVtuToCustomerWallet({
       metadata,
       row,
       supabase,
+      expectedStatus,
       paymentSplit,
     });
   }
@@ -211,5 +222,11 @@ export async function refundVtuToCustomerWallet({
     );
     return { metadataChanged, refundIssued: false, refundedAmount: 0 };
   }
-  return await refundCardOnly({ metadata, row, supabase, totalAmount });
+  return await refundCardOnly({
+    metadata,
+    row,
+    supabase,
+    expectedStatus,
+    totalAmount,
+  });
 }

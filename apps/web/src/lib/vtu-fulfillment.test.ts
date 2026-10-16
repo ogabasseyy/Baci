@@ -4413,6 +4413,12 @@ describe('fulfillPendingVtuTransaction', () => {
       },
       name: 'RetryableVtuError',
     });
+    // The reconcile persist flipped the row to failed; the guard must
+    // carry the persisted status, not the stale processing snapshot.
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.objectContaining({ p_expected_status: 'failed' })
+    );
   });
 
   it('returns failed when processing reconciliation intentionally skips the wallet refund', async () => {
@@ -5384,7 +5390,12 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(mockPurchaseAirtime).not.toHaveBeenCalled();
       expect(rpcImpl).toHaveBeenCalledWith(
         'refund_customer_wallet_for_vtu',
-        expect.objectContaining({ p_amount: 700 })
+        expect.objectContaining({
+          p_amount: 700,
+          // The row was just claimed (processing) when the race
+          // refund runs; the snapshot still reads pending (R115 P1).
+          p_expected_status: 'processing',
+        })
       );
       expect(rpcImpl).not.toHaveBeenCalledWith(
         'reverse_vtu_wallet_payment',
@@ -5744,13 +5755,21 @@ describe('fulfillPendingVtuTransaction', () => {
       });
 
       expect(result).toMatchObject({ status: 'failed' });
+      // The purchase persist flipped the row to failed before the
+      // refund ran; the snapshot still reads pending (R115 P1).
       expect(rpcImpl).toHaveBeenCalledWith(
         'reverse_vtu_wallet_payment',
-        expect.objectContaining({ p_vtu_transaction_id: 'vtu-kuda-fail-1' })
+        expect.objectContaining({
+          p_vtu_transaction_id: 'vtu-kuda-fail-1',
+          p_expected_status: 'failed',
+        })
       );
       expect(rpcImpl).toHaveBeenCalledWith(
         'refund_customer_wallet_for_vtu',
-        expect.objectContaining({ p_amount: 700 })
+        expect.objectContaining({
+          p_amount: 700,
+          p_expected_status: 'failed',
+        })
       );
       // Both legs were reversed, so the response reports the total
       // (Codex R98 P2): card-only reporting claimed refundedToWallet:

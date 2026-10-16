@@ -19,6 +19,14 @@ export interface RefundBranchInput {
   metadata: Record<string, unknown>;
   row: VtuTransactionRow;
   supabase: SupabaseClient;
+  /**
+   * Caller-known persisted status for the refund RPCs'
+   * expected-status guard (Codex R115 P1). Defaults to
+   * row.status; callers whose in-memory snapshot predates the
+   * persist they gated on (fresh-failure persists, the
+   * just-claimed wallet race) MUST pass the persisted value.
+   */
+  expectedStatus?: string;
 }
 
 export interface RefundBranchResult {
@@ -48,10 +56,12 @@ export async function refundHybridKudaFailure({
   metadata,
   row,
   supabase,
+  expectedStatus,
   paymentSplit,
 }: RefundBranchInput & {
   paymentSplit: PaymentSplit;
 }): Promise<RefundBranchResult> {
+  const guardStatus = expectedStatus ?? row.status;
   // Reverse the wallet leg first (idempotent at the RPC layer).
   const { error: reverseError } = await supabase.rpc(
     'reverse_vtu_wallet_payment',
@@ -61,7 +71,7 @@ export async function refundHybridKudaFailure({
       p_merchant_id: row.merchant_id,
       // Lost-update guard (Codex R114): the RPC refuses when the row
       // moved off the caller-observed status (a concurrent retry claim).
-      p_expected_status: row.status,
+      p_expected_status: guardStatus,
     }
   );
   if (reverseError) {
@@ -84,7 +94,7 @@ export async function refundHybridKudaFailure({
         p_amount: paymentSplit.card,
         p_vtu_transaction_id: row.id,
         p_description: `Refund (card portion) for failed ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)} purchase`,
-        p_expected_status: row.status,
+        p_expected_status: guardStatus,
       }
     );
     if (refundError) {
@@ -122,10 +132,12 @@ export async function refundHybridWalletRace({
   metadata,
   row,
   supabase,
+  expectedStatus,
   paymentSplit,
 }: RefundBranchInput & {
   paymentSplit: PaymentSplit;
 }): Promise<RefundBranchResult> {
+  const guardStatus = expectedStatus ?? row.status;
   // Wallet-only race (paymentSplit.card === 0): nothing to refund. Mark
   // the row refunded for visibility but do NOT call the refund RPC — the
   // wallet was never debited and no gateway charge was collected.
@@ -145,7 +157,7 @@ export async function refundHybridWalletRace({
       p_amount: paymentSplit.card,
       p_vtu_transaction_id: row.id,
       p_description: `Wallet balance changed during checkout — card portion refunded for ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)}`,
-      p_expected_status: row.status,
+      p_expected_status: guardStatus,
     }
   );
   if (raceRefundError) {
@@ -178,15 +190,17 @@ export async function refundCardOnly({
   metadata,
   row,
   supabase,
+  expectedStatus,
   totalAmount,
 }: RefundBranchInput & { totalAmount: number }): Promise<RefundBranchResult> {
+  const guardStatus = expectedStatus ?? row.status;
   const { error } = await supabase.rpc('refund_customer_wallet_for_vtu', {
     p_customer_id: row.customer_id,
     p_merchant_id: row.merchant_id,
     p_amount: totalAmount,
     p_vtu_transaction_id: row.id,
     p_description: `Refund for failed ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)} purchase ₦${row.amount}`,
-    p_expected_status: row.status,
+    p_expected_status: guardStatus,
   });
   if (error) {
     console.error('Failed to refund VTU payment to customer wallet:', {

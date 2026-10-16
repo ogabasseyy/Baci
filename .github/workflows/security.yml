@@ -202,6 +202,8 @@ jobs:
           git diff --name-only -z --diff-filter=d "origin/${PR_BASE_REF}...HEAD" -- \
             .github/scripts/semgrep-sarif-pg-diagnostic.py \
             .github/scripts/semgrep-sarif-pg-diagnostic.test.py >> semgrep.requested-targets
+          # Preserve filename bytes and NUL framing while removing duplicate targets.
+          LC_ALL=C sort -zu -o semgrep.requested-targets semgrep.requested-targets
         env:
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
 

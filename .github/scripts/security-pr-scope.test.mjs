@@ -147,24 +147,31 @@ test('a root Next config change remains in targeted PR scope', () => {
 });
 
 
-test('base-pinned selection adds exact new diagnostics without dropping base-selected paths', () => {
-  const oldBaseHelper = 'import pathlib\npathlib.Path("semgrep.requested-targets").write_bytes(b"apps/web/src/lib/probe.ts\\0")\n';
-  const f = fixture('probe.ts', 'apps/web/src/lib', oldBaseHelper);
-  try {
+for (const baseKnowsDiagnostics of [false, true]) {
+  test(`base-pinned selection preserves unique NUL paths when base knows diagnostics: ${baseKnowsDiagnostics}`, () => {
     const diagnosticPaths = ['.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py'];
-    for (const path of [...diagnosticPaths, '.github/scripts/unrelated.py']) {
-      writeFileSync(join(f.root, path), 'print("synthetic")');
+    const basePaths = ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/line\nbreak.ts', 'apps/web/src/lib/é.ts', 'apps/web/src/lib/e\u0301.ts'];
+    const selectedBasePaths = [...basePaths, ...(baseKnowsDiagnostics ? diagnosticPaths : [])];
+    const baseHelper = `import pathlib\npathlib.Path("semgrep.requested-targets").write_bytes(${JSON.stringify(selectedBasePaths.join('\0') + '\0')}.encode())\n`;
+    const f = fixture('probe.ts', 'apps/web/src/lib', baseHelper);
+    try {
+      for (const path of [...basePaths, ...diagnosticPaths, '.github/scripts/unrelated.py']) {
+        writeFileSync(join(f.root, path), 'print("synthetic")');
+      }
+      f.git('add', '.');
+      f.git('commit', '-qm', 'new diagnostics');
+      const selector = parse(workflow).jobs.semgrep.steps.find((step) => step.id === 'semgrep_pr_targets');
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', selector.run], {
+        cwd: f.root, encoding: 'utf8', env: { ...process.env, PR_BASE_REF: 'main', GITHUB_WORKSPACE: f.root },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const manifest = readFileSync(join(f.root, 'semgrep.requested-targets'), 'utf8');
+      assert.ok(manifest.endsWith('\0'));
+      const paths = manifest.split('\0').filter(Boolean);
+      assert.deepEqual(paths.sort(), [...basePaths, ...diagnosticPaths].sort());
+      assert.equal(paths.length, new Set(paths).size);
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
     }
-    f.git('add', '.');
-    f.git('commit', '-qm', 'new diagnostics');
-    const selector = parse(workflow).jobs.semgrep.steps.find((step) => step.id === 'semgrep_pr_targets');
-    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', selector.run], {
-      cwd: f.root, encoding: 'utf8', env: { ...process.env, PR_BASE_REF: 'main', GITHUB_WORKSPACE: f.root },
-    });
-    assert.equal(result.status, 0, result.stderr);
-    const paths = readFileSync(join(f.root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean);
-    assert.deepEqual([...new Set(paths)].sort(), ['apps/web/src/lib/probe.ts', ...diagnosticPaths].sort());
-  } finally {
-    rmSync(f.root, { recursive: true, force: true });
-  }
-});
+  });
+}

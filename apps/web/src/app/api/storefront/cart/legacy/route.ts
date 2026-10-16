@@ -10,7 +10,6 @@ import {
 } from '@/lib/cart/merchant-resolution';
 import { checkCartQuota, readCartJsonBody } from '@/lib/cart/request-context';
 import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
-import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { legacyMcpBridgeRequestSchema } from '@/schemas/cart-legacy-bridge';
@@ -22,12 +21,6 @@ export async function POST(request: NextRequest) {
     ?.match(/^Bearer legacy_mcp_([a-f0-9]{64})$/)?.[1];
   if (!token || !/^[a-f0-9]{64}$/.test(token))
     return cartErrorResponse('unauthorized');
-  const quota = await checkCartQuota({
-    merchantId: 'legacy-bridge',
-    operation: 'handoff_preview',
-    subject: getTrustedClientIdentifier(request),
-  });
-  if (!quota.allowed) return cartErrorResponse('quota_exceeded');
   try {
     const anon = createAnonClient();
     const merchant = await resolveCartMerchant(request, {
@@ -36,6 +29,15 @@ export async function POST(request: NextRequest) {
       loadMerchantFeatures: createAnonMerchantFeatureLookup(anon),
     });
     if (!merchant.ok) return cartErrorResponse(merchant.error);
+    // Bridge traffic is server-to-server behind one egress identity:
+    // budget it per resolved merchant and legacy token (hashed into
+    // the quota key), never in one global client-IP bucket.
+    const quota = await checkCartQuota({
+      merchantId: merchant.merchant.id,
+      operation: 'legacy_bridge',
+      subject: token,
+    });
+    if (!quota.allowed) return cartErrorResponse('quota_exceeded');
     const body = await readCartJsonBody(request);
     const input = legacyMcpBridgeRequestSchema.safeParse(
       body.ok ? body.body : null

@@ -11,6 +11,7 @@ export type CartQuotaOperation =
   | 'handoff_issue'
   | 'handoff_redeem'
   | 'handoff_preview'
+  | 'legacy_bridge'
   | 'checkout_prepare';
 
 export interface CartQuotaInput {
@@ -45,6 +46,10 @@ export const CART_QUOTA_BUDGETS: Record<
   handoff_issue: { limit: 60, windowMs: 60 * 60 * 1000 },
   handoff_redeem: { limit: 120, windowMs: 60 * 60 * 1000 },
   handoff_preview: { limit: 120, windowMs: 60 * 1000 },
+  // MCP legacy-bridge writes are token-authenticated server-to-server
+  // calls: budgeted per merchant and legacy token, never by the shared
+  // broker egress identity, and not fail-closed on quota degradation.
+  legacy_bridge: { limit: 120, windowMs: 60 * 1000 },
   // Checkout review preparation: per-submit plus refresh retries.
   checkout_prepare: { limit: 60, windowMs: 60 * 1000 },
 };

@@ -134,6 +134,35 @@ describe('handoff destination checks', () => {
     expect(isHandoffWebOriginAllowed(null, merchant)).toBe(false);
   });
 
+  it('allows only the exact slug loopback host outside production', () => {
+    const merchant = {
+      customDomain: null,
+      rootDomain: 'usebaci.com',
+      slug: 'ogabassey',
+    };
+    expect(
+      isHandoffWebOriginAllowed(
+        'http://ogabassey.localhost:3000',
+        merchant,
+        'development'
+      )
+    ).toBe(true);
+    expect(
+      isHandoffWebOriginAllowed(
+        'http://evil.localhost:3000',
+        merchant,
+        'development'
+      )
+    ).toBe(false);
+    expect(
+      isHandoffWebOriginAllowed(
+        'http://ogabassey.localhost:3000',
+        merchant,
+        'production'
+      )
+    ).toBe(false);
+  });
+
   it('rejects plain-HTTP merchant origins', () => {
     const merchant = {
       customDomain: 'shop.example.com',

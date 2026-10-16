@@ -86,6 +86,20 @@ it('uses resolved merchant and opaque holder capability rather than body owner f
     })
   );
 });
+it('budgets bridge writes per resolved merchant and legacy token', async () => {
+  await POST(request('a'.repeat(64)));
+  await POST(request('b'.repeat(64)));
+  expect(mocks.quota).toHaveBeenCalledWith({
+    merchantId: 'merchant',
+    operation: 'legacy_bridge',
+    subject: 'a'.repeat(64),
+  });
+  expect(mocks.quota).toHaveBeenCalledWith({
+    merchantId: 'merchant',
+    operation: 'legacy_bridge',
+    subject: 'b'.repeat(64),
+  });
+});
 it('does not migrate non-enrolled merchants or leak provider errors', async () => {
   mocks.merchant.mockResolvedValueOnce({
     ok: false,

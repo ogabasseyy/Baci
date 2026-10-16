@@ -234,8 +234,7 @@ export function isHandoffWebOriginAllowed(
     return (
       host === 'localhost' ||
       host === '127.0.0.1' ||
-      host === `${slug}.localhost` ||
-      host.endsWith('.localhost')
+      host === `${slug}.localhost`
     );
   } catch {
     return false;

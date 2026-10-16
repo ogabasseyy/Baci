@@ -73,6 +73,16 @@ describe('redirectSystemPath', () => {
     );
   });
 
+  it('does not guess a root for non-standard API host shapes', () => {
+    mockEnv.apiUrl = 'https://staging-api.usebaci.com';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: undefined })
+    );
+  });
+
   it('uses a bare root API host as the root itself', () => {
     mockEnv.apiUrl = 'https://usebaci.com';
     redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });

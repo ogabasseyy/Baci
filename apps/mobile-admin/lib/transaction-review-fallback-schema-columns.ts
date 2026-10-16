@@ -5,6 +5,7 @@ export type TransactionReviewSchemaColumnAvailability = Readonly<{
   discountCodeUnavailable: boolean;
   lineIdUnavailable: boolean;
   offerIdUnavailable?: boolean;
+  offerIdSnapshotUnavailable?: boolean;
   offerGradeUnavailable?: boolean;
   offerConditionNotesUnavailable?: boolean;
   productMatchStatusUnavailable?: boolean;
@@ -28,6 +29,7 @@ const schemaColumnAvailabilityKeys: Readonly<
   discount_code_id: 'discountCodeUnavailable',
   line_id: 'lineIdUnavailable',
   offer_id: 'offerIdUnavailable',
+  offer_id_snapshot: 'offerIdSnapshotUnavailable',
   offer_grade: 'offerGradeUnavailable',
   offer_condition_notes: 'offerConditionNotesUnavailable',
   product_match_status: 'productMatchStatusUnavailable',
@@ -48,6 +50,7 @@ export function createTransactionReviewSchemaColumnState() {
     discountCodeUnavailable: false,
     lineIdUnavailable: false,
     offerIdUnavailable: false,
+    offerIdSnapshotUnavailable: false,
     offerGradeUnavailable: false,
     offerConditionNotesUnavailable: false,
     productMatchStatusUnavailable: false,
@@ -131,6 +134,9 @@ export function omitUnavailableTransactionReviewSchemaColumns(
   }
   if (isUnavailable('offerIdUnavailable', 'offer_id')) {
     result = withoutSchemaColumn(result, 'offer_id');
+  }
+  if (isUnavailable('offerIdSnapshotUnavailable', 'offer_id_snapshot')) {
+    result = withoutSchemaColumn(result, 'offer_id_snapshot');
   }
   if (isUnavailable('offerGradeUnavailable', 'offer_grade')) {
     result = withoutSchemaColumn(result, 'offer_grade');

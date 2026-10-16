@@ -93,6 +93,20 @@ describe('omitUnavailableTransactionReviewSchemaColumns', () => {
     );
   });
 
+  it('removes the offer snapshot when that column is unavailable', () => {
+    const selector =
+      'id, order_items(id, condition, offer_id, offer_id_snapshot, variant_attributes, name)';
+
+    expect(
+      omitUnavailableTransactionReviewSchemaColumns(selector, {
+        ...noUnavailableColumns,
+        offerIdSnapshotUnavailable: true,
+      })
+    ).toBe(
+      'id, order_items(id, condition, offer_id, variant_attributes, name)'
+    );
+  });
+
   it('keeps rich fields while removing a missing line id', () => {
     const selector =
       'id, order_items(id, line_id, variant_id, order_item_unit_costs(unit_index, cost_price))';

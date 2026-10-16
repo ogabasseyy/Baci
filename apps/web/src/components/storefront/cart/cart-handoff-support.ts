@@ -67,12 +67,57 @@ export function loadOrCreateAttemptId(handoffId: string): string {
   return attemptId;
 }
 
+const attemptChoices = new Map<string, Choice>();
+
+function attemptChoiceStorageKey(handoffId: string): string {
+  return `${attemptStorageKey(handoffId)}:choice`;
+}
+
+/**
+ * The choice an unresolved attempt is locked to. The redeem RPC
+ * replays solely by attempt id, so retrying with a different choice
+ * would silently apply the original redemption; the first choice is
+ * recorded and later different choices are refused until the outcome
+ * is definitive.
+ */
+export function lockedAttemptChoice(handoffId: string): Choice | null {
+  const key = attemptChoiceStorageKey(handoffId);
+  const cached = attemptChoices.get(key);
+  if (cached) return cached;
+  try {
+    const stored = window.localStorage.getItem(key);
+    if (
+      stored === 'connect' ||
+      stored === 'merge' ||
+      stored === 'keep_existing'
+    ) {
+      attemptChoices.set(key, stored);
+      return stored;
+    }
+  } catch {
+    /* Storage is optional; the tab cache still locks the choice. */
+  }
+  return null;
+}
+
+export function recordAttemptChoice(handoffId: string, choice: Choice): void {
+  const key = attemptChoiceStorageKey(handoffId);
+  attemptChoices.set(key, choice);
+  try {
+    window.localStorage.setItem(key, choice);
+  } catch {
+    /* Use the tab cache. */
+  }
+}
+
 /** Redemption already committed; optional browser cleanup cannot undo success. */
 export function clearHandoffAttempt(handoffId: string): void {
   const key = attemptStorageKey(handoffId);
   attemptIds.delete(key);
+  attemptChoices.delete(attemptChoiceStorageKey(handoffId));
   try {
     window.localStorage.removeItem(key);
+    window.localStorage.removeItem(attemptChoiceStorageKey(handoffId));
   } catch {
     /* Storage may be disabled. */
   }

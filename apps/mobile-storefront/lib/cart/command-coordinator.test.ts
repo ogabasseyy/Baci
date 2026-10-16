@@ -81,6 +81,30 @@ it('persists before transmission and replays the identical request after process
   expect(s.receipts.clear).toHaveBeenCalledWith(merchantId, 'same-key');
   expect(s.onSnapshot).toHaveBeenCalledTimes(1);
 });
+it.each([
+  'expired',
+  'unauthorized',
+  'not_found',
+  'merchant_unavailable',
+  'idempotency_conflict',
+])('releases the command receipt after a definitive %s rejection', async (code) => {
+  const s = setup();
+  s.client.command.mockRejectedValue(new NativeCartError(code));
+  await expect(
+    createCartCommandCoordinator(s.options).command(cartId, input)
+  ).rejects.toMatchObject({ code });
+  expect(s.receipts.clear).toHaveBeenCalledWith(merchantId, 'same-key');
+});
+it('retains the command receipt after a transient server rejection', async () => {
+  const s = setup();
+  s.client.command.mockRejectedValue(
+    new NativeCartError('temporarily_unavailable')
+  );
+  await expect(
+    createCartCommandCoordinator(s.options).command(cartId, input)
+  ).rejects.toMatchObject({ code: 'temporarily_unavailable' });
+  expect(s.receipts.clear).not.toHaveBeenCalled();
+});
 it('never replays a previous guest intent under a new principal', async () => {
   const s = setup();
   s.client.command.mockRejectedValueOnce(

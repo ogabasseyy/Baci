@@ -17,6 +17,7 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
     resolutions,
     setResolutions,
     redeeming,
+    lockedChoice,
     redeemError,
     destinationError,
     setDestinationError,
@@ -218,17 +219,30 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
         </p>
       ) : null}
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button disabled={redeeming} onClick={() => void act('connect')}>
+        <Button
+          disabled={
+            redeeming || (lockedChoice !== null && lockedChoice !== 'connect')
+          }
+          onClick={() => void act('connect')}
+        >
           {redeeming ? 'Connecting…' : 'Connect this cart'}
         </Button>
         {destCart ? (
           <>
-            <Button disabled={redeeming} onClick={() => void act('merge')}>
+            <Button
+              disabled={
+                redeeming || (lockedChoice !== null && lockedChoice !== 'merge')
+              }
+              onClick={() => void act('merge')}
+            >
               {redeeming ? 'Merging…' : 'Merge with my cart'}
             </Button>
             <Button
               variant="secondary"
-              disabled={redeeming}
+              disabled={
+                redeeming ||
+                (lockedChoice !== null && lockedChoice !== 'keep_existing')
+              }
               onClick={() => void act('keep_existing')}
             >
               Keep my existing cart
@@ -236,6 +250,12 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
           </>
         ) : null}
       </div>
+      {lockedChoice ? (
+        <p className="mt-2 text-sm">
+          Confirming your earlier choice for this link — retry the same option
+          to check its outcome.
+        </p>
+      ) : null}
       {destCart ? (
         <p className="mt-3 text-sm">
           Your current cart ({destCart.lines.length}{' '}

@@ -102,6 +102,33 @@ it('treats a completed cart as finished and starts a fresh cart on the next writ
   expect(restart).toHaveBeenCalledTimes(1);
   expect(s.client.create).toHaveBeenCalledTimes(1);
 });
+it('clears the published terminal reference before creating the next cart', async () => {
+  const s = setup();
+  s.connect();
+  s.client.read.mockResolvedValue({
+    cart: { ...snapshot, state: 'completed' as const },
+  });
+  await s.controller.refresh();
+  // The real publish callback stores the terminal cart as the shared
+  // reference; getLegacy now reflects that published state.
+  let repaired: unknown = 'unset';
+  s.repairLegacy.mockImplementation((items: CartItem[]) => {
+    repaired = items;
+    s.getLegacy.mockReturnValue({
+      items: [],
+      sharedCartRef: undefined,
+    } as never);
+  });
+  s.getLegacy.mockReturnValue({
+    items: [],
+    sharedCartRef: { merchantId: merchant, cartId },
+  } as never);
+  s.client.context.mockResolvedValue({ actor: 'guest', cartId: null });
+  s.client.read.mockResolvedValue({ cart: snapshot });
+  await s.controller.write({ type: 'clear' });
+  expect(repaired).toEqual([]);
+  expect(s.client.create).toHaveBeenCalledTimes(1);
+});
 it('retires a server-completed cart when clear is rejected as locked', async () => {
   const s = setup();
   s.connect();

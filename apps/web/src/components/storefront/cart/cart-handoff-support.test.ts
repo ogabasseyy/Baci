@@ -1,9 +1,21 @@
 import { expect, it } from 'vitest';
 import {
+  clearHandoffAttempt,
   formatMinor,
   loadOrCreateAttemptId,
+  lockedAttemptChoice,
+  recordAttemptChoice,
   redactHandoffFragment,
 } from './cart-handoff-support';
+
+it('locks an attempt to its first choice until cleared', () => {
+  localStorage.clear();
+  expect(lockedAttemptChoice('handoff-lock')).toBeNull();
+  recordAttemptChoice('handoff-lock', 'connect');
+  expect(lockedAttemptChoice('handoff-lock')).toBe('connect');
+  clearHandoffAttempt('handoff-lock');
+  expect(lockedAttemptChoice('handoff-lock')).toBeNull();
+});
 
 it('preserves the redemption attempt after a response is lost', () => {
   sessionStorage.clear();

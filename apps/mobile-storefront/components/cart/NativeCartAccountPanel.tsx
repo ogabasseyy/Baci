@@ -9,6 +9,19 @@ import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { NativeCartMergeConflicts } from './NativeCartMergeConflicts';
 
 /**
+ * Owner-scope equality by value: a recreated scope object for the same
+ * owner and generation must still match a completed saved-cart read.
+ */
+export function savedCartScopeMatches(
+  saved: { userId: string | null; generation: number } | null,
+  owner: { userId: string | null; generation: number }
+): boolean {
+  return (
+    saved?.userId === owner.userId && saved?.generation === owner.generation
+  );
+}
+
+/**
  * Explicit account choice for a signed-in shopper. Guest checkout never
  * requires this panel, and signing in alone never links the cart.
  */
@@ -99,8 +112,7 @@ export function NativeCartAccountPanel() {
   // Compare scopes by value, not reference: a recreated scope object
   // for the same owner and generation must not orphan a completed read.
   const savedReady =
-    savedRead.scope?.userId === ownerScope.userId &&
-    savedRead.scope?.generation === ownerScope.generation &&
+    savedCartScopeMatches(savedRead.scope, ownerScope) &&
     savedRead.status === 'ready';
   const current = snapshot;
   const saved = savedCart;

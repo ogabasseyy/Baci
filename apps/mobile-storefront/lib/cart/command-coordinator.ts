@@ -1,4 +1,5 @@
 import type {
+  CartErrorCode,
   CartMutationInput,
   CartSnapshot,
   CreateCartInput,
@@ -75,39 +76,31 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
     } catch (error) {
       // Definitive rejections prove this exact request did not commit, so
       // its key is released; uncertain outcomes keep the same request/key.
-      const definitive: Record<PendingCartBody['kind'], string[]> = {
-        command: [
-          'version_conflict',
-          'cart_locked',
-          'invalid_item',
-          'invalid_request',
-        ],
-        create: ['invalid_item', 'invalid_request', 'idempotency_conflict'],
-        account: [
-          'invalid_item',
-          'invalid_request',
-          'idempotency_conflict',
-          'merge_conflict',
-        ],
-        handoff: [
-          'handoff_consumed',
-          'merge_conflict',
-          'expired',
-          'invalid_item',
-          'invalid_request',
-          'not_found',
+      // Every shared server rejection code except the two transient ones
+      // (temporarily_unavailable, rate_limited) is non-retryable for the
+      // identical request — replaying it would be rejected again and
+      // would strand every later write behind pending_operation.
+      const definitiveServerCodes: ReadonlySet<string> = new Set<CartErrorCode>(
+        [
           'unauthorized',
-          // A version/refresh rejection proves this exact redemption
-          // did not commit; keeping the receipt would resend the same
-          // stale expected versions forever and block any new review.
+          'merchant_unavailable',
+          'not_found',
+          'expired',
           'version_conflict',
+          'idempotency_conflict',
+          'invalid_item',
+          'cart_locked',
           'refresh_required',
-        ],
-      };
+          'merge_conflict',
+          'too_many_lines',
+          'handoff_consumed',
+        ]
+      );
       if (
         error instanceof NativeCartError &&
         !error.indeterminate &&
-        definitive[body.kind].includes(error.code)
+        (definitiveServerCodes.has(error.code) ||
+          error.code === 'invalid_request')
       ) {
         await assertActor(request.actor);
         await receipts.clear(options.merchantId, request.operationId);

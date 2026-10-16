@@ -7,10 +7,12 @@ import {
   clearHandoffAttempt,
   fetchJson,
   loadOrCreateAttemptId,
+  lockedAttemptChoice,
   type MergeConflictView,
   mergeResolutionList,
   type PreviewResponse,
   planHandoffMerge as planMerge,
+  recordAttemptChoice,
   recordResolutionList,
   redactHandoffFragment,
 } from './cart-handoff-support';
@@ -26,6 +28,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     Record<string, 'incoming' | 'existing'>
   >({});
   const [redeeming, setRedeeming] = useState(false);
+  const [lockedChoice, setLockedChoice] = useState<Choice | null>(null);
   const [redeemError, setRedeemError] = useState<string | null>(null);
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const bootstrapRequired = useRef(false);
@@ -39,6 +42,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   useEffect(() => {
     if (loadStarted.current) return;
     loadStarted.current = true;
+    setLockedChoice(lockedAttemptChoice(handoffId));
     void loadPreview();
   }, []);
 
@@ -155,6 +159,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       };
       if (response.ok) {
         clearHandoffAttempt(handoffId);
+        setLockedChoice(null);
         window.location.replace(
           window.location.pathname + window.location.search
         );
@@ -178,12 +183,16 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         return false;
       }
       if (payload.code === 'handoff_consumed') {
+        clearHandoffAttempt(handoffId);
+        setLockedChoice(null);
         setLoadError(
           'This link was already used. Ask the sender for a fresh one.'
         );
         return false;
       }
       if (payload.code === 'expired') {
+        clearHandoffAttempt(handoffId);
+        setLockedChoice(null);
         setLoadError('This link has expired. Ask the sender for a fresh one.');
         return false;
       }
@@ -199,6 +208,19 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
 
   async function act(choice: Choice): Promise<void> {
     if (!preview?.snapshot) return;
+    // The redeem RPC replays by attempt id alone: once an attempt has
+    // started, a different choice under the same id would silently
+    // apply the original redemption. Lock retries to the first choice
+    // until its outcome is definitive.
+    const lockedChoice = lockedAttemptChoice(handoffId);
+    if (lockedChoice && lockedChoice !== choice) {
+      setRedeemError(
+        'A previous choice for this link is still being confirmed. Retry that same choice so its outcome can be checked.'
+      );
+      return;
+    }
+    recordAttemptChoice(handoffId, choice);
+    setLockedChoice(choice);
     const attemptId = loadOrCreateAttemptId(handoffId);
     const base = {
       attemptId,
@@ -251,6 +273,15 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       }
       return;
     }
+    const lockedMergeChoice = lockedAttemptChoice(handoffId);
+    if (lockedMergeChoice && lockedMergeChoice !== 'merge') {
+      setRedeemError(
+        'A previous choice for this link is still being confirmed. Retry that same choice so its outcome can be checked.'
+      );
+      return;
+    }
+    recordAttemptChoice(handoffId, 'merge');
+    setLockedChoice('merge');
     const attemptId = loadOrCreateAttemptId(handoffId);
     const ok = await postRedeem({
       attemptId,
@@ -278,6 +309,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     resolutions,
     setResolutions,
     redeeming,
+    lockedChoice,
     redeemError,
     destinationError,
     setDestinationError,

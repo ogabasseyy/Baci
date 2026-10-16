@@ -27,6 +27,7 @@ export function createNativeCartController(
 ) {
   let snapshot: CartSnapshot | null = null;
   let terminal = false;
+  let terminalCartId: string | null = null;
   let incoming: CartSnapshot | null = null;
   let tail: Promise<unknown> = Promise.resolve();
   const receipts = options.receipts ?? pendingCartRequest;
@@ -74,11 +75,13 @@ export function createNativeCartController(
       // display clears and the next explicit write starts a fresh cart.
       snapshot = null;
       terminal = true;
+      terminalCartId = next.cartId;
       options.publish(next, { items: [], metadataReady: true });
       options.status('ready');
       return;
     }
     terminal = false;
+    terminalCartId = null;
     if (snapshot?.cartId === next.cartId && snapshot.version > next.version)
       return;
     const display = await hydrateNativeCart(
@@ -195,7 +198,20 @@ export function createNativeCartController(
     }
     if (!context || context.cartId)
       throw new NativeCartError('refresh_required');
-    const legacy = options.getLegacy();
+    let legacy = options.getLegacy();
+    if (
+      legacy.sharedCartRef &&
+      terminalCartId &&
+      legacy.sharedCartRef.cartId === terminalCartId &&
+      options.repairLegacy
+    ) {
+      // Retire the published reference to the finished cart as part of
+      // starting the next generation; otherwise it would trip the
+      // reconnect guard below forever. The items survive for the
+      // fresh cart's lines.
+      options.repairLegacy(legacy.items);
+      legacy = options.getLegacy();
+    }
     if (legacy.sharedCartRef) throw new NativeCartError('reconnect_required');
     const created = await coordinator.create({
       operationId: options.newOperationId(),

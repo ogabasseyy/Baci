@@ -14,6 +14,7 @@ from capability_gate_contract_ci_checks import (
     _on_block_subs,
     _ordered_branch_match,
     _strip_comment,
+    _without_block_scalars,
 )
 
 # The gate job's run block, stripped per line. Any edit fails until this expectation is updated alongside it; that update cannot take effect same-PR (the running checker is base-owned), so run-block changes need two PRs.
@@ -67,7 +68,7 @@ _JOB_HEADER = re.compile(r"^  ([A-Za-z0-9_.\-]+)\s*:")
 
 def contract_trigger_failures(workflow_text):
     """The guard's own triggers must stay unwidened: narrowed types/branches keep the key while silencing updates or main PRs."""
-    lines = workflow_text.splitlines()
+    lines = _without_block_scalars(workflow_text.splitlines())
     subs, end = _on_block_subs(lines)
     if subs is None:
         return ["contract workflow must declare triggers"]
@@ -106,16 +107,9 @@ def contract_trigger_failures(workflow_text):
         for key, rest, idx in subs["push"]:
             if key in ("paths", "paths-ignore", "branches-ignore", "types"):
                 failures.append(f"contract workflow must not narrow push with {key}:")
-        # Exact scope, canonically spelled: inclusion globs ([main, attacker],
-        # ['*']) still match main, so merely including main is not enough.
+        # Exact push scope, canonically spelled: inclusion globs ([main, attacker], ['*']) still match main.
         lone = [(rest, idx) for key, rest, idx in subs["push"] if key == "branches"]
-        scoped = len(lone) == 1 and re.sub(r"\s+", "", _strip_comment(lone[0][0]).strip()) == "[main]"
-        if scoped:
-            j = lone[0][1] + 1
-            while j < end and (not lines[j].strip() or lines[j].strip().startswith("#")):
-                j += 1
-            scoped = j >= end or _TRIGGER_ITEM.match(lines[j]) is None
-        if not scoped:
+        if len(lone) != 1 or re.sub(r"[\s\"']", "", _strip_comment(lone[0][0]).strip()) != "[main]":
             failures.append("contract workflow must scope push to exactly branches: [main]:")
     # Exact trigger set: extra triggers mint same-named skipped contexts; merge_group stays excluded (queue commits would deadlock on the PRT-gated context).
     if set(subs) != {"pull_request_target", "push"}:
@@ -132,7 +126,8 @@ def workflow_failures(workflow_text):
     asserted structurally. Comment lines never execute, so none of them can
     satisfy a check.
     """
-    code = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
+    raw = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
+    code = _without_block_scalars(raw)
     failures = contract_trigger_failures(workflow_text)
     if any(re.match(r"""^"[^"\n]*\\[^"\n]*"\s*:""", line) for line in code):
         failures.append("contract workflow keys must use plain spelling: escapes execute decoded")
@@ -162,7 +157,9 @@ def workflow_failures(workflow_text):
         return failures + [f"contract workflow must keep exactly its guard jobs (found {sorted(set(names))})"]
     gate = next(i for i, line in enumerate(code) if re.match(r"^  gate-contract\s*:", line))
     later = [i for i in range(len(code)) if i > gate and re.match(r"^  [A-Za-z0-9_.\-]+\s*:", code[i])]
-    block = code[gate : (later[0] if later else len(code))]
+    stop = later[0] if later else len(code)
+    block = code[gate:stop]
+    rawblock = raw[gate:stop]
     # Each job runs exactly in its safe context (guard on pull_request_target,
     # attestation on push): anything else fails, so the required status is exact.
     for job, want in EXPECTED_JOB_CONDITIONS.items():
@@ -244,7 +241,7 @@ def workflow_failures(workflow_text):
         return failures + ["contract workflow run step must stay a block run"]
     indent = len(block[runs[0]]) - len(block[runs[0]].lstrip())
     body = []
-    for line in block[runs[0] + 1 :]:
+    for line in rawblock[runs[0] + 1 :]:
         stripped = line.strip()
         if len(line) - len(line.lstrip()) <= indent:
             break

@@ -39,7 +39,7 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned for reviewed new-order-only attested shipping coordinates.
   // Existing-order replay, notification and payment authority are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '157cfe3c8fb5dccfe0ec49545b3560878d0c8fb89bd40da286870b8c8bdf6c70',
+    '0b359481b401e18fc117e5ff5accba97587587ecb59d2de4057a13f65d44ecda',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

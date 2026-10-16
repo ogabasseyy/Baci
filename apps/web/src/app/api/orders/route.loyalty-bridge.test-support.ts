@@ -114,6 +114,7 @@ export const LOYALTY_CODE_ROW = {
   reward_type: 'discount_fixed',
   reward_value: 100,
   minimum_order_amount: null,
+  minimum_known: true,
   expires_at: null,
   used: false,
   issuance_currency: 'NGN',

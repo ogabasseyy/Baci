@@ -191,7 +191,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000015', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'fx-cover',NULL,true
+      pg_catalog.now(), 'bank_transfer', 'fx-cover',NULL,true
     );
     RAISE EXCEPTION 'manual accepted beside unreconciled foreign money';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
@@ -225,7 +225,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000018', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'unverified-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'unverified-1',NULL,true);
     RAISE EXCEPTION 'manual accepted beside unverified provider money';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
@@ -267,7 +267,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000021', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'overfunded-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'overfunded-1',NULL,true);
     RAISE EXCEPTION 'manual accepted on an overfunded ledger';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;

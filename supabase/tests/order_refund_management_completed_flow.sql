@@ -141,7 +141,7 @@ BEGIN
   -- strand settlement reversal, notifications, and review close.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000034', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'cash', 'cash34-1', NULL, true
+    pg_catalog.now(), 'cash', 'cash34-1', NULL, true
   ) INTO v_result;
   IF v_result->>'status' <> 'queued' THEN
     RAISE EXCEPTION 'final internal manual did not requeue, got %',

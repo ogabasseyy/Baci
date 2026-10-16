@@ -219,14 +219,14 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000004', 'manual', 51,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'over-after-reversal',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'over-after-reversal',NULL,true);
     RAISE EXCEPTION 'manual exceeded reversal-adjusted remaining';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_exceeds_remaining' THEN RAISE; END IF;
   END;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000004', 'manual', 50,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'reversal-adjusted',NULL,true
+    pg_catalog.now(), 'bank_transfer', 'reversal-adjusted',NULL,true
   ) INTO v_result;
   IF v_result->>'status' <> 'queued' THEN
     RAISE EXCEPTION 'reversal-adjusted manual did not requeue, got %',
@@ -237,7 +237,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000005', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'unlinked-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'unlinked-1',NULL,true);
     RAISE EXCEPTION 'manual accepted beside unallocated refund';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'unallocated_refund_requires_review' THEN RAISE; END IF;

@@ -91,20 +91,25 @@ DO $refund_attestation$
 DECLARE
   v_result jsonb;
   v_label text;
+  -- Replay identity includes the refund instant: the idempotent
+  -- retries below must present the same instant, not two clock
+  -- reads microseconds apart, or they read as a conflicting
+  -- transfer instead of the same one.
+  v_refunded_at timestamptz := pg_catalog.now();
 BEGIN
   -- Recording attests money already moved: direct RPC callers must
   -- attest too, and the ledger row keeps the proof.
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'unconfirmed-1', NULL, false);
+      v_refunded_at, 'bank_transfer', 'unconfirmed-1', NULL, false);
     RAISE EXCEPTION 'unattested manual refund accepted';
   EXCEPTION WHEN SQLSTATE '22023' THEN
     IF SQLERRM <> 'refund_confirmation_required' THEN RAISE; END IF;
   END;
   PERFORM public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1', NULL, true);
+    v_refunded_at, 'bank_transfer', 'attested-1', NULL, true);
   IF NOT EXISTS (
     SELECT 1 FROM public.transactions
     WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
@@ -128,7 +133,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1', 'rewritten',
+      v_refunded_at, 'bank_transfer', 'attested-1', 'rewritten',
       false);
     RAISE EXCEPTION 'unattested replay accepted';
   EXCEPTION WHEN SQLSTATE '22023' THEN
@@ -160,7 +165,7 @@ BEGIN
   SET LOCAL ROLE authenticated;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1',
+    v_refunded_at, 'bank_transfer', 'attested-1',
     'frozen-note', true) INTO v_result;
   IF EXISTS (
     SELECT 1 FROM public.transactions
@@ -179,7 +184,7 @@ BEGIN
   SET LOCAL ROLE authenticated;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1',
+    v_refunded_at, 'bank_transfer', 'attested-1',
     'applied-note', true) INTO v_result;
   IF NOT EXISTS (
     SELECT 1 FROM public.transactions
@@ -208,7 +213,7 @@ BEGIN
   -- like the status response, not failed.
   PERFORM public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 90,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-full', NULL, true);
+    v_refunded_at, 'bank_transfer', 'attested-full', NULL, true);
   SELECT action INTO v_label FROM public.order_refund_events
    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
    ORDER BY created_at DESC LIMIT 1;

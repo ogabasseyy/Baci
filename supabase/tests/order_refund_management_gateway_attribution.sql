@@ -194,7 +194,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000025', 'manual', 80,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'overfunded-partial',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'overfunded-partial',NULL,true);
     RAISE EXCEPTION 'manual accepted on a partially covered overfunded leg';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
@@ -231,7 +231,7 @@ BEGIN
   -- worker instead.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000027', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'paystack', 'direct-paystack-1', NULL, true
+    pg_catalog.now(), 'paystack', 'direct-paystack-1', NULL, true
   ) INTO v_result;
   IF v_result->>'status' <> 'processing' THEN
     RAISE EXCEPTION 'unverified paystack manual not processing, got %',

@@ -127,13 +127,13 @@ BEGIN
   -- implicit pin below pends beside covered money.
   PERFORM public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000035', 'manual', 30,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-first-35', NULL, true);
+    pg_catalog.now(), 'bank_transfer', 'partial-first-35', NULL, true);
   -- A sole outstanding external leg pins itself: no review, no
   -- guess. The attestation still pends verification beside the 30
   -- already covered (link asserted below).
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000035', 'manual', 70,
-    '2026-09-28T12:00:00Z', 'paystack', 'implicit-pin-35', NULL, true
+    pg_catalog.now(), 'paystack', 'implicit-pin-35', NULL, true
   ) INTO v_result;
   IF (v_result->>'pending')::numeric <> 70
     OR (v_result->>'remaining')::numeric <> 70 THEN
@@ -146,7 +146,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000045', 'manual', 50,
-      '2026-09-28T12:00:00Z', 'paystack', 'korapay-pin-45', NULL, true,
+      pg_catalog.now(), 'paystack', 'korapay-pin-45', NULL, true,
       p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000062');
     RAISE EXCEPTION 'paystack pin to a korapay leg was accepted';
   EXCEPTION WHEN SQLSTATE '22023' THEN
@@ -157,7 +157,7 @@ BEGIN
   -- candidate list names it alone.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000045', 'manual', 50,
-    '2026-09-28T12:00:00Z', 'paystack', 'implicit-45', NULL, true
+    pg_catalog.now(), 'paystack', 'implicit-45', NULL, true
   ) INTO v_result;
   IF (v_result->>'pending')::numeric <> 50
     OR (v_result->>'remaining')::numeric <> 200 THEN

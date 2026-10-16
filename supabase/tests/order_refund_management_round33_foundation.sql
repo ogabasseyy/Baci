@@ -209,7 +209,7 @@ BEGIN
   -- next call rejects until the next poll.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000035', 'manual', 30,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-first-35', NULL, true
+    pg_catalog.now(), 'bank_transfer', 'partial-first-35', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 70 THEN
     RAISE EXCEPTION 'partial-first manual left remaining %',
@@ -268,7 +268,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000041', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'no-ts-41', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'no-ts-41', NULL, true);
     RAISE EXCEPTION 'manual accepted without a cancellation timestamp';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;

@@ -10,11 +10,16 @@
 -- pending/movement evidence exists), the note rewrite is skipped but
 -- the idempotent status read-back still succeeds: audit metadata
 -- stays frozen in exactly the states the processing gate protects.
+-- Lookup and rewrite scope by merchant and terminal status like the
+-- manager: a cross-merchant row must never produce a false replay
+-- or conflict, failed rows are not recorded transfers (retrying one
+-- records fresh), and the note rewrite touches only matched rows.
 DROP FUNCTION IF EXISTS private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text);
+DROP FUNCTION IF EXISTS private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text,boolean);
 CREATE OR REPLACE FUNCTION private.apply_manual_refund_replay_v1(
   p_order_id uuid, p_amount numeric, p_refunded_at timestamptz,
   p_method text, p_reference text, p_note text,
-  p_note_frozen boolean DEFAULT false
+  p_merchant_id uuid, p_note_frozen boolean DEFAULT false
 ) RETURNS text LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_replay jsonb;
@@ -23,7 +28,8 @@ BEGIN
   -- 'Manual' spelling or padded reference is the same transfer.
   SELECT jsonb_build_object('amount',sum(amount),'method',min(metadata->>'method'),
     'refunded_at',min(metadata->>'refunded_at'),'note',min(metadata->>'note')) INTO v_replay
-    FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
+    FROM public.transactions WHERE order_id=p_order_id AND merchant_id=p_merchant_id
+    AND transaction_type='refund' AND status IN ('completed','refunded')
     AND public.normalized_gateway_name_v1(gateway)='MANUAL'
     AND btrim(metadata->>'reference')=NULLIF(btrim(p_reference),'');
   IF (v_replay->>'amount') IS NOT NULL THEN
@@ -41,7 +47,8 @@ BEGIN
       AND COALESCE(v_replay->>'note','') IS DISTINCT FROM COALESCE(p_note,'') THEN
       UPDATE public.transactions SET metadata = metadata ||
         jsonb_build_object('note',p_note)
-        WHERE order_id=p_order_id AND transaction_type='refund'
+        WHERE order_id=p_order_id AND merchant_id=p_merchant_id
+          AND transaction_type='refund' AND status IN ('completed','refunded')
           AND public.normalized_gateway_name_v1(gateway)='MANUAL'
           AND btrim(metadata->>'reference')=NULLIF(btrim(p_reference),'');
     END IF;
@@ -49,10 +56,10 @@ BEGIN
   END IF;
   RETURN 'manual';
 END; $$;
-REVOKE ALL ON FUNCTION private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text,boolean)
+REVOKE ALL ON FUNCTION private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text,uuid,boolean)
   FROM PUBLIC,anon,authenticated;
 -- Mirrors record_manual_order_refund: service_role fires the manager,
 -- and authenticated EXECUTE keeps any hypothetical direct call on the
 -- clean schema-USAGE denial instead of the crashing function-ACL path.
-GRANT EXECUTE ON FUNCTION private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text,boolean)
+GRANT EXECUTE ON FUNCTION private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text,uuid,boolean)
   TO service_role, authenticated;

@@ -206,7 +206,7 @@ BEGIN
   END IF;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000049', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'live-capture-49', NULL, true
+    pg_catalog.now(), 'bank_transfer', 'live-capture-49', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 0 THEN
     RAISE EXCEPTION 'live-capture manual left remaining %',
@@ -224,7 +224,7 @@ BEGIN
   -- would ever verify it.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000050', 'manual', 30,
-    '2026-09-28T12:00:00Z', 'paystack', 'verify-queue-50', NULL, true
+    pg_catalog.now(), 'paystack', 'verify-queue-50', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 100
     OR (v_result->>'pending')::numeric <> 30 THEN
@@ -243,7 +243,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000050', 'manual', 30,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'verify-blocked-50', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'verify-blocked-50', NULL, true);
     RAISE EXCEPTION 'manual accepted beside unverified paystack claim';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;

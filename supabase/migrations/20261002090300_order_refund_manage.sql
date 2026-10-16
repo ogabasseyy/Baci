@@ -47,7 +47,7 @@ BEGIN
   -- orders they may not touch (including foreign-tenant rows),
   -- stalling the drain and other merchants. The plain read cannot
   -- mutate; mutating actions re-lock after authorization.
-  SELECT merchant_id,currency,amount_paid,shipping_status,cancelled_at INTO v_order
+  SELECT merchant_id,currency,amount_paid,shipping_status,cancelled_at,created_at INTO v_order
     FROM public.orders WHERE id=p_order_id;
   -- Missing and foreign orders share one error: distinct not-found vs
   -- forbidden responses would let any authenticated caller probe order
@@ -69,7 +69,7 @@ BEGIN
   -- serialize against mutations. Mutating actions re-lock both
   -- rows now that the caller is authorized.
   IF p_action <> 'status' THEN
-    SELECT merchant_id,currency,amount_paid,shipping_status,cancelled_at INTO v_order
+    SELECT merchant_id,currency,amount_paid,shipping_status,cancelled_at,created_at INTO v_order
       FROM public.orders WHERE id=p_order_id FOR UPDATE;
     SELECT status,error,attempts,retry_requests,last_retry_at
       INTO v_step_status,v_step_error,v_step_attempts,v_step_retry_requests,v_step_last_retry_at
@@ -184,17 +184,17 @@ BEGIN
       v_reference := NULLIF(btrim(p_reference),'');
       IF p_amount IS NULL OR p_amount<=0 OR p_amount<>round(p_amount,2)
         OR p_refunded_at IS NULL OR p_refunded_at>now()
+        -- Windowed both ways: a pre-order date is an entry error, not a transfer (NULL created_at skips legacy rows).
+        OR (v_order.created_at IS NOT NULL AND p_refunded_at<v_order.created_at)
         OR p_method IS NULL OR p_method NOT IN ('paystack','bank_transfer','cash','other')
         OR v_reference IS NULL OR length(v_reference)>100
         OR COALESCE(length(p_note),0)>500 THEN
         RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
       END IF;
-      -- Idempotent replay short-circuit: same transfer reads back status.
-      -- It skips the processing gate by design, so freeze its note
-      -- rewrite under the same condition.
-      p_action := private.apply_manual_refund_replay_v1(p_order_id,
-        p_amount, p_refunded_at, p_method, p_reference, p_note,
-        v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0 OR v_has_movement_evidence);
+      -- Idempotent replay short-circuit (skips the processing gate by
+      -- design; its note rewrite freezes under the same condition).
+      p_action := private.apply_manual_refund_replay_v1(p_order_id, p_amount, p_refunded_at, p_method, p_reference,
+        p_note, v_order.merchant_id, v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0 OR v_has_movement_evidence);
     END IF;
     IF p_action <> 'status' AND (v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0
       OR v_has_movement_evidence) THEN

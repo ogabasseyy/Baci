@@ -96,14 +96,14 @@ BEGIN
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000062',
         'method', 'bank_transfer', 'reference', 'legacy-1',
-        'refunded_at', '2026-09-28T12:00:00Z')),
+        'refunded_at', pg_catalog.now())),
     ('9ef12000-0000-4000-8000-000000000067', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000062', 'refund', 20, 'NGN',
       'completed', 'manual', 'pad-old-1',
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000063',
         'method', 'bank_transfer', 'reference', 'pad-1 ',
-        'refunded_at', '2026-09-28T12:00:00Z'));
+        'refunded_at', pg_catalog.now()));
 END;
 $fixtures$;
 
@@ -131,7 +131,7 @@ BEGIN
   END IF;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000061', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'cash', 'rescue-61', NULL, true
+    pg_catalog.now(), 'cash', 'rescue-61', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 0
     OR pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
@@ -143,7 +143,7 @@ BEGIN
   -- instead of allocating a duplicate beside it.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000062', 'manual', 30,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'legacy-1', 'teller 5', true
+    pg_catalog.now(), 'bank_transfer', 'legacy-1', 'teller 5', true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 150
     OR pg_catalog.jsonb_array_length(v_result->'history') <> 2 THEN
@@ -153,7 +153,7 @@ BEGIN
   -- A padded legacy reference is the same transfer trimmed.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000062', 'manual', 20,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'pad-1', NULL, true
+    pg_catalog.now(), 'bank_transfer', 'pad-1', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 150
     OR pg_catalog.jsonb_array_length(v_result->'history') <> 2 THEN
@@ -165,7 +165,7 @@ BEGIN
   -- sibling even though FIFO reaches it first.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000063', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'external-63', NULL, true
+    pg_catalog.now(), 'bank_transfer', 'external-63', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 0
     OR pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
@@ -176,7 +176,7 @@ BEGIN
   -- gateway cannot prove drift over a provider terminalization.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000064', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'unknown-64', NULL, true
+    pg_catalog.now(), 'bank_transfer', 'unknown-64', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 0
     OR pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN

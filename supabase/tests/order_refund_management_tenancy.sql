@@ -163,7 +163,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'staff-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'staff-1',NULL,true);
   EXCEPTION WHEN SQLSTATE '42501' THEN
     v_rejected := SQLERRM = 'refund_forbidden';
   END;

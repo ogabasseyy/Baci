@@ -139,7 +139,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000071', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'blocked-71', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'blocked-71', NULL, true);
     RAISE EXCEPTION 'manual accepted beside failed-leg evidence';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
@@ -165,7 +165,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000073', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'blocked-73', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'blocked-73', NULL, true);
     RAISE EXCEPTION 'manual accepted beside zero pending row';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
@@ -181,7 +181,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000074', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'blocked-74', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'blocked-74', NULL, true);
     RAISE EXCEPTION 'manual accepted beside signed pending rows';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;

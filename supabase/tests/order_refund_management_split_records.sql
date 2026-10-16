@@ -129,12 +129,16 @@ DECLARE
   v_result jsonb;
   v_rejected boolean;
   v_label text;
+  -- Replay identity includes the refund instant: the idempotent
+  -- retry below must present the same instant, not two clock
+  -- reads microseconds apart.
+  v_refunded_at timestamptz := pg_catalog.now();
 BEGIN
   -- One manual transfer spans both legs with unique ledger identifiers
   -- while the merchant reference stays queryable on every leg.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000002', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'split-1',NULL,true
+    v_refunded_at, 'bank_transfer', 'split-1',NULL,true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 2 THEN
     RAISE EXCEPTION 'split manual did not span both legs';
@@ -144,7 +148,7 @@ BEGIN
   END IF;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000002', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'split-1',NULL,true
+    v_refunded_at, 'bank_transfer', 'split-1',NULL,true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 2 THEN
     RAISE EXCEPTION 'split manual replay duplicated rows';
@@ -175,7 +179,7 @@ BEGIN
   -- Overlong padded references validate and store trimmed.
   PERFORM public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000003', 'manual', 10,
-    '2026-09-28T12:00:00Z', 'bank_transfer',
+    v_refunded_at, 'bank_transfer',
     '  ' || pg_catalog.repeat('p', 100) || '  ',NULL,true);
 
 END;

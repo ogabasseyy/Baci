@@ -169,14 +169,14 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000006', 'manual', 61,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'internal-over',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'internal-over',NULL,true);
     RAISE EXCEPTION 'manual exceeded split-internal remaining';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_exceeds_remaining' THEN RAISE; END IF;
   END;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000006', 'manual', 60,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'internal-1',NULL,true
+    pg_catalog.now(), 'bank_transfer', 'internal-1',NULL,true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
     RAISE EXCEPTION 'manual allocated to the reversed wallet leg';
@@ -191,7 +191,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000007', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'wallet-only-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'wallet-only-1',NULL,true);
     RAISE EXCEPTION 'manual allocated to a wallet-only order';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
@@ -200,7 +200,7 @@ BEGIN
   -- Legacy currency casing passes; genuinely foreign legs block.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000010', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'lower-1',NULL,true
+    pg_catalog.now(), 'bank_transfer', 'lower-1',NULL,true
   ) INTO v_result;
   IF v_result->>'status' <> 'queued' THEN
     RAISE EXCEPTION 'lowercase currency manual did not requeue, got %',
@@ -209,7 +209,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000011', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'usd-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'usd-1',NULL,true);
     RAISE EXCEPTION 'manual accepted on foreign-currency leg';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_currency_requires_review' THEN RAISE; END IF;
@@ -227,7 +227,7 @@ BEGIN
   END IF;
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000019', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'cash', 'cashonly-1',NULL,true
+    pg_catalog.now(), 'cash', 'cashonly-1',NULL,true
   ) INTO v_result;
   IF v_result->>'status' <> 'queued' THEN
     RAISE EXCEPTION 'cash-only manual did not requeue, got %',

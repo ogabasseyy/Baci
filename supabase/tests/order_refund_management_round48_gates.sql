@@ -226,7 +226,7 @@ BEGIN
   -- manual records instead of blocking on dead evidence.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000075', 'manual', 30,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'failed-only-75', NULL, true
+    pg_catalog.now(), 'bank_transfer', 'failed-only-75', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 70
     OR (v_result->>'refunded')::numeric <> 30 THEN

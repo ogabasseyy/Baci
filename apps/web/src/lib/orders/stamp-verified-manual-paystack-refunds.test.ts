@@ -34,6 +34,10 @@ describe('stampVerifiedManualPaystackRefunds', () => {
     await stampVerifiedManualPaystackRefunds({
       currency: 'NGN',
       linkedPaymentId,
+      pairedProviderRefunds: [
+        { kobo: 100, providerRefundId: 7 },
+        { kobo: 100, providerRefundId: 8 },
+      ],
       refundRows: [
         row(),
         row({ id: 'refund-2', status: 'refunded' }),
@@ -75,6 +79,7 @@ describe('stampVerifiedManualPaystackRefunds', () => {
         method: 'paystack',
         payment_transaction_id: 'payment-1',
         provider_refund_status: 'processed',
+        provider_refund_id: 7,
       },
       // Status renames its current value so the sync trigger
       // re-evaluates coverage; metadata alone would not fire it.
@@ -114,13 +119,13 @@ describe('stampVerifiedManualPaystackRefunds', () => {
       refundRows: [
         row({ amount: 0.6 }),
         row({ amount: 0.4, id: 'refund-2', status: 'refunded' }),
-        // Foreign-currency rows never pair: no proof to steal.
+        // Foreign-currency rows never pair and take no stamp.
         row({ currency: 'USD', id: 'refund-3' }),
       ],
       supabase: client as never,
       transactionId: 'payment-1',
     });
-    expect(client.update).toHaveBeenCalledTimes(3);
+    expect(client.update).toHaveBeenCalledTimes(2);
     expect(client.update.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
         metadata: expect.objectContaining({ provider_refund_id: 7 }),
@@ -131,13 +136,23 @@ describe('stampVerifiedManualPaystackRefunds', () => {
         metadata: expect.objectContaining({ provider_refund_id: 8 }),
       })
     );
-    expect(client.update.mock.calls[2]?.[0]).toEqual(
-      expect.objectContaining({
-        metadata: expect.not.objectContaining({
-          provider_refund_id: expect.anything(),
-        }),
-      })
-    );
+  });
+
+  it('skips rows that consumed no provider pair instead of stamping them', async () => {
+    // The foreign-currency row never pairs: stamping it processed
+    // would assert verification no refund was consumed for, and
+    // downstream coverage counts the stamp as verified. Skipped
+    // rows stay unverified so the matcher withholds them.
+    const client = supabase();
+    await stampVerifiedManualPaystackRefunds({
+      currency: 'NGN',
+      linkedPaymentId,
+      pairedProviderRefunds: [{ kobo: 100, providerRefundId: 7 }],
+      refundRows: [row({ currency: 'USD', id: 'refund-3' })],
+      supabase: client as never,
+      transactionId: 'payment-1',
+    });
+    expect(client.update).not.toHaveBeenCalled();
   });
 
   it('throws when the stamp write fails', async () => {
@@ -146,6 +161,7 @@ describe('stampVerifiedManualPaystackRefunds', () => {
       stampVerifiedManualPaystackRefunds({
         currency: 'NGN',
         linkedPaymentId,
+        pairedProviderRefunds: [{ kobo: 100, providerRefundId: 7 }],
         refundRows: [row()],
         supabase: client as never,
         transactionId: 'payment-1',

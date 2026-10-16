@@ -139,7 +139,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       'b5611000-0000-4000-8000-000000000091', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'cap-91-1', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'cap-91-1', NULL, true);
     RAISE EXCEPTION 'manual allocated to a wallet-only order';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
@@ -179,7 +179,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       'b5611000-0000-4000-8000-000000000094', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'cap-94-1', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'cap-94-1', NULL, true);
     RAISE EXCEPTION 'manual submitted against a vetoed ledger';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_currency_requires_review' THEN RAISE; END IF;

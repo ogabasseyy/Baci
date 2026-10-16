@@ -203,7 +203,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000012', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'legacy-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'legacy-1',NULL,true);
     RAISE EXCEPTION 'manual accepted without cancellation timestamp';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
@@ -238,7 +238,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000014', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'inflight-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'inflight-1',NULL,true);
     RAISE EXCEPTION 'manual accepted beside an in-flight payment leg';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;

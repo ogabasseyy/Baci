@@ -125,7 +125,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000043', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'paystack', 'ambiguous-43', NULL, true);
+      pg_catalog.now(), 'paystack', 'ambiguous-43', NULL, true);
     RAISE EXCEPTION 'ambiguous paystack record was FIFO-linked';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'payment_ledger_requires_review' THEN RAISE; END IF;
@@ -146,7 +146,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000043', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'bad-pin-43', NULL, true,
+      pg_catalog.now(), 'bank_transfer', 'bad-pin-43', NULL, true,
       p_payment_transaction_id => 'ffffffff-0000-4000-8000-000000000000');
     RAISE EXCEPTION 'dangling leg pin was accepted';
   EXCEPTION WHEN SQLSTATE '22023' THEN
@@ -157,7 +157,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000043', 'manual', 150,
-      '2026-09-28T12:00:00Z', 'paystack', 'over-pin-43', NULL, true,
+      pg_catalog.now(), 'paystack', 'over-pin-43', NULL, true,
       p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000057');
     RAISE EXCEPTION 'oversized pinned attestation was accepted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
@@ -168,7 +168,7 @@ BEGIN
   -- stays open while pending carries it (link asserted below).
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000043', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'paystack', 'pin-2', NULL, true,
+    pg_catalog.now(), 'paystack', 'pin-2', NULL, true,
     p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000058'
   ) INTO v_result;
   IF (v_result->>'pending')::numeric <> 100
@@ -186,7 +186,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000043', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'paystack', 'pin-1', NULL, true,
+      pg_catalog.now(), 'paystack', 'pin-1', NULL, true,
       p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000057');
     RAISE EXCEPTION 'second pin slipped past pending evidence';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
@@ -195,7 +195,7 @@ BEGIN
   -- A non-paystack pin allocates pinned-first, then spills FIFO.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000044', 'manual', 150,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'spill-1', NULL, true,
+    pg_catalog.now(), 'bank_transfer', 'spill-1', NULL, true,
     p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000060'
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 50 THEN

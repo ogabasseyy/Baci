@@ -165,7 +165,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000055', 'manual', 30,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'movement-blocked-55', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'movement-blocked-55', NULL, true);
     RAISE EXCEPTION 'manual accepted beside open movement review';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
@@ -191,7 +191,7 @@ BEGIN
   -- moved and the manual records.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000056', 'manual', 30,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'failed-only-56', NULL, true
+    pg_catalog.now(), 'bank_transfer', 'failed-only-56', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 70
     OR (v_result->>'refunded')::numeric <> 30 THEN

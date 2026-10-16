@@ -152,7 +152,7 @@ BEGIN
   -- terminal refunded) until finalization runs.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000020', 'manual', 40,
-    '2026-09-28T12:00:00Z', 'cash', 'cashrest-1',NULL,true
+    pg_catalog.now(), 'cash', 'cashrest-1',NULL,true
   ) INTO v_result;
   IF v_result->>'status' <> 'queued' THEN
     RAISE EXCEPTION 'mixed cash remainder did not requeue, got %',

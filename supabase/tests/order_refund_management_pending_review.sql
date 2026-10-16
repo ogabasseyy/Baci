@@ -154,7 +154,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000052', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'race-52',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'race-52',NULL,true);
     RAISE EXCEPTION 'racing reference accepted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'manual_reference_conflict' THEN RAISE; END IF;
@@ -198,7 +198,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000017', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'norow-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'norow-1',NULL,true);
     RAISE EXCEPTION 'manual accepted beside a corrupt link';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
@@ -235,7 +235,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000022', 'manual', 100,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'multileg-1',NULL,true);
+      pg_catalog.now(), 'bank_transfer', 'multileg-1',NULL,true);
     RAISE EXCEPTION 'manual accepted beside multi-leg unlinked money';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;

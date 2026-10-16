@@ -204,7 +204,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       'b6111000-0000-4000-8000-000000000091', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'fail-91-2', NULL, true);
+      pg_catalog.now(), 'bank_transfer', 'fail-91-2', NULL, true);
     RAISE EXCEPTION 'manual accepted beside unstamped failure';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;

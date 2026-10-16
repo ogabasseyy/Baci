@@ -156,6 +156,10 @@ DO $refund_manager$
 DECLARE
   v_result jsonb;
   v_label text;
+  -- Replay identity includes the refund instant: the idempotent
+  -- retries below must present the same instant, not two clock
+  -- reads microseconds apart.
+  v_refunded_at timestamptz := pg_catalog.now();
 BEGIN
   -- Failed refunds are retryable, and a retry requeues exhausted work.
   SELECT public.manage_order_refund(
@@ -174,7 +178,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 101,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'excess-1',NULL,true);
+      v_refunded_at, 'bank_transfer', 'excess-1',NULL,true);
     RAISE EXCEPTION 'excess refund accepted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_exceeds_remaining' THEN RAISE; END IF;
@@ -194,7 +198,7 @@ BEGIN
   -- matcher would quarantine the step and strand the balance.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 20,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1',NULL,true
+    v_refunded_at, 'bank_transfer', 'partial-1',NULL,true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 80 THEN
     RAISE EXCEPTION 'partial refund did not reduce remaining';
@@ -214,7 +218,7 @@ BEGIN
   -- conflicting reuse of the reference is rejected.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 20,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1',NULL,true
+    v_refunded_at, 'bank_transfer', 'partial-1',NULL,true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
     RAISE EXCEPTION 'manual replay duplicated the ledger row';
@@ -223,7 +227,7 @@ BEGIN
   -- existing rows instead of recording new money or going stale.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000001', 'manual', 20,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1', 'teller 4', true
+    v_refunded_at, 'bank_transfer', 'partial-1', 'teller 4', true
   ) INTO v_result;
   IF pg_catalog.jsonb_array_length(v_result->'history') <> 1 THEN
     RAISE EXCEPTION 'note-corrected replay duplicated the ledger row';
@@ -244,7 +248,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 25,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'partial-1',NULL,true);
+      v_refunded_at, 'bank_transfer', 'partial-1',NULL,true);
     RAISE EXCEPTION 'conflicting reference reuse accepted';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'manual_reference_conflict' THEN RAISE; END IF;
@@ -261,7 +265,7 @@ BEGIN
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000008', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'claimed-1',NULL,true);
+      v_refunded_at, 'bank_transfer', 'claimed-1',NULL,true);
     RAISE EXCEPTION 'manual write accepted during claimed refund';
   EXCEPTION WHEN SQLSTATE 'P0001' THEN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;

@@ -29,8 +29,12 @@ interface StampableRefundRow {
  * listings need not arrive in ledger order, so positional pairing
  * would cross-assign ids when amounts differ per row — and the
  * finalized-contradiction sweep would then reject both associations
- * as evidence mismatches. Rows without a pair keep the status-only
- * stamp.
+ * as evidence mismatches. Rows without a pair are skipped entirely:
+ * stamping them processed would assert provider verification no
+ * refund was consumed for, and downstream coverage counts a
+ * processed stamp as verified. Skipped rows stay unverified so the
+ * matcher withholds them with evidence instead of counting a claim
+ * the provider never confirmed.
  */
 export async function stampVerifiedManualPaystackRefunds({
   currency,
@@ -71,19 +75,18 @@ export async function stampVerifiedManualPaystackRefunds({
       normalizeRefundMoneyField(row.currency) !== legCurrency
         ? -1
         : remainingPairs.findIndex((pair) => pair.kobo === rowKobo);
-    const providerRefundId =
-      pairIndex === -1
-        ? undefined
-        : remainingPairs.splice(pairIndex, 1)[0]?.providerRefundId;
+    if (pairIndex === -1) {
+      continue;
+    }
+    const providerRefundId = remainingPairs.splice(pairIndex, 1)[0]
+      ?.providerRefundId;
     const { error } = await supabase
       .from('transactions')
       .update({
         metadata: {
           ...metadata,
           provider_refund_status: 'processed',
-          ...(providerRefundId === undefined
-            ? {}
-            : { provider_refund_id: providerRefundId }),
+          provider_refund_id: providerRefundId,
         },
         status: row.status,
       })

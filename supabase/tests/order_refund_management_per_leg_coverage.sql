@@ -230,7 +230,7 @@ BEGIN
   -- manual record lands instead of raising currency review.
   SELECT public.manage_order_refund(
     '9ef21000-0000-4000-8000-000000000036', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'null-ccy-36', NULL, true
+    pg_catalog.now(), 'bank_transfer', 'null-ccy-36', NULL, true
   ) INTO v_result;
   IF (v_result->>'remaining')::numeric <> 0 THEN
     RAISE EXCEPTION 'null-currency manual left remaining %',

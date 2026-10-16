@@ -39,10 +39,24 @@ BEGIN
       'test', pg_catalog.now(), pg_catalog.now(), pg_catalog.now(),
       '{}'::jsonb, '{}'::jsonb);
 
+  INSERT INTO auth.users (
+    id, instance_id, aud, role, email, encrypted_password,
+    email_confirmed_at, created_at, updated_at,
+    raw_app_meta_data, raw_user_meta_data
+  ) VALUES (
+    'c6210000-0000-4000-8000-000000000099',
+    '00000000-0000-4000-8000-000000000000',
+    'authenticated', 'authenticated', 'gate62-alien@example.test',
+    'test', pg_catalog.now(), pg_catalog.now(), pg_catalog.now(),
+    '{}'::jsonb, '{}'::jsonb);
+
   INSERT INTO public.merchants (id, user_id, email, business_name, slug)
   VALUES
     (v_merchant_id, v_owner_id, 'gate62-owner@example.test',
-      'Gate62 Fixture', 'gate62-fixture');
+      'Gate62 Fixture', 'gate62-fixture'),
+    ('c6210100-0000-4000-8000-000000000099',
+      'c6210000-0000-4000-8000-000000000099',
+      'gate62-alien@example.test', 'Gate62 Alien', 'gate62-alien');
 
   INSERT INTO public.staff_members (
     merchant_id, user_id, email, name, role, permissions, status
@@ -156,9 +170,20 @@ BEGIN
   PERFORM pg_catalog.set_config(
     'request.jwt.claim.sub', 'c6210000-0000-4000-8000-000000000002', true);
   SET ROLE authenticated;
+  -- A refund date before the order existed is an entry error, not a
+  -- transfer: the window floor rejects it like a future date.
+  BEGIN
+    PERFORM public.manage_order_refund(
+      'c6211000-0000-4000-8000-000000000002', 'manual', 100,
+      pg_catalog.now() - interval '1 day', 'bank_transfer', 'floor-62-1',
+      NULL, true);
+    RAISE EXCEPTION 'pre-order refund date was accepted';
+  EXCEPTION WHEN SQLSTATE '22023' THEN
+    IF SQLERRM <> 'invalid_manual_refund' THEN RAISE; END IF;
+  END;
   PERFORM public.manage_order_refund(
     'c6211000-0000-4000-8000-000000000002', 'manual', 100,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'rpc-62-1', NULL, true);
+    pg_catalog.now(), 'bank_transfer', 'rpc-62-1', NULL, true);
   RESET ROLE;
   PERFORM pg_catalog.set_config(
     'request.jwt.claim.role', 'service_role', true);
@@ -173,5 +198,67 @@ BEGIN
   END IF;
 END;
 $round62_gates$;
+
+DO $round62_replay_scope$
+DECLARE
+  v_now timestamptz := pg_catalog.now();
+  v_branch text;
+BEGIN
+  -- Replay scoping: the lookup keys merchant and terminal status
+  -- like the manager, so corrupt or foreign rows never read as a
+  -- recorded transfer of this merchant's order.
+  INSERT INTO public.transactions (
+    id, merchant_id, order_id, transaction_type, amount, currency,
+    status, gateway, gateway_reference, metadata
+  ) VALUES
+    ('c6212000-0000-4000-8000-000000000011',
+      'c6210100-0000-4000-8000-000000000099',
+      'c6211000-0000-4000-8000-000000000002', 'refund', 100, 'NGN',
+      'completed', 'manual', 'alien-62-1',
+      jsonb_build_object(
+        'method', 'bank_transfer', 'reference', 'alien-62-1',
+        'refunded_at', v_now, 'confirmed', 'true')),
+    ('c6212000-0000-4000-8000-000000000012',
+      'c6210100-0000-4000-8000-000000000001',
+      'c6211000-0000-4000-8000-000000000002', 'refund', 100, 'NGN',
+      'failed', 'manual', 'failed-own-62-1',
+      jsonb_build_object(
+        'method', 'bank_transfer', 'reference', 'failed-own-62-1',
+        'refunded_at', v_now, 'confirmed', 'true')),
+    ('c6212000-0000-4000-8000-000000000013',
+      'c6210100-0000-4000-8000-000000000001',
+      'c6211000-0000-4000-8000-000000000002', 'refund', 100, 'NGN',
+      'completed', 'manual', 'own-62-1',
+      jsonb_build_object(
+        'method', 'bank_transfer', 'reference', 'own-62-1',
+        'refunded_at', v_now, 'confirmed', 'true'));
+  -- An alien-merchant row is not this merchant's transfer: no false
+  -- replay, no false conflict — the record path runs fresh.
+  SELECT private.apply_manual_refund_replay_v1(
+    'c6211000-0000-4000-8000-000000000002', 100, v_now,
+    'bank_transfer', 'alien-62-1', NULL,
+    'c6210100-0000-4000-8000-000000000001', false) INTO v_branch;
+  IF v_branch <> 'manual' THEN
+    RAISE EXCEPTION 'alien row replayed as %, want manual', v_branch;
+  END IF;
+  -- A failed row is not a recorded transfer either: retrying one
+  -- records fresh instead of conflicting with its own past attempt.
+  SELECT private.apply_manual_refund_replay_v1(
+    'c6211000-0000-4000-8000-000000000002', 100, v_now,
+    'bank_transfer', 'failed-own-62-1', NULL,
+    'c6210100-0000-4000-8000-000000000001', false) INTO v_branch;
+  IF v_branch <> 'manual' THEN
+    RAISE EXCEPTION 'failed row replayed as %, want manual', v_branch;
+  END IF;
+  -- Positive control: the own-merchant completed row still replays.
+  SELECT private.apply_manual_refund_replay_v1(
+    'c6211000-0000-4000-8000-000000000002', 100, v_now,
+    'bank_transfer', 'own-62-1', NULL,
+    'c6210100-0000-4000-8000-000000000001', false) INTO v_branch;
+  IF v_branch <> 'status' THEN
+    RAISE EXCEPTION 'own row replayed as %, want status', v_branch;
+  END IF;
+END;
+$round62_replay_scope$;
 
 ROLLBACK;

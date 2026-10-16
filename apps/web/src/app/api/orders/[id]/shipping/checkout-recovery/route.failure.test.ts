@@ -19,6 +19,18 @@ describe('checkout recovery error responses', () => {
     expect(await response.json()).toEqual({ error: 'Forbidden' });
   });
 
+  it('returns a safe service-unavailable response while release activation is closed', async () => {
+    const response = recoveryFailure({
+      message: 'shipping_recovery_not_activated: private deployment metadata',
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error:
+        'Shipping recovery is temporarily unavailable. Please try again later.',
+      code: 'SHIPPING_RECOVERY_NOT_ACTIVATED',
+    });
+  });
+
   it.each([
     ['shipping_recovery_price_changed', 'SHIPPING_RECOVERY_PRICE_CHANGED'],
     [

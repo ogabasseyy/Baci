@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type ServerModule = typeof import('next/server');
+
 type MutationRecord = {
   filters: [string, unknown][];
   payload: Record<string, unknown>;
@@ -23,7 +25,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next/server')>();
+  const actual = await importOriginal<ServerModule>();
   return { ...actual, after: mocks.after };
 });
 

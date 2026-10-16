@@ -3,6 +3,7 @@ import { isUint8Array } from 'node:util/types';
 import { Client } from 'pg';
 import { piggyvestPostgresConfigurationSchema } from '@/schemas/piggyvest-postgres-configuration';
 import { piggyvestPostgresExecutionSchemas } from '@/schemas/piggyvest-postgres-execution';
+import { rejectLocalPostgresPassword } from './local-postgres-password';
 import { PIGGYVEST_POSTGRES_EXECUTOR as settings } from './postgres-executor.constants';
 import { PIGGYVEST_POSTGRES_STATEMENTS } from './postgres-statements';
 import type { PiggyvestProvisioningExecutor } from './provisioning-store.types';
@@ -41,7 +42,12 @@ export function createPiggyvestPostgresExecutor(
         user: config.role,
         database: config.database,
         port: config.port,
-        password: config.password,
+        // A truthy provider prevents pg from consulting ambient PGPASSWORD or
+        // pgpass. Trust-authenticated local sockets never invoke the provider.
+        password:
+          config.transport === 'local_test' && config.password === undefined
+            ? rejectLocalPostgresPassword
+            : config.password,
         ssl:
           config.transport === 'local_test'
             ? false

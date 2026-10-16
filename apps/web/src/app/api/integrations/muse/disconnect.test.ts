@@ -4,7 +4,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 const { csrf, owner } = vi.hoisted(() => ({ csrf: vi.fn(), owner: vi.fn() }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: csrf }));
 vi.mock('./connection-helpers', async (original) => ({
-  ...(await original<typeof import('./connection-helpers')>()),
+  ...(await original<ConnectionHelpersModule>()),
   resolveOwnerContext: owner,
   authenticateConnectorRequest: vi
     .fn()
@@ -12,6 +12,8 @@ vi.mock('./connection-helpers', async (original) => ({
 }));
 
 import { disconnectConnector } from './disconnect';
+
+type ConnectionHelpersModule = typeof import('./connection-helpers');
 
 beforeEach(() => {
   vi.clearAllMocks();

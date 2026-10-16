@@ -4,6 +4,8 @@ import { sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { GET as autocompleteGET } from './autocomplete/route';
 import { GET as searchGET } from './route';
 
+type ServerModule = typeof import('next/server');
+
 const afterCallbacks = vi.hoisted(
   () => [] as Array<() => Promise<void> | void>
 );
@@ -127,7 +129,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next/server')>();
+  const actual = await importOriginal<ServerModule>();
   return {
     ...actual,
     after: vi.fn((callback: () => Promise<void> | void) => {

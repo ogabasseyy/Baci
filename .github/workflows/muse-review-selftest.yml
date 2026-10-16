@@ -24,6 +24,13 @@ on:
       - '.github/workflows/security.yml'
       - '.github/workflows/semgrep-tripwire.yml'
       - '.github/workflows/dependency-review.yml'
+      - 'apps/web/src/app/api/domains/check-availability/route.ts'
+      - 'apps/web/src/app/api/inventory/push-alerts/route.ts'
+      - 'apps/web/src/app/api/payments/initialize/route.ts'
+      - 'apps/web/src/app/api/integrations/google-merchant-center/feed/route.ts'
+      - 'apps/web/src/lib/embeddings.ts'
+      - 'apps/web/src/lib/piggyvest/runtime-composition-auth.ts'
+      - 'apps/web/src/lib/supabase/middleware.ts'
   pull_request:
     paths:
       - '.github/scripts/muse-review/**'
@@ -38,6 +45,13 @@ on:
       - '.github/workflows/security.yml'
       - '.github/workflows/semgrep-tripwire.yml'
       - '.github/workflows/dependency-review.yml'
+      - 'apps/web/src/app/api/domains/check-availability/route.ts'
+      - 'apps/web/src/app/api/inventory/push-alerts/route.ts'
+      - 'apps/web/src/app/api/payments/initialize/route.ts'
+      - 'apps/web/src/app/api/integrations/google-merchant-center/feed/route.ts'
+      - 'apps/web/src/lib/embeddings.ts'
+      - 'apps/web/src/lib/piggyvest/runtime-composition-auth.ts'
+      - 'apps/web/src/lib/supabase/middleware.ts'
   schedule:
     # Weekly bump signal so the pinned CLI cannot go silently stale.
     - cron: '17 9 * * 1'
@@ -83,6 +97,7 @@ jobs:
               bash .github/scripts/semgrep-sarif-filter-trusted-sync.test.sh
               bash .github/scripts/semgrep-sarif-filter-trusted-sync-negatives.test.sh
               bash .github/scripts/semgrep-sarif-filter-suppression-pins.test.sh
+              bash .github/scripts/semgrep-sarif-filter-pr-diff.test.sh
               perl -c .github/scripts/muse-review/ranges.pl
               # schema.json is data (validate it); the .jq files are programs, and
               # `jq empty` would misparse them as JSON input — they are executed

@@ -100,8 +100,8 @@ export async function GET(request: NextRequest) {
 
         sentCount++;
       } catch (pushError) {
-        // Audit-noise: a crafted value can only garble this server log line. Dismissed in code-scanning (false-positive).
         console.error(
+          // Audit-noise: a crafted value can only garble this server log line. Dismissed in code-scanning (false-positive).
           // nosemgrep: javascript.lang.security.audit.unsafe-formatstring.unsafe-formatstring
           `[Inventory Alerts] Failed to notify for alert ${alert.id}:`,
           pushError

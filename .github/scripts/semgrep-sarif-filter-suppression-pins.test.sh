@@ -9,9 +9,28 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 fail=0
+# Positional check: the anchor must match exactly one line, the
+# nosemgrep must be the immediately preceding line, and the dismissal
+# rationale the line above that. A passing pin therefore proves the
+# specific finding occurrence is suppressed, not just that the file
+# mentions the rule somewhere.
 pinned_above() { # file anchor-literal rule-id
-  if ! grep -B1 -F "$2" "$ROOT/$1" | grep -q "nosemgrep: $3"; then
-    echo "::error::missing above-line nosemgrep $3 for [$2] in $1"
+  local file="$ROOT/$1" anchor="$2" rule="$3" n line prev prev2
+  n="$(grep -cF "$anchor" "$file")"
+  if [[ "$n" -ne 1 ]]; then
+    echo "::error::anchor [$anchor] matches $n lines in $1 (want exactly 1)"
+    fail=1
+    return
+  fi
+  line="$(grep -nF "$anchor" "$file" | cut -d: -f1)"
+  prev="$(sed -n "$((line - 1))p" "$file")"
+  prev2="$(sed -n "$((line - 2))p" "$file")"
+  if [[ "$prev" != *"nosemgrep: $rule"* ]]; then
+    echo "::error::missing above-line nosemgrep $rule for [$anchor] in $1"
+    fail=1
+  fi
+  if [[ "$prev2" != *"code-scanning"* ]]; then
+    echo "::error::missing dismissal rationale above nosemgrep for [$anchor] in $1"
     fail=1
   fi
 }

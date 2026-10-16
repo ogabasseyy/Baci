@@ -202,6 +202,21 @@ if grep -Eq ' --text( |$)' "$SEC"; then
   echo "::error::bare --text flag breaks --sarif scans on semgrep 1.104.0; use --text-output only"
   fail=1
 fi
+# The PR base diff must fail closed: --prune once deleted the base
+# ref mid-fetch and a swallowing pipe turned the fatal into an empty
+# skip, making the required scan a no-op. Neither may return.
+if grep -q -- '--prune' "$SEC"; then
+  echo "::error::--prune must not appear in $SEC (it deleted origin/main refs mid-fetch)"
+  fail=1
+fi
+if ! grep -q 'failing closed instead of skipping the scan' "$SEC"; then
+  echo "::error::PR base diff lost its fail-closed handler in $SEC"
+  fail=1
+fi
+if ! grep -A4 'diff_out="$(git diff' "$SEC" | grep -q 'exit 1'; then
+  echo "::error::PR base diff handler must exit nonzero in $SEC"
+  fail=1
+fi
 fail_if="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; print}' "$SEC")"
 fail_run="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; getline; print}' "$SEC")"
 for scan in semgrep_pr semgrep_push semgrep_full; do

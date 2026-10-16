@@ -50,7 +50,25 @@ export function getCartProofEnvironment(): string {
     }
   }
   if (vercel) return vercel;
-  return process.env.NODE_ENV?.trim() || 'development';
+  const nodeEnv = process.env.NODE_ENV?.trim() || 'development';
+  if (nodeEnv === 'production') {
+    // Outside Vercel there is no platform deployment identity, so the
+    // bare 'production' literal would be shared by every such
+    // deployment. Bind the host identity instead, and fail closed
+    // when no distinct discriminator exists: production deployments
+    // must set CART_PROOF_ENVIRONMENT explicitly.
+    const host = process.env.HOSTNAME?.trim();
+    if (!host) {
+      throw new Error(
+        'CART_PROOF_ENVIRONMENT is required for production cart proofs outside Vercel'
+      );
+    }
+    const identity = `production:${host}`;
+    return identity.length <= 64
+      ? identity
+      : `production:${createHash('sha256').update(host).digest('base64url')}`;
+  }
+  return nodeEnv;
 }
 
 export interface CartPreviousSessionSecret {

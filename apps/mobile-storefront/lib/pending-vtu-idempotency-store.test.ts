@@ -1,5 +1,6 @@
 import { hashVtuScopeDescriptor } from '@baci/shared';
 import { jest } from '@jest/globals';
+import { Platform } from 'react-native';
 import { parsePendingVtuSnapshot } from './pending-vtu-idempotency-codec';
 import {
   clearForgottenVtuScopes,
@@ -137,5 +138,69 @@ describe('pending-vtu-idempotency-store', () => {
     await import('./pending-vtu-idempotency');
 
     expect(loadPendingVtuSnapshot()).toBe(original);
+  });
+
+  it('reports failure on Expo web when localStorage is blocked (MMKV Map fallback)', async () => {
+    // Codex R125 P1: MMKV 4.x getLocalStorage() silently substitutes
+    // a module-local Map when the web build cannot access
+    // window.localStorage — set() succeeds but the key dies on
+    // reload, so a lost-response retry would mint fresh and debit
+    // twice. The store must report unavailable (pre-POST guard
+    // refuses) instead of returning true.
+    const priorOs = Platform.OS;
+    const descriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'localStorage'
+    );
+    Platform.OS = 'web';
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('Access denied');
+      },
+    });
+    try {
+      // No module reset: the probe runs per call (mid-session flip),
+      // so the live module must refuse immediately.
+      expect(savePendingVtuSnapshot('{"entries":[]}')).toBe(false);
+      expect(persistPendingVtuEntries([])).toBe(false);
+      expect(loadPendingVtuSnapshot()).toBeNull();
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(globalThis, 'localStorage', descriptor);
+      } else {
+        // @ts-expect-error deleting a possibly absent global for restoration
+        delete globalThis.localStorage;
+      }
+      Platform.OS = priorOs;
+    }
+  });
+
+  it('stays durable on web when localStorage is accessible', () => {
+    // The probe must not refuse a working web backend: accessible
+    // localStorage keeps the bucket (mock MMKV here stands in for
+    // the real one — the probe only gates on access, not on MMKV).
+    // The jest env has no localStorage of its own, so stub one.
+    const priorOs = Platform.OS;
+    const descriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'localStorage'
+    );
+    Platform.OS = 'web';
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: {},
+    });
+    try {
+      expect(savePendingVtuSnapshot('{"entries":[]}')).toBe(true);
+    } finally {
+      if (descriptor) {
+        Object.defineProperty(globalThis, 'localStorage', descriptor);
+      } else {
+        // @ts-expect-error deleting a possibly absent global for restoration
+        delete globalThis.localStorage;
+      }
+      Platform.OS = priorOs;
+    }
   });
 });

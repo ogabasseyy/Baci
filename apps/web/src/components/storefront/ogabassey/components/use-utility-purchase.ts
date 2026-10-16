@@ -144,10 +144,15 @@ export function useUtilityPurchase({
     const names = [customer?.first_name, customer?.last_name].filter(Boolean);
     const customerName =
       names.join(' ').trim() || customer?.email || user?.email || 'Customer';
+    // Pre-gate peek: the slug value is behavior-neutral here (the
+    // shared signature canonicalizer excludes merchantSlug), so an
+    // empty scope misses retention and the gate below blocks with
+    // 'Store unavailable' — never a hard-coded fallback storefront
+    // (Muse R125).
     const isRetainedReplay = isAttemptRetained(
       buildVtuWalletPayloadSignature(
         buildUtilityCheckoutWalletPayload({
-          merchantSlug: merchantSlug || 'ogabassey',
+          merchantSlug: merchantSlug ?? '',
           customerName,
           customerPhone: customer?.phone,
           expectedUserId: submittingUserId,
@@ -163,6 +168,7 @@ export function useUtilityPurchase({
         isAuthenticated,
         isRetainedReplay,
         merchantId,
+        merchantSlug,
         onInsufficientWalletBalance,
         refreshWallet,
         user,
@@ -173,6 +179,12 @@ export function useUtilityPurchase({
         walletInitialReadPending: isWalletInitialReadPending(),
       })
     ) {
+      return;
+    }
+    if (!merchantSlug) {
+      // Unreachable: the readiness gate above blocks a missing slug
+      // with 'Store unavailable'. Narrows the type for the submit
+      // below without a fallback storefront.
       return;
     }
 
@@ -197,7 +209,7 @@ export function useUtilityPurchase({
     // Pass already awaited above the peek: capture recalls post-settle.
     const result = await submitUtilityCheckout({
       payload,
-      merchantSlug: merchantSlug || 'ogabassey',
+      merchantSlug,
       customerName,
       customerPhone: customer?.phone,
       expectedUserId: submittingUserId,

@@ -15,6 +15,7 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     isAuthLoading: false,
     isAuthenticated: true,
     merchantId: 'merchant-1',
+    merchantSlug: 'ogabassey',
     refreshWallet: vi.fn(),
     user,
     getWalletBalance: () => 5000,
@@ -145,6 +146,20 @@ describe('checkUtilityPurchaseReadiness', () => {
     // would miss recall, mint fresh, and debit twice.
     expect(
       checkUtilityPurchaseReadiness(baseInput({ merchantId: undefined }))
+    ).toBe(false);
+    expect(mockToast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Store unavailable' })
+    );
+  });
+
+  it('blocks when the merchant ID resolved but the slug is missing (no fallback storefront)', () => {
+    // Muse R125: the payload carries merchantSlug to the route,
+    // which resolves the customer under it — submitting an
+    // id-present/slug-missing merchant against a hard-coded
+    // fallback would misroute the purchase (and its idempotency
+    // scope) to the wrong storefront. Fail closed like a missing ID.
+    expect(
+      checkUtilityPurchaseReadiness(baseInput({ merchantSlug: undefined }))
     ).toBe(false);
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Store unavailable' })

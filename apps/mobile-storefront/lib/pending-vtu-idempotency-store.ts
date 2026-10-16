@@ -5,8 +5,11 @@
  * orchestration. Serialization lives in
  * `pending-vtu-idempotency-codec.ts` (Codex R56 6rrhXi). The MMKV
  * touchpoints stay lazy and try/catch-guarded so web/SSR (where
- * `createMMKV` throws) degrades to memory-only.
+ * `createMMKV` throws) degrades to memory-only — and the web
+ * fallback probe below catches the subtler case where MMKV silently
+ * substitutes a module-local Map (Codex R125 P1).
  */
+import { Platform } from 'react-native';
 import { createMMKV } from 'react-native-mmkv';
 import type { PersistedPendingVtuPurchase } from './pending-vtu-idempotency-codec';
 import { serializePendingVtuEntries } from './pending-vtu-idempotency-codec';
@@ -21,21 +24,51 @@ interface PendingVtuKeyStore {
 
 let keyStore: PendingVtuKeyStore | null | undefined;
 
+type WebStorageGlobal = typeof globalThis & {
+  localStorage?: Storage | null;
+};
+
+/**
+ * True when MMKV silently backs this store with its module-local Map:
+ * Expo web without window.localStorage access (private mode,
+ * blocked third-party storage). set() then succeeds without
+ * surviving reload (Codex R125 P1) — the store must report
+ * unavailable so save() returns false and the pre-POST guard
+ * refuses, exactly like a null bucket. Probes access the way MMKV
+ * itself does (getLocalStorage.js touches window.localStorage in
+ * try/catch). Native (Platform.OS !== 'web') always uses durable
+ * MMKV — never refuse there.
+ */
+function isMmkvWebFallbackActive(): boolean {
+  if (Platform.OS !== 'web') {
+    return false;
+  }
+  try {
+    return (globalThis as WebStorageGlobal).localStorage == null;
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Lazily opens the MMKV bucket (isolated ID so zustand persistence
  * never collides). Synchronous by design: the submit path needs the
- * recall inline. No Platform branch: on web/SSR createMMKV throws and
- * the catch below degrades to memory-only, same as any native
- * failure.
+ * recall inline. On web/SSR createMMKV throws and the catch below
+ * degrades to memory-only, same as any native failure; the
+ * fallback probe runs per call (not cached with the bucket)
+ * because storage access can flip mid-session, and a Map-backed
+ * write must never report durable.
  */
 function getPendingVtuStorage(): PendingVtuKeyStore | null {
-  if (keyStore !== undefined) {
-    return keyStore;
+  if (keyStore === undefined) {
+    try {
+      keyStore = createMMKV({ id: 'baci-vtu-pending-keys' });
+    } catch {
+      keyStore = null;
+    }
   }
-  try {
-    keyStore = createMMKV({ id: 'baci-vtu-pending-keys' });
-  } catch {
-    keyStore = null;
+  if (keyStore && isMmkvWebFallbackActive()) {
+    return null;
   }
   return keyStore;
 }

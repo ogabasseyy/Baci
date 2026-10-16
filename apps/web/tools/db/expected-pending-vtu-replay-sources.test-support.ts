@@ -39,4 +39,9 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
       'supabase/migrations/20261013040000_require_service_role_jwt_in_vtu_replay_rpcs.sql',
     sha256: '447c954c731edda20e82aef78313ab99668e238059edee7ed45748020b04e9fc',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016010000_serialize_vtu_refund_retry.sql',
+    sha256: '6f23b529bcba102bbc86f094d43c4e1fa978628c37b9ad0387e6324c28e84ef3',
+  },
 ];

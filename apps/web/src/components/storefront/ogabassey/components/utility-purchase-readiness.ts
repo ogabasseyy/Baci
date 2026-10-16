@@ -9,6 +9,7 @@ interface CheckUtilityPurchaseReadinessInput {
   /** True when this exact purchase already has a retained attempt. */
   isRetainedReplay?: boolean;
   merchantId: string | undefined;
+  merchantSlug: string | undefined;
   onInsufficientWalletBalance?: () => void;
   refreshWallet: () => void;
   user: CustomerUser | null;
@@ -51,6 +52,7 @@ export function checkUtilityPurchaseReadiness({
   isAuthenticated,
   isRetainedReplay = false,
   merchantId,
+  merchantSlug,
   onInsufficientWalletBalance,
   refreshWallet,
   user,
@@ -87,6 +89,18 @@ export function checkUtilityPurchaseReadiness({
   // below would usually block first, but this makes the invariant
   // explicit instead of incidental.)
   if (!merchantId) {
+    toast({
+      title: 'Store unavailable',
+      description: 'Please wait while the store finishes loading.',
+    });
+    return false;
+  }
+
+  // Same fail-closed shape for the slug (Muse R125): the payload
+  // carries merchantSlug to the route, which resolves the customer
+  // under it — an id-present/slug-missing merchant must block here
+  // rather than submit against a hard-coded fallback storefront.
+  if (!merchantSlug) {
     toast({
       title: 'Store unavailable',
       description: 'Please wait while the store finishes loading.',

@@ -105,6 +105,25 @@ describe('order shipping transport failures', () => {
     expect(mocks.fetch).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    'synchronous',
+    'rejected',
+  ])('preserves a %s session lookup failure without sending a booking', async (failure) => {
+    mocks.getSession.mockImplementation(() => {
+      const error = new Error('Local session storage failed');
+      if (failure === 'synchronous') throw error;
+      return Promise.reject(error);
+    });
+
+    await expect(
+      useOrderStatusMutation().mutate({ orderId: 'order-1', status: 'shipped' })
+    ).rejects.toMatchObject({
+      name: 'AuthenticatedFetchPreflightError',
+      message: 'Could not authenticate request. Please try again.',
+    });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
   it('preserves authentication failures because no booking request was sent', async () => {
     mocks.getSession.mockResolvedValue({ data: { session: null } });
 

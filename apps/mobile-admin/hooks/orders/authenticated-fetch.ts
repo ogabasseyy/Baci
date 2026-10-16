@@ -35,42 +35,61 @@ export async function createAuthenticatedFetch(
   options: RequestInit,
   timeoutMs: number
 ): Promise<Response> {
-  const {
-    data: { session },
-    error: sessionError,
-  } = await supabase.auth.getSession();
-
-  if (sessionError) {
-    throw new AuthenticatedFetchPreflightError(sessionError.message);
-  }
-
-  if (!session?.access_token) {
-    throw new AuthenticatedFetchPreflightError('Not authenticated');
-  }
-
-  const controller = new AbortController();
-  const abortFromCaller = () => controller.abort();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  if (options.signal?.aborted) {
-    controller.abort();
-  } else {
-    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
-  }
+  let requestStarted = false;
+  let preflightMessage = 'Could not authenticate request. Please try again.';
+  let controller: AbortController | undefined;
+  let callerSignal: AbortSignal | null | undefined;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const abortFromCaller = () => controller?.abort();
 
   try {
-    return await fetch(url, {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+    if (sessionError) {
+      throw new AuthenticatedFetchPreflightError(sessionError.message);
+    }
+    if (!session?.access_token) {
+      throw new AuthenticatedFetchPreflightError('Not authenticated');
+    }
+
+    preflightMessage = 'Could not prepare request. Please try again.';
+    controller = new AbortController();
+    const requestOptions: RequestInit = {
       ...options,
       headers: mergeAuthorizationHeader(options.headers, session.access_token),
       signal: controller.signal,
-    });
+    };
+    callerSignal = options.signal;
+    if (callerSignal?.aborted) {
+      throw new AuthenticatedFetchPreflightError(
+        'Request cancelled before it was sent.'
+      );
+    }
+    callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+    timeoutId = setTimeout(() => controller?.abort(), timeoutMs);
+
+    // Everything above is local preparation. After calling fetch, a failure
+    // cannot prove whether the server received or committed a mutation.
+    requestStarted = true;
+    return await fetch(url, requestOptions);
   } catch (error: unknown) {
+    if (!requestStarted) {
+      throw error instanceof AuthenticatedFetchPreflightError
+        ? error
+        : new AuthenticatedFetchPreflightError(preflightMessage);
+    }
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error(TIMEOUT_ERROR_MESSAGE);
     }
-
     throw error;
   } finally {
-    options.signal?.removeEventListener('abort', abortFromCaller);
     clearTimeout(timeoutId);
+    try {
+      callerSignal?.removeEventListener('abort', abortFromCaller);
+    } catch {
+      // Listener cleanup must not replace the request's response or error.
+    }
   }
 }

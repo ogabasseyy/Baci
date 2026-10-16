@@ -224,12 +224,12 @@ describe('ProductDetailClient', () => {
     };
     render(<ProductDetailClient product={product} />);
 
-    // Dark-mode-remapped amber trio (amber-300 borders escape the remap).
+    // Store-token notice trio (no hardcoded merchant palette).
     expect(screen.getByRole('alert')).toHaveTextContent(/no longer available/);
     expect(screen.getByRole('alert')).toHaveClass(
-      'border-amber-200',
-      'bg-amber-50',
-      'text-amber-800'
+      'border-store-accent',
+      'bg-store-secondary',
+      'text-store-secondary-text'
     );
     expect(screen.getByRole('button', { name: 'Add to Cart' })).toBeDisabled();
     expect(mockStickyAddToCart).toHaveBeenLastCalledWith(
@@ -262,9 +262,9 @@ describe('ProductDetailClient', () => {
       /This option is no longer available/
     );
     expect(screen.getByRole('alert')).toHaveClass(
-      'border-amber-200',
-      'bg-amber-50',
-      'text-amber-800'
+      'border-store-accent',
+      'bg-store-secondary',
+      'text-store-secondary-text'
     );
     expect(screen.getByRole('button', { name: 'Add to Cart' })).toBeDisabled();
     expect(mockStickyAddToCart).toHaveBeenLastCalledWith(

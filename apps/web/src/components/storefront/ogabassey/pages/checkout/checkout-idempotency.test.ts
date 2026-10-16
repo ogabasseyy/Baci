@@ -49,6 +49,35 @@ describe('checkout idempotency key storage', () => {
     );
   });
 
+  it('keeps every active fingerprint key instead of overwriting', async () => {
+    // Two code-bearing checkouts in one browser: starting B must not
+    // destroy A's recovery key, or A's retry cannot replay its order.
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+    await expect(getCheckoutIdempotencyKey('fingerprint-b')).resolves.toBe(
+      '22222222-2222-4222-8222-222222222222'
+    );
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+  });
+
+  it('adopts a legacy single-entry stored key for its fingerprint', async () => {
+    window.localStorage.setItem(
+      CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
+      JSON.stringify({
+        checkoutFingerprintHash: await sha256Hex('fingerprint-a'),
+        createdAt: 1_000,
+        key: '11111111-1111-4111-8111-111111111111',
+      })
+    );
+
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+  });
+
   it('stores the fingerprint hash, key, and createdAt in local storage', async () => {
     await getCheckoutIdempotencyKey('fingerprint-a');
 
@@ -57,16 +86,13 @@ describe('checkout idempotency key storage', () => {
     );
 
     expect(stored).toEqual({
-      checkoutFingerprintHash: await sha256Hex('fingerprint-a'),
-      createdAt: 1_000,
-      key: '11111111-1111-4111-8111-111111111111',
+      [await sha256Hex('fingerprint-a')]: {
+        createdAt: 1_000,
+        key: '11111111-1111-4111-8111-111111111111',
+      },
     });
     expect(stored).not.toHaveProperty('checkoutFingerprint');
-    expect(
-      JSON.parse(
-        window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
-      ).checkoutFingerprintHash
-    ).not.toBe('fingerprint-a');
+    expect(Object.keys(stored)).not.toContain('fingerprint-a');
   });
 
   it('recovers from malformed stored JSON by replacing it with a fresh key', async () => {
@@ -80,9 +106,10 @@ describe('checkout idempotency key storage', () => {
         window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
       )
     ).toEqual({
-      checkoutFingerprintHash: await sha256Hex('fingerprint-a'),
-      createdAt: 1_000,
-      key: '11111111-1111-4111-8111-111111111111',
+      [await sha256Hex('fingerprint-a')]: {
+        createdAt: 1_000,
+        key: '11111111-1111-4111-8111-111111111111',
+      },
     });
   });
 
@@ -104,15 +131,12 @@ describe('checkout idempotency key storage', () => {
     );
 
     expect(stored).toEqual({
-      checkoutFingerprintHash: await sha256Hex('fingerprint-a'),
-      createdAt: 1_000,
-      key: '11111111-1111-4111-8111-111111111111',
+      [await sha256Hex('fingerprint-a')]: {
+        createdAt: 1_000,
+        key: '11111111-1111-4111-8111-111111111111',
+      },
     });
-    expect(
-      JSON.parse(
-        window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
-      ).checkoutFingerprint
-    ).toBeUndefined();
+    expect(stored).not.toHaveProperty('checkoutFingerprint');
   });
 
   it('blocks another order when storage reads fail', async () => {

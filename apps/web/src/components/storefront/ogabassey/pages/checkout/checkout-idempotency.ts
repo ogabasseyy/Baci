@@ -8,6 +8,18 @@ type StoredCheckoutIdempotency = {
   key: string;
 };
 
+// Keys persist per fingerprint: several code-bearing checkouts can
+// be in flight in one browser (different carts, merchants, tabs), and
+// a single shared entry would let a later checkout overwrite an
+// earlier attempt's recovery key — its retry would then mint a fresh
+// key and lose the committed order. The stored value is a map from
+// fingerprint hash to entry; the legacy single-entry shape still
+// reads as a one-entry map.
+type StoredCheckoutEntries = Record<
+  string,
+  { createdAt: number; key: string }
+>;
+
 function bufferToHex(buffer: ArrayBuffer) {
   return Array.from(new Uint8Array(buffer), (byte) =>
     byte.toString(16).padStart(2, '0')
@@ -26,32 +38,50 @@ async function hashCheckoutFingerprint(checkoutFingerprint: string) {
   }
 }
 
-function readStoredKey(): StoredCheckoutIdempotency | null {
+function isValidEntry(value: unknown): value is { createdAt: number; key: string } {
+  if (typeof value !== 'object' || value === null) return false;
+  const entry = value as Partial<{ createdAt: number; key: string }>;
+  return (
+    typeof entry.key === 'string' &&
+    entry.key.trim().length > 0 &&
+    typeof entry.createdAt === 'number'
+  );
+}
+
+function readStoredEntries(): StoredCheckoutEntries {
   // An inaccessible store cannot establish whether a previous attempt exists.
   const raw = window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
   try {
     if (!raw) {
-      return null;
+      return {};
     }
 
-    const parsed = JSON.parse(raw) as Partial<StoredCheckoutIdempotency>;
+    const parsed = JSON.parse(raw) as Partial<StoredCheckoutIdempotency> &
+      Record<string, unknown>;
+    const legacyHash = parsed.checkoutFingerprintHash;
     if (
-      typeof parsed.checkoutFingerprintHash !== 'string' ||
-      parsed.checkoutFingerprintHash.trim().length === 0 ||
-      typeof parsed.key !== 'string' ||
-      parsed.key.trim().length === 0 ||
-      typeof parsed.createdAt !== 'number'
+      typeof legacyHash === 'string' &&
+      legacyHash.trim().length > 0 &&
+      isValidEntry(parsed)
     ) {
-      return null;
+      // Legacy single-entry shape written before per-fingerprint keys.
+      return {
+        [legacyHash]: {
+          createdAt: parsed.createdAt,
+          key: parsed.key,
+        },
+      };
     }
 
-    return {
-      checkoutFingerprintHash: parsed.checkoutFingerprintHash,
-      createdAt: parsed.createdAt,
-      key: parsed.key,
-    };
+    const entries: StoredCheckoutEntries = {};
+    for (const [hash, value] of Object.entries(parsed)) {
+      if (hash.trim().length > 0 && isValidEntry(value)) {
+        entries[hash] = { createdAt: value.createdAt, key: value.key };
+      }
+    }
+    return entries;
   } catch {
-    return null;
+    return {};
   }
 }
 
@@ -70,27 +100,34 @@ export async function getCheckoutIdempotencyKey(checkoutFingerprint: string) {
     );
   }
 
-  let stored: StoredCheckoutIdempotency | null;
+  let entries: StoredCheckoutEntries;
   try {
-    stored = readStoredKey();
+    entries = readStoredEntries();
   } catch {
     throw new Error(
       'Unable to read checkout recovery. Please enable browser storage and try again.'
     );
   }
   const now = Date.now();
-  if (
-    stored?.checkoutFingerprintHash === checkoutFingerprintHash &&
-    now - stored.createdAt <= CHECKOUT_IDEMPOTENCY_TTL_MS
-  ) {
-    return stored.key;
+  const existing = entries[checkoutFingerprintHash];
+  if (existing && now - existing.createdAt <= CHECKOUT_IDEMPOTENCY_TTL_MS) {
+    return existing.key;
   }
 
   const key = crypto.randomUUID();
   try {
+    // Prune expired entries so abandoned attempts cannot grow the
+    // stored map without bound; other live attempts keep their keys.
+    const liveEntries: StoredCheckoutEntries = {};
+    for (const [hash, entry] of Object.entries(entries)) {
+      if (now - entry.createdAt <= CHECKOUT_IDEMPOTENCY_TTL_MS) {
+        liveEntries[hash] = entry;
+      }
+    }
+    liveEntries[checkoutFingerprintHash] = { createdAt: now, key };
     window.localStorage.setItem(
       CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
-      JSON.stringify({ checkoutFingerprintHash, createdAt: now, key })
+      JSON.stringify(liveEntries)
     );
   } catch {
     throw new Error(
@@ -116,10 +153,20 @@ export async function clearCheckoutIdempotencyKey(
         return;
       }
 
-      const stored = readStoredKey();
-      if (stored?.checkoutFingerprintHash !== checkoutFingerprintHash) {
+      const entries = readStoredEntries();
+      if (!(checkoutFingerprintHash in entries)) {
         return;
       }
+      delete entries[checkoutFingerprintHash];
+      if (Object.keys(entries).length === 0) {
+        window.localStorage.removeItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(
+          CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
+          JSON.stringify(entries)
+        );
+      }
+      return;
     }
     window.localStorage.removeItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
   } catch {

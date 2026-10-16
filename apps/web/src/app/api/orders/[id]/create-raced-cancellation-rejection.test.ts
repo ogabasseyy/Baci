@@ -51,6 +51,24 @@ describe('createRacedCancellationRejection', () => {
     await expect(reject()).resolves.toBeNull();
   });
 
+  it('propagates a failed re-read instead of reporting no race', async () => {
+    const failure = { code: 'XX000', message: 'connection lost' };
+    const builder = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      single: vi.fn(() => Promise.resolve({ data: null, error: failure })),
+    };
+    const reject = createRacedCancellationRejection({
+      supabase: { from: vi.fn(() => builder) } as unknown as SupabaseClient,
+      merchantId: 'merchant-1',
+      orderId: 'order-1',
+      requestedPaymentStatus: 'paid',
+      requestedShippingStatus: undefined,
+    });
+
+    await expect(reject()).rejects.toBe(failure);
+  });
+
   it('returns null when the row is gone', async () => {
     const reject = createRacedCancellationRejection({
       supabase: supabaseWithOrder(null),

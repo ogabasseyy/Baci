@@ -21,12 +21,16 @@ export function createRacedCancellationRejection(input: {
   requestedShippingStatus: string | undefined;
 }): () => Promise<CancelledTransitionRejection | null> {
   return async () => {
-    const { data: freshOrder } = await input.supabase
+    const { data: freshOrder, error: freshError } = await input.supabase
       .from('orders')
       .select('payment_status, shipping_status')
       .eq('id', input.orderId)
       .eq('merchant_id', input.merchantId)
       .single();
+    // A failed re-read is not evidence that no cancellation raced:
+    // propagate it so the caller fails explicitly instead of treating
+    // the race as absent. PGRST116 is the genuine missing-order case.
+    if (freshError && freshError.code !== 'PGRST116') throw freshError;
     if (!freshOrder) return null;
     const fresh = freshOrder as {
       payment_status: string | null;

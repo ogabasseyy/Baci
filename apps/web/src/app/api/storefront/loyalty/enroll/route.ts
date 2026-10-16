@@ -125,10 +125,25 @@ export async function POST(request: NextRequest) {
       // on that result instead of surfacing a failure. Return the
       // persisted enrollment fields so the caller's success receipt
       // shows the real balance/tier/referral code, not empty defaults.
-      const { data: statusData } = await supabase.rpc('get_loyalty_status', {
-        p_merchant_id: parsed.data.merchant_id,
-        p_customer_id: parsed.data.customer_id,
-      });
+      const { data: statusData, error: statusError } = await supabase.rpc(
+        'get_loyalty_status',
+        {
+          p_merchant_id: parsed.data.merchant_id,
+          p_customer_id: parsed.data.customer_id,
+        }
+      );
+      if (statusError) {
+        // Never fabricate a receipt from defaults: the persisted
+        // values exist, this read just failed — answer retryably.
+        logger.error({
+          message: 'Failed to load enrollment for replay',
+          error: statusError,
+        });
+        return NextResponse.json(
+          { error: 'Failed to enroll in loyalty program' },
+          { status: 500 }
+        );
+      }
       const status = (statusData ?? {}) as {
         points_balance?: unknown;
         current_tier?: unknown;

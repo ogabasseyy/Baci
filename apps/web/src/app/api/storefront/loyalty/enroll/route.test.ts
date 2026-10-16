@@ -205,6 +205,22 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     });
   });
 
+  it('fails retryably when the replay status lookup errors', async () => {
+    // Fabricating zero/bronze defaults would misreport a committed
+    // enrollment; a failed status read must surface as a failure.
+    mocks.mockRpc.mockImplementation(async (fn: string) =>
+      fn === 'get_loyalty_status'
+        ? { data: null, error: { message: 'db unavailable' } }
+        : { data: { success: false, error: 'already_enrolled' }, error: null }
+    );
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+
+    expect(response.status).toBe(500);
+  });
+
   it('returns 400 when the configured bonus is out of range', async () => {
     mocks.mockRpc.mockResolvedValue({
       data: { success: false, error: 'out_of_range' },

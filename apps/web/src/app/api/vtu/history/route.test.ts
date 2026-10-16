@@ -214,6 +214,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '2500',
@@ -381,6 +382,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-invalid-amount',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: 'not-a-number',
@@ -424,6 +426,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-invalid-cashback',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: '2500',
@@ -464,6 +467,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '2500',
@@ -555,6 +559,7 @@ describe('GET /api/vtu/history', () => {
       amount: '2500',
       biller_name: 'EKEDC NG',
       created_at: '2026-04-08T12:00:00.000Z',
+      customer_id: 'customer-1',
       customer_cashback: '0',
       error_message: null,
       id,
@@ -572,6 +577,7 @@ describe('GET /api/vtu/history', () => {
         amount: '2500',
         biller_name: 'EKEDC NG',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         customer_cashback: '0',
         id: 'tx-eligible',
         metadata: {},
@@ -615,6 +621,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-processing',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'processing',
         amount: '1000',
@@ -688,6 +695,66 @@ describe('GET /api/vtu/history', () => {
     expect(mockBackfillVtuVoucherPin).not.toHaveBeenCalled();
   });
 
+  it('never schedules fulfillment for rows outside the resolved caller', async () => {
+    // Muse R138: fulfillment-level ownership assertion, not just
+    // the query filter — a foreign row reaching the scheduler
+    // (future query refactor) must not be fulfilled.
+    const { GET } = await import('./route');
+    transactionsData = [
+      {
+        id: 'tx-owned',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
+        type: 'electricity',
+        status: 'processing',
+        amount: '1000',
+        biller_name: 'EKEDC NG',
+        metadata: {},
+        request_reference: 'VTU-OWNED',
+        transaction_id: 'kuda-bill-owned',
+        customer_cashback: '0',
+      },
+      {
+        id: 'tx-foreign',
+        created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-2',
+        type: 'electricity',
+        status: 'processing',
+        amount: '1000',
+        biller_name: 'EKEDC NG',
+        metadata: {},
+        request_reference: 'VTU-FOREIGN',
+        transaction_id: 'kuda-bill-foreign',
+        customer_cashback: '0',
+      },
+    ];
+    paymentRowsData = [];
+    mockFulfillPendingVtuTransaction.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-OWNED',
+      status: 'processing',
+    });
+
+    const response = await GET(
+      makeRequest('?merchantSlug=ogabassey&type=electricity')
+    );
+    expect(response.status).toBe(200);
+
+    for (const [callback] of mockAfter.mock.calls) {
+      await (callback as () => Promise<void>)();
+    }
+
+    expect(mockFulfillPendingVtuTransaction).toHaveBeenCalledTimes(1);
+    expect(mockFulfillPendingVtuTransaction).toHaveBeenCalledWith({
+      supabase: expect.any(Object),
+      transactionId: 'tx-owned',
+    });
+    expect(vtuTransactionUpdateEqCalls).not.toContainEqual([
+      'id',
+      'tx-foreign',
+    ]);
+  });
+
   it('does not wait for voucher-pin backfill scheduling before returning history', async () => {
     const { GET } = await import('./route');
     let resolveBackfillClaim:
@@ -700,6 +767,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '2500',
@@ -778,6 +846,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '2500',
@@ -819,6 +888,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-1',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: '2500',
@@ -856,6 +926,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-paystack',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: '2500',
@@ -871,6 +942,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-korapay',
         created_at: '2026-04-08T12:01:00.000Z',
+        customer_id: 'customer-1',
         type: 'airtime',
         status: 'successful',
         amount: '2500',
@@ -937,6 +1009,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-failed',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'failed',
         amount: '1000',
@@ -944,7 +1017,6 @@ describe('GET /api/vtu/history', () => {
         request_reference: 'VTU-FAIL',
         customer_cashback: '0',
         source: 'checkout',
-        customer_id: 'customer-1',
       },
     ];
 
@@ -967,6 +1039,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-refunded',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'failed',
         amount: '1000',
@@ -1001,6 +1074,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-wallet-only',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'failed',
         amount: '1000',
@@ -1016,6 +1090,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-hybrid',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'failed',
         amount: '1000',
@@ -1057,6 +1132,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-card-only',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'failed',
         amount: '1000',
@@ -1064,7 +1140,6 @@ describe('GET /api/vtu/history', () => {
         request_reference: 'VTU-CARD-ONLY',
         customer_cashback: '0',
         source: 'checkout',
-        customer_id: 'customer-1',
       },
     ];
 
@@ -1090,6 +1165,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-ok',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'successful',
         amount: '1000',
@@ -1100,6 +1176,7 @@ describe('GET /api/vtu/history', () => {
       {
         id: 'tx-failed-noncheckout',
         created_at: '2026-04-08T12:00:00.000Z',
+        customer_id: 'customer-1',
         type: 'electricity',
         status: 'failed',
         amount: '1000',
@@ -1107,7 +1184,6 @@ describe('GET /api/vtu/history', () => {
         request_reference: 'VTU-NONCHECKOUT',
         customer_cashback: '0',
         source: 'admin',
-        customer_id: 'customer-1',
       },
     ];
 

@@ -186,6 +186,15 @@ export async function GET(request: NextRequest) {
         break;
       }
 
+      // Owned-rows-only (Muse R138): the query above already filters
+      // by customer_id, but fulfillment must never depend on a
+      // filter alone — skip any row that is not the resolved
+      // caller's, so a future query refactor cannot turn history
+      // polling into cross-customer fulfillment.
+      if (candidate.transaction.customer_id !== customerId) {
+        continue;
+      }
+
       if (
         candidate.voucherPin !== null ||
         !shouldBackfillForStatus(candidate.transaction.status) ||

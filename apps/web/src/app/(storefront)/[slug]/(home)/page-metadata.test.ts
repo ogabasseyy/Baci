@@ -163,11 +163,30 @@ describe('storefront homepage metadata', () => {
     expect(mockResolveOgabasseyHomeHeroShell).not.toHaveBeenCalled();
   });
 
-  it('warms the OgaBassey home hero shell in parallel with merchant resolution', async () => {
-    await generateMetadata({
+  it('warms the OgaBassey home hero shell before merchant resolution completes', async () => {
+    let resolveMerchant!: (
+      value: Awaited<ReturnType<typeof getRequestScopedMerchant>>
+    ) => void;
+    vi.mocked(getRequestScopedMerchant).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveMerchant = resolve;
+        })
+    );
+
+    const metadataPromise = generateMetadata({
       params: Promise.resolve({ slug: 'ogabassey.com' }),
     });
 
+    await Promise.resolve();
+
     expect(mockResolveOgabasseyHomeHeroShell).toHaveBeenCalledOnce();
+
+    resolveMerchant(
+      baseMerchant as unknown as Awaited<
+        ReturnType<typeof getRequestScopedMerchant>
+      >
+    );
+    await metadataPromise;
   });
 });

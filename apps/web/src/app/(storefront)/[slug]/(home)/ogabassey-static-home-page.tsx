@@ -1,9 +1,7 @@
 import { Suspense } from 'react';
 import { OgabasseyHomeHeroReserveFallback } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-reserve-fallback';
-import {
-  OgabasseyHomeStaticShellHead,
-  OgabasseyStaticHomePageContent,
-} from '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content';
+import { OgabasseyHomeStaticShellHead } from '@/app/(storefront)/ogabassey/ogabassey-home-static-shell-head';
+import { OgabasseyStaticHomePageContent } from '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content';
 import { OgabasseyStaticResourceHints } from '@/app/(storefront)/ogabassey/ogabassey-static-resource-hints';
 
 export function OgabasseyStaticHomePage({

@@ -24,11 +24,17 @@ vi.mock('@/app/(storefront)/storefront-home-critical.css', () => {
 });
 
 vi.mock(
-  '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content',
+  '@/app/(storefront)/ogabassey/ogabassey-home-static-shell-head',
   () => ({
     OgabasseyHomeStaticShellHead: () => (
       <span data-testid="ogabassey-home-static-shell-head" />
     ),
+  })
+);
+
+vi.mock(
+  '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content',
+  () => ({
     OgabasseyStaticHomePageContent: (props: {
       omitCommittedHero?: boolean;
       pathPrefix: string;
@@ -80,6 +86,9 @@ describe('OgabasseyStaticHomePage', () => {
     });
     render(<OgabasseyStaticHomePage pathPrefix="/ogabassey" />);
 
+    expect(
+      screen.getByTestId('ogabassey-home-static-shell-head')
+    ).toBeInTheDocument();
     expect(
       document.querySelector(
         '[data-ogabassey-home-hero-reserve-fallback="true"]'

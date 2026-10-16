@@ -58,16 +58,15 @@ jobs:
         with:
           run_install: false
       - name: Install isolated pinned fixture runtime
-        shell: pwsh
+        shell: bash
         run: |
-          $runtime = Join-Path $env:RUNNER_TEMP 'pilot-codec-runtime'
-          New-Item -ItemType Directory -Force $runtime | Out-Null
-          Copy-Item .github/fixtures/pilot-codec/package.json $runtime
-          Copy-Item .github/fixtures/pilot-codec/pnpm-lock.yaml $runtime
-          pnpm --dir $runtime install --frozen-lockfile --ignore-scripts
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          pnpm --dir $runtime exec playwright install webkit
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          set -euo pipefail
+          runtime="$RUNNER_TEMP/pilot-codec-runtime"
+          mkdir -p "$runtime"
+          cp .github/fixtures/pilot-codec/package.json "$runtime/"
+          cp .github/fixtures/pilot-codec/pnpm-lock.yaml "$runtime/"
+          pnpm --dir "$runtime" install --frozen-lockfile --ignore-scripts
+          pnpm --dir "$runtime" exec playwright install webkit
       - name: Prove native no-AVIF, WebP fallback and intact hydration
         env:
           PILOT_CODEC_RUNTIME: ${{ runner.temp }}/pilot-codec-runtime
@@ -101,6 +100,8 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           # Fail closed: a detection failure must run the suites, never
           # skip them silently. The pilot patterns mirror the
@@ -139,10 +140,10 @@ jobs:
             done
             return 1
           }
-          if ! names=$(api_with_retry "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/files" --paginate -q '.[].filename'); then
+          if ! names=$(api_with_retry "repos/${PR_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate -q '.[].filename'); then
             echo 'pilot=true' >> "$GITHUB_OUTPUT"
             echo 'transformer=true' >> "$GITHUB_OUTPUT"
-          elif ! changed=$(api_with_retry "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}" -q '.changed_files'); then
+          elif ! changed=$(api_with_retry "repos/${PR_REPOSITORY}/pulls/${PR_NUMBER}" -q '.changed_files'); then
             echo 'pilot=true' >> "$GITHUB_OUTPUT"
             echo 'transformer=true' >> "$GITHUB_OUTPUT"
           else

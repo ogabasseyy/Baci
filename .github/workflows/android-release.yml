@@ -241,7 +241,7 @@ jobs:
             echo "::error::ANDROID_KEYSTORE_BASE64 secret is empty or not set"
             exit 1
           fi
-          KEYSTORE_PATH="${{ runner.temp }}/release.keystore"
+          KEYSTORE_PATH="${RUNNER_TEMP}/release.keystore"
           umask 077
           echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
           chmod 600 "$KEYSTORE_PATH"
@@ -364,8 +364,8 @@ jobs:
       - name: Clean up keystore
         if: always()
         run: |
-          rm -f "${{ env.ANDROID_ADMIN_KEYSTORE_FILE }}"
-          if ! git -C ${{ github.workspace }} ls-files --error-unmatch ${{ env.WORKING_DIR }}/google-services.json >/dev/null 2>&1; then
-            rm -f ${{ env.WORKING_DIR }}/google-services.json
+          rm -f "$ANDROID_ADMIN_KEYSTORE_FILE"
+          if ! git -C "$GITHUB_WORKSPACE" ls-files --error-unmatch "$WORKING_DIR/google-services.json" >/dev/null 2>&1; then
+            rm -f "$WORKING_DIR/google-services.json"
           fi
-          rm -f ${{ env.WORKING_DIR }}/android/app/google-services.json
+          rm -f "$WORKING_DIR/android/app/google-services.json"

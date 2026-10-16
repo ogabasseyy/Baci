@@ -29,7 +29,9 @@ export const piggyvestPostgresConfigurationSchema = z.discriminatedUnion(
           /^\/(?:private\/)?tmp\/baci-piggyvest-runtime\.[A-Za-z0-9]+\/socket$/
         ),
       database: z.literal('piggyvest_local'),
-      password: z.literal('synthetic-local-only'),
+      // Private local trust-authenticated sockets need no password. Preserve
+      // the legacy synthetic marker for existing local-only test fixtures.
+      password: z.literal('synthetic-local-only').optional(),
     }),
     z
       .strictObject({

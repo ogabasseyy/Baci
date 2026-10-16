@@ -1,3 +1,4 @@
+import type { EventEmitter } from 'node:events';
 import { Client } from 'pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,6 +9,8 @@ import { createPiggyvestPostgresExecutor } from './postgres-executor';
 import { PIGGYVEST_POSTGRES_EXECUTOR } from './postgres-executor.constants';
 import { postgresExecutorFixture } from './postgres-executor.test-support';
 import { PIGGYVEST_POSTGRES_STATEMENTS as statements } from './postgres-statements';
+
+type PgModule = typeof import('pg');
 
 let fixture: ReturnType<typeof postgresExecutorFixture>;
 function createMockClient(): Client {
@@ -29,6 +32,35 @@ afterEach(() => {
 });
 
 describe('createPiggyvestPostgresExecutor', () => {
+  it('prevents ambient password lookup and rejects password challenges for password-free local sockets', async () => {
+    vi.stubEnv('PGPASSWORD', 'synthetic-ambient-password');
+    vi.stubEnv('PGPASSFILE', '/tmp/synthetic-pgpass-must-not-be-read');
+    const configuration = { ...fixture.configuration };
+    Reflect.deleteProperty(configuration, 'password');
+    await createPiggyvestPostgresExecutor(configuration)(
+      statements.enqueueInbox.text,
+      parameters
+    );
+    const options = vi.mocked(Client).mock.calls[0]?.[0];
+    const actualPg = await vi.importActual<PgModule>('pg');
+    const actualClient = new actualPg.Client(options);
+    const password: unknown = Reflect.get(actualClient, 'password');
+    expect(password).toBeTypeOf('function');
+    expect(password).not.toBe('synthetic-ambient-password');
+    const rejected = Promise.withResolvers<Error>();
+    const connection = Reflect.get(actualClient, 'connection') as EventEmitter;
+    connection.once('error', rejected.resolve);
+    const getPassword = Reflect.get(actualClient, '_getPassword') as (
+      callback: () => void
+    ) => void;
+    const proceedWithPassword = vi.fn();
+    getPassword.call(actualClient, proceedWithPassword);
+    await expect(rejected.promise).resolves.toEqual(
+      new Error('Local database password authentication is disabled')
+    );
+    expect(proceedWithPassword).not.toHaveBeenCalled();
+  });
+
   it('uses explicit connection identity and waits for acknowledged COMMIT', async () => {
     const commitStarted = Promise.withResolvers<void>();
     const finishCommit = Promise.withResolvers<{ command: string; rows: [] }>();

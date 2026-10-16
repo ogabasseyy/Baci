@@ -1,5 +1,7 @@
 import { vi } from 'vitest';
 
+type ProductsDataModule = typeof import('./products-data');
+
 const mocks = vi.hoisted(() => ({
   chainCalls: [] as Array<{ method: string; args: unknown[] }>,
   createProductRecord: vi.fn(),
@@ -175,7 +177,7 @@ vi.mock('./product-save', () => ({
 }));
 
 vi.mock('./products-data', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./products-data')>();
+  const actual = await importOriginal<ProductsDataModule>();
   return { ...actual, updateProductStatus: mocks.updateProductStatus };
 });
 

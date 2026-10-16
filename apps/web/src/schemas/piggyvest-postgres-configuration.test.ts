@@ -25,6 +25,26 @@ const staging = {
 };
 
 describe('piggyvestPostgresConfigurationSchema', () => {
+  it('accepts password-free local Unix socket configuration without inventing a credential', () => {
+    const input = { ...local };
+    Reflect.deleteProperty(input, 'password');
+    const parsed = schema.parse(input);
+    expect(parsed.transport).toBe('local_test');
+    expect(parsed).not.toHaveProperty('password');
+  });
+
+  it.each([
+    { socketDirectory: '/tmp/production/socket' },
+    { socketDirectory: 'production.example.test' },
+    { environment: 'production' },
+    { role: 'postgres' },
+    { password: 'real-password' },
+  ])('keeps password-free local configuration isolated from unsafe overrides', (change) => {
+    const input = { ...local };
+    Reflect.deleteProperty(input, 'password');
+    expect(schema.safeParse({ ...input, ...change }).success).toBe(false);
+  });
+
   it('accepts the policy writer only through explicit synthetic local configuration', () => {
     expect(
       schema.safeParse({ ...local, role: 'piggyvest_staging_policy_writer' })
@@ -69,6 +89,7 @@ describe('piggyvestPostgresConfigurationSchema', () => {
     { expectedHost: 'other.example.test' },
     { actualProjectId: 'other-project' },
     { host: '127.0.0.1', expectedHost: '127.0.0.1' },
+    { password: undefined },
     { password: '' },
     { password: 'contains\0nul' },
     { database: '' },

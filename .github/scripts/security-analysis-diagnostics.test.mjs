@@ -87,8 +87,26 @@ test('shell scripts read GitHub context through environment variables', () => {
 });
 
 test('targeted and protected-branch scans use the existing full CI engine', () => {
-  assert.equal((workflow.match(/semgrep install-semgrep-pro/g) ?? []).length, 2);
+  const steps = parse(workflow).jobs.semgrep.steps;
+  for (const id of ['semgrep_pr', 'semgrep_push']) {
+    const step = steps.find((entry) => entry.id === id);
+    assert.match(step.run, /semgrep install-semgrep-pro/);
+    assert.match(step.run, /semgrep scan --error --strict --pro-intrafile --config auto/);
+  }
   assert.equal((workflow.match(/semgrep scan --error --strict --pro-intrafile --config auto/g) ?? []).length, 2);
+});
+
+test('every required scan gives each rule 15 seconds without relaxing failures', () => {
+  const steps = parse(workflow).jobs.semgrep.steps;
+  for (const id of ['semgrep_pr', 'semgrep_push', 'semgrep_full']) {
+    const step = steps.find((entry) => entry.id === id);
+    assert.ok(step, `${id} must remain present`);
+    assert.match(step.run, /--timeout 15(?: |$)/);
+    assert.doesNotMatch(step.run, /--timeout-threshold|--no-strict|--suppress-errors/);
+  }
+  assert.equal((workflow.match(/--timeout 15/g) ?? []).length, 3);
+  assert.equal((workflow.match(/semgrep scan --error --strict --pro-intrafile --config auto/g) ?? []).length, 2);
+  assert.match(workflow, /semgrep ci --no-suppress-errors/);
 });
 
 test('a silently skipped requested target fails even when another file was scanned', () => {
@@ -117,7 +135,7 @@ test('protected-branch manifest includes tracked source files with spaces', () =
   const root = mkdtempSync(join(tmpdir(), 'baci-semgrep-push-scope-'));
   try {
     assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
-    for (const path of ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/config.json', 'apps/web/src/lib/probe.py', '.github/scripts/semgrep-sarif-analysis-diagnostics.py', 'next.config.ts', 'outside.ts']) {
+    for (const path of ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/config.json', 'apps/web/src/lib/probe.py', '.github/scripts/semgrep-sarif-analysis-diagnostics.py', '.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py', 'next.config.ts', 'packages/shared/scripts/check-module-size.mjs', 'packages/shared/scripts/check-module-size-report.mjs', 'scripts/local-only.mjs', 'outside.ts']) {
       mkdirSync(join(root, path, '..'), { recursive: true });
       writeFileSync(join(root, path), 'fixture');
     }
@@ -125,7 +143,7 @@ test('protected-branch manifest includes tracked source files with spaces', () =
     const targets = workflow.split('          scan_targets=(\n')[1].split('          )')[0].trim().split(/\s+/);
     const result = spawnSync('python3', [helper, 'push-targets', ...targets], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: root } });
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(readFileSync(join(root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean).sort(), ['.github/scripts/semgrep-sarif-analysis-diagnostics.py', 'apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'next.config.ts']);
+    assert.deepEqual(readFileSync(join(root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean).sort(), ['.github/scripts/semgrep-sarif-analysis-diagnostics.py', '.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py', 'apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'next.config.ts', 'packages/shared/scripts/check-module-size-report.mjs', 'packages/shared/scripts/check-module-size.mjs']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -136,4 +154,51 @@ test('workflow, diagnostics and scope changes trigger their regression suite', (
   for (const path of ['.github/workflows/security.yml', '.github/scripts/semgrep-sarif-analysis-diagnostics.py', '.github/scripts/security-analysis-diagnostics.test.mjs', '.github/scripts/security-pr-scope.test.mjs']) {
     assert.ok(filters.quiz_db.includes(path), `${path} must trigger coverage regressions`);
   }
+});
+
+// Git check-ignore is a Gitignore syntax proxy, not an actual Semgrep scan.
+// Actual pinned Semgrep target selection was also verified independently.
+test('Gitignore proxy restores only the two required shared scripts', () => {
+  const root = mkdtempSync(join(tmpdir(), 'baci-semgrep-ignore-'));
+  try {
+    assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+    writeFileSync(join(root, '.git/info/exclude'), readFileSync(new URL('../../.semgrepignore', import.meta.url)));
+    for (const path of ['scripts/local-only.mjs', 'apps/web/scripts/local-only.mjs', 'packages/shared/scripts/other.mjs', 'packages/shared/scripts/nested/local-only.mjs', 'packages/shared/scripts/check-module-size.mjs', 'packages/shared/scripts/check-module-size-report.mjs']) {
+      mkdirSync(join(root, path, '..'), { recursive: true });
+      writeFileSync(join(root, path), 'fixture');
+      const result = spawnSync('git', ['check-ignore', '--no-index', path], { cwd: root, encoding: 'utf8' });
+      const restored = ['packages/shared/scripts/check-module-size.mjs', 'packages/shared/scripts/check-module-size-report.mjs'].includes(path);
+      assert.equal(result.status, restored ? 1 : 0, `${path}: ${result.stdout}${result.stderr}`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+
+test('optional synthetic PostgreSQL scanner diagnostic preserves its isolation contracts', () => {
+  const diagnosticTest = fileURLToPath(new URL('./semgrep-sarif-pg-diagnostic.test.py', import.meta.url));
+  const result = spawnSync('python3', [diagnosticTest], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+});
+
+test('optional PostgreSQL diagnostic changes trigger their regression suite', () => {
+  const filters = parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
+  for (const path of ['.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py']) {
+    assert.ok(filters.quiz_db.includes(path), `${path} must trigger diagnostic regressions`);
+  }
+});
+
+
+test('optional diagnostic failure emits a warning while required scan failures remain enforced', () => {
+  const steps = parse(workflow).jobs.semgrep.steps;
+  const warning = steps.find((step) => step.name === 'Warn if optional PostgreSQL diagnostics failed');
+  assert.match(warning.if, /steps\.pg_diagnostic\.outcome == 'failure'/);
+  assert.match(warning.if, /steps\.pg_diagnostic_upload\.outcome == 'failure'/);
+  assert.match(warning.run, /::warning::/);
+  assert.doesNotMatch(warning.run, /\$\{\{/);
+  const failGate = steps.find((step) => step.name === 'Fail on Semgrep findings or scanner errors');
+  assert.match(failGate.if, /steps\.semgrep_full\.outcome == 'failure'/);
+  assert.doesNotMatch(failGate.if, /pg_diagnostic/);
+  assert.equal(failGate.run, 'exit 1');
 });

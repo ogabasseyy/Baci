@@ -5,10 +5,12 @@ import {
   resolveKudaDataPlanForPurchase,
 } from './kuda-data-plans';
 
+type KudaModule = typeof import('./kuda');
+
 const mockGetDataProviders = vi.hoisted(() => vi.fn());
 
 vi.mock('./kuda', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./kuda')>();
+  const actual = await importOriginal<KudaModule>();
   return {
     ...actual,
     getDataProviders: () => mockGetDataProviders(),

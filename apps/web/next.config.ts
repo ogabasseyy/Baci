@@ -1,8 +1,8 @@
 import path from 'node:path';
-import { withPostHogConfig } from '@posthog/nextjs-config';
 import type { NextConfig } from 'next';
 import { builderPreviewRouteHeaders } from './src/config/builder-preview-route-headers';
 import { CACHE_LIFE_PROFILES } from './src/config/cache-life-profiles';
+import { composePostHogNextConfig } from './src/config/compose-posthog-next-config';
 import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-link-header';
 import { getHostedDraftStandaloneOutput } from './src/config/hosted-draft-standalone-output';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
@@ -733,42 +733,27 @@ const nextConfig: NextConfig = {
   },
 };
 
-type NextConfigContext = { defaultConfig: NextConfig };
-type ResolvableNextConfig =
-  | NextConfig
-  | ((
-      phase: string,
-      context: NextConfigContext
-    ) => NextConfig | Promise<NextConfig>);
-
-// PostHog's declaration says NextConfig, but its enabled runtime returns
-// an async config function. Keep that callable branch explicit here.
-function applyPostHogConfig(config: NextConfig): ResolvableNextConfig {
-  if (
-    !POSTHOG_SOURCE_MAP_UPLOAD_ENABLED ||
-    !POSTHOG_SOURCE_MAP_API_KEY ||
-    !POSTHOG_SOURCE_MAP_PROJECT_ID
-  ) {
-    return config;
-  }
-
-  return withPostHogConfig(config, {
-    personalApiKey: POSTHOG_SOURCE_MAP_API_KEY,
-    projectId: POSTHOG_SOURCE_MAP_PROJECT_ID,
-    host: getPostHogUiHost(),
-    sourcemaps: {
-      enabled: true,
-      releaseName: 'baci-web',
-      releaseVersion: getPostHogReleaseVersion(),
-      deleteAfterUpload: true,
-    },
-  });
-}
-
 // Composed once at import, exactly like the object form this replaced:
 // the exported function runs the phase-scoped gate and resolves this
 // value, so repeated evaluations never re-wrap the PostHog config.
-const composedConfig = applyPostHogConfig(nextConfig);
+const composedConfig = composePostHogNextConfig(
+  nextConfig,
+  POSTHOG_SOURCE_MAP_UPLOAD_ENABLED &&
+    POSTHOG_SOURCE_MAP_API_KEY &&
+    POSTHOG_SOURCE_MAP_PROJECT_ID
+    ? {
+        personalApiKey: POSTHOG_SOURCE_MAP_API_KEY,
+        projectId: POSTHOG_SOURCE_MAP_PROJECT_ID,
+        host: getPostHogUiHost(),
+        sourcemaps: {
+          enabled: true,
+          releaseName: 'baci-web',
+          releaseVersion: getPostHogReleaseVersion(),
+          deleteAfterUpload: true,
+        },
+      }
+    : undefined
+);
 
 // Function form so the pilot gate reads Next's own phase signal:
 // PHASE_PRODUCTION_BUILD asserts, dev/start stash for the boot gate,
@@ -781,10 +766,8 @@ const composedConfig = applyPostHogConfig(nextConfig);
 // tooling callers compatible when they provide only the phase.
 export default function pilotNextConfig(
   phase: string,
-  context: NextConfigContext = { defaultConfig: {} }
+  context?: { defaultConfig: NextConfig }
 ): NextConfig | Promise<NextConfig> {
   applyPilotPublicGate(__dirname, phase);
-  return typeof composedConfig === 'function'
-    ? composedConfig(phase, context)
-    : composedConfig;
+  return composedConfig(phase, context);
 }

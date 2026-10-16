@@ -22,7 +22,9 @@ function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
  * than only in the httpOnly cookie. Merchant resolution may accept a
  * merchant hint on more hosts, but arbitrary deployment hosts are not
  * a credential-disclosure surface: body proofs are limited to the
- * production/staging API, root, and local native/programmatic hosts.
+ * production/staging API hosts and local native/programmatic hosts
+ * (loopback and private LAN). The browsable root and www hosts are
+ * deliberately excluded and stay on the httpOnly-cookie path.
  */
 export function requestUsesSharedPlatformHost(
   request: Request,

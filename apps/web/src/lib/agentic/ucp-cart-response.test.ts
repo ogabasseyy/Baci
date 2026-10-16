@@ -54,6 +54,22 @@ describe('buildUcpCartResponse', () => {
     });
   });
 
+  it.each([
+    ['null', null],
+    ['absent', undefined],
+    ['empty', ''],
+  ])('omits continue_url when the continuation is %s', (_label, value) => {
+    const response = buildUcpCartResponse({
+      cartId: 'cart_read',
+      continueUrl: value,
+      currency: 'NGN',
+      lineItems: [],
+      status: 'active',
+      totals: [{ amount: 0, display_text: 'Total', type: 'total' }],
+    });
+    expect(response).not.toHaveProperty('continue_url');
+  });
+
   it('returns an empty line item list for carts without valid items', () => {
     expect(
       buildUcpCartResponse({

@@ -1,5 +1,18 @@
 import { expect, it, vi } from 'vitest';
-import { runCartEventsOnce } from './process-cart-events';
+import {
+  cartEventsRetryDelayMs,
+  runCartEventsOnce,
+} from './process-cart-events';
+
+it('backs off exponentially after failed passes, capped at one minute', () => {
+  expect(cartEventsRetryDelayMs(0)).toBe(1_000);
+  expect(cartEventsRetryDelayMs(1)).toBe(1_000);
+  expect(cartEventsRetryDelayMs(2)).toBe(2_000);
+  expect(cartEventsRetryDelayMs(3)).toBe(4_000);
+  expect(cartEventsRetryDelayMs(6)).toBe(32_000);
+  expect(cartEventsRetryDelayMs(7)).toBe(60_000);
+  expect(cartEventsRetryDelayMs(30)).toBe(60_000);
+});
 
 it('is disabled without explicit worker activation and never loads a credential', async () => {
   const run = vi.fn();

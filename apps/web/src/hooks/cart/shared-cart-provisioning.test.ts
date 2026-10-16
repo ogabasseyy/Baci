@@ -173,6 +173,41 @@ describe('useSharedCart legacy import', () => {
     await waitFor(() => expect(result.current.importStatus).toBe('done'));
   });
 
+  it('blocks an over-capacity first import instead of creating an empty cart', async () => {
+    saveCartToStorage(
+      Array.from({ length: 21 }, (_, index) =>
+        cartItem({
+          cartItemId: `prod-${index}`,
+          id: `prod-${index}`,
+        })
+      ),
+      SLUG
+    );
+    vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+      code: 'unauthorized',
+      ok: false,
+      retryable: false,
+      snapshot: null,
+    });
+    vi.mocked(bootstrapSharedCart).mockResolvedValue({ ok: true });
+    const { result } = renderHook(() =>
+      useSharedCart({
+        merchantId: MERCHANT_ID,
+        merchantSlug: SLUG,
+        sessionGeneration: 1,
+      })
+    );
+    await waitFor(() =>
+      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(1)
+    );
+    act(() => result.current.addToCart(product({ id: 'prod-new' }), 1));
+    await waitFor(() => expect(result.current.importStatus).toBe('failed'));
+    expect(result.current.importWarnings).toContain('import_capacity_exceeded');
+    expect(createSharedCart).not.toHaveBeenCalled();
+    // The legacy cache survives for an explicit retry after trimming.
+    expect(getCartFromStorage(SLUG)).toHaveLength(21);
+  });
+
   it('creates with the cached lines on the first action and records the receipt', async () => {
     saveCartToStorage(
       [cartItem({ id: 'prod-1', price: 100, quantity: 2 })],

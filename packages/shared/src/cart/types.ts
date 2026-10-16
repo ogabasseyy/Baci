@@ -115,6 +115,7 @@ export type CartErrorCode =
   | 'temporarily_unavailable'
   | 'rate_limited'
   | 'merge_conflict'
+  | 'too_many_lines'
   | 'handoff_consumed';
 
 export interface CartWarning {

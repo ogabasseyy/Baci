@@ -17,6 +17,8 @@ const SAFE_MESSAGES: Record<CartErrorCode, string> = {
   refresh_required: 'Your cart changed elsewhere. Refresh to see the latest.',
   temporarily_unavailable:
     'The cart is temporarily unavailable. Your items are saved; try again.',
+  too_many_lines:
+    'This cart has too many different items. Remove some items and try again.',
   unauthorized: 'Your cart session ended. Reconnect to keep shopping.',
   version_conflict:
     'Your cart changed on another device. Refresh to see the latest.',

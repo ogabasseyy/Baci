@@ -189,14 +189,20 @@ describe('planCartMerge', () => {
   it('pins voucher merges to quantity one', () => {
     const result = planCartMerge(
       snapshot([line(TECNO, 2)]),
-      snapshot([line(TECNO, 1, { voucherToken: 'tok-A' })]),
+      snapshot([
+        line(TECNO, 1, { voucherToken: 'tok-A', voucherAwardId: 'award-A' }),
+      ]),
       [{ item: { productId: TECNO }, keep: 'incoming' }]
     );
 
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.lines).toEqual([
-        expect.objectContaining({ quantity: 1, voucherToken: 'tok-A' }),
+        expect.objectContaining({
+          quantity: 1,
+          voucherToken: 'tok-A',
+          voucherAwardId: 'award-A',
+        }),
       ]);
     }
   });

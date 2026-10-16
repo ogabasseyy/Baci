@@ -96,12 +96,19 @@ it('does not publish a previous account choice after the shopper changes', async
 
 it('lets a new owner act while a previous owner attempt is still in flight', async () => {
   let finishFirst: () => void = () => undefined;
+  let finishSecond: () => void = () => undefined;
   const linkAccount = jest
     .fn()
     .mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
           finishFirst = resolve;
+        })
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSecond = resolve;
         })
     )
     .mockResolvedValue(undefined);
@@ -126,8 +133,16 @@ it('lets a new owner act while a previous owner attempt is still in flight', asy
   await act(async () => {});
   fireEvent.press(view.getByText('Keep this cart on my account'));
   await waitFor(() => expect(linkAccount).toHaveBeenCalledTimes(2));
+  // Finish the stale first request while the new owner's request is
+  // still pending: its finally must not clear the new owner's flight
+  // guard, so another click cannot launch a duplicate.
   await act(async () => {
     finishFirst();
+  });
+  fireEvent.press(view.getByText('Keep this cart on my account'));
+  expect(linkAccount).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    finishSecond();
   });
   await waitFor(() =>
     expect(view.getByText('Cart linked to your account.')).toBeTruthy()

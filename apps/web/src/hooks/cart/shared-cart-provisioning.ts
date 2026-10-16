@@ -89,6 +89,15 @@ export function createCartProvisioning(context: SharedCartRuntime) {
         (status === 'none' || status === 'failed') && cached.length > 0
           ? planLegacyImport(cached, null, null)
           : null;
+      if (planned?.kind === 'blocked') {
+        // Over-capacity first import: surface the same actionable
+        // capacity outcome as the server-cart path instead of hiding
+        // the cached lines behind an empty create. Release the
+        // attempt latch so trimming the cache can re-plan.
+        dispatch({ generation, type: 'import/capacity_exceeded' });
+        createAttemptedRef.current = false;
+        return { code: 'too_many_lines', ok: false, retryable: false };
+      }
       const lines = planned?.kind === 'create' ? planned.lines : undefined;
       if (planned?.kind === 'create') {
         dispatch({

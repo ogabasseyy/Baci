@@ -40,6 +40,7 @@ const ROUTE_STATUS: Record<CartRouteErrorCode, number> = {
   rate_limited: 429,
   refresh_required: 409,
   temporarily_unavailable: 503,
+  too_many_lines: 400,
   unauthorized: 401,
   version_conflict: 409,
 };

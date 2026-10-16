@@ -14,14 +14,12 @@ export type {
   NativeSharedCartRef,
 };
 
+import { createNativeCartAccountOps } from './controller-account';
 import { hydrateNativeCart, nativeCartInput } from './display';
 import { pairNativeCart } from './native-cart-pairing';
 import type { CartPairingLink } from './pairing-link';
 import { pendingCartRequest } from './pending-request';
-import {
-  type NativeAccountLinkInput,
-  NativeCartError,
-} from './shared-cart-client';
+import { NativeCartError } from './shared-cart-client';
 
 const TERMINAL_STATES = new Set(['completed', 'expired', 'canceled']);
 export function createNativeCartController(
@@ -187,6 +185,14 @@ export function createNativeCartController(
     await accept(created);
     return created;
   }
+  const accountOps = createNativeCartAccountOps({
+    accept,
+    assertCurrent,
+    coordinator,
+    ensureCart,
+    options,
+    serial,
+  });
   const operations = createNativeCartWrite({
     accept,
     coordinator,
@@ -262,44 +268,7 @@ export function createNativeCartController(
           resolutions
         )
       ),
-    savedCart: () =>
-      serial(async () => {
-        if (!options.client.savedAccountCart)
-          throw new NativeCartError('temporarily_unavailable');
-        // A fresh install holds no proof: bootstrap one (without
-        // creating a cart) so the account read can authorize.
-        if (!(await options.client.context())) {
-          await options.client.bootstrap();
-          assertCurrent();
-        }
-        const reply = await options.client.savedAccountCart();
-        assertCurrent();
-        return reply.cart ?? null;
-      }),
-    linkAccount: (input: NativeAccountLinkInput) =>
-      serial(async () => {
-        // Adopting the saved cart needs no destination cart; creating
-        // an empty one first would replace the saved-cart pointer.
-        if (input.choice !== 'use_saved') await ensureCart();
-        options.status('pending');
-        await accept(await coordinator.linkAccount(input));
-      }),
-    reviewCheckout: (operationId: string) =>
-      serial(async () => {
-        const current = await ensureCart();
-        if (!options.client.prepareCheckout)
-          throw new NativeCartError('temporarily_unavailable');
-        options.status('pending');
-        try {
-          return await options.client.prepareCheckout({
-            cartId: current.cartId,
-            expectedVersion: current.version,
-            operationId,
-          });
-        } finally {
-          if (options.isCurrent()) options.status('ready');
-        }
-      }),
+    ...accountOps,
     chooseLegacy: (
       choice: 'keep_server' | 'merge',
       resolutions: CartMergeResolution[] = []

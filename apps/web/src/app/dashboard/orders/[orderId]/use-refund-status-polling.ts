@@ -23,11 +23,17 @@ export function useRefundStatusPolling({
   terminal: boolean;
 }) {
   const loadedOrder = useRef<string | null>(null);
+  const requestSequence = useRef(0);
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
     async function load() {
       const startedRevision = revision.current;
+      // Monotonic per-request sequence: a slow poll overlapping the
+      // next interval shares the submission revision, so without this
+      // the older response would land last and clobber the panel with
+      // stale balances, status, and action flags.
+      const startedSequence = ++requestSequence.current;
       try {
         const response = await fetch(
           `/api/orders/${encodeURIComponent(orderId)}/refund`,
@@ -40,7 +46,11 @@ export function useRefundStatusPolling({
         const data = await response.json().catch(() => ({}));
         if (!response.ok)
           throw new Error(data.error || 'Unable to load refund');
-        if (active && startedRevision === revision.current) {
+        if (
+          active &&
+          startedRevision === revision.current &&
+          startedSequence === requestSequence.current
+        ) {
           onSummary(data);
           onError(null);
         }
@@ -48,6 +58,7 @@ export function useRefundStatusPolling({
         if (
           active &&
           startedRevision === revision.current &&
+          startedSequence === requestSequence.current &&
           !controller.signal.aborted
         )
           onError(e instanceof Error ? e.message : 'Unable to load refund');

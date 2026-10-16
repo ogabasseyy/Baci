@@ -74,6 +74,59 @@ describe('refundNotificationLedgerAmount manual legs', () => {
     expect(amount).toContain('100');
   });
 
+  it('totals a reversal-only order from its wallet and savings reversals', async () => {
+    // A wallet-only order has no external or manual legs: the total
+    // comes from the reversals alone instead of dead-lettering with
+    // a ledger mismatch. An unreversed savings goal stays out, and
+    // a legless order with no reversals still mismatches.
+    const { supabase } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'wallet',
+          id: 'pay-wallet',
+          status: 'completed',
+        },
+      ],
+      refunds: [],
+      savingsReversals: [
+        { amount: 40, metadata: { reversed_at: '2026-09-28T12:00:00Z' } },
+        { amount: 999, metadata: {} },
+      ],
+      walletReversals: [{ amount: 60 }],
+    });
+
+    const amount = await refundNotificationLedgerAmount({
+      merchantId: 'merchant-1',
+      order,
+      supabase,
+    });
+
+    expect(amount).toContain('100');
+
+    const { supabase: empty } = database({
+      payments: [
+        {
+          amount: 100,
+          currency: 'NGN',
+          gateway: 'savings',
+          id: 'pay-savings',
+          status: 'completed',
+        },
+      ],
+      refunds: [],
+    });
+
+    await expect(
+      refundNotificationLedgerAmount({
+        merchantId: 'merchant-1',
+        order,
+        supabase: empty,
+      })
+    ).rejects.toThrow('refund_notification_ledger_mismatch');
+  });
+
   it('includes a manually covered cash leg beside provider legs', async () => {
     const { supabase } = database({
       payments: [

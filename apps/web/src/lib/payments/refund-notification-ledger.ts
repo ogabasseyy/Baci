@@ -35,7 +35,11 @@ const MANUAL_COVERAGE_INTERNAL_GATEWAYS = new Set([
  * their own ledgers) validate through explicitly linked manual rows in
  * matching money, mirroring the aggregate claim, and join the total;
  * without them a cash-only finalization would dead-letter its own
- * notification. Throws refund_notification_ledger_* on mismatch.
+ * notification. Reversal-only orders (wallet/savings legs alone)
+ * total from the reversal queries below: the manager counts those
+ * reversals as refunded coverage, so the ledger must admit them or
+ * every notification dead-letters. Throws refund_notification_ledger_*
+ * on mismatch.
  */
 export async function refundNotificationLedgerAmount({
   merchantId,
@@ -207,23 +211,16 @@ export async function refundNotificationLedgerAmount({
     };
   });
   const linkedTotals = [...linkedRefunds, ...linkedManualRefunds];
-  if (
-    (externalLegs.length === 0 && manualLegs.length === 0) ||
-    linkedTotals.some((refund) => refund === undefined)
-  ) {
-    throw new Error('refund_notification_ledger_mismatch');
-  }
-  const refundAmount = (linkedTotals as Array<{ amount: number }>).reduce(
-    (sum, leg) => sum + Number(leg.amount),
-    0
-  );
   // Internal reversals return outside the refund ledger — wallet
   // reversals credit customer_wallets, savings reversals restore the
   // goal — but the refund manager counts both as refunded coverage,
   // so the notification total must too or mixed orders understate
   // (a ₦50 cash leg plus a ₦50 wallet reversal would read ₦50 of
   // ₦100 returned). Mirror the manager's predicates verbatim: the
-  // wallet source_type and the savings reversed_at key.
+  // wallet source_type and the savings reversed_at key. Read before
+  // the mismatch gate: a reversal-only order has no external or
+  // manual legs, and gating first would dead-letter a notification
+  // the finalizer queued for real reversed money.
   const { data: walletRows, error: walletError } = await supabase
     .from('customer_wallet_transactions')
     .select('amount')
@@ -253,6 +250,22 @@ export async function refundNotificationLedgerAmount({
         (sum: number, row: { amount: number }) => sum + Number(row.amount),
         0
       );
+  const hasLedgerLegs = externalLegs.length > 0 || manualLegs.length > 0;
+  if (!hasLedgerLegs || linkedTotals.some((refund) => refund === undefined)) {
+    // Legless orders total from reversals alone; anything else
+    // without legs is unaccounted money, not a notification.
+    if (!hasLedgerLegs && reversalAmount > 0) {
+      return formatAmount(
+        reversalAmount,
+        normalizeCurrencyCode(order.currency) || 'NGN'
+      );
+    }
+    throw new Error('refund_notification_ledger_mismatch');
+  }
+  const refundAmount = (linkedTotals as Array<{ amount: number }>).reduce(
+    (sum, leg) => sum + Number(leg.amount),
+    0
+  );
   // Normalize the order currency once: a legacy padded code must
   // compare equal AND format — Intl.NumberFormat throws on ' NGN '.
   const orderCurrency = normalizeCurrencyCode(order.currency) || 'NGN';

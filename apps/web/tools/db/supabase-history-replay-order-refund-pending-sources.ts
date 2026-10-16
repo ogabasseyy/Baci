@@ -5,7 +5,7 @@
 // internal-only reversal sync, BNPL reconciliation admission, the
 // manual-leg finalization predicate plus override, and the
 // stamped-manual sweep plus verifier widening, and the
-// any-status sweep reselect),
+// any-status sweep reselect plus its order-first transition),
 // extracted from the main replay-source manifest to keep it under
 // the 300-line modularity limit.
 export const ORDER_REFUND_PENDING_REPLAY_SOURCE_ROWS = `94858119ca5d10b25d0fc0f44a5116164e08f8bc06531aba6e6b7d55df52c486 20261002090000_order_refund_events.sql
@@ -27,4 +27,5 @@ b04b605f619812a8eb9603eb2339a5cb0a970e64d40ee32d4dcd9477eee6d9b0 20261016010000_
 c7e8b6c16e8fc7a04984f5a930cc2b4163ff9231550eac4d74336b4cdd1e3d73 20261016020000_reconcile_manual_leg_finalization.sql
 1592a39ab44675796ee8a3ad54fada28152ccd750a2794a138042a72adf237e7 20261016030000_sweep_stamped_manual_paystack_refunds.sql
 aa0712efbe6e9276af6f70486df84cac288943250cfd009d500f97d08852f2af 20261016040000_verify_stamped_manual_paystack_refunds.sql
-03d41bf245175afe15b84037813bb7e1b6d4be0236604f279d069f43e4aadb35 20261016050000_sweep_stamped_manuals_any_status.sql`;
+6b228a254799cac565baa248060a9ddca057d5f0d0e0164d2fd913997816ba2f 20261016050000_sweep_stamped_manuals_any_status.sql
+9fe8eee42055a064e209ddcb914dfd83241a94322f5c62eb6d4c2438f7c0dda0 20261016060000_verify_stamped_manuals_any_status.sql`;

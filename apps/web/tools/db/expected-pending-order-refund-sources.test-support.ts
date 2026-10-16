@@ -97,6 +97,11 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261016050000_sweep_stamped_manuals_any_status.sql',
-    sha256: '03d41bf245175afe15b84037813bb7e1b6d4be0236604f279d069f43e4aadb35',
+    sha256: '6b228a254799cac565baa248060a9ddca057d5f0d0e0164d2fd913997816ba2f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016060000_verify_stamped_manuals_any_status.sql',
+    sha256: '9fe8eee42055a064e209ddcb914dfd83241a94322f5c62eb6d4c2438f7c0dda0',
   },
 ];

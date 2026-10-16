@@ -99,6 +99,35 @@ describe('useRefundStatusPolling', () => {
     await act(async () => {});
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
+  it('drops a stale poll response that lands after a newer one', async () => {
+    let resolveFirst!: (value: unknown) => void;
+    const first = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+    vi.mocked(fetch)
+      .mockReturnValueOnce(first as unknown as Promise<Response>)
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ ...summary, status: 'processing' }),
+      } as unknown as Response);
+    render(React.createElement(Harness, { terminal: false }));
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    await act(async () => {});
+    expect(screen.getByText('status:processing')).toBeInTheDocument();
+    // The slow first poll lands last: without the request sequence
+    // it would clobber the panel with its stale summary.
+    await act(async () => {
+      resolveFirst({ ok: true, json: async () => summary });
+    });
+    await act(async () => {});
+    expect(screen.getByText('status:processing')).toBeInTheDocument();
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+  });
+
   it('surfaces load errors without polling past them', async () => {
     vi.mocked(fetch).mockResolvedValue({
       ok: false,

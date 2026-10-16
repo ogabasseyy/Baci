@@ -37,8 +37,16 @@ export async function listPaystackRefunds(
     throw new Error('Invalid payment reference');
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret) throw new Error('Paystack refund verification unavailable');
+  // Bare numeric transaction IDs above 2^53 would not survive
+  // JSON.parse: quote them on the wire text before parsing so the
+  // identity check below compares exact decimal text. Only the
+  // transaction key is rewritten, so row id/amount validation keeps
+  // its fail-closed unsafe-number behavior.
+  const quoteWireTransactionIds = (raw: string): string =>
+    raw.replace(/"transaction"\s*:\s*(\d+)/g, '"transaction":"$1"');
   async function request(
-    path: string
+    path: string,
+    preprocess: (raw: string) => string = (raw) => raw
   ): Promise<{ payload: Record<string, unknown>; raw: string }> {
     // Recompute the cap from the absolute deadline before every
     // request: a timeout computed once would let each of the 20
@@ -59,7 +67,7 @@ export async function listPaystackRefunds(
     const raw = await response.text();
     let payload: Record<string, unknown>;
     try {
-      payload = JSON.parse(raw) as Record<string, unknown>;
+      payload = JSON.parse(preprocess(raw)) as Record<string, unknown>;
     } catch {
       throw new Error('Paystack refund verification failed');
     }
@@ -91,7 +99,8 @@ export async function listPaystackRefunds(
   for (let page = 1; page <= 20; page++) {
     const envelope = (
       await request(
-        `/refund?transaction=${transactionId}&perPage=100&page=${page}`
+        `/refund?transaction=${transactionId}&perPage=100&page=${page}`,
+        quoteWireTransactionIds
       )
     ).payload;
     if (!Array.isArray(envelope.data))

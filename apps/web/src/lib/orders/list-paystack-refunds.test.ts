@@ -132,6 +132,28 @@ describe('listPaystackRefunds', () => {
       expect.anything()
     );
   });
+  it('matches a bare oversized transaction ID off the list wire text', async () => {
+    // The same 2^53+1 corruption inside a list page: the nested
+    // transaction quotes before parsing, so the row matches the
+    // verified ID instead of quarantining for review.
+    const big = '9007199254740993';
+    const verifyRaw = `{"status":true,"data":{"id":${big},"reference":"capture-1"}}`;
+    const listRaw = `{"status":true,"data":[{"id":1,"amount":100,"currency":"NGN","status":"processed","transaction":${big}}]}`;
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => JSON.parse(verifyRaw),
+        text: async () => verifyRaw,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => JSON.parse(listRaw),
+        text: async () => listRaw,
+      });
+    vi.stubGlobal('fetch', fetcher);
+    expect(await listPaystackRefunds('capture-1')).toHaveLength(1);
+  });
   it('rejects a verify payload with a reordered data object', async () => {
     // The wire-ID anchor requires the ID as the data object's first
     // key; a nested ID in first position must fail closed rather

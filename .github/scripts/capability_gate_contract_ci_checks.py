@@ -37,19 +37,12 @@ def _on_block_subs(lines):
             continue
         key = _TRIGGER_KEY.match(line)
         if key:
-            current = key.group(1)
+            current = _decoded_key(key.group(1))
             subs[current] = []
             continue
         sub = _TRIGGER_SUBKEY.match(line)
         if sub and current is not None:
-            # A double-quoted subkey decodes escapes (`"br\x61nches"` is `branches`);
-            # unseen filters would pass while GitHub honors them. Other spellings pass through.
-            key = sub.group(1).strip()
-            if len(key) >= 2 and key.startswith('"') and key.endswith('"'):
-                key = _decode_scalar(key)
-            else:
-                key = key.strip("\"'")
-            subs[current].append((key, sub.group(2), i))
+            subs[current].append((_decoded_key(sub.group(1)), sub.group(2), i))
     return subs, end
 
 
@@ -85,24 +78,17 @@ def _ordered_branch_match(subs, trig, lines, end):
 
 
 def _norm(line):
-    """Normalize YAML spacing without changing semantics: valid YAML permits
-    whitespace before a mapping colon (``if : false`` is the same ``if``
-    key), so structural patterns must tolerate it."""
+    """Normalize YAML spacing without changing semantics (whitespace before a mapping colon is insignificant)."""
     return re.sub(r"\s+:", ":", line.strip())
 
 
 def _has_escaped_key(line):
-    """Double-quoted YAML keys decode backslash escapes (`"\\x69f"` is `if`),
-    which raw-text scans cannot see: quoted keys must be escape-free. Only
-    key-position quotes count (workflow/job/step levels), never script
-    content; single quotes need no check (no escape processing)."""
+    """Double-quoted keys decode escapes (`"\\x69f"` is `if`): key-position quotes must be escape-free."""
     return re.match(r'^ {2,8}"[^"\n]*\\', line) is not None
 
 
 def _decode_scalar(value):
-    """Decode a double-quoted YAML scalar's backslash escapes so quoted and
-    bare spellings evaluate identically (`"!m\\x61in"` is `!main`). Bare and
-    single-quoted scalars process no escapes and pass through untouched."""
+    """Decode double-quoted backslash escapes so spellings evaluate identically."""
     text = value.strip()
     if len(text) >= 2 and text.startswith('"') and text.endswith('"'):
         try:
@@ -110,6 +96,14 @@ def _decode_scalar(value):
         except (UnicodeError, ValueError):
             return text
     return text
+
+
+def _decoded_key(raw):
+    """A mapping key as GitHub executes it: double-quoted escapes decoded, other spellings quote-stripped."""
+    text = raw.strip()
+    if len(text) >= 2 and text.startswith('"') and text.endswith('"'):
+        return _decode_scalar(text)
+    return text.strip("\"'")
 
 
 def _without_block_scalars(lines):
@@ -136,8 +130,7 @@ def _without_block_scalars(lines):
 
 
 def _strip_comment(value):
-    """Cut a trailing YAML comment: '#' starts one outside quotes when it
-    begins the value or follows whitespace (a quoted '#' stays literal)."""
+    """Cut a trailing YAML comment ('#' outside quotes, at start or after whitespace)."""
     in_single = in_double = False
     for i, ch in enumerate(value):
         if ch == "'" and not in_double:
@@ -156,8 +149,8 @@ EXPECTED_PRECEDING_CHECKOUT = "- uses: actions/checkout@3d3c42e5aac5ba805825da76
 # scope runs PR-controlled code before the gate's python3 starts.
 _STARTUP_ENV = frozenset({"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV", "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB", "PERLLIB", "RUBYLIB", "RUBYOPT"})
 _NEXT_STEP = re.compile(r"^      -(\s|$)")
-_TRIGGER_KEY = re.compile(r"^  ([A-Za-z_]+)\s*:\s*(.*)$")
-_TRIGGER_SUBKEY = re.compile(r"^    ([^:\n]+?)\s*:\s*(.*)$")
+_TRIGGER_KEY = re.compile(r"^  (\S[^:\n]*?)\s*:\s*(.*)$")
+_TRIGGER_SUBKEY = re.compile(r"^    (\S[^:\n]*?)\s*:\s*(.*)$")
 _TRIGGER_ITEM = re.compile(r"^      -\s(.*)$")
 
 
@@ -200,9 +193,9 @@ def ci_failures(ci_text):
     """Exact invocation block bound to an unconditional executing job."""
     lines = ci_text.splitlines()
     failures = trigger_failures(ci_text)
-    # Top-level env inherits into every job including the gate: a PR-added
-    # startup variable preloads code before the gate runs. The key accepts
-    # quote spellings; an inline (flow) mapping is rejected outright.
+    if any(re.match(r"""^"[^"\n]*\\[^"\n]*"\s*:""", line) for line in lines if line.strip() and not line.strip().startswith("#")):
+        failures.append("ci.yml top-level keys must use plain spelling: escapes execute decoded")
+    # Top-level env inherits into every job including the gate: quote spellings accepted, inline mappings rejected.
     try:
         top = next(i for i, line in enumerate(lines) if re.match(r"""^["']?env["']?:""", line))
     except StopIteration:
@@ -244,12 +237,17 @@ def ci_failures(ci_text):
     # step ever runs); a `container:` swaps the python3 that runs the gate.
     # Job-level env applies wherever it sits: an env block after the steps is still job-wide.
     for line in job:
+        if _has_escaped_key(line):
+            return failures + ["capability gate job keys must use plain spelling (no escapes)"]
         if re.match(r"^    [\"']?container[\"']?\s*:", line):
             return failures + ["capability gate job must not run in a PR-selected container"]
         if re.match(r"^    [\"']?uses[\"']?\s*:", line):
             return failures + ["capability gate job must not call a reusable workflow"]
         if re.match(r"^    [\"']?env[\"']?\s*:", line):
             return failures + ["capability gate job must not set environment (startup injection)"]
+        runs = re.match(r"^    [\"']?runs-on[\"']?\s*:\s*(.*)$", line)
+        if runs and _strip_comment(runs.group(1)).strip().strip("\"'") != "ubuntu-24.04":
+            return failures + ["capability gate job must stay on ubuntu-24.04 runners"]
     # A checkout pinned to the base SHA would diff the base against itself and skip the suite.
     for line in lines[job_start:start]:
         stripped = line.strip()

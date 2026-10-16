@@ -16,11 +16,7 @@ from capability_gate_contract_ci_checks import (
     _strip_comment,
 )
 
-# The gate job's run block, stripped per line. Any edit — an added step, a
-# dropped fetch, head-owned execution — fails until this expectation is
-# updated alongside it. That update cannot take effect same-PR (the running
-# checker is base-owned): run-block changes need two PRs — first update this
-# expectation alone, merge, then change the run block.
+# The gate job's run block, stripped per line. Any edit fails until this expectation is updated alongside it; that update cannot take effect same-PR (the running checker is base-owned), so run-block changes need two PRs.
 EXPECTED_RUN = [
     'if [ -n "${{ github.event.pull_request.head.sha }}" ]; then',
     "rm -rf /tmp/cg-check && mkdir -p /tmp/cg-check",
@@ -33,10 +29,7 @@ EXPECTED_RUN = [
     'python3 "$CHECKER" "$PINNED_CHECKER_SHA256"',
 ]
 
-# The gate job's first step, stripped per line. The checkout runs under
-# pull_request_target before the base-owned script, so its identity, its
-# effective with.ref, and its data-only unsafety opt-in are all pinned:
-# replacing the action, retargeting the ref, or dropping the flag fails.
+# The gate job's first step, stripped per line: the checkout's identity, its effective with.ref, and its data-only unsafety opt-in are all pinned.
 EXPECTED_FIRST_STEP = [
     "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
     "with:",
@@ -46,26 +39,19 @@ EXPECTED_FIRST_STEP = [
     "allow-unsafe-pr-checkout: true",
 ]
 
-# Each job runs exactly in its safe context: the guard only on
-# pull_request_target (base-owned), the attestation only on push (merged
-# code). The required status must be the guard's context — never the
-# self-attested push leg — so the mapping is exact, not an allowlist.
+# Each job runs exactly in its safe context (guard on pull_request_target, attestation on push): the mapping is exact, not an allowlist.
 EXPECTED_JOB_CONDITIONS = {
     "gate-contract": "github.event_name == 'pull_request_target'",
     "gate-attestation": "github.event_name == 'push'",
 }
 
-# Required status checks are named by job name and ignore event triggers,
-# while a skipped job still reports success: swapping these display names
-# would let the push-only attestation satisfy the guard's required context
-# while the real check runs under an unrequired name.
+# Required checks are named by job name and a skipped job still reports success: swapping names would let the attestation satisfy the guard's context.
 EXPECTED_JOB_NAMES = {
     "gate-contract": "Capability Gate Contract",
     "gate-attestation": "Capability Gate Contract Attestation",
 }
 
-# The attestation is never trusted, but its same-named context must not be
-# rewritable into fake confirmation: pin its steps exactly.
+# The attestation is never trusted, but its same-named context must not be rewritable: pin its steps exactly.
 EXPECTED_ATTESTATION_STEPS = [
     "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1",
     "with:",
@@ -80,13 +66,7 @@ _JOB_HEADER = re.compile(r"^  ([A-Za-z0-9_.\-]+)\s*:")
 
 
 def contract_trigger_failures(workflow_text):
-    """The guard's own triggers must stay unwidened-in-reverse.
-
-    Presence alone is not enough: types: [opened] or branches: [never]
-    under pull_request_target keeps the key while silencing synchronize
-    updates or main-targeted PRs, so later enforcement changes bypass the
-    independent guard after merge.
-    """
+    """The guard's own triggers must stay unwidened: narrowed types/branches keep the key while silencing updates or main PRs."""
     lines = workflow_text.splitlines()
     subs, end = _on_block_subs(lines)
     if subs is None:
@@ -137,6 +117,9 @@ def contract_trigger_failures(workflow_text):
             scoped = j >= end or _TRIGGER_ITEM.match(lines[j]) is None
         if not scoped:
             failures.append("contract workflow must scope push to exactly branches: [main]:")
+    # Exact trigger set: extra triggers mint same-named skipped contexts; merge_group stays excluded (queue commits would deadlock on the PRT-gated context).
+    if set(subs) != {"pull_request_target", "push"}:
+        failures.append("contract workflow must keep exactly the pull_request_target and push triggers:")
     return failures
 
 
@@ -151,6 +134,8 @@ def workflow_failures(workflow_text):
     """
     code = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
     failures = contract_trigger_failures(workflow_text)
+    if any(re.match(r"""^"[^"\n]*\\[^"\n]*"\s*:""", line) for line in code):
+        failures.append("contract workflow keys must use plain spelling: escapes execute decoded")
     # Top-level permissions must be exactly read-only: a substring match
     # would accept a write-all mapping hiding beside a decoy string.
     try:

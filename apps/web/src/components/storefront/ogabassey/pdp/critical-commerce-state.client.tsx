@@ -13,6 +13,7 @@ import {
 import { pruneSelectionsByVariantAvailability } from '@/components/storefront/ogabassey/variant-selection-pruning';
 import { recoverHiddenSelectionsFromUniqueVariant } from '@/components/storefront/ogabassey/recover-hidden-variant-selections';
 import { useCart } from '@/hooks/cart';
+import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
 import {
   DEFAULT_CRITICAL_PRICE_CURRENCY,
   getVariantAxesWithMultipleOptions,
@@ -179,7 +180,24 @@ export function OgabasseyPdpCriticalCommerceProvider({
     : null;
   const [quantity, setQuantity] = useState(maxQuantity === 0 ? 0 : 1);
   const [previousMaxQuantity, setPreviousMaxQuantity] = useState(maxQuantity);
-  const { addToCart, setIsCartOpen } = useCart();
+  // `cart` defaults for test doubles that stub only the cart actions.
+  const { addToCart, cart = [], setIsCartOpen } = useCart();
+  // Shared with handleAddToCart so the pre-add existence check below
+  // always agrees with the line the add merges into.
+  const cartAddOptions = buildCriticalCartAddOptions({
+    purchasableSelection: effectivePurchasableVariantSelection,
+    productForCart,
+    activeRouteOffer,
+  });
+  const mergingCartLineIndex = findMergingCartLineIndex(
+    cart,
+    productForCart,
+    cartAddOptions
+  );
+  const quantityInCart =
+    mergingCartLineIndex >= 0
+      ? (cart[mergingCartLineIndex]?.quantity ?? 0)
+      : 0;
 
   useEffect(() => {
     if (
@@ -263,13 +281,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
       return;
     }
 
-    const cartOptions = buildCriticalCartAddOptions({
-      purchasableSelection: effectivePurchasableVariantSelection,
-      productForCart,
-      activeRouteOffer,
-    });
-
-    addToCart(productForCart, quantity, cartOptions);
+    addToCart(productForCart, quantity, cartAddOptions);
     setIsCartOpen(true);
   }
 
@@ -285,6 +297,7 @@ export function OgabasseyPdpCriticalCommerceProvider({
         maxQuantity,
         productForCart,
         quantity,
+        quantityInCart,
         renderableVariantAxes,
         routeOfferMissingActive,
         selectedAttributes,

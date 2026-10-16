@@ -81,6 +81,45 @@ describe('useProductDetailCartState', () => {
     mockCartStoreState.items = [];
   });
 
+  it('matches a raw-code line against the display selection', () => {
+    // Reprice reconciliation stores the raw live code ("open_box")
+    // while the PDP selection formats as display ("Open Box").
+    mockCartStoreState.items = [
+      {
+        cartItemId: 'line-raw',
+        product_id: 'product-1',
+        condition: 'open_box',
+        offer_id: 'offer-b',
+        quantity: 3,
+      },
+    ] as never;
+
+    const { result } = renderHook(() =>
+      useProductDetailCartState({
+        currentVariantDisplaySelection: null,
+        effectiveSelectedAttributes: {},
+        effectiveSelectedColor: null,
+        effectiveSelectedStorage: null,
+        effectiveSelectedVariantId: null,
+        offerConditionKey: 'open_box',
+        routeOfferId: 'offer-b',
+        suppressConditionOfferMatch: false,
+        product: {
+          condition: 'new',
+          has_variants: false,
+          id: 'product-1',
+          offers: [{ id: 'offer-b', condition: 'open_box' }],
+        },
+      } as never)
+    );
+
+    expect(result.current.getConditionDisplay()).toBe('Open Box');
+    expect(result.current.cartItem).toMatchObject({ cartItemId: 'line-raw' });
+    expect(result.current.quantityInCart).toBe(3);
+
+    mockCartStoreState.items = [];
+  });
+
   it('totals sibling lines per product while skipping voucher lines', () => {
     mockCartStoreState.items = [
       {

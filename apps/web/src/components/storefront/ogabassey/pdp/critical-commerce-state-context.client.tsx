@@ -42,6 +42,13 @@ export interface OgabasseyPdpCriticalCommerceState {
   maxQuantity: number | null;
   productForCart: CartProduct;
   quantity: number;
+  /**
+   * Units of this exact selection already in the cart (via the shared
+   * merge matcher, so it always agrees with the add target). The
+   * assurance note shows only for fresh adds: merged adds keep the
+   * stored line choice.
+   */
+  quantityInCart: number;
   renderableVariantAxes: string[];
   routeOfferMissingActive: boolean;
   selectedAttributes: Record<string, string>;

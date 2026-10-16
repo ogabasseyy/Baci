@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import Colors from '@/constants/Colors';
+import { useCartStore } from '@/stores/cart-store';
 import { StickyAssuranceDefaultNote } from './StickyAssuranceDefaultNote';
 
 const mockConfig: { merchantSlug: string; smartCartProEnabled: boolean } = {
@@ -95,5 +96,38 @@ describe('StickyAssuranceDefaultNote', () => {
       />
     );
     expect(screen.queryByTestId('assurance-default-note')).toBeNull();
+  });
+
+  it('reconciles lines stamped pending while the setting was unknown', () => {
+    // Cold deep link to this PDP never mounts the tab layout's
+    // warm-up; the note must flip pending lines itself when the
+    // setting resolves affirmative.
+    useCartStore.setState({
+      items: [
+        {
+          id: 'line-pending',
+          product_id: 'product-1',
+          slug: 'slug-1',
+          name: 'Widget',
+          price: 100,
+          quantity: 1,
+          hasAssurance: false,
+          assurancePendingSetting: true,
+        },
+      ],
+    });
+    mockSettings.data = { shipping_insurance_enabled: true };
+    render(
+      <StickyAssuranceDefaultNote
+        canPurchase
+        quantityInCart={0}
+        colors={Colors.light}
+      />
+    );
+    expect(useCartStore.getState().items[0]).toMatchObject({
+      hasAssurance: true,
+      assurancePendingSetting: undefined,
+    });
+    useCartStore.setState({ items: [] });
   });
 });

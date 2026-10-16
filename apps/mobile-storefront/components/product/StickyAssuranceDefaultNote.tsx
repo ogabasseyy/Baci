@@ -4,6 +4,7 @@ import {
 } from '@baci/shared/lib';
 import { StyleSheet, Text } from 'react-native';
 import type Colors from '@/constants/Colors';
+import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
 import { useMerchantPaymentSettings } from '@/hooks/useMerchantPaymentSettings';
 import { CONFIG } from '@/lib/config';
 
@@ -21,6 +22,10 @@ interface StickyAssuranceDefaultNoteProps {
  * add path reads and re-renders this note when the live toggle
  * resolves. Shows only when a fresh add would default the fee on; the
  * cart line itself shows the exact fee with a toggle.
+ *
+ * Also reconciles lines stamped pending while the setting was unknown:
+ * a cold deep link to this PDP never mounts the tab layout's warm-up,
+ * so without this the pending stamp would stick permanently.
  */
 export function StickyAssuranceDefaultNote({
   canPurchase,
@@ -28,6 +33,7 @@ export function StickyAssuranceDefaultNote({
   colors,
 }: StickyAssuranceDefaultNoteProps) {
   const { data: settings } = useMerchantPaymentSettings();
+  useWarmMerchantPaymentSettings();
   const visible =
     canPurchase &&
     quantityInCart === 0 &&

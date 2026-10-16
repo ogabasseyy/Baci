@@ -16,6 +16,7 @@ import { getRedis } from './redis';
 interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
+  failClosedWithoutRedis?: boolean;
 }
 
 interface RateLimitResult {
@@ -169,6 +170,17 @@ export function checkRateLimit(
   return applyRateLimit(identifier, pattern, config);
 }
 
+function denyWithoutDistributedBackend(
+  config: RateLimitConfig
+): RateLimitResult {
+  return {
+    allowed: false,
+    limit: config.maxRequests,
+    remaining: 0,
+    resetTime: Date.now() + config.windowMs,
+  };
+}
+
 async function applyRateLimit(
   identifier: string,
   pattern: string,
@@ -191,17 +203,24 @@ async function applyRateLimit(
         resetTime: result.reset,
       };
     } catch {
-      // Redis error — fall through to in-memory
+      // Redis error — fall through to in-memory, unless this abuse-
+      // sensitive bucket fails closed without its distributed backend.
       void rateLimitDiagnostics.report({
         backend: 'memory',
         reason: 'redis_error',
       });
+      if (config.failClosedWithoutRedis) {
+        return denyWithoutDistributedBackend(config);
+      }
     }
   } else {
     void rateLimitDiagnostics.report({
       backend: 'memory',
       reason: 'redis_unavailable',
     });
+    if (config.failClosedWithoutRedis) {
+      return denyWithoutDistributedBackend(config);
+    }
   }
 
   // Fallback to in-memory

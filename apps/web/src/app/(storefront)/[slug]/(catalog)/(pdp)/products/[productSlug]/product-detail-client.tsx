@@ -19,13 +19,13 @@ import { useMerchant } from '@/hooks/use-merchant-client';
 import { useRecentlyViewed } from '@/hooks/use-recently-viewed';
 import { trackEvent } from '@/lib/event-tracking';
 import { getEffectiveStock } from '@/lib/product-stock';
-import type { Product, ProductVariant } from '@/lib/products';
+import type { Product } from '@/lib/products';
 import { asRoute } from '@/lib/routes';
-import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { cn } from '@/lib/utils';
 import type { FAQItem } from '@/types/faq';
 import type { ProductCondition } from './product-selection-condition';
 import { PLACEHOLDER_IMAGE } from './product-selection-placeholder';
+import { isVariantAvailable } from './product-variant-availability';
 import { useProductCartSubmission } from './use-product-cart-submission';
 import { useProductOfferSelection } from './use-product-offer-selection';
 
@@ -70,59 +70,6 @@ const RecentlyViewedProducts = dynamic(
     loading: () => <Skeleton className="h-[300px] w-full rounded-xl" />,
   }
 );
-
-/**
- * Check if a variant with given attributes exists and has stock
- */
-function isVariantAvailable(
-  variants: ProductVariant[],
-  partialAttributes: Record<string, string>,
-  isStockManaged: boolean,
-  fallbackStock: number,
-  options?: {
-    condition?: ProductCondition | null;
-    usesVariantConditions?: boolean;
-  }
-): boolean {
-  if (!isStockManaged) {
-    return variants.some((variant) => {
-      const conditionMatches =
-        !options?.usesVariantConditions ||
-        !options.condition ||
-        variant.condition === options.condition;
-
-      return (
-        conditionMatches &&
-        Object.entries(partialAttributes).every(
-          ([key, value]) => variant.attributes[key] === value
-        )
-      );
-    });
-  }
-
-  return variants.some((variant) => {
-    const conditionMatches =
-      !options?.usesVariantConditions ||
-      !options.condition ||
-      variant.condition === options.condition;
-    const matches = Object.entries(partialAttributes).every(
-      ([key, value]) => variant.attributes[key] === value
-    );
-    // Serialized tracking resolves from exact units (strict) or stays
-    // enabled with no finite count (unlimited); other variants use the
-    // scalar quantity with parent-stock inheritance.
-    const serializedStock = resolveSerializedVariantStock(variant);
-    return (
-      conditionMatches &&
-      matches &&
-      (serializedStock ??
-        getEffectiveStock({
-          stock: variant.stock_quantity ?? fallbackStock,
-          stock_quantity: variant.stock_quantity ?? fallbackStock,
-        })) > 0
-    );
-  });
-}
 
 export default function ProductDetailClient({
   product,

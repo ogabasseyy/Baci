@@ -292,6 +292,16 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20261015090000_storefront_payment_settings_shipping_insurance.sql',
     sha256: '5d563615e5bc1d14623f18f69f6c714bf818da85d1e89a9d485fc774f3cce8f3',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016090000_search_condition_match_hyphen.sql',
+    sha256: '82e8ab798c5444cfcc1037f21bfb376940d15ae7801f0462efa12f32bde0b274',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016100000_storefront_order_replay_key_floor.sql',
+    sha256: '35bb3fc0bca3a6e133e1909c7dc53179709819abf734ae6ae573f8a505709039',
+  },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,
 ]

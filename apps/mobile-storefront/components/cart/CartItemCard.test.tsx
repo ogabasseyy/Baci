@@ -17,6 +17,13 @@ jest.mock('@/components/ui/SafeImage', () => ({
   SafeImage: (props: unknown) => mockSafeImage(props),
 }));
 
+const mockPaymentSettings: { data: unknown } = {
+  data: { shipping_insurance_enabled: true },
+};
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  useMerchantPaymentSettings: () => mockPaymentSettings,
+}));
+
 function createItem(overrides: Partial<CartItem> = {}): CartItem {
   return {
     id: 'cart-1',
@@ -252,5 +259,43 @@ describe('CartItemCard', () => {
 
     fireEvent.press(screen.getByText('Negotiate'));
     expect(openItemNegotiation).toHaveBeenCalledWith(pendingItem);
+  });
+
+  it.each([
+    {
+      label: 'opt-in when the merchant enables insurance',
+      data: { shipping_insurance_enabled: true },
+      hasAssurance: false,
+      shown: true,
+    },
+    {
+      label: 'opt-out for an assured line when the merchant disables it',
+      data: { shipping_insurance_enabled: false },
+      hasAssurance: true,
+      shown: true,
+    },
+    {
+      label: 'no opt-in when the merchant disables insurance',
+      data: { shipping_insurance_enabled: false },
+      hasAssurance: false,
+      shown: false,
+    },
+    {
+      label: 'no opt-in while the setting is unknown',
+      data: null,
+      hasAssurance: false,
+      shown: false,
+    },
+  ])('gates the assurance toggle: $label', ({ data, hasAssurance, shown }) => {
+    mockPaymentSettings.data = data;
+    try {
+      renderCard(createItem({ hasAssurance }));
+      const toggle = screen.queryByLabelText(
+        'Toggle Ogabassey Assurance for iPhone 13 Pro'
+      );
+      expect(!!toggle).toBe(shown);
+    } finally {
+      mockPaymentSettings.data = { shipping_insurance_enabled: true };
+    }
   });
 });

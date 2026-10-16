@@ -122,6 +122,54 @@ describe('quiz route rate limits', () => {
     ).resolves.toMatchObject({ limit: 10 });
   });
 
+  it('denies the intake bucket when Redis is unconfigured', async () => {
+    const request = new NextRequest(
+      'http://localhost:3000/api/storefront/product-requests'
+    );
+
+    // Memory fallback would multiply across instances and let one
+    // caller burn the merchant-wide DB budget — deny instead.
+    await expect(checkRateLimit(request)).resolves.toMatchObject({
+      allowed: false,
+      limit: 10,
+      remaining: 0,
+    });
+  });
+
+  it('denies the intake bucket on Redis errors', async () => {
+    mockGetRedis.mockReturnValue({});
+    mockLimiterLimit.mockRejectedValue(new Error('Redis unavailable'));
+    const request = new NextRequest(
+      'http://localhost:3000/api/storefront/product-requests'
+    );
+
+    await expect(checkRateLimit(request)).resolves.toMatchObject({
+      allowed: false,
+      limit: 10,
+      remaining: 0,
+    });
+  });
+
+  it('allows the intake bucket through Redis when healthy', async () => {
+    mockGetRedis.mockReturnValue({});
+    mockLimiterLimit.mockResolvedValue({
+      limit: 10,
+      remaining: 9,
+      reset: 123_456,
+      success: true,
+    });
+    const request = new NextRequest(
+      'http://localhost:3000/api/storefront/product-requests'
+    );
+
+    await expect(checkRateLimit(request)).resolves.toEqual({
+      allowed: true,
+      limit: 10,
+      remaining: 9,
+      resetTime: 123_456,
+    });
+  });
+
   it('does not apply a quiz limit to unrelated routes (default fall-through)', async () => {
     const result = await checkRateLimit(
       new NextRequest('http://localhost:3000/api/unknown')

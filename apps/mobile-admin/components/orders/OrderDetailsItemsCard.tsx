@@ -60,6 +60,9 @@ export function OrderDetailsItemsCard({
             ]}
           >
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name}, quantity ${item.quantity}`}
+              accessibilityHint="Opens the details for this item"
               onPress={() => onSelectItem(item)}
               style={styles.itemRowPressable}
             >
@@ -160,6 +163,9 @@ export function OrderDetailsItemsCard({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Copy full offer reference ${String(item.offer_id)}`}
+                // 12px text/icon alone is far below the 44pt minimum
+                // target; expand the touch area without moving layout.
+                hitSlop={12}
                 onPress={() => {
                   // Clipboard writes can reject (permissions, web
                   // denial): surface a failure instead of failing

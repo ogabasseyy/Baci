@@ -210,6 +210,7 @@ export function OgabasseyPdpCriticalCommerceControls({
     isAtMaxQuantity,
     maxQuantity,
     quantity,
+    quantityInCart,
     setQuantity,
   } = useOgabasseyPdpCriticalCommerce();
 
@@ -255,7 +256,10 @@ export function OgabasseyPdpCriticalCommerceControls({
       >
         Add to cart
       </button>
-      <AssuranceDefaultNote canPurchase={canAddToCart} />
+      <AssuranceDefaultNote
+        canPurchase={canAddToCart}
+        quantityInCart={quantityInCart}
+      />
       <Link
         data-ogabassey-pdp-commerce-secondary-action
         href={cartHref}

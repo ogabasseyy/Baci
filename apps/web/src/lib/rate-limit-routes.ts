@@ -1,6 +1,12 @@
 interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
+  /**
+   * Abuse-sensitive buckets deny when the distributed backend is
+   * unavailable instead of falling back to the per-instance memory
+   * store (which cold starts and horizontal scaling would multiply).
+   */
+  failClosedWithoutRedis?: boolean;
 }
 
 interface RateLimitMatch {
@@ -41,10 +47,14 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // each merchant at 50/hour, so bound one IP to 10/hour: a single caller
   // can no longer exhaust the merchant-wide budget, while genuine
   // zero-result requests (rare, form-gated) stay well under the ceiling
-  // even behind carrier NAT.
+  // even behind carrier NAT. Fail closed without Redis: the per-instance
+  // memory fallback would let one caller burn the merchant-wide DB
+  // budget during an outage, blocking genuine requests and spamming
+  // the inbox — a 429 outage for a rare form beats inbox exhaustion.
   '/api/storefront/product-requests': {
     maxRequests: 10,
     windowMs: 3_600_000,
+    failClosedWithoutRedis: true,
   },
   '/api/customers': { maxRequests: 20, windowMs: 60_000 },
   '/api/newsletter': { maxRequests: 5, windowMs: 900_000 },

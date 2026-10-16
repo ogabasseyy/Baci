@@ -14,6 +14,13 @@ jest.mock('@/components/ui/SafeImage', () => ({
   },
 }));
 
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+  useMerchantPaymentSettings: () => ({
+    data: { shipping_insurance_enabled: true },
+  }),
+}));
+
 jest.mock('@/components/storefront/GadgetPattern', () => {
   const { Text } =
     jest.requireActual<typeof import('react-native')>('react-native');

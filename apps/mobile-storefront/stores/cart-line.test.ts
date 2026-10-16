@@ -165,6 +165,49 @@ describe('cart-line helpers', () => {
     });
   });
 
+  it('matches display and raw-code conditions canonically', () => {
+    // The PDP stamps display ("Open Box") at add time; reprice
+    // reconciliation stores the raw live code ("open_box"). Both
+    // spellings must merge instead of splitting into duplicates.
+    const nonVariantBase = {
+      ...baseItem,
+      variant_id: undefined,
+      condition: 'open_box',
+    };
+    const nonVariantIncoming = {
+      ...incomingBaseItem,
+      variant_id: undefined,
+      condition: 'Open Box',
+    };
+    expect(isSameCartLine(nonVariantBase, nonVariantIncoming)).toBe(true);
+    expect(
+      isSameCartLine(nonVariantBase, {
+        ...nonVariantIncoming,
+        condition: 'Used',
+      })
+    ).toBe(false);
+    // Missing stays missing on exact (non-variant) lines.
+    expect(
+      isSameCartLine(nonVariantBase, {
+        ...nonVariantIncoming,
+        condition: undefined,
+      })
+    ).toBe(false);
+    // Variant lines keep the null wildcard with canonical compare.
+    expect(
+      isSameCartLine(
+        { ...baseItem, condition: 'open_box' },
+        { ...incomingBaseItem, condition: 'Open Box' }
+      )
+    ).toBe(true);
+    expect(
+      isSameCartLine(baseItem, {
+        ...incomingBaseItem,
+        condition: undefined,
+      })
+    ).toBe(true);
+  });
+
   it('wildcards a missing color on variant lines where web stays exact', () => {
     // Cross-platform parity pin (mirrored in web
     // hooks/cart/find-merging-cart-line.test.ts): native merges a

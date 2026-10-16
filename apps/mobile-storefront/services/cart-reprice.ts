@@ -35,6 +35,7 @@ import {
 import type { RepriceResult } from './cart-reprice-types';
 import { EMPTY_REPRICE_RESULT } from './cart-reprice-types';
 import {
+  fetchOfferEligibleParents,
   fetchVariantOverrides,
   resolveVariantLinePrice,
 } from './cart-reprice-variants';
@@ -77,10 +78,13 @@ export async function repriceCartItems(
     // Base prices (active products only — mirrors the order RPC's catalog read).
     // `has_condition_offers` flags products with live offer rows; the parent
     // `condition` distinguishes a true parent-priced base line from a legacy
-    // offer line that predates exact offer ids.
+    // offer line that predates exact offer ids. `has_variants`/`variant_model`
+    // feed the offer-parent eligibility gate below.
     const { data: products, error: productsError } = await supabase
       .from('products')
-      .select('id, price, has_condition_offers, condition')
+      .select(
+        'id, price, has_condition_offers, condition, has_variants, variant_model'
+      )
       .eq('merchant_id', merchantId)
       .eq('status', 'active')
       .in('id', productIds);
@@ -119,6 +123,11 @@ export async function repriceCartItems(
     );
     const { map: offerPrice, failed: offerLookupFailed } =
       await fetchLiveOfferRepriceMap(offerFetchProductIds);
+    // Parents must still satisfy the order RPC's offer gate (flag on,
+    // non-variant-bearing, no live variants) or the priced line dies at
+    // checkout with `invalid_offer`. Probe failure skips offer lines.
+    const { eligible: offerEligibleParents, failed: offerParentFailed } =
+      await fetchOfferEligibleParents(products, offerFetchProductIds);
 
     const result: RepriceResult = {
       priceById: {},
@@ -170,7 +179,10 @@ export async function repriceCartItems(
           )
         ) {
           // Base line: fall through to the productPrice path below.
-        } else if (offerLookupFailed) {
+        } else if (offerLookupFailed || offerParentFailed) {
+          continue;
+        } else if (!offerEligibleParents.has(item.product_id)) {
+          result.unavailable.push({ id: item.id, name: item.name });
           continue;
         } else {
           adoptedOfferId = resolveLegacyOfferId(item, offerPrice);
@@ -196,9 +208,9 @@ export async function repriceCartItems(
         typeof effectiveItem.offer_id === 'string' &&
         effectiveItem.offer_id.length > 0
       ) {
-        if (!offerLookupFailed) {
+        if (!offerLookupFailed && !offerParentFailed) {
           const live = resolveOfferLinePrice(effectiveItem, offerPrice);
-          if (!live) {
+          if (!live || !offerEligibleParents.has(item.product_id)) {
             result.unavailable.push({ id: item.id, name: item.name });
           } else {
             result.priceById[item.id] = live.price;

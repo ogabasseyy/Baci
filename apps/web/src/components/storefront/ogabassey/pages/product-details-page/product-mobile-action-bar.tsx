@@ -89,7 +89,7 @@ export function ProductMobileActionBar({
           <AssuranceDefaultNote
             canPurchase={canPurchase}
             quantityInCart={quantityInCart}
-            className="mt-2 text-center text-xs text-gray-500"
+            className="mt-2 text-center text-xs text-store-background-text/60"
           />
         </>
       )}

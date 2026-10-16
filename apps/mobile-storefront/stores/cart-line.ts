@@ -1,4 +1,7 @@
-import { resolveAddedLineAssurance } from '@baci/shared/lib';
+import {
+  normalizeCanonicalProductCondition,
+  resolveAddedLineAssurance,
+} from '@baci/shared/lib';
 import type { CartItem } from './cart-store.types';
 
 export function createCartLineId(
@@ -108,6 +111,37 @@ function areEquivalentCartAttributes(
   );
 }
 
+// Conditions compare canonically: the PDP stamps the display string
+// ("Open Box") at add time while reprice reconciliation stores the raw
+// live code ("open_box"). Strict equality would split the reconciled
+// line from its re-add into a duplicate; checkout canonically compares
+// the submitted condition too, so canonical matching agrees with it.
+function areEquivalentCartConditions(
+  existingValue: string | undefined,
+  incomingValue: string | undefined
+) {
+  const normalizedExistingValue = existingValue ?? null;
+  const normalizedIncomingValue = incomingValue ?? null;
+
+  if (normalizedExistingValue === null || normalizedIncomingValue === null) {
+    return normalizedExistingValue === normalizedIncomingValue;
+  }
+  return (
+    normalizeCanonicalProductCondition(normalizedExistingValue) ===
+    normalizeCanonicalProductCondition(normalizedIncomingValue)
+  );
+}
+
+function areEquivalentVariantCartConditions(
+  existingValue: string | undefined,
+  incomingValue: string | undefined
+) {
+  if ((existingValue ?? null) === null || (incomingValue ?? null) === null) {
+    return true;
+  }
+  return areEquivalentCartConditions(existingValue, incomingValue);
+}
+
 export function isSameCartLine(
   existingItem: CartItem,
   incomingItem: Omit<CartItem, 'id'>
@@ -144,7 +178,7 @@ export function isSameCartLine(
     return (
       areEquivalentCartAttributes(existingItem.color, incomingItem.color) &&
       areEquivalentCartAttributes(existingItem.storage, incomingItem.storage) &&
-      areEquivalentCartAttributes(
+      areEquivalentVariantCartConditions(
         existingItem.condition,
         incomingItem.condition
       )
@@ -154,6 +188,6 @@ export function isSameCartLine(
   return (
     (existingItem.color ?? null) === (incomingItem.color ?? null) &&
     (existingItem.storage ?? null) === (incomingItem.storage ?? null) &&
-    (existingItem.condition ?? null) === (incomingItem.condition ?? null)
+    areEquivalentCartConditions(existingItem.condition, incomingItem.condition)
   );
 }

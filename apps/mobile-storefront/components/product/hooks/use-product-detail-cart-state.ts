@@ -1,3 +1,4 @@
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { useShallow } from 'zustand/react/shallow';
 import { findMatchingConditionOffer } from '@/lib/product-condition-offers';
 import { useCartStore } from '@/stores/cart-store';
@@ -5,6 +6,21 @@ import { formatProductConditionDisplay } from '@/types/product';
 import type { useProductDetailRouteData } from './use-product-detail-route-data';
 
 type RouteData = ReturnType<typeof useProductDetailRouteData>;
+
+function isSamePdpCondition(
+  stored: string | undefined,
+  selected: string | undefined
+): boolean {
+  const storedCondition = stored || null;
+  const selectedCondition = selected || null;
+  if (storedCondition === null || selectedCondition === null) {
+    return storedCondition === selectedCondition;
+  }
+  return (
+    normalizeCanonicalProductCondition(storedCondition) ===
+    normalizeCanonicalProductCondition(selectedCondition)
+  );
+}
 
 export function useProductDetailCartState(routeData: RouteData) {
   const { items, addItem, updateQuantity, removeItem } = useCartStore(
@@ -49,7 +65,10 @@ export function useProductDetailCartState(routeData: RouteData) {
           item.product_id === routeData.product?.id &&
           (item.variant_id || null) ===
             (routeData.effectiveSelectedVariantId || null) &&
-          (item.condition || null) === (getConditionDisplay() || null) &&
+          // Canonical compare: the stored line may carry the raw live
+          // code ("open_box") after a reprice reconciliation while the
+          // selection formats as display ("Open Box").
+          isSamePdpCondition(item.condition, getConditionDisplay()) &&
           (item.offer_id || null) === (conditionOffer?.id || null) &&
           (item.color || null) === (routeData.effectiveSelectedColor || null) &&
           (item.storage || null) ===

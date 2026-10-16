@@ -8,6 +8,7 @@ import type { OrderDetailsItem } from './order-details.types';
 
 const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
+  pressable: vi.fn(),
   safeImage: vi.fn(),
   setStringAsync: vi.fn(),
 }));
@@ -41,18 +42,28 @@ vi.mock('react-native', async () => {
   return {
     Alert: { alert: mocks.alert },
     StatusBar: () => null,
-    Pressable: ({
-      children,
-      onPress,
-    }: {
+    Pressable: (props: {
+      accessibilityHint?: string;
+      accessibilityLabel?: string;
+      accessibilityRole?: string;
       children?: React.ReactNode;
+      hitSlop?: number;
       onPress?: (event?: { stopPropagation?: () => void }) => void;
-    }) =>
-      React.createElement(
+    }) => {
+      const { children, onPress, ...rest } = props;
+      mocks.pressable(rest);
+      return React.createElement(
         'button',
-        { onClick: (event) => onPress?.(event), type: 'button' },
+        {
+          onClick: (event) => onPress?.(event),
+          type: 'button',
+          ...(props.accessibilityLabel
+            ? { 'aria-label': props.accessibilityLabel }
+            : {}),
+        },
         children
-      ),
+      );
+    },
     StyleSheet: {
       create: (styles: Record<string, unknown>) => styles,
     },
@@ -300,5 +311,41 @@ describe('OrderDetailsItemsCard', () => {
 
     expect(screen.queryByText(/Offer:/)).not.toBeInTheDocument();
     expect(screen.getByText('ref 55555555')).toBeInTheDocument();
+  });
+
+  it('exposes row semantics and an expanded copy target', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    // The row select keeps button semantics with a label and hint.
+    expect(
+      screen.getByRole('button', { name: 'iPhone 15 Pro, quantity 2' })
+    ).toBeInTheDocument();
+    expect(mocks.pressable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessibilityRole: 'button',
+        accessibilityLabel: 'iPhone 15 Pro, quantity 2',
+        accessibilityHint: 'Opens the details for this item',
+      })
+    );
+    // The 12px copy control expands its touch area via hitSlop.
+    expect(mocks.pressable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessibilityLabel:
+          'Copy full offer reference 55555555-5555-4555-8555-555555555555',
+        hitSlop: 12,
+      })
+    );
   });
 });

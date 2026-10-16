@@ -7,6 +7,8 @@ type ProductsResponse = {
     price: number | string;
     has_condition_offers?: boolean;
     condition?: string | null;
+    has_variants?: boolean | null;
+    variant_model?: string | null;
   }> | null;
   error: { message: string } | null;
 };
@@ -29,13 +31,28 @@ type ProductQuery = {
 };
 
 const mockWarn = jest.fn();
-const mockRpc =
+// The variant-override RPC resolves `{ data, error }` directly while the
+// live-variant presence probe chains `.range()` off the builder.
+const mockRange =
   jest.fn<
-    (
-      name: string,
-      params: { p_variant_ids: string[] }
-    ) => Promise<VariantsResponse>
+    (...args: unknown[]) => Promise<{
+      count: number | null;
+      error: { message: string } | null;
+    }>
   >();
+const mockRpc = jest.fn<(name: string, ...args: unknown[]) => unknown>();
+let overridesResult: VariantsResponse = { data: [], error: null };
+function applyRpcMock() {
+  mockRpc.mockImplementation((name: string) =>
+    name === 'get_storefront_product_variants'
+      ? { range: (...args: unknown[]) => mockRange(...args) }
+      : Promise.resolve(overridesResult)
+  );
+}
+function setVariantOverrides(result: VariantsResponse) {
+  overridesResult = result;
+  applyRpcMock();
+}
 const mockGetOffers =
   jest.fn<
     (
@@ -95,9 +112,11 @@ describe('repriceCartItems', () => {
     productQuery.eq.mockClear();
     productQuery.in.mockReset();
     mockRpc.mockReset();
+    mockRange.mockReset();
     mockGetOffers.mockReset();
     productQuery.in.mockResolvedValue({ data: [], error: null });
-    mockRpc.mockResolvedValue({ data: [], error: null });
+    setVariantOverrides({ data: [], error: null });
+    mockRange.mockResolvedValue({ count: 0, error: null });
     mockGetOffers.mockResolvedValue({});
   });
 
@@ -151,7 +170,7 @@ describe('repriceCartItems', () => {
       ],
       error: null,
     });
-    mockRpc.mockResolvedValue({
+    setVariantOverrides({
       data: [
         {
           id: 'variant-1',
@@ -166,7 +185,7 @@ describe('repriceCartItems', () => {
 
     expect(mockFrom).toHaveBeenCalledWith('products');
     expect(productQuery.select).toHaveBeenCalledWith(
-      'id, price, has_condition_offers, condition'
+      'id, price, has_condition_offers, condition, has_variants, variant_model'
     );
     expect(productQuery.eq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(productQuery.eq).toHaveBeenCalledWith('status', 'active');
@@ -304,7 +323,7 @@ describe('repriceCartItems', () => {
       ],
       error: null,
     });
-    mockRpc.mockResolvedValue({
+    setVariantOverrides({
       data: null,
       error: { message: 'variants unavailable' },
     });
@@ -348,7 +367,7 @@ describe('repriceCartItems', () => {
     // and rejects with `invalid_variant`, so the line is unavailable —
     // falling back to the base price would sail past the removal alert
     // and fail at checkout.
-    mockRpc.mockResolvedValue({
+    setVariantOverrides({
       data: [
         {
           id: 'variant-1',
@@ -378,7 +397,7 @@ describe('repriceCartItems', () => {
       data: [{ id: 'product-1', price: 430000 }],
       error: null,
     });
-    mockRpc.mockResolvedValue({
+    setVariantOverrides({
       data: [
         { id: 'variant-1', product_id: 'product-1', price_override: null },
       ],
@@ -404,7 +423,7 @@ describe('repriceCartItems', () => {
     });
     // Successful lookup, but the variant row is gone (deleted/inactive):
     // checkout would reject with `invalid_variant`.
-    mockRpc.mockResolvedValue({ data: [], error: null });
+    setVariantOverrides({ data: [], error: null });
 
     const result = await repriceCartItems([item], 'merchant-1');
 
@@ -603,6 +622,114 @@ describe('repriceCartItems', () => {
     const result = await repriceCartItems([legacyLine, baseLine], 'merchant-1');
 
     expect(result.priceById).toEqual({ 'base-line': 430000 });
+    expect(result.unavailable).toEqual([]);
+  });
+
+  it.each([
+    {
+      label: 'flag disabled',
+      product: { id: 'offer-product', price: 430000 },
+    },
+    {
+      label: 'flag explicitly false',
+      product: {
+        id: 'offer-product',
+        price: 430000,
+        has_condition_offers: false,
+      },
+    },
+    {
+      label: 'variant-bearing parent',
+      product: {
+        id: 'offer-product',
+        price: 430000,
+        has_condition_offers: true,
+        has_variants: true,
+      },
+    },
+    {
+      label: 'sku-matrix parent',
+      product: {
+        id: 'offer-product',
+        price: 430000,
+        has_condition_offers: true,
+        variant_model: 'sku_matrix',
+      },
+    },
+  ])('marks an exact offer line unavailable when the parent is ineligible ($label)', async ({
+    product,
+  }) => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 280000,
+    });
+    productQuery.in.mockResolvedValue({ data: [product], error: null });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [{ id: 'offer-7', price: 280000 }],
+    });
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    // The live offer row exists, but the order RPC's parent gate
+    // would reject the line with `invalid_offer`.
+    expect(result.priceById).toEqual({});
+    expect(result.unavailable).toEqual([
+      { id: 'offer-line', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('marks an exact offer line unavailable when live variants appear', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 280000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [{ id: 'offer-7', price: 280000 }],
+    });
+    mockRange.mockResolvedValue({ count: 2, error: null });
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({});
+    expect(result.unavailable).toEqual([
+      { id: 'offer-line', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('skips offer lines when the live-variant probe fails', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 280000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [{ id: 'offer-7', price: 280000 }],
+    });
+    mockRange.mockResolvedValue({
+      count: null,
+      error: { message: 'probe down' },
+    });
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    expect(result.priceById).toEqual({});
     expect(result.unavailable).toEqual([]);
   });
 
@@ -833,7 +960,7 @@ describe('repriceCartItems', () => {
       ],
       error: null,
     });
-    mockRpc.mockResolvedValue({
+    setVariantOverrides({
       data: [
         {
           id: 'variant-1',

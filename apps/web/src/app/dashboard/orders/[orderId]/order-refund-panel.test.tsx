@@ -213,6 +213,35 @@ describe('OrderRefundPanel', () => {
       vi.useRealTimers();
     }
   });
+  it('keeps polling a refunded Paystack-backed order', async () => {
+    // The durable flag (not legs, which empty exactly at full
+    // refund) carries the provider-backed signal: a later
+    // contradictory provider verdict can still re-open the
+    // balance, including behind self-terminalized legs.
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            ...summary,
+            hasPaystackPayment: true,
+            status: 'refunded',
+          }),
+        })
+      );
+      render(<OrderRefundPanel orderId="order-1" />);
+      await vi.waitFor(() =>
+        expect(screen.getAllByText('Refunded').length).toBeGreaterThan(0)
+      );
+      const settled = vi.mocked(fetch).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(settled);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('keeps polling while the refund can still change', async () => {
     vi.useFakeTimers();
     try {

@@ -255,9 +255,11 @@ BEGIN
 END; $$;
 REVOKE ALL ON FUNCTION private.backfill_cancelled_order_refund_status()
   FROM PUBLIC,anon,authenticated;
--- Like the sibling helpers: service_role callers need EXECUTE, or
--- the denial path segfaults the backend instead of raising (see
--- the coverage migration). The round-61 suite calls it directly.
+-- Unlike the sibling helpers, authenticated gets no EXECUTE: the
+-- backfill flips labels fleet-wide with no end-user identity, so a
+-- hypothetical direct call must fail closed even if schema USAGE is
+-- ever granted. service_role keeps EXECUTE for the migration-time
+-- call below and the round-61 suite.
 GRANT EXECUTE ON FUNCTION private.backfill_cancelled_order_refund_status()
-  TO service_role, authenticated;
+  TO service_role;
 SELECT private.backfill_cancelled_order_refund_status();

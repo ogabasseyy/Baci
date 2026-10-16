@@ -126,10 +126,14 @@ BEGIN
     -- money the manager's way. amount_paid loads here, not in
     -- the lock SELECT above: the concurrency proof's minimal
     -- fixture carries only the lock columns, and this branch is
-    -- unreached while the lock blocks.
+    -- unreached while the lock blocks. A NULL amount_paid
+    -- derives from funded legs like the manager: coalescing to
+    -- zero would trivialize this gate and finalize without ever
+    -- comparing returned money to the paid total.
     SELECT o.amount_paid INTO v_paid FROM public.orders o
      WHERE o.id = p_order_id AND o.merchant_id = v_order.merchant_id;
-    v_paid := COALESCE(v_paid, 0);
+    v_paid := private.effective_amount_paid_v1(
+      p_order_id, v_order.merchant_id, v_order.currency, v_paid);
     v_total_returned := private.total_refund_returned_v1(
       p_order_id, v_order.merchant_id, v_order.currency);
     IF v_total_returned >= v_paid THEN

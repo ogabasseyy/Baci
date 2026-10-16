@@ -229,4 +229,27 @@ BEGIN
 END;
 $confinement_evidence_helpers_foreign$;
 
+-- Even with hypothetical schema USAGE, authenticated holds no
+-- EXECUTE on the fleet-wide backfill: the direct call fails closed
+-- instead of flipping labels. (Transaction-local grant; the final
+-- ROLLBACK undoes it.)
+RESET ROLE;
+GRANT USAGE ON SCHEMA private TO authenticated;
+SET LOCAL ROLE authenticated;
+
+DO $confinement_backfill_no_execute$
+DECLARE
+  v_rejected boolean := false;
+BEGIN
+  BEGIN
+    PERFORM private.backfill_cancelled_order_refund_status();
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'authenticated backfill probe was not rejected';
+  END IF;
+END;
+$confinement_backfill_no_execute$;
+
 ROLLBACK;

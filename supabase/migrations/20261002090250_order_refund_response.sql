@@ -70,9 +70,13 @@ BEGIN
   -- outstanding captures, so a fully refunded Paystack order shows
   -- legs [] while a later contradictory provider verdict can still
   -- re-open the balance. The panel keeps polling on this flag.
+  -- Self-terminalized legs count: a payment the provider already
+  -- flipped to refunded still backs local rows a later verdict can
+  -- contradict, so excluding it would stop polling exactly when a
+  -- re-opened balance needs it.
   SELECT EXISTS(SELECT 1 FROM public.transactions p
     WHERE p.order_id=p_order_id AND p.merchant_id=p_merchant_id
-      AND p.transaction_type='payment' AND p.status='completed' AND p.amount>0
+      AND p.transaction_type='payment' AND p.status IN ('completed','refunded') AND p.amount>0
       AND upper(btrim(p.gateway))='PAYSTACK') INTO v_has_paystack;
   RETURN jsonb_build_object('currency',p_currency,'amountPaid',p_amount_paid,
     'refunded',p_refunded,'remaining',p_remaining,'pending',p_pending,

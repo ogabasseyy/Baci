@@ -47,7 +47,15 @@ BEGIN
     ('9ef51000-0000-4000-8000-000000000001', v_merchant_id, 'NULLPAID-001',
       100, NULL, 'paid', 'cancelled', pg_catalog.now()),
     ('9ef51000-0000-4000-8000-000000000002', v_merchant_id, 'NULLPAID-002',
-      75, NULL, 'paid', 'cancelled', pg_catalog.now());
+      75, NULL, 'paid', 'cancelled', pg_catalog.now()),
+    -- Fully manual-covered NULL-paid order: the claim derives
+    -- paid from funded legs like the manager and finalizes.
+    ('9ef51000-0000-4000-8000-000000000004', v_merchant_id, 'NULLPAID-004',
+      100, NULL, 'paid', 'cancelled', pg_catalog.now()),
+    -- Self-terminalized provider leg: the flag stays on so the
+    -- panel keeps polling behind it.
+    ('9ef51000-0000-4000-8000-000000000005', v_merchant_id, 'NULLPAID-005',
+      100, 100, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -58,7 +66,20 @@ BEGIN
       'completed', 'paystack', 'np-1', '{}'::jsonb),
     ('9ef52000-0000-4000-8000-000000000002', v_merchant_id,
       '9ef51000-0000-4000-8000-000000000002', 'payment', 75, 'NGN',
-      'completed', 'cash', 'np-2', '{}'::jsonb);
+      'completed', 'cash', 'np-2', '{}'::jsonb),
+    ('9ef52000-0000-4000-8000-000000000005', v_merchant_id,
+      '9ef51000-0000-4000-8000-000000000004', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'np-4', '{}'::jsonb),
+    ('9ef52000-0000-4000-8000-000000000006', v_merchant_id,
+      '9ef51000-0000-4000-8000-000000000004', 'refund', 100, 'NGN',
+      'completed', 'manual', 'np-4#1',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef52000-0000-4000-8000-000000000005',
+        'method', 'bank_transfer', 'reference', 'np-4',
+        'confirmed', 'true')),
+    ('9ef52000-0000-4000-8000-000000000007', v_merchant_id,
+      '9ef51000-0000-4000-8000-000000000005', 'payment', 100, 'NGN',
+      'refunded', 'paystack', 'np-5', '{}'::jsonb);
 END;
 $null_paid_fixtures$;
 
@@ -107,6 +128,43 @@ BEGIN
   IF (v_result->>'hasPaystackPayment')::boolean IS NOT FALSE THEN
     RAISE EXCEPTION 'cash-only order wrongly flagged provider-backed';
   END IF;
+  SELECT public.manage_order_refund(
+    '9ef51000-0000-4000-8000-000000000005'
+  ) INTO v_result;
+  IF (v_result->>'hasPaystackPayment')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'self-terminalized leg dropped the provider flag';
+  END IF;
 END;
 $null_paid_derivation$;
+
+DO $null_paid_claim$
+DECLARE
+  v_won boolean;
+  v_status text;
+BEGIN
+  -- Fully covered NULL-paid order: the claim derives paid from
+  -- funded legs (100) and finalizes against real returned money,
+  -- never against a coalesced zero.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef51000-0000-4000-8000-000000000004', 'refund',
+    '9ef53000-0000-4000-8000-000000000004');
+  IF v_won OR v_status <> 'completed' THEN
+    RAISE EXCEPTION 'null-paid covered claim won=% status=%, want f completed',
+      v_won, v_status;
+  END IF;
+  -- Uncovered NULL-paid cash order: no zero-paid shortcut into
+  -- finalization — the claim raises for merchant recording instead
+  -- of completing against a coalesced zero.
+  BEGIN
+    PERFORM public.claim_order_cancellation_side_effect(
+      '9ef51000-0000-4000-8000-000000000002', 'refund',
+      '9ef53000-0000-4000-8000-000000000002');
+    RAISE EXCEPTION 'null-paid uncovered cash claim did not raise';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'refund_not_required' THEN RAISE; END IF;
+  END;
+END;
+$null_paid_claim$;
+
 ROLLBACK;

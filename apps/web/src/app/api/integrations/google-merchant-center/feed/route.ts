@@ -163,11 +163,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const target = await resolveLegacyFeedTarget(host);
-    // SAFE: `target.redirectHost` is constrained by `isAllowedRedirectHost`
-    // inside `resolveLegacyFeedTarget` — it is either a `${slug}.<rootDomain>`
-    // for the managed flow or the exact `domain` column of an active row in
-    // the `domains` table for custom domains. Any other value throws
-    // `MerchantNotFoundError`. Request input cannot drive the authority.
+    // SAFE: `target.redirectHost` is constrained before this line. Managed
+    // flow: `isAllowedRedirectHost` against the root domain (substantive).
+    // Custom flow: the active-row `domains`-table match is the operative
+    // control (a row with a verified active domain, else
+    // `MerchantNotFoundError`); the trailing allowlist check there
+    // compares the value against itself and must not be relied on as
+    // defence-in-depth. Request input cannot drive the authority.
     const redirectUrl = new URL(
       '/api/feed/google-merchant',
       `https://${target.redirectHost}`

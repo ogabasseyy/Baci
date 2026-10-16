@@ -59,7 +59,11 @@ m_scan_error_dropped() { sub "$SEC" "semgrep scan --error" "semgrep scan"; }
 m_text_output_dropped() { sub "$SEC" " --text-output=/dev/stdout" ""; }
 m_bare_text_added() { sub "$SEC" "--sarif --output=semgrep.sarif --text-output=/dev/stdout" "--sarif --output=semgrep.sarif --text --text-output=/dev/stdout"; }
 m_prune_readded() { sub "$SEC" "fetch --no-tags origin" "fetch --no-tags --prune origin"; }
-m_exit1_removed() { sub "$SEC" 'failing closed instead of skipping the scan."; exit 1' 'failed."'; }
+m_exit1_removed() { sub .github/scripts/semgrep-sarif-filter-pr-changed-files.sh 'exit 1' 'exit 0'; }
+m_marker_removed() { sub "$SEC" 'failing closed instead of skipping the scan' 'silently passing'; }
+m_invocation_removed() { sub "$SEC" 'semgrep-sarif-filter-pr-changed-files.sh' 'REMOVED-script.sh'; }
+m_script_deleted() { rm .github/scripts/semgrep-sarif-filter-pr-changed-files.sh; }
+m_skiparm_removed() { sub .github/scripts/semgrep-sarif-filter-pr-changed-files.sh ' || true' ''; }
 m_gate_disjuncts_dropped() { sub "$SEC" " || steps.semgrep_push.outcome == 'failure' || steps.semgrep_full.outcome == 'failure'" ""; }
 m_gate_run_true() { sub "$SEC" "run: exit 1" "run: true"; }
 m_gate_coe() { sub "$SEC" "        run: exit 1" "$NL_GATE_COE"; }
@@ -103,7 +107,11 @@ neg "scan-error-dropped" "expected 2 semgrep scan --error" m_scan_error_dropped
 neg "text-output-dropped" "expected 3 --text-output" m_text_output_dropped
 neg "bare-text-added" "breaks --sarif scans" m_bare_text_added
 neg "prune-readded" "must not appear" m_prune_readded
-neg "failclosed-exit-removed" "must exit nonzero" m_exit1_removed
+neg "failclosed-exit-removed" "nonzero fail-closed arm" m_exit1_removed
+neg "failclosed-marker-removed" "lost its fail-closed handler" m_marker_removed
+neg "skiparm-removed" "legitimate-empty skip arm" m_skiparm_removed
+neg "changed-script-uninvoked" "lost its changed-files script invocation" m_invocation_removed
+neg "changed-script-deleted" "changed-files script missing" m_script_deleted
 neg "gate-disjuncts-dropped" "lost the semgrep_push outcome disjunct" m_gate_disjuncts_dropped
 neg "gate-run-true" "must be exactly 'run: exit 1'" m_gate_run_true
 neg "gate-continue-on-error" "must not carry continue-on-error" m_gate_coe

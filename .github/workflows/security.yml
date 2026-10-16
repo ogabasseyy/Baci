@@ -167,12 +167,12 @@ jobs:
           GIT_ASKPASS="$fetch_askpass" GIT_TERMINAL_PROMPT=0 \
             git -c credential.helper= fetch --no-tags origin \
             "${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
-          # Fail closed: a diff that errors (bad base ref, fetch failure)
-          # must fail the scan, not silently skip it via empty input.
-          diff_out="$(git diff --name-only --diff-filter=d "origin/${{ github.event.pull_request.base.ref }}...HEAD" -- '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml')" || {
+          # Fail closed: the script exits nonzero on base-diff errors
+          # (a swallowing pipe once turned that fatal into a silent skip).
+          changed_out="$("$GITHUB_WORKSPACE/.github/scripts/semgrep-sarif-filter-pr-changed-files.sh" "origin/${{ github.event.pull_request.base.ref }}")" || {
             echo "::error::PR base diff failed; failing closed instead of skipping the scan."; exit 1
           }
-          mapfile -t changed_files < <(grep -E '^(next\.config\.ts$|apps/web/src/app/api/|apps/web/src/lib/|apps/web/src/schemas/|apps/mobile-admin/(app|hooks|lib)/|apps/mobile-storefront/(app|hooks|lib|services|stores)/|packages/shared/|supabase/migrations/|\.github/workflows/)' <<<"$diff_out" || true)
+          mapfile -t changed_files < <(printf '%s' "$changed_out")
 
           if [ ${#changed_files[@]} -eq 0 ]; then
             echo "No security-relevant changed files. Skipping Semgrep."

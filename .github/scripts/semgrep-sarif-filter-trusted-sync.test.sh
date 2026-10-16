@@ -213,8 +213,24 @@ if ! grep -q 'failing closed instead of skipping the scan' "$SEC"; then
   echo "::error::PR base diff lost its fail-closed handler in $SEC"
   fail=1
 fi
-if ! grep -A4 'diff_out="$(git diff' "$SEC" | grep -q 'exit 1'; then
-  echo "::error::PR base diff handler must exit nonzero in $SEC"
+# The changed-file computation lives in a script (testable) that the
+# workflow must invoke; the script file itself must exist. Behavior
+# (bogus base -> nonzero) is covered by the pr-diff functional test.
+CHANGED="$ROOT/.github/scripts/semgrep-sarif-filter-pr-changed-files.sh"
+if ! grep -q 'semgrep-sarif-filter-pr-changed-files.sh' "$SEC"; then
+  echo "::error::PR scan lost its changed-files script invocation in $SEC"
+  fail=1
+fi
+if [[ ! -f "$CHANGED" ]]; then
+  echo "::error::changed-files script missing: $CHANGED"
+  fail=1
+fi
+if ! grep -q 'exit 1' "$CHANGED"; then
+  echo "::error::changed-files script lost its nonzero fail-closed arm"
+  fail=1
+fi
+if ! grep -q '|| true' "$CHANGED"; then
+  echo "::error::changed-files script lost its legitimate-empty skip arm"
   fail=1
 fi
 fail_if="$(awk '/- name: Fail on Semgrep findings or scanner errors/{getline; print}' "$SEC")"

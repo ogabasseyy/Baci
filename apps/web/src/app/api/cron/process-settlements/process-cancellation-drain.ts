@@ -50,11 +50,14 @@ export async function processCancellationDrain(
   // When refund verification pends, cap the phase before it consumes the
   // provider admission: a full reconcile leaves ~30s and every 76s
   // verification-plus-initiation defers on every backlog invocation.
+  // A thrown probe outage fails closed (capped) like a returned
+  // read error: aborting here would skip every drain below.
+  const verificationPending = await isRefundVerificationPending(supabase).catch(
+    () => true
+  );
   const workerDeadlineMs = reconcileWorkerDeadlineMs(
     workersStartedAt,
-    (await isRefundVerificationPending(supabase))
-      ? CAPPED_RECONCILE_PHASE_MS
-      : undefined
+    verificationPending ? CAPPED_RECONCILE_PHASE_MS : undefined
   );
   const [refundResult, legacyRefundResult, watchSweepResult] =
     await Promise.allSettled([

@@ -118,6 +118,28 @@ describe('processCancellationDrain budget scheduling', () => {
     );
   });
 
+  it('caps the reconcile phase when the verification probe throws', async () => {
+    // A transport-level probe outage must fail closed (capped),
+    // not abort the whole cron invocation before the drains run.
+    mocks.isRefundVerificationPending.mockRejectedValue(
+      new Error('transport down')
+    );
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      await processCancellationDrain(
+        supabase,
+        mocks.sendEmail,
+        mocks.notifyMerchant
+      );
+    } finally {
+      now.mockRestore();
+    }
+    expect(
+      mocks.reconcilePendingPaystackCancellationRefunds
+    ).toHaveBeenCalledWith(supabase, 25, 1_016_000);
+    expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalled();
+  });
+
   it('skips the notification drain when the workers exhausted the cron budget', async () => {
     const now = vi.spyOn(Date, 'now');
     now

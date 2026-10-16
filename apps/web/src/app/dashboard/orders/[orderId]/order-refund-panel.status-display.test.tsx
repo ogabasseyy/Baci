@@ -47,7 +47,6 @@ describe('OrderRefundPanel status display', () => {
           method: 'bank_transfer',
           reference: 'bank-1',
           date: '2026-09-28T12:00:00Z',
-          recorded_by: null,
         },
       ],
     });
@@ -97,7 +96,6 @@ describe('OrderRefundPanel status display', () => {
           id: 'e-1',
           action: 'failed',
           date: '2026-09-28T12:00:00Z',
-          actor: null,
           details: {
             error: 'The refund ran into a problem. Support has the details.',
             previousError: 'Refund in progress — waiting for the money.',
@@ -124,7 +122,6 @@ describe('OrderRefundPanel status display', () => {
           id: 'e-1',
           action: 'failed',
           date: 'not-a-date',
-          actor: null,
           details: {},
         },
       ],

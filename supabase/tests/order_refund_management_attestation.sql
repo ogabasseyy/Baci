@@ -88,6 +88,8 @@ SELECT pg_catalog.set_config(
 );
 
 DO $refund_attestation$
+DECLARE
+  v_result jsonb;
 BEGIN
   -- Recording attests money already moved: direct RPC callers must
   -- attest too, and the ledger row keeps the proof.
@@ -130,6 +132,21 @@ BEGIN
       AND metadata->>'note' = 'rewritten'
   ) THEN
     RAISE EXCEPTION 'unattested replay mutated the audit note';
+  END IF;
+  -- Peer identity stays out of the payload at the SQL source, so
+  -- direct RPC callers bypassing the route mask see none either.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000001'
+  ) INTO v_result;
+  IF (v_result->'history'->0) ? 'recorded_by' THEN
+    RAISE EXCEPTION 'recorded_by leaked into refund history';
+  END IF;
+  IF COALESCE(jsonb_array_length(v_result->'events'), 0) < 1 THEN
+    RAISE EXCEPTION 'no audit event to check for actor leaks';
+  END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(v_result->'events') e
+    WHERE e ? 'actor') THEN
+    RAISE EXCEPTION 'actor leaked into refund events';
   END IF;
 END;
 $refund_attestation$;

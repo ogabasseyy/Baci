@@ -28,7 +28,6 @@ export interface RefundSummary {
     id: string;
     action: string;
     date: string;
-    actor: string | null;
     details: {
       error?: string | null;
       previousError?: string | null;
@@ -45,7 +44,6 @@ export interface RefundSummary {
     reference: string;
     date: string;
     note: string | null;
-    recorded_by: string | null;
   }>;
   // Pin candidates for Paystack attestations: completed Paystack
   // captures with money still outstanding, oldest first. Only

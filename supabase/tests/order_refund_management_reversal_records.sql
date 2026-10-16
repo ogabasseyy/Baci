@@ -1,7 +1,8 @@
 -- REGRESSION TEST: reversal-adjusted and unlinked manual records.
 --
--- Covers wallet/savings-adjusted remainders and sole-leg
--- attribution of unlinked refunds.
+-- Covers wallet/savings-adjusted remainders, sole-leg
+-- attribution of unlinked refunds, and reversal-evidence totals
+-- at the aggregate claim.
 -- Split from order_refund_management.sql per the 300-line boundary;
 -- self-contained fixtures use the 9ef1 namespace and roll back.
 --
@@ -109,12 +110,20 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000004', v_merchant_id, 'REFUND-004',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000005', v_merchant_id, 'REFUND-005',
+      100, 100, 'paid', 'cancelled'),
+    -- Mixed order with an unreversed wallet leg (drift).
+    ('9ef11000-0000-4000-8000-000000000012', v_merchant_id, 'REFUND-012',
+      100, 100, 'paid', 'cancelled'),
+    -- Mixed order with a reversed wallet leg.
+    ('9ef11000-0000-4000-8000-000000000013', v_merchant_id, 'REFUND-013',
       100, 100, 'paid', 'cancelled');
 
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
   WHERE id IN (
       '9ef11000-0000-4000-8000-000000000004',
-      '9ef11000-0000-4000-8000-000000000005');
+      '9ef11000-0000-4000-8000-000000000005',
+      '9ef11000-0000-4000-8000-000000000012',
+      '9ef11000-0000-4000-8000-000000000013');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -129,7 +138,39 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000008', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000005', 'refund', 10, 'NGN',
       'completed', 'paystack', '777005',
-      jsonb_build_object('provider_refund_status', 'processed'));
+      jsonb_build_object('provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000009', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000012', 'payment', 60, 'NGN',
+      'completed', 'paystack', 'cap-12', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000010', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000012', 'payment', 40, 'NGN',
+      'completed', 'wallet', 'cap-12w', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000011', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000012', 'refund', 60, 'NGN',
+      'completed', 'paystack', '424245',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000009',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000012', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000013', 'payment', 60, 'NGN',
+      'completed', 'paystack', 'cap-13', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000013', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000013', 'payment', 40, 'NGN',
+      'completed', 'wallet', 'cap-13w', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000014', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000013', 'refund', 60, 'NGN',
+      'completed', 'paystack', '424246',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000012',
+        'provider_refund_status', 'processed'));
+
+  INSERT INTO public.customer_wallet_transactions (
+    wallet_id, customer_id, merchant_id, type, amount, balance_after,
+    source_type, source_id
+  ) VALUES
+    ('9ef14000-0000-4000-8000-000000000001', v_customer_id, v_merchant_id,
+      'adjustment', 40, 80, 'order_reversal',
+      '9ef11000-0000-4000-8000-000000000013');
 
   UPDATE public.orders SET customer_id = v_customer_id
   WHERE id = '9ef11000-0000-4000-8000-000000000004';
@@ -226,12 +267,32 @@ DECLARE
   v_padded_ok boolean;
   v_internal_ok boolean;
   v_o4_status text;
+  v_won boolean;
+  v_status text;
 BEGIN
 
   SELECT payment_status INTO v_o4_status FROM public.orders
   WHERE id = '9ef11000-0000-4000-8000-000000000004';
   IF v_o4_status <> 'refunded' THEN
     RAISE EXCEPTION 'reversal-adjusted completion did not flip payment status';
+  END IF;
+
+  -- An unreversed wallet leg is drift: the claim quarantines
+  -- the gap even though the external leg is covered.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000012', 'refund',
+    '9ef13000-0000-4000-8000-000000000012');
+  IF v_status <> 'delivery_uncertain' THEN
+    RAISE EXCEPTION 'unreversed wallet leg finalized, got %', v_status;
+  END IF;
+  -- With the reversal recorded, the same mixed shape finalizes.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000013', 'refund',
+    '9ef13000-0000-4000-8000-000000000013');
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'reversed mixed order did not finalize, got %', v_status;
   END IF;
 
 END;

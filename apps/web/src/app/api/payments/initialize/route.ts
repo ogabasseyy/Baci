@@ -705,15 +705,13 @@ async function initializeJuicyway(
           }
 
           // LOG SESSION POLLING
-          console.log(
-            `[Juicyway Poll #${pollAttempt}/${MAX_POLL_ATTEMPTS}] Session`,
-            {
-              status: polledSessionData.payment?.status,
-              message: polledSessionData.message,
-              hasAddress: !!paymentMethod?.address,
-              raw: `${JSON.stringify(polledSessionData).substring(0, 100)}...`,
-            }
-          );
+          console.log('[Juicyway Poll] Session', {
+            pollAttempt,
+            maxPollAttempts: MAX_POLL_ATTEMPTS,
+            status: polledSessionData.payment?.status,
+            message: polledSessionData.message,
+            hasAddress: !!paymentMethod?.address,
+          });
 
           // Fallback: If session endpoint doesn't return address, try the specific PAYMENT endpoint
           // This handles cases where session status lags behind payment status
@@ -738,10 +736,10 @@ async function initializeJuicyway(
                     })
                   | undefined;
                 const fallbackAddr = pm?.address || pm?.params?.address;
-                console.log(`[Juicyway Poll #${pollAttempt}] Payment Check`, {
+                console.log('[Juicyway Poll] Payment Check', {
+                  pollAttempt,
                   status: paymentDetails.status,
                   hasAddress: !!fallbackAddr,
-                  raw: `${JSON.stringify(paymentDetails).substring(0, 100)}...`,
                 });
 
                 if (fallbackAddr) {

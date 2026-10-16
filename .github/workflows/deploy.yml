@@ -14,6 +14,11 @@ on:
         description: Exact commit verified by the release coordinator
         required: false
         type: string
+      reconcile_checkout_recovery_legacy:
+        description: Approve the exact ten-migration recovery predecessor upgrade to its closed gate
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -229,6 +234,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      CHECKOUT_RECOVERY_LEGACY_RECONCILIATION: ${{ github.event_name == 'workflow_dispatch' && inputs.reconcile_checkout_recovery_legacy && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

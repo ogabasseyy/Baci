@@ -150,22 +150,23 @@ export async function incrementWindowCounter(
   const redis = getRedis();
   if (redis) {
     try {
-      const script = redis.createScript<number | string>(`
+      // Return count and remaining TTL from the same script so the
+      // expiry is exact and a metadata failure cannot discard an
+      // authoritative count into the per-instance memory budget.
+      const script = redis.createScript<
+        [number | string, number | string] | number | string
+      >(`
         local count = redis.call("INCR", KEYS[1])
         if count == 1 then
           redis.call("PEXPIRE", KEYS[1], ARGV[1])
         end
-        return count
+        return {count, redis.call("PTTL", KEYS[1])}
       `);
-      const count = parseCounter(
-        await script.eval([key], [String(Math.max(1, windowMs))])
-      );
-      // Report the actual fixed-window expiry, not now + windowMs:
-      // after the first request in a window the latter overstates
-      // the remaining window by up to its full length.
-      const pttl = await redis.pttl(key);
-      const msRemaining =
-        typeof pttl === 'number' && pttl > 0 ? pttl : windowMs;
+      const reply = await script.eval([key], [String(Math.max(1, windowMs))]);
+      const [rawCount, rawPttl] = Array.isArray(reply) ? reply : [reply, -1];
+      const count = parseCounter(rawCount);
+      const pttl = parseCounter(rawPttl);
+      const msRemaining = pttl > 0 ? pttl : windowMs;
       return {
         count,
         degraded: false,
@@ -190,6 +191,14 @@ const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
   'create',
   'handoff_preview',
   'handoff_redeem',
+  // Credential-minting and account-linking operations also fail
+  // closed: a degraded per-instance budget would multiply their
+  // limits by the instance count exactly while the system is
+  // degraded. Authenticated cart commands, checkout preparation, and
+  // the token-authenticated legacy bridge stay on the degraded
+  // memory budget for availability.
+  'account_link',
+  'handoff_issue',
 ]);
 
 /**

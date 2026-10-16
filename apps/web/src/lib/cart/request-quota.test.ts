@@ -135,6 +135,21 @@ describe('checkCartQuota degraded store', () => {
         subject: 'ip-degraded',
       })
     ).resolves.toMatchObject({ allowed: false });
+    // Credential-minting and account-linking fail closed too.
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'account_link',
+        subject: 'ip-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: false });
+    await expect(
+      checkCartQuota({
+        merchantId: MERCHANT_ID,
+        operation: 'handoff_issue',
+        subject: 'ip-degraded',
+      })
+    ).resolves.toMatchObject({ allowed: false });
   });
 
   it('keeps the legacy bridge available in production without Redis up to its boundary', async () => {
@@ -237,8 +252,7 @@ describe('quota degradation warning', () => {
 
   it('reports the Redis window expiry from PTTL, not now + window', async () => {
     mockGetRedis.mockReturnValue({
-      createScript: () => ({ eval: async () => 3 }),
-      pttl: async () => 5_000,
+      createScript: () => ({ eval: async () => [3, 5_000] }),
     });
     const before = Date.now();
     const result = await incrementWindowCounter('quota:test', 3_600_000);

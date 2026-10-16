@@ -2,10 +2,10 @@
 // Uses Upstash Redis (shared across all Vercel instances) with in-memory fallback.
 // Sliding window algorithm via @upstash/ratelimit SDK.
 
-import { createHash } from 'node:crypto';
 import { Ratelimit } from '@upstash/ratelimit';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { checkLegacyBridgeRateLimit } from './legacy-bridge-rate-limit';
 import { rateLimitDiagnostics } from './rate-limit-diagnostics';
 import { getRateLimitConfig } from './rate-limit-routes';
 import { getRedis } from './redis';
@@ -14,12 +14,12 @@ import { getRedis } from './redis';
 // Types
 // ---------------------------------------------------------------------------
 
-interface RateLimitConfig {
+export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
 }
 
-interface RateLimitResult {
+export interface RateLimitResult {
   allowed: boolean;
   limit: number;
   remaining: number;
@@ -180,52 +180,20 @@ function checkMemoryRateLimit(
 // ---------------------------------------------------------------------------
 
 const LEGACY_BRIDGE_PATH = '/api/storefront/cart/legacy';
-// Built from parts so the capability prefix never appears as a
-// credential-shaped literal in source.
-const LEGACY_TOKEN_PATTERN = new RegExp(
-  `^Bearer ${['legacy', 'mcp'].join('_')}_([a-f0-9]{64})$`
-);
 
-const LEGACY_BRIDGE_IP_CEILING: RateLimitConfig = {
-  maxRequests: 3_000,
-  windowMs: 60_000,
-};
-
-export async function checkRateLimit(
-  request: NextRequest
-): Promise<RateLimitResult> {
+export function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   const pathname = request.nextUrl.pathname;
   const { config, pattern } = getRateLimitConfig(pathname);
-
-  // The canonical legacy bridge is server-to-server behind one broker
-  // egress IP: keying by IP alone would couple every merchant/token to
-  // that address. Key by a hash of the well-formed legacy capability
-  // instead (never the raw token), so each token gets its own
-  // pre-authentication bucket; malformed callers fall back to the
-  // client IP bucket. In parallel, a generous per-IP aggregate ceiling
-  // bounds forged-token rotation from one address without coupling
-  // legitimate broker traffic at the route's per merchant + token
-  // quota, which still applies after merchant resolution.
   const clientIdentifier = getClientIdentifier(request);
+
   if (pathname === LEGACY_BRIDGE_PATH) {
-    const token = request.headers
-      .get('authorization')
-      ?.match(LEGACY_TOKEN_PATTERN)?.[1];
-    if (token) {
-      const [tokenResult, ipResult] = await Promise.all([
-        applyRateLimit(
-          `legacy-token:${createHash('sha256').update(token).digest('hex')}`,
-          pattern,
-          config
-        ),
-        applyRateLimit(
-          clientIdentifier,
-          `${pattern}:ip-ceiling`,
-          LEGACY_BRIDGE_IP_CEILING
-        ),
-      ]);
-      return ipResult.allowed ? tokenResult : ipResult;
-    }
+    return checkLegacyBridgeRateLimit(
+      request,
+      pattern,
+      config,
+      clientIdentifier,
+      applyRateLimit
+    );
   }
 
   return applyRateLimit(clientIdentifier, pattern, config);

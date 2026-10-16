@@ -87,7 +87,10 @@ export async function handleCanonicalUcpCart(
           ? input.expectedVersion
           : cart.state.version,
       operationId,
-      handoff: true,
+      // A plain read must not mint a redeemable handoff credential:
+      // the continueUrl upgrades read access into a full session
+      // proof at redemption. Only update/checkout flows hand off.
+      handoff: input.action !== 'read',
     });
     if (!result.ok || !result.state)
       return {

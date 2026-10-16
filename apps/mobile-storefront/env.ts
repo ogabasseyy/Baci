@@ -1,7 +1,10 @@
 import Constants from 'expo-constants';
 import { z } from 'zod';
 
-const DEFAULT_MOBILE_API_URL = 'https://usebaci.com';
+// Native callers use the programmatic api.* origin: it is the only
+// production surface that returns the script/device-readable cart
+// bootstrap proof the native client requires.
+const DEFAULT_MOBILE_API_URL = 'https://api.usebaci.com';
 
 function emptyStringToUndefined(value: unknown) {
   return typeof value === 'string' && value.trim().length === 0

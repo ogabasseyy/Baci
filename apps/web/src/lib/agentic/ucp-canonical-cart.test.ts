@@ -168,6 +168,20 @@ it('rejects malformed canonical versions before resolving authority', async () =
   ).toMatchObject({ status: 400 });
   expect(deps.open).not.toHaveBeenCalled();
 });
+it('does not mint a handoff credential for a plain read', async () => {
+  const deps = fixture();
+  await handleCanonicalUcpCart(input, deps as never);
+  expect(deps.operate).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ handoff: false })
+  );
+  await handleCanonicalUcpCart({ ...input, action: 'update' }, deps as never);
+  expect(deps.operate).toHaveBeenLastCalledWith(
+    expect.anything(),
+    expect.objectContaining({ handoff: true })
+  );
+});
+
 it('keeps signed mutation operation keys stable and refreshes read handoff attempt identity', async () => {
   const deps = fixture();
   await handleCanonicalUcpCart(

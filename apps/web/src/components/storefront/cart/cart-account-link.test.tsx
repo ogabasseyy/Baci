@@ -172,6 +172,19 @@ it('reloads after the hook reports a new cart generation with unchanged merchant
   expect(accountState.load).toHaveBeenCalledTimes(2);
 });
 
+it('retries bootstrap before reloading after a failed saved-cart load', async () => {
+  cartState.sharedCartRef = null;
+  accountState.status = 'error';
+  render(<CartAccountLink merchantSlug="shop" />);
+  const retry = await screen.findByRole('button', {
+    name: 'Retry loading saved cart',
+  });
+  await waitFor(() => expect(mockBootstrap).toHaveBeenCalledTimes(1));
+  fireEvent.click(retry);
+  await waitFor(() => expect(mockBootstrap).toHaveBeenCalledTimes(2));
+  expect(accountState.load).toHaveBeenCalledTimes(2);
+});
+
 it('offers saved-cart adoption before a current cart exists', async () => {
   cartState.sharedCartRef = null;
   accountState.savedCart = {

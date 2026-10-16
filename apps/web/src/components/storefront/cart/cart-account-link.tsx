@@ -1,7 +1,7 @@
 'use client';
 
 import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
@@ -58,26 +58,28 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
   const authenticated = Boolean(auth?.isAuthenticated);
   const sharedRef = cart.sharedCartRef;
 
+  const ensureSavedCart = useCallback(async () => {
+    // A fresh browser may hold no cart proof at all: establish the
+    // bootstrap authority the account read/link requires before
+    // loading the saved cart. The retry path repeats this sequence so
+    // a failed bootstrap (network, 429, 503) can recover instead of
+    // repeating an unauthorized account read.
+    if (!sharedRef) {
+      await bootstrapSharedCart(props.merchantSlug ?? undefined);
+    }
+    await loadSavedCart();
+  }, [loadSavedCart, props.merchantSlug, sharedRef]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: Stable loader reads scope from refs; merchant and shopper changes must trigger a fresh saved-cart observation.
   useEffect(() => {
-    if (!authenticated || !cart.sharedCartAccountsEnabled) return;
-    void (async () => {
-      // A fresh browser may hold no cart proof at all: establish the
-      // bootstrap authority the account read/link requires before
-      // loading the saved cart.
-      if (!sharedRef) {
-        await bootstrapSharedCart(props.merchantSlug ?? undefined);
-      }
-      await loadSavedCart();
-    })();
+    if (authenticated && cart.sharedCartAccountsEnabled) void ensureSavedCart();
   }, [
     authenticated,
     auth?.user?.id,
     props.merchantSlug,
     cart.sharedCartAccountsEnabled,
-    loadSavedCart,
+    ensureSavedCart,
     scopeKey,
-    sharedRef?.cartId,
   ]);
 
   if (!authenticated || !cart.sharedCartAccountsEnabled) return null;
@@ -124,7 +126,7 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
         <p role="status">Checking your saved cart…</p>
       ) : null}
       {!pending && status === 'error' ? (
-        <Button type="button" onClick={() => void loadSavedCart()}>
+        <Button type="button" onClick={() => void ensureSavedCart()}>
           Retry loading saved cart
         </Button>
       ) : null}

@@ -68,6 +68,33 @@ describe('legacy bridge rate limit keying', () => {
     // A different token behind the same IP gets its own bucket.
     expect(otherToken.remaining).toBe(599);
   });
+
+  it('enforces the aggregate per-IP ceiling across rotating tokens', async () => {
+    const prefix = `Bearer ${['legacy', 'mcp'].join('_')}_`;
+    const url = 'https://ogabassey.com/api/storefront/cart/legacy';
+    const requestFrom = (ip: string, tokenIndex: number) =>
+      new NextRequest(url, {
+        method: 'POST',
+        headers: {
+          authorization: `${prefix}${tokenIndex.toString(16).padStart(64, '0')}`,
+          'x-real-ip': ip,
+        },
+      });
+
+    // 3,000 rotating well-formed tokens from one IP all pass the
+    // aggregate ceiling (each token bucket is nearly untouched).
+    for (let index = 0; index < 3_000; index++) {
+      const result = await checkRateLimit(requestFrom('192.0.2.30', index));
+      expect(result.allowed).toBe(true);
+    }
+    // The next request from that IP is blocked by the ceiling even
+    // with a brand-new token, while a distinct IP is unaffected.
+    const blocked = await checkRateLimit(requestFrom('192.0.2.30', 3_001));
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.limit).toBe(3_000);
+    const control = await checkRateLimit(requestFrom('192.0.2.31', 3_001));
+    expect(control.allowed).toBe(true);
+  });
 });
 
 // Dedicated coverage for the quiz-specific rate-limit entries added for launch.

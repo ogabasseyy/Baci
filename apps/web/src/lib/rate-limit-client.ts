@@ -50,9 +50,9 @@ export function getClientIdentifier(request: NextRequest): string {
  * getClientIdentifier this never trusts x-forwarded-for: that header is
  * client-suppliable on any deployment whose edge does not overwrite it,
  * so a caller could rotate it to reset the budget. Only the platform
- * address (NextRequest.ip, or the x-real-ip the Vercel edge sets and
- * clients cannot spoof) identifies the client; anything else falls
- * into the single shared 'unknown' bucket, failing closed.
+ * address (NextRequest.ip, or an x-real-ip whose overwrite the
+ * platform/operator guarantees) identifies the client; anything else
+ * falls into the single shared 'unknown' bucket, failing closed.
  */
 export function getTrustedClientIdentifier(request: NextRequest): string {
   const requestWithIp = request as NextRequest & { ip?: string };
@@ -61,8 +61,18 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
     return requestIp;
   }
 
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp && isValidIP(realIp)) return realIp;
+  // x-real-ip is only trustworthy when the platform guarantees the
+  // edge overwrites it: on Vercel, or where the operator explicitly
+  // asserts a trusted proxy (CART_TRUST_PROXY_HEADERS=true). On any
+  // other deployment the header is client-suppliable, so it collapses
+  // into the shared 'unknown' bucket instead of resetting budgets.
+  const proxyGuaranteed =
+    Boolean(process.env.VERCEL?.trim()) ||
+    process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true';
+  if (proxyGuaranteed) {
+    const realIp = request.headers.get('x-real-ip');
+    if (realIp && isValidIP(realIp)) return realIp;
+  }
 
   return 'unknown';
 }

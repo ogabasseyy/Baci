@@ -12,7 +12,11 @@ import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
-import { toCheckoutLaneItem } from '@/lib/agentic/ucp-cart-lane-items';
+import {
+  toCheckoutLaneItem,
+  toPersistedUcpItems,
+  toResolvedResponseLines,
+} from '@/lib/agentic/ucp-cart-lane-items';
 import { buildUcpCartResponse } from '@/lib/agentic/ucp-cart-response';
 import { buildUcpCartInsert } from '@/lib/agentic/ucp-cart-storage';
 import { adaptUcpShippingAddressToAgentic } from '@/lib/agentic/ucp-request-adapters';
@@ -172,20 +176,7 @@ export async function POST(request: NextRequest) {
   // by positional correlation with the request: when the calculator
   // drops an invalid lane, a positional match would attach that lane's
   // metadata to the next accepted line.
-  const normalizedItems = calculation.lineItems.map((lineItem) => ({
-    // The calculator resolves the parent product for variant-id lines;
-    // persist that pair, never the raw variant UUID as the product id.
-    id: lineItem.item.product_id,
-
-    quantity: lineItem.item.quantity,
-    ...(lineItem.item.variant_id
-      ? { variant_id: lineItem.item.variant_id }
-      : {}),
-    ...(lineItem.item.condition ? { condition: lineItem.item.condition } : {}),
-    ...(lineItem.item.variant_attributes
-      ? { variant_attributes: lineItem.item.variant_attributes }
-      : {}),
-  }));
+  const normalizedItems = toPersistedUcpItems(calculation.lineItems);
   const { error } = await supabase.from('agentic_cart_sessions').insert(
     buildUcpCartInsert({
       agentId: mutation.agentId,
@@ -278,7 +269,7 @@ export async function POST(request: NextRequest) {
         request,
       }),
       currency,
-      lineItems: calculation.lineItems,
+      lineItems: toResolvedResponseLines(calculation.lineItems),
       status: 'active',
       totals: calculation.totals,
     }),

@@ -9,6 +9,46 @@ type UcpLaneItem = {
 
 type UcpLaneLine = { item: UcpLaneItem; quantity: number };
 
+type CalculatedLaneLine = {
+  item: {
+    id?: string;
+    product_id: string;
+    quantity: number;
+    variant_id?: string;
+    condition?: string;
+    variant_attributes?: Record<string, string>;
+  };
+};
+
+/**
+ * Persisted session items built from the calculator's resolved lane
+ * identity: the parent product id plus the resolved variant, condition,
+ * and options of each accepted line.
+ */
+export function toPersistedUcpItems(lineItems: CalculatedLaneLine[]) {
+  return lineItems.map((lineItem) => ({
+    id: lineItem.item.product_id,
+    quantity: lineItem.item.quantity,
+    ...(lineItem.item.variant_id
+      ? { variant_id: lineItem.item.variant_id }
+      : {}),
+    ...(lineItem.item.condition ? { condition: lineItem.item.condition } : {}),
+    ...(lineItem.item.variant_attributes
+      ? { variant_attributes: lineItem.item.variant_attributes }
+      : {}),
+  }));
+}
+
+/** Calculator response lines re-identified by their resolved product. */
+export function toResolvedResponseLines<T extends CalculatedLaneLine>(
+  lineItems: T[]
+): T[] {
+  return lineItems.map((lineItem) => ({
+    ...lineItem,
+    item: { ...lineItem.item, id: lineItem.item.product_id },
+  }));
+}
+
 /** Checkout-calculator item carrying the full UCP lane identity. */
 export function toCheckoutLaneItem(line: UcpLaneLine): CheckoutItem {
   return {

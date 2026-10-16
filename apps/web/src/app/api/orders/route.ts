@@ -568,6 +568,7 @@ export async function POST(request: NextRequest) {
       const rejection = validateRedvaultRequest({
         merchantId: merchant_id,
         hasVoucherItem,
+        hasSharedCart: Boolean(shared_cart),
         discountCode: body.discount_code,
         useWallet: use_wallet_credit,
         useSavings: use_savings_credit,

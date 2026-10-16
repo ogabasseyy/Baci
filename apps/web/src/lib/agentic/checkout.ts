@@ -1,4 +1,5 @@
 // --- Interfaces based on Spec ---
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { orderConditionPrice } from '@/lib/checkout/order-condition-prices';
 import { getEffectiveStock } from '@/lib/product-stock';
@@ -75,9 +76,6 @@ export interface CheckoutItem {
 }
 
 // --- Helpers ---
-
-const POSTGRES_UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function calculateCheckoutSession(
   supabase: SupabaseClient,
@@ -232,7 +230,14 @@ export async function calculateCheckoutSession(
     itemsBaseAmount += itemTotal;
 
     lineItems.push({
-      id: `line_${requestedItem.id}`,
+      // Distinct per lane: sibling variants/conditions/options of one
+      // product must not share a line id in the response.
+      id: `line_${productId}_${variantId ?? 'base'}_${
+        requestedItem.condition ?? 'new'
+      }_${createHash('sha256')
+        .update(JSON.stringify(variantAttributes ?? {}))
+        .digest('hex')
+        .slice(0, 8)}`,
       item: {
         id: requestedItem.id,
         product_id: productId,

@@ -3,6 +3,8 @@ import {
   resolveCanonicalVariantLines,
   toCanonicalLaneLine,
   toCheckoutLaneItem,
+  toPersistedUcpItems,
+  toResolvedResponseLines,
 } from './ucp-cart-lane-items';
 
 describe('UCP lane item mapping', () => {
@@ -85,5 +87,38 @@ describe('resolveCanonicalVariantLines', () => {
     await expect(
       resolveCanonicalVariantLines(client as never, 'm-1', lines)
     ).resolves.toEqual(lines);
+  });
+});
+
+describe('toPersistedUcpItems and toResolvedResponseLines', () => {
+  const calculated = [
+    {
+      item: {
+        condition: 'used',
+        id: 'variant-1',
+        product_id: 'product-1',
+        quantity: 2,
+        variant_attributes: { size: 'L' },
+        variant_id: 'variant-1',
+      },
+    },
+  ];
+
+  it('persists the resolved product/variant pair', () => {
+    expect(toPersistedUcpItems(calculated as never)).toEqual([
+      {
+        condition: 'used',
+        id: 'product-1',
+        quantity: 2,
+        variant_attributes: { size: 'L' },
+        variant_id: 'variant-1',
+      },
+    ]);
+  });
+
+  it('re-identifies response lines by the resolved product', () => {
+    const lines = toResolvedResponseLines(calculated as never);
+    expect(lines[0]?.item.id).toBe('product-1');
+    expect(lines[0]?.item.variant_id).toBe('variant-1');
   });
 });

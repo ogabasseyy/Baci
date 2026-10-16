@@ -125,3 +125,7 @@ BEGIN
    IF SQLERRM<>'migrated cart is read-only' THEN RAISE; END IF;
  END;
 END $$;
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='product_variants' AND policyname='Agentic checkout variants are readable by scoped client')
+ THEN RAISE EXCEPTION 'Agentic variant read policy missing'; END IF;
+END $$;

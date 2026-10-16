@@ -15,6 +15,8 @@ import {
   resolveCanonicalVariantLines,
   toCanonicalLaneLine,
   toCheckoutLaneItem,
+  toPersistedUcpItems,
+  toResolvedResponseLines,
 } from '@/lib/agentic/ucp-cart-lane-items';
 import { ucpCartMigrationRaceOutcome } from '@/lib/agentic/ucp-cart-migration-race';
 import { readUcpCart } from '@/lib/agentic/ucp-cart-read-route';
@@ -233,7 +235,7 @@ export async function POST(request: NextRequest, props: RouteProps) {
   const updatePayload = buildUcpCartUpdate({
     buyer: parsed.data.buyer,
     existingBuyer: coerceJsonRecord(cartResult.cart.buyer),
-    items,
+    items: toPersistedUcpItems(calculation.lineItems),
     shippingAddress,
   });
   let updateQuery = context.supabase
@@ -286,7 +288,7 @@ export async function POST(request: NextRequest, props: RouteProps) {
         request,
       }),
       currency,
-      lineItems: calculation.lineItems,
+      lineItems: toResolvedResponseLines(calculation.lineItems),
       status: 'active',
       totals: calculation.totals,
     }),

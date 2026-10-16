@@ -36,6 +36,7 @@ try:
    sql+='\n'+(root/'supabase/migrations'/name).read_text()
   # Final installed cart chain after 15151000 (grant/expiry, receive,
   # merge, preview-token, guard, legacy-bridge lanes, marker fence).
+  sql+='\n\\i '+str(root/'supabase/migrations/20260430142500_add_agentic_scoped_access_policies.sql')
   sql+='\nCREATE SCHEMA IF NOT EXISTS realtime; CREATE TABLE realtime.messages(extension text, private boolean, topic text); ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY; CREATE FUNCTION realtime.topic() RETURNS text LANGUAGE sql STABLE AS $$ SELECT NULL::text $$;'
   for f in sorted((root/'supabase/migrations').glob('202610151[67]*.sql')):
    sql+='\n\\i '+str(f)

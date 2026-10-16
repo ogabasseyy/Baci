@@ -1,9 +1,11 @@
 import { NextRequest } from 'next/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getClientIdentifier,
   getTrustedClientIdentifier,
 } from './rate-limit-client';
+
+afterEach(() => vi.unstubAllEnvs());
 
 function requestWith(headers: Record<string, string>): NextRequest {
   return new NextRequest('http://localhost:3000/api/storefront/cart', {
@@ -45,7 +47,21 @@ describe('getTrustedClientIdentifier', () => {
     ).toBe('unknown');
   });
 
-  it('uses the platform-set x-real-ip', () => {
+  it('ignores a spoofable x-real-ip without a proxy guarantee', () => {
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
+    ).toBe('unknown');
+  });
+
+  it('uses x-real-ip when the platform guarantees it', () => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
+    ).toBe('192.0.2.44');
+    vi.stubEnv('VERCEL', '');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', 'true');
     expect(
       getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
     ).toBe('192.0.2.44');

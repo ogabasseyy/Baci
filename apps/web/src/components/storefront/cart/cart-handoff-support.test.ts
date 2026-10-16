@@ -2,8 +2,10 @@ import { expect, it } from 'vitest';
 import {
   clearHandoffAttempt,
   formatMinor,
+  loadActiveHandoff,
   loadOrCreateAttemptId,
   lockedAttemptChoice,
+  recordActiveHandoff,
   recordAttemptChoice,
   redactHandoffFragment,
 } from './cart-handoff-support';
@@ -15,6 +17,19 @@ it('locks an attempt to its first choice until cleared', () => {
   expect(lockedAttemptChoice('handoff-lock')).toBe('connect');
   clearHandoffAttempt('handoff-lock');
   expect(lockedAttemptChoice('handoff-lock')).toBeNull();
+});
+
+it('keeps an active handoff locator for reload until the attempt clears', () => {
+  sessionStorage.clear();
+  localStorage.clear();
+  expect(loadActiveHandoff()).toBeNull();
+  recordActiveHandoff('pairing-secret', 'handoff-reload');
+  expect(loadActiveHandoff()).toEqual({
+    token: 'pairing-secret',
+    handoffId: 'handoff-reload',
+  });
+  clearHandoffAttempt('handoff-reload');
+  expect(loadActiveHandoff()).toBeNull();
 });
 
 it('preserves the redemption attempt after a response is lost', () => {

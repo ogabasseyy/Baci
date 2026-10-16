@@ -181,6 +181,44 @@ describe('POST /api/storefront/cart/bootstrap', () => {
     expect(response.headers.get('set-cookie')).toBeNull();
   });
 
+  it('replaces a session cookie whose backing grant was revoked', async () => {
+    const sessionProof = issueCartSessionProof(
+      {
+        cartId: '22222222-2222-4222-8222-222222222222',
+        grantId: '33333333-3333-4333-8333-333333333333',
+        merchantId: MERCHANT_ID,
+        principalId: 'guest-revoked',
+        scope: 'session',
+      },
+      { environment: 'test', secret: TEST_SECRET }
+    );
+    vi.mocked(getCart).mockResolvedValue({
+      ok: false,
+      code: 'unauthorized',
+    } as never);
+    const cookieName = `baci-cart-${MERCHANT_ID}`;
+
+    const response = await postBootstrap({
+      body: {},
+      headers: { cookie: `csrf-token=csrf-1; ${cookieName}=${sessionProof}` },
+    });
+
+    expect(response.status).toBe(201);
+    // The dead proof is replaced with a fresh bootstrap cookie so the
+    // next create can proceed instead of replaying the revoked grant.
+    const cookieProof = cookieValue(
+      response.headers.get('set-cookie'),
+      cookieName
+    );
+    expect(cookieProof).toMatch(/^cp1\./);
+    const verified = verifyCartSessionProof(cookieProof ?? '', {
+      environment: 'test',
+      secret: TEST_SECRET,
+    });
+    expect(verified.ok).toBe(true);
+    if (verified.ok) expect(verified.session.cartId).toBeNull();
+  });
+
   it('does not resolve a merchant from a hint on Vercel deployment hosts', async () => {
     const response = await postBootstrap({
       body: {},

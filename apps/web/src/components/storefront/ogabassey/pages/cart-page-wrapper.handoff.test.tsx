@@ -52,6 +52,7 @@ function mockCartReady(): void {
 describe('CartPageWrapper handoff', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     mockCartReady();
   });
 
@@ -71,6 +72,24 @@ describe('CartPageWrapper handoff', () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText('Cart page')).not.toBeInTheDocument();
+  });
+
+  it('reconstructs the handoff from the tab locator after a reload', async () => {
+    mockSearch('');
+    sessionStorage.clear();
+    window.history.pushState({}, '', '/ogabassey/cart');
+    sessionStorage.setItem(
+      'baci-cart-handoff-active',
+      JSON.stringify({ token: 'ch1.saved', handoffId: 'handoff-saved' })
+    );
+
+    render(<CartPageWrapper merchantId="merchant-1" />);
+
+    expect(
+      await screen.findByText(
+        'Handoff continuation for handoff-saved with ch1.saved'
+      )
+    ).toBeInTheDocument();
   });
 
   it('holds the item transfer while a handoff pairing owns the surface', async () => {

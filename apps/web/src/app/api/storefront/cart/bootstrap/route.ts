@@ -154,7 +154,14 @@ export async function POST(request: NextRequest) {
             hasLiveSessionCookie =
               current.cart.state === 'active' ||
               current.cart.state === 'checkout';
-          else if (current.code === 'expired' || current.code === 'not_found')
+          else if (
+            current.code === 'expired' ||
+            current.code === 'not_found' ||
+            // A revoked grant reads as unauthorized forever; keeping
+            // the flag would strand the shopper on the dead proof
+            // until it expires instead of installing the fresh one.
+            current.code === 'unauthorized'
+          )
             hasLiveSessionCookie = false;
         } catch {
           /* An indeterminate read must not discard a potentially live cart. */

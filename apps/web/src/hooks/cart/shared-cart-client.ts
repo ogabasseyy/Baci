@@ -138,26 +138,30 @@ type BootstrapResult =
   | { ok: true }
   | { ok: false; code: CartErrorCode; retryable: boolean };
 
-let inFlightBootstrap: Promise<BootstrapResult> | null = null;
+const inFlightBootstraps = new Map<string, Promise<BootstrapResult>>();
 
 /**
- * Bootstrap is single-flight: two concurrent bootstraps can both
- * leave without a live-session cookie, and whichever Set-Cookie lands
- * last wins — a cart-less bootstrap proof arriving after provisioning
- * would overwrite the proof bound to the just-created cart and orphan
- * it. Callers do not all name the merchant the same way (the account
- * panel omits the slug and lets the host resolve it), so the flight
- * is global rather than keyed by the slug argument: one page serves
- * one merchant.
+ * Bootstrap is single-flight per resolved merchant: two concurrent
+ * bootstraps can both leave without a live-session cookie, and
+ * whichever Set-Cookie lands last wins — a cart-less bootstrap proof
+ * arriving after provisioning would overwrite the proof bound to the
+ * just-created cart and orphan it. Callers do not all name the
+ * merchant the same way (the account panel omits the slug and lets
+ * the host resolve it), so an unnamed flight coalesces with any
+ * in-flight bootstrap, while distinct named merchants — the
+ * client-side merchant-switch flow — keep separate flights.
  */
 export function bootstrapSharedCart(
   merchantSlug?: string
 ): Promise<BootstrapResult> {
-  if (inFlightBootstrap) return inFlightBootstrap;
+  const key = merchantSlug ?? '';
+  for (const [flightKey, pending] of inFlightBootstraps) {
+    if (flightKey === key || flightKey === '' || key === '') return pending;
+  }
   const pending = requestBootstrap(merchantSlug).finally(() => {
-    if (inFlightBootstrap === pending) inFlightBootstrap = null;
+    if (inFlightBootstraps.get(key) === pending) inFlightBootstraps.delete(key);
   });
-  inFlightBootstrap = pending;
+  inFlightBootstraps.set(key, pending);
   return pending;
 }
 

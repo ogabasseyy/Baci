@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import { cartSessionStorage } from '@/lib/cart/session-storage';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { useCartStore } from './cart-store';
@@ -11,7 +12,21 @@ import {
 /** Account teardown clears private device state, never a shared server cart. */
 export async function clearDeviceCartForAccountTeardown(): Promise<void> {
   if (!hasSharedCartWriter()) {
-    await useCartStore.getState().clearCart();
+    // No writer is mounted (bridge not yet installed or enrollment
+    // disabled since last launch): the legacy clear alone would leave
+    // the shared reference and the stored account-owned proof behind,
+    // so retire both explicitly for the next device owner.
+    const state = useCartStore.getState();
+    const merchantId = state.sharedCartRef?.merchantId;
+    await state.clearCart();
+    useCartStore.setState({ sharedCartRef: undefined });
+    if (merchantId) {
+      try {
+        await cartSessionStorage.remove(merchantId);
+      } catch {
+        /* Storage may be unavailable; the reference is already gone. */
+      }
+    }
     return;
   }
   const retirement = retireSharedCartWriter();

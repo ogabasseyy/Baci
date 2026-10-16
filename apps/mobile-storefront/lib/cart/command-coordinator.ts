@@ -1,5 +1,4 @@
 import type {
-  CartErrorCode,
   CartMutationInput,
   CartSnapshot,
   CreateCartInput,
@@ -40,7 +39,7 @@ interface CoordinatorOptions {
 // (temporarily_unavailable, rate_limited) is non-retryable for the
 // identical request — replaying it would be rejected again and would
 // strand every later write behind pending_operation.
-const definitiveServerCodes: ReadonlySet<string> = new Set<CartErrorCode>([
+const definitiveServerCodes: ReadonlySet<string> = new Set<string>([
   'unauthorized',
   'merchant_unavailable',
   'not_found',
@@ -53,6 +52,14 @@ const definitiveServerCodes: ReadonlySet<string> = new Set<CartErrorCode>([
   'merge_conflict',
   'too_many_lines',
   'handoff_consumed',
+  // Route-boundary proof failures are equally definitive for the
+  // identical request: the proof is gone or revoked, so replaying the
+  // saved receipt can only fail the same way and would strand every
+  // later write behind pending_operation.
+  'missing_proof',
+  'expired_proof',
+  'invalid_proof',
+  'merchant_mismatch',
 ]);
 
 function isDefinitiveRejection(error: unknown): boolean {

@@ -180,9 +180,58 @@ export function clearHandoffAttempt(handoffId: string): void {
     window.localStorage.removeItem(key);
     window.localStorage.removeItem(attemptChoiceStorageKey(handoffId));
     window.localStorage.removeItem(attemptBodyStorageKey(handoffId));
+    const active = loadActiveHandoff();
+    if (active?.handoffId === handoffId)
+      window.sessionStorage.removeItem(ACTIVE_HANDOFF_KEY);
   } catch {
     /* Storage may be disabled. */
   }
+}
+
+const ACTIVE_HANDOFF_KEY = 'baci-cart-handoff-active';
+
+/**
+ * Tab-scoped locator for an in-progress handoff. The pairing secret
+ * lives in the URL fragment, which the continuation immediately
+ * redacts; without this record a browser reload after an
+ * indeterminate redemption could never reconstruct the flow or
+ * replay its persisted attempt. Session storage dies with the tab.
+ */
+export function recordActiveHandoff(token: string, handoffId: string): void {
+  try {
+    window.sessionStorage.setItem(
+      ACTIVE_HANDOFF_KEY,
+      JSON.stringify({ token, handoffId })
+    );
+  } catch {
+    /* Storage is optional; the in-page flow continues regardless. */
+  }
+}
+
+export function loadActiveHandoff(): {
+  token: string;
+  handoffId: string;
+} | null {
+  try {
+    const stored = window.sessionStorage.getItem(ACTIVE_HANDOFF_KEY);
+    if (!stored) return null;
+    const parsed: unknown = JSON.parse(stored);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      'token' in parsed &&
+      'handoffId' in parsed &&
+      typeof parsed.token === 'string' &&
+      typeof parsed.handoffId === 'string' &&
+      parsed.token &&
+      parsed.handoffId
+    ) {
+      return { token: parsed.token, handoffId: parsed.handoffId };
+    }
+  } catch {
+    /* Storage is optional. */
+  }
+  return null;
 }
 
 export function formatMinor(minor: number, currency: string): string {

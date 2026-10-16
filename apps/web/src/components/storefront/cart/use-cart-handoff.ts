@@ -14,6 +14,7 @@ import {
   mergeResolutionList,
   type PreviewResponse,
   planHandoffMerge as planMerge,
+  recordActiveHandoff,
   recordAttemptBody,
   recordAttemptChoice,
   recordResolutionList,
@@ -39,6 +40,9 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   const [destinationError, setDestinationError] = useState<string | null>(null);
   const bootstrapRequired = useRef(false);
   useLayoutEffect(() => {
+    // Preserve a tab-scoped locator before the secret leaves the URL,
+    // so a reload can reconstruct this flow and replay its attempt.
+    recordActiveHandoff(token, handoffId);
     redactHandoffFragment();
   }, []);
 
@@ -120,6 +124,15 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         await loadDestination(payload.merchant?.slug ?? null);
       } else {
         setDestChecked(true);
+        if (payload.status === 'consumed') {
+          // A link consumed by our own earlier attempt (whose success
+          // response or replacement cookie was lost) replays its
+          // receipt when the persisted body is resent; a link consumed
+          // by someone else has no local body and simply ends here.
+          const persistedBody = loadAttemptBody(handoffId);
+          if (persistedBody)
+            await postRedeem(persistedBody, payload.merchant?.slug);
+        }
       }
       return payload;
     } catch {
@@ -134,7 +147,10 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     setLockedChoice(choice);
   }
 
-  function postRedeem(body: Record<string, unknown>): Promise<boolean> {
+  function postRedeem(
+    body: Record<string, unknown>,
+    merchantSlug = preview?.merchant?.slug
+  ): Promise<boolean> {
     // Persist the exact body before sending: retries of an unresolved
     // attempt resend it verbatim instead of replanning from the
     // shopper's possibly edited selections.
@@ -143,7 +159,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     return postHandoffRedeem(
       {
         handoffId,
-        merchantSlug: preview?.merchant?.slug,
+        merchantSlug,
         bootstrapRequired,
         setRedeeming,
         setRedeemError,

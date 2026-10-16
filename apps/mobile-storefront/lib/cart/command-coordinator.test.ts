@@ -87,6 +87,10 @@ it.each([
   'not_found',
   'merchant_unavailable',
   'idempotency_conflict',
+  'missing_proof',
+  'expired_proof',
+  'invalid_proof',
+  'merchant_mismatch',
 ])('releases the command receipt after a definitive %s rejection', async (code) => {
   const s = setup();
   s.client.command.mockRejectedValue(new NativeCartError(code));

@@ -8,6 +8,7 @@ import { fetchAndAddCartItems } from '@/lib/cart-link-transfer';
 import { resolveGuestCartTransfer } from '@/lib/resolve-guest-cart-transfer';
 import { CartAccountLink } from '../../cart/cart-account-link';
 import { CartHandoff } from '../../cart/cart-handoff';
+import { loadActiveHandoff } from '../../cart/cart-handoff-support';
 import { CartImportConflicts } from '../../cart/cart-import-conflicts';
 import { CartPage } from './cart-page';
 
@@ -36,7 +37,12 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
   // after hydration and retain it when the continuation strips the URL.
   const [pairing, setPairing] = useState<ReturnType<typeof parseHandoffPairing>>(null);
   useEffect(() => {
-    setPairing(parseHandoffPairing(window.location.hash));
+    // After a reload the fragment is already redacted; fall back to
+    // the tab-scoped locator recorded before redaction so an
+    // unresolved handoff (and its persisted attempt) stays reachable.
+    setPairing(
+      parseHandoffPairing(window.location.hash) ?? loadActiveHandoff()
+    );
   }, []);
   const processedRef = useRef(false);
   const blockedNoticeRef = useRef(false);

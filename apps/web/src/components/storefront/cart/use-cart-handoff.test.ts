@@ -202,6 +202,86 @@ it('resends the persisted body for a top-level retry after remount', async () =>
   expect(bodies[0]?.expectedDestVersion).toBe(3);
 });
 
+it('replays the persisted attempt when the preview reports consumed', async () => {
+  const snapshot = {
+    cartId: 'incoming-cart',
+    currency: 'NGN',
+    estimatedTotals: false,
+    expiresAt: '2099-01-01T00:00:00Z',
+    lines: [],
+    merchantId: 'merchant-1',
+    state: 'active',
+    subtotalMinor: 0,
+    totalMinor: 0,
+    version: 1,
+  };
+  const preview = () =>
+    new Response(
+      JSON.stringify({
+        status: 'pending',
+        merchant: { id: 'merchant-1', slug: 'shop' },
+        snapshot,
+        expiresAt: '2099-01-01T00:00:00Z',
+      })
+    );
+  const destination = () =>
+    new Response(
+      JSON.stringify({ cart: { ...snapshot, cartId: 'dest-cart', version: 3 } })
+    );
+  const bodies: Record<string, unknown>[] = [];
+  const replaceMock = vi.fn();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    value: { ...window.location, pathname: '/cart', replace: replaceMock },
+  });
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce(preview())
+    .mockResolvedValueOnce(destination())
+    .mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ code: 'temporarily_unavailable' }), {
+        status: 503,
+      });
+    });
+  vi.stubGlobal('fetch', fetchMock);
+  const { result } = renderHook(() =>
+    useCartHandoff({ token: 'valid', handoffId: 'public-consumed' })
+  );
+  await waitFor(() => expect(result.current.destChecked).toBe(true));
+  await act(async () => {
+    await result.current.act('connect');
+  });
+  expect(bodies).toHaveLength(1);
+  // The link now reads consumed (our first attempt committed but its
+  // response was lost): reloading the preview must replay the exact
+  // persisted body, and the replayed success finishes the flow.
+  fetchMock
+    .mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          status: 'consumed',
+          merchant: { id: 'merchant-1', slug: 'shop' },
+          snapshot,
+          expiresAt: '2099-01-01T00:00:00Z',
+        })
+      )
+    )
+    .mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ cart: snapshot }), {
+        status: 200,
+      });
+    });
+  await act(async () => {
+    await result.current.loadPreview();
+  });
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toEqual(bodies[0]);
+  expect(replaceMock).toHaveBeenCalled();
+  expect(result.current.lockedChoice).toBeNull();
+});
+
 it('does not lock the choice when merge preflight exits without sending', async () => {
   const snapshot = {
     cartId: 'incoming-cart',

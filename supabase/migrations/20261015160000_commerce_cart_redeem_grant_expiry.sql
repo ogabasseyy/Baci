@@ -33,11 +33,33 @@ BEGIN
       AND coalesce(line->'item'->'options','{}'::jsonb)=coalesce(l.options,'{}'::jsonb))) THEN
     RETURN jsonb_build_object('ok',false,'code','invalid_item','state',null,'replayed',false);
    END IF;
-   -- The versioned merge protocol has one context choice per identity. Do not
-   -- silently drop multiple same-identity voucher lines within one source.
-   IF EXISTS(SELECT 1 FROM public.commerce_cart_lines l WHERE l.merchant_id=merchant AND l.cart_id IN(handoff.source_cart_id,p_dest_cart_id)
-     GROUP BY l.cart_id,l.product_id,l.variant_id,l.condition,l.options HAVING count(*)>1) THEN
-    RETURN jsonb_build_object('ok',false,'code','merge_conflict','state',null,'replayed',false);
+   -- Exact sibling lane coverage.
+   IF EXISTS(SELECT 1 FROM public.commerce_cart_lines l
+    WHERE l.merchant_id=merchant AND l.cart_id IN(handoff.source_cart_id,p_dest_cart_id)
+    AND EXISTS(SELECT 1 FROM public.commerce_cart_lines sibling
+      WHERE sibling.merchant_id=merchant AND sibling.cart_id IN(handoff.source_cart_id,p_dest_cart_id)
+        AND sibling.product_id=l.product_id AND sibling.variant_id IS NOT DISTINCT FROM l.variant_id
+        AND sibling.condition IS NOT DISTINCT FROM l.condition AND sibling.options=l.options
+      GROUP BY sibling.cart_id HAVING count(*)>1)
+    AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_lines) line
+      CROSS JOIN LATERAL public.commerce_cart_parse_input_line(line) parsed
+      WHERE parsed.pi_product=l.product_id AND parsed.pi_variant IS NOT DISTINCT FROM l.variant_id
+        AND parsed.pi_condition IS NOT DISTINCT FROM l.condition AND parsed.pi_options=coalesce(l.options,'{}'::jsonb)
+        AND ((NOT (line ? 'sourceLineId')
+          AND parsed.pi_voucher_token IS NOT DISTINCT FROM l.voucher_token
+          AND parsed.pi_voucher_award IS NOT DISTINCT FROM l.voucher_award_id::text
+          AND parsed.pi_negotiated IS NOT DISTINCT FROM l.negotiated_unit_price_minor
+          AND parsed.pi_neg_status IS NOT DISTINCT FROM l.negotiation_status)
+        OR EXISTS(SELECT 1 FROM public.commerce_cart_lines selected
+          WHERE selected.id::text=line->>'sourceLineId' AND selected.merchant_id=merchant
+            AND selected.cart_id IN(handoff.source_cart_id,p_dest_cart_id)
+            AND selected.product_id=l.product_id AND selected.variant_id IS NOT DISTINCT FROM l.variant_id
+            AND selected.condition IS NOT DISTINCT FROM l.condition AND selected.options=l.options
+            AND selected.voucher_token IS NOT DISTINCT FROM l.voucher_token
+            AND selected.voucher_award_id IS NOT DISTINCT FROM l.voucher_award_id
+            AND selected.negotiated_unit_price_minor IS NOT DISTINCT FROM l.negotiated_unit_price_minor
+            AND selected.negotiation_status IS NOT DISTINCT FROM l.negotiation_status)))) THEN
+    RETURN jsonb_build_object('ok',false,'code','invalid_item','state',null,'replayed',false);
    END IF;
   END IF;
  ELSIF claims->>'cart_scope'='bootstrap' AND EXISTS(SELECT 1 FROM public.commerce_cart_grants g WHERE g.merchant_id=(claims->>'cart_merchant_id')::uuid AND g.principal_id=claims->>'cart_principal_id' AND g.revoked_at IS NOT NULL) THEN

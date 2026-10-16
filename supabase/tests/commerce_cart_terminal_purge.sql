@@ -65,6 +65,30 @@ BEGIN
   END IF;
 END $$;
 
+-- Device-retirement tombstones older than every credential replay
+-- window are reclaimed by the same purge; recent ones survive.
+DO $$
+DECLARE
+  m uuid := '11111111-1111-4111-8111-111111111111';
+BEGIN
+  INSERT INTO public.commerce_cart_device_retirements(merchant_id, device_principal_id, retired_at)
+  VALUES (m, 'purge-old-device', now() - interval '31 days'),
+         (m, 'purge-fresh-device', now() - interval '1 day');
+  PERFORM public.commerce_cart_purge_terminal_carts(interval '90 days', 100);
+  IF EXISTS (
+    SELECT 1 FROM public.commerce_cart_device_retirements
+    WHERE merchant_id = m AND device_principal_id = 'purge-old-device'
+  ) THEN
+    RAISE EXCEPTION 'stale device tombstone must be purged';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.commerce_cart_device_retirements
+    WHERE merchant_id = m AND device_principal_id = 'purge-fresh-device'
+  ) THEN
+    RAISE EXCEPTION 'recent device tombstone must survive';
+  END IF;
+END $$;
+
 -- Retention floor and batch bounds are enforced.
 DO $$
 DECLARE

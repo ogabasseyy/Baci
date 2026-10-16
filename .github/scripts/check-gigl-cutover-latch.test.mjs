@@ -122,7 +122,7 @@ describe('GIGL cutover latch check', () => {
     assert.equal(values.manifest_drift, 'true');
   });
 
-  it('never passes the job token on the git command line', () => {
+  it('never passes the job token on the git command line and writes basic x-access-token auth config', () => {
     const { origin, root, tip } = fixture();
     const checkout = checkoutAt(origin, root, 'checkout', tip);
     const realGit = spawnSync('/bin/sh', ['-c', 'command -v git'], {
@@ -131,12 +131,14 @@ describe('GIGL cutover latch check', () => {
     assert.ok(realGit.length > 0, 'expected to resolve a real git binary');
     const binDir = join(root, 'shim-bin');
     const argvLog = join(root, 'git-argv.log');
+    const authConfigLog = join(root, 'git-auth-config.log');
     mkdirSync(binDir, { recursive: true });
     writeFileSync(argvLog, '');
+    writeFileSync(authConfigLog, '');
     const shim = join(binDir, 'git');
     writeFileSync(
       shim,
-      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${argvLog}"\nexec "${realGit}" "$@"\n`
+      `#!/bin/sh\nprintf '%s\\n' "$*" >> "${argvLog}"\nfor arg in "$@"; do\n  case "$arg" in\n    include.path=*) cat "\${arg#include.path=}" >> "${authConfigLog}" 2>/dev/null || true ;;\n  esac\ndone\nexec "${realGit}" "$@"\n`
     );
     chmodSync(shim, 0o755);
 
@@ -161,6 +163,21 @@ describe('GIGL cutover latch check', () => {
     assert.ok(
       !argvLines.some((line) => line.includes(sentinel)),
       'job token must not appear in git argv'
+    );
+    const authConfigContent = readFileSync(authConfigLog, 'utf8');
+    const expectedBasic = Buffer.from(`x-access-token:${sentinel}`).toString(
+      'base64'
+    );
+    assert.ok(
+      authConfigContent
+        .split('\n')
+        .map((line) => line.trim())
+        .includes(`extraHeader = AUTHORIZATION: basic ${expectedBasic}`),
+      'expected basic auth header in git auth config'
+    );
+    assert.ok(
+      !authConfigContent.includes(sentinel),
+      'raw job token must not appear unencoded in git auth config'
     );
   });
 

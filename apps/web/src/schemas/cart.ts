@@ -41,7 +41,7 @@ export const cartItemIdentitySchema = z.strictObject({
 });
 
 const cartLineAttachmentsSchema = z.strictObject({
-  negotiatedUnitPriceMinor: z.number().int().positive().optional(),
+  negotiatedUnitPriceMinor: z.number().int().nonnegative().optional(),
   negotiationStatus: z.enum(['pending', 'accepted', 'rejected']).optional(),
   voucherAwardId: z.string().trim().min(1).max(128).optional(),
   voucherToken: z.string().trim().min(1).max(512).optional(),
@@ -75,7 +75,7 @@ const cartCommandSchema = z.discriminatedUnion('type', [
   }),
   z.strictObject({
     lineId: z.string().trim().min(1).max(64),
-    negotiatedUnitPriceMinor: z.number().int().min(1).nullable(),
+    negotiatedUnitPriceMinor: z.number().int().min(0).nullable(),
     type: z.literal('set_negotiated_price'),
   }),
   z.strictObject({

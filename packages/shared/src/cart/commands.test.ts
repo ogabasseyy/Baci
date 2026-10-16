@@ -138,7 +138,7 @@ describe('validateCartCommand', () => {
       lines: [
         {
           item: { productId: '11111111-1111-4111-8111-111111111111' },
-          negotiatedUnitPriceMinor: 0,
+          negotiatedUnitPriceMinor: -1,
           quantity: 1,
         },
       ],
@@ -199,6 +199,13 @@ describe('cart command validation boundaries', () => {
         type: 'set_negotiated_price',
         lineId: 'line-1',
         negotiatedUnitPriceMinor: 0,
+      })
+    ).toBeNull();
+    expect(
+      validateCartCommand({
+        type: 'set_negotiated_price',
+        lineId: 'line-1',
+        negotiatedUnitPriceMinor: -1,
       })?.code
     ).toBe('invalid_item');
     expect(

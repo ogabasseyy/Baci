@@ -110,6 +110,31 @@ describe('sharedCartMutationRequestSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('accepts a zero negotiated price and rejects negative prices', () => {
+    expect(
+      sharedCartMutationRequestSchema.safeParse({
+        command: {
+          lineId: 'line-1',
+          negotiatedUnitPriceMinor: 0,
+          type: 'set_negotiated_price',
+        },
+        expectedVersion: 3,
+        operationId: 'op-1',
+      }).success
+    ).toBe(true);
+    expect(
+      sharedCartMutationRequestSchema.safeParse({
+        command: {
+          lineId: 'line-1',
+          negotiatedUnitPriceMinor: -1,
+          type: 'set_negotiated_price',
+        },
+        expectedVersion: 3,
+        operationId: 'op-1',
+      }).success
+    ).toBe(false);
+  });
+
   it('rejects unknown commands and missing versions', () => {
     expect(
       sharedCartMutationRequestSchema.safeParse({

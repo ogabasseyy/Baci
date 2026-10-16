@@ -78,6 +78,22 @@ describe('buildCartSnapshot', () => {
     expect(snapshot.totalMinor).toBe(2000);
   });
 
+  it('prices an accepted zero negotiated price at zero', () => {
+    const { snapshot } = buildCartSnapshot(
+      raw([
+        line({
+          negotiatedUnitPriceMinor: 0,
+          negotiationStatus: 'accepted',
+          quantity: 2,
+          unitPriceMinor: 2500,
+        }),
+      ])
+    );
+
+    expect(snapshot.lines[0].lineTotalMinor).toBe(0);
+    expect(snapshot.totalMinor).toBe(0);
+  });
+
   it('warns and reprices when the service invalidated a negotiation', () => {
     const { snapshot, warnings } = buildCartSnapshot(
       raw([

@@ -64,9 +64,9 @@ function validateAttachments(
   if (
     line.negotiatedUnitPriceMinor !== undefined &&
     (!Number.isInteger(line.negotiatedUnitPriceMinor) ||
-      line.negotiatedUnitPriceMinor <= 0)
+      line.negotiatedUnitPriceMinor < 0)
   ) {
-    return issue('Negotiated prices must be positive minor-unit integers.');
+    return issue('Negotiated prices must be non-negative minor-unit integers.');
   }
   if (
     line.negotiationStatus !== undefined &&
@@ -138,10 +138,10 @@ export function validateCartCommand(
       if (
         command.negotiatedUnitPriceMinor !== null &&
         (!Number.isInteger(command.negotiatedUnitPriceMinor) ||
-          command.negotiatedUnitPriceMinor <= 0)
+          command.negotiatedUnitPriceMinor < 0)
       ) {
         return issue(
-          'A negotiated price must be null or a positive minor-unit integer.'
+          'A negotiated price must be null or a non-negative minor-unit integer.'
         );
       }
       return null;

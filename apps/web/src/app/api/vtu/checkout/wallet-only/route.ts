@@ -1,4 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
@@ -10,6 +9,10 @@ import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import { cleanupOrphanVtuTransactionAfterKeyRace } from '@/lib/vtu-orphan-transaction-cleanup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
+import {
+  findExistingIdempotencyRow,
+  verifyReplayTransactionBinding,
+} from '@/lib/vtu-replay-binding';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
 
@@ -29,53 +32,6 @@ import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
  */
 function createErrorResponse(error: string, status = 400) {
   return NextResponse.json({ error }, { status });
-}
-
-interface ExistingIdempotencyRow {
-  key: string;
-  vtu_transaction_id: string;
-  customer_id: string;
-  merchant_id: string;
-  request_fingerprint: string;
-}
-
-async function findExistingIdempotencyRow(
-  supabase: SupabaseClient,
-  key: string
-): Promise<ExistingIdempotencyRow | null> {
-  const { data, error } = await supabase
-    .from('vtu_idempotency_keys')
-    .select(
-      'key, vtu_transaction_id, customer_id, merchant_id, request_fingerprint'
-    )
-    .eq('key', key)
-    .maybeSingle();
-  if (error) {
-    throw new Error(`Failed to look up idempotency key: ${error.message}`);
-  }
-  return data ?? null;
-}
-
-interface ReplayTransactionBinding {
-  customer_id: string | null;
-  id: string;
-  merchant_id: string | null;
-  status: string | null;
-}
-
-async function findReplayTransactionBinding(
-  supabase: SupabaseClient,
-  transactionId: string
-): Promise<ReplayTransactionBinding | null> {
-  const { data, error } = await supabase
-    .from('vtu_transactions')
-    .select('id, customer_id, merchant_id, status')
-    .eq('id', transactionId)
-    .maybeSingle();
-  if (error) {
-    throw new Error(`Failed to look up replay transaction: ${error.message}`);
-  }
-  return (data as ReplayTransactionBinding | null) ?? null;
 }
 
 /**
@@ -162,40 +118,14 @@ export async function POST(request: NextRequest) {
           409
         );
       }
-      // Owner binding (Muse R119 MEDIUM): the guards above validated
-      // the IDEMPOTENCY row's owner, but fulfillment debits/refunds
-      // from the TRANSACTION row — bind them, or a key↔tx
-      // inconsistency (orphan leftovers, manual repair) would
-      // transact as the wrong customer. 400 rotates the key (fresh
-      // purchase); a missing row is equally terminal for this key.
-      const bound = await findReplayTransactionBinding(
+      // Owner binding: the key row's owner was validated above;
+      // the transaction row must match before fulfilling.
+      const binding = await verifyReplayTransactionBinding({
         supabase,
-        existing.vtu_transaction_id
-      );
-      if (!bound) {
-        return createErrorResponse(
-          'Purchase for this Idempotency-Key no longer exists. Please start a new purchase.',
-          400
-        );
-      }
-      if (
-        bound.customer_id !== existing.customer_id ||
-        bound.merchant_id !== existing.merchant_id
-      ) {
-        // The key itself is the unguessable replay credential — log
-        // the transaction id instead (Muse R108 MEDIUM).
-        console.error('Idempotency-Key transaction owner mismatch:', {
-          keyCustomerId: existing.customer_id,
-          keyMerchantId: existing.merchant_id,
-          status: bound.status,
-          transactionCustomerId: bound.customer_id,
-          transactionId: bound.id,
-          transactionMerchantId: bound.merchant_id,
-        });
-        return createErrorResponse(
-          'Idempotency-Key does not belong to this purchase.',
-          400
-        );
+        keyRow: existing,
+      });
+      if ('error' in binding) {
+        return createErrorResponse(binding.error, 400);
       }
       // Current-attempt overlay: the retry carries the freshest
       // phone/reference; attempt-1's snapshot must not win. Runs on
@@ -295,32 +225,12 @@ export async function POST(request: NextRequest) {
         }
         // Same owner binding as the replay path: the winner's
         // transaction row must belong to the key's owner.
-        const racedBound = await findReplayTransactionBinding(
+        const racedBinding = await verifyReplayTransactionBinding({
           supabase,
-          racedExisting.vtu_transaction_id
-        );
-        if (!racedBound) {
-          return createErrorResponse(
-            'Purchase for this Idempotency-Key no longer exists. Please start a new purchase.',
-            400
-          );
-        }
-        if (
-          racedBound.customer_id !== racedExisting.customer_id ||
-          racedBound.merchant_id !== racedExisting.merchant_id
-        ) {
-          console.error('Idempotency-Key transaction owner mismatch:', {
-            keyCustomerId: racedExisting.customer_id,
-            keyMerchantId: racedExisting.merchant_id,
-            status: racedBound.status,
-            transactionCustomerId: racedBound.customer_id,
-            transactionId: racedBound.id,
-            transactionMerchantId: racedBound.merchant_id,
-          });
-          return createErrorResponse(
-            'Idempotency-Key does not belong to this purchase.',
-            400
-          );
+          keyRow: racedExisting,
+        });
+        if ('error' in racedBinding) {
+          return createErrorResponse(racedBinding.error, 400);
         }
         // Same current-attempt overlay as the replay path (user
         // client, ownership-enforced RPC — see above).

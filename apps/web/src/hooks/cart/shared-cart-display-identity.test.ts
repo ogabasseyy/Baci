@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cartItemToIdentity,
+  displayLineMatchesAddLane,
   isCartCondition,
 } from './shared-cart-display-identity';
 
@@ -27,5 +28,25 @@ describe('display identity normalization', () => {
       cartItemToIdentity({ id: 'phone', condition: 'unsupported' })
     ).toEqual({ productId: 'phone' });
     expect(isCartCondition(undefined)).toBe(false);
+  });
+  it('matches add lanes only when every attachment agrees', () => {
+    const line = {
+      negotiatedPrice: 12.5,
+      negotiationStatus: 'accepted' as const,
+      quizAwardId: 'award',
+      quizVoucherToken: 'token',
+    };
+    expect(
+      displayLineMatchesAddLane(line as never, {
+        negotiatedUnitPriceMinor: 1250,
+        negotiationStatus: 'accepted',
+        voucherAwardId: 'award',
+        voucherToken: 'token',
+      })
+    ).toBe(true);
+    expect(
+      displayLineMatchesAddLane(line as never, { voucherToken: 'token' })
+    ).toBe(false);
+    expect(displayLineMatchesAddLane({} as never, {})).toBe(true);
   });
 });

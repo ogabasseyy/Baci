@@ -49,3 +49,30 @@ export function cartItemToIdentity(
 export function identityKeyOfDisplay(item: SharedCartDisplayItem): string {
   return cartLineIdentity(cartItemToIdentity(item));
 }
+
+/**
+ * Attachment-lane identity for adds: the server merges an add only
+ * into the line whose voucher AND negotiation attachments match, so
+ * capacity checks and optimistic matching must compare the full lane
+ * (negotiated price in minor units, status normalized to 'none').
+ */
+export function displayLineMatchesAddLane(
+  line: SharedCartDisplayItem,
+  lane: {
+    voucherToken?: string;
+    voucherAwardId?: string;
+    negotiatedUnitPriceMinor?: number;
+    negotiationStatus?: string;
+  }
+): boolean {
+  const lineNegotiatedMinor =
+    line.negotiatedPrice != null
+      ? Math.round(line.negotiatedPrice * 100)
+      : undefined;
+  return (
+    (line.quizVoucherToken ?? undefined) === lane.voucherToken &&
+    (line.quizAwardId ?? undefined) === lane.voucherAwardId &&
+    lineNegotiatedMinor === lane.negotiatedUnitPriceMinor &&
+    (line.negotiationStatus ?? 'none') === (lane.negotiationStatus ?? 'none')
+  );
+}

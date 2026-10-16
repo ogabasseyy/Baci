@@ -1,9 +1,8 @@
-import { CART_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-cart-pending-sources';
 // Raw frozen replay-source data; update migration hashes in lockstep.
-
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
 import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
+import { CART_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-cart-pending-sources';
 import { CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-checkout-recovery-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';

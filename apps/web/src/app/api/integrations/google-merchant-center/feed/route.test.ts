@@ -196,6 +196,32 @@ describe('GET /api/integrations/google-merchant-center/feed', () => {
     );
   });
 
+  it.each([
+    '//attacker.example/?next=https://attacker.example&merchant_slug=victim#fragment',
+    'https://attacker.example/\\path?x=1',
+    'merchant%2Fname & value',
+  ])('keeps resolved slug %s inside one encoded query value', async (slug) => {
+    mockDomainLookup({
+      data: { merchant_id: 'merchant-1', domain: 'ogabassey.com' },
+      error: null,
+    });
+    mockResolveFeedMerchant.mockResolvedValue({ id: 'merchant-1', slug });
+    const { GET } = await import('./route');
+    const response = await GET(
+      makeRequest(
+        'https://ogabassey.com/api/integrations/google-merchant-center/feed',
+        { host: 'ogabassey.com' }
+      )
+    );
+    const location = new URL(response.headers.get('location') ?? '');
+    expect(response.status).toBe(308);
+    expect(location.origin).toBe('https://usebaci.com');
+    expect(location.pathname).toBe('/api/feed/google-merchant');
+    expect(location.searchParams.get('merchant_slug')).toBe(slug);
+    expect([...location.searchParams.keys()]).toEqual(['merchant_slug']);
+    expect(location.hash).toBe('');
+  });
+
   it('returns 404 when the host cannot be mapped to a merchant', async () => {
     mockDomainLookup({ data: null, error: null });
     const { GET } = await import('./route');

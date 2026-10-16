@@ -119,11 +119,11 @@ export async function GET(request: NextRequest) {
     // Feed lookup accepts merchant_slug independently of the request host.
     // Keep every legacy redirect on the server-configured Baci origin; an
     // active custom domain must never become redirect authority from headers.
+    const merchantSlug = encodeURIComponent(target.merchantSlug);
     const redirectUrl = new URL(
-      '/api/feed/google-merchant',
+      `/api/feed/google-merchant?merchant_slug=${merchantSlug}`,
       `https://${getRootDomain()}`
     );
-    redirectUrl.searchParams.set('merchant_slug', target.merchantSlug);
 
     return NextResponse.redirect(redirectUrl, 308);
   } catch (error) {

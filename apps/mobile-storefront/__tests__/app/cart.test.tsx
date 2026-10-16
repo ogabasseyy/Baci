@@ -142,6 +142,27 @@ describe('CartScreen state', () => {
     expect(screen.queryByText('Lenovo ThinkPad E16 Gen 2')).toBeNull();
   });
 
+  it('keeps the load error reachable when shared status also has content', () => {
+    mockCartStateHolder.current = {
+      items: undefined,
+      itemCount: undefined,
+      subtotal: undefined,
+      updateQuantity: undefined,
+      removeItem: undefined,
+      clearCart: undefined,
+      toggleAssurance: undefined,
+    };
+    useNativeSharedCartStore.setState({
+      enabled: true,
+      status: 'choice_required',
+    });
+
+    render(<CartScreen />);
+
+    expect(screen.getByText('Unable to load cart')).toBeTruthy();
+    expect(screen.getByText('Retry')).toBeTruthy();
+  });
+
   it('opens guest identity modal for guests and routes signed-in users straight to checkout', () => {
     const { rerender } = render(<CartScreen />);
 

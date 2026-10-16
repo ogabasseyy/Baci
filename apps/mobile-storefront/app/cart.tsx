@@ -207,8 +207,6 @@ export default function CartScreen() {
   };
 
   const statusOnly = useCartStatusOnly(items.length);
-  if (statusOnly) return <CartStatusOnlyScreen />;
-
   if (hasCartLoadError) {
     return (
       <CartStateView
@@ -221,6 +219,8 @@ export default function CartScreen() {
       />
     );
   }
+
+  if (statusOnly) return <CartStatusOnlyScreen />;
 
   if (items.length === 0) {
     return (

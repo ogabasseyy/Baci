@@ -63,6 +63,26 @@ describe('redirectSystemPath', () => {
     );
   });
 
+  it('normalizes an uppercase trailing-dot explicit root domain', () => {
+    mockEnv.rootDomain = '  USEBACI.COM. ';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: 'usebaci.com' })
+    );
+  });
+
+  it('fails closed for an explicit root that is not a bare hostname', () => {
+    mockEnv.rootDomain = 'https://usebaci.com';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: '' })
+    );
+  });
+
   it('strips a staging API prefix when no explicit root is configured', () => {
     mockEnv.apiUrl = 'https://api-staging.usebaci.com';
     redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });

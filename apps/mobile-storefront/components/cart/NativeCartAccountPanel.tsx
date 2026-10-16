@@ -165,7 +165,8 @@ export function NativeCartAccountPanel() {
         Save this cart to your account
       </Text>
       {notice ? <Text style={{ color: colors.text }}>{notice}</Text> : null}
-      {savedRead.scope === ownerScope && savedRead.status === 'error' ? (
+      {savedCartScopeMatches(savedRead.scope, ownerScope) &&
+      savedRead.status === 'error' ? (
         <Pressable
           accessibilityRole="button"
           onPress={() => setReadRetry((value) => value + 1)}

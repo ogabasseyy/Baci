@@ -172,7 +172,10 @@ BEGIN
        AND merchant_claim.merchant_id = p_merchant_id
        AND merchant_claim.transaction_type = 'refund'
        AND merchant_claim.status IN ('completed', 'refunded')
-       AND merchant_claim.amount > 0
+       -- No amount filter (like the anomaly veto below): the pending
+       -- gate floors nonpositive unverified rows to one unit, so
+       -- excluding them here would finalize while the manager still
+       -- reports processing.
        AND UPPER(BTRIM(merchant_claim.currency))
          = UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency), ''), 'NGN')))
        AND (public.normalized_gateway_name_v1(merchant_claim.gateway) = 'PAYSTACK'

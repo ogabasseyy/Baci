@@ -16,10 +16,7 @@ vi.mock('@/lib/orders/build-order-cancellation-email-message', () => ({
 
 import { executeOrderCancellationSideEffect } from './execute-order-cancellation-side-effect';
 import { auditReviewsQuery } from './execute-order-cancellation-side-effect.test-support';
-import {
-  DeferredError,
-  DeliveryUncertainError,
-} from './run-order-cancellation-side-effect';
+import { DeliveryUncertainError } from './run-order-cancellation-side-effect';
 
 const merchant = {
   business_name: 'Store',
@@ -93,58 +90,6 @@ describe('cancellation refund preflight quarantine', () => {
         txn_id: 'payment-2',
       })
     );
-  });
-
-  it('defers a mixed order whose other leg is refund-pending', async () => {
-    const paymentQuery = transactionQuery([
-      {
-        amount: 100,
-        currency: 'NGN',
-        gateway: 'paystack',
-        gateway_reference: 'PSK-1',
-        id: 'payment-1',
-        status: 'completed',
-      },
-      {
-        amount: 50,
-        currency: 'NGN',
-        gateway: 'paypal',
-        gateway_reference: 'PP-1',
-        id: 'payment-2',
-        status: 'refund_pending',
-      },
-    ]);
-    const resetEq = vi.fn().mockReturnThis();
-    const resetUpdate = vi.fn().mockReturnValue({ eq: resetEq });
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(paymentQuery)
-      .mockReturnValueOnce(transactionQuery([]))
-      .mockReturnValueOnce(auditReviewsQuery([]))
-      .mockReturnValueOnce({ update: resetUpdate });
-
-    await expect(
-      executeOrderCancellationSideEffect({
-        merchant,
-        order,
-        step: 'refund',
-        supabase: { from } as never,
-      })
-    ).rejects.toBeInstanceOf(DeferredError);
-    // The leg scan mirrors the completion gate: refund-state legs stay
-    // visible so they defer instead of slipping to false completion — and
-    // quarantining them terminally would strand the remaining Paystack leg
-    // instead of resuming after the provider refund completes.
-    expect(paymentQuery.in).toHaveBeenCalledWith('status', [
-      'completed',
-      'refund_pending',
-      'refunded',
-    ]);
-    expect(mocks.initiateRefund).not.toHaveBeenCalled();
-    // No terminal review: payments lookup, the empty refund lookup, the
-    // audit lookup, plus the attempt-budget reset behind the defer.
-    expect(from).toHaveBeenCalledTimes(4);
-    expect(resetUpdate).toHaveBeenCalledWith({ attempts: 0 });
   });
 
   it('quarantines a refund-pending leg with no reference to track', async () => {

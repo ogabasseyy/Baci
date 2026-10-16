@@ -9,7 +9,6 @@ import {
   type OrderCancellationSideEffectStep,
   runOrderCancellationSideEffect,
 } from '@/lib/orders/run-order-cancellation-side-effect';
-import { REFUND_PREFLIGHT_ADMISSION_BUDGET_MS } from '@/lib/orders/schedule-preflight-provider-verification';
 import {
   type CancellationDrainCandidateRow,
   selectCancellationDrainCandidates,
@@ -187,12 +186,12 @@ export async function drainFailedOrderCancellationSideEffects({
       });
       continue;
     }
-    // No pre-claim budget skip for refund steps: the claim RPC
-    // finalizes fully covered rows cheaply (no provider call), so
-    // skipping it under backlog would starve their settlement
-    // reversal and review closure indefinitely. The verification
-    // budget gates the post-claim worker run inside the runner
-    // instead, where only rows that may enter preflight see it.
+    // No budget skip for refund steps: the claim RPC finalizes
+    // fully covered rows cheaply (no provider call), and the
+    // verification budget is enforced inside the worker run only
+    // once a leg needing provider verification is scheduled —
+    // cheap paths like unsupported-gateway quarantine must still
+    // run under backlog.
     try {
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -241,12 +240,6 @@ export async function drainFailedOrderCancellationSideEffects({
       }
 
       const status = await runOrderCancellationSideEffect({
-        ...(step === 'refund'
-          ? {
-              deadlineMs,
-              executeAdmissionBudgetMs: REFUND_PREFLIGHT_ADMISSION_BUDGET_MS,
-            }
-          : {}),
         orderId,
         step,
         supabase,

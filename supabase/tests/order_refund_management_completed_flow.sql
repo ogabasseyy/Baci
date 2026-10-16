@@ -108,10 +108,12 @@ BEGIN
       'completed', 'cash', 'cash-34', '{}'::jsonb);
 
   INSERT INTO public.order_cancellation_side_effects (
-    order_id, merchant_id, step, status, claim_token, attempts, error
+    order_id, merchant_id, step, status, claim_token, attempts, error,
+    completed_at
   ) VALUES
     ('9ef11000-0000-4000-8000-000000000034', v_merchant_id, 'refund',
-      'completed', '9ef13000-0000-4000-8000-000000000034', 1, NULL);
+      'completed', '9ef13000-0000-4000-8000-000000000034', 1, NULL,
+      '2026-09-01T00:00:00Z');
 
   GRANT SELECT ON public.orders TO authenticated;
   GRANT SELECT ON public.order_cancellation_side_effects TO authenticated;
@@ -150,6 +152,15 @@ BEGIN
     AND step = 'refund';
   IF v_row_status <> 'failed' THEN
     RAISE EXCEPTION 'completed row not requeued, got %', v_row_status;
+  END IF;
+  -- Reopening clears the old completion time: the claim stamps
+  -- COALESCE(completed_at, now()), so retaining it would backdate
+  -- the real finalization to before the manual was recorded.
+  PERFORM 1 FROM public.order_cancellation_side_effects
+  WHERE order_id = '9ef11000-0000-4000-8000-000000000034'
+    AND step = 'refund' AND completed_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'requeued row kept its completion time';
   END IF;
 END;
 $refund_completed_row_requeue$;

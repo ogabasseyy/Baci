@@ -85,7 +85,7 @@ async function executeAirtimePurchase({
     );
     // The pass was already awaited above the retained peek in
     // handlePurchase; the capture below recalls post-settle state.
-    const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
+    const idempotencyKey = await payment.getWalletIdempotencyKey(descriptor);
     const submittingOwner = payment.captureSubmittingOwner();
     const submittingUserId = payment.captureSubmittingUserId();
     try {

@@ -204,20 +204,24 @@ describe('useUtilityPayment', () => {
     });
   });
 
-  it('returns a stable wallet idempotency key until it is reset', () => {
+  it('returns a stable wallet idempotency key until it is reset', async () => {
     const { result } = renderHook(() => useUtilityPayment());
 
-    const first = result.current.getWalletIdempotencyKey('stable-descriptor');
-    const second = result.current.getWalletIdempotencyKey('stable-descriptor');
+    const first = await result.current.getWalletIdempotencyKey(
+      'stable-descriptor'
+    );
+    const second = await result.current.getWalletIdempotencyKey(
+      'stable-descriptor'
+    );
     expect(first).toBe(second);
 
     result.current.resetWalletIdempotencyKey('stable-descriptor');
     expect(
-      result.current.getWalletIdempotencyKey('stable-descriptor')
+      await result.current.getWalletIdempotencyKey('stable-descriptor')
     ).not.toBe(first);
   });
 
-  it('refuses to mint a key the store cannot durably persist', () => {
+  it('refuses to mint a key the store cannot durably persist', async () => {
     // Codex R96 P1 (web mirror): a failed MMKV write must abort
     // before the POST — the throw surfaces through the handler
     // (whose finally releases the checkout guard) and the retry
@@ -225,32 +229,44 @@ describe('useUtilityPayment', () => {
     const persistSpy = jest
       .spyOn(vtuStore, 'persistPendingVtuEntries')
       .mockReturnValue(false);
+    // Pins the fallback: this jsdom's LockManager never releases a
+    // lock whose callback throws, so a throw through the real
+    // manager would wedge every later mint in this file (real
+    // browsers release per spec; throw-through-locks is covered
+    // with a mock in the sync suite instead).
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = {};
     try {
       const { result } = renderHook(() => useUtilityPayment());
-      expect(() =>
+      await expect(
         result.current.getWalletIdempotencyKey('nopersist-descriptor')
-      ).toThrow('Could not save this purchase for retry');
+      ).rejects.toThrow('Could not save this purchase for retry');
     } finally {
       persistSpy.mockRestore();
+      g.navigator = priorNavigator;
     }
   });
 
-  it('recalls the pending key across hook instances for the same purchase', () => {
+  it('recalls the pending key across hook instances for the same purchase', async () => {
     // Remount regression: Back to Home + reopen Utilities creates a
     // fresh hook instance; retrying the same purchase MUST reuse the
     // pending key or the server debits a second transaction.
     const firstMount = renderHook(() => useUtilityPayment());
-    const key =
-      firstMount.result.current.getWalletIdempotencyKey('remount-descriptor');
+    const key = await firstMount.result.current.getWalletIdempotencyKey(
+      'remount-descriptor'
+    );
     firstMount.unmount();
 
     const secondMount = renderHook(() => useUtilityPayment());
     expect(
-      secondMount.result.current.getWalletIdempotencyKey('remount-descriptor')
+      await secondMount.result.current.getWalletIdempotencyKey(
+        'remount-descriptor'
+      )
     ).toBe(key);
   });
 
-  it('peeks retained attempts without minting keys', () => {
+  it('peeks retained attempts without minting keys', async () => {
     // Codex R65 6ru4mK: readiness needs the registry WITHOUT
     // creating fresh intent; a minting peek would permanently
     // mark every abandoned form as "retained" and let later
@@ -261,7 +277,7 @@ describe('useUtilityPayment', () => {
     const untouched = { phoneNumber: '08010000002', amount: 1000 };
 
     expect(result.current.hasRetainedVtuAttempt(submitted)).toBe(false);
-    result.current.getWalletIdempotencyKey(
+    await result.current.getWalletIdempotencyKey(
       result.current.scopePendingVtuDescriptor(
         buildVtuPurchaseDescriptor(submitted)
       )
@@ -272,15 +288,15 @@ describe('useUtilityPayment', () => {
     expect(result.current.hasRetainedVtuAttempt(untouched)).toBe(false);
   });
 
-  it('mints distinct keys for distinct purchases', () => {
+  it('mints distinct keys for distinct purchases', async () => {
     const { result } = renderHook(() => useUtilityPayment());
 
-    const airtime = result.current.getWalletIdempotencyKey('airtime-0801');
-    const data = result.current.getWalletIdempotencyKey('data-0801');
+    const airtime = await result.current.getWalletIdempotencyKey('airtime-0801');
+    const data = await result.current.getWalletIdempotencyKey('data-0801');
     expect(airtime).not.toBe(data);
   });
 
-  it('keeps recalling the pending key when customer hydration lands', () => {
+  it('keeps recalling the pending key when customer hydration lands', async () => {
     // Hydration regression: at startup only the Supabase user ID is
     // known; customers.id arrives later and is a DIFFERENT id. Scope
     // must not flip, or the retry orphans the key and double-debits.
@@ -290,7 +306,7 @@ describe('useUtilityPayment', () => {
     const scopedBefore =
       beforeHydration.result.current.scopePendingVtuDescriptor('hydration-key');
     const key =
-      beforeHydration.result.current.getWalletIdempotencyKey(scopedBefore);
+      await beforeHydration.result.current.getWalletIdempotencyKey(scopedBefore);
     beforeHydration.unmount();
 
     mockAuthState.customer = { id: 'customer-a' };
@@ -299,11 +315,11 @@ describe('useUtilityPayment', () => {
       afterHydration.result.current.scopePendingVtuDescriptor('hydration-key');
     expect(scopedAfter).toBe(scopedBefore);
     expect(
-      afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)
+      await afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)
     ).toBe(key);
   });
 
-  it('keeps the scope stable when merchantId hydrates mid-session', () => {
+  it('keeps the scope stable when merchantId hydrates mid-session', async () => {
     // The scope uses the build CONFIG merchant id unconditionally: a
     // merchantId || CONFIG fallback would split a pre-hydration
     // attempt from its post-hydration retry whenever the hydrated id
@@ -315,7 +331,7 @@ describe('useUtilityPayment', () => {
         'merchant-hydration-key'
       );
     const key =
-      beforeHydration.result.current.getWalletIdempotencyKey(scopedBefore);
+      await beforeHydration.result.current.getWalletIdempotencyKey(scopedBefore);
     beforeHydration.unmount();
 
     mockAuthState.merchantId = 'merchant-1';
@@ -325,11 +341,11 @@ describe('useUtilityPayment', () => {
     );
     expect(scopedAfter).toBe(scopedBefore);
     expect(
-      afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)
+      await afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)
     ).toBe(key);
   });
 
-  it('does not recall another owner’s pending key for the same purchase', () => {
+  it('does not recall another owner’s pending key for the same purchase', async () => {
     // Sign-out regression: customer A’s remembered key must be
     // unreachable once customer B signs in, or the route rejects B’s
     // first purchase as belonging to another customer.
@@ -337,7 +353,7 @@ describe('useUtilityPayment', () => {
     const scopedA = firstOwner.result.current.scopePendingVtuDescriptor(
       'owner-scoped-descriptor'
     );
-    const keyA = firstOwner.result.current.getWalletIdempotencyKey(scopedA);
+    const keyA = await firstOwner.result.current.getWalletIdempotencyKey(scopedA);
     firstOwner.unmount();
 
     mockAuthState.customer = { id: 'customer-b' };
@@ -347,15 +363,15 @@ describe('useUtilityPayment', () => {
       'owner-scoped-descriptor'
     );
     expect(scopedB).not.toBe(scopedA);
-    const keyB = secondOwner.result.current.getWalletIdempotencyKey(scopedB);
+    const keyB = await secondOwner.result.current.getWalletIdempotencyKey(scopedB);
 
     expect(keyB).not.toBe(keyA);
-    expect(secondOwner.result.current.getWalletIdempotencyKey(scopedB)).toBe(
+    expect(await secondOwner.result.current.getWalletIdempotencyKey(scopedB)).toBe(
       keyB
     );
   });
 
-  it('captures the submitting owner so a mid-flight switch cannot redirect completion', () => {
+  it('captures the submitting owner so a mid-flight switch cannot redirect completion', async () => {
     // The scoped descriptor is computed once per submission from the
     // submitting account: even if the auth store switches to customer
     // B before A’s request settles, A’s already-scoped key still
@@ -363,7 +379,7 @@ describe('useUtilityPayment', () => {
     const scopedA = renderHook(() =>
       useUtilityPayment()
     ).result.current.scopePendingVtuDescriptor('mid-flight-key');
-    const keyA = renderHook(() =>
+    const keyA = await renderHook(() =>
       useUtilityPayment()
     ).result.current.getWalletIdempotencyKey(scopedA);
 
@@ -372,7 +388,7 @@ describe('useUtilityPayment', () => {
 
     const afterSwitch = renderHook(() => useUtilityPayment());
     // A’s captured scope still recalls A’s key after the switch…
-    expect(afterSwitch.result.current.getWalletIdempotencyKey(scopedA)).toBe(
+    expect(await afterSwitch.result.current.getWalletIdempotencyKey(scopedA)).toBe(
       keyA
     );
     // …while B’s own scoping addresses a different entry.

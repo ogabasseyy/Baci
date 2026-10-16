@@ -56,7 +56,7 @@ function createPaymentState(
     isWalletRefetching: () => false,
     isWalletSettled: () => true,
     getWalletError: () => null,
-    getWalletIdempotencyKey: jest.fn(() => 'test-key'),
+    getWalletIdempotencyKey: jest.fn(async () => 'test-key'),
     scopePendingVtuDescriptor: (d: string) => d,
     captureSubmittingOwner: () => 'test-owner',
     captureSubmittingUserId: () => 'test-user',
@@ -129,7 +129,7 @@ describe('createBillFormPurchaseHandler', () => {
       onSuccess,
       payment: createPaymentState({
         getWalletBalance: () => 1500,
-        getWalletIdempotencyKey: jest.fn(() => 'idem-key-1'),
+        getWalletIdempotencyKey: jest.fn(async () => 'idem-key-1'),
         scopePendingVtuDescriptor: (d: string) => d,
         captureSubmittingOwner: () => 'test-owner',
         captureSubmittingUserId: () => 'test-user',
@@ -382,7 +382,7 @@ describe('createBillFormPurchaseHandler', () => {
         numericAmount: 1000,
         payment: createPaymentState({
           getWalletBalance: () => 1000,
-          getWalletIdempotencyKey: jest.fn(() => 'idem-key-2'),
+          getWalletIdempotencyKey: jest.fn(async () => 'idem-key-2'),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
           captureSubmittingUserId: () => 'test-user',
@@ -416,7 +416,7 @@ describe('createBillFormPurchaseHandler', () => {
         onSuccess,
         payment: createPaymentState({
           getWalletBalance: () => 1000,
-          getWalletIdempotencyKey: jest.fn(() => 'idem-key-proc'),
+          getWalletIdempotencyKey: jest.fn(async () => 'idem-key-proc'),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
           captureSubmittingUserId: () => 'test-user',
@@ -450,7 +450,7 @@ describe('createBillFormPurchaseHandler', () => {
         numericAmount: 1000,
         payment: createPaymentState({
           getWalletBalance: () => 1000,
-          getWalletIdempotencyKey: jest.fn(() => 'idem-key-3'),
+          getWalletIdempotencyKey: jest.fn(async () => 'idem-key-3'),
           scopePendingVtuDescriptor: (d: string) => d,
           captureSubmittingOwner: () => 'test-owner',
           captureSubmittingUserId: () => 'test-user',

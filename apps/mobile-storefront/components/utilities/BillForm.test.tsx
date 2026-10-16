@@ -153,7 +153,7 @@ describe('BillForm', () => {
       walletError: null,
       walletIsLoading: false,
       isWalletSettled: () => true,
-      getWalletIdempotencyKey: jest.fn(() => 'test-key'),
+      getWalletIdempotencyKey: jest.fn(async () => 'test-key'),
       scopePendingVtuDescriptor: (d: string) => d,
       captureSubmittingOwner: () => 'test-owner',
       captureSubmittingUserId: () => 'test-user',

@@ -75,7 +75,7 @@ interface RealSignatureSubmitRequest {
   customerName: string;
   customerPhone: string | null | undefined;
   expectedUserId: string | null | undefined;
-  getWalletIdempotencyKey: (signature: string) => string;
+  getWalletIdempotencyKey: (signature: string) => Promise<string>;
 }
 
 /**
@@ -87,7 +87,7 @@ function mockRealSignatureSubmit(seenKeys: string[]) {
   mockSubmit.mockImplementation(
     async (request: RealSignatureSubmitRequest) => {
       seenKeys.push(
-        request.getWalletIdempotencyKey(
+        await request.getWalletIdempotencyKey(
           buildVtuWalletPayloadSignature(
             buildUtilityCheckoutWalletPayload({
               merchantSlug: request.merchantSlug,
@@ -168,7 +168,9 @@ describe('useUtilityPurchase', () => {
     });
     const { result } = renderHook(() => useUtilityPurchase(baseParams()));
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     await act(async () => {});
@@ -196,10 +198,14 @@ describe('useUtilityPurchase', () => {
     });
     const { result } = renderHook(() => useUtilityPurchase(baseParams()));
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     await act(async () => {});
@@ -221,7 +227,9 @@ describe('useUtilityPurchase', () => {
     mockGetSettlementPass.mockReturnValueOnce(gate);
     const { result } = renderHook(() => useUtilityPurchase(baseParams()));
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     await act(async () => {});
@@ -258,7 +266,9 @@ describe('useUtilityPurchase', () => {
       useUtilityPurchase(baseParams())
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     await act(async () => {});
@@ -323,7 +333,9 @@ describe('useUtilityPurchase', () => {
       useUtilityPurchase(baseParams({ clearIntent, setWalletBalance }))
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
 
@@ -466,9 +478,9 @@ describe('useUtilityPurchase', () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         return {
           kind: 'wallet-success',
           reference: 'REF-PROC',
@@ -507,7 +519,9 @@ describe('useUtilityPurchase', () => {
       useUtilityPurchase(baseParams({ setWalletBalance }))
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
 
@@ -521,9 +535,9 @@ describe('useUtilityPurchase', () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         return {
           kind: 'wallet-success',
           reference: 'REF-PROC',
@@ -560,9 +574,9 @@ describe('useUtilityPurchase', () => {
     let calls = 0;
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        request.getWalletIdempotencyKey('SIG');
+        await request.getWalletIdempotencyKey('SIG');
         calls += 1;
         if (calls === 1) {
           return { kind: 'error', message: 'timeout' };
@@ -601,9 +615,9 @@ describe('useUtilityPurchase', () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         return {
           kind: 'wallet-success',
           reference: 'REF-OK',
@@ -629,9 +643,9 @@ describe('useUtilityPurchase', () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         return { kind: 'error', message: 'Payment failed', status: 400 };
       }
     );
@@ -672,9 +686,9 @@ describe('useUtilityPurchase', () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         return { kind: 'error', message: 'Server error', status: 502 };
       }
     );
@@ -695,9 +709,9 @@ describe('useUtilityPurchase', () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         return { kind: 'error', message: 'Too many requests', status: 429 };
       }
     );
@@ -815,9 +829,9 @@ describe('useUtilityPurchase', () => {
       const seenKeys: string[] = [];
       mockSubmit.mockImplementation(
         async (request: {
-          getWalletIdempotencyKey: (signature: string) => string;
+          getWalletIdempotencyKey: (signature: string) => Promise<string>;
         }) => {
-          seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+          seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
           // First submit is still processing; the replay lands later.
           return seenKeys.length === 1
             ? {
@@ -871,9 +885,9 @@ describe('useUtilityPurchase', () => {
       const seenKeys: string[] = [];
       mockSubmit.mockImplementation(
         async (request: {
-          getWalletIdempotencyKey: (signature: string) => string;
+          getWalletIdempotencyKey: (signature: string) => Promise<string>;
         }) => {
-          seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+          seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
           // First submit is still processing; the replay lands later.
           return seenKeys.length === 1
             ? {
@@ -934,9 +948,9 @@ describe('useUtilityPurchase', () => {
   it('refreshes (never double-decrements) when a noted processing vend resolves', async () => {
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        request.getWalletIdempotencyKey('SIG');
+        await request.getWalletIdempotencyKey('SIG');
         return mockSubmit.mock.calls.length === 1
           ? {
               kind: 'wallet-success',
@@ -982,7 +996,9 @@ describe('useUtilityPurchase', () => {
     });
     const { result } = renderHook(() => useUtilityPurchase(baseParams()));
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
 
@@ -1028,7 +1044,9 @@ describe('useUtilityPurchase', () => {
       { initialProps: { customer, user } }
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     expect(result.current.loading).toBe(true);
@@ -1093,7 +1111,9 @@ describe('useUtilityPurchase', () => {
       { initialProps: { customer, merchantSlug: 'ogabassey' } }
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     expect(result.current.loading).toBe(true);
@@ -1149,7 +1169,9 @@ describe('useUtilityPurchase', () => {
       useUtilityPurchase(baseParams({ setWalletBalance }))
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
 
@@ -1205,7 +1227,9 @@ describe('useUtilityPurchase', () => {
       { initialProps: { customer: null as Customer | null } }
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
 
@@ -1244,9 +1268,9 @@ describe('useUtilityPurchase', () => {
     let resolveSubmit!: (value: SubmitResult) => void;
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         if (seenKeys.length === 1) {
           return new Promise<SubmitResult>((resolve) => {
             resolveSubmit = resolve;
@@ -1271,7 +1295,9 @@ describe('useUtilityPurchase', () => {
       { initialProps: { customer, user } }
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     rerender({ customer: customerB, user: userB });
@@ -1313,9 +1339,9 @@ describe('useUtilityPurchase', () => {
     let resolveSubmit!: (value: SubmitResult) => void;
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         if (seenKeys.length === 1) {
           return new Promise<SubmitResult>((resolve) => {
             resolveSubmit = resolve;
@@ -1334,7 +1360,9 @@ describe('useUtilityPurchase', () => {
       useUtilityPurchase(baseParams())
     );
 
-    act(() => {
+    // Async act (R149): the mint-mutex hop delays submit dispatch
+    // past a sync act, so flush microtasks before resolving.
+    await act(async () => {
       result.current.handleAirtimeDataSubmit(airtime);
     });
     unmount();
@@ -1368,9 +1396,9 @@ describe('useUtilityPurchase', () => {
     const seenKeys: string[] = [];
     mockSubmit.mockImplementation(
       async (request: {
-        getWalletIdempotencyKey: (signature: string) => string;
+        getWalletIdempotencyKey: (signature: string) => Promise<string>;
       }) => {
-        seenKeys.push(request.getWalletIdempotencyKey('SIG'));
+        seenKeys.push(await request.getWalletIdempotencyKey('SIG'));
         return {
           kind: 'wallet-success',
           reference: 'REF-PROC',

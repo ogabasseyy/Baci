@@ -88,7 +88,7 @@ describe('bill stale success replay', () => {
         // Mirrors the production hook: recall-first, remember only
         // when no entry exists (a blind re-remember would wipe the
         // note/completion the stale guard needs).
-        getWalletIdempotencyKey: jest.fn((descriptor: string) => {
+        getWalletIdempotencyKey: jest.fn(async (descriptor: string) => {
           const recalled = recallPendingVtuKey(descriptor);
           if (recalled) return recalled;
           rememberPendingVtuPurchase(descriptor, 'stale-bill-key');

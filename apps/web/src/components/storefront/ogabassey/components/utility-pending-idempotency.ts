@@ -11,12 +11,11 @@ export {
   notePendingVtuReference,
 } from './utility-pending-vtu-reference-registry';
 import {
-  acquirePendingVtuMintLock,
   forgottenScopedKeys,
   noteForgottenVtuScope,
   pendingVtuPurchases,
   persistPendingVtuPurchases,
-  releasePendingVtuMintLock,
+  runPendingVtuMintLocked,
   syncPendingVtuPurchasesFromSnapshot,
 } from './utility-pending-vtu-sync';
 
@@ -247,41 +246,37 @@ export function forgetPendingVtuPurchaseGeneration(
   persistPendingVtuPurchases();
 }
 
+const PENDING_VTU_STORAGE_ERROR =
+  'Could not save this purchase for retry. Please check your browser storage and try again.';
+
 /**
- * Recalled key, else mint + remember (mobile mirror). Throws when
- * the minted key is memory-only (R96 P1): aborts pre-POST, retry
- * re-mints once storage works. Recalled keys are already durable.
+ * Recalled key, else mint + remember (mobile mirror). Async: the
+ * triple runs under the navigator.locks mint mutex (R149), so two
+ * tabs racing recall → mint serialize and the loser adopts the
+ * winner's key instead of double-debiting. Throws the storage
+ * error when the lock is unacquired or the mint is memory-only
+ * (R96 P1): aborts pre-POST, retry re-mints once storage works.
  */
 export function getPendingVtuKey(
   payloadSignature: string,
   scopeTag?: string
-): string {
-  // Mint mutex (Codex R148 P1): two tabs recalling simultaneously
-  // both miss — without the lock both mint and the server debits
-  // twice. The loser blocks, then re-recalls inside the lock and
-  // adopts the winner's key. Unacquired → the storage error (no
-  // key, no POST): fail-closed, same as an undurable remember.
-  const lock = acquirePendingVtuMintLock();
-  if (!lock) {
-    throw new Error(
-      'Could not save this purchase for retry. Please check your browser storage and try again.'
-    );
-  }
-  try {
+): Promise<string> {
+  return runPendingVtuMintLocked(() => {
     const recalled = recallPendingVtuKey(payloadSignature);
     if (recalled) {
       return recalled;
     }
     const minted = createWalletIdempotencyKey();
     if (!rememberPendingVtuPurchase(payloadSignature, minted, scopeTag)) {
-      throw new Error(
-        'Could not save this purchase for retry. Please check your browser storage and try again.'
-      );
+      throw new Error(PENDING_VTU_STORAGE_ERROR);
     }
     return minted;
-  } finally {
-    releasePendingVtuMintLock(lock);
-  }
+  }).then((key) => {
+    if (key === null) {
+      throw new Error(PENDING_VTU_STORAGE_ERROR);
+    }
+    return key;
+  });
 }
 
 /**

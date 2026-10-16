@@ -2,8 +2,15 @@ import {
   buildVtuPurchaseDescriptor,
   scopePendingVtuKey,
 } from './pending-vtu-descriptor';
+
+let mockNextUuid = 0;
+jest.mock('expo-crypto', () => ({
+  randomUUID: () => `uuid-${++mockNextUuid}`,
+}));
+
 import {
   clearPendingVtuKeys,
+  getPendingVtuKey,
   hasNotedPendingVtuReference,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
@@ -11,9 +18,7 @@ import {
 import * as vtuCodec from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
 import {
-  acquirePendingVtuMintLock,
-  PENDING_VTU_MINT_LOCK_TTL_MS,
-  releasePendingVtuMintLock,
+  runPendingVtuMintLocked,
   syncPendingVtuPurchasesFromSnapshot,
 } from './pending-vtu-idempotency-sync';
 
@@ -134,42 +139,131 @@ describe('pending-vtu-idempotency-sync', () => {
   });
 
   it('serializes mint acquisition: a second contender waits out the budget (Codex R148 P1)', () => {
-    const first = acquirePendingVtuMintLock();
+    const first = vtuStore.acquirePendingVtuMintLock();
     expect(typeof first).toBe('string');
     if (!first) {
       throw new Error('first acquire must succeed on an empty lock');
     }
     // Sibling tab spins the ~250ms budget, then fails closed (null).
-    expect(acquirePendingVtuMintLock()).toBeNull();
-    releasePendingVtuMintLock(first);
-    const second = acquirePendingVtuMintLock();
+    expect(vtuStore.acquirePendingVtuMintLock()).toBeNull();
+    vtuStore.releasePendingVtuMintLock(first);
+    const second = vtuStore.acquirePendingVtuMintLock();
     if (!second) {
       throw new Error('acquire must succeed after release');
     }
     expect(second).not.toBe(first);
-    releasePendingVtuMintLock(second);
+    vtuStore.releasePendingVtuMintLock(second);
   }, 10000);
 
   it('steals an expired lock immediately (Codex R148 P1)', () => {
     vtuStore.savePendingVtuMintLock(
       'crashed-holder',
-      Date.now() - PENDING_VTU_MINT_LOCK_TTL_MS - 50
+      Date.now() - vtuStore.PENDING_VTU_MINT_LOCK_TTL_MS - 50
     );
-    const token = acquirePendingVtuMintLock();
+    const token = vtuStore.acquirePendingVtuMintLock();
     if (!token) {
       throw new Error('expired lock must be stealable');
     }
-    releasePendingVtuMintLock(token);
+    vtuStore.releasePendingVtuMintLock(token);
   });
 
   it('releases only the holding token (Codex R148 P1)', () => {
-    const token = acquirePendingVtuMintLock();
+    const token = vtuStore.acquirePendingVtuMintLock();
     if (!token) {
       throw new Error('acquire must succeed on an empty lock');
     }
-    releasePendingVtuMintLock('someone-else');
+    vtuStore.releasePendingVtuMintLock('someone-else');
     expect(vtuStore.loadPendingVtuMintLock()?.token).toBe(token);
-    releasePendingVtuMintLock(token);
+    vtuStore.releasePendingVtuMintLock(token);
     expect(vtuStore.loadPendingVtuMintLock()).toBeNull();
   });
+
+  it('runs the mint under navigator.locks when available (Muse R149 M1, web mirror)', async () => {
+    // Immediate-grant mock: proves the primary path delegates to a
+    // real mutex (bypassing the runner leaves request uncalled).
+    const request = jest.fn(
+      async (_name: string, callback: () => string) => callback()
+    );
+    const priorNavigator = (globalThis as { navigator?: unknown }).navigator;
+    (globalThis as { navigator?: unknown }).navigator = { locks: { request } };
+    try {
+      const key = await getPendingVtuKey('{"locks":"primary"}');
+      expect(typeof key).toBe('string');
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(request).toHaveBeenCalledWith(
+        vtuStore.PENDING_VTU_MINT_LOCK_NAME,
+        expect.any(Function)
+      );
+      // Callback throws reject (never a sync throw, never a retry).
+      await expect(
+        runPendingVtuMintLocked(() => {
+          throw new Error('undurable');
+        })
+      ).rejects.toThrow('undurable');
+    } finally {
+      (globalThis as { navigator?: unknown }).navigator = priorNavigator;
+    }
+  });
+
+  it('serializes simultaneous mints so both tabs share one key (Muse R149 M1, web mirror)', async () => {
+    // Queuing mock with genuine lock semantics: the second
+    // request's callback cannot start until the first resolves.
+    const queue: Array<() => void> = [];
+    let running = false;
+    const pump = () => {
+      if (!running) {
+        const next = queue.shift();
+        if (next) {
+          running = true;
+          next();
+        }
+      }
+    };
+    const request = jest.fn(
+      (_name: string, callback: () => string) =>
+        new Promise<string>((resolve) => {
+          queue.push(() => resolve(callback()));
+          pump();
+        }).finally(() => {
+          running = false;
+          pump();
+        })
+    );
+    const priorNavigator = (globalThis as { navigator?: unknown }).navigator;
+    (globalThis as { navigator?: unknown }).navigator = { locks: { request } };
+    try {
+      const [tabA, tabB] = await Promise.all([
+        getPendingVtuKey('{"locks":"race"}'),
+        getPendingVtuKey('{"locks":"race"}'),
+      ]);
+      expect(tabA).toBe(tabB);
+      expect(request).toHaveBeenCalledTimes(2);
+    } finally {
+      (globalThis as { navigator?: unknown }).navigator = priorNavigator;
+    }
+  });
+
+  it('falls back to the storage lock without navigator.locks (Muse R149 M1, web mirror)', async () => {
+    // Force the fallback path deterministically: the RN jest env
+    // ships its own navigator shape, so pin one without locks.
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = {};
+    try {
+      // Fallback held → null (caller throws); released → runs fn.
+      vtuStore.savePendingVtuMintLock('tab-a', Date.now());
+      await expect(runPendingVtuMintLocked(() => 'k')).resolves.toBeNull();
+      vtuStore.clearPendingVtuMintLock();
+      await expect(runPendingVtuMintLocked(() => 'k')).resolves.toBe('k');
+      // Fallback callback throws propagate (never retried unlocked).
+      await expect(
+        runPendingVtuMintLocked(() => {
+          throw new Error('undurable');
+        })
+      ).rejects.toThrow('undurable');
+      expect(vtuStore.loadPendingVtuMintLock()).toBeNull();
+    } finally {
+      g.navigator = priorNavigator;
+    }
+  }, 10000);
 });

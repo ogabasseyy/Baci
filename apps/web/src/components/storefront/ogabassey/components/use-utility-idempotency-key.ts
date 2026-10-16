@@ -37,7 +37,7 @@ export interface UtilityIdempotencyAttempt {
 interface UseUtilityIdempotencyKeyResult {
   captureAttemptKey: (
     payloadSignature: string
-  ) => UtilityIdempotencyAttempt;
+  ) => Promise<UtilityIdempotencyAttempt>;
   forgetScopedKey: (scoped: string) => void;
   /** Non-minting retained check: recall only, never creates an entry. */
   isAttemptRetained: (payloadSignature: string) => boolean;
@@ -158,7 +158,7 @@ export function useUtilityIdempotencyKey({
 
   const isResultViewActive = () => mountedRef.current;
 
-  const captureAttemptKey = (payloadSignature: string) => {
+  const captureAttemptKey = async (payloadSignature: string) => {
     // merchantId is guaranteed defined here: the purchase readiness
     // gate blocks submit until the merchant hydrates, so no attempt
     // is ever scoped under '' (a post-hydration retry would miss it
@@ -175,7 +175,8 @@ export function useUtilityIdempotencyKey({
       userId ?? customerId,
       merchantId
     );
-    return { key: getPendingVtuKey(scoped, scopeTag), scoped, recalled };
+    // Async (R149): the mint runs under the navigator.locks mutex.
+    return { key: await getPendingVtuKey(scoped, scopeTag), scoped, recalled };
   };
 
   const isAttemptRetained = (payloadSignature: string) => {

@@ -23,7 +23,7 @@ export interface UtilityCheckoutRequest {
   customerPhone: string | null | undefined;
   /** Auth user id captured before dispatch; the route rejects a mismatch. */
   expectedUserId: string | null | undefined;
-  getWalletIdempotencyKey: (payloadSignature: string) => string;
+  getWalletIdempotencyKey: (payloadSignature: string) => Promise<string>;
 }
 
 export type UtilityCheckoutResult =
@@ -83,7 +83,8 @@ export const submitUtilityCheckout = async ({
       response = await fetchWithCsrf('/api/vtu/checkout/wallet-only', {
         method: 'POST',
         headers: {
-          'Idempotency-Key': getWalletIdempotencyKey(
+          // Async (R149): the capture runs under the mint mutex.
+          'Idempotency-Key': await getWalletIdempotencyKey(
             buildVtuWalletPayloadSignature(walletPayload)
           ),
         },

@@ -213,8 +213,8 @@ export function useUtilityPurchase({
       customerName,
       customerPhone: customer?.phone,
       expectedUserId: submittingUserId,
-      getWalletIdempotencyKey: (payloadSignature: string) => {
-        captured.attempt = captureAttemptKey(payloadSignature);
+      getWalletIdempotencyKey: async (payloadSignature: string) => {
+        captured.attempt = await captureAttemptKey(payloadSignature);
         return captured.attempt.key;
       },
     });

@@ -22,10 +22,9 @@ import {
   noteForgottenVtuScopes,
 } from './pending-vtu-idempotency-store';
 import {
-  acquirePendingVtuMintLock,
   pendingPurchases,
   persistPendingVtuPurchases,
-  releasePendingVtuMintLock,
+  runPendingVtuMintLocked,
   syncPendingVtuPurchasesFromSnapshot,
 } from './pending-vtu-idempotency-sync';
 import {
@@ -128,40 +127,38 @@ export function rememberPendingVtuPurchase(
   return true;
 }
 
+const PENDING_VTU_STORAGE_ERROR =
+  'Could not save this purchase for retry. Please try again.';
+
 /**
- * Recall-or-mint choke point (Codex R148 P1, web mirror): the whole
- * triple runs under the mint mutex so two Expo web tabs recalling
- * simultaneously cannot both mint (the server would debit twice).
- * The loser re-recalls inside the lock and adopts the winner's key.
- * Throws the storage error when the lock is unacquirable or the
- * minted key is undurable — the throw aborts before the POST and
- * the handler's finally releases the checkout guard.
+ * Recall-or-mint choke point (R148, real mutex R149, web mirror):
+ * async — the triple runs under the navigator.locks mint mutex on
+ * Expo web, so two tabs racing recall → mint serialize and the
+ * loser adopts the winner's key instead of double-debiting. Throws
+ * the storage error when the lock is unacquired or the mint is
+ * undurable — the throw aborts before the POST and the handler's
+ * finally releases the checkout guard.
  */
 export function getPendingVtuKey(
   descriptor: string,
   scopeTag?: string
-): string {
-  const lock = acquirePendingVtuMintLock();
-  if (!lock) {
-    throw new Error(
-      'Could not save this purchase for retry. Please try again.'
-    );
-  }
-  try {
+): Promise<string> {
+  return runPendingVtuMintLocked(() => {
     const recalled = recallPendingVtuKey(descriptor);
     if (recalled) {
       return recalled;
     }
     const minted = Crypto.randomUUID();
     if (!rememberPendingVtuPurchase(descriptor, minted, scopeTag)) {
-      throw new Error(
-        'Could not save this purchase for retry. Please try again.'
-      );
+      throw new Error(PENDING_VTU_STORAGE_ERROR);
     }
     return minted;
-  } finally {
-    releasePendingVtuMintLock(lock);
-  }
+  }).then((key) => {
+    if (key === null) {
+      throw new Error(PENDING_VTU_STORAGE_ERROR);
+    }
+    return key;
+  });
 }
 
 /** Attaches the server reference once a non-terminal response arrives. */

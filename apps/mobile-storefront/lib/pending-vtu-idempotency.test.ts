@@ -706,7 +706,7 @@ describe('pending-vtu-idempotency', () => {
     ]);
   });
 
-  it('getPendingVtuKey recalls retained keys and fails closed under a held mint (Codex R148 P1)', () => {
+  it('getPendingVtuKey recalls retained keys and fails closed under a held mint (Codex R148 P1)', async () => {
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',
       amount: 5,
@@ -714,19 +714,28 @@ describe('pending-vtu-idempotency', () => {
     });
     const scoped = scopePendingVtuKey('user-a', 'merchant-1', descriptor);
 
-    const first = getPendingVtuKey(scoped);
+    const first = await getPendingVtuKey(scoped);
     expect(typeof first).toBe('string');
     // Same descriptor recalls the retained key (no fresh mint).
-    expect(getPendingVtuKey(scoped)).toBe(first);
+    expect(await getPendingVtuKey(scoped)).toBe(first);
 
     // Sibling tab holds the mint: fail closed with the storage
     // error (no key, no POST) instead of minting a second key.
-    vtuStore.savePendingVtuMintLock('tab-a', Date.now());
-    expect(() => getPendingVtuKey(scoped)).toThrow(
-      /Could not save this purchase/
-    );
-    vtuStore.clearPendingVtuMintLock();
-    expect(getPendingVtuKey(scoped)).toBe(first);
+    // Pins the fallback: this jest env ships a real LockManager,
+    // which (correctly) ignores the storage fallback cell.
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = {};
+    try {
+      vtuStore.savePendingVtuMintLock('tab-a', Date.now());
+      await expect(getPendingVtuKey(scoped)).rejects.toThrow(
+        /Could not save this purchase/
+      );
+    } finally {
+      vtuStore.clearPendingVtuMintLock();
+      g.navigator = priorNavigator;
+    }
+    expect(await getPendingVtuKey(scoped)).toBe(first);
   }, 10000);
 
   it('merges sibling-tab reference knowledge into the live same-key entry (Codex R143 P1)', () => {

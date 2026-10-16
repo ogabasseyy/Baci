@@ -29,14 +29,14 @@ describe('utility-pending-idempotency', () => {
     clearPendingVtuKeys();
   });
 
-  it('mints a key on first submit and recalls it for the same purchase', () => {
-    const first = getPendingVtuKey('{"amount":100}');
+  it('mints a key on first submit and recalls it for the same purchase', async () => {
+    const first = await getPendingVtuKey('{"amount":100}');
 
     expect(first).toBeTruthy();
-    expect(getPendingVtuKey('{"amount":100}')).toBe(first);
+    expect(await getPendingVtuKey('{"amount":100}')).toBe(first);
   });
 
-  it('refuses to hand out a key localStorage cannot durably store', () => {
+  it('refuses to hand out a key localStorage cannot durably store', async () => {
     // Codex R96 P1: quota/private-mode setItem throws → the minted
     // key would be memory-only; a reload would lose it and the retry
     // mint fresh and double-debit on ambiguous results. Refuse
@@ -49,7 +49,7 @@ describe('utility-pending-idempotency', () => {
         throw new Error('QuotaExceededError');
       });
     try {
-      expect(() => getPendingVtuKey('{"amount":100}')).toThrow(
+      await expect(getPendingVtuKey('{"amount":100}')).rejects.toThrow(
         'Could not save this purchase for retry'
       );
       expect(recallPendingVtuKey('{"amount":100}')).toBeUndefined();
@@ -61,12 +61,12 @@ describe('utility-pending-idempotency', () => {
       setItem.mockRestore();
     }
     // Storage works again: the retry mints and persists normally.
-    const retry = getPendingVtuKey('{"amount":100}');
+    const retry = await getPendingVtuKey('{"amount":100}');
     expect(retry).toBeTruthy();
     expect(recallPendingVtuKey('{"amount":100}')).toBe(retry);
   });
 
-  it('restores the tombstone when the replacement persist fails', () => {
+  it('restores the tombstone when the replacement persist fails', async () => {
     // Codex R99 P2 (mobile mirror): consecutive write failures — the
     // forget's setItem throws (old key still in the snapshot,
     // tombstone memory-only) and the replacement's save throws too.
@@ -95,22 +95,22 @@ describe('utility-pending-idempotency', () => {
     expect(forgottenScopedKeys.has('{"tomb":"web"}')).toBe(false);
   });
 
-  it('mints distinct keys for distinct purchases', () => {
-    const airtime = getPendingVtuKey('{"type":"airtime"}');
-    const data = getPendingVtuKey('{"type":"data"}');
+  it('mints distinct keys for distinct purchases', async () => {
+    const airtime = await getPendingVtuKey('{"type":"airtime"}');
+    const data = await getPendingVtuKey('{"type":"data"}');
 
     expect(airtime).not.toBe(data);
   });
 
-  it('forgets a terminal purchase so a repeat buy mints fresh', () => {
-    const first = getPendingVtuKey('{"amount":100}');
+  it('forgets a terminal purchase so a repeat buy mints fresh', async () => {
+    const first = await getPendingVtuKey('{"amount":100}');
     forgetPendingVtuPurchase('{"amount":100}');
 
     expect(recallPendingVtuKey('{"amount":100}')).toBeUndefined();
-    expect(getPendingVtuKey('{"amount":100}')).not.toBe(first);
+    expect(await getPendingVtuKey('{"amount":100}')).not.toBe(first);
   });
 
-  it('retains TTL-aged unanswered entries on recall', () => {
+  it('retains TTL-aged unanswered entries on recall', async () => {
     // Codex R63 6ruGlp: a lost response leaves the reference null
     // after a possibly-committed debit — dropping the key would mint
     // fresh on retry and debit twice. Only completed entries drop.
@@ -133,7 +133,7 @@ describe('utility-pending-idempotency', () => {
     expect(recallPendingVtuKey('{"ttl":"done"}')).toBeUndefined();
   });
 
-  it('retains TTL-aged referenced entries on recall', () => {
+  it('retains TTL-aged referenced entries on recall', async () => {
     // Codex R61 6rtSNk: dropping the key mapping for a referenced but
     // never-terminally-observed entry would make the retry mint fresh
     // and debit again while the first charge is still processing.
@@ -145,7 +145,7 @@ describe('utility-pending-idempotency', () => {
     expect(recallPendingVtuKey('{"ttl":"ref"}')).toBe('key-ttl-ref');
   });
 
-  it('overflows past the cap rather than evicting live attempts', () => {
+  it('overflows past the cap rather than evicting live attempts', async () => {
     // Evicting a live (unconfirmed) entry would lose deduplication:
     // retrying it would mint fresh and double-debit. Only past-TTL
     // entries are eviction victims; live overflow is cheap and the
@@ -154,14 +154,19 @@ describe('utility-pending-idempotency', () => {
       { length: 33 },
       (_, index) => `{"n":${index}}`
     );
-    const keys = signatures.map((signature) => getPendingVtuKey(signature));
+    // Sequential: the fallback mint lock serializes contenders via
+    // its spin budget, so 33 parallel mints would take seconds.
+    const keys: string[] = [];
+    for (const signature of signatures) {
+      keys.push(await getPendingVtuKey(signature));
+    }
 
     // Oldest AND newest entries still recall past the cap.
     expect(recallPendingVtuKey(signatures[0])).toBe(keys[0]);
     expect(recallPendingVtuKey(signatures[32])).toBe(keys[32]);
   });
 
-  it('keeps stale referenced entries past the cap (no live victim exists)', () => {
+  it('keeps stale referenced entries past the cap (no live victim exists)', async () => {
     // Staleness is deliberately NOT a victim criterion: a referenced
     // entry older than five minutes may still be processing, and the
     // stale branch needs its key. With every entry live, the 33rd
@@ -190,7 +195,7 @@ describe('utility-pending-idempotency', () => {
     }
   });
 
-  it('retains referenced-processing past-TTL entries at the cap (overflow)', () => {
+  it('retains referenced-processing past-TTL entries at the cap (overflow)', async () => {
     // Codex R61 6rtSNk + R63 6ruGlp: sig-old is uncompleted, so the
     // cap cannot evict it — eviction would lose the original key and
     // the retry would double-debit. Only the completed aged entry is
@@ -228,14 +233,14 @@ describe('utility-pending-idempotency', () => {
     }
   });
 
-  it('remembering an existing signature does not evict or rotate it', () => {
-    const key = getPendingVtuKey('{"amount":100}');
+  it('remembering an existing signature does not evict or rotate it', async () => {
+    const key = await getPendingVtuKey('{"amount":100}');
     rememberPendingVtuPurchase('{"amount":100}', key);
 
     expect(recallPendingVtuKey('{"amount":100}')).toBe(key);
   });
 
-  it('isolates remembered keys by scoped owner', () => {
+  it('isolates remembered keys by scoped owner', async () => {
     const scopedA = scopePendingVtuSignature(
       'customer-a',
       'merchant-1',
@@ -246,15 +251,15 @@ describe('utility-pending-idempotency', () => {
       'merchant-1',
       '{"scoped":true}'
     );
-    const key = getPendingVtuKey(scopedA);
+    const key = await getPendingVtuKey(scopedA);
 
     expect(recallPendingVtuKey(scopedB)).toBeUndefined();
     expect(recallPendingVtuKey(scopedA)).toBe(key);
   });
 
-  it('detects a stale success replay only past the recall window', () => {
+  it('detects a stale success replay only past the recall window', async () => {
     const signature = '{"stale":true}';
-    getPendingVtuKey(signature);
+    await getPendingVtuKey(signature);
     notePendingVtuReference(signature, 'REF-1');
     // Staleness keys off OBSERVED completion: a noted-but-uncompleted
     // entry is never stale, however old the submit.
@@ -285,13 +290,13 @@ describe('utility-pending-idempotency', () => {
     ).toBe(false);
   });
 
-  it('presents a slow first completion instead of aging the submit', () => {
+  it('presents a slow first completion instead of aging the submit', async () => {
     // A 202 noted early, completed minutes later via reconciliation:
     // the replay must present the vend, not "Already Completed" (which
     // would forget the key and double-debit the prompted retry).
     const signature = '{"slow":true}';
     const submittedAt = Date.now();
-    getPendingVtuKey(signature);
+    await getPendingVtuKey(signature);
     notePendingVtuReference(signature, 'REF-SLOW');
 
     const completedAt = submittedAt + PENDING_VTU_STALE_AFTER_MS + 60_000;
@@ -308,9 +313,9 @@ describe('utility-pending-idempotency', () => {
     ).toBe(true);
   });
 
-  it('keeps the first completion when re-marked', () => {
+  it('keeps the first completion when re-marked', async () => {
     const signature = '{"remark":true}';
-    getPendingVtuKey(signature);
+    await getPendingVtuKey(signature);
     notePendingVtuReference(signature, 'REF-1');
     const first = Date.now();
     markPendingVtuCompleted(signature, first);
@@ -325,9 +330,9 @@ describe('utility-pending-idempotency', () => {
     ).toBe(true);
   });
 
-  it('forgets retained entries by noted reference on terminal history', () => {
+  it('forgets retained entries by noted reference on terminal history', async () => {
     const signature = '{"settle":true}';
-    const key = getPendingVtuKey(signature);
+    const key = await getPendingVtuKey(signature);
     notePendingVtuReference(signature, 'REF-SETTLE');
 
     // Unknown references touch nothing.
@@ -341,15 +346,15 @@ describe('utility-pending-idempotency', () => {
     forgetPendingVtuByReference('REF-SETTLE');
 
     expect(recallPendingVtuKey(signature)).toBeUndefined();
-    expect(getPendingVtuKey(signature)).not.toBe(key);
+    expect(await getPendingVtuKey(signature)).not.toBe(key);
   });
 
-  it('marks background-settled successes stale without deleting them', () => {
+  it('marks background-settled successes stale without deleting them', async () => {
     // Codex R68 6rwG9F: the outcome was never shown in-session, so
     // the retry must be told "Already Completed" — not silently
     // double-charge on a fresh key, and not lose the replay.
     const signature = '{"mark-settle":true}';
-    const key = getPendingVtuKey(signature);
+    const key = await getPendingVtuKey(signature);
     notePendingVtuReference(signature, 'REF-MARK-SETTLE');
 
     markSettledPendingVtuByReference('REF-OTHER');
@@ -361,11 +366,11 @@ describe('utility-pending-idempotency', () => {
     expect(isStalePendingVtuSuccess(signature, 'REF-MARK-SETTLE')).toBe(true);
   });
 
-  it('skips already-marked entries when settling by reference', () => {
+  it('skips already-marked entries when settling by reference', async () => {
     // Codex R68 6rwG9F: suppressed completions keep their fresh mark
     // so the stale guard presents them on replay.
     const signature = '{"mark-skip":true}';
-    const key = getPendingVtuKey(signature);
+    const key = await getPendingVtuKey(signature);
     notePendingVtuReference(signature, 'REF-MARK-SKIP');
     markPendingVtuCompleted(signature);
 
@@ -375,9 +380,9 @@ describe('utility-pending-idempotency', () => {
     expect(isStalePendingVtuSuccess(signature, 'REF-MARK-SKIP')).toBe(false);
   });
 
-  it('recognizes a noted reference as the replay of its processing vend', () => {
+  it('recognizes a noted reference as the replay of its processing vend', async () => {
     const signature = '{"noted":true}';
-    getPendingVtuKey(signature);
+    await getPendingVtuKey(signature);
 
     expect(hasNotedPendingVtuReference(signature, 'REF-1')).toBe(false);
     notePendingVtuReference(signature, 'REF-1');
@@ -385,14 +390,14 @@ describe('utility-pending-idempotency', () => {
     expect(hasNotedPendingVtuReference(signature, 'REF-OTHER')).toBe(false);
   });
 
-  it('never flags reference-less entries as stale', () => {
+  it('never flags reference-less entries as stale', async () => {
     // The user saw failure (any response would have finalized the
     // entry), so a re-tap is definitionally a retry at any age:
     // reusing the key lets the server dedupe, while forcing stale
     // would mint a fresh key and double-debit a slow retry of an
     // already-committed attempt.
     const signature = '{"noref":true}';
-    getPendingVtuKey(signature);
+    await getPendingVtuKey(signature);
 
     expect(
       isStalePendingVtuSuccess(
@@ -403,7 +408,7 @@ describe('utility-pending-idempotency', () => {
     ).toBe(false);
   });
 
-  it('lists noted references deduped, excluding unanswered entries', () => {
+  it('lists noted references deduped, excluding unanswered entries', async () => {
     clearPendingVtuKeys();
     rememberPendingVtuPurchase('{"l1":true}', 'key-l1');
     notePendingVtuReference('{"l1":true}', 'REF-SHARED');
@@ -416,7 +421,7 @@ describe('utility-pending-idempotency', () => {
     expect(listNotedPendingVtuReferences()).toEqual(['REF-SHARED']);
   });
 
-  it('filters noted references by scope tag, failing open untagged', () => {
+  it('filters noted references by scope tag, failing open untagged', async () => {
     // Codex R62 6rtokd: the settle pass must not burn history reads
     // on another account's references. Untagged (pre-tag) entries
     // fail open — their owner is unknowable.
@@ -445,7 +450,7 @@ describe('utility-pending-idempotency', () => {
     ]);
   });
 
-  it('settles only the shown generation when a newer same-scope key went live', () => {
+  it('settles only the shown generation when a newer same-scope key went live', async () => {
     // Codex R137 P1: the backfill forgets by reference, then the
     // success view settles by scope after a render commit — a
     // cross-tab buy-again minted in between is already live
@@ -475,7 +480,7 @@ describe('utility-pending-idempotency', () => {
     ).toBe(true);
   });
 
-  it('tombstones the shown generation even with no live entry', () => {
+  it('tombstones the shown generation even with no live entry', async () => {
     // Codex R137 P1: without a live entry the legacy settle
     // degrades to a keyless tombstone (timestamp arbitration can
     // suppress a same-millisecond newer key). The shown key is

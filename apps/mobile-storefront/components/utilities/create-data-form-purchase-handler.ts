@@ -151,7 +151,7 @@ export function createDataFormPurchaseHandler({
       );
       // The pass was already awaited above the peek; the capture below
       // recalls the same post-settle state.
-      const idempotencyKey = payment.getWalletIdempotencyKey(descriptor);
+      const idempotencyKey = await payment.getWalletIdempotencyKey(descriptor);
       const submittingOwner = payment.captureSubmittingOwner();
       const submittingUserId = payment.captureSubmittingUserId();
       try {

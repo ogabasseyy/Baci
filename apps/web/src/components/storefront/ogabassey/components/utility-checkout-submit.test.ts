@@ -25,7 +25,7 @@ const baseRequest = {
   customerName: 'Test Customer',
   customerPhone: '08012345678',
   expectedUserId: 'user-1',
-  getWalletIdempotencyKey: () => 'idem-key',
+  getWalletIdempotencyKey: async () => 'idem-key',
 };
 
 describe('submitUtilityCheckout', () => {
@@ -71,7 +71,7 @@ describe('submitUtilityCheckout', () => {
       ...baseRequest,
       customerName: 'Customer',
       customerPhone: undefined,
-      getWalletIdempotencyKey: (signature: string) => {
+      getWalletIdempotencyKey: async (signature: string) => {
         seenSignatures.push(signature);
         return 'idem-key';
       },
@@ -80,7 +80,7 @@ describe('submitUtilityCheckout', () => {
       ...baseRequest,
       customerName: 'Test Customer',
       customerPhone: '08012345678',
-      getWalletIdempotencyKey: (signature: string) => {
+      getWalletIdempotencyKey: async (signature: string) => {
         seenSignatures.push(signature);
         return 'idem-key';
       },

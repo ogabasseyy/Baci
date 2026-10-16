@@ -105,3 +105,58 @@ export function clearPendingVtuMintLock(): void {
     // Best effort.
   }
 }
+
+/** navigator.locks name for the mint mutex (Muse R149 M1). */
+export const PENDING_VTU_MINT_LOCK_NAME = 'baci:vtu-mint-lock/v1';
+
+/**
+ * Fallback mint-lock protocol (R148, honest R149 revision): the
+ * token write + confirm re-read NARROWS the cross-tab mint race but
+ * cannot close it — localStorage has no compare-and-swap, so two
+ * tabs loading "no lock" in the same instant can both confirm and
+ * both mint. The runner in the sync module prefers navigator.locks
+ * (a real mutex) and uses this only where locks are unavailable.
+ * Bounded 1ms spin; TTL-gated steal for crashed holders. Null =
+ * unacquired; the caller fails closed (no key, no POST).
+ */
+export const PENDING_VTU_MINT_LOCK_TTL_MS = 1000;
+export const PENDING_VTU_MINT_LOCK_WAIT_MS = 250;
+
+function spinWaitMs(ms: number): number {
+  const end = Date.now() + ms;
+  let now = Date.now();
+  while (now < end) {
+    now = Date.now();
+  }
+  return now;
+}
+
+export function acquirePendingVtuMintLock(
+  now: number = Date.now()
+): string | null {
+  if (typeof localStorage === 'undefined') {
+    return `ssr-${now}`;
+  }
+  const token = `mint-${now}-${Math.floor(Math.random() * 2 ** 32).toString(36)}`;
+  const deadline = now + PENDING_VTU_MINT_LOCK_WAIT_MS;
+  let at = now;
+  while (at < deadline) {
+    const held = loadPendingVtuMintLock();
+    if (!held || at - held.at >= PENDING_VTU_MINT_LOCK_TTL_MS) {
+      savePendingVtuMintLock(token, at);
+      if (loadPendingVtuMintLock()?.token === token) {
+        return token;
+      }
+    }
+    at = spinWaitMs(1);
+  }
+  return null;
+}
+
+export function releasePendingVtuMintLock(token: string): void {
+  // Release only our own token: a TTL-expired successor's claim
+  // must survive our finally.
+  if (loadPendingVtuMintLock()?.token === token) {
+    clearPendingVtuMintLock();
+  }
+}

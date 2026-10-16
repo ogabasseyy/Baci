@@ -19,7 +19,7 @@ describe('useUtilityIdempotencyKey', () => {
     clearPendingVtuKeys();
   });
 
-  it('returns a stable key until the attempt is forgotten', () => {
+  it('returns a stable key until the attempt is forgotten', async () => {
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
@@ -27,31 +27,31 @@ describe('useUtilityIdempotencyKey', () => {
     let first = '';
     let second = '';
     let scoped = '';
-    act(() => {
-      const attempt = result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      const attempt = await result.current.captureAttemptKey('SIG');
       first = attempt.key;
       scoped = attempt.scoped;
-      second = result.current.captureAttemptKey('SIG').key;
+      second = (await result.current.captureAttemptKey('SIG')).key;
     });
     expect(first).toBe(second);
 
-    act(() => {
+    await act(async () => {
       result.current.forgetScopedKey(scoped);
     });
     let third = '';
-    act(() => {
-      third = result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      third = (await result.current.captureAttemptKey('SIG')).key;
     });
     expect(third).not.toBe(first);
   });
 
-  it('isolates keys by owner so a second customer never recalls the first’s key', () => {
+  it('isolates keys by owner so a second customer never recalls the first’s key', async () => {
     const firstOwner = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let keyA = '';
-    act(() => {
-      keyA = firstOwner.result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      keyA = (await firstOwner.result.current.captureAttemptKey('SIG')).key;
     });
     firstOwner.unmount();
 
@@ -59,20 +59,20 @@ describe('useUtilityIdempotencyKey', () => {
       useUtilityIdempotencyKey({ customerId: 'customer-b' })
     );
     let keyB = '';
-    act(() => {
-      keyB = secondOwner.result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      keyB = (await secondOwner.result.current.captureAttemptKey('SIG')).key;
     });
 
     expect(keyB).not.toBe(keyA);
   });
 
-  it('recalls the pending key across hook instances for the same owner', () => {
+  it('recalls the pending key across hook instances for the same owner', async () => {
     const firstMount = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let key = '';
-    act(() => {
-      const attempt = firstMount.result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      const attempt = await firstMount.result.current.captureAttemptKey('SIG');
       key = attempt.key;
       expect(attempt.recalled).toBe(false);
     });
@@ -82,8 +82,8 @@ describe('useUtilityIdempotencyKey', () => {
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let recalled = '';
-    act(() => {
-      const attempt = secondMount.result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      const attempt = await secondMount.result.current.captureAttemptKey('SIG');
       recalled = attempt.key;
       expect(attempt.recalled).toBe(true);
     });
@@ -91,7 +91,7 @@ describe('useUtilityIdempotencyKey', () => {
     expect(recalled).toBe(key);
   });
 
-  it('keeps recalling the pending key when customer hydration lands', () => {
+  it('keeps recalling the pending key when customer hydration lands', async () => {
     // Hydration regression: only the session user ID is known at first;
     // customers.id arrives later and is a DIFFERENT id. Scope must not
     // flip, or the retry orphans the key and double-debits.
@@ -101,8 +101,8 @@ describe('useUtilityIdempotencyKey', () => {
       { initialProps: { userId: 'user-a' } }
     );
     let key = '';
-    act(() => {
-      key = result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      key = (await result.current.captureAttemptKey('SIG')).key;
     });
     unmount();
 
@@ -114,32 +114,32 @@ describe('useUtilityIdempotencyKey', () => {
       }
     );
     let recalled = '';
-    act(() => {
-      recalled = lateHydration.result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      recalled = (await lateHydration.result.current.captureAttemptKey('SIG')).key;
     });
 
     expect(recalled).toBe(key);
   });
 
-  it('recognizes a noted reference as a replay of its processing vend', () => {
+  it('recognizes a noted reference as a replay of its processing vend', async () => {
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
 
     let scoped = '';
-    act(() => {
-      scoped = result.current.captureAttemptKey('SIG').scoped;
+    await act(async () => {
+      scoped = (await result.current.captureAttemptKey('SIG')).scoped;
     });
     expect(result.current.isScopedReplay(scoped, 'REF-1')).toBe(false);
 
-    act(() => {
+    await act(async () => {
       result.current.noteScopedReference(scoped, 'REF-1');
     });
     expect(result.current.isScopedReplay(scoped, 'REF-1')).toBe(true);
     expect(result.current.isScopedReplay(scoped, 'REF-OTHER')).toBe(false);
   });
 
-  it('binds completion to the submitting owner across a mid-flight switch', () => {
+  it('binds completion to the submitting owner across a mid-flight switch', async () => {
     // The scope is captured when the key is issued: even if the hook
     // re-renders as customer B before A’s request settles, noting the
     // reference still lands on A’s entry — never B’s.
@@ -149,12 +149,12 @@ describe('useUtilityIdempotencyKey', () => {
       { initialProps: { customerId: 'customer-a' } }
     );
     let scoped = '';
-    act(() => {
-      scoped = result.current.captureAttemptKey('SIG').scoped;
+    await act(async () => {
+      scoped = (await result.current.captureAttemptKey('SIG')).scoped;
     });
 
     rerender({ customerId: 'customer-b' });
-    act(() => {
+    await act(async () => {
       result.current.noteScopedReference(scoped, 'REF-1');
     });
 
@@ -172,7 +172,7 @@ describe('useUtilityIdempotencyKey', () => {
     ).toBe(false);
   });
 
-  it('keeps concurrent attempts independent via per-execution captures', () => {
+  it('keeps concurrent attempts independent via per-execution captures', async () => {
     // Two overlapping submits must not share mutable hook state: each
     // capture finalizes exactly its own entry.
     const { result } = renderHook(() =>
@@ -181,49 +181,49 @@ describe('useUtilityIdempotencyKey', () => {
 
     let attemptA = { key: '', scoped: '', recalled: false };
     let attemptB = { key: '', scoped: '', recalled: false };
-    act(() => {
-      attemptA = result.current.captureAttemptKey('SIG-A');
-      attemptB = result.current.captureAttemptKey('SIG-B');
+    await act(async () => {
+      attemptA = await result.current.captureAttemptKey('SIG-A');
+      attemptB = await result.current.captureAttemptKey('SIG-B');
     });
-    act(() => {
+    await act(async () => {
       result.current.forgetScopedKey(attemptA.scoped);
     });
 
     let recallA = '';
     let recallB = '';
-    act(() => {
-      recallA = result.current.captureAttemptKey('SIG-A').key;
-      recallB = result.current.captureAttemptKey('SIG-B').key;
+    await act(async () => {
+      recallA = (await result.current.captureAttemptKey('SIG-A')).key;
+      recallB = (await result.current.captureAttemptKey('SIG-B')).key;
     });
     expect(recallA).not.toBe(attemptA.key);
     expect(recallB).toBe(attemptB.key);
   });
 
-  it('reports a success stale only when completion is past the window', () => {
+  it('reports a success stale only when completion is past the window', async () => {
     vi.useFakeTimers();
     try {
       const { result } = renderHook(() =>
         useUtilityIdempotencyKey({ customerId: 'customer-a' })
       );
       let scoped = '';
-      act(() => {
-        scoped = result.current.captureAttemptKey('SIG').scoped;
+      await act(async () => {
+        scoped = (await result.current.captureAttemptKey('SIG')).scoped;
         result.current.noteScopedReference(scoped, 'REF-1');
       });
       expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(false);
 
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(6 * 60 * 1000);
       });
       // Noted but never completed: still not stale — a slow first
       // completion must present, not "Already Completed".
       expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(false);
 
-      act(() => {
+      await act(async () => {
         markPendingVtuCompleted(scoped);
       });
       expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(false);
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(6 * 60 * 1000);
       });
       expect(result.current.isScopedStale(scoped, 'REF-1')).toBe(true);
@@ -233,7 +233,7 @@ describe('useUtilityIdempotencyKey', () => {
     }
   });
 
-  it('settles only the shown generation when a newer key went live', () => {
+  it('settles only the shown generation when a newer key went live', async () => {
     // Codex R137 P1 (hook threading): mark carries the shown key
     // through, so settle tombstones exactly it — a cross-tab
     // buy-again under the same scope survives instead of being
@@ -244,8 +244,8 @@ describe('useUtilityIdempotencyKey', () => {
 
     let scoped = '';
     let shownKey = '';
-    act(() => {
-      const attempt = result.current.captureAttemptKey('SIG-SHOWN');
+    await act(async () => {
+      const attempt = await result.current.captureAttemptKey('SIG-SHOWN');
       scoped = attempt.scoped;
       shownKey = attempt.key;
       result.current.markAttemptShown(scoped, shownKey);
@@ -253,7 +253,7 @@ describe('useUtilityIdempotencyKey', () => {
     // Cross-tab buy-again lands before the settle runs.
     rememberPendingVtuPurchase(scoped, 'key-newer-generation');
 
-    act(() => {
+    await act(async () => {
       result.current.settleShownAttempt();
     });
 
@@ -266,7 +266,7 @@ describe('finalizeSuppressedAttempt', () => {
     clearPendingVtuKeys();
   });
 
-  it('preserves a switched terminal success so the returnee replays it', () => {
+  it('preserves a switched terminal success so the returnee replays it', async () => {
     // The charge committed to the submitter while their UI was
     // suppressed: forgetting would mint a fresh key on their
     // switch-back repeat and debit/vend a second time. The repeat
@@ -275,8 +275,8 @@ describe('finalizeSuppressedAttempt', () => {
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let attempt = { key: '', scoped: '', recalled: false };
-    act(() => {
-      attempt = result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      attempt = await result.current.captureAttemptKey('SIG');
     });
 
     finalizeSuppressedAttempt(attempt, {
@@ -287,14 +287,14 @@ describe('finalizeSuppressedAttempt', () => {
     });
 
     let repeat = '';
-    act(() => {
-      repeat = result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      repeat = (await result.current.captureAttemptKey('SIG')).key;
     });
     expect(repeat).toBe(attempt.key);
     expect(result.current.isScopedReplay(attempt.scoped, 'REF-1')).toBe(true);
   });
 
-  it('records completion on switched terminal success (processing notes do not)', () => {
+  it('records completion on switched terminal success (processing notes do not)', async () => {
     // The stale guard keys off completion time: a switch-back repeat
     // minutes later must present this vend, while a repeat long after
     // reports "Already Completed". Processing notes must NOT mark.
@@ -305,9 +305,9 @@ describe('finalizeSuppressedAttempt', () => {
       );
       let terminal = { key: '', scoped: '', recalled: false };
       let processing = { key: '', scoped: '', recalled: false };
-      act(() => {
-        terminal = result.current.captureAttemptKey('SIG-TERM');
-        processing = result.current.captureAttemptKey('SIG-PROC');
+      await act(async () => {
+        terminal = await result.current.captureAttemptKey('SIG-TERM');
+        processing = await result.current.captureAttemptKey('SIG-PROC');
       });
 
       finalizeSuppressedAttempt(terminal, {
@@ -326,7 +326,7 @@ describe('finalizeSuppressedAttempt', () => {
         result.current.isScopedStale(terminal.scoped, 'REF-TERM')
       ).toBe(false);
 
-      act(() => {
+      await act(async () => {
         vi.advanceTimersByTime(6 * 60 * 1000);
       });
       expect(result.current.isScopedStale(terminal.scoped, 'REF-TERM')).toBe(
@@ -340,13 +340,13 @@ describe('finalizeSuppressedAttempt', () => {
     }
   });
 
-  it('notes the reference when the switched result is processing', () => {
+  it('notes the reference when the switched result is processing', async () => {
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let attempt = { key: '', scoped: '', recalled: false };
-    act(() => {
-      attempt = result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      attempt = await result.current.captureAttemptKey('SIG');
     });
 
     finalizeSuppressedAttempt(attempt, {
@@ -361,13 +361,13 @@ describe('finalizeSuppressedAttempt', () => {
     );
   });
 
-  it('keeps the key for errors and null attempts', () => {
+  it('keeps the key for errors and null attempts', async () => {
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let attempt = { key: '', scoped: '', recalled: false };
-    act(() => {
-      attempt = result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      attempt = await result.current.captureAttemptKey('SIG');
     });
 
     finalizeSuppressedAttempt(attempt, {
@@ -382,19 +382,19 @@ describe('finalizeSuppressedAttempt', () => {
     });
 
     let repeat = '';
-    act(() => {
-      repeat = result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      repeat = (await result.current.captureAttemptKey('SIG')).key;
     });
     expect(repeat).toBe(attempt.key);
   });
 
-  it('forgets a terminal 4xx error so the returnee retries fresh', () => {
+  it('forgets a terminal 4xx error so the returnee retries fresh', async () => {
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let attempt = { key: '', scoped: '', recalled: false };
-    act(() => {
-      attempt = result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      attempt = await result.current.captureAttemptKey('SIG');
     });
 
     finalizeSuppressedAttempt(attempt, {
@@ -404,19 +404,19 @@ describe('finalizeSuppressedAttempt', () => {
     });
 
     let repeat = '';
-    act(() => {
-      repeat = result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      repeat = (await result.current.captureAttemptKey('SIG')).key;
     });
     expect(repeat).not.toBe(attempt.key);
   });
 
-  it('keeps the key for a pre-route 429 error after a switch', () => {
+  it('keeps the key for a pre-route 429 error after a switch', async () => {
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let attempt = { key: '', scoped: '', recalled: false };
-    act(() => {
-      attempt = result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      attempt = await result.current.captureAttemptKey('SIG');
     });
 
     finalizeSuppressedAttempt(attempt, {
@@ -426,21 +426,21 @@ describe('finalizeSuppressedAttempt', () => {
     });
 
     let repeat = '';
-    act(() => {
-      repeat = result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      repeat = (await result.current.captureAttemptKey('SIG')).key;
     });
     expect(repeat).toBe(attempt.key);
   });
 });
 
 describe('shouldRotateVtuKeyForStatus', () => {
-  it('returns true for definitive route 4xx (outcome recorded, key is dead)', () => {
+  it('returns true for definitive route 4xx (outcome recorded, key is dead)', async () => {
     for (const status of [400, 404, 409, 422]) {
       expect(shouldRotateVtuKeyForStatus(status)).toBe(true);
     }
   });
 
-  it('returns false for pre-route 401/403/413/415/429 — handler never ran', () => {
+  it('returns false for pre-route 401/403/413/415/429 — handler never ran', async () => {
     // A 429 retry of an already-committed attempt must keep the key:
     // rotating would mint a fresh key and debit a second transaction.
     for (const status of [401, 403, 413, 415, 429]) {
@@ -448,7 +448,7 @@ describe('shouldRotateVtuKeyForStatus', () => {
     }
   });
 
-  it('returns false for 408/425 timeouts — ambiguous infrastructure responses', () => {
+  it('returns false for 408/425 timeouts — ambiguous infrastructure responses', async () => {
     // Codex R95 P1: either can arrive after the handler accepted the
     // request or committed the debit, so the retry must dedupe on the
     // retained key instead of minting a fresh UUID and debiting twice.
@@ -457,7 +457,7 @@ describe('shouldRotateVtuKeyForStatus', () => {
     }
   });
 
-  it('returns false for 5xx and missing statuses', () => {
+  it('returns false for 5xx and missing statuses', async () => {
     expect(shouldRotateVtuKeyForStatus(500)).toBe(false);
     expect(shouldRotateVtuKeyForStatus(502)).toBe(false);
     expect(shouldRotateVtuKeyForStatus(undefined)).toBe(false);
@@ -469,7 +469,7 @@ describe('settleShownAttempt', () => {
     clearPendingVtuKeys();
   });
 
-  it('forgets the marked key once; a second call is a no-op', () => {
+  it('forgets the marked key once; a second call is a no-op', async () => {
     // Controlled clock: the tombstone kills same-ms re-remembers, so
     // the post-settle capture must land in a later millisecond (as any
     // real buy-again would).
@@ -480,29 +480,29 @@ describe('settleShownAttempt', () => {
         useUtilityIdempotencyKey({ customerId: 'customer-a' })
       );
       let attempt = { key: '', scoped: '', recalled: false };
-      act(() => {
-        attempt = result.current.captureAttemptKey('SIG');
+      await act(async () => {
+        attempt = await result.current.captureAttemptKey('SIG');
       });
-      act(() => {
+      await act(async () => {
         result.current.markAttemptShown(attempt.scoped);
       });
-      act(() => {
+      await act(async () => {
         result.current.settleShownAttempt();
       });
 
       now += 60_000;
       let repeat = '';
-      act(() => {
-        repeat = result.current.captureAttemptKey('SIG').key;
+      await act(async () => {
+        repeat = (await result.current.captureAttemptKey('SIG')).key;
       });
       expect(repeat).not.toBe(attempt.key);
 
-      act(() => {
+      await act(async () => {
         result.current.settleShownAttempt();
       });
       let again = '';
-      act(() => {
-        again = result.current.captureAttemptKey('SIG').key;
+      await act(async () => {
+        again = (await result.current.captureAttemptKey('SIG')).key;
       });
       expect(again).toBe(repeat);
     } finally {
@@ -510,22 +510,22 @@ describe('settleShownAttempt', () => {
     }
   });
 
-  it('is a no-op when nothing was marked', () => {
+  it('is a no-op when nothing was marked', async () => {
     const { result } = renderHook(() =>
       useUtilityIdempotencyKey({ customerId: 'customer-a' })
     );
     let attempt = { key: '', scoped: '', recalled: false };
-    act(() => {
-      attempt = result.current.captureAttemptKey('SIG');
+    await act(async () => {
+      attempt = await result.current.captureAttemptKey('SIG');
     });
 
-    act(() => {
+    await act(async () => {
       result.current.settleShownAttempt();
     });
 
     let repeat = '';
-    act(() => {
-      repeat = result.current.captureAttemptKey('SIG').key;
+    await act(async () => {
+      repeat = (await result.current.captureAttemptKey('SIG')).key;
     });
     expect(repeat).toBe(attempt.key);
   });

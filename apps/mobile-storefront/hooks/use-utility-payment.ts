@@ -155,12 +155,12 @@ export function useUtilityPayment() {
      * mirror): the throw aborts before the POST and the handler's
      * finally releases the checkout guard.
      */
-    getWalletIdempotencyKey: (descriptor: string) => {
+    getWalletIdempotencyKey: async (descriptor: string) => {
       // Tag from the SAME pair the scope hashed (Codex R62 6rtokd):
       // the settle filter recomputes this for the active account.
-      // Recall-or-mint runs under the mint mutex inside
-      // getPendingVtuKey (Codex R148 P1) so simultaneous Expo web
-      // tabs cannot both mint and double-debit.
+      // Recall-or-mint runs under the navigator.locks mint mutex
+      // inside getPendingVtuKey (R148/R149) so simultaneous Expo
+      // web tabs cannot both mint and double-debit.
       return getPendingVtuKey(
         descriptor,
         buildPendingVtuScopeTag(ownerId, CONFIG.MERCHANT_ID)

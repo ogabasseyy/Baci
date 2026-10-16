@@ -44,6 +44,13 @@ import re
 import sys
 from pathlib import Path
 
+# Module names that load without ever matching test discovery: the two
+# interpreter auto-imports plus every stdlib top-level name (a file with one
+# of these stems in the suite dir would shadow the real module at runtime).
+_RESERVED_MODULE_NAMES = frozenset({"sitecustomize", "usercustomize"}) | frozenset(
+    getattr(sys, "stdlib_module_names", ())
+)
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from capability_gate_contract_ci_checks import (
     CHECKER,
@@ -59,7 +66,7 @@ BASE_PINS = {
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
     ".github/scripts/capability_gate_contract_ci_checks.py": "af7aec0fb16f42b0834b3dea511ab251f204f19565103162ce9f807a4586f5bc",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "868285a558a1d9307ce5554cdeaae3c480dad7461685875d99f47fe39403f233",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "7a6a5daecabb8f4d821118ac605b07e9de508579b1a8716930cca351934104bf",
     ".github/workflows/capability-register-freshness.yml": "7496fead7a21713f6864b61ee828b1718350dd3034571c73381d5402f5ae27df",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
@@ -69,7 +76,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/prompt-builder.patch": "4a5454701c14a0beae4471bc6952885baa3a3152ff733998202400751f0b5c8e",
     "vps-workers/baci-editorial-context/test_capability_agent_access_map.py": "a697cd05c1107268219490c23797e283cb9a3c03482f1e3dbfc590d949583687",
     "vps-workers/baci-editorial-context/test_capability_gate.py": "88815781ee49e265a1e94ee7a693340b77a53fef60a9cb08b2c3e9098c268fb8",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "76fe9031ca2220e2a77d26b33754399bfbaba1db0c0f61d2a8239397f716b0df",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "4ead989df3f03f2d9becbc7f74f6dcab60c557bbe61ebfbf26fd854f93a21542",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "20b635c6a0a4395c1c29f8c8de3bd62054ebdda11951f6a8790a5e39a948a99a",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "1381bd0b024f0e1780915ab1aab614093af2d5a61b718224310e542b9d77411b",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
@@ -143,23 +150,33 @@ def pin_failures(repo_root, base_pins, declared):
             )
     for rel in declared:
         if rel not in base_pins:
-            # A brand-new suite file has no baseline to betray: its whole
-            # content is visible in the diff, so a declaration matching the
-            # file's actual digest passes with a notice. Anything else stays
-            # a failure — an unmatched hash would let a benign file declare
-            # a future payload's digest, then land it silently later. The
-            # allowance mirrors the gate's discovery pattern exactly: a
-            # non-test module (sitecustomize, stdlib shadows, helpers) never
-            # qualifies, since it is not what the suite executes.
-            if (
+            # A brand-new file has no baseline to betray: its whole content
+            # is visible in the diff, so a declaration matching the file's
+            # actual digest passes with a notice. Anything else stays a
+            # failure — an unmatched hash would let a benign file declare a
+            # future payload's digest, then land it silently later. Test
+            # modules mirror the gate's discovery pattern; non-test helpers
+            # are declarable too, so the situation in review (a helper that
+            # is neither pinned nor pinnable) cannot arise — except names
+            # that would hijack the interpreter itself (sitecustomize and
+            # stdlib shadows load without ever matching discovery), which
+            # stay undeclarable.
+            in_scope = (
                 rel.startswith(SUITE_DIR + "/")
-                and fnmatch.fnmatchcase(Path(rel).name, "test_*capabilit*.py")
+                and rel.endswith(".py")
                 and Path(repo_root, rel).is_file()
-            ):
+            )
+            shadow = in_scope and Path(rel).stem in _RESERVED_MODULE_NAMES
+            if in_scope and not shadow:
+                kind = (
+                    "suite" if fnmatch.fnmatchcase(Path(rel).name, "test_*capabilit*.py") else "helper"
+                )
                 if declared[rel] == sha256_of(Path(repo_root, rel)):
-                    notices.append(f"declared new suite file (needs review): {rel}")
+                    notices.append(f"declared new {kind} file (needs review): {rel}")
                 else:
-                    failures.append(f"new suite file pin does not match its content: {rel} (declare the file's actual hash)")
+                    failures.append(f"new {kind} file pin does not match its content: {rel} (declare the file's actual hash)")
+            elif shadow:
+                failures.append(f"pin declaration must not shadow the interpreter: {rel}")
             else:
                 failures.append(f"unknown pin declaration: {rel}")
     return failures, notices

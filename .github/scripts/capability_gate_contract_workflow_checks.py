@@ -9,6 +9,7 @@ import re
 from capability_gate_contract_ci_checks import (
     CHECKER,
     WORKFLOW,
+    _TRIGGER_ITEM,
     _has_escaped_key,
     _on_block_subs,
     _ordered_branch_match,
@@ -76,9 +77,6 @@ EXPECTED_ATTESTATION_STEPS = [
 ]
 
 _JOB_HEADER = re.compile(r"^  ([A-Za-z0-9_.\-]+)\s*:")
-_TRIGGER_KEY = re.compile(r"^  ([A-Za-z_]+)\s*:\s*(.*)$")
-_TRIGGER_SUBKEY = re.compile(r"^    ([A-Za-z_-]+)\s*:\s*(.*)$")
-_TRIGGER_ITEM = re.compile(r"^      -\s(.*)$")
 
 
 def contract_trigger_failures(workflow_text):
@@ -98,9 +96,9 @@ def contract_trigger_failures(workflow_text):
         return ["contract workflow must keep the pull_request_target trigger"]
     on_at = next(i for i, line in enumerate(lines) if line == "on:")
     for line in lines[on_at + 1 : end]:
-        inline = re.match(r"^  pull_request_target\s*:\s*(.*)$", line)
-        if inline and _strip_comment(inline.group(1)).strip():
-            failures.append("contract workflow must not carry inline pull_request_target trigger filters:")
+        inline = re.match(r"^  (pull_request_target|push)\s*:\s*(.*)$", line)
+        if inline and _strip_comment(inline.group(2)).strip():
+            failures.append(f"contract workflow must not carry inline {inline.group(1)} trigger filters:")
     for key, rest, idx in subs["pull_request_target"]:
         if key in ("paths", "paths-ignore", "branches-ignore"):
             failures.append(f"contract workflow must not narrow pull_request_target with {key}:")
@@ -120,6 +118,18 @@ def contract_trigger_failures(workflow_text):
                 failures.append("contract workflow must keep the full pull_request_target types:")
     if _ordered_branch_match(subs, "pull_request_target", lines, end) is False:
         failures.append("contract workflow must keep an exact main match in pull_request_target branches:")
+    # The push attestation must only ever run on main: a bare push trigger
+    # lets any branch push mint the same-named context self-attested.
+    if "push" not in subs:
+        failures.append("contract workflow must keep the push trigger")
+    else:
+        for key, rest, idx in subs["push"]:
+            if key in ("paths", "paths-ignore", "branches-ignore", "types"):
+                failures.append(f"contract workflow must not narrow push with {key}:")
+        # None (no branches key) is not a pass here: unlike
+        # pull_request_target, an unfiltered push fires on every branch.
+        if _ordered_branch_match(subs, "push", lines, end) is not True:
+            failures.append("contract workflow must keep an exact main match in push branches:")
     return failures
 
 

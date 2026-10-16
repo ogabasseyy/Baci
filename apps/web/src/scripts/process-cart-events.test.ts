@@ -94,7 +94,7 @@ it('uses one retained cleanup schedule across loop passes without touching crede
   expect(run).toHaveBeenCalledTimes(3);
 });
 
-it('retries failed cleanup next pass while keeping the publisher running', async () => {
+it('retries failed cleanup after its backoff while keeping the publisher running', async () => {
   const { createCartRetentionScheduler } = await import(
     '@/lib/cart/retention-scheduler'
   );
@@ -102,9 +102,10 @@ it('retries failed cleanup next pass while keeping the publisher running', async
     .fn()
     .mockResolvedValueOnce({ data: null, error: { message: 'private' } })
     .mockResolvedValue({ data: null, error: null });
+  let now = 1000;
   const cleanup = createCartRetentionScheduler({
     client: () => ({ rpc }),
-    now: () => 1000,
+    now: () => now,
   });
   const run = vi
     .fn()
@@ -112,9 +113,14 @@ it('retries failed cleanup next pass while keeping the publisher running', async
   const logger = { info: vi.fn(), error: vi.fn() };
   const env = { COMMERCE_CART_EVENTS_ENABLED: 'true' };
   expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(0);
+  // The next pass is inside the failure backoff: no retry, no log spam,
+  // but the publisher still runs.
+  expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(0);
+  expect(rpc).toHaveBeenCalledTimes(1);
+  now += 30_000;
   expect(await runCartEventsOnce({ env, run, cleanup, logger })).toBe(0);
   expect(rpc).toHaveBeenCalledTimes(2);
-  expect(run).toHaveBeenCalledTimes(2);
+  expect(run).toHaveBeenCalledTimes(3);
   expect(logger.error).toHaveBeenCalledWith(
     '[cart-events] retention unavailable'
   );

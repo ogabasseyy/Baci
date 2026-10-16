@@ -49,6 +49,16 @@ flags remain disabled by default, and no merchant is enrolled.
 5. Expand only after convergence, checkout-binding and isolation
    evidence pass at the deployed revision.
 
+## Signing keys
+
+Session proofs and handoff tokens derive separate signing keys from
+the provisioned cart master secret (the handoff key is an
+HMAC-labelled derivation, `baci-cart-handoff-signing:v1`), so the two
+credential types never share a signing key. Rotating the master
+secret still rotates both together: outstanding handoff links and
+session proofs minted before a rotation stop verifying, so rotate
+only with enrollment drained or accept re-issuing live handoff links.
+
 ## Rollback
 
 - Disable new enrollment/realtime first. Migrated carts keep canonical

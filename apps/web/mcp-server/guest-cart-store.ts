@@ -72,10 +72,28 @@ export class GuestCartStore {
   /** Token-free code of the latest failed write; /health degrades until a write succeeds. */
   lastStorageErrorCode: string | null = null;
 
+  private readonly canonical: ReturnType<typeof createGuestCanonicalBridge>;
+
   constructor(
     private readonly supabase: SupabaseClient,
-    private readonly canonical = createGuestCanonicalBridge()
-  ) {}
+    canonical?: ReturnType<typeof createGuestCanonicalBridge>
+  ) {
+    // A misconfigured canonical bridge endpoint must not brick the
+    // legacy guest-cart store: disable the bridge, log the bounded
+    // startup error, and keep serving legacy carts.
+    if (canonical !== undefined) {
+      this.canonical = canonical;
+      return;
+    }
+    try {
+      this.canonical = createGuestCanonicalBridge();
+    } catch {
+      console.error(
+        '[guest-cart] canonical bridge configuration invalid; canonical carts disabled'
+      );
+      this.canonical = null;
+    }
+  }
 
   private async rpc<T>(name: string, params: Record<string, unknown>) {
     const { data, error } = await this.supabase.rpc(name, params);

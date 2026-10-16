@@ -47,12 +47,25 @@ export interface HandoffMerchantRef {
   rootDomain: string;
 }
 
+/**
+ * Domain-separated handoff signing key: derived from the cart master
+ * secret with an HMAC label, so handoff tokens and session proofs
+ * never share a signing key even though they share provisioning.
+ * Rotating the master still rotates both (by design, pre-activation),
+ * but a leaked handoff signing context cannot forge session proofs.
+ */
+export function deriveHandoffSigningKey(masterSecret: string): string {
+  return createHmac('sha256', masterSecret)
+    .update('baci-cart-handoff-signing:v1')
+    .digest('hex');
+}
+
 export function requireSecret(secret: string | undefined): string {
   const normalized = secret?.trim() ? secret.trim() : getCartSessionSecret();
   if (!normalized || normalized.length < MIN_SECRET_LENGTH) {
     throw new HandoffConfigError();
   }
-  return normalized;
+  return deriveHandoffSigningKey(normalized);
 }
 
 export function encodeCanonicalPayload(

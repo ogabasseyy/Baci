@@ -201,6 +201,27 @@ it('surfaces transport failures as typed outages and clears them on success', as
   expect(describeGuestCartStoreHealth(store)).toEqual({ guestCarts: 'ok' });
 });
 
+it('keeps serving legacy carts when the canonical bridge configuration is invalid', async () => {
+  const fake = createFakeGuestCartSupabase();
+  fake.rows.set(token, liveRow([]));
+  const previous = process.env.MCP_CANONICAL_CART_BRIDGE_URL;
+  process.env.MCP_CANONICAL_CART_BRIDGE_URL =
+    'https://evil.example/api/storefront/cart/legacy';
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const store = new GuestCartStore(fake.supabase as never);
+    await expect(store.hasToken(token)).resolves.toBe(true);
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('canonical carts disabled')
+    );
+  } finally {
+    errorSpy.mockRestore();
+    if (previous === undefined)
+      delete process.env.MCP_CANONICAL_CART_BRIDGE_URL;
+    else process.env.MCP_CANONICAL_CART_BRIDGE_URL = previous;
+  }
+});
+
 it('probes liveness without throwing, even on outage', async () => {
   const fake = createFakeGuestCartSupabase();
   fake.rows.set(token, liveRow([]));

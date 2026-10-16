@@ -1,6 +1,13 @@
 'use client';
 
-import { createContext, type ReactNode, use, useEffect, useState } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from 'react';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
 import {
   loadCustomerSession,
@@ -105,7 +112,7 @@ export function CustomerAuthProvider({
     // here — the module mutation cannot roll back, so a speculative
     // render would report a merchant switch that never committed and
     // discard a healthy in-flight checkout (Codex R129 P2). It runs
-    // in the committed session effect below instead.
+    // in the committed layout effect below instead.
     setPrevMerchantSlug(merchantSlug);
     setIsLoading(true);
     setUser(null);
@@ -117,13 +124,19 @@ export function CustomerAuthProvider({
   const checkSession = () =>
     loadCustomerSession(merchantSlug, { setUser, setCustomer, setIsLoading });
 
+  // Publish the storefront reset commit-synchronously (Codex R129
+  // P2, R133 P2): a layout effect leaves no post-commit window in
+  // which a settling promise continuation could read the previous
+  // storefront's identity and publish the old store's result into
+  // the newly committed view. Runs on mount and every committed
+  // merchantSlug change. The async session load stays in the
+  // passive effect below.
+  useLayoutEffect(() => {
+    publishCustomerIdentity(null, null, merchantSlug);
+  }, [merchantSlug]);
+
   useEffect(() => {
     let cancelled = false;
-
-    // Publish the storefront reset only after commit (Codex R129 P2):
-    // runs on mount and every committed merchantSlug change,
-    // synchronously before the async session load below.
-    publishCustomerIdentity(null, null, merchantSlug);
 
     void loadCustomerSession(
       merchantSlug,

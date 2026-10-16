@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { act, Suspense } from 'react';
+import { act, Suspense, useLayoutEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -360,6 +360,92 @@ describe('CustomerAuthProvider', () => {
       });
     } finally {
       suspendOnSlug = null;
+      publishCustomerIdentity(null, null, null);
+      await act(async () => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it('publishes the merchant reset before any post-commit layout reader runs', async () => {
+    // Codex R133 P2: a promise continuation settling in the
+    // post-commit / pre-passive-flush window must already see the
+    // reset — otherwise it accepts the old storefront's identity
+    // and publishes the old store's result into the new view. The
+    // sibling spy reads the singleton from its own layout effect,
+    // which runs after the provider's layout effects but before
+    // ANY passive effect of the same commit — exactly the window
+    // under test. Fails pre-fix: the passive publish has not run
+    // yet, so the spy still sees store-a.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          authenticated: true,
+          customer: {
+            email: 'a@example.com',
+            first_name: 'A',
+            id: 'customer-a',
+            last_name: 'User',
+          },
+          user: { email: 'a@example.com', id: 'user-a', role: 'customer' },
+        })
+      )
+      .mockImplementation(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const seenAtLayout: ReturnType<typeof getLiveCustomerIdentity>[] = [];
+    function LayoutSpy() {
+      useLayoutEffect(() => {
+        seenAtLayout.push({ ...getLiveCustomerIdentity() });
+      });
+      return null;
+    }
+
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(
+          <>
+            <CustomerAuthProvider merchantSlug="store-a">
+              <AuthProbe />
+            </CustomerAuthProvider>
+            <LayoutSpy />
+          </>
+        );
+      });
+      await waitFor(() =>
+        expect(getLiveCustomerIdentity()).toEqual({
+          customerId: 'customer-a',
+          merchantSlug: 'store-a',
+          userId: 'user-a',
+        })
+      );
+
+      seenAtLayout.length = 0;
+      await act(async () => {
+        root.render(
+          <>
+            <CustomerAuthProvider merchantSlug="store-b">
+              <AuthProbe />
+            </CustomerAuthProvider>
+            <LayoutSpy />
+          </>
+        );
+      });
+
+      // The update commit's layout phase already saw the reset —
+      // no post-commit window exposes the stale storefront.
+      expect(seenAtLayout.length).toBeGreaterThan(0);
+      expect(seenAtLayout.at(-1)).toEqual({
+        customerId: null,
+        merchantSlug: 'store-b',
+        userId: null,
+      });
+    } finally {
       publishCustomerIdentity(null, null, null);
       await act(async () => {
         root.unmount();

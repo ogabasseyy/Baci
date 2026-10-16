@@ -8,6 +8,7 @@ import {
   type Dispatch,
   type SetStateAction,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react';
@@ -106,12 +107,13 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   // 300-line ceiling (Codex R104 P1).
   const fetchCoordination = useWalletFetchCoordination();
   const fetchGenerationRef = fetchCoordination.fetchGenerationRef;
-  // Latest-balance mirror (Codex R78 6sN80p): assigned during render
-  // (not in an effect — passive effects can lag the microtask that
-  // resumes a settled gate), so any committed render has already
-  // published its balance before post-await code can read it. Covers
-  // fetch completions AND direct setWalletBalance calls (post-
-  // purchase optimistic updates), which no fetch-side hook could see.
+  // Latest-balance mirror (Codex R78 6sN80p, R133 P2): published
+  // in the every-commit layout effect below — layout, not render
+  // (abandoned renders would poison the mirror with discarded
+  // state) and not passive (passive effects can lag the microtask
+  // that resumes a settled gate). Covers fetch completions AND
+  // direct setWalletBalance calls (post-purchase optimistic
+  // updates), which no fetch-side hook could see.
   const walletBalanceRef = useRef(walletBalance);
   // Live error mirror (Codex R81 P2): published synchronously by
   // setWalletErrorLive at every write site, so a failure landing
@@ -127,23 +129,48 @@ export function useWallet({ userId, merchantSlug }: UseWalletOptions): UseWallet
   // never read a stale account number for even one render after a switch.
   // Keyed on identity only — a manual refresh (refreshToken bump) keeps
   // state to avoid a zero-flash. React "adjusting state during render".
+  // State updates ONLY here: ref mutations cannot roll back, so an
+  // abandoned concurrent render would poison the committed identity's
+  // fetch generation and wedge its initial-read gate (Codex R133 P2).
+  // The generation claim + live error-ref clear run commit-synchronously
+  // in the layout effect below instead.
   const identity =
     userId && merchantSlug ? `${userId}:${merchantSlug}` : null;
   const [fetchedIdentity, setFetchedIdentity] = useState<string | null>(null);
   if (identity !== fetchedIdentity) {
     setFetchedIdentity(identity);
-    fetchCoordination.claimIdentity(identity);
     setWalletBalance(0);
-    setWalletErrorLive(false);
+    setWalletError(false);
     setPayWithWallet(false);
     setFundingAccount(null);
     setRequiresFundingAccountConsent(false);
     setWalletDvaEnabled(false);
     setWalletTransactions([]);
   }
-  // Publish this render's balance for post-await readers (see above).
-  walletBalanceRef.current = walletBalance;
-
+  // Commit-synchronous ref publication (Codex R133 P2): layout
+  // effects never run for renders that never commit, and nothing
+  // interleaves between commit and layout — the same commit/effect-gap
+  // protection the render-phase claim gave R95 (a previous-account
+  // response resolving mid-transition still sees a superseded
+  // generation), without poisoning on abandonment. Layout (not
+  // passive) preserves the R78 guarantee — a committed render has
+  // published before any post-commit microtask can read — because
+  // layout runs synchronously inside the commit.
+  //
+  // Balance mirror: every committed render publishes (no dep array),
+  // covering fetch completions AND direct setWalletBalance calls
+  // (post-purchase optimistic updates) exactly like the render-phase
+  // assignment did — minus the abandonment poison.
+  useLayoutEffect(() => {
+    walletBalanceRef.current = walletBalance;
+  });
+  // Generation claim + live error-ref clear: identity-keyed. Both
+  // are ref mutations with the same no-rollback hazard, and the
+  // submit gate reads both live.
+  useLayoutEffect(() => {
+    setWalletErrorLive(false);
+    fetchCoordination.claimIdentity(identity);
+  }, [identity]);
   useEffect(() => {
     const abortController = new AbortController();
     const generation = fetchGenerationRef.current;

@@ -81,12 +81,16 @@ export function useWalletFetchCoordination(): {
       // zero: block submits until it settles (see above).
       initialReadPendingRef.current = true;
     }
-    // Claim the next generation NOW, not in the effect (Codex R95
-    // P1, same as claimRefresh): the old effect's cleanup runs
-    // only after this render commits, so a previous-account
-    // response resolving in between would otherwise see an
-    // un-superseded generation and repopulate the new session with
-    // the previous customer's balance and funding account.
+    // Claimed commit-synchronously from the caller's layout effect
+    // (Codex R95 P1, R133 P2 — same timing class as claimRefresh):
+    // the old passive effect's cleanup runs only after this render
+    // commits, so a previous-account response resolving in between
+    // would otherwise see an un-superseded generation and
+    // repopulate the new session with the previous customer's
+    // balance and funding account. Layout — not render-phase, not
+    // passive: nothing interleaves between commit and layout, and
+    // abandoned renders never run layout effects (a render-phase
+    // claim would poison the committed generation on abandonment).
     fetchGenerationRef.current += 1;
   };
 

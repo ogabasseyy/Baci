@@ -222,7 +222,7 @@ describe('GET /api/storefront/cart/handoff', () => {
     // token (hashed inside the RPC), never the id alone.
     expect(mocks.locatorArgs).toEqual({
       p_handoff_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      p_token_hash: 'ch1.fixture.token',
+      p_token: 'ch1.fixture.token',
     });
   });
 

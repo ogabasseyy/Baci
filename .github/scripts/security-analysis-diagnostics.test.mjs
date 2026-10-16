@@ -96,6 +96,19 @@ test('targeted and protected-branch scans use the existing full CI engine', () =
   assert.equal((workflow.match(/semgrep scan --error --strict --pro-intrafile --config auto/g) ?? []).length, 2);
 });
 
+test('every required scan gives each rule 15 seconds without relaxing failures', () => {
+  const steps = parse(workflow).jobs.semgrep.steps;
+  for (const id of ['semgrep_pr', 'semgrep_push', 'semgrep_full']) {
+    const step = steps.find((entry) => entry.id === id);
+    assert.ok(step, `${id} must remain present`);
+    assert.match(step.run, /--timeout 15(?: |$)/);
+    assert.doesNotMatch(step.run, /--timeout-threshold|--no-strict|--suppress-errors/);
+  }
+  assert.equal((workflow.match(/--timeout 15/g) ?? []).length, 3);
+  assert.equal((workflow.match(/semgrep scan --error --strict --pro-intrafile --config auto/g) ?? []).length, 2);
+  assert.match(workflow, /semgrep ci --no-suppress-errors/);
+});
+
 test('a silently skipped requested target fails even when another file was scanned', () => {
   assert.notEqual(validate(complete, { requested: ['probe.ts', 'oversized.ts'] }).status, 0);
 });

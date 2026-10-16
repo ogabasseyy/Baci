@@ -121,7 +121,7 @@ class DiagnosticTest(unittest.TestCase):
         self.assertNotIn('dump-config', diagnostic)
         self.assertNotIn('semgrep_full', diagnostic)
         self.assertNotIn('semgrep.sarif', diagnostic)
-        self.assertIn('semgrep ci --no-suppress-errors --sarif --output=semgrep.sarif --json-output=semgrep.raw.json', workflow)
+        self.assertIn('semgrep ci --no-suppress-errors --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json', workflow)
         self.assertIn('semgrep scan --error --strict --pro-intrafile --config auto', workflow)
         self.assertLess(workflow.index('name: Upload synthetic PostgreSQL diagnostic'),
                         workflow.index('name: Run full Semgrep on scheduled and manual scans'))

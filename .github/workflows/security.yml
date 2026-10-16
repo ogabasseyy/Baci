@@ -261,7 +261,7 @@ jobs:
           # Match the existing full CI engine; use only the existing entitlement.
           semgrep install-semgrep-pro
           # --strict also fails on warning-level analysis errors.
-          semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
+          semgrep scan --error --strict --pro-intrafile --config auto --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
@@ -293,7 +293,7 @@ jobs:
           )
           python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py push-targets "${scan_targets[@]}"
           semgrep install-semgrep-pro
-          semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${scan_targets[@]}"
+          semgrep scan --error --strict --pro-intrafile --config auto --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${scan_targets[@]}"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
@@ -328,7 +328,7 @@ jobs:
       - name: Run full Semgrep on scheduled and manual scans
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         id: semgrep_full
-        run: semgrep ci --no-suppress-errors --sarif --output=semgrep.sarif --json-output=semgrep.raw.json
+        run: semgrep ci --no-suppress-errors --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true

@@ -7,6 +7,10 @@ import { PIGGYVEST_POSTGRES_EXECUTOR as settings } from './postgres-executor.con
 import { PIGGYVEST_POSTGRES_STATEMENTS } from './postgres-statements';
 import type { PiggyvestProvisioningExecutor } from './provisioning-store.types';
 
+function rejectLocalPasswordAuthentication(): never {
+  throw new Error('Local database password authentication is disabled');
+}
+
 export function createPiggyvestPostgresExecutor(
   configuration: unknown
 ): PiggyvestProvisioningExecutor {
@@ -41,7 +45,12 @@ export function createPiggyvestPostgresExecutor(
         user: config.role,
         database: config.database,
         port: config.port,
-        password: config.password,
+        // A truthy provider prevents pg from consulting ambient PGPASSWORD or
+        // pgpass. Trust-authenticated local sockets never invoke the provider.
+        password:
+          config.transport === 'local_test' && config.password === undefined
+            ? rejectLocalPasswordAuthentication
+            : config.password,
         ssl:
           config.transport === 'local_test'
             ? false

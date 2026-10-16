@@ -39,7 +39,6 @@ async function fixture(sequence: number, prepared = true) {
     transport: 'local_test',
     socketDirectory: process.env.PIGGYVEST_LOCAL_TEST_SOCKET,
     database: 'piggyvest_local',
-    password: 'synthetic-local-only',
     role: 'piggyvest_staging_policy_writer',
     port: 55443,
   });

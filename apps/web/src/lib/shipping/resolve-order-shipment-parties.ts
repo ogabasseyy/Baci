@@ -22,7 +22,7 @@ export function resolveOrderShipmentParties({
   merchantSender,
   orderItems,
 }: {
-  bookingContext: { receiver: ShippingAddress };
+  bookingContext: { receiver: ShippingAddress; defaultWeight?: number };
   effectiveQuoteRequest: QuoteRequest | null;
   isInternationalQuote: boolean;
   merchantSender: ShippingAddress | undefined;
@@ -51,6 +51,10 @@ export function resolveOrderShipmentParties({
           orderItems,
           effectiveQuoteRequest.items
         )
-      : toDomesticBookingItems(orderItems, effectiveQuoteRequest?.items);
+      : toDomesticBookingItems(
+          orderItems,
+          effectiveQuoteRequest?.items,
+          bookingContext.defaultWeight
+        );
   return { receiver, sender, items };
 }

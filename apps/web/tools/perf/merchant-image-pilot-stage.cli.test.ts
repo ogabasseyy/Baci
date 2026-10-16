@@ -1,0 +1,236 @@
+import { createHash } from 'node:crypto';
+import { lstat, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { labGenerationIdFor } from '@/lib/merchant-image-variant-pilot/lab-generation-identity';
+import { PILOT_RECIPE_ID } from '@/schemas/merchant-image-variant-pilot';
+import {
+  assertServedPublicDir,
+  main,
+  parseStageArgs,
+} from './merchant-image-pilot-stage.cli';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const GENERATOR_FIXTURES = join(
+  here,
+  '..',
+  '..',
+  '..',
+  '..',
+  'infra',
+  'cdn-transformer',
+  'pilot',
+  'fixtures'
+);
+
+const MERCHANT = '6b5cb8a4-5575-456c-b936-8cdfae30db74';
+
+async function setupStageFiles() {
+  const base = await mkdtemp(join(tmpdir(), 'pilot-stage-'));
+  const inputRoot = join(base, 'input');
+  const outputRoot = join(base, 'output');
+  const publicDir = join(base, 'public');
+  await mkdir(inputRoot, { recursive: true });
+
+  const snapshot = await readFile(join(GENERATOR_FIXTURES, 'tiny-48x48.png'));
+  await writeFile(join(inputRoot, 'logo-1.png'), snapshot);
+  const sourceSha256 = createHash('sha256').update(snapshot).digest('hex');
+  // The loader recomputes the generation identity and rejects renamed
+  // directories, so the fixture must use the real derived ID.
+  const generationId = labGenerationIdFor({
+    assetId: 'logo-1',
+    encoderIdentity: {
+      libvipsVersion: '8.18.6',
+      name: 'sharp',
+      sharpVersion: '0.35.4',
+    },
+    merchantId: MERCHANT,
+    recipeId: PILOT_RECIPE_ID,
+    role: 'logo',
+    sourceSha256,
+  });
+  const generationDir = join(outputRoot, 'generations', generationId);
+  await mkdir(generationDir, { recursive: true });
+
+  const tiers = [];
+  for (const requestedWidth of [96, 192, 384]) {
+    for (const format of ['avif', 'webp'] as const) {
+      const bytes = Buffer.concat([
+        snapshot,
+        Buffer.from(`${requestedWidth}${format}`),
+      ]);
+      const hash = createHash('sha256').update(bytes).digest('hex');
+      const fileName = `${hash}.${format}`;
+      await writeFile(join(generationDir, fileName), bytes);
+      tiers.push({
+        actualWidth: 48,
+        bytes: bytes.length,
+        contentType: `image/${format}`,
+        // Synthetic tiers exceed the snapshot bytes from a png source:
+        // the explicit over-source exception (never forced into a cap).
+        delivery: 'generated-over-source',
+        format,
+        height: 48,
+        path: fileName,
+        quality: 70,
+        requestedWidth,
+        sha256: hash,
+        width: 48,
+      });
+    }
+  }
+  await writeFile(
+    join(generationDir, 'manifest.json'),
+    JSON.stringify({
+      assetId: 'logo-1',
+      createdAt: '2026-10-01T20:00:00.000Z',
+      encoder: {
+        libvipsVersion: '8.18.6',
+        name: 'sharp',
+        sharpVersion: '0.35.4',
+      },
+      merchantId: MERCHANT,
+      policyVersion: 1,
+      recipeId: PILOT_RECIPE_ID,
+      role: 'logo',
+      schemaVersion: 1,
+      source: {
+        bytes: snapshot.length,
+        format: 'png',
+        orientedHeight: 48,
+        orientedWidth: 48,
+        sha256: sourceSha256,
+      },
+      tiers,
+    })
+  );
+  await writeFile(
+    join(outputRoot, 'acceptances.json'),
+    JSON.stringify([
+      {
+        assetId: 'logo-1',
+        generationId,
+        merchantId: MERCHANT,
+        note: 'Lab review passed.',
+        outputHashes: tiers.map((tier) => tier.sha256),
+        qualities: tiers.map((tier) => tier.quality),
+        originalUrl: 'https://cdn.example.com/media/logo.png',
+        recipeId: PILOT_RECIPE_ID,
+        reviewedAt: '2026-10-01T21:00:00.000Z',
+        reviewer: 'pilot-owner',
+        schemaVersion: 1,
+        slotId: 'header-logo',
+        sourceSha256,
+        verdict: 'accepted',
+      },
+    ])
+  );
+  await writeFile(
+    join(inputRoot, 'inventory.json'),
+    JSON.stringify([
+      {
+        assetId: 'logo-1',
+        merchantId: MERCHANT,
+        role: 'logo',
+        schemaVersion: 1,
+        sha256: sourceSha256,
+        slot: 'header-logo',
+        sourcePath: 'logo-1.png',
+        url: 'https://cdn.example.com/media/logo.png',
+      },
+    ])
+  );
+  return { generationId, inputRoot, outputRoot, publicDir, tiers };
+}
+
+describe('parseStageArgs', () => {
+  it('reads space-separated roots and rejects malformed tokens', () => {
+    expect(
+      parseStageArgs([
+        '--input-root',
+        'in',
+        '--output-root',
+        'out',
+        '--public-dir',
+        'pub',
+      ])
+    ).toEqual({ inputRoot: 'in', outputRoot: 'out', publicDir: 'pub' });
+    expect(parseStageArgs([])).toEqual({
+      inputRoot: undefined,
+      outputRoot: undefined,
+      publicDir: undefined,
+    });
+    // The motivating typo: --public-di must abort, never stage the wrong
+    // tree behind an ok:true.
+    expect(() => parseStageArgs(['--public-di', 'pub'])).toThrow(
+      /unknown staging flag "--public-di"/
+    );
+    expect(() => parseStageArgs(['--input-root'])).toThrow(
+      /flag "--input-root" requires a value/
+    );
+    // A missing value must not consume the next flag as a path.
+    expect(() =>
+      parseStageArgs(['--input-root', '--output-root', 'out'])
+    ).toThrow(/flag "--input-root" requires a value/);
+    expect(() =>
+      parseStageArgs(['--input-root', 'a', '--input-root', 'b'])
+    ).toThrow(/duplicate flag "--input-root"/);
+  });
+});
+
+describe('stage main', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('rejects an explicit public dir outside the served tree', async () => {
+    // Next serves /__pilot only from the app public tree: staging into
+    // an alternate dir would validate green yet serve 404s, so main()
+    // fails before writing anything there. (Library-level staging into
+    // tmpdirs stays covered by the lab-config suites.)
+    const lab = await setupStageFiles();
+    vi.stubEnv('BACI_IMAGE_PILOT_LAB', '1');
+    const argv = process.argv;
+    process.argv = [
+      'node',
+      'merchant-image-pilot-stage.cli.ts',
+      '--input-root',
+      lab.inputRoot,
+      '--output-root',
+      lab.outputRoot,
+      '--public-dir',
+      lab.publicDir,
+    ];
+    try {
+      await expect(main()).rejects.toThrow(
+        /must be the served Next public directory/
+      );
+    } finally {
+      process.argv = argv;
+    }
+    await expect(lstat(join(lab.publicDir, '__pilot'))).rejects.toThrow(
+      /ENOENT/
+    );
+  });
+
+  it('assertServedPublicDir accepts the served tree only', async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), 'pilot-stage-served-'));
+    const cwd = process.cwd();
+    try {
+      process.chdir(sandbox);
+      // The sandbox spells through the symlinked tmpdir parent, so this
+      // also proves the compare canonicalizes instead of matching text.
+      await expect(
+        assertServedPublicDir(join(sandbox, 'public'))
+      ).resolves.toBeUndefined();
+      await expect(assertServedPublicDir(sandbox)).rejects.toThrow(
+        /must be the served Next public directory/
+      );
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+});

@@ -75,6 +75,7 @@ const defaults: Deps = {
 };
 export function useSharedCart(options: Options, deps: Deps = defaults): void {
   const latest = useRef(options);
+  const wasEnabled = useRef(false);
   // Async guards must observe only committed options: advance the ref
   // in an effect, never during render, so a discarded concurrent
   // render cannot publish an uncommitted scope.
@@ -90,13 +91,19 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       // a later sign-out teardown may no longer have a writer (or this
       // merchant scope) to derive it from, and a surviving account-owned
       // record would greet the next device owner with session_changed.
-      void cartSessionStorage.remove(options.merchantId).catch(() => undefined);
+      if (wasEnabled.current) {
+        wasEnabled.current = false;
+        void cartSessionStorage
+          .remove(options.merchantId)
+          .catch(() => undefined);
+      }
       const legacy = useCartStore.getState();
       if (legacy.sharedCartRef) {
         useCartStore.setState({ items: [], sharedCartRef: undefined });
       }
       return;
     }
+    wasEnabled.current = true;
     let alive = true;
     let generation = sharedCartWriterGeneration();
     const isCurrent = () =>

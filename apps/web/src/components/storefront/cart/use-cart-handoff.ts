@@ -97,6 +97,12 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
           setLoadError('Could not load this cart link. Please try again.');
           return null;
         }
+        // Definitive failure: the link is dead, so drop the locator
+        // and attempt state instead of restoring this screen on every
+        // later cart-page load. Retryable failures keep them.
+        clearHandoffAttempt(handoffId);
+        clearActiveHandoff(handoffId);
+        redeem.clearLockedChoice();
         setLoadError(
           'This link is no longer valid. Ask the sender for a fresh one.'
         );

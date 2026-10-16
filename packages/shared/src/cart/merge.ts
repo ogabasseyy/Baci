@@ -97,7 +97,41 @@ export function planCartMerge(
       return { ok: false, code: 'too_many_lines', lineCount: minimumLineCount };
     }
     const refs = new Map<string, CartInputLine>();
+    const refLines = new Map<string, CartLine>();
     for (const line of [...existing.lines, ...incoming.lines]) {
+      const previous = refLines.get(line.id);
+      if (previous) {
+        // The same stored line presented twice (same cart on both
+        // sides, a replayed preview) coalesces; a repeated id with
+        // different content is a duplicate identity, never a silent
+        // overwrite.
+        if (
+          cartLineIdentity(previous.item) !== cartLineIdentity(line.item) ||
+          previous.quantity !== line.quantity ||
+          Boolean(previous.hasAssurance) !== Boolean(line.hasAssurance)
+        ) {
+          return {
+            ok: false,
+            code: 'merge_conflict',
+            reason: 'duplicate_identity',
+            conflicts: [
+              {
+                item: line.item,
+                existing: {
+                  ...attachmentsOf(previous),
+                  quantity: previous.quantity,
+                },
+                incoming: {
+                  ...attachmentsOf(line),
+                  quantity: line.quantity,
+                },
+              },
+            ],
+          };
+        }
+        continue;
+      }
+      refLines.set(line.id, line);
       refs.set(line.id, {
         sourceLineId: line.id,
         item: line.item,

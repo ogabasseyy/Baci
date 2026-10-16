@@ -196,4 +196,26 @@ BEGIN
  PERFORM pg_temp.handoff_check(r->>'ok'='true','keep existing with chosen quantity 5 rejected: '||r::text);
  PERFORM pg_temp.handoff_check((SELECT quantity=5 AND negotiated_unit_price_minor=2200 FROM public.commerce_cart_lines WHERE cart_id=source2 AND product_id=p),'keep existing must keep quantity 5');
 END $$;
+DO $$
+DECLARE m uuid:='11111111-1111-4111-8111-111111111111'; p uuid:='44444444-4444-4444-8444-444444444444';
+ source uuid:='aaaaaaaa-3400-4000-8000-000000000001'; sg uuid:='bbbbbbbb-3400-4000-8000-000000000001';
+ h uuid:='cccccccc-3400-4000-8000-000000000001'; r jsonb; stored_hash text;
+BEGIN
+ INSERT INTO public.commerce_carts(id,merchant_id,created_at,expires_at) VALUES (source,m,now()-interval '1 day',now()+interval '10 minutes');
+ INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,created_at,expires_at) VALUES (sg,m,source,'preview-origin',now()-interval '1 day',now()+interval '10 minutes');
+ INSERT INTO public.commerce_cart_lines(merchant_id,cart_id,product_id,quantity,last_unit_price_minor) VALUES (m,source,p,1,1500);
+ PERFORM pg_temp.handoff_claim(source,sg,'preview-origin');
+ r:=public.commerce_cart_issue_handoff(encode(pg_catalog.sha256('preview-raw-token'::bytea),'hex'),h,source,'preview-issue','{"type":"native"}');
+ PERFORM pg_temp.handoff_check(r->>'ok'='true','preview token issue rejected');
+ SELECT handoff_hash INTO stored_hash FROM public.commerce_cart_handoffs WHERE id=h;
+ PERFORM pg_temp.handoff_check(public.commerce_cart_handoff_merchant(h,'preview-raw-token')=m,'merchant locator must accept the raw token');
+ PERFORM pg_temp.handoff_check(public.commerce_cart_handoff_merchant(h,stored_hash) IS NULL,'merchant locator must reject the stored hash as a credential');
+ PERFORM pg_temp.handoff_check(public.commerce_cart_handoff_merchant(h,'wrong-token') IS NULL,'merchant locator must reject a wrong token');
+ r:=public.commerce_cart_preview_handoff(h,'preview-raw-token');
+ PERFORM pg_temp.handoff_check(r->>'ok'='true','preview must accept the raw token: '||r::text);
+ r:=public.commerce_cart_preview_handoff(h,stored_hash);
+ PERFORM pg_temp.handoff_check(r->>'code'='not_found','preview must reject the stored hash as a credential: '||r::text);
+ r:=public.commerce_cart_preview_handoff(h,'wrong-token');
+ PERFORM pg_temp.handoff_check(r->>'code'='not_found','preview must reject a wrong token: '||r::text);
+END $$;
 DO $$ DECLARE failures text; BEGIN SELECT string_agg(message,E'\n') INTO failures FROM handoff_failures; IF failures IS NOT NULL THEN RAISE EXCEPTION E'Handoff attachment/lifetime regressions:\n%',failures; END IF; END $$;

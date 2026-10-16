@@ -130,7 +130,12 @@ export async function POST(request: NextRequest) {
     try {
       proof = issueCartSessionProof(
         {
-          allowedOperations: principal.allowedOperations,
+          // Renew with the live grant's operations, not the incoming
+          // proof's: a grant narrowed (or widened) since issuance must
+          // be reflected in the renewed proof. The incoming proof's
+          // operations are only the fallback when the reload failed.
+          allowedOperations:
+            liveGrant?.allowedOperations ?? principal.allowedOperations,
           cartId: principal.cartId,
           grantId: principal.grantId,
           grantExpiresAt: proofGrantExpiry,

@@ -92,14 +92,25 @@ it('discards canonical ownership when enrollment turns off', async () => {
       clear: jest.fn(),
     },
   };
-  renderHook(() => useSharedCart({ ...options, enabled: false }, deps));
-  expect(mockLegacyCart.current.sharedCartRef).toBeUndefined();
-  expect(mockLegacyCart.current.items).toEqual([]);
-  // The secure session record for this merchant scope is retired too,
-  // so a later no-writer sign-out cannot strand it for the next owner.
   const SecureStore = jest.requireMock('expo-secure-store') as {
     deleteItemAsync: jest.Mock;
   };
+  SecureStore.deleteItemAsync.mockClear();
+  const { rerender } = renderHook(
+    (p: typeof options) => useSharedCart(p, deps),
+    { initialProps: { ...options, enabled: false } }
+  );
+  expect(mockLegacyCart.current.sharedCartRef).toBeUndefined();
+  expect(mockLegacyCart.current.items).toEqual([]);
+  // An initial disabled mount (enrollment still loading) must not
+  // retire the persisted session before the real merchant record lands.
+  expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith(
+    `baci.cart.session.${options.merchantId}`
+  );
+  // After a committed enabled period, turning enrollment off retires
+  // the secure record so a later no-writer sign-out cannot strand it.
+  await act(async () => rerender(options));
+  await act(async () => rerender({ ...options, enabled: false }));
   await waitFor(() =>
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
       `baci.cart.session.${options.merchantId}`

@@ -52,6 +52,8 @@ try:
  if '--baseline' not in sys.argv:
   for name in ['20261015144000_commerce_cart_checkout_add_identity.sql','20261015145000_commerce_cart_checkout_complete_vouchers.sql','20261015150000_commerce_cart_agentic_checkout_economics.sql','20261015151000_commerce_cart_partial_voucher_binding.sql']: sql+='\n'+(root/'supabase/migrations'/name).read_text()
  sql+='\n'+(root/'supabase/migrations/20261015167000_commerce_cart_merge_chosen_quantity.sql').read_text()
+ sql+='\n'+(root/'supabase/migrations/20261015168000_commerce_cart_handoff_preview_raw_token.sql').read_text()
+ sql+='\n'+(root/'supabase/migrations/20261015169000_commerce_cart_canonical_feature_guard.sql').read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_handoff_attachment_lifetime.sql').read_text()
  sql+='\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-handoff-attachment-lifetime.log','w'),stderr=subprocess.STDOUT,cwd=root)

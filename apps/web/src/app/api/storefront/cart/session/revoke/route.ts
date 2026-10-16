@@ -39,7 +39,28 @@ export async function POST(request: NextRequest): Promise<Response> {
           environment: getCartProofEnvironment(),
         }),
     });
-    if (!context.ok) return cartErrorResponse(context.error);
+    if (!context.ok) {
+      const response = cartErrorResponse(context.error);
+      if (context.error === 'invalid_proof') {
+        // The presented proof can never verify again (for example
+        // after a signing-key rotation): expire every cart session
+        // cookie the request carried so the dead credential does not
+        // keep blocking legacy orders or future sign-outs.
+        for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+          const name = part.split('=')[0]?.trim();
+          if (name?.startsWith('baci-cart-')) {
+            response.cookies.set(name, '', {
+              httpOnly: true,
+              maxAge: 0,
+              path: '/',
+              sameSite: 'lax',
+              secure: process.env.NODE_ENV === 'production',
+            });
+          }
+        }
+      }
+      return response;
+    }
     const quota = await checkCartQuota({
       merchantId: context.merchant.id,
       operation: 'session_revoke',

@@ -97,6 +97,30 @@ it('blocks revocation when the per-principal quota is exceeded', async () => {
   });
   expect(revokeCartDeviceGrants).not.toHaveBeenCalled();
 });
+it('expires presented cart cookies when the proof is definitively invalid', async () => {
+  vi.mocked(resolveCartRequestContext).mockResolvedValue({
+    ok: false,
+    error: 'invalid_proof',
+  });
+  const response = await POST(
+    new Request('http://localhost/api/storefront/cart/session/revoke', {
+      method: 'POST',
+      headers: {
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.dead.dead; other=1',
+      },
+      body: '{}',
+    })
+  );
+  expect(response.status).toBe(401);
+  const setCookie = response.headers.get('set-cookie') ?? '';
+  expect(setCookie).toContain(
+    'baci-cart-11111111-1111-4111-8111-111111111111=;'
+  );
+  expect(setCookie).toContain('Max-Age=0');
+  expect(setCookie).not.toContain('other=');
+  expect(revokeCartDeviceGrants).not.toHaveBeenCalled();
+});
 it('clears only the resolved merchant cookie after idempotent scoped revocation', async () => {
   const principal = {
     merchantId: 'm',

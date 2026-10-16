@@ -349,11 +349,11 @@ describe('GET /api/storefront/cart/handoff', () => {
     expect(payload.merchant).toEqual({ id: MERCHANT_ID, slug: 'ogabassey' });
     expect(mocks.capturedPrincipal).toBeNull();
     expect(mocks.cartRpcCalls).toHaveLength(0);
-    // The merchant locator is token-gated: it receives the pairing
-    // token hash, never the id alone.
+    // The merchant locator is token-gated: it receives the raw pairing
+    // token (hashed inside the RPC), never the id alone.
     expect(mocks.locatorArgs).toEqual({
       p_handoff_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      p_token_hash: hashHandoffToken('ch1.fixture.token'),
+      p_token_hash: 'ch1.fixture.token',
     });
   });
 
@@ -419,7 +419,7 @@ describe('GET /api/storefront/cart/handoff', () => {
       await checkCartQuota({
         merchantId: 'handoff-preview',
         operation: 'handoff_preview',
-        subject,
+        subject: `${subject}:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
       });
     }
     const previewCallsBefore = mocks.previewCalls;

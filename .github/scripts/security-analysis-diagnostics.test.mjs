@@ -145,16 +145,17 @@ test('workflow, diagnostics and scope changes trigger their regression suite', (
 
 // Git check-ignore is a Gitignore syntax proxy, not an actual Semgrep scan.
 // Actual pinned Semgrep target selection was also verified independently.
-test('Gitignore proxy keeps shared package scripts outside the root tooling exclusion', () => {
+test('Gitignore proxy restores only the two required shared scripts', () => {
   const root = mkdtempSync(join(tmpdir(), 'baci-semgrep-ignore-'));
   try {
     assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
     writeFileSync(join(root, '.git/info/exclude'), readFileSync(new URL('../../.semgrepignore', import.meta.url)));
-    for (const path of ['scripts/local-only.mjs', 'packages/shared/scripts/check-module-size.mjs', 'packages/shared/scripts/check-module-size-report.mjs']) {
+    for (const path of ['scripts/local-only.mjs', 'apps/web/scripts/local-only.mjs', 'packages/shared/scripts/other.mjs', 'packages/shared/scripts/nested/local-only.mjs', 'packages/shared/scripts/check-module-size.mjs', 'packages/shared/scripts/check-module-size-report.mjs']) {
       mkdirSync(join(root, path, '..'), { recursive: true });
       writeFileSync(join(root, path), 'fixture');
       const result = spawnSync('git', ['check-ignore', '--no-index', path], { cwd: root, encoding: 'utf8' });
-      assert.equal(result.status, path.startsWith('scripts/') ? 0 : 1, `${path}: ${result.stdout}${result.stderr}`);
+      const restored = ['packages/shared/scripts/check-module-size.mjs', 'packages/shared/scripts/check-module-size-report.mjs'].includes(path);
+      assert.equal(result.status, restored ? 1 : 0, `${path}: ${result.stdout}${result.stderr}`);
     }
   } finally {
     rmSync(root, { recursive: true, force: true });

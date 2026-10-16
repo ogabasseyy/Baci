@@ -3,7 +3,12 @@
 
 # Internal dev tooling - not production code
 .gemini/
-/scripts/
+scripts/
+# Restore only these shared runtime checks; other scripts remain excluded.
+!/packages/shared/scripts/
+/packages/shared/scripts/*
+!/packages/shared/scripts/check-module-size.mjs
+!/packages/shared/scripts/check-module-size-report.mjs
 fix-all-async-calls.mjs
 process_pr_comments.cjs
 process_security_alerts.cjs

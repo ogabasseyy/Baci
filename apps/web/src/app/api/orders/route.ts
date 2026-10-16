@@ -32,7 +32,7 @@ import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assu
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
 import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
-import { resolveIdempotentOfferReplay } from '@/lib/checkout/resolve-idempotent-offer-replay';
+import { resolveOfferReplayForOrderRoute } from '@/lib/checkout/resolve-idempotent-offer-replay-route';
 import { scheduleCheckoutProductBlogPurge } from '@/lib/checkout/schedule-checkout-product-blog-purge';
 import { selectIdempotencyShippingAddress } from '@/lib/checkout/select-idempotency-shipping-address';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
@@ -990,29 +990,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // F1 (offer economics): an idempotent retry replays the ORIGINAL order
-    // before it can be re-judged against the merchant's CURRENT offers
-    // (see resolve-idempotent-offer-replay). On a replay hit the stored
-    // tax_amount is reused below instead of recomputing VAT from parent
-    // prices, which would drift the request hash into a conflict.
-    const offerReplay = await resolveIdempotentOfferReplay({
+    const offerReplayResult = await resolveOfferReplayForOrderRoute({
       merchantId: merchant_id,
       orderItemsPayload,
       requestIdempotencyKey,
       supabase,
     });
-    if (!offerReplay.ok) {
-      if (offerReplay.reason === 'verification_failed') {
-        console.error('Order offer verification failed:', offerReplay.error);
-        return NextResponse.json(
-          { error: 'Failed to verify order offers' },
-          { status: 500 }
-        );
-      }
-      return NextResponse.json(
-        { error: 'Invalid condition offer for order item' },
-        { status: 400 }
-      );
+    if (!offerReplayResult.ok) {
+      return offerReplayResult.response;
     }
     const {
       isIdempotentOfferOrderReplay,
@@ -1020,7 +1005,7 @@ export async function POST(request: NextRequest) {
       liveOfferPrices,
       storedReplayDiscountAmount,
       storedReplayTaxAmount,
-    } = offerReplay.value;
+    } = offerReplayResult.value;
 
     // Offer assurance fees recompute below, after the negotiation preflight
     // validates (and possibly prices) the client basis: the fee follows the

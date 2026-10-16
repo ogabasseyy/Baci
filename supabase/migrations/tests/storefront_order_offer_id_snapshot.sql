@@ -25,7 +25,10 @@ DECLARE
   v_offer_id uuid := '0be00000-0000-4000-8000-000000000003';
   v_order_id uuid;
   v_line record;
+  v_forged record;
+  v_projected jsonb;
   v_mutation_blocked boolean := false;
+  v_line_flip_blocked boolean := false;
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug, is_published)
   VALUES (v_merchant_id, 'offer-snapshot@example.com',
@@ -68,6 +71,22 @@ BEGIN
     RAISE EXCEPTION 'expected stamped offer_id_snapshot %, got %', v_offer_id, v_line.offer_id_snapshot;
   END IF;
 
+  -- Hardening: a caller-supplied snapshot is derived, never trusted,
+  -- and the restock discriminator follows the live offer identity.
+  INSERT INTO public.order_items (order_id, product_id, name, price,
+    quantity, offer_id, offer_id_snapshot, offer_line)
+  VALUES (v_order_id, v_product_id, 'Forged line', 100, 1, v_offer_id,
+    '0be00000-0000-4000-8000-000000000009', false)
+  RETURNING offer_id_snapshot, offer_line INTO v_forged;
+  IF v_forged.offer_id_snapshot IS DISTINCT FROM v_offer_id THEN
+    RAISE EXCEPTION 'expected derived snapshot %, got %', v_offer_id, v_forged.offer_id_snapshot;
+  END IF;
+  IF v_forged.offer_line IS NOT TRUE THEN
+    RAISE EXCEPTION 'expected derived offer_line true, got %', v_forged.offer_line;
+  END IF;
+  DELETE FROM public.order_items
+  WHERE order_id = v_order_id AND name = 'Forged line';
+
   -- Deleting the offer nulls the live FK (ON DELETE SET NULL) while the
   -- snapshot keeps the exact purchased identity for fulfillment.
   DELETE FROM public.product_offers WHERE id = v_offer_id;
@@ -92,6 +111,32 @@ BEGIN
   END;
   IF NOT v_mutation_blocked THEN
     RAISE EXCEPTION 'expected snapshot rewrite to fail, but it succeeded';
+  END IF;
+
+  -- The restock discriminator is immutable: flipping an offer line into
+  -- the parent branch fails closed.
+  BEGIN
+    UPDATE public.order_items
+    SET offer_line = false
+    WHERE order_id = v_order_id;
+  EXCEPTION WHEN raise_exception THEN
+    v_line_flip_blocked := true;
+  END;
+  IF NOT v_line_flip_blocked THEN
+    RAISE EXCEPTION 'expected offer_line flip to fail, but it succeeded';
+  END IF;
+
+  -- The replay-economics projection falls back to the snapshot, so the
+  -- deleted offer's line keeps distinct identity instead of queuing
+  -- as offerless.
+  UPDATE public.orders
+  SET checkout_idempotency_key = 'snapshot-projection-key-001'
+  WHERE id = v_order_id;
+  SELECT e.items INTO v_projected
+  FROM public.get_storefront_order_replay_economics(
+    v_merchant_id, 'snapshot-projection-key-001') AS e;
+  IF v_projected->0->>'offer_id' IS DISTINCT FROM v_offer_id::text THEN
+    RAISE EXCEPTION 'expected projected offer_id %, got %', v_offer_id, v_projected->0->>'offer_id';
   END IF;
 END;
 $$;

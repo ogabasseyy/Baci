@@ -62,15 +62,13 @@ export const orderDetailsItemsStyles = StyleSheet.create({
     gap: 4,
     marginTop: 4,
   },
-  itemRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
+  itemRowStack: {
+    flexDirection: 'column',
     paddingVertical: 14,
   },
   itemRowPressable: {
     alignItems: 'center',
-    flex: 1,
+    alignSelf: 'stretch',
     flexDirection: 'row',
     gap: 12,
   },

@@ -18,6 +18,22 @@ type BaseInventoryClient = {
   ) => PromiseLike<{ data: unknown; error: unknown }>;
 };
 
+type PagedVariantsClient = {
+  rpc: (
+    fn: string,
+    args: Record<string, unknown>
+  ) => {
+    range: (
+      from: number,
+      to: number
+    ) => PromiseLike<{ data: unknown; error: unknown }>;
+  };
+};
+
+// PostgREST clamps unpaged responses at 1,000 rows: page the lookup so
+// a variant-heavy cart cannot silently lose tail rows.
+const VARIANTS_PAGE_SIZE = 1000;
+
 /**
  * Maps catalog-load failures to the shared 500 response, or the
  * narrowed offer map when every load succeeded. Split out of the
@@ -143,5 +159,48 @@ export async function fetchStrictPoolUnits({
   } catch (rpcError) {
     console.error('Cart validation base-inventory query threw:', rpcError);
     return new Map();
+  }
+}
+
+/**
+ * Every live non-anchor variant row for the cart's products. An unpaged
+ * call silently drops rows past PostgREST's 1,000-row clamp, and a
+ * dropped row makes a variant-bearing offer parent look variant-free —
+ * so the parent gate would retain a stale offer line that order
+ * creation rejects as invalid_offer. Terminates on the first short
+ * page; errors keep the route's { data, error } shape so the catalog
+ * gate still fails closed with a 500.
+ */
+export async function fetchAllStorefrontProductVariants<TVariant>({
+  supabase,
+  productIds,
+}: {
+  supabase: PagedVariantsClient;
+  productIds: readonly string[];
+}): Promise<{ data: TVariant[] | null; error: unknown }> {
+  const rows: TVariant[] = [];
+  let offset = 0;
+  for (;;) {
+    let page: { data: unknown; error: unknown };
+    try {
+      page = await supabase
+        .rpc('get_storefront_product_variants', {
+          p_product_ids: [...productIds],
+        })
+        .range(offset, offset + VARIANTS_PAGE_SIZE - 1);
+    } catch (rpcError) {
+      return { data: null, error: rpcError };
+    }
+    if (page.error || !Array.isArray(page.data)) {
+      return {
+        data: null,
+        error: page.error ?? new Error('unexpected response shape'),
+      };
+    }
+    rows.push(...(page.data as TVariant[]));
+    if (page.data.length < VARIANTS_PAGE_SIZE) {
+      return { data: rows, error: null };
+    }
+    offset += VARIANTS_PAGE_SIZE;
   }
 }

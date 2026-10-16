@@ -52,6 +52,13 @@ export function useProductDetailRouteData({
   // condition-offer selection, and the PDP would adopt the offer's price.
   const routeBaseMatch =
     getFirstRouteParamValue(routeParams.match_base) === '1';
+  // A stale row on a flag-disabled parent is invisible to all matching.
+  const routeOfferRow =
+    product?.has_condition_offers === true
+      ? product?.offers?.find(
+          (offer) => String(offer.id) === String(routeOfferIdParam)
+        )
+      : undefined;
   // ID-only offer links derive the condition from this product's live
   // offer (mirrors web): the snapshot condition is deliberately omitted by
   // entry points because it can be stale, and seeding from the live option
@@ -59,10 +66,7 @@ export function useProductDetailRouteData({
   const routeCondition = normalizeRouteCondition(
     routeSelectionInput.condition ??
       (!usesVariantRouteSelection
-        ? (routeConditionParam ??
-          product?.offers?.find(
-            (offer) => String(offer.id) === routeOfferIdParam
-          )?.condition)
+        ? (routeConditionParam ?? routeOfferRow?.condition)
         : undefined)
   );
   const routeVariantId = routeSelectionInput.variantId ?? null;
@@ -113,9 +117,7 @@ export function useProductDetailRouteData({
     routeOfferIdParam &&
     product?.has_condition_offers === true &&
     product?.offers_hydration_failed !== true &&
-    product?.offers?.some(
-      (offer) => String(offer.id) === String(routeOfferIdParam)
-    )
+    routeOfferRow != null
       ? routeOfferIdParam
       : null;
   // An exact offer link whose offer fetch failed must not render as an
@@ -134,10 +136,9 @@ export function useProductDetailRouteData({
     routeOfferIdParam != null &&
     routeOfferIdParam.length > 0 &&
     product?.offers_hydration_failed !== true &&
-    Array.isArray(product?.offers) &&
-    !product.offers.some(
-      (offer) => String(offer.id) === String(routeOfferIdParam)
-    );
+    product != null &&
+    (product.has_condition_offers !== true ||
+      (Array.isArray(product.offers) && routeOfferRow == null));
   const routeOfferUnavailable =
     routeOfferHydrationFailed || routeOfferMissingFromHydratedOffers;
   const routeOfferHydrationError = routeOfferUnavailable
@@ -200,12 +201,13 @@ export function useProductDetailRouteData({
   // The entry selection equals the route one, or the entry carries no
   // condition at all (bare flag); ids-bearing links never suppress.
   const suppressConditionOfferMatch =
-    routeBaseMatch &&
-    !routeOfferId &&
-    !routeVariantId &&
-    !selection.hasCustomizedSelection &&
-    (selection.effectiveSelectedCondition === routeCondition ||
-      routeCondition == null);
+    product?.has_condition_offers !== true ||
+    (routeBaseMatch &&
+      !routeOfferId &&
+      !routeVariantId &&
+      !selection.hasCustomizedSelection &&
+      (selection.effectiveSelectedCondition === routeCondition ||
+        routeCondition == null));
   const displayProduct = product
     ? {
         ...product,

@@ -171,7 +171,10 @@ export async function attachOrderItemOfferLabels<
   let labels = new Map<string, { grade?: string; notes?: string }>();
   try {
     // Bounded batches like the order verifiers: a large order must not
-    // fan out an unbounded burst of parallel offer RPCs.
+    // fan out an unbounded burst of parallel offer RPCs. Each product
+    // is fail-soft on its own: one transient failure leaves only that
+    // product's lines untouched instead of discarding every other
+    // product's fetched labels.
     const results: {
       productId: string;
       data: OfferLabelRow[] | null;
@@ -179,36 +182,38 @@ export async function attachOrderItemOfferLabels<
     }[] = [];
     for (let index = 0; index < productIds.length; index += 10) {
       const batch = await Promise.all(
-        productIds.slice(index, index + 10).map(async (productId) => ({
-          productId,
-          ...(await fetchOffers(productId)),
-        }))
+        productIds.slice(index, index + 10).map(async (productId) => {
+          try {
+            return { productId, ...(await fetchOffers(productId)) };
+          } catch (error) {
+            return { productId, data: null, error };
+          }
+        })
       );
       results.push(...batch);
     }
-    if (results.some((result) => result.error)) {
-      return items as AttachedOfferLabelItem<TItem>[];
-    }
     labels = new Map(
-      results.flatMap((result) =>
-        (result.data ?? []).flatMap((row) =>
-          typeof row?.offer_id === 'string'
-            ? [
-                [
-                  `${result.productId}::${row.offer_id}`,
-                  {
-                    grade:
-                      typeof row.grade === 'string' ? row.grade : undefined,
-                    notes:
-                      typeof row.condition_notes === 'string'
-                        ? row.condition_notes
-                        : undefined,
-                  },
-                ] as const,
-              ]
-            : []
+      results
+        .filter((result) => !result.error)
+        .flatMap((result) =>
+          (result.data ?? []).flatMap((row) =>
+            typeof row?.offer_id === 'string'
+              ? [
+                  [
+                    `${result.productId}::${row.offer_id}`,
+                    {
+                      grade:
+                        typeof row.grade === 'string' ? row.grade : undefined,
+                      notes:
+                        typeof row.condition_notes === 'string'
+                          ? row.condition_notes
+                          : undefined,
+                    },
+                  ] as const,
+                ]
+              : []
+          )
         )
-      )
     );
   } catch {
     return items as AttachedOfferLabelItem<TItem>[];

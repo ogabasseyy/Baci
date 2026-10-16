@@ -8,6 +8,7 @@ import {
 } from './cart-offer-prices';
 import {
   buildCartValidationCatalog,
+  fetchAllStorefrontProductVariants,
   fetchStrictPoolUnits,
   resolveCartValidationCatalog,
 } from './cart-validation-catalog';
@@ -119,12 +120,10 @@ export async function POST(request: NextRequest) {
             .returns<CartProductRow[]>()
         : Promise.resolve({ data: null, error: null }),
       needsVariantList && validFormatIds.length > 0
-        ? (supabase.rpc('get_storefront_product_variants', {
-            p_product_ids: Array.from(new Set(validFormatIds)),
-          }) as unknown as Promise<{
-            data: CartVariantRow[] | null;
-            error: { message: string } | null;
-          }>)
+        ? fetchAllStorefrontProductVariants<CartVariantRow>({
+            supabase,
+            productIds: Array.from(new Set(validFormatIds)),
+          })
         : Promise.resolve({ data: null, error: null }),
       fetchCartOfferPrices(
         (productId) =>

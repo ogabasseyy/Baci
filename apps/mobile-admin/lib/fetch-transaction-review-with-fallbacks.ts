@@ -29,6 +29,7 @@ export async function fetchTransactionReviewWithFallbacks(
           'quiz_award_amount',
           'line_id',
           'offer_id',
+          'offer_id_snapshot',
           'offer_grade',
           'offer_condition_notes',
           'discount_code_id',

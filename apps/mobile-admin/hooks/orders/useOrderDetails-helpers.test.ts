@@ -289,6 +289,27 @@ describe('attachOrderItemOfferLabels', () => {
     ).resolves.toEqual(items);
   });
 
+  it('keeps successful products when one product lookup fails', async () => {
+    const fetchOffers = vi.fn(async (productId: string) => {
+      if (productId === 'product-bad') {
+        throw new Error('boom');
+      }
+      return {
+        data: [{ offer_id: 'offer-7', grade: 'B' }],
+        error: null,
+      };
+    });
+    const items = [
+      { offer_id: 'offer-7', product_id: 'product-1' },
+      { offer_id: 'offer-9', product_id: 'product-bad' },
+    ];
+
+    const result = await attachOrderItemOfferLabels(items, fetchOffers);
+
+    expect(result[0]).toMatchObject({ offer_grade: 'B' });
+    expect(result[1]).not.toHaveProperty('offer_grade');
+  });
+
   it('skips the lookup when no line names an offer', async () => {
     const fetchOffers = vi.fn();
     const items = [{ product_id: 'product-1' }];

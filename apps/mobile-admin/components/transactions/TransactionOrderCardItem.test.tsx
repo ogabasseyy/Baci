@@ -11,7 +11,9 @@ import { TransactionOrderCardItem } from './TransactionOrderCardItem';
 
 const mocks = vi.hoisted(() => ({
   alert: vi.fn(),
+  pressable: vi.fn(),
   setStringAsync: vi.fn(),
+  view: vi.fn(),
 }));
 
 vi.mock('expo-clipboard', () => ({
@@ -31,25 +33,43 @@ vi.mock('react-native', async () => {
   return {
     Alert: { alert: mocks.alert },
     StatusBar: () => null,
-    Pressable: ({
-      children,
-      onPress,
-    }: {
+    Pressable: (props: {
+      accessibilityHint?: string;
+      accessibilityLabel?: string;
+      accessibilityRole?: string;
       children?: React.ReactNode;
+      hitSlop?: number;
       onPress?: (event?: { stopPropagation?: () => void }) => void;
-    }) =>
-      React.createElement(
+    }) => {
+      const { children, onPress, ...rest } = props;
+      mocks.pressable(rest);
+      return React.createElement(
         'button',
-        { onClick: (event) => onPress?.(event), type: 'button' },
+        {
+          onClick: (event) => onPress?.(event),
+          type: 'button',
+          ...(props.accessibilityLabel
+            ? { 'aria-label': props.accessibilityLabel }
+            : {}),
+        },
         children
-      ),
+      );
+    },
     StyleSheet: {
       create: (styles: Record<string, unknown>) => styles,
     },
     Text: ({ children }: { children?: React.ReactNode }) =>
       React.createElement('span', null, children),
-    View: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('div', null, children),
+    View: ({
+      children,
+      ...rest
+    }: {
+      children?: React.ReactNode;
+      style?: unknown;
+    }) => {
+      mocks.view(rest);
+      return React.createElement('div', null, children);
+    },
   };
 });
 
@@ -154,5 +174,34 @@ describe('TransactionOrderCardItem', () => {
     // so the copy press must never double-trigger the editor — on web
     // targets where presses bubble or on native.
     expect(onOpenEditor).not.toHaveBeenCalled();
+  });
+
+  it('exposes copy semantics with an expanded touch target', () => {
+    renderItem();
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Copy full offer reference 55555555-5555-4555-8555-555555555555',
+      })
+    ).toBeInTheDocument();
+    expect(mocks.pressable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessibilityRole: 'button',
+        accessibilityLabel:
+          'Copy full offer reference 55555555-5555-4555-8555-555555555555',
+        hitSlop: 12,
+      })
+    );
+  });
+
+  it('stacks the copy control below the item instead of beside it', () => {
+    renderItem();
+
+    const styles = mocks.view.mock.calls.flatMap(([props]) =>
+      Array.isArray(props.style) ? props.style : [props.style]
+    );
+    expect(styles).toContainEqual(
+      expect.objectContaining({ flexDirection: 'column' })
+    );
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   buildCartValidationCatalog,
+  fetchAllStorefrontProductVariants,
   fetchStrictPoolUnits,
   resolveCartValidationCatalog,
 } from './cart-validation-catalog';
@@ -175,5 +176,74 @@ describe('fetchStrictPoolUnits', () => {
       });
       expect(pools.size).toBe(0);
     }
+  });
+});
+
+describe('fetchAllStorefrontProductVariants', () => {
+  type Row = { id: string; product_id: string };
+
+  function client(pages: Array<{ data: Row[] | null; error: unknown }>) {
+    const range = vi.fn(async (from: number) => {
+      const index = Math.floor(from / 1000);
+      return pages[index] ?? { data: [] as Row[], error: null };
+    });
+    const rpc = vi.fn(() => ({ range }));
+    return { rpc, range, supabase: { rpc } };
+  }
+
+  it('returns a single short page with one ranged call', async () => {
+    const { rpc, range, supabase } = client([
+      { data: [{ id: 'v1', product_id: STR_ID }], error: null },
+    ]);
+
+    const result = await fetchAllStorefrontProductVariants<Row>({
+      supabase,
+      productIds: [STR_ID],
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.data).toEqual([{ id: 'v1', product_id: STR_ID }]);
+    expect(rpc).toHaveBeenCalledWith('get_storefront_product_variants', {
+      p_product_ids: [STR_ID],
+    });
+    expect(range).toHaveBeenCalledTimes(1);
+    expect(range).toHaveBeenCalledWith(0, 999);
+  });
+
+  it('concatenates full pages until the first short page', async () => {
+    const full = Array.from({ length: 1000 }, (_, index) => ({
+      id: `v${index}`,
+      product_id: STR_ID,
+    }));
+    const { range, supabase } = client([
+      { data: full, error: null },
+      { data: [{ id: 'v-tail', product_id: STR_ID }], error: null },
+    ]);
+
+    const result = await fetchAllStorefrontProductVariants<Row>({
+      supabase,
+      productIds: [STR_ID],
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.data).toHaveLength(1001);
+    expect(result.data?.[1000]).toEqual({
+      id: 'v-tail',
+      product_id: STR_ID,
+    });
+    expect(range).toHaveBeenCalledTimes(2);
+    expect(range).toHaveBeenNthCalledWith(2, 1000, 1999);
+  });
+
+  it('fails closed with the route error shape on RPC failure', async () => {
+    const { supabase } = client([{ data: null, error: { message: 'boom' } }]);
+
+    const result = await fetchAllStorefrontProductVariants<Row>({
+      supabase,
+      productIds: [STR_ID],
+    });
+
+    expect(result.data).toBeNull();
+    expect(result.error).toEqual({ message: 'boom' });
   });
 });

@@ -44,6 +44,7 @@ export interface TransactionReviewOrderRow {
     line_id?: number | string | null;
     name: string | null;
     offer_id?: string | null;
+    offer_id_snapshot?: string | null;
     offer_grade?: string | null;
     offer_condition_notes?: string | null;
     order_item_unit_costs?: TransactionReviewUnitCostRow[] | null;

@@ -33,6 +33,35 @@ describe('isVariantAvailable', () => {
     ).toBe(false);
   });
 
+  it('honors a strict child policy under an unmanaged parent', () => {
+    expect(
+      isVariantAvailable(
+        [
+          variant({
+            inventory_tracking_policy: 'serialized_strict',
+            available_units: 0,
+          }),
+        ],
+        { color: 'red' },
+        false,
+        0
+      )
+    ).toBe(false);
+    expect(
+      isVariantAvailable(
+        [
+          variant({
+            inventory_tracking_policy: 'serialized_strict',
+            available_units: 2,
+          }),
+        ],
+        { color: 'red' },
+        false,
+        0
+      )
+    ).toBe(true);
+  });
+
   it('gates managed variants on scalar stock with parent fallback', () => {
     expect(
       isVariantAvailable(

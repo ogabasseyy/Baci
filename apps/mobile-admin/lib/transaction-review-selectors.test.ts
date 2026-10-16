@@ -301,4 +301,10 @@ describe('transaction review selectors', () => {
       expect(selector).toContain(', offer_id');
     }
   });
+
+  it('projects the immutable offer snapshot in every order-items projection', () => {
+    for (const selector of Object.values(TRANSACTION_REVIEW_SELECTORS)) {
+      expect(selector).toContain(', offer_id_snapshot');
+    }
+  });
 });

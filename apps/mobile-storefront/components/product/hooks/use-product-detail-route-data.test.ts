@@ -146,6 +146,28 @@ it('rejects an offer id on a product that never carried offers', () => {
   expect(result.current.routeOfferId).toBeNull();
 });
 
+it('reports unavailable and seeds no condition from a stale row on a flag-disabled parent', () => {
+  mockParams = { slug: 'phone', offer_id: 'o1' };
+  // The fixture offers array still carries o1 (stale hydration after
+  // the merchant turned the flag off): the row must be invisible.
+  const flagOff = { ...product, has_condition_offers: false };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: flagOff,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  expect(result.current.routeOfferId).toBeNull();
+  expect(result.current.error).toMatch(/no longer available/);
+  // Pricing, selection, and add all resolve through
+  // findMatchingConditionOffer: suppressing the match keeps the stale
+  // row out of the stamped offer_id so checkout never sees it.
+  expect(result.current.suppressConditionOfferMatch).toBe(true);
+});
+
 it('ignores the hydration marker without an exact offer link', () => {
   mockParams = { slug: 'phone' };
   const marked = {

@@ -48,13 +48,24 @@ export function TransactionOrderCardItem({
   // focus/voice-control hazard on web) and double-trigger without
   // stopPropagation, which native responder events do not guarantee.
   return (
-    <View style={[styles.itemRow, { borderTopColor: colors.border }]}>
+    // Stacked column: the copy control sits below the item, never as a
+    // squeezing side action. Inline: transactions.styles.ts sits at the
+    // 300-line module ceiling, so this row layout lives with its only
+    // consumer.
+    <View
+      style={[
+        styles.itemRow,
+        {
+          alignItems: 'stretch',
+          borderTopColor: colors.border,
+          flexDirection: 'column',
+        },
+      ]}
+    >
       <Pressable
-        // Inline: transactions.styles.ts sits at the 300-line module
-        // ceiling, so this row layout lives with its only consumer.
         style={{
           alignItems: 'center',
-          flex: 1,
+          alignSelf: 'stretch',
           flexDirection: 'row',
           gap: SPACING.xs,
         }}
@@ -136,6 +147,9 @@ export function TransactionOrderCardItem({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Copy full offer reference ${String(item.offerId)}`}
+          // 12px text/icon alone is far below the 44pt minimum
+          // target; expand the touch area without moving layout.
+          hitSlop={12}
           onPress={() => {
             // Clipboard writes can reject (permissions, web denial):
             // surface a failure instead of failing silent on a ref

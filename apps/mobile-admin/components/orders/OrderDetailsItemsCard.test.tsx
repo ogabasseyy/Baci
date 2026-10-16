@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   pressable: vi.fn(),
   safeImage: vi.fn(),
   setStringAsync: vi.fn(),
+  view: vi.fn(),
 }));
 
 vi.mock('expo-clipboard', () => ({
@@ -74,8 +75,16 @@ vi.mock('react-native', async () => {
       children?: React.ReactNode;
       numberOfLines?: number;
     }) => React.createElement('span', null, children),
-    View: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('div', null, children),
+    View: ({
+      children,
+      ...rest
+    }: {
+      children?: React.ReactNode;
+      style?: unknown;
+    }) => {
+      mocks.view(rest);
+      return React.createElement('div', null, children);
+    },
   };
 });
 
@@ -376,6 +385,34 @@ describe('OrderDetailsItemsCard', () => {
           'Copy full offer reference 55555555-5555-4555-8555-555555555555',
         hitSlop: 12,
       })
+    );
+  });
+
+  it('stacks the copy control below the item row instead of beside it', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    // The outer row View lays out as a column so the ref pressable
+    // renders under the details, never as a squeezing side column.
+    const styles = mocks.view.mock.calls.flatMap(([props]) =>
+      Array.isArray(props.style) ? props.style : [props.style]
+    );
+    expect(styles).toContainEqual(
+      expect.objectContaining({ flexDirection: 'column' })
+    );
+    expect(styles).not.toContainEqual(
+      expect.objectContaining({ flexDirection: 'row', gap: 12 })
     );
   });
 });

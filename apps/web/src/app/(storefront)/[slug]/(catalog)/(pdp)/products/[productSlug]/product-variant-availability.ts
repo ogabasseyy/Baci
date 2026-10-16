@@ -25,13 +25,19 @@ export function isVariantAvailable(
         !options?.usesVariantConditions ||
         !options.condition ||
         variant.condition === options.condition;
-
-      return (
-        conditionMatches &&
-        Object.entries(partialAttributes).every(
-          ([key, value]) => variant.attributes[key] === value
-        )
+      const matches = Object.entries(partialAttributes).every(
+        ([key, value]) => variant.attributes[key] === value
       );
+      if (!conditionMatches || !matches) {
+        return false;
+      }
+      // A child variant can override an unmanaged parent with a
+      // serialized policy: resolve its exact units instead of assuming
+      // availability from the attribute match alone, or the option
+      // button enables a zero-unit strict variant the purchase checks
+      // then reject.
+      const serializedStock = resolveSerializedVariantStock(variant);
+      return serializedStock == null || serializedStock > 0;
     });
   }
 

@@ -39,16 +39,24 @@ function buildSupabaseMock() {
   };
   const supabase = {
     from: vi.fn(() => productsQuery),
-    rpc: vi.fn((name: string) =>
-      name === 'get_product_offers'
-        ? Promise.resolve({ data: mocks.offers, error: mocks.offerError })
-        : name === 'get_storefront_product_base_inventory'
-          ? Promise.resolve({ data: mocks.baseInventory, error: null })
-          : Promise.resolve({
-              data: mocks.variants,
-              error: mocks.variantError,
-            })
-    ),
+    rpc: vi.fn((name: string) => {
+      if (name === 'get_product_offers') {
+        return Promise.resolve({ data: mocks.offers, error: mocks.offerError });
+      }
+      if (name === 'get_storefront_product_base_inventory') {
+        return Promise.resolve({ data: mocks.baseInventory, error: null });
+      }
+      // The variants lookup pages through .range(); tests hold under
+      // one page, so every ranged call resolves the full fixture set.
+      return {
+        range: vi.fn(() =>
+          Promise.resolve({
+            data: mocks.variants,
+            error: mocks.variantError,
+          })
+        ),
+      };
+    }),
   };
 
   return { productsQuery, supabase };

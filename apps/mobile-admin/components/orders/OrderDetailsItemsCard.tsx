@@ -54,10 +54,13 @@ export function OrderDetailsItemsCard({
         // double-trigger without stopPropagation, which native
         // responder events do not guarantee.
         return (
+          // Stacked column: the copy control sits below the item row,
+          // never beside it — a row parent would squeeze the details
+          // column on narrow screens.
           <View
             key={item.id}
             style={[
-              styles.itemRow,
+              styles.itemRowStack,
               !isLastItem && {
                 borderBottomColor: colors.border,
                 borderBottomWidth: 1,
@@ -182,7 +185,7 @@ export function OrderDetailsItemsCard({
                     );
                   });
                 }}
-                style={[styles.offerRefRow, { marginTop: 0 }]}
+                style={styles.offerRefRow}
               >
                 <Text
                   style={[styles.itemVariant, { color: colors.textSecondary }]}

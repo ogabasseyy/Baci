@@ -1207,6 +1207,20 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     const consoleErrorSpy = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
+    const deleteSpy = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            select: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { id: 'vtu-tx-new' },
+                error: null,
+              }),
+            })),
+          })),
+        })),
+      })),
+    }));
     supabaseMockRef.current = {
       from: vi.fn((table: string) => {
         if (table === 'vtu_idempotency_keys') {
@@ -1262,20 +1276,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
         }
         if (table === 'vtu_transactions') {
           return {
-            delete: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                eq: vi.fn(() => ({
-                  eq: vi.fn(() => ({
-                    select: vi.fn(() => ({
-                      maybeSingle: vi.fn().mockResolvedValue({
-                        data: { id: 'vtu-tx-new' },
-                        error: null,
-                      }),
-                    })),
-                  })),
-                })),
-              })),
-            })),
+            delete: deleteSpy,
           };
         }
         return {
@@ -1295,6 +1296,13 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       expect(JSON.stringify(call)).not.toContain(VALID_KEY);
     }
     expect(JSON.stringify(body)).not.toContain(VALID_KEY);
+    // Muse R131 MEDIUM (orphan on non-race failure): the re-read
+    // returned null (no winner), so the prepared row is a genuine
+    // orphan — the branch verified-deletes it before the 500 (the
+    // `!==` condition covers null; the comment above the branch
+    // documents the genuine-orphan case).
+    expect(deleteSpy).toHaveBeenCalled();
+    expect(mockFulfill).not.toHaveBeenCalled();
     consoleErrorSpy.mockRestore();
   });
 

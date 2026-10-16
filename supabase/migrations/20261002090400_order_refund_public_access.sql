@@ -19,6 +19,109 @@ REVOKE ALL ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,
 GRANT EXECUTE ON FUNCTION public.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)
   TO authenticated;
 
+-- Round-60 P2: the refunded label may land only when no pending
+-- or anomalous refund evidence survives. The manager keeps
+-- reporting processing while any in-flight, unverified,
+-- currency-mismatched, or invalid-link refund exists, and the
+-- aggregate finalization helper refuses the same order, so
+-- flipping on coverage alone leaves reports and other
+-- payment_status consumers inconsistent with the refund worker.
+-- Mirrors the trailing gate arms of
+-- private.cancellation_refund_legs_covered_v1 verbatim (see that
+-- helper for the full rationale); it is created later in the
+-- chain, so the trigger and the migration-time backfill below
+-- cannot call it here.
+CREATE OR REPLACE FUNCTION private.refund_label_gates_clear_v1(
+  p_order_id uuid, p_merchant_id uuid, p_currency text
+) RETURNS boolean LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+DECLARE
+  v_sole_external_leg boolean;
+  v_sole_leg_gateway text;
+BEGIN
+  -- Sole-leg attribution mirrors the manager verbatim: an unlinked
+  -- refund attributes only to the single completed external leg.
+  SELECT count(*)=1,
+    max(public.normalized_gateway_name_v1(sole.gateway))
+    INTO v_sole_external_leg,v_sole_leg_gateway FROM public.transactions sole
+   WHERE sole.order_id=p_order_id AND sole.merchant_id=p_merchant_id
+     AND sole.transaction_type='payment' AND sole.status='completed' AND sole.amount>0
+     AND COALESCE(public.normalized_gateway_name_v1(sole.gateway),'') NOT IN (
+       'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY');
+  RETURN NOT EXISTS (
+    -- Unverified Paystack evidence blocks the label whether it is a
+    -- merchant declaration or an ordinary provider row.
+    SELECT 1 FROM public.transactions merchant_claim
+     WHERE merchant_claim.order_id=p_order_id
+       AND merchant_claim.merchant_id=p_merchant_id
+       AND merchant_claim.transaction_type='refund'
+       AND merchant_claim.status IN ('completed','refunded')
+       AND UPPER(BTRIM(merchant_claim.currency))
+         = UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency),''),'NGN')))
+       AND (public.normalized_gateway_name_v1(merchant_claim.gateway)='PAYSTACK'
+         OR (public.normalized_gateway_name_v1(merchant_claim.gateway)='MANUAL'
+           AND merchant_claim.metadata->>'method'='paystack'))
+       AND merchant_claim.metadata->>'provider_refund_status'
+         IS DISTINCT FROM 'processed'
+       AND (merchant_claim.metadata->>'payment_transaction_id' IS NULL
+         OR EXISTS (SELECT 1 FROM public.transactions leg
+           WHERE leg.id::text
+             = merchant_claim.metadata->>'payment_transaction_id'
+             AND leg.order_id=p_order_id AND leg.merchant_id=p_merchant_id
+             AND leg.transaction_type='payment'
+             AND leg.status IN ('completed','refund_pending','refunded'))))
+  AND NOT EXISTS (
+    -- In-flight refund evidence blocks the label even when every
+    -- leg is terminally covered; only failed rows are dead enough
+    -- to ignore.
+    SELECT 1 FROM public.transactions in_flight
+     WHERE in_flight.order_id=p_order_id
+       AND in_flight.merchant_id=p_merchant_id
+       AND in_flight.transaction_type='refund'
+       AND in_flight.status NOT IN ('completed','refunded','failed'))
+  AND NOT EXISTS (
+    -- Anomalous terminal evidence blocks the label exactly like
+    -- the manager's pending gate: a currency-mismatched,
+    -- link/gateway-mismatched, or invalid-link row keeps the
+    -- manager reporting pending.
+    SELECT 1 FROM public.transactions anomaly
+     WHERE anomaly.order_id=p_order_id
+       AND anomaly.merchant_id=p_merchant_id
+       AND anomaly.transaction_type='refund'
+       AND anomaly.status IN ('completed','refunded')
+       AND (UPPER(BTRIM(anomaly.currency))
+           IS DISTINCT FROM UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency),''),'NGN')))
+         OR NOT COALESCE((EXISTS (SELECT 1 FROM public.transactions leg
+             WHERE leg.id::text=anomaly.metadata->>'payment_transaction_id'
+               AND leg.order_id=p_order_id AND leg.merchant_id=p_merchant_id
+               AND leg.transaction_type='payment'
+               AND leg.status IN ('completed','refund_pending','refunded')
+               AND (public.normalized_gateway_name_v1(anomaly.gateway)='MANUAL'
+                 OR public.normalized_gateway_name_v1(anomaly.gateway)
+                   = public.normalized_gateway_name_v1(leg.gateway)))
+           OR (anomaly.metadata->>'payment_transaction_id' IS NULL
+             AND v_sole_external_leg
+             AND public.normalized_gateway_name_v1(anomaly.gateway)=v_sole_leg_gateway)),false)))
+  AND NOT EXISTS (
+    -- A foreign-currency self-terminal refunded leg counts as
+    -- returned only in the order currency.
+    SELECT 1 FROM public.transactions self_terminal
+     WHERE self_terminal.order_id=p_order_id
+       AND self_terminal.merchant_id=p_merchant_id
+       AND self_terminal.transaction_type='payment'
+       AND self_terminal.status='refunded'
+       AND self_terminal.amount>0
+       AND UPPER(BTRIM(self_terminal.currency))
+         IS DISTINCT FROM UPPER(BTRIM(COALESCE(NULLIF(BTRIM(p_currency),''),'NGN'))));
+END; $$;
+REVOKE ALL ON FUNCTION private.refund_label_gates_clear_v1(uuid,uuid,text)
+  FROM PUBLIC,anon,authenticated;
+-- Like the sibling coverage helpers: service_role fires the sync
+-- trigger, and authenticated EXECUTE keeps any hypothetical direct
+-- call on the clean schema-USAGE denial instead of the crashing
+-- function-ACL path (see the coverage migration).
+GRANT EXECUTE ON FUNCTION private.refund_label_gates_clear_v1(uuid,uuid,text)
+  TO service_role, authenticated;
+
 -- A provider confirmation updates payment status without changing amount paid.
 CREATE OR REPLACE FUNCTION private.sync_cancelled_order_refund_status()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
@@ -62,10 +165,17 @@ BEGIN
     -- test alone cannot prove every funded leg is covered (a
     -- superseded capture's reversal satisfies it beside an
     -- outstanding live capture), so the transition additionally
-    -- requires zero per-leg uncovered obligation.
+    -- requires zero per-leg uncovered obligation. The label
+    -- additionally waits for clear pending/anomaly gates: while
+    -- any in-flight, unverified, currency-mismatched, or
+    -- invalid-link refund survives, the manager reports
+    -- processing and the aggregate finalizer refuses, so the
+    -- label must not claim refunded first.
     UPDATE public.orders o SET payment_status='refunded',updated_at=now()
       WHERE o.id=NEW.order_id AND o.merchant_id=NEW.merchant_id
         AND o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
+        AND private.refund_label_gates_clear_v1(
+          o.id, o.merchant_id, o.currency)
         AND o.amount_paid <= private.capped_refund_coverage_v1(
             o.id, o.merchant_id, o.currency)
         + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
@@ -102,6 +212,7 @@ BEGIN
   UPDATE public.orders o SET payment_status='refunded',updated_at=now()
    WHERE o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
      AND o.payment_status IN ('paid','partially_paid','pending','bnpl_approved')
+     AND private.refund_label_gates_clear_v1(o.id, o.merchant_id, o.currency)
      AND o.amount_paid <= private.capped_refund_coverage_v1(
            o.id, o.merchant_id, o.currency)
        + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p

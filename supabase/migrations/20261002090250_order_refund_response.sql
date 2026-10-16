@@ -125,7 +125,13 @@ BEGIN
     -- with outstanding capacity: without a leg that can accept it,
     -- every submission ends in payment_ledger_requires_review, so a
     -- wallet/savings-only remainder must not advertise recovery.
-    -- Mirrors record_manual_order_refund's leg scan exactly.
+    -- Mirrors record_manual_order_refund's leg scan exactly, plus
+    -- its input-independent ledger vetoes: a foreign-currency leg,
+    -- an unallocated terminal refund, or allocatable legs
+    -- exceeding the live remainder each route every submission to
+    -- review no matter what the merchant enters. (Pin, amount, and
+    -- reference rejections depend on the submission itself, so the
+    -- flag cannot precompute them.)
     'canRecordManual',p_remaining>0 AND p_pending=0
       AND NOT p_has_movement_evidence AND p_cancelled_at IS NOT NULL
       AND EXISTS (
@@ -143,7 +149,36 @@ BEGIN
           WHERE r.order_id=p_order_id AND r.transaction_type='refund'
           AND r.status IN ('completed','refunded')
           AND upper(btrim(r.currency))=upper(btrim(leg.currency))
-          AND r.metadata->>'payment_transaction_id'=leg.id::text),0)),
+          AND r.metadata->>'payment_transaction_id'=leg.id::text),0))
+      AND NOT EXISTS (
+        SELECT 1 FROM public.transactions leg
+        WHERE leg.order_id=p_order_id
+        AND leg.transaction_type='payment'
+        AND (leg.status='completed'
+          OR (leg.status='refunded'
+            AND public.normalized_gateway_name_v1(leg.gateway) IN (
+              'CASH','STORE_CREDIT','MANUAL','PAY_ON_DELIVERY')))
+        AND upper(btrim(leg.currency)) IS DISTINCT FROM upper(btrim(p_currency)))
+      AND NOT EXISTS (
+        SELECT 1 FROM public.transactions r
+        WHERE r.order_id=p_order_id
+        AND r.transaction_type='refund' AND r.status IN ('completed','refunded')
+        AND r.metadata->>'payment_transaction_id' IS NULL)
+      AND (SELECT COALESCE(SUM(GREATEST(leg.amount-COALESCE((
+          SELECT SUM(r.amount) FROM public.transactions r
+          WHERE r.order_id=p_order_id AND r.transaction_type='refund'
+          AND r.status IN ('completed','refunded')
+          AND upper(btrim(r.currency))=upper(btrim(leg.currency))
+          AND r.metadata->>'payment_transaction_id'=leg.id::text),0),0)),0)
+        FROM public.transactions leg
+        WHERE leg.order_id=p_order_id AND leg.merchant_id=p_merchant_id
+        AND leg.transaction_type='payment'
+        AND ((leg.status='completed'
+            AND (leg.gateway IS NULL OR btrim(leg.gateway)=''
+              OR upper(btrim(leg.gateway)) NOT IN ('WALLET','SAVINGS')))
+          OR (leg.status='refunded'
+            AND public.normalized_gateway_name_v1(leg.gateway) IN (
+              'CASH','STORE_CREDIT','MANUAL','PAY_ON_DELIVERY')))) <= p_remaining,
     'canManageRefunds',p_can_manage
       AND COALESCE(p_step_status,'') NOT IN ('claimed','delivery_uncertain'));
 END; $$;

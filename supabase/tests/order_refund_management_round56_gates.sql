@@ -57,7 +57,13 @@ BEGIN
     ('b5611000-0000-4000-8000-000000000092', v_merchant_id, 'CAP-092',
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('b5611000-0000-4000-8000-000000000093', v_merchant_id, 'CAP-093',
-      150, 150, 'paid', 'cancelled', pg_catalog.now());
+      150, 150, 'paid', 'cancelled', pg_catalog.now()),
+    ('b5611000-0000-4000-8000-000000000094', v_merchant_id, 'CAP-094',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('b5611000-0000-4000-8000-000000000095', v_merchant_id, 'CAP-095',
+      200, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('b5611000-0000-4000-8000-000000000096', v_merchant_id, 'CAP-096',
+      200, 200, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -83,7 +89,25 @@ BEGIN
       'b5611000-0000-4000-8000-000000000093', 'refund', 100, 'NGN',
       'completed', 'manual', 'cap-93-1',
       jsonb_build_object(
-        'payment_transaction_id', 'b5612000-0000-4000-8000-000000000093'));
+        'payment_transaction_id', 'b5612000-0000-4000-8000-000000000093')),
+    -- Foreign-currency leg: the currency gate routes to review.
+    ('b5612000-0000-4000-8000-000000000096', v_merchant_id,
+      'b5611000-0000-4000-8000-000000000094', 'payment', 100, 'USD',
+      'completed', 'cash', 'cash-94', '{}'::jsonb),
+    -- Overfunded legs: allocatable exceeds the live remainder.
+    ('b5612000-0000-4000-8000-000000000097', v_merchant_id,
+      'b5611000-0000-4000-8000-000000000095', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-95a', '{}'::jsonb),
+    ('b5612000-0000-4000-8000-000000000098', v_merchant_id,
+      'b5611000-0000-4000-8000-000000000095', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-95b', '{}'::jsonb),
+    -- Unallocated terminal refund beside an underfunded leg.
+    ('b5612000-0000-4000-8000-000000000099', v_merchant_id,
+      'b5611000-0000-4000-8000-000000000096', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-96', '{}'::jsonb),
+    ('b5612000-0000-4000-8000-000000000100', v_merchant_id,
+      'b5611000-0000-4000-8000-000000000096', 'refund', 100, 'NGN',
+      'completed', 'manual', 'cap-96-1', '{}'::jsonb);
 END;
 $fixtures$;
 
@@ -141,6 +165,41 @@ BEGIN
   END IF;
   IF (v_result->>'canRecordManual')::boolean IS DISTINCT FROM false THEN
     RAISE EXCEPTION 'spent-leg remainder advertised manual, got %',
+      v_result->>'canRecordManual';
+  END IF;
+
+  -- A foreign-currency ledger veto: recording would route to review.
+  SELECT public.manage_order_refund(
+    'b5611000-0000-4000-8000-000000000094'
+  ) INTO v_result;
+  IF (v_result->>'canRecordManual')::boolean IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'foreign-currency ledger advertised manual, got %',
+      v_result->>'canRecordManual';
+  END IF;
+  BEGIN
+    PERFORM public.manage_order_refund(
+      'b5611000-0000-4000-8000-000000000094', 'manual', 10,
+      '2026-09-28T12:00:00Z', 'bank_transfer', 'cap-94-1', NULL, true);
+    RAISE EXCEPTION 'manual submitted against a vetoed ledger';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'payment_currency_requires_review' THEN RAISE; END IF;
+  END;
+
+  -- Overfunded ledgers route to review: no manual recovery to offer.
+  SELECT public.manage_order_refund(
+    'b5611000-0000-4000-8000-000000000095'
+  ) INTO v_result;
+  IF (v_result->>'canRecordManual')::boolean IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'overfunded ledger advertised manual, got %',
+      v_result->>'canRecordManual';
+  END IF;
+
+  -- An unallocated terminal refund routes to review likewise.
+  SELECT public.manage_order_refund(
+    'b5611000-0000-4000-8000-000000000096'
+  ) INTO v_result;
+  IF (v_result->>'canRecordManual')::boolean IS DISTINCT FROM false THEN
+    RAISE EXCEPTION 'unallocated refund advertised manual, got %',
       v_result->>'canRecordManual';
   END IF;
 END;

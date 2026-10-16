@@ -233,6 +233,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
+      .mockReturnValueOnce(selectQuery(null))
       .mockReturnValueOnce(selectQuery(null));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
@@ -274,6 +275,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
+      .mockReturnValueOnce(selectQuery(null))
       .mockReturnValueOnce(selectQuery(null));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 
@@ -443,6 +445,7 @@ describe('recoverUnknownPaystackRefund recovery reviews', () => {
       .mockReturnValueOnce(selectQuery([firstPayment]))
       .mockReturnValueOnce(selectQuery(order))
       .mockReturnValueOnce({ insert: auditInsert })
+      .mockReturnValueOnce(selectQuery(null))
       .mockReturnValueOnce(selectQuery(null));
     const supabase = { from, rpc } as unknown as SupabaseClient;
 

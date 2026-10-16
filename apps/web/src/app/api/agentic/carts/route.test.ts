@@ -125,6 +125,35 @@ describe('POST /api/agentic/carts', () => {
     });
   });
 
+  it('rejects ownerless cart creation before inserting a session', async () => {
+    mockMutation({
+      currency: 'NGN',
+      line_items: [{ item: { id: 'product-1' }, quantity: 1 }],
+    });
+    vi.mocked(readAgenticMutationRequest).mockResolvedValue({
+      agentId: null,
+      apiVersion: '2026-04-30',
+      body: {
+        currency: 'NGN',
+        line_items: [{ item: { id: 'product-1' }, quantity: 1 }],
+      },
+      idempotencyKey: 'idem-1',
+      method: 'POST',
+      ok: true,
+      pathname: '/api/agentic/carts',
+      rawBody: '{}',
+      requestId: 'req-1',
+    });
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts', { method: 'POST' })
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: 'Platform identity required',
+    });
+  });
+
   it('returns 400 for invalid cart bodies', async () => {
     mockMutation({ line_items: [] });
 

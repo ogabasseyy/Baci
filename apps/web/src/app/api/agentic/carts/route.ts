@@ -41,6 +41,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Caller scoping keys every later read/update/cancel/checkout to
+  // the creating platform: an ownerless cart could never be read back
+  // (every scoped lookup 404s), so creation requires the identity.
+  if (!mutation.agentId) {
+    return NextResponse.json(
+      { error: 'Platform identity required' },
+      { status: 400 }
+    );
+  }
+
   const merchant = await resolveAgenticMerchantContext(createAdminClient());
   if (!merchant) {
     return NextResponse.json(

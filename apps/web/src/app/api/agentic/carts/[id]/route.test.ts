@@ -526,7 +526,19 @@ describe('/api/agentic/carts/[id]', () => {
       line_items: [{ item: { id: 'product-1' }, quantity: 2 }],
       expectedVersion: 4,
     });
+    // Canonical state stays authoritative: the legacy row is never
+    // used as a fallback. A read may still load the session row for
+    // the one-shot create-recovery check, which finds no pending
+    // marker here and leaves the canonical response untouched.
     const from = vi.fn(() => {
+      if (action === 'read') {
+        const query = {
+          select: vi.fn(() => query),
+          eq: vi.fn(() => query),
+          maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+        };
+        return query;
+      }
       throw new Error('legacy must not be read');
     });
     vi.mocked(createAgenticScopedSupabaseClient).mockReturnValue({
@@ -554,6 +566,6 @@ describe('/api/agentic/carts/[id]', () => {
         cartId: 'cart_123',
       })
     );
-    expect(from).not.toHaveBeenCalled();
+    if (action === 'update') expect(from).not.toHaveBeenCalled();
   });
 });

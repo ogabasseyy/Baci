@@ -47,6 +47,18 @@ it('keeps a valid pending pairing when a later invalid link arrives', () => {
   }
 });
 
+it('reduces non-pairing absolute URLs to the in-app cart route', () => {
+  for (const path of [
+    'https://evil.example/phish',
+    '//evil.example/phish',
+    'baci://evil.example/phish',
+    'intent://evil.example/#Intent;scheme=https;end',
+  ]) {
+    expect(captureCartPairingLink(path, config)).toBe('/cart');
+  }
+  expect(captureCartPairingLink('/(tabs)/shop', config)).toBe('/(tabs)/shop');
+});
+
 it('captures the relative path shape redirectSystemPath delivers', () => {
   const path = `/cart#handoff=${token()}&hid=${hid}`;
   expect(captureCartPairingLink(path, config)).toBe('/cart');

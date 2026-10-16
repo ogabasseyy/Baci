@@ -72,7 +72,15 @@ export function captureCartPairingLink(path: string, config: Config): string {
     fragment.has('hid') ||
     url.searchParams.has('handoff') ||
     url.searchParams.has('hid');
-  if (!pairing) return path;
+  if (!pairing) {
+    // Non-pairing deliveries pass through only as relative in-app
+    // paths; absolute or scheme-bearing URLs are reduced to the cart
+    // route instead of being handed back unvalidated as a redirect.
+    const trimmed = path.trim();
+    if (/^(?:[a-zA-Z][a-zA-Z0-9+.-]*:)?\/\//.test(trimmed)) return '/cart';
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return '/cart';
+    return path;
+  }
   // A malformed or foreign pairing link must not wipe a valid pending
   // pairing captured moments earlier: the pending link is replaced
   // only after the incoming one fully validates below.

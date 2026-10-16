@@ -46,9 +46,9 @@ BEGIN
  PERFORM set_config('request.jwt.claims',c::text,true); ctx:=public.commerce_cart_legacy_owner_context('ucp',hash);
  IF ctx->>'ok' IS DISTINCT FROM 'false' OR ctx->>'code' IS DISTINCT FROM 'not_found' THEN RAISE EXCEPTION 'Wrong agent verified UCP ownership'; END IF;
  c:=c||jsonb_build_object('cart_legacy_agent_id','agent-a'); PERFORM set_config('request.jwt.claims',c::text,true);
- UPDATE public.agentic_cart_sessions SET cart_items='[{"id":"44444444-4444-4444-8444-444444444444","quantity":1,"variant_id":"44444444-4444-4444-8444-444444444445"}]' WHERE cart_id='ucp-owned';
+ UPDATE public.agentic_cart_sessions SET cart_items='[{"id":"44444444-4444-4444-8444-444444444444","quantity":1,"variant_id":"44444444-4444-4444-8444-444444444445","condition":"new","variant_attributes":{"size":"L"}}]' WHERE cart_id='ucp-owned';
  ctx:=public.commerce_cart_legacy_owner_context('ucp',hash);
- IF ctx->>'code' IS DISTINCT FROM 'invalid_item' THEN RAISE EXCEPTION 'Unsupported variant identity was dropped'; END IF;
+ IF ctx->>'ok' IS DISTINCT FROM 'true' OR ctx->'lines'->0->'item'->>'variantId' IS DISTINCT FROM '44444444-4444-4444-8444-444444444445' OR ctx->'lines'->0->'item'->>'condition' IS DISTINCT FROM 'new' OR ctx->'lines'->0->'item'->'options'->>'size' IS DISTINCT FROM 'L' THEN RAISE EXCEPTION 'Supported lane identity was not translated %',ctx; END IF;
  UPDATE public.agentic_cart_sessions SET cart_items='[{"id":"44444444-4444-4444-8444-444444444444","quantity":1}]' WHERE cart_id='ucp-owned';
  ctx:=public.commerce_cart_legacy_owner_context('ucp',hash);
  r:=public.commerce_cart_migrate_legacy('ucp',hash,'ucp-import',ctx->'lines',ctx->>'legacyVersion',ctx->>'currency');

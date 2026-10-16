@@ -128,6 +128,49 @@ describe('OrderRefundPanel status display', () => {
     });
     expect(await screen.findByText(/Date unavailable/)).toBeInTheDocument();
   });
+  it('keeps polling a Paystack-backed refund past refunded', async () => {
+    // A later contradictory provider verdict can re-open the
+    // balance after completion, so provider-backed pages never
+    // treat refunded as terminal.
+    vi.useFakeTimers();
+    try {
+      loadWith({
+        ...summary,
+        status: 'refunded',
+        legs: [
+          {
+            amount: 100,
+            gateway: 'paystack',
+            id: 'leg-1',
+            outstanding: 0,
+            reference: 'ps-1',
+          },
+        ],
+      });
+      await act(async () => {});
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('stops polling a refunded order without provider legs', async () => {
+    vi.useFakeTimers();
+    try {
+      loadWith({ ...summary, status: 'refunded' });
+      await act(async () => {});
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('keeps polling while the refund needs review', async () => {
     // Requires-review is not terminal: provider reconciliation can
     // still complete the underlying delivery_uncertain step, so an

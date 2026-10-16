@@ -45,7 +45,9 @@ BEGIN
     payment_status, shipping_status, cancelled_at
   ) VALUES
     ('9ef51000-0000-4000-8000-000000000001', v_merchant_id, 'NULLPAID-001',
-      100, NULL, 'paid', 'cancelled', pg_catalog.now());
+      100, NULL, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef51000-0000-4000-8000-000000000002', v_merchant_id, 'NULLPAID-002',
+      75, NULL, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -53,7 +55,10 @@ BEGIN
   ) VALUES
     ('9ef52000-0000-4000-8000-000000000001', v_merchant_id,
       '9ef51000-0000-4000-8000-000000000001', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'np-1', '{}'::jsonb);
+      'completed', 'paystack', 'np-1', '{}'::jsonb),
+    ('9ef52000-0000-4000-8000-000000000002', v_merchant_id,
+      '9ef51000-0000-4000-8000-000000000002', 'payment', 75, 'NGN',
+      'completed', 'cash', 'np-2', '{}'::jsonb);
 END;
 $null_paid_fixtures$;
 
@@ -83,6 +88,16 @@ BEGIN
   END IF;
   IF (v_result->>'canRecordManual')::boolean IS NOT TRUE THEN
     RAISE EXCEPTION 'NULL-paid order not manually recordable';
+  END IF;
+  -- Cash-like legs refund through the manual allocator, not the
+  -- wallet/savings ledgers, so a cash-only NULL-paid order derives
+  -- its balance too instead of stranding at zero.
+  SELECT public.manage_order_refund(
+    '9ef51000-0000-4000-8000-000000000002'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 75 THEN
+    RAISE EXCEPTION 'NULL-paid cash remaining = %, want 75',
+      v_result->>'remaining';
   END IF;
 END;
 $null_paid_derivation$;

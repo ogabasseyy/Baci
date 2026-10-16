@@ -33,6 +33,28 @@ export interface CancellationRefundLedgerRow {
  * verification throws. Initiated refunds persist per leg, so every
  * budget-deferred run still converges.
  */
+/**
+ * Reconstruct a null paid total from funded legs (mirrors
+ * effective_amount_paid_v1): currency-matching legs except
+ * wallet/savings, which reverse through their own ledgers. The
+ * executor only passes funded-status legs, so no status filter is
+ * needed; gross (coverage-blind) like the SQL side.
+ */
+function derivedFundedPaid(
+  transactions: GatewayPaymentTransaction[],
+  orderCurrency: string
+): number {
+  return transactions
+    .filter(
+      (transaction) =>
+        normalizeRefundMoneyField(transaction.currency) === orderCurrency &&
+        !['WALLET', 'SAVINGS'].includes(
+          normalizePaymentGateway(transaction.gateway)
+        )
+    )
+    .reduce((sum, transaction) => sum + Number(transaction.amount), 0);
+}
+
 export async function preflightCancellationRefundInitiation({
   auditBlockedLegIds,
   deadlineMs,
@@ -80,7 +102,6 @@ export async function preflightCancellationRefundInitiation({
   const outstandingTransactions = initiationTransactions.filter(
     (transaction) => !refundedPaymentIds.has(transaction.id)
   );
-  const refundAmount = Number(order.amount_paid) || 0;
   // Currency is an initiation-time property like the kobo cap below:
   // legacy rows pad or re-case ISO codes, so compare normalized values
   // while still rejecting missing or genuinely different currencies.
@@ -107,6 +128,15 @@ export async function preflightCancellationRefundInitiation({
       transactions: mismatchedCurrencyLegs,
     });
   }
+  // A null paid total (legacy rows) derives from funded legs,
+  // mirroring effective_amount_paid_v1: a zero cap would quarantine
+  // every retry for reconciliation instead of initiating it. A
+  // recorded zero stays zero — paid nothing with money outstanding
+  // is the overfunded anomaly this cap exists to catch.
+  const refundAmount =
+    Number(
+      order.amount_paid ?? derivedFundedPaid(transactions, orderCurrency)
+    ) || 0;
   // Captures may legitimately exceed the recorded amount paid when
   // superseded legs exist (their completed refunds already cover them),
   // but the outstanding initiation itself must never exceed it. An

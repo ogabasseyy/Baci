@@ -78,14 +78,16 @@ export function OrderRefundPanel({
       setMethod,
     });
 
-  // Only a refunded order is terminal: a failed row can still
-  // transition asynchronously (drain retries, provider
+  // Only a refunded order without provider legs is terminal: other
+  // rows can still transition asynchronously (drain retries, provider
   // reconciliation), and the ledger-derived balance would go stale
-  // without the poll. Requires-review is not terminal either: its
-  // delivery_uncertain step completes asynchronously once provider
-  // reconciliation verifies coverage, so stopping the loop would
-  // strand an open page on "Requires review" past the refund.
-  const terminal = summary?.status === 'refunded';
+  // without the poll. A Paystack-backed refund can even flip after
+  // completion when a later contradictory provider verdict re-opens
+  // the balance, so those pages keep polling past refunded.
+  const hasPaystackLeg = (summary?.legs ?? []).some(
+    (leg) => normalizePaymentGateway(leg.gateway) === 'PAYSTACK'
+  );
+  const terminal = summary?.status === 'refunded' && !hasPaystackLeg;
   useRefundStatusPolling({
     hasInitialSummary: initialSummary !== undefined,
     onError: setError,

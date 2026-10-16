@@ -17,6 +17,7 @@ import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
 import { isValidMerchantIdentifier } from '@/lib/validation';
+import { resolveOgabasseyHomeHeroShell } from '../ogabassey/ogabassey-home-hero-shell-data';
 import { isOgabasseyHomeIdentifier } from './(home)/is-ogabassey-home-identifier';
 import { getStorefrontSeoDescription } from './seo-helpers';
 import { StorefrontPprStaticShell } from './storefront-ppr-static-shell';
@@ -171,7 +172,11 @@ export async function StorefrontLayoutContent(props: {
   // key as the snapshot's own call, so a match dedupes to one fetch; the
   // snapshot revalidates the id before adopting the early result.
   const shellSnapshotBasePromise = getStorefrontShellSnapshotBase(slug);
-  const eagerCategories = isOgabasseyHomeIdentifier(slug)
+  const isOgabasseyHome = isOgabasseyHomeIdentifier(slug);
+  if (isOgabasseyHome) {
+    void resolveOgabasseyHomeHeroShell().catch(() => undefined);
+  }
+  const eagerCategories = isOgabasseyHome
     ? {
         merchantId: OGABASSEY_MERCHANT_ID,
         categories: getStorefrontNavigationCategories(OGABASSEY_MERCHANT_ID),

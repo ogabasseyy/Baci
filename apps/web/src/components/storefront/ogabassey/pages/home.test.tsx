@@ -247,4 +247,44 @@ describe('OgabasseyHomePage', () => {
       (homepageStripCall?.[0] as { fallback?: unknown }).fallback
     ).toBeUndefined();
   });
+
+  it('gives the Suspense boundary around HomeProductGridGate an explicit 1200px inline-styled fallback', () => {
+    const element = OgabasseyHomePage({
+      products: [],
+      categories: [],
+      renderHero: false,
+    }) as {
+      props?: {
+        children?: Array<{
+          type?: unknown;
+          props?: {
+            fallback?: {
+              props?: Record<string, unknown> & {
+                children?: { props?: Record<string, unknown> };
+              };
+            };
+          };
+        }>;
+      };
+    };
+    const children = Array.isArray(element?.props?.children)
+      ? element.props.children
+      : [];
+    const suspenseChild = children.find(
+      (child) =>
+        child &&
+        typeof child === 'object' &&
+        child.type === Symbol.for('react.suspense')
+    );
+
+    expect(suspenseChild).toBeDefined();
+    expect(
+      suspenseChild?.props?.fallback?.props?.[
+        'data-ogabassey-grid-gate-reserve'
+      ]
+    ).toBe('true');
+    expect(suspenseChild?.props?.fallback?.props?.children?.props?.style).toEqual(
+      { minHeight: '1200px' }
+    );
+  });
 });

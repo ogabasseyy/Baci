@@ -4,7 +4,7 @@ import 'server-only';
 import { unstable_rethrow } from 'next/navigation';
 import { buildLaunchSlides } from '@/components/storefront/ogabassey/components/build-launch-slides';
 import type { LaunchProductSlide } from '@/components/storefront/ogabassey/components/LaunchCarousel';
-import { getCachedMerchant } from '@/lib/cached-data';
+import * as cachedData from '@/lib/cached-data';
 import { buildStoreUrl } from '@/lib/store-url';
 import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 
@@ -34,7 +34,13 @@ export type OgabasseyHomeHeroShellResult =
   | OgabasseyHomeHeroUnpublishedShell;
 
 async function resolveShellSlides(): Promise<OgabasseyHomeHeroShellResult | null> {
-  const merchant = await getCachedMerchant(OGABASSEY_MERCHANT_SLUG);
+  if (
+    !('getCachedMerchant' in cachedData) ||
+    typeof cachedData.getCachedMerchant !== 'function'
+  ) {
+    return null;
+  }
+  const merchant = await cachedData.getCachedMerchant(OGABASSEY_MERCHANT_SLUG);
   if (!merchant?.id) {
     return null;
   }

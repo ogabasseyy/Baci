@@ -101,18 +101,31 @@ export async function OgabasseyStaticHomePageContent({
       ) : (
         <>
           {/*
-            No hero preload hint here: whenever this branch renders with a
-            live URL, omitCommittedHero is set and the upstream committed
-            slot already owns the scanner-visible hint for that URL.
+            No hero preload hint or second reserve boundary here: whenever
+            omitCommittedHero is true, the upstream committed slot owns the
+            scanner-visible hint and OgabasseyStaticHomePage already wraps
+            this component in <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>.
+            Avoiding a second nested reserve boundary saves ~19 KB of
+            duplicate fallback HTML + RSC Flight payload and eliminates an
+            extra Suspense boundary swap before Hero reveals.
           */}
-          <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
+          {omitCommittedHero ? (
             <OgabasseyHomePageContent
-              omitDocumentHeading={omitCommittedHero}
+              omitDocumentHeading
               pathPrefix={pathPrefix}
               shellMerchantId={shellMerchantId}
               shellSlides={shellSlides}
             />
-          </Suspense>
+          ) : (
+            <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
+              <OgabasseyHomePageContent
+                omitDocumentHeading={false}
+                pathPrefix={pathPrefix}
+                shellMerchantId={shellMerchantId}
+                shellSlides={shellSlides}
+              />
+            </Suspense>
+          )}
         </>
       )}
     </>

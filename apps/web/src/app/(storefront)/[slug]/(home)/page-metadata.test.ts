@@ -10,8 +10,16 @@ import {
 } from '@/config/ogabassey';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 
+const mockResolveOgabasseyHomeHeroShell = vi.hoisted(() =>
+  vi.fn(() => Promise.resolve(null))
+);
+
 vi.mock('@/lib/cached-data', () => ({
   getRequestScopedMerchant: vi.fn(),
+}));
+
+vi.mock('@/app/(storefront)/ogabassey/ogabassey-home-hero-shell-data', () => ({
+  resolveOgabasseyHomeHeroShell: () => mockResolveOgabasseyHomeHeroShell(),
 }));
 
 vi.mock('@/lib/validation', () => ({
@@ -37,6 +45,7 @@ const { generateMetadata } = await import('./page');
 
 describe('storefront homepage metadata', () => {
   beforeEach(() => {
+    mockResolveOgabasseyHomeHeroShell.mockClear();
     vi.mocked(getRequestScopedMerchant).mockReset();
     vi.mocked(getRequestScopedMerchant).mockResolvedValue(
       baseMerchant as unknown as Awaited<
@@ -151,5 +160,14 @@ describe('storefront homepage metadata', () => {
     });
 
     expect(metadata.twitter).not.toHaveProperty('site');
+    expect(mockResolveOgabasseyHomeHeroShell).not.toHaveBeenCalled();
+  });
+
+  it('warms the OgaBassey home hero shell in parallel with merchant resolution', async () => {
+    await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
+    });
+
+    expect(mockResolveOgabasseyHomeHeroShell).toHaveBeenCalledOnce();
   });
 });

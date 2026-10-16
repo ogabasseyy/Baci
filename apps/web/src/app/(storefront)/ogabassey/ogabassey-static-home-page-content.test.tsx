@@ -287,4 +287,19 @@ describe('OgabasseyStaticHomePageContent', () => {
       screen.getByRole('region', { name: /dynamic home content/i })
     ).toHaveAttribute('data-omit-document-heading', 'true');
   });
+
+  it('omits the redundant inner hero-reserve Suspense boundary when the parent shell already wraps it', async () => {
+    const element = await OgabasseyStaticHomePageContent({
+      omitCommittedHero: true,
+      pathPrefix: '',
+    });
+
+    render(element);
+
+    expect(
+      document.querySelector(
+        '[data-ogabassey-home-hero-reserve-fallback="true"]'
+      )
+    ).not.toBeInTheDocument();
+  });
 });

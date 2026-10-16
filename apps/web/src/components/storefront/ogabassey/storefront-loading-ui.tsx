@@ -1,3 +1,9 @@
+import { HeroMobileControlsSkeleton } from '@/components/storefront/ogabassey/components/hero-mobile-controls-skeleton';
+import {
+  HERO_MOBILE_PANEL_CLASSES,
+  HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS,
+  HERO_MOBILE_WRAPPER_CLASSES,
+} from '@/components/storefront/ogabassey/components/hero-mobile-geometry';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { CSSProperties, ReactNode } from 'react';
 import {
@@ -161,7 +167,32 @@ export function ShellChromeLoading({
 export function HomeRouteLoading() {
   return (
     <LoadingStatus label="Loading storefront homepage">
-      <StorefrontPageSkeleton />
+      <div aria-hidden="true" data-storefront-home-loading-reserve="true">
+        <section className="max-w-[1400px] mx-auto px-4 md:px-6 relative z-10 pt-4 md:pt-6 flex flex-col">
+          <div className={HERO_MOBILE_WRAPPER_CLASSES}>
+            <div className={HERO_MOBILE_PANEL_CLASSES} />
+            <HeroMobileControlsSkeleton />
+          </div>
+          <div className="hidden md:grid grid-cols-1 lg:grid-cols-5 gap-4 h-auto lg:h-[540px] order-2">
+            <div className="lg:col-span-3 h-[400px] lg:h-full rounded-2xl ring-1 ring-store-border/70 shadow-lg bg-store-secondary" />
+            <div className="hidden lg:flex flex-col gap-4 h-full lg:col-span-2">
+              <div className="flex-1 rounded-2xl shadow-lg ring-1 ring-store-border/70 bg-store-secondary" />
+              <div className="flex-1 rounded-2xl shadow-lg ring-1 ring-store-border/70 bg-store-secondary" />
+            </div>
+          </div>
+        </section>
+        <div className="w-full bg-white mt-3 md:mt-8 mb-6 border-y border-gray-100 md:py-5">
+          <div className="md:hidden px-4">
+            <div
+              className={`${HERO_MOBILE_UTILITY_PANEL_MIN_HEIGHT_CLASS} bg-white rounded-3xl shadow-sm border border-gray-100 p-2`}
+            />
+          </div>
+          <div className="hidden md:flex max-w-[1400px] mx-auto px-4 md:px-6 h-[92px]" />
+        </div>
+        <div className="ogabassey-home-products">
+          <div className="min-h-[1200px]" style={{ minHeight: '1200px' }} />
+        </div>
+      </div>
     </LoadingStatus>
   );
 }

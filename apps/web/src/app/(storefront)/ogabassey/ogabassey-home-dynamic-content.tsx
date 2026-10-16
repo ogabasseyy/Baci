@@ -94,7 +94,10 @@ export function OgabasseyHomeDynamicContent({
             className="ogabassey-home-products"
             data-ogabassey-product-reserve="true"
           >
-            <div className={PRODUCT_RESERVE_MIN_HEIGHT_CLASS} />
+            <div
+              className={PRODUCT_RESERVE_MIN_HEIGHT_CLASS}
+              style={{ minHeight: '1200px' }}
+            />
           </div>
         }
       >
@@ -111,7 +114,10 @@ export function OgabasseyHomeDynamicContent({
             className="mx-auto mt-8 max-w-[1400px] px-4 md:px-6"
             data-ogabassey-discovery-reserve="true"
           >
-            <div className={DISCOVERY_RESERVE_MIN_HEIGHT_CLASS} />
+            <div
+              className={DISCOVERY_RESERVE_MIN_HEIGHT_CLASS}
+              style={{ minHeight: '280px' }}
+            />
           </div>
         }
       >

@@ -65,7 +65,7 @@ BASE_PINS = {
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
-    ".github/scripts/capability_gate_contract_ci_checks.py": "af7aec0fb16f42b0834b3dea511ab251f204f19565103162ce9f807a4586f5bc",
+    ".github/scripts/capability_gate_contract_ci_checks.py": "eefa8714dd8a321130ec1f9f855d2a6bed77310a0a0b2a9bf6ad5821c553118c",
     ".github/scripts/capability_gate_contract_workflow_checks.py": "7a6a5daecabb8f4d821118ac605b07e9de508579b1a8716930cca351934104bf",
     ".github/workflows/capability-register-freshness.yml": "7496fead7a21713f6864b61ee828b1718350dd3034571c73381d5402f5ae27df",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
@@ -86,7 +86,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/test_platform_capability_prompt.py": "0c3b79f20946ecb17bd0684ed54d3cb97b0c2d7dcf3b0cebced76d9c25caccad",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/prompt_builder.py": "59997648a8c05f9fdbba5d4a9849e96a066ae4d316a2a9d465e0e1ef58aed3ae",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "b90a50818a68d85ecda851eba406ec27e84f9cbb54617abce857b505db59688e",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "5c1d9f517170f0d4528a086964655cabb849c3886c8cea8bc83693ae6c557c4e",
     "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }

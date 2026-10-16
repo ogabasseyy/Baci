@@ -29,12 +29,15 @@ export interface PersistedPendingVtuPurchase {
  * an identical purchase then presents the previous vend as new
  * without charging. `forgottenAt` arbitrates against re-remember: an
  * entry remembered after the tombstone wins. Mirrors web's
- * `PersistedVtuTombstone` (single runtime here, so no cross-tab merge
- * — the codec suppresses snapshot entries directly).
+ * `PersistedVtuTombstone`, including the key-bound R61 shape — the
+ * codec suppresses snapshot entries directly, and
+ * syncPendingVtuPurchasesFromSnapshot arbitrates runtime merges.
  */
 export interface PersistedVtuTombstone {
   scoped: string;
   forgottenAt: number;
+  /** Key of the deleted generation; absent on pre-binding snapshots. */
+  key?: string;
 }
 
 export interface ParsedPendingVtuSnapshot {
@@ -88,7 +91,8 @@ function isPersistedTombstone(item: unknown): item is PersistedVtuTombstone {
   const candidate = item as PersistedVtuTombstone;
   return (
     typeof candidate.scoped === 'string' &&
-    typeof candidate.forgottenAt === 'number'
+    typeof candidate.forgottenAt === 'number' &&
+    (candidate.key === undefined || typeof candidate.key === 'string')
   );
 }
 
@@ -125,6 +129,7 @@ export function serializePendingVtuEntries(
       liveForgotten.push({
         scoped: tombstone.scoped,
         forgottenAt: tombstone.forgottenAt,
+        ...(tombstone.key !== undefined ? { key: tombstone.key } : {}),
       });
     }
   }
@@ -137,8 +142,10 @@ export function serializePendingVtuEntries(
  * is recoverable via the server idempotency key check). Legacy
  * bare-array snapshots (entries only) still parse, with no
  * tombstones. Entries at or below their tombstone's generation are
- * suppressed HERE (mobile has one runtime, so unlike web there is no
- * live map to reconcile — hydrate only runs on an empty map). Legacy
+ * suppressed HERE (key-bound: only the deleted generation's key —
+ * keyless legacy tombstones fall back to timestamps), and the
+ * runtime sync re-applies the same arbitration against live memory
+ * for Expo web tabs sharing the bucket (Codex R143 P1). Legacy
  * raw scope keys migrate to digests on read, on both sides of the
  * suppression comparison, so old tombstones still suppress old entries.
  */
@@ -171,20 +178,30 @@ export function parsePendingVtuSnapshot(
     .map((tombstone) => ({
       scoped: normalizePersistedVtuScopeKey(tombstone.scoped),
       forgottenAt: tombstone.forgottenAt,
+      ...(tombstone.key !== undefined ? { key: tombstone.key } : {}),
     }));
-  const tombstonedAt = new Map(
-    forgotten.map((tombstone) => [tombstone.scoped, tombstone.forgottenAt])
+  const tombstoned = new Map(
+    forgotten.map((tombstone) => [tombstone.scoped, tombstone])
   );
   const entries = (Array.isArray(rawEntries) ? rawEntries : [])
     .filter(
       (item): item is [string, PersistedPendingVtuPurchase] =>
         isPersistedEntry(item) && !isExpiredPendingVtuEntry(item[1], now)
     )
-    .filter(
-      ([scoped, entry]) =>
-        (tombstonedAt.get(normalizePersistedVtuScopeKey(scoped)) ?? -1) <
-        entry.rememberedAt
-    )
+    .filter(([scoped, entry]) => {
+      // Key-bound like web R61 (Codex R143 P1): a newer generation
+      // (different key) survives an older generation's tombstone even
+      // when remembered earlier — timestamp-only suppression would
+      // erase a sibling tab's active key and a retry would mint
+      // fresh and debit again. Keyless tombstones (pre-binding)
+      // keep timestamp arbitration.
+      const tombstone = tombstoned.get(normalizePersistedVtuScopeKey(scoped));
+      return (
+        tombstone === undefined ||
+        entry.rememberedAt > tombstone.forgottenAt ||
+        (tombstone.key !== undefined && tombstone.key !== entry.key)
+      );
+    })
     .map(([scoped, entry]): [string, PersistedPendingVtuPurchase] => [
       normalizePersistedVtuScopeKey(scoped),
       {

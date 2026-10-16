@@ -47,8 +47,12 @@ export function UtilityPaymentOptions({
   const colors = Colors[colorScheme ?? 'light'];
   // Unsettled (query disabled, no data yet) renders as checking even
   // though isLoading is false — the submit gate already treats it
-  // that way (Codex R130 P2).
-  const isChecking = walletIsLoading === true || walletIsSettled === false;
+  // that way (Codex R130 P2). A settled error is NOT checking: the
+  // first fetch failed with no cached data, so surface the
+  // wallet-unavailable state instead of an indefinite spinner
+  // (Codex R143 P2).
+  const isChecking =
+    walletIsLoading === true || (walletIsSettled === false && !walletError);
   const balance = walletBalance ?? 0;
   const coversBill = amount > 0 && balance >= amount;
   const shortfall = amount > 0 ? Math.max(amount - balance, 0) : 0;

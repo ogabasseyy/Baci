@@ -91,6 +91,23 @@ describe('UtilityPaymentOptions', () => {
     expect(screen.queryByText('Pay with wallet')).toBeNull();
   });
 
+  it('shows the error state, not a spinner, when the first wallet fetch fails unsettled (Codex R143 P2)', () => {
+    render(
+      <UtilityPaymentOptions
+        amount={1000}
+        returnToHref={RETURN_TO_HREF}
+        walletError={new Error('wallet unavailable')}
+        walletIsLoading={false}
+        walletIsSettled={false}
+      />
+    );
+
+    // Without the precedence fix, isChecking swallows the error and
+    // the section spins indefinitely.
+    expect(screen.getByText('Wallet unavailable')).toBeTruthy();
+    expect(screen.queryByText(/checking wallet balance/i)).toBeNull();
+  });
+
   it('renders the bank-transfer nudge when eligible and the balance is short', () => {
     render(
       <UtilityPaymentOptions

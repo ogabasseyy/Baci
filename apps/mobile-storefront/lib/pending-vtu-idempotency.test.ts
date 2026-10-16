@@ -505,12 +505,16 @@ describe('pending-vtu-idempotency', () => {
     }
     expect(recallPendingVtuKey(scoped)).toBe('new-key');
 
-    // The remember's snapshot carries the new entry with NO tombstone
-    // (without clear-on-remember it carries both, same-millisecond).
+    // The remember's snapshot carries the new entry; the adopted
+    // old-generation tombstone rides along (persist-time sync,
+    // Codex R143 P1) but binds old-key, so it cannot suppress the
+    // same-millisecond new generation.
     const rememberSnapshot = serializeSpy.mock.results.at(-1)?.value as string;
     serializeSpy.mockRestore();
     const written = parsePendingVtuSnapshot(rememberSnapshot);
-    expect(written.forgotten).toEqual([]);
+    expect(written.forgotten).toEqual([
+      expect.objectContaining({ forgottenAt: now, key: 'old-key' }),
+    ]);
     expect(written.entries).toHaveLength(1);
 
     // And a restart restores the new key instead of suppressing it.
@@ -616,5 +620,112 @@ describe('pending-vtu-idempotency', () => {
       'REF-B',
       'REF-C',
     ]);
+  });
+
+  it('recalls a key a sibling Expo web tab persisted without a restart (Codex R143 P1)', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 1,
+      phoneNumber: 'sibling-tab',
+    });
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', descriptor);
+    // Sibling tab's snapshot lands in shared storage while this tab's
+    // memory is empty (beforeEach cleared both; only storage reseeds).
+    vtuStore.savePendingVtuSnapshot(
+      vtuCodec.serializePendingVtuEntries(
+        [
+          [
+            scoped,
+            {
+              key: 'key-sibling',
+              reference: null,
+              rememberedAt: Date.now(),
+              completedAt: null,
+            },
+          ],
+        ],
+        []
+      )
+    );
+
+    // Without the recall-time sync this returns null and the retry
+    // mints fresh — the server debits a second transaction.
+    expect(recallPendingVtuKey(scoped)).toBe('key-sibling');
+  });
+
+  it('preserves a sibling tab entry when persisting its own (Codex R143 P1)', () => {
+    const descriptorA = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 2,
+      phoneNumber: 'sibling-a',
+    });
+    const scopedA = scopePendingVtuKey('user-a', 'merchant-1', descriptorA);
+    vtuStore.savePendingVtuSnapshot(
+      vtuCodec.serializePendingVtuEntries(
+        [
+          [
+            scopedA,
+            {
+              key: 'key-a',
+              reference: null,
+              rememberedAt: Date.now(),
+              completedAt: null,
+            },
+          ],
+        ],
+        []
+      )
+    );
+
+    const descriptorB = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 3,
+      phoneNumber: 'sibling-b',
+    });
+    rememberPendingVtuPurchase(
+      scopePendingVtuKey('user-a', 'merchant-1', descriptorB),
+      'key-b'
+    );
+
+    // Without the persist-time sync the snapshot holds only key-b and
+    // the sibling key is unrecoverable after a restart.
+    const snapshot = vtuCodec.parsePendingVtuSnapshot(
+      vtuStore.loadPendingVtuSnapshot()
+    );
+    expect(snapshot.entries.map(([, entry]) => entry.key).sort()).toEqual([
+      'key-a',
+      'key-b',
+    ]);
+  });
+
+  it('merges sibling-tab reference knowledge into the live same-key entry (Codex R143 P1)', () => {
+    const descriptor = buildVtuPurchaseDescriptor({
+      type: 'airtime',
+      amount: 4,
+      phoneNumber: 'sibling-ref',
+    });
+    const scoped = scopePendingVtuKey('user-a', 'merchant-1', descriptor);
+    rememberPendingVtuPurchase(scoped, 'key-live');
+    // Sibling observed the provider reference after this tab imported
+    // the key; storage now knows more than live memory.
+    vtuStore.savePendingVtuSnapshot(
+      vtuCodec.serializePendingVtuEntries(
+        [
+          [
+            scoped,
+            {
+              key: 'key-live',
+              reference: 'REF-SIBLING',
+              rememberedAt: Date.now() - 1000,
+              completedAt: null,
+            },
+          ],
+        ],
+        []
+      )
+    );
+
+    expect(listNotedPendingVtuReferences()).toEqual(['REF-SIBLING']);
+    expect(hasNotedPendingVtuReference(scoped, 'REF-SIBLING')).toBe(true);
   });
 });

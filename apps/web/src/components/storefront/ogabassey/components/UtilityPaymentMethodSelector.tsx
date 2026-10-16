@@ -11,6 +11,10 @@ interface UtilityPaymentMethodSelectorProps {
   onSelectWallet: () => void;
   showWalletRow: boolean;
   walletBalance: number;
+  // True when the last balance fetch failed (Codex R143 P2): the
+  // balance is unknown, not zero — show unavailable instead of the
+  // funding hint, and hide the funding CTA.
+  walletError?: boolean;
   walletLoading: boolean;
   // Selection state (payWithWallet), distinct from eligibility
   // (canUseWallet): aria-checked must track selection so an eligible
@@ -25,14 +29,17 @@ export function UtilityPaymentMethodSelector({
   onSelectWallet,
   showWalletRow,
   walletBalance,
+  walletError = false,
   walletLoading,
   walletSelected,
 }: UtilityPaymentMethodSelectorProps) {
   const walletSubtitle = walletLoading
     ? 'Checking wallet balance...'
-    : canUseWallet
-      ? `₦${walletBalance.toLocaleString()} available`
-      : WALLET_FUNDING_COPY.zeroBalanceHint;
+    : walletError
+      ? WALLET_FUNDING_COPY.walletBalanceUnavailable
+      : canUseWallet
+        ? `₦${walletBalance.toLocaleString()} available`
+        : WALLET_FUNDING_COPY.zeroBalanceHint;
 
   return (
     <div className="space-y-2">
@@ -78,7 +85,7 @@ export function UtilityPaymentMethodSelector({
         </p>
       ) : null}
 
-      {showWalletRow && onFundWallet ? (
+      {showWalletRow && onFundWallet && !walletError ? (
         <button
           type="button"
           onClick={onFundWallet}

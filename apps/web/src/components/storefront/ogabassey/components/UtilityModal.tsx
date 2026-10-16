@@ -53,6 +53,7 @@ export const UtilityModal = ({
     payWithWallet,
     walletBalance,
     walletDvaEnabled,
+    walletError,
     walletLoading,
     walletTransactions,
   } = useWallet({
@@ -218,6 +219,7 @@ export const UtilityModal = ({
                 onSelectWallet={handleSelectWallet}
                 showWalletRow={isAuthenticated}
                 walletBalance={walletBalance}
+                walletError={walletError}
                 walletLoading={walletLoading}
                 walletSelected={payWithWallet}
               />

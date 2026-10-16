@@ -236,4 +236,32 @@ describe('UtilityPaymentMethodSelector', () => {
     expect(selected).toHaveAttribute('aria-checked', 'true');
     expect(selected.className).toContain('border-store-primary');
   });
+
+  it('shows unavailable instead of the funding hint when the balance fetch failed (Codex R143 P2)', () => {
+    render(
+      <UtilityPaymentMethodSelector
+        canUseWallet={false}
+        isLoading={false}
+        onFundWallet={vi.fn()}
+        onSelectWallet={vi.fn()}
+        showWalletRow={true}
+        walletBalance={0}
+        walletError={true}
+        walletSelected={false}
+        walletLoading={false}
+      />
+    );
+
+    // The balance is unknown, not zero: no funding hint, no funding
+    // CTA — only the unavailable state.
+    expect(
+      screen.getByText(/could not load your wallet balance/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/fund your wallet to pay without card fees/i)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /pay with bank transfer/i })
+    ).not.toBeInTheDocument();
+  });
 });

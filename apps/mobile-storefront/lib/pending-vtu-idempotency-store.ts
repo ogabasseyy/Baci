@@ -112,21 +112,27 @@ export function savePendingVtuSnapshot(serialized: string): boolean {
 
 /**
  * Scopes deliberately deleted since the last persist (scope ->
- * deletion time). Cleared only after a durable write: if the write
+ * deletion record). Cleared only after a durable write: if the write
  * throws, the stale snapshot still holds the completed entries, and
- * clearing would resurrect them on the next restart.
+ * clearing would resurrect them on the next restart. Tombstones bind
+ * the deleted generation's key (web R61 parity, Codex R143 P1) so a
+ * newer generation survives an older generation's tombstone.
  */
-export const forgottenVtuScopes = new Map<string, number>();
+export const forgottenVtuScopes = new Map<
+  string,
+  { forgottenAt: number; key?: string }
+>();
 
 /** Records deletion tombstones for scopes the registry just forgot. */
 export function noteForgottenVtuScopes(
   scopes: string[],
-  forgottenAt: number
+  forgottenAt: number,
+  key?: string
 ): void {
   for (const scoped of scopes) {
     const known = forgottenVtuScopes.get(scoped);
-    if (known === undefined || forgottenAt > known) {
-      forgottenVtuScopes.set(scoped, forgottenAt);
+    if (known === undefined || forgottenAt > known.forgottenAt) {
+      forgottenVtuScopes.set(scoped, { forgottenAt, key });
     }
   }
 }
@@ -148,9 +154,10 @@ export function persistPendingVtuEntries(
   const ok = savePendingVtuSnapshot(
     serializePendingVtuEntries(
       entries,
-      [...forgottenVtuScopes].map(([scoped, forgottenAt]) => ({
+      [...forgottenVtuScopes].map(([scoped, record]) => ({
         scoped,
-        forgottenAt,
+        forgottenAt: record.forgottenAt,
+        ...(record.key !== undefined ? { key: record.key } : {}),
       })),
       now
     )

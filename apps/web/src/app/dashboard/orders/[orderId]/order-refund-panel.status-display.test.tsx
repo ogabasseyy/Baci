@@ -47,7 +47,6 @@ describe('OrderRefundPanel status display', () => {
           method: 'bank_transfer',
           reference: 'bank-1',
           date: '2026-09-28T12:00:00Z',
-          recorded_by: null,
         },
       ],
     });
@@ -97,7 +96,6 @@ describe('OrderRefundPanel status display', () => {
           id: 'e-1',
           action: 'failed',
           date: '2026-09-28T12:00:00Z',
-          actor: null,
           details: {
             error: 'The refund ran into a problem. Support has the details.',
             previousError: 'Refund in progress — waiting for the money.',
@@ -124,14 +122,59 @@ describe('OrderRefundPanel status display', () => {
           id: 'e-1',
           action: 'failed',
           date: 'not-a-date',
-          actor: null,
           details: {},
         },
       ],
     });
     expect(await screen.findByText(/Date unavailable/)).toBeInTheDocument();
   });
-  it('stops polling once the refund needs review', async () => {
+  it('keeps polling a Paystack-backed refund past refunded', async () => {
+    // A later contradictory provider verdict can re-open the
+    // balance after completion, so provider-backed pages never
+    // treat refunded as terminal. RPC-true shape: at full refund
+    // the outstanding-leg list is empty and only the durable flag
+    // carries the provider-backed signal.
+    vi.useFakeTimers();
+    try {
+      loadWith({
+        ...summary,
+        status: 'refunded',
+        legs: [],
+        hasPaystackPayment: true,
+      });
+      await act(async () => {});
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000);
+      });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('stops polling a refunded order without a Paystack payment', async () => {
+    vi.useFakeTimers();
+    try {
+      loadWith({
+        ...summary,
+        status: 'refunded',
+        legs: [],
+        hasPaystackPayment: false,
+      });
+      await act(async () => {});
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(120_000);
+      });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('keeps polling while the refund needs review', async () => {
+    // Requires-review is not terminal: provider reconciliation can
+    // still complete the underlying delivery_uncertain step, so an
+    // open page must keep refreshing until it observes refunded.
     vi.useFakeTimers();
     try {
       loadWith({ ...summary, status: 'requires_review' });
@@ -141,7 +184,7 @@ describe('OrderRefundPanel status display', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(120_000);
       });
-      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(5);
     } finally {
       vi.useRealTimers();
     }

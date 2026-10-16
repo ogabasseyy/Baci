@@ -29,15 +29,15 @@ const REFUND_EVENT_DETAIL_KEYS = new Set([
   'previousAttempts',
   'previousError',
 ]);
-// Event keys the timeline reads. actor (the auth UUID of whoever
-// retried or recorded) is dropped: the status action serves
-// view-only staff, who have no operational need for peer identity,
-// and nothing renders it.
+// Event keys the timeline reads. actor is confined at the SQL
+// source (this allow-list is the backstop): the status action
+// serves view-only staff, who have no operational need for peer
+// identity, and nothing renders it.
 const REFUND_EVENT_KEYS = new Set(['id', 'action', 'date', 'details']);
-// History keys the timeline reads. recorded_by is dropped with the
-// same reasoning as actor; reference and note stay (the panel
-// renders both, and they are the merchant's own data on an order
-// they can view).
+// History keys the timeline reads. recorded_by is confined at the
+// SQL source with the same reasoning as actor (this allow-list is
+// the backstop); reference and note stay (the panel renders both,
+// and they are the merchant's own data on an order they can view).
 const REFUND_HISTORY_KEYS = new Set([
   'id',
   'amount',

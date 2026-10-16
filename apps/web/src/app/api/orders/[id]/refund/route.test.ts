@@ -85,7 +85,6 @@ describe('order refund route', () => {
         id: 'event-1',
         action: 'retry_requested',
         date: '2026-10-01T12:00:00Z',
-        actor: null,
         details: {
           error:
             'Refund in progress — waiting for the remaining money to arrive.',
@@ -105,15 +104,11 @@ describe('order refund route', () => {
     });
     const response = await GET(request(), context);
     expect(response.status).toBe(200);
-    // The actor rides the RPC payload but the mask drops it: the
-    // status action serves view-only staff with no need for peer
-    // identity.
-    const { actor: _dropped, ...maskedEvent } = events[0];
     expect(await response.json()).toEqual({
       status: 'requires_review',
       error: 'The refund ran into a problem. Support has the details.',
       needsPaystackCheck: true,
-      events: [maskedEvent],
+      events,
     });
   });
   it('normalizes a missing Paystack signal to false', async () => {

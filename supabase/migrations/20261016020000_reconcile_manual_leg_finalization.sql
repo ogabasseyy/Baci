@@ -194,6 +194,20 @@ BEGIN
     PERFORM public.finalize_refunded_cancellation_order_v1(
       v_order.id, v_order.merchant_id, v_refund.id
     );
+    -- Reconciliation finalized the money: a delivery-uncertain side
+    -- effect would otherwise report requires_review (and stop panel
+    -- polling) forever despite complete coverage. Complete it once
+    -- no review still needs a human.
+    UPDATE public.order_cancellation_side_effects
+       SET status = 'completed',
+           completed_at = COALESCE(completed_at, now()),
+           error = NULL
+     WHERE order_id = v_order.id AND step = 'refund'
+       AND status = 'delivery_uncertain'
+       AND NOT EXISTS (
+         SELECT 1 FROM public.reconciliation_review rr
+          WHERE rr.order_id = v_order.id
+            AND rr.resolved_at IS NULL);
   END IF;
   RETURN 'processed';
 END;

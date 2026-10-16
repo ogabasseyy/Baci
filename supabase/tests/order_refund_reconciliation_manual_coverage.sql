@@ -94,6 +94,7 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
 DO $reconciliation_manual_coverage$
 DECLARE
   v_verdict text;
+  v_status text;
 BEGIN
   -- Leg B settles at the provider: the manual-covered leg A must
   -- not block aggregate finalization.
@@ -122,6 +123,130 @@ BEGIN
     WHERE order_id = '9ef11000-0000-4000-8000-000000000082'
   ) THEN
     RAISE EXCEPTION 'drifted reconciliation finalized despite the ledger gap';
+  END IF;
+  -- A duplicate in-flight provider refund blocks the same-gateway
+  -- fallback: per-leg terminal coverage alone must not finalize
+  -- while provider money can still settle.
+  INSERT INTO public.orders (
+    id, merchant_id, order_number, total, amount_paid,
+    payment_status, shipping_status, cancelled_at
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000083',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-083',
+      100, 100, 'paid', 'cancelled', pg_catalog.now());
+  INSERT INTO public.transactions (
+    id, merchant_id, order_id, transaction_type, amount, currency,
+    status, gateway, gateway_reference, metadata
+  ) VALUES
+    ('9ef12000-0000-4000-8000-000000000107',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000083', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-83', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000108',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000083', 'refund', 100, 'NGN',
+      'completed', 'paystack', '424249',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000107',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000109',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000083', 'refund', 100, 'NGN',
+      'refund_pending', 'paystack', '424250',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000107'));
+  IF private.reconciliation_should_finalize_v1(
+    '9ef11000-0000-4000-8000-000000000083',
+    '9ef10100-0000-4000-8000-000000000001', 'NGN', 'paid'
+  ) THEN
+    RAISE EXCEPTION 'predicate finalized beside an in-flight duplicate';
+  END IF;
+  -- A delivery-uncertain side effect completes once reconciliation
+  -- finalizes with no review outstanding ...
+  INSERT INTO public.orders (
+    id, merchant_id, order_number, total, amount_paid,
+    payment_status, shipping_status, cancelled_at
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000084',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-084',
+      100, 100, 'paid', 'cancelled', pg_catalog.now());
+  INSERT INTO public.transactions (
+    id, merchant_id, order_id, transaction_type, amount, currency,
+    status, gateway, gateway_reference, metadata
+  ) VALUES
+    ('9ef12000-0000-4000-8000-000000000110',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000084', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-84', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000111',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000084', 'refund', 100, 'NGN',
+      'completed', 'paystack', '424251',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000110'));
+  INSERT INTO public.order_cancellation_side_effects (
+    order_id, merchant_id, step, status, claim_token, attempts, error
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000084',
+      '9ef10100-0000-4000-8000-000000000001', 'refund',
+      'delivery_uncertain', '9ef13000-0000-4000-8000-000000000084', 2,
+      'Ambiguous initiation');
+  SELECT public.record_verified_paystack_cancellation_refund_v1(
+    '9ef12000-0000-4000-8000-000000000111', 'processed', 424251, 10000, 'NGN'
+  ) INTO v_verdict;
+  SELECT status INTO v_status
+    FROM public.order_cancellation_side_effects
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000084'
+     AND step = 'refund';
+  IF v_status <> 'completed' THEN
+    RAISE EXCEPTION 'reconciliation left delivery_uncertain behind, got %',
+      v_status;
+  END IF;
+  -- ... but stays put while a review still needs a human.
+  INSERT INTO public.orders (
+    id, merchant_id, order_number, total, amount_paid,
+    payment_status, shipping_status, cancelled_at
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000085',
+      '9ef10100-0000-4000-8000-000000000001', 'REFUND-085',
+      100, 100, 'paid', 'cancelled', pg_catalog.now());
+  INSERT INTO public.transactions (
+    id, merchant_id, order_id, transaction_type, amount, currency,
+    status, gateway, gateway_reference, metadata
+  ) VALUES
+    ('9ef12000-0000-4000-8000-000000000112',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000085', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-85', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000113',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000085', 'refund', 100, 'NGN',
+      'completed', 'paystack', '424252',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000112'));
+  INSERT INTO public.order_cancellation_side_effects (
+    order_id, merchant_id, step, status, claim_token, attempts, error
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000085',
+      '9ef10100-0000-4000-8000-000000000001', 'refund',
+      'delivery_uncertain', '9ef13000-0000-4000-8000-000000000085', 2,
+      'Ambiguous initiation');
+  INSERT INTO public.reconciliation_review (
+    order_id, merchant_id, issue_type, metadata
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000085',
+      '9ef10100-0000-4000-8000-000000000001',
+      'provider_refund_outside_cancellation', '{}'::jsonb);
+  SELECT public.record_verified_paystack_cancellation_refund_v1(
+    '9ef12000-0000-4000-8000-000000000113', 'processed', 424252, 10000, 'NGN'
+  ) INTO v_verdict;
+  SELECT status INTO v_status
+    FROM public.order_cancellation_side_effects
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000085'
+     AND step = 'refund';
+  IF v_status <> 'delivery_uncertain' THEN
+    RAISE EXCEPTION 'reconciliation completed despite an open review, got %',
+      v_status;
   END IF;
 END;
 $reconciliation_manual_coverage$;

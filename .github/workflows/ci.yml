@@ -405,6 +405,7 @@ jobs:
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
           --sql-check supabase/tests/order_refund_management.sql
+          --sql-check supabase/tests/order_refund_management_attestation.sql
           --sql-check supabase/tests/order_refund_management_tenancy.sql
           --sql-check supabase/tests/order_refund_management_owner.sql
           --sql-check supabase/tests/order_refund_management_split_records.sql
@@ -419,6 +420,7 @@ jobs:
           --sql-check supabase/tests/order_refund_management_round33_pins.sql
           --sql-check supabase/tests/order_refund_management_round33_implicit_pins.sql
           --sql-check supabase/tests/order_refund_management_round45_gates.sql
+          --sql-check supabase/tests/order_refund_management_retry_gating.sql
           --sql-check supabase/tests/order_refund_management_round46_gates.sql
           --sql-check supabase/tests/order_refund_management_round47_gates.sql
           --sql-check supabase/tests/order_refund_management_round48_gates.sql
@@ -438,6 +440,7 @@ jobs:
           --sql-check supabase/tests/order_refund_finalizer_internal_coverage.sql
           --sql-check supabase/tests/order_refund_coverage_helper_confinement.sql
           --sql-check supabase/tests/order_refund_reconciliation_manual_coverage.sql
+          --sql-check supabase/tests/order_refund_management_null_paid.sql
           --sql-check supabase/migrations/tests/search_analytics_service_role_only_insert.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
@@ -445,7 +448,7 @@ jobs:
         run: >-
           bash supabase/tests/run-cache-invalidation-outbox-test-runner.test.sh &&
           bash supabase/tests/run-cache-invalidation-outbox-test.sh
-      - name: Test order-refund claim/manual serialization
+      - name: Test order-refund claim lock serialization (Phase 1 only)
         env:
           MINIMAL_PHASE1: 1
         run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh

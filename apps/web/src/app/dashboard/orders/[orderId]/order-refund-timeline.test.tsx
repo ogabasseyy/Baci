@@ -16,7 +16,6 @@ describe('OrderRefundTimeline', () => {
         events={[
           {
             action: 'manual_recorded',
-            actor: 'merchant-1',
             date: '2026-09-28T12:00:00Z',
             details: {
               error: 'The refund ran into a problem. Support has the details.',
@@ -44,7 +43,6 @@ describe('OrderRefundTimeline', () => {
         events={[
           {
             action: 'something_new',
-            actor: null,
             date: 'not-a-date',
             details: {},
             id: 'event-9',
@@ -57,7 +55,6 @@ describe('OrderRefundTimeline', () => {
             id: 'refund-9',
             method: 'mystery_rail',
             note: null,
-            recorded_by: null,
             reference: 'odd-1',
             status: 'weird_state',
           },
@@ -84,7 +81,6 @@ describe('OrderRefundTimeline', () => {
             id: 'refund-1',
             method: 'bank_transfer',
             note: 'Counter payment confirmed',
-            recorded_by: 'merchant-1',
             reference: 'bank-1',
             status: 'completed',
           },
@@ -94,7 +90,6 @@ describe('OrderRefundTimeline', () => {
             id: 'refund-2',
             method: 'bank_transfer',
             note: null,
-            recorded_by: null,
             reference: 'bank-2',
             status: 'completed',
           },

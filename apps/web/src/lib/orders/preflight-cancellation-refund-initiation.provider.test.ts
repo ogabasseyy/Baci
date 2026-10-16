@@ -89,6 +89,22 @@ describe('preflightCancellationRefundInitiation provider guards', () => {
     }
   });
 
+  it('derives the cap from funded legs when amount paid is null', async () => {
+    const client = preflightSupabase();
+    // A legacy null paid total reconstructs from the outstanding
+    // leg instead of zeroing the cap and quarantining the retry.
+    await expect(
+      preflightCancellationRefundInitiation(
+        preflightInput({
+          order: { ...order, amount_paid: null } as never,
+          supabase: client as never,
+        })
+      )
+    ).resolves.toBeDefined();
+    expect(client.insert).not.toHaveBeenCalled();
+    expect(checkCancellationRefundProvider).toHaveBeenCalled();
+  });
+
   it('quarantines overfunded ledgers instead of retrying them', async () => {
     const client = preflightSupabase();
     await expect(

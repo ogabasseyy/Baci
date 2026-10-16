@@ -175,7 +175,6 @@ describe('OrderRefundPanel', () => {
               id: 'event-1',
               action: 'retry_requested',
               date: '2026-10-01T12:00:00Z',
-              actor: null,
               details: {
                 error:
                   'The refund ran into a problem. Support has the details.',

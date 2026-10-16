@@ -29,6 +29,7 @@ CREATE OR REPLACE FUNCTION private.refund_status_response(
 DECLARE
   v_history jsonb;
   v_legs jsonb;
+  v_has_paystack boolean;
 BEGIN
   -- Bound like the audit events: one row per partial manual with 30s
   -- status polling would otherwise grow every response unbounded.
@@ -36,8 +37,7 @@ BEGIN
     'method',COALESCE(h.metadata->>'method',h.gateway),
     'reference',COALESCE(h.metadata->>'reference',h.gateway_reference),
     'date',COALESCE(h.metadata->>'refunded_at',to_json(h.created_at)#>>'{}'),
-    'note',h.metadata->>'note',
-    'recorded_by',h.metadata->>'recorded_by')
+    'note',h.metadata->>'note')
     ORDER BY h.created_at DESC),'[]') INTO v_history
     FROM (SELECT id,amount,status,metadata,gateway,gateway_reference,created_at
       FROM public.transactions
@@ -66,9 +66,18 @@ BEGIN
       AND p.transaction_type='payment' AND p.status='completed' AND p.amount>0
       AND upper(btrim(p.gateway))='PAYSTACK'
     ) l WHERE l.outstanding>0;
+  -- Durable provider-backed signal for polling: legs lists only
+  -- outstanding captures, so a fully refunded Paystack order shows
+  -- legs [] while a later contradictory provider verdict can still
+  -- re-open the balance. The panel keeps polling on this flag.
+  SELECT EXISTS(SELECT 1 FROM public.transactions p
+    WHERE p.order_id=p_order_id AND p.merchant_id=p_merchant_id
+      AND p.transaction_type='payment' AND p.status='completed' AND p.amount>0
+      AND upper(btrim(p.gateway))='PAYSTACK') INTO v_has_paystack;
   RETURN jsonb_build_object('currency',p_currency,'amountPaid',p_amount_paid,
     'refunded',p_refunded,'remaining',p_remaining,'pending',p_pending,
     'reversedInternal',p_reversed_internal,
+    'hasPaystackPayment',v_has_paystack,
     -- A terminal quarantined step reports review before anything
     -- else: delivery_uncertain rows never resume, so pending
     -- evidence (or even full coverage) must not relabel them as
@@ -106,9 +115,12 @@ BEGIN
     'attempts',COALESCE(p_step_attempts,0),
     'retryRequests',COALESCE(p_step_retry_requests,0),'history',v_history,
     'legs',v_legs,
+    -- No actor/recorded_by: the status action serves view-only
+    -- staff, and PostgREST RPC callers bypass the route mask, so
+    -- peer identity is confined at the source, not the edge.
     'events',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',x.id,'action',x.action,
-      'details',x.details,'date',x.created_at,'actor',x.actor_id) ORDER BY x.created_at DESC)
-      FROM (SELECT id,action,details,created_at,actor_id FROM public.order_refund_events
+      'details',x.details,'date',x.created_at) ORDER BY x.created_at DESC)
+      FROM (SELECT id,action,details,created_at FROM public.order_refund_events
         WHERE order_id=p_order_id AND merchant_id=p_merchant_id
         ORDER BY created_at DESC LIMIT 50) x),'[]'::jsonb),
     -- A failed step under full coverage is retryable: rearming

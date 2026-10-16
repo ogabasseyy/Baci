@@ -9,11 +9,16 @@
 -- rows, provider-verified Paystack only). LEFT JOINED: legs with
 -- no attributed rows still report (covered = 0) for the
 -- uncovered aggregate; the capped scalar folds them to zero.
+-- The wallet/savings flag reshapes the composite: OR REPLACE
+-- cannot change a return type, so drop first (callers in this file
+-- are recreated below; no other object references the listing).
+DROP FUNCTION IF EXISTS private.refund_coverage_per_leg_v1(uuid,uuid,text);
 CREATE OR REPLACE FUNCTION private.refund_coverage_per_leg_v1(
   p_order_id uuid, p_merchant_id uuid, p_currency text
 ) RETURNS TABLE (
   leg_id uuid, leg_amount numeric, covered numeric,
-  is_refunded boolean, is_internal boolean, is_funded boolean
+  is_refunded boolean, is_internal boolean, is_funded boolean,
+  is_wallet_savings boolean
 ) LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_actor uuid;
@@ -65,7 +70,12 @@ BEGIN
       COALESCE(public.normalized_gateway_name_v1(leg.gateway), '')
         IN ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
           'PAY_ON_DELIVERY'),
-      COALESCE(leg.status IN ('completed', 'refunded', 'refund_pending'), false)
+      COALESCE(leg.status IN ('completed', 'refunded', 'refund_pending'), false),
+      -- Cash-like internal legs (store credit, cash, manual, PoD)
+      -- refund through the manual allocator, not the wallet/savings
+      -- reversal ledgers: the NULL-paid derivation must count them.
+      COALESCE(public.normalized_gateway_name_v1(leg.gateway), '')
+        IN ('WALLET', 'SAVINGS')
       FROM public.transactions leg
       LEFT JOIN public.transactions refund
         ON refund.order_id = p_order_id
@@ -215,6 +225,28 @@ GRANT EXECUTE ON FUNCTION private.capped_refund_coverage_v1(uuid,uuid,text)
 GRANT EXECUTE ON FUNCTION private.refund_coverage_per_leg_v1(uuid,uuid,text)
   TO service_role, authenticated;
 GRANT EXECUTE ON FUNCTION private.uncovered_refund_obligation_v1(uuid,uuid,text,numeric,numeric)
+  TO service_role, authenticated;
+-- Effective paid total for legacy NULL-paid orders: amount_paid is
+-- defaulted but nullable since baseline, and completed funded legs
+-- beside a NULL total are real customer money. Treating NULL as
+-- zero strands the payment (zero remainder, already_refunded on
+-- every mutation). Derive from authoritative funded legs in the
+-- order currency when NULL, excluding only wallet/savings (those
+-- reverse through their own ledgers); cash-like internal legs
+-- refund through the manual allocator, so they count. Membership
+-- gates inside the per-leg listing, like
+-- uncovered_refund_obligation_v1.
+CREATE OR REPLACE FUNCTION private.effective_amount_paid_v1(
+  p_order_id uuid, p_merchant_id uuid, p_currency text, p_amount_paid numeric
+) RETURNS numeric LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
+  SELECT COALESCE(p_amount_paid, COALESCE((SELECT SUM(l.leg_amount)
+    FROM private.refund_coverage_per_leg_v1(
+      p_order_id, p_merchant_id, p_currency) l
+    WHERE l.is_funded AND NOT l.is_wallet_savings), 0));
+$$;
+REVOKE ALL ON FUNCTION private.effective_amount_paid_v1(uuid,uuid,text,numeric)
+  FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION private.effective_amount_paid_v1(uuid,uuid,text,numeric)
   TO service_role, authenticated;
 -- Shared membership gate for the authenticated-granted private
 -- refund helpers (pending evidence, movement evidence, partial

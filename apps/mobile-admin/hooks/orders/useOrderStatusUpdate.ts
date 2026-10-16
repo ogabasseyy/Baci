@@ -3,7 +3,10 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BASE_URL } from '@/lib/api-client';
 import { useMerchant } from '../useMerchant';
-import { createAuthenticatedFetch } from './authenticated-fetch';
+import {
+  AuthenticatedFetchPreflightError,
+  createAuthenticatedFetch,
+} from './authenticated-fetch';
 import { OrderStatusUpdateError } from './order-status-update-error';
 import type { OrdersPage } from './order-types';
 import { parseResponsePayload } from './response-utils';
@@ -21,6 +24,13 @@ interface OrderStatusVariables {
   status: ShippingStatus;
 }
 
+function unconfirmedShippingResult(): OrderStatusUpdateError {
+  return new OrderStatusUpdateError(
+    'We could not confirm the shipping result. Check this order’s shipment status before booking again. If it remains unclear, contact support to avoid a duplicate shipment.',
+    'SHIPMENT_BOOKING_UNCONFIRMED'
+  );
+}
+
 async function updateOrderStatus(
   orderId: string,
   status: ShippingStatus
@@ -33,6 +43,7 @@ async function updateOrderStatus(
   }
 
   let response: Response;
+  let responseText: string;
   try {
     response = await createAuthenticatedFetch(
       url,
@@ -49,6 +60,7 @@ async function updateOrderStatus(
       },
       ORDER_STATUS_UPDATE_TIMEOUT_MS
     );
+    responseText = await response.text();
   } catch (error: unknown) {
     if (IS_DEV_RUNTIME) {
       const message = error instanceof Error ? error.message : String(error);
@@ -60,10 +72,17 @@ async function updateOrderStatus(
       });
     }
 
+    // A lost fetch or response body cannot prove the carrier request failed.
+    // Authentication preflight errors are definitive: no request was sent.
+    if (
+      status === 'shipped' &&
+      !(error instanceof AuthenticatedFetchPreflightError)
+    ) {
+      throw unconfirmedShippingResult();
+    }
     throw error;
   }
 
-  const responseText = await response.text();
   const payload = parseResponsePayload(responseText);
 
   if (!response.ok) {
@@ -95,6 +114,24 @@ async function updateOrderStatus(
 
   if (isCancellation) {
     return { id: orderId, shipping_status: 'cancelled' } as Order;
+  }
+
+  const acknowledgedOrder =
+    payload &&
+    typeof payload === 'object' &&
+    payload.order &&
+    typeof payload.order === 'object'
+      ? payload.order
+      : null;
+  if (
+    status === 'shipped' &&
+    (!acknowledgedOrder ||
+      !('id' in acknowledgedOrder) ||
+      acknowledgedOrder.id !== orderId ||
+      !('shipping_status' in acknowledgedOrder) ||
+      acknowledgedOrder.shipping_status !== 'shipped')
+  ) {
+    throw unconfirmedShippingResult();
   }
 
   if (

@@ -7,10 +7,14 @@
 // (throwing when browser storage is unavailable, so the caller fails
 // the submit closed rather than risk a duplicate against a single-use
 // code). Completing a session clears the key so a repeated identical
-// cart with a reusable code creates a fresh order — except BNPL
-// loyalty checkouts, whose key is retained: the shopper may close the
-// payment popup and resume the same (already-claimed) order, which
-// only this key can replay.
+// cart with a reusable code creates a fresh order — except loyalty
+// checkouts, whose key is retained through the payment handoff: the
+// shopper may close the BNPL popup, have a gateway redirect blocked,
+// or abandon the gateway and retry later, and only this key can
+// replay the already-claimed order instead of minting a second key
+// that the wrapper rejects as already used. The page retires the
+// retained key when payment succeeds or the claimed order reports
+// itself cancelled, so retention cannot strand a fresh purchase.
 import type { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';
 import type { LegacyCheckoutKeyInput } from './build-legacy-checkout-fingerprint';
 import type { CheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
@@ -63,13 +67,12 @@ export async function beginLegacyCheckoutKey(
     if (input.discountCodeIsLoyalty) throw error;
     idempotencyKey = null;
   }
-  const retainForBnplResume =
-    input.gateway === 'credit_direct' && input.discountCodeIsLoyalty;
+  const retainForLoyaltyResume = input.discountCodeIsLoyalty;
   return {
     idempotencyKey,
     keyInput,
     completeCheckout: async () => {
-      if (!retainForBnplResume) {
+      if (!retainForLoyaltyResume) {
         await clearLegacyCheckoutIdempotencyKey(keyInput);
       }
     },

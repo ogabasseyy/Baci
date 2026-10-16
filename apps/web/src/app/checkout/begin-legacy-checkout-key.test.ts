@@ -72,6 +72,26 @@ describe('beginLegacyCheckoutKey', () => {
     expect(resumed.idempotencyKey).toBe(session.idempotencyKey);
   });
 
+  it('retains a loyalty key on completion for redirect gateways', async () => {
+    // Paystack/Korapay hand off by redirect: a blocked redirect or an
+    // abandoned gateway visit must resume the claimed order with the
+    // same key instead of minting one the wrapper rejects.
+    const session = await beginLegacyCheckoutKey({
+      ...BASE_INPUT,
+      gateway: 'paystack',
+      discountCode: 'RDM-ABCDEF12',
+      discountCodeIsLoyalty: true,
+    });
+    await session.completeCheckout();
+    const resumed = await beginLegacyCheckoutKey({
+      ...BASE_INPUT,
+      gateway: 'paystack',
+      discountCode: 'RDM-ABCDEF12',
+      discountCodeIsLoyalty: true,
+    });
+    expect(resumed.idempotencyKey).toBe(session.idempotencyKey);
+  });
+
   it('proceeds keyless for a merchant code when storage is unusable', async () => {
     vi.stubGlobal('localStorage', {
       getItem: () => {
@@ -113,7 +133,9 @@ describe('beginLegacyCheckoutKey', () => {
     vi.unstubAllGlobals();
   });
 
-  it('clears a loyalty key on completion outside BNPL', async () => {
+  it('retains a loyalty key on completion outside BNPL', async () => {
+    // Retention is loyalty-wide, not BNPL-only: redirect gateways
+    // resume through the same persisted key (see the paystack case).
     const session = await beginLegacyCheckoutKey({
       ...BASE_INPUT,
       discountCode: 'RDM-ABCDEF12',
@@ -125,6 +147,6 @@ describe('beginLegacyCheckoutKey', () => {
       discountCode: 'RDM-ABCDEF12',
       discountCodeIsLoyalty: true,
     });
-    expect(next.idempotencyKey).not.toBe(session.idempotencyKey);
+    expect(next.idempotencyKey).toBe(session.idempotencyKey);
   });
 });

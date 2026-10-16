@@ -102,12 +102,15 @@ export function createNativeCartController(
       pending.body &&
       typeof pending.body === 'object' &&
       'kind' in pending.body &&
-      pending.body.kind === 'create'
+      (pending.body.kind === 'create' ||
+        pending.body.kind === 'handoff' ||
+        pending.body.kind === 'account')
     ) {
-      // A pending create whose bootstrap authority has expired can
-      // never be recovered: its actor check will fail forever. Retire
-      // the receipt so the preserved legacy items can bootstrap a
-      // fresh cart instead of stranding every refresh and write.
+      // A pending promotion (create, handoff redemption, or account
+      // link) whose bootstrap authority has expired can never be
+      // recovered: its actor check will fail forever. Retire the
+      // receipt so the shopper can bootstrap fresh and re-initiate
+      // instead of stranding every refresh and write.
       await receipts.clear(options.merchantId, pending.operationId);
       assertCurrent();
       pending = null;

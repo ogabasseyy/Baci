@@ -97,6 +97,11 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
           'invalid_request',
           'not_found',
           'unauthorized',
+          // A version/refresh rejection proves this exact redemption
+          // did not commit; keeping the receipt would resend the same
+          // stale expected versions forever and block any new review.
+          'version_conflict',
+          'refresh_required',
         ],
       };
       if (

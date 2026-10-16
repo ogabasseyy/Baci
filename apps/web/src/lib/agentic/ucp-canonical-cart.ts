@@ -15,7 +15,7 @@ interface Input {
   merchant: { id: string; slug: string; custom_domain?: string };
   cartId: string;
   agentId: string | null;
-  action: 'read' | 'update' | 'cancel' | 'checkout';
+  action: 'create' | 'read' | 'update' | 'cancel' | 'checkout';
   lines?: CartInputLine[];
   operationId?: string;
   expectedVersion?: unknown;
@@ -77,7 +77,7 @@ export async function handleCanonicalUcpCart(
     const result = await deps.operate(cart, {
       ...(input.action === 'cancel'
         ? { command: { type: 'clear' as const } }
-        : input.action === 'update' &&
+        : (input.action === 'update' || input.action === 'create') &&
             !input.detailsRequireHandoff &&
             input.lines
           ? { command: { type: 'replace' as const, lines: input.lines } }
@@ -120,6 +120,11 @@ export async function handleCanonicalUcpCart(
             id: line.item.productId,
             product_id: line.item.productId,
             variant_id: line.item.variantId,
+            // Full lane identity: a read-modify-replace client must be
+            // able to resubmit the exact options and condition it read,
+            // or sibling lanes collapse into one another.
+            variant_attributes: line.item.options ?? {},
+            ...(line.item.condition ? { condition: line.item.condition } : {}),
             quantity: line.quantity,
           },
           base_amount: line.lineTotalMinor,

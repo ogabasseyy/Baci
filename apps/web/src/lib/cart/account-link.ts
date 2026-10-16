@@ -89,7 +89,10 @@ export async function getCustomerCart(
 }
 /** Uses one SQL transaction for the account choice, Task 6 merge and saved-cart pointer. */
 export type LinkAccountResult =
-  | (Extract<CartResult, { ok: true }> & { principalId: string })
+  | (Extract<CartResult, { ok: true }> & {
+      principalId: string;
+      grantExpiresAt: string;
+    })
   | Extract<CartResult, { ok: false }>;
 export async function linkCartToCustomer(
   principal: CartPrincipal,
@@ -153,6 +156,11 @@ export async function linkCartToCustomer(
       ...snapshot,
       operationId: body.operationId,
       grantId: receipt.data.grantId,
+      // The selected grant's own expiry (the receipt's, falling back
+      // to the incoming principal's): proof issuance must cap at this,
+      // not at the cart expiry, or a replayed link mints a proof that
+      // outlives its backing grant.
+      grantExpiresAt: selected.expiresAt,
       principalId: receipt.data.principalId,
       replayed: receipt.data.replayed === true,
     };

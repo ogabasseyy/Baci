@@ -17,6 +17,9 @@ describe('buildUcpCartResponse', () => {
             item: {
               id: 'product-1',
               product_id: 'product-1',
+              variant_id: 'variant-1',
+              variant_attributes: { storage: '128GB' },
+              condition: 'used',
               quantity: 2,
               title: 'iPhone 15',
             },
@@ -35,7 +38,13 @@ describe('buildUcpCartResponse', () => {
       line_items: [
         {
           id: 'line_product_1',
-          item: { id: 'product-1', title: 'iPhone 15' },
+          item: {
+            id: 'product-1',
+            title: 'iPhone 15',
+            variant_id: 'variant-1',
+            variant_attributes: { storage: '128GB' },
+            condition: 'used',
+          },
           quantity: 2,
           totals: [
             { amount: 2000, display_text: 'Subtotal', type: 'subtotal' },

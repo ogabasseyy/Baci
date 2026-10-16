@@ -2,7 +2,10 @@ import type { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { getCustomerCart, linkCartToCustomer } from '@/lib/cart/account-link';
 import { resolveAccountCartRequest } from '@/lib/cart/account-request';
-import { issueCartSessionProof } from '@/lib/cart/session-proof';
+import {
+  cartSessionCookieMaxAge,
+  issueCartSessionProof,
+} from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { GET, POST } from './route';
 
@@ -105,6 +108,31 @@ it('issues the selected rotated principal only after an atomic account choice', 
     expect.anything()
   );
   expect((await response.json()).linkedUserId).toBe('user');
+});
+it('caps proof and cookie at the selected grant expiry, not the cart expiry', async () => {
+  const grantExpiresAt = new Date(Date.now() + 600_000).toISOString();
+  vi.mocked(linkCartToCustomer).mockResolvedValue({
+    ok: true,
+    cart: { cartId: 'selected', expiresAt: '2099-01-01T00:00:00Z' },
+    grantId: 'new-grant',
+    grantExpiresAt,
+    principalId: 'rotated',
+    operationId: 'x',
+    warnings: [],
+    replayed: true,
+  } as never);
+  vi.mocked(issueCartSessionProof).mockReturnValue('cp1.safe.signature');
+  const response = await POST(
+    request('{"operationId":"x","choice":"use_saved"}')
+  );
+  expect(response.status).toBe(200);
+  expect(issueCartSessionProof).toHaveBeenCalledWith(
+    expect.objectContaining({ grantExpiresAt }),
+    expect.anything()
+  );
+  // The cookie lifetime is derived from the same grant expiry (the
+  // helper itself is mocked to a fixed 3600 in this suite).
+  expect(cartSessionCookieMaxAge).toHaveBeenCalledWith(grantExpiresAt);
 });
 it('returns the rotated proof to native callers presenting it via the proof header', async () => {
   vi.mocked(linkCartToCustomer).mockResolvedValue({

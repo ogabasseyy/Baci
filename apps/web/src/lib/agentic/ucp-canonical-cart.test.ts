@@ -85,6 +85,77 @@ it('delegates replacements with the signed operation id and canonical expected v
     })
   );
 });
+it('creates with the full lane identity and issues a continuation', async () => {
+  const deps = fixture();
+  const lines = [
+    {
+      item: {
+        productId: 'p',
+        variantId: 'v',
+        condition: 'used' as const,
+        options: { storage: '128GB' },
+      },
+      quantity: 2,
+    },
+  ];
+  const result = await handleCanonicalUcpCart(
+    { ...input, action: 'create', lines, operationId: 'create-op' },
+    deps as never
+  );
+  expect(deps.operate).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      command: { type: 'replace', lines },
+      handoff: true,
+      operationId: expect.stringMatching(/^ucp-create:/),
+    })
+  );
+  expect(result).toMatchObject({
+    status: 200,
+    body: { continue_url: 'https://shop/cart#handoff=secret' },
+  });
+});
+it('projects the full canonical line identity for read-modify-replace', async () => {
+  const deps = fixture();
+  const line = {
+    id: 'line-1',
+    productId: 'p',
+    variantId: 'v',
+    condition: 'used',
+    options: { storage: '128GB' },
+    quantity: 1,
+    unitPriceMinor: 500,
+    available: true,
+  };
+  const state = {
+    cartId: 'canonical',
+    merchantId: 'merchant',
+    state: 'active',
+    version: 3,
+    currency: 'USD',
+    expiresAt: '2099-01-01',
+    checkoutSessionId: null,
+    replayed: false,
+    lines: [line],
+  };
+  deps.open.mockResolvedValue({ state });
+  deps.operate.mockResolvedValue({
+    ok: true,
+    state,
+    continueUrl: 'https://shop/cart#handoff=secret',
+  });
+  const result = await handleCanonicalUcpCart(input, deps as never);
+  expect(result?.body.line_items).toEqual([
+    expect.objectContaining({
+      item: expect.objectContaining({
+        product_id: 'p',
+        variant_id: 'v',
+        variant_attributes: { storage: '128GB' },
+        condition: 'used',
+      }),
+    }),
+  ]);
+});
 it('never falls back to legacy data after enrolled authority fails', async () => {
   const deps = fixture();
   deps.open.mockRejectedValue(new Error('private database detail'));

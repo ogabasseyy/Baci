@@ -244,7 +244,19 @@ describe('POST /api/agentic/carts', () => {
   });
   it('migrates an enrolled newly created cart and returns its actual continuation', async () => {
     mockCalculation();
-    mockMutation({ line_items: [{ item: { id: 'product-1' }, quantity: 1 }] });
+    mockMutation({
+      line_items: [
+        {
+          item: {
+            id: 'product-1',
+            variant_id: 'variant-1',
+            variant_attributes: { storage: '128GB' },
+            condition: 'used',
+          },
+          quantity: 1,
+        },
+      ],
+    });
     const insert = vi.fn().mockResolvedValue({ error: null });
     vi.mocked(createAgenticScopedSupabaseClient).mockReturnValue({
       from: vi.fn(() => ({ insert })),
@@ -264,8 +276,19 @@ describe('POST /api/agentic/carts', () => {
     expect(handleCanonicalUcpCart).toHaveBeenCalledWith(
       expect.objectContaining({
         agentId: 'openai-agent',
-        action: 'read',
+        action: 'create',
         cartId: expect.stringMatching(/^cart_/),
+        lines: [
+          {
+            item: {
+              productId: 'product-1',
+              variantId: 'variant-1',
+              condition: 'used',
+              options: { storage: '128GB' },
+            },
+            quantity: 1,
+          },
+        ],
       })
     );
     expect(await response.json()).toMatchObject({

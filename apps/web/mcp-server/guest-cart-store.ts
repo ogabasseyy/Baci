@@ -2,7 +2,11 @@ import {
   readGuestCartMigration,
   updateGuestCartWithCanonical,
 } from './guest-cart-canonical-delegation';
-import { createGuestCanonicalBridge } from './guest-cart-canonical-bridge';
+import {
+  type createGuestCanonicalBridge,
+  createGuestCanonicalBridgeOrDisabled,
+} from './guest-cart-canonical-bridge';
+import { runExclusive } from './guest-cart-mutex';
 import { randomBytes } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
@@ -37,25 +41,6 @@ const MAX_LINES = 20;
 // writer won the version gate, so re-read, re-merge, and try again.
 const MAX_ATTEMPTS = 3;
 
-// In-process per-token mutex: concurrent updates to one cart from this
-// process serialize instead of churning the version gate. Cross-process
-// races resolve through the gate plus the retry loop above.
-const queues = new Map<string, Promise<unknown>>();
-
-async function runExclusive<T>(
-  key: string,
-  operation: () => Promise<T>
-): Promise<T> {
-  const previous = queues.get(key) ?? Promise.resolve();
-  const pending = previous.catch(() => undefined).then(operation);
-  queues.set(key, pending);
-  try {
-    return await pending;
-  } finally {
-    if (queues.get(key) === pending) queues.delete(key);
-  }
-}
-
 interface CartRow {
   items: GuestCartLine[];
   expires_at: number;
@@ -78,21 +63,10 @@ export class GuestCartStore {
     private readonly supabase: SupabaseClient,
     canonical?: ReturnType<typeof createGuestCanonicalBridge>
   ) {
-    // A misconfigured canonical bridge endpoint must not brick the
-    // legacy guest-cart store: disable the bridge, log the bounded
-    // startup error, and keep serving legacy carts.
-    if (canonical !== undefined) {
-      this.canonical = canonical;
-      return;
-    }
-    try {
-      this.canonical = createGuestCanonicalBridge();
-    } catch {
-      console.error(
-        '[guest-cart] canonical bridge configuration invalid or origin not allowlisted; canonical carts disabled, serving legacy only'
-      );
-      this.canonical = null;
-    }
+    this.canonical =
+      canonical !== undefined
+        ? canonical
+        : createGuestCanonicalBridgeOrDisabled();
   }
 
   private async rpc<T>(name: string, params: Record<string, unknown>) {

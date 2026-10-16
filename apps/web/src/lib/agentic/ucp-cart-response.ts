@@ -37,6 +37,9 @@ export function buildUcpCartResponse({
         ...(lineItem.item.variant_attributes
           ? { variant_attributes: lineItem.item.variant_attributes }
           : {}),
+        ...(lineItem.item.condition
+          ? { condition: lineItem.item.condition }
+          : {}),
       },
       quantity: lineItem.item.quantity,
       totals: [

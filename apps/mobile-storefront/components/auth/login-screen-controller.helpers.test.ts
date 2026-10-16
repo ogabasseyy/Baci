@@ -107,7 +107,7 @@ describe('login screen controller helpers', () => {
       fetchLoginEmailHintFromReturnTo('/receipts/claim/token_123', fetchImpl)
     ).resolves.toBe('shopper@example.com');
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://usebaci.com/api/storefront/receipts/claims/token_123/login-email',
+      'https://api.usebaci.com/api/storefront/receipts/claims/token_123/login-email',
       { headers: { accept: 'application/json' } }
     );
   });

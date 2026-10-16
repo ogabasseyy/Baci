@@ -201,6 +201,24 @@ it('releases a definitively rejected handoff attempt instead of replaying a dead
   ).rejects.toMatchObject({ code: 'handoff_consumed' });
   expect(s.receipts.clear).toHaveBeenCalledWith(merchantId, 'pair-dead');
 });
+it('releases a handoff attempt rejected for stale versions', async () => {
+  const s = setup();
+  const redeem = jest
+    .fn()
+    .mockRejectedValue(new NativeCartError('version_conflict'));
+  await expect(
+    createCartCommandCoordinator({
+      ...s.options,
+      client: { ...s.client, redeem },
+    }).redeem({
+      token: 'ch1.payload.signature',
+      handoffId: cartId,
+      attemptId: 'pair-stale',
+      choice: 'connect',
+    })
+  ).rejects.toMatchObject({ code: 'version_conflict' });
+  expect(s.receipts.clear).toHaveBeenCalledWith(merchantId, 'pair-stale');
+});
 it('retains a handoff attempt whose outcome is uncertain', async () => {
   const s = setup();
   const redeem = jest

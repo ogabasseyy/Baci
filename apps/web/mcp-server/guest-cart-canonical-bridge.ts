@@ -68,6 +68,22 @@ export function canonicalBridgeAllowedOrigins(
     .filter(Boolean);
 }
 
+/**
+ * Fail-soft bridge construction for the legacy store: a misconfigured
+ * canonical endpoint must not brick legacy guest carts, so log the
+ * bounded startup error and serve legacy only.
+ */
+export function createGuestCanonicalBridgeOrDisabled(): GuestCanonicalBridge | null {
+  try {
+    return createGuestCanonicalBridge();
+  } catch {
+    console.error(
+      '[guest-cart] canonical bridge configuration invalid or origin not allowlisted; canonical carts disabled, serving legacy only'
+    );
+    return null;
+  }
+}
+
 export function createGuestCanonicalBridge(
   configured = process.env.MCP_CANONICAL_CART_BRIDGE_URL,
   fetcher: typeof fetch = fetch,

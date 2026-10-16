@@ -186,7 +186,21 @@ export async function POST(request: NextRequest) {
     merchant,
     cartId,
     agentId: mutation.agentId,
-    action: 'read',
+    // Creation replaces the migrated legacy projection with the full
+    // parsed lane identity (variant, attributes, condition) and issues
+    // the website continuation, unlike a plain read.
+    action: 'create',
+    lines: parsed.data.line_items.map((line) => ({
+      item: {
+        productId: line.item.id,
+        ...(line.item.variant_id ? { variantId: line.item.variant_id } : {}),
+        ...(line.item.condition ? { condition: line.item.condition } : {}),
+        ...(line.item.variant_attributes
+          ? { options: line.item.variant_attributes }
+          : {}),
+      },
+      quantity: line.quantity,
+    })),
     operationId: mutation.idempotencyKey,
   });
   if (canonical)

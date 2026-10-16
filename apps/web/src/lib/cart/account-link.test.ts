@@ -209,7 +209,7 @@ it('uses the fresh rotated grant expiry for the post-link scoped snapshot read',
     replayed: false,
   } as never);
   const snapshotClient = vi.fn(() => ({}) as SupabaseClient);
-  await linkCartToCustomer(
+  const result = await linkCartToCustomer(
     { ...principal, expiresAt: '2020-01-01T00:00:00Z' },
     await customer(),
     { operationId: 'expiry-link', choice: 'keep_current' },
@@ -223,4 +223,5 @@ it('uses the fresh rotated grant expiry for the post-link scoped snapshot read',
   expect(snapshotClient).toHaveBeenCalledWith(
     expect.objectContaining({ expiresAt: grantExpiresAt })
   );
+  expect(result).toMatchObject({ ok: true, grantExpiresAt });
 });

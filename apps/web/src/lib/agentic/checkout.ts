@@ -10,6 +10,7 @@ export interface GPTLineItem {
     product_id: string;
     variant_id?: string;
     variant_attributes?: Record<string, string>;
+    condition?: 'new' | 'used' | 'open_box' | 'refurbished';
     quantity: number;
     title?: string;
     description?: string;

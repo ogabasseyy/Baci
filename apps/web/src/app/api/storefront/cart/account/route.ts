@@ -110,7 +110,10 @@ export async function POST(request: NextRequest): Promise<Response> {
           cartId: result.cart.cartId,
           grantId: result.grantId,
           scope: 'session',
-          grantExpiresAt: result.cart.expiresAt,
+          // Cap at the selected grant's expiry, never the cart's: a
+          // replayed link can select a grant that expires well before
+          // the cart, and a longer proof would only be rejected later.
+          grantExpiresAt: result.grantExpiresAt,
         },
         { environment: getCartProofEnvironment() }
       );
@@ -127,10 +130,14 @@ export async function POST(request: NextRequest): Promise<Response> {
       replayed: result.replayed,
       warnings: result.warnings,
     });
-    // The proof is capped at the cart expiry; the cookie must not
-    // outlive it (a non-positive lifetime would delete the cookie, so
-    // omit it and let the body proof govern until it expires).
-    const cookieMaxAge = cartSessionCookieMaxAge(result.cart.expiresAt);
+    // The proof is capped at the earlier of cart and grant expiry;
+    // the cookie must not outlive it (a non-positive lifetime would
+    // delete the cookie, so omit it and let the body proof govern).
+    const cookieMaxAge = cartSessionCookieMaxAge(
+      Date.parse(result.grantExpiresAt) < Date.parse(result.cart.expiresAt)
+        ? result.grantExpiresAt
+        : result.cart.expiresAt
+    );
     if (proof && cookieMaxAge > 0) {
       setCartSessionCookie(response, resolved.merchant.id, proof, cookieMaxAge);
     }

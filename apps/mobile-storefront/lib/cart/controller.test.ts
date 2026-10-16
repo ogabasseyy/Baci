@@ -177,6 +177,24 @@ it('retires an unrecoverable pending create after its bootstrap authority expire
   expect(s.client.create).toHaveBeenCalledTimes(1);
 });
 
+it.each([
+  'handoff',
+  'account',
+] as const)('retires an unrecoverable pending %s after its bootstrap authority expires', async (kind) => {
+  const s = setup();
+  s.receipts.read
+    .mockResolvedValueOnce({
+      actor: 'old',
+      operationId: `old-${kind}`,
+      body: {
+        kind,
+        input: { operationId: `old-${kind}`, attemptId: `old-${kind}` },
+      },
+    })
+    .mockResolvedValue(null);
+  await expect(s.controller.refresh()).resolves.not.toThrow();
+  expect(s.receipts.clear).toHaveBeenCalledWith(merchant, `old-${kind}`);
+});
 it('does not bootstrap a new principal over unresolved durable intent', async () => {
   const s = setup();
   s.receipts.read.mockResolvedValue({

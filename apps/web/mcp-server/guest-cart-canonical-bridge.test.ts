@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createGuestCanonicalBridge } from './guest-cart-canonical-bridge';
+import {
+  createGuestCanonicalBridge,
+  createGuestCanonicalBridgeOrDisabled,
+} from './guest-cart-canonical-bridge';
 const endpoint = 'https://ogabassey.com/api/storefront/cart/legacy';
 const token = 'a'.repeat(64);
 const state = {
@@ -34,6 +37,22 @@ describe('canonical MCP transport', () => {
 
   it('stays disabled without explicit endpoint configuration', () => {
     expect(createGuestCanonicalBridge('', vi.fn())).toBeNull();
+  });
+  it('fails soft to legacy-only on invalid bridge configuration', () => {
+    vi.stubEnv(
+      'MCP_CANONICAL_CART_BRIDGE_URL',
+      'https://evil.example/api/storefront/cart/legacy'
+    );
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(createGuestCanonicalBridgeOrDisabled()).toBeNull();
+      expect(error).toHaveBeenCalledWith(
+        expect.stringContaining('canonical carts disabled')
+      );
+    } finally {
+      error.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
   it('sends only the opaque capability header and honors canonical preconditions', async () => {
     const fetcher = vi.fn().mockResolvedValue(

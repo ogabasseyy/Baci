@@ -23,6 +23,13 @@ export async function POST(request: NextRequest) {
   if (!token || !/^[a-f0-9]{64}$/.test(token))
     return cartErrorResponse('unauthorized');
   try {
+    // Validate the body shape before any database lookup: malformed
+    // payloads must not drive alias, merchant, or feature resolution.
+    const body = await readCartJsonBody(request);
+    const input = legacyMcpBridgeRequestSchema.safeParse(
+      body.ok ? body.body : null
+    );
+    if (!input.success) return cartErrorResponse('invalid_request');
     const anon = createAnonClient();
     const merchant = await resolveCartMerchant(request, {
       rpcClient: anon,
@@ -39,11 +46,6 @@ export async function POST(request: NextRequest) {
       subject: token,
     });
     if (!quota.allowed) return cartErrorResponse('quota_exceeded');
-    const body = await readCartJsonBody(request);
-    const input = legacyMcpBridgeRequestSchema.safeParse(
-      body.ok ? body.body : null
-    );
-    if (!input.success) return cartErrorResponse('invalid_request');
     if (input.data.probe) {
       const exists = await probeLegacyCanonicalCart({
         provider: 'mcp',

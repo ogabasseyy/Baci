@@ -60,6 +60,7 @@ const replaceMock = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
+  sessionStorage.clear();
   vi.stubGlobal('fetch', fetchMock);
   window.history.replaceState(null, '', '/cart');
   Object.defineProperty(window, 'location', {

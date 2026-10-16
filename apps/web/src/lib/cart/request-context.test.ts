@@ -238,7 +238,15 @@ describe('resolveCartRequestContext', () => {
       wrongScopeError: 'not_found',
     });
 
-    expect(result).toEqual({ error: 'merchant_mismatch', ok: false });
+    expect(result).toEqual({
+      error: 'merchant_mismatch',
+      merchant: {
+        customDomain: null,
+        id: '11111111-1111-4111-8111-111111111111',
+        slug: 'ogabassey',
+      },
+      ok: false,
+    });
   });
 
   it('reports expired proofs distinctly from missing ones', async () => {
@@ -257,7 +265,15 @@ describe('resolveCartRequestContext', () => {
       wrongScopeError: 'not_found',
     });
 
-    expect(result).toEqual({ error: 'expired_proof', ok: false });
+    expect(result).toEqual({
+      error: 'expired_proof',
+      merchant: {
+        customDomain: null,
+        id: '11111111-1111-4111-8111-111111111111',
+        slug: 'ogabassey',
+      },
+      ok: false,
+    });
   });
 
   it('applies the route scope rule when a bootstrap proof reaches a session route', async () => {

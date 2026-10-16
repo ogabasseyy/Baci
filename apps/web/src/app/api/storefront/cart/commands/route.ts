@@ -23,6 +23,10 @@ import {
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
+import {
+  commandVoucherLines,
+  voucherAttachmentsValid,
+} from '@/lib/cart/voucher-attachments';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
@@ -69,6 +73,11 @@ export async function POST(request: NextRequest) {
     }
     const parsedBody = sharedCartMutationRequestSchema.safeParse(rawBody.body);
     if (!parsedBody.success) {
+      return cartErrorResponse('invalid_request');
+    }
+    if (
+      !voucherAttachmentsValid(commandVoucherLines(parsedBody.data.command))
+    ) {
       return cartErrorResponse('invalid_request');
     }
 

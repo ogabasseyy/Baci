@@ -55,6 +55,25 @@ export function isPrivateLanHost(host: string): boolean {
   );
 }
 
+/**
+ * Hosts where a client merchantSlug hint may select the tenant: the
+ * native API origins (and non-production local/LAN dev hosts). The
+ * browsable apex/www hosts are shared platform hosts for other
+ * purposes, but a hint there must not mint tenant authority — the
+ * merchant subdomain or custom domain is the tenant signal on the web.
+ */
+export function isHintPlatformHost(
+  host: string,
+  rootDomain: string,
+  environment: string | undefined = process.env.NODE_ENV
+): boolean {
+  if (host === `api.${rootDomain}` || host === `api-staging.${rootDomain}`)
+    return true;
+  const isLocalHost =
+    host === 'localhost' || host === '127.0.0.1' || isPrivateLanHost(host);
+  return environment !== 'production' && isLocalHost;
+}
+
 export function isSharedPlatformHost(
   host: string,
   rootDomain: string,

@@ -12,6 +12,7 @@ import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { NativeCartMergeConflicts } from './NativeCartMergeConflicts';
 import { savedCartScopeMatches } from './saved-cart-scope';
+import { useSavedCartRead } from './use-saved-cart-read';
 
 /**
  * Explicit account choice for a signed-in shopper. Guest checkout never
@@ -33,9 +34,7 @@ export function NativeCartAccountPanel() {
   const savedCart = useNativeSharedCartStore((state) => state.savedCart);
   const colors = Colors[useColorScheme() ?? 'light'];
   const operationRef = useRef<string | null>(null);
-  // Owner-scoped flight guard: a stale attempt from a previous
-  // account owner never blocks the new owner's first choice, and its
-  // finally only clears its own scope.
+  // Owner-scoped flight guard: stale attempts never block a new owner.
   const inFlight = useRef<{
     userId: string | null;
     generation: number;
@@ -47,11 +46,6 @@ export function NativeCartAccountPanel() {
   const [linking, setLinking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [picks, setPicks] = useState<CartMergeResolution[]>([]);
-  const [savedRead, setSavedRead] = useState<{
-    scope: { userId: string | null; generation: number } | null;
-    status: 'loading' | 'ready' | 'error';
-  }>({ scope: null, status: 'loading' });
-  const [readRetry, setReadRetry] = useState(0);
   const userId = accountUserId;
   // Owner scope is state, not a ref: when the signed-in owner changes,
   // a render-phase state update advances the generation atomically
@@ -103,25 +97,13 @@ export function NativeCartAccountPanel() {
     setNotice(null);
     setPicks([]);
   }, [userId]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the retry counter explicitly restarts a failed saved-cart read.
-  useEffect(() => {
-    if (!userId || !loadSavedCart || !accountsEnabled) return;
-    let active = true;
-    const scope = ownerScope;
-    setSavedRead({ scope, status: 'loading' });
-    setPicks([]);
-    void loadSavedCart().then(
-      () => {
-        if (active) setSavedRead({ scope, status: 'ready' });
-      },
-      () => {
-        if (active) setSavedRead({ scope, status: 'error' });
-      }
-    );
-    return () => {
-      active = false;
-    };
-  }, [userId, loadSavedCart, accountsEnabled, readRetry, ownerScope]);
+  const { savedRead, setSavedRead, retrySavedRead } = useSavedCartRead({
+    userId,
+    loadSavedCart,
+    accountsEnabled,
+    ownerScope,
+    onStart: () => setPicks([]),
+  });
   if (!enabled || !accountsEnabled || !accountUserId || !linkAccount)
     return null;
   // Compare scopes by value, not reference: a recreated scope object
@@ -167,7 +149,7 @@ export function NativeCartAccountPanel() {
         operationRef.current = null;
         setSavedRead({ scope, status: 'loading' });
         setPicks([]);
-        setReadRetry((value) => value + 1);
+        retrySavedRead();
         setNotice('Your carts changed. Review them and choose again.');
         return;
       }
@@ -196,10 +178,7 @@ export function NativeCartAccountPanel() {
       {notice ? <Text style={{ color: colors.text }}>{notice}</Text> : null}
       {savedCartScopeMatches(savedRead.scope, ownerScope) &&
       savedRead.status === 'error' ? (
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => setReadRetry((value) => value + 1)}
-        >
+        <Pressable accessibilityRole="button" onPress={retrySavedRead}>
           <Text style={{ color: colors.primary }}>
             Retry loading saved cart
           </Text>

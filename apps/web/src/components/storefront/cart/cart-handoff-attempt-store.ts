@@ -1,12 +1,13 @@
 /**
- * Persisted redemption-attempt state: the exact body sent for an
+ * Tab-scoped redemption-attempt state: the exact body sent for an
  * unresolved attempt (retries resend it verbatim — replaying by
  * attempt id applies the original receipt, so rebuilding lines or
  * resolutions after an indeterminate response could contradict what
  * the shopper now sees selected) and the tab-scoped active-handoff
- * locator (the pairing secret lives in the URL fragment, which the
- * continuation immediately redacts; without this record a browser
- * reload could never reconstruct the flow or replay its attempt).
+ * locator. The body carries the raw single-use handoff token, so it
+ * lives in sessionStorage (tab-scoped, alongside the locator that
+ * already holds the pairing secret) rather than origin-wide
+ * persistent localStorage.
  */
 
 function attemptBodyStorageKey(handoffId: string): string {
@@ -22,7 +23,7 @@ export function recordAttemptBody(
   const key = attemptBodyStorageKey(handoffId);
   attemptBodies.set(key, body);
   try {
-    window.localStorage.setItem(key, JSON.stringify(body));
+    window.sessionStorage.setItem(key, JSON.stringify(body));
   } catch {
     /* Use the tab cache. */
   }
@@ -36,7 +37,7 @@ export function recordAttemptBody(
 export function clearAttemptBody(handoffId: string): void {
   attemptBodies.delete(attemptBodyStorageKey(handoffId));
   try {
-    window.localStorage.removeItem(attemptBodyStorageKey(handoffId));
+    window.sessionStorage.removeItem(attemptBodyStorageKey(handoffId));
   } catch {
     /* Storage may be disabled. */
   }
@@ -49,7 +50,7 @@ export function loadAttemptBody(
   const cached = attemptBodies.get(key);
   if (cached) return cached;
   try {
-    const stored = window.localStorage.getItem(key);
+    const stored = window.sessionStorage.getItem(key);
     if (!stored) return null;
     const parsed: unknown = JSON.parse(stored);
     if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {

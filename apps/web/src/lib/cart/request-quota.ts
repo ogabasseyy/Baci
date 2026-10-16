@@ -180,8 +180,12 @@ export async function incrementWindowCounter(
         return {count, redis.call("PTTL", KEYS[1])}
       `);
       const reply = await script.eval([key], [String(Math.max(1, windowMs))]);
-      const [rawCount, rawPttl] = Array.isArray(reply) ? reply : [reply, -1];
-      const count = parseCounterStrict(rawCount, 0);
+      // The Lua script always returns a [count, pttl] pair and INCR
+      // yields at least 1: a scalar reply or a zero count is malformed.
+      if (!Array.isArray(reply) || reply.length < 2)
+        throw new Error('Malformed cart quota reply');
+      const [rawCount, rawPttl] = reply;
+      const count = parseCounterStrict(rawCount, 1);
       const pttl = parseCounterStrict(rawPttl, -2);
       // A malformed-but-non-throwing reply must not read as count 0
       // with a healthy store: degrade so fail-closed operations fail

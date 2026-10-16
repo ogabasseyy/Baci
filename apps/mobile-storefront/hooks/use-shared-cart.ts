@@ -22,6 +22,8 @@ import {
 import { getCartShopperToken } from '@/lib/cart/shopper-token';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
+import { releaseCheckoutCreditSnapshot } from '@/lib/release-checkout-credit-snapshot';
+import { releaseCodepointCheckoutItemSort } from '@/lib/release-codepoint-checkout-item-sort';
 import { getSession } from '@/lib/supabase';
 import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
@@ -97,7 +99,20 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       );
       const legacy = useCartStore.getState();
       if (legacy.sharedCartRef) {
-        useCartStore.setState({ items: [], sharedCartRef: undefined });
+        // Retiring the canonical reference also retires its checkout
+        // generation: the next legacy cart must not inherit the
+        // abandoned cart's frozen credit choices or order attempt.
+        const nextGeneration = mintedCheckoutGenerations.register(
+          Crypto.randomUUID()
+        );
+        useCartStore.setState({
+          items: [],
+          sharedCartRef: undefined,
+          checkoutGeneration: nextGeneration,
+        });
+        persistCheckoutGenerationDetached(nextGeneration);
+        void releaseCheckoutCreditSnapshot(legacy.checkoutGeneration);
+        void releaseCodepointCheckoutItemSort(legacy.checkoutGeneration);
       }
       return;
     }

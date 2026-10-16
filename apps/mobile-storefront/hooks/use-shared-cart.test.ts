@@ -8,7 +8,11 @@ import {
 import { useSharedCart } from './use-shared-cart';
 
 const mockLegacyCart = {
-  current: { items: [] as unknown[], sharedCartRef: undefined as unknown },
+  current: {
+    items: [] as unknown[],
+    sharedCartRef: undefined as unknown,
+    checkoutGeneration: 'generation-initial' as string,
+  },
 };
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: {
@@ -24,6 +28,12 @@ jest.mock('@/hooks/product-utils', () => ({
 }));
 jest.mock('@/lib/persist-checkout-generation', () => ({
   persistCheckoutGenerationDetached: jest.fn(),
+}));
+jest.mock('@/lib/release-checkout-credit-snapshot', () => ({
+  releaseCheckoutCreditSnapshot: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('@/lib/release-codepoint-checkout-item-sort', () => ({
+  releaseCodepointCheckoutItemSort: jest.fn().mockResolvedValue(undefined),
 }));
 jest.mock('expo/fetch', () => ({ fetch: jest.fn() }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'operation' }));
@@ -72,6 +82,7 @@ it('installs one owner only in enabled mode and fences late callbacks on cleanup
 it('discards canonical ownership when enrollment turns off', async () => {
   mockLegacyCart.current = {
     items: [{ id: 'item-1' }],
+    checkoutGeneration: 'generation-old',
     sharedCartRef: {
       merchantId: options.merchantId,
       cartId: '22222222-2222-4222-8222-222222222222',
@@ -103,6 +114,9 @@ it('discards canonical ownership when enrollment turns off', async () => {
   );
   expect(mockLegacyCart.current.sharedCartRef).toBeUndefined();
   expect(mockLegacyCart.current.items).toEqual([]);
+  // The abandoned canonical generation is rotated so the next legacy
+  // cart cannot inherit its frozen credit choices or order attempt.
+  expect(mockLegacyCart.current.checkoutGeneration).not.toBe('generation-old');
   // An initial disabled mount (enrollment still loading) must not
   // retire the persisted session before the real merchant record lands.
   expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith(

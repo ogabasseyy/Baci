@@ -11,6 +11,7 @@ import {
 import { storefrontAuthMerchantRpcRowSchema } from '@/schemas/storefront-auth-merchant';
 
 import {
+  isHintPlatformHost,
   isSharedPlatformHost,
   normalizeHeader,
   requestHost,
@@ -226,12 +227,16 @@ export async function resolveCartMerchant(
     }
     return result;
   };
+  // Client hints may select a tenant only on the native API hosts
+  // (or non-production dev hosts); on browsable shared hosts the
+  // host itself must identify the merchant.
+  const hintAllowed = isHintPlatformHost(host, rootDomain);
   const hint =
     trusted ??
     hostIdentifier ??
-    queryHint(request) ??
-    deps.bodyHint?.trim().toLowerCase() ??
-    null;
+    (hintAllowed
+      ? (queryHint(request) ?? deps.bodyHint?.trim().toLowerCase() ?? null)
+      : null);
   if (!hint) {
     return { error: 'merchant_unresolved', ok: false };
   }

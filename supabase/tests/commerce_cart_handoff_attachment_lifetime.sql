@@ -72,6 +72,30 @@ BEGIN
   PERFORM pg_temp.handoff_check(replay->>'ok'='true' AND replay->>'replayed'='true','attachment merge response-loss replay failed');
  END IF;
 END $$;
+-- Caller binding: a token minted for one destination type must not
+-- redeem through the other caller label, regardless of Origin claims.
+DO $$
+DECLARE m uuid:='11111111-1111-4111-8111-111111111111';
+ source uuid:='aaaaaaaa-3000-4000-8000-000000000003'; dest uuid:='aaaaaaaa-3000-4000-8000-000000000004';
+ sg uuid:='bbbbbbbb-3000-4000-8000-000000000003'; dg uuid:='bbbbbbbb-3000-4000-8000-000000000004';
+ hweb uuid:='cccccccc-3000-4000-8000-000000000011'; hnative uuid:='cccccccc-3000-4000-8000-000000000012'; r jsonb;
+BEGIN
+ INSERT INTO public.commerce_carts(id,merchant_id,created_at,expires_at) VALUES
+ (source,m,now(),now()+interval '1 hour'),(dest,m,now(),now()+interval '1 hour');
+ INSERT INTO public.commerce_cart_grants(id,merchant_id,cart_id,principal_id,created_at,expires_at) VALUES
+ (sg,m,source,'caller-source',now(),now()+interval '1 hour'),
+ (dg,m,dest,'caller-receiver',now(),now()+interval '1 hour');
+ PERFORM pg_temp.handoff_claim(source,sg,'caller-source');
+ r:=public.commerce_cart_issue_handoff('caller-binding-web',hweb,source,'caller-issue-web','{"type":"web"}');
+ PERFORM pg_temp.handoff_check(r->>'ok'='true','web-destined issue rejected');
+ r:=public.commerce_cart_issue_handoff('caller-binding-native',hnative,source,'caller-issue-native','{"type":"native"}');
+ PERFORM pg_temp.handoff_check(r->>'ok'='true','native-destined issue rejected');
+ PERFORM pg_temp.handoff_claim(dest,dg,'caller-receiver');
+ r:=public.commerce_cart_redeem_handoff('caller-binding-web',hweb,'caller-web-as-native','connect','native',dest,1,1,'[]','[]');
+ PERFORM pg_temp.handoff_check(r->>'code'='unauthorized','web-destined token redeemed as native');
+ r:=public.commerce_cart_redeem_handoff('caller-binding-native',hnative,'caller-native-as-web','connect','web',dest,1,1,'[]','[]');
+ PERFORM pg_temp.handoff_check(r->>'code'='unauthorized','native-destined token redeemed as web');
+END $$;
 -- Independent single-lane flows prove expiry failures even before sibling fix.
 DO $$
 DECLARE m uuid:='11111111-1111-4111-8111-111111111111'; p uuid:='44444444-4444-4444-8444-444444444444';

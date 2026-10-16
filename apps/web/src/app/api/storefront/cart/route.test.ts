@@ -304,7 +304,7 @@ describe('GET /api/storefront/cart', () => {
       state: rawState({ merchantId: OTHER_MERCHANT.id }),
     };
     const url =
-      'https://usebaci.com/api/storefront/cart?merchantSlug=second-store';
+      'https://api.usebaci.com/api/storefront/cart?merchantSlug=second-store';
 
     const collision = await getCart({
       headers: { cookie: cartCookie(sessionProof()) },

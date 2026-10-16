@@ -159,7 +159,7 @@ describe('resolveCartMerchant', () => {
 
   it('resolves a query hint on hosts without trusted headers', async () => {
     const request = new Request(
-      'https://usebaci.com/api/storefront/cart?merchant_slug=ogabassey'
+      'https://api.usebaci.com/api/storefront/cart?merchant_slug=ogabassey'
     );
     const client = rpcClientReturning([merchantRow()]);
 
@@ -176,8 +176,24 @@ describe('resolveCartMerchant', () => {
     );
   });
 
+  it('rejects a query hint on the browsable apex host', async () => {
+    const request = new Request(
+      'https://usebaci.com/api/storefront/cart?merchant_slug=ogabassey'
+    );
+    const client = rpcClientReturning([merchantRow()]);
+
+    const result = await resolveCartMerchant(request, {
+      resolveAlias: async () => null,
+      rootDomain: 'usebaci.com',
+      rpcClient: client,
+    });
+
+    expect(result).toEqual({ error: 'merchant_unresolved', ok: false });
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
   it('resolves a body hint when no header or query identifies the store', async () => {
-    const request = new Request('https://usebaci.com/api/storefront/cart');
+    const request = new Request('https://api.usebaci.com/api/storefront/cart');
 
     const result = await resolveCartMerchant(request, {
       bodyHint: 'ogabassey',
@@ -211,7 +227,7 @@ describe('resolveCartMerchant', () => {
 
   it('follows retired slugs through the alias table', async () => {
     const request = new Request(
-      'https://usebaci.com/api/storefront/cart?merchantSlug=old-slug'
+      'https://api.usebaci.com/api/storefront/cart?merchantSlug=old-slug'
     );
     const client = {
       rpc: vi.fn(async (_name: string, args: { p_identifier: string }) => ({
@@ -302,7 +318,7 @@ describe('resolveCartMerchant', () => {
 
   it('rejects unpublished stores without revealing internals', async () => {
     const request = new Request(
-      'https://usebaci.com/api/storefront/cart?merchantSlug=ogabassey'
+      'https://api.usebaci.com/api/storefront/cart?merchantSlug=ogabassey'
     );
 
     const result = await resolveCartMerchant(request, {
@@ -316,7 +332,7 @@ describe('resolveCartMerchant', () => {
 
   it('fails closed with a retryable code when merchant lookup errors', async () => {
     const request = new Request(
-      'https://usebaci.com/api/storefront/cart?merchantSlug=ogabassey'
+      'https://api.usebaci.com/api/storefront/cart?merchantSlug=ogabassey'
     );
 
     const result = await resolveCartMerchant(request, {

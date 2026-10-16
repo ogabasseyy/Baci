@@ -53,8 +53,11 @@ BEGIN
        FROM public.transactions t
        JOIN public.orders o ON o.id = t.order_id
        WHERE t.transaction_type = 'refund'
+         -- Legacy native refunds may store 'refunded' rather than
+         -- 'completed': the transition accepts any status, so both
+         -- terminal spellings reselect for re-verification.
          AND (public.normalized_gateway_name_v1(t.gateway) = 'PAYSTACK'
-           AND t.status = 'completed'
+           AND t.status IN ('completed', 'refunded')
            OR (public.normalized_gateway_name_v1(t.gateway) = 'MANUAL'
              AND t.metadata->>'provider_refund_id' ~ '^[0-9]+$'
              AND t.status IN ('completed', 'failed')))
@@ -81,14 +84,17 @@ BEGIN
          -- without this a failure on a paid order would never
          -- recheck.
          AND (public.normalized_gateway_name_v1(t.gateway) = 'PAYSTACK'
-           AND t.status = 'completed'
+           AND t.status IN ('completed', 'refunded')
            OR (public.normalized_gateway_name_v1(t.gateway) = 'MANUAL'
              AND t.metadata->>'provider_refund_id' ~ '^[0-9]+$'
              AND t.status = 'failed'))
          -- Wedged orders (completed legs never flipped to paid) cancel
          -- and verify like paid orders: without 'pending' their
-         -- completed refunds never reach the transition RPC.
-         AND o.payment_status IN ('paid', 'partially_paid', 'pending')
+         -- completed refunds never reach the transition RPC. BNPL
+         -- approved is funded like paid (Credit Direct flips it
+         -- alongside), so its completed refunds need the same
+         -- re-verification or the BNPL finalization path starves.
+         AND o.payment_status IN ('paid', 'partially_paid', 'pending', 'bnpl_approved')
          AND o.shipping_status IN ('cancelled', 'canceled')
          AND o.cancelled_at IS NOT NULL
        ORDER BY t.updated_at ASC NULLS FIRST

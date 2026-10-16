@@ -26,7 +26,30 @@ interface FailedRefundRow {
   gateway: string | null;
   gateway_reference: string | null;
   id: string;
-  metadata: { payment_transaction_id?: unknown } | null;
+  metadata: { method?: unknown; payment_transaction_id?: unknown } | null;
+}
+
+/**
+ * Effective gateway for replacement matching: a manual row claiming
+ * Paystack money is Paystack in substance whatever its stored
+ * gateway label, on both the failed and the replacement side. Without
+ * this a failed stamped manual could never match a later native
+ * provider refund on the same leg, filing a false contradiction for a
+ * completed replacement.
+ */
+function effectiveRefundGateway(
+  gateway: string | null,
+  metadata: { method?: unknown } | null
+): string {
+  const stored = normalizePaymentGateway(gateway);
+  if (stored !== 'MANUAL') {
+    return stored;
+  }
+  const method = metadata?.method;
+  return typeof method === 'string' &&
+    method.trim().toLowerCase() === 'paystack'
+    ? 'PAYSTACK'
+    : stored;
 }
 
 interface ReplacementRefundRow {
@@ -64,13 +87,17 @@ function replacementMatchesFailedLeg(
   const failedLeg = failed.metadata?.payment_transaction_id;
   if (typeof failedLeg !== 'string' || failedLeg.length === 0) return false;
   if (replacement.metadata?.payment_transaction_id !== failedLeg) return false;
-  // Normalize (trim + uppercase) for both matching and Paystack
-  // classification: a bare casefold accepts a ` paystack `/` paystack `
-  // pair yet fails to recognize the replacement as Paystack, letting
-  // a merely locally completed, unverified replacement suppress the
-  // failure alert.
-  const replacementGateway = normalizePaymentGateway(replacement.gateway);
-  const failedGateway = normalizePaymentGateway(failed.gateway);
+  // Effective gateways on both sides: a manual row claiming Paystack
+  // money matches native Paystack rows (either direction), so a failed
+  // stamped manual meets its later provider-verified native
+  // replacement instead of filing a false contradiction. Trimmed and
+  // case-folded throughout, so a padded spelling cannot match as the
+  // same transfer while dodging Paystack classification.
+  const replacementGateway = effectiveRefundGateway(
+    replacement.gateway,
+    replacement.metadata
+  );
+  const failedGateway = effectiveRefundGateway(failed.gateway, failed.metadata);
   if (
     replacementGateway === '' ||
     failedGateway === '' ||
@@ -86,22 +113,10 @@ function replacementMatchesFailedLeg(
   ) {
     return false;
   }
-  // A locally completed Paystack refund counts only after it is
-  // provider-verified; other gateways keep local-status trust. A
-  // manual claim about provider money is a Paystack replacement in
-  // substance whatever its gateway label, so it needs the processed
-  // stamp too: without this a newer unverified merchant claim would
-  // silently supersede a failed stamped manual's alert. Trimmed and
-  // case-folded like the gateway above, so a padded spelling cannot
-  // dodge the proof while still matching as the same transfer.
-  const replacementMethod = replacement.metadata?.method;
-  const claimsPaystackMoney =
-    replacementGateway === 'PAYSTACK' ||
-    (replacementGateway === 'MANUAL' &&
-      typeof replacementMethod === 'string' &&
-      replacementMethod.trim().toLowerCase() === 'paystack');
+  // A locally completed Paystack replacement counts only after it is
+  // provider-verified; other gateways keep local-status trust.
   if (
-    claimsPaystackMoney &&
+    replacementGateway === 'PAYSTACK' &&
     replacement.metadata?.provider_refund_status !== 'processed'
   ) {
     return false;

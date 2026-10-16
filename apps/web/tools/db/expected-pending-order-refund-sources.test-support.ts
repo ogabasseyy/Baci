@@ -97,7 +97,7 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261016050000_sweep_stamped_manuals_any_status.sql',
-    sha256: '6b228a254799cac565baa248060a9ddca057d5f0d0e0164d2fd913997816ba2f',
+    sha256: '48615b869125e13baf76dd068edd7d9f29f686e4e2b1df5529924a238f5eaaaf',
   },
   {
     repositoryPath:

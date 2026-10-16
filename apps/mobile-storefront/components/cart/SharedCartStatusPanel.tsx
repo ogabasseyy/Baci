@@ -135,7 +135,10 @@ export function SharedCartStatusPanel() {
           </Pressable>
         </>
       ) : null}
-      {!busy && state.status === 'choice_required' && conflicts.length === 0 ? (
+      {!busy &&
+      state.status === 'choice_required' &&
+      conflicts.length === 0 &&
+      state.chooseLegacy ? (
         <>
           <Pressable
             accessibilityRole="button"
@@ -163,7 +166,7 @@ export function SharedCartStatusPanel() {
             <Text style={{ color: colors.primary }}>Use saved cart</Text>
           </Pressable>
         </>
-      ) : !busy ? (
+      ) : !busy && state.status !== 'choice_required' ? (
         <Pressable
           accessibilityRole="button"
           onPress={() =>

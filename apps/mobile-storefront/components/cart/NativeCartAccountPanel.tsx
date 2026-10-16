@@ -96,8 +96,12 @@ export function NativeCartAccountPanel() {
   }, [userId, loadSavedCart, accountsEnabled, readRetry, ownerScope]);
   if (!enabled || !accountsEnabled || !accountUserId || !linkAccount)
     return null;
+  // Compare scopes by value, not reference: a recreated scope object
+  // for the same owner and generation must not orphan a completed read.
   const savedReady =
-    savedRead.scope === ownerScope && savedRead.status === 'ready';
+    savedRead.scope?.userId === ownerScope.userId &&
+    savedRead.scope?.generation === ownerScope.generation &&
+    savedRead.status === 'ready';
   const current = snapshot;
   const saved = savedCart;
   function operationId(): string {

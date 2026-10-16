@@ -17,6 +17,20 @@ beforeEach(() => {
     chooseLegacy: null,
   });
 });
+it('shows no dead choice buttons when no legacy chooser is available', () => {
+  useNativeSharedCartStore.setState({
+    status: 'choice_required',
+    chooseLegacy: null,
+  });
+  const screen = render(<SharedCartStatusPanel />);
+  expect(screen.queryByRole('button', { name: 'Combine carts' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Use saved cart' })).toBeNull();
+  expect(
+    screen.getByText(
+      'You have a saved cart and items on this device. Choose which cart to use.'
+    )
+  ).toBeTruthy();
+});
 it('hides the resolution-less combine while conflicts need picks', () => {
   useNativeSharedCartStore.setState({
     mergeConflicts: [{ productId }],

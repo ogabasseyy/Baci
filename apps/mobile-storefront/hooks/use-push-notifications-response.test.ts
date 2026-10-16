@@ -8,6 +8,8 @@ import {
 } from '@jest/globals';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
+type PushNotificationsModule = typeof import('@/services/push-notifications');
+
 type NotificationResponse = import('expo-notifications').NotificationResponse;
 const mockRouterPush = jest.fn();
 const mockNotificationListenerRemove = jest.fn<() => void>();
@@ -22,9 +24,7 @@ const mockGetLastNotificationResponse =
   jest.fn<() => Promise<NotificationResponse | null>>();
 const mockClearLastNotificationResponse = jest.fn<() => void>();
 const mockHandleNotificationResponse =
-  jest.fn<
-    typeof import('@/services/push-notifications')['handleNotificationResponse']
-  >();
+  jest.fn<PushNotificationsModule['handleNotificationResponse']>();
 let mockNotificationResponseCallback:
   | ((response: NotificationResponse) => void)
   | null = null;

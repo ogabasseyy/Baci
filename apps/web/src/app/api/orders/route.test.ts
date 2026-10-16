@@ -11,6 +11,10 @@ import { reservePaystackDvaAssignment } from '@/lib/payments/reserve-paystack-dv
 import { createQuizVoucherToken } from '@/lib/quiz-voucher-token';
 import { POST } from './route';
 
+type PersistPaystackDvaAssignmentModule =
+  typeof import('@/lib/payments/persist-paystack-dva-assignment');
+type ServerModule = typeof import('next/server');
+
 // Hoisted mocks for fire-and-forget side effects so tests don't await emails / push.
 const {
   MockQuizProductionNotApprovedError,
@@ -117,10 +121,7 @@ const mockPersistPaystackDvaAssignment = vi.hoisted(() => vi.fn());
 vi.mock(
   '@/lib/payments/persist-paystack-dva-assignment',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/payments/persist-paystack-dva-assignment')
-      >();
+    const actual = await importOriginal<PersistPaystackDvaAssignmentModule>();
     // Default passthrough preserves the legacy RPC-less doubles every
     // invoice test relies on; individual tests override per-case (e.g. the
     // Pay for Me reservation, whose proof-bound RPC needs a live key).
@@ -192,8 +193,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/server', async () => {
-  const actual =
-    await vi.importActual<typeof import('next/server')>('next/server');
+  const actual = await vi.importActual<ServerModule>('next/server');
   return { ...actual, after: mockAfter };
 });
 

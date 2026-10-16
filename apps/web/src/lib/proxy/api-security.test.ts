@@ -7,7 +7,7 @@ vi.mock('@/lib/rate-limit', () => ({
 }));
 vi.mock('@/lib/slug-alias-cache', () => ({ getCurrentSlugForAlias: vi.fn() }));
 vi.mock('./host', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./host')>();
+  const actual = await importOriginal<HostModule>();
   return {
     ...actual,
     getSlugForOriginCustomDomain: vi.fn().mockResolvedValue(null),
@@ -15,6 +15,8 @@ vi.mock('./host', async (importOriginal) => {
 });
 
 import { getApiSecurityContext, runApiSecurityStage } from './api-security';
+
+type HostModule = typeof import('./host');
 
 describe('API security stage', () => {
   it('maps legacy analytics POST and alias API paths to their guarded route', () => {

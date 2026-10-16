@@ -12,6 +12,11 @@ on:
     # Run daily at 3:00 AM UTC
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      pg_diagnostics:
+        description: 'Run optional synthetic PostgreSQL rule diagnostics; required scans remain unchanged'
+        type: boolean
+        default: false
 
 concurrency:
   group: security-${{ github.ref }}
@@ -245,6 +250,28 @@ jobs:
           semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${scan_targets[@]}"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        continue-on-error: true
+
+      - name: Diagnose PostgreSQL rule with synthetic fixtures
+        if: github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true
+        id: pg_diagnostic
+        shell: bash
+        run: |
+          semgrep install-semgrep-pro
+          python3 .github/scripts/semgrep-sarif-pg-diagnostic.py "${RUNNER_TEMP}/pg-diagnostic-summary.json"
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        # Optional diagnostics never replace or exempt the required full scan.
+        continue-on-error: true
+
+      - name: Upload synthetic PostgreSQL diagnostic
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-pg-synthetic-diagnostic
+          path: ${{ runner.temp }}/pg-diagnostic-summary.json
+          if-no-files-found: error
+          retention-days: 3
         continue-on-error: true
 
       - name: Run full Semgrep on scheduled and manual scans

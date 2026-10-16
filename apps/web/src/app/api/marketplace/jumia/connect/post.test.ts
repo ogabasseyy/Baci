@@ -23,8 +23,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@/lib/get-merchant-for-api-request')>();
+  const original = await importOriginal<GetMerchantForApiRequestModule>();
   return {
     ...original,
     getMerchantForApiRequest: (...args: unknown[]) =>
@@ -33,6 +32,9 @@ vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => {
 });
 
 import { createJumiaConnectPost } from './post';
+
+type GetMerchantForApiRequestModule =
+  typeof import('@/lib/get-merchant-for-api-request');
 
 describe('createJumiaConnectPost', () => {
   it('creates the handler without reading credentials eagerly', () => {

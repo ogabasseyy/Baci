@@ -11,7 +11,7 @@ vi.mock('./provisioning-recovery-store', () => ({
   createPiggyvestProvisioningRecoveryStore: vi.fn(),
 }));
 vi.mock('./funding-accounts', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./funding-accounts')>()),
+  ...(await importOriginal<FundingAccountsModule>()),
   retrievePiggyvestStagingFundingAccounts: vi.fn(),
 }));
 
@@ -21,6 +21,8 @@ import { retrievePiggyvestStagingFundingAccounts } from './funding-accounts';
 import { provisionPiggyvestStagingResource } from './provisioning-client';
 import { recoverPiggyvestProvisioning } from './provisioning-recovery-client';
 import { createPiggyvestProvisioningRecoveryStore } from './provisioning-recovery-store';
+
+type FundingAccountsModule = typeof import('./funding-accounts');
 
 const merchantId = '10000000-0000-4000-8000-000000000001';
 const customerId = '20000000-0000-4000-8000-000000000001';

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/env', async (importOriginal) => {
-  const mod = await importOriginal<typeof import('@/env')>();
+  const mod = await importOriginal<EnvModule>();
   return { ...mod, getAppUrl: vi.fn(() => 'http://localhost:3000') };
 });
 
@@ -11,6 +11,8 @@ import {
   trackServerSidePurchase,
 } from './server-side-analytics';
 import { serverSideAnalyticsTestHarness as harness } from './server-side-analytics.test-utils';
+
+type EnvModule = typeof import('@/env');
 
 describe('Server-Side Analytics Service', () => {
   beforeEach(() => {

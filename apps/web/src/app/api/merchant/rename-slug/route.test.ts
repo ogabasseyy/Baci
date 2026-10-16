@@ -1,6 +1,10 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type ServerModule = typeof import('next/server');
+type GetMerchantForApiRequestModule =
+  typeof import('@/lib/get-merchant-for-api-request');
+
 const mockCheckCsrfProtection = vi.fn();
 const mockAuthenticateApiRequest = vi.fn();
 const mockGetMerchantForApiRequest = vi.fn();
@@ -17,7 +21,7 @@ const mockTriggerSync = vi.fn();
 const merchantAId = '11111111-1111-4111-8111-111111111111';
 
 vi.mock('next/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next/server')>();
+  const actual = await importOriginal<ServerModule>();
   // Run after() callbacks synchronously so we can assert the Edge Config resync.
   return { ...actual, after: (fn: () => unknown) => fn() };
 });
@@ -36,8 +40,7 @@ vi.mock('@/lib/api-auth', () => ({
 }));
 
 vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/lib/get-merchant-for-api-request')>();
+  const actual = await importOriginal<GetMerchantForApiRequestModule>();
 
   return {
     ...actual,

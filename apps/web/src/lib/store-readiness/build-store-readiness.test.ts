@@ -6,9 +6,11 @@ import {
   type StoreReadinessFacts,
 } from './build-store-readiness';
 
+type BuildStoreLaunchReadinessModule =
+  typeof import('./build-store-launch-readiness');
+
 vi.mock('./build-store-launch-readiness', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('./build-store-launch-readiness')>();
+  const actual = await importOriginal<BuildStoreLaunchReadinessModule>();
 
   return {
     ...actual,

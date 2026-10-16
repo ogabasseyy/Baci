@@ -3,7 +3,7 @@
 
 # Internal dev tooling - not production code
 .gemini/
-scripts/
+/scripts/
 fix-all-async-calls.mjs
 process_pr_comments.cjs
 process_security_alerts.cjs

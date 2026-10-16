@@ -77,7 +77,7 @@ export default function SettingsScreen() {
           ]}
         >
           <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
-            GROWTH & MARKETING
+            GROWTH &amp; MARKETING
           </Text>
           <SettingsListItem
             icon="bar-chart-outline"

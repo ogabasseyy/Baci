@@ -51,15 +51,33 @@ export interface GuestCanonicalBridge {
   hasToken(token: string): Promise<boolean>;
 }
 /** Explicit configuration only; never send a capability to an inferred API host. */
+/**
+ * Exact origins the canonical bridge may target. The production
+ * merchant origin is the default; operators running a staging or
+ * additional deployment allowlist their exact origin through
+ * MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS (comma-separated) instead
+ * of the bridge silently accepting arbitrary configured hosts.
+ */
+export function canonicalBridgeAllowedOrigins(
+  configured = process.env.MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS
+): string[] {
+  if (!configured?.trim()) return ['https://ogabassey.com'];
+  return configured
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 export function createGuestCanonicalBridge(
   configured = process.env.MCP_CANONICAL_CART_BRIDGE_URL,
-  fetcher: typeof fetch = fetch
+  fetcher: typeof fetch = fetch,
+  allowedOrigins: string[] = canonicalBridgeAllowedOrigins()
 ): GuestCanonicalBridge | null {
   if (!configured) return null;
   const url = new URL(configured);
   if (
     url.protocol !== 'https:' ||
-    url.origin !== 'https://ogabassey.com' ||
+    !allowedOrigins.includes(url.origin) ||
     url.pathname !== '/api/storefront/cart/legacy' ||
     url.username ||
     url.password ||

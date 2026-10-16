@@ -332,9 +332,12 @@ the hourly `mcp-guest-cart-cleanup` pg_cron sweep.
 ### Canonical shared-cart bridge (release gate)
 
 The optional `MCP_CANONICAL_CART_BRIDGE_URL` delegates token-bound cart reads and
-writes to the verified-owner web broker. Its only accepted value is
-`https://ogabassey.com/api/storefront/cart/legacy`; redirects and other origins
-are rejected before an opaque guest capability is sent. The MCP worker receives
+writes to the verified-owner web broker. Its default accepted value is
+`https://ogabassey.com/api/storefront/cart/legacy`; staging or additional
+deployments allowlist their exact origin with
+`MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS` (comma-separated exact origins).
+Redirects and non-allowlisted origins are rejected before an opaque guest
+capability is sent. The MCP worker receives
 no cart signing key or service-role credential. The broker verifies the persisted
 merchant and legacy owner, migrates the exact stored source once, and returns
 scoped canonical state plus a web handoff. Keep the returned guest token for

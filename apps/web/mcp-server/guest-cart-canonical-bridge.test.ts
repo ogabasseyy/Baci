@@ -17,6 +17,21 @@ describe('canonical MCP transport', () => {
   ])('rejects an unapproved endpoint %s', (url) => {
     expect(() => createGuestCanonicalBridge(url, vi.fn())).toThrow();
   });
+  it('accepts an allowlisted staging origin and rejects non-allowlisted ones', () => {
+    const staging = 'https://staging.example.com/api/storefront/cart/legacy';
+    expect(
+      createGuestCanonicalBridge(staging, vi.fn(), [
+        'https://staging.example.com',
+      ])
+    ).not.toBeNull();
+    expect(() => createGuestCanonicalBridge(staging, vi.fn())).toThrow();
+    expect(() =>
+      createGuestCanonicalBridge(endpoint, vi.fn(), [
+        'https://staging.example.com',
+      ])
+    ).toThrow();
+  });
+
   it('stays disabled without explicit endpoint configuration', () => {
     expect(createGuestCanonicalBridge('', vi.fn())).toBeNull();
   });

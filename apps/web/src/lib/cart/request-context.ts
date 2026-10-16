@@ -127,7 +127,7 @@ export interface CartRequestContextDeps {
 
 export type CartRequestContextResult =
   | { ok: true; merchant: CartRouteMerchant; principal: CartPrincipal }
-  | { error: CartRouteErrorCode; ok: false };
+  | { error: CartRouteErrorCode; merchant?: CartRouteMerchant; ok: false };
 
 /**
  * Builds route authority from trusted merchant resolution plus a
@@ -153,7 +153,10 @@ export async function resolveCartRequestContext(
       verify: async (proof) => deps.verify(proof),
     });
     if (!resolved.ok) {
-      return resolved;
+      // Carry the resolved merchant on proof failures so routes that
+      // clean up credentials (revocation) can scope the cleanup to
+      // this merchant instead of every cart cookie on a shared host.
+      return { ...resolved, merchant: merchant.merchant };
     }
     principal = resolved.principal;
   } catch (error) {

@@ -101,6 +101,7 @@ it('expires presented cart cookies when the proof is definitively invalid', asyn
   vi.mocked(resolveCartRequestContext).mockResolvedValue({
     ok: false,
     error: 'invalid_proof',
+    merchant: { id: '11111111-1111-4111-8111-111111111111', slug: 'shop' },
   });
   const response = await POST(
     new Request('http://localhost/api/storefront/cart/session/revoke', {
@@ -120,6 +121,43 @@ it('expires presented cart cookies when the proof is definitively invalid', asyn
   expect(setCookie).toContain('Max-Age=0');
   expect(setCookie).not.toContain('other=');
   expect(revokeCartDeviceGrants).not.toHaveBeenCalled();
+});
+it('preserves another merchant cookie on a shared host during invalid-proof expiry', async () => {
+  vi.mocked(resolveCartRequestContext).mockResolvedValue({
+    ok: false,
+    error: 'invalid_proof',
+    merchant: { id: '11111111-1111-4111-8111-111111111111', slug: 'shop' },
+  });
+  const payloadFor = (merchantId: string) =>
+    `cp1.${Buffer.from(
+      JSON.stringify({
+        aud: 'cart',
+        cartId: null,
+        env: 'test',
+        exp: 1999999999,
+        grantId: null,
+        iat: 1700000000,
+        merchantId,
+        principalId: 'guest',
+        scope: 'session',
+        v: 'cp1',
+      })
+    ).toString('base64url')}.dead`;
+  const merchantA = '11111111-1111-4111-8111-111111111111';
+  const merchantB = '22222222-2222-4222-8222-222222222222';
+  const response = await POST(
+    new Request('http://localhost/api/storefront/cart/session/revoke', {
+      method: 'POST',
+      headers: {
+        cookie: `baci-cart-${merchantA}=${payloadFor(merchantA)}; baci-cart-${merchantB}=${payloadFor(merchantB)}`,
+      },
+      body: '{}',
+    }) as never
+  );
+  expect(response.status).toBe(401);
+  const setCookie = response.headers.get('set-cookie') ?? '';
+  expect(setCookie).toContain(`baci-cart-${merchantA}=;`);
+  expect(setCookie).not.toContain(`baci-cart-${merchantB}=;`);
 });
 it('clears only the resolved merchant cookie after idempotent scoped revocation', async () => {
   const principal = {

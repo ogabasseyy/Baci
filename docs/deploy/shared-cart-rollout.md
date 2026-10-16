@@ -121,6 +121,17 @@ handoff preview request leaves no token value in proxy, APM, or
 error-reporting captures; record both checks in the activation
 evidence. Enrollment stays closed until they pass.
 
+Accepted surface: the two preview RPCs are anon-granted so the web
+route can call them without a cart session, which means a caller who
+can reach PostgREST directly can also invoke them, bypassing the
+route's quotas. This is accepted because the pairing token is the
+authorization (high-entropy, hash stored, raw token required since
+`20261015168000`), preview output is redacted, and invalid probing is
+bounded by platform/PostgREST rate limits and monitoring. The same
+activation check must confirm database statement logging does not
+persist RPC arguments (`log_statement` must not capture the preview
+calls), since the raw token now reaches the RPC as an argument.
+
 ## Observability gaps to close before activation
 
 - No production dashboards/alerts exist yet for mutation latency,

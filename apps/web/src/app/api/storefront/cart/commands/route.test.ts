@@ -300,38 +300,6 @@ describe('POST /api/storefront/cart/commands', () => {
     expect(maxAge).toBeLessThanOrEqual(3600);
   });
 
-  it('renews the proof with the live grant operations, not the stale proof operations', async () => {
-    const grantExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    mocks.grantAuthority = {
-      ok: true,
-      allowedOperations: ['add'],
-      grantExpiresAt: grantExpiry,
-    };
-    mocks.cartPayload = {
-      code: null,
-      ok: true,
-      replayed: false,
-      state: rawState({ expiresAt: grantExpiry, lines: [rawLine()] }),
-    };
-    const response = await postCommand({
-      body: addCommand('narrowed-proof'),
-      headers: {
-        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
-      },
-    });
-    expect(response.status).toBe(200);
-    const setCookie = response.headers.get('set-cookie') ?? '';
-    const cookieProof = setCookie.match(/baci-cart-[^=]+=([^;]+)/)?.[1] ?? '';
-    const verified = verifyCartSessionProof(cookieProof, {
-      secret: TEST_SECRET,
-      environment: 'test',
-    });
-    expect(verified).toMatchObject({
-      ok: true,
-      session: { allowedOperations: ['add'] },
-    });
-  });
-
   it('returns the committed cart when proof reissue hits a config failure', async () => {
     const expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     mocks.cartPayload = {

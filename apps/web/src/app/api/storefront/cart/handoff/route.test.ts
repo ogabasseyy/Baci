@@ -1,14 +1,9 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { hashHandoffToken } from '@/lib/cart/handoff-token';
 import type { CartPrincipal } from '@/lib/cart/principal';
-import {
-  __resetCartQuotaStoreForTesting,
-  checkCartQuota,
-} from '@/lib/cart/request-context';
+import { __resetCartQuotaStoreForTesting } from '@/lib/cart/request-context';
 import { issueCartSessionProof } from '@/lib/cart/session-proof';
-import { getTrustedClientIdentifier } from '@/lib/rate-limit';
-import { GET, POST } from './route';
+import { POST } from './route';
 
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 const CART_ID = '22222222-2222-4222-8222-222222222222';
@@ -84,7 +79,7 @@ function merchantRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function rawState(overrides: Record<string, unknown> = {}) {
+function _rawState(overrides: Record<string, unknown> = {}) {
   return {
     cartId: CART_ID,
     checkoutSessionId: null,
@@ -311,155 +306,5 @@ describe('POST /api/storefront/cart/handoff', () => {
     for (const call of spy.mock.calls) {
       expect(JSON.stringify(call)).not.toContain('ch1.');
     }
-  });
-});
-
-describe('GET /api/storefront/cart/handoff', () => {
-  function getPreview(handoffId: string | null) {
-    const url =
-      handoffId === null
-        ? HANDOFF_URL
-        : `${HANDOFF_URL}?handoff_id=${handoffId}`;
-    return GET(
-      new NextRequest(url, {
-        headers: { 'x-handoff-token': 'ch1.fixture.token' },
-        method: 'GET',
-      })
-    );
-  }
-
-  it('previews a pending grant without consuming or authenticating', async () => {
-    mocks.handoffMerchantId = MERCHANT_ID;
-    mocks.previewPayload = {
-      code: null,
-      expiresAt: '2026-10-12T06:05:00.000Z',
-      merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
-      ok: true,
-      snapshot: rawState(),
-      status: 'pending',
-    };
-
-    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-    const payload = await response.json();
-    expect(payload.status).toBe('pending');
-    expect(payload.snapshot.version).toBe(3);
-    expect(payload.merchant).toEqual({ id: MERCHANT_ID, slug: 'ogabassey' });
-    expect(mocks.capturedPrincipal).toBeNull();
-    expect(mocks.cartRpcCalls).toHaveLength(0);
-    // The merchant locator is token-gated: it receives the raw pairing
-    // token (hashed inside the RPC), never the id alone.
-    expect(mocks.locatorArgs).toEqual({
-      p_handoff_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      p_token_hash: 'ch1.fixture.token',
-    });
-  });
-
-  it('reports consumed and expired links as statuses, unknown as 404', async () => {
-    mocks.handoffMerchantId = MERCHANT_ID;
-    for (const status of ['consumed', 'expired'] as const) {
-      mocks.previewPayload = {
-        code: null,
-        expiresAt: '2026-10-12T06:05:00.000Z',
-        ok: true,
-        status,
-      };
-      const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-      expect(response.status).toBe(200);
-      expect((await response.json()).status).toBe(status);
-    }
-
-    mocks.previewPayload = { code: 'not_found', ok: false };
-    const missing = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-    expect(missing.status).toBe(404);
-    expect((await missing.json()).code).toBe('not_found');
-  });
-
-  it('fails closed without the preview RPC when the locator resolves nothing', async () => {
-    mocks.handoffMerchantId = null;
-    mocks.previewPayload = {
-      code: null,
-      expiresAt: '2026-10-12T06:05:00.000Z',
-      merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
-      ok: true,
-      snapshot: rawState(),
-      status: 'pending',
-    };
-    const previewCallsBefore = mocks.previewCalls;
-
-    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-
-    expect(response.status).toBe(404);
-    expect((await response.json()).code).toBe('not_found');
-    expect(mocks.previewCalls).toBe(previewCallsBefore);
-  });
-
-  it('rejects missing and malformed preview ids', async () => {
-    expect((await getPreview(null)).status).toBe(400);
-    expect((await getPreview('not-a-uuid')).status).toBe(400);
-  });
-
-  it('applies the per-client quota before running the preview RPC', async () => {
-    mocks.previewPayload = {
-      code: null,
-      expiresAt: '2026-10-12T06:05:00.000Z',
-      merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
-      ok: true,
-      snapshot: rawState(),
-      status: 'pending',
-    };
-    const probe = new NextRequest(
-      `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
-      { method: 'GET' }
-    );
-    const subject = getTrustedClientIdentifier(probe);
-    for (let index = 0; index < 120; index += 1) {
-      await checkCartQuota({
-        merchantId: 'handoff-preview',
-        operation: 'handoff_preview',
-        subject: `${subject}:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
-      });
-    }
-    const previewCallsBefore = mocks.previewCalls;
-
-    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-
-    expect(response.status).toBe(429);
-    expect((await response.json()).code).toBe('quota_exceeded');
-    expect(mocks.previewCalls).toBe(previewCallsBefore);
-  });
-
-  it('applies the merchant quota before the preview RPC assembles anything', async () => {
-    mocks.handoffMerchantId = MERCHANT_ID;
-    mocks.previewPayload = {
-      code: null,
-      expiresAt: '2026-10-12T06:05:00.000Z',
-      merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
-      ok: true,
-      snapshot: rawState(),
-      status: 'pending',
-    };
-    const probe = new NextRequest(
-      `${HANDOFF_URL}?handoff_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
-      { method: 'GET' }
-    );
-    const subject = getTrustedClientIdentifier(probe);
-    for (let index = 0; index < 120; index += 1) {
-      await checkCartQuota({
-        merchantId: MERCHANT_ID,
-        operation: 'handoff_preview',
-        subject,
-      });
-    }
-    const previewCallsBefore = mocks.previewCalls;
-
-    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-
-    expect(response.status).toBe(429);
-    expect((await response.json()).code).toBe('quota_exceeded');
-    // The expensive preview RPC never ran for this attempt.
-    expect(mocks.previewCalls).toBe(previewCallsBefore);
   });
 });

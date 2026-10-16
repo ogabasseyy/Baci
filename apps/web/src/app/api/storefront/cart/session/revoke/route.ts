@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
 import { revokeCartDeviceGrants } from '@/lib/cart/device-session';
+import { cartSessionCookieName } from '@/lib/cart/principal';
 import {
   readCartJsonBody,
   resolveCartRequestContext,
@@ -41,23 +42,19 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
     if (!context.ok) {
       const response = cartErrorResponse(context.error);
-      if (context.error === 'invalid_proof') {
+      if (context.error === 'invalid_proof' && context.merchant) {
         // The presented proof can never verify again (for example
-        // after a signing-key rotation): expire every cart session
-        // cookie the request carried so the dead credential does not
-        // keep blocking legacy orders or future sign-outs.
-        for (const part of (request.headers.get('cookie') ?? '').split(';')) {
-          const name = part.split('=')[0]?.trim();
-          if (name?.startsWith('baci-cart-')) {
-            response.cookies.set(name, '', {
-              httpOnly: true,
-              maxAge: 0,
-              path: '/',
-              sameSite: 'lax',
-              secure: process.env.NODE_ENV === 'production',
-            });
-          }
-        }
+        // after a signing-key rotation): expire only this merchant's
+        // cookie so the dead credential does not keep blocking legacy
+        // orders, while other merchants' cookies on a shared host
+        // stay valid.
+        response.cookies.set(cartSessionCookieName(context.merchant.id), '', {
+          httpOnly: true,
+          maxAge: 0,
+          path: '/',
+          sameSite: 'lax',
+          secure: process.env.NODE_ENV === 'production',
+        });
       }
       return response;
     }

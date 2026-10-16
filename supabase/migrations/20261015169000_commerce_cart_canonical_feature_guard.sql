@@ -19,11 +19,11 @@ BEGIN
   FOR feature IN
     SELECT value FROM pg_catalog.jsonb_array_elements_text(NEW.premium_features)
   LOOP
-    IF pg_catalog.lower(pg_catalog.btrim(feature)) IN (
+    IF pg_catalog.lower(pg_catalog.regexp_replace(feature, '^\s+|\s+$', '', 'g')) IN (
         'shared_cart', 'shared_cart_realtime', 'shared_cart_accounts',
         'shared_cart_native'
       )
-      AND feature <> pg_catalog.lower(pg_catalog.btrim(feature)) THEN
+      AND feature <> pg_catalog.lower(pg_catalog.regexp_replace(feature, '^\s+|\s+$', '', 'g')) THEN
       RAISE EXCEPTION 'shared cart premium_features values must be exact lowercase: %', feature
         USING ERRCODE = '22023';
     END IF;

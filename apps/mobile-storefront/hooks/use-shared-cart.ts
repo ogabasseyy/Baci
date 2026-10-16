@@ -4,6 +4,12 @@ import { AppState } from 'react-native';
 import { fetchProductRow, transformProduct } from '@/hooks/product-utils';
 import { createNativeCartController } from '@/lib/cart/controller';
 import type { CartProductShell } from '@/lib/cart/display';
+import {
+  createEnrollmentTransition,
+  DISABLED_SHARED_CART_STATE,
+  markEnrollmentEnabled,
+  retireEnrollmentSession,
+} from '@/lib/cart/enrollment-transition';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
@@ -75,35 +81,27 @@ const defaults: Deps = {
 };
 export function useSharedCart(options: Options, deps: Deps = defaults): void {
   const latest = useRef(options);
-  const wasEnabled = useRef(false);
-  // Async guards must observe only committed options: advance the ref
-  // in an effect, never during render, so a discarded concurrent
-  // render cannot publish an uncommitted scope.
+  const enrollmentTransition = useRef(createEnrollmentTransition());
+  // Async guards observe only committed options (advance in an effect).
   useEffect(() => {
     latest.current = options;
   });
   useEffect(() => {
     if (!options.enabled) {
-      // Enrollment turned off after canonical ownership was installed:
-      // discard the canonical display and reference so legacy writes and
-      // order creation are not fenced to a cart nothing can prepare.
-      // Also retire the secure session record for this merchant scope:
-      // a later sign-out teardown may no longer have a writer (or this
-      // merchant scope) to derive it from, and a surviving account-owned
-      // record would greet the next device owner with session_changed.
-      if (wasEnabled.current) {
-        wasEnabled.current = false;
-        void cartSessionStorage
-          .remove(options.merchantId)
-          .catch(() => undefined);
-      }
+      // Enrollment off: discard canonical ownership (see
+      // enrollment-transition) and retire its secure session record.
+      void retireEnrollmentSession(
+        enrollmentTransition.current,
+        options.merchantId,
+        (merchantId) => cartSessionStorage.remove(merchantId)
+      );
       const legacy = useCartStore.getState();
       if (legacy.sharedCartRef) {
         useCartStore.setState({ items: [], sharedCartRef: undefined });
       }
       return;
     }
-    wasEnabled.current = true;
+    markEnrollmentEnabled(enrollmentTransition.current);
     let alive = true;
     let generation = sharedCartWriterGeneration();
     const isCurrent = () =>
@@ -274,24 +272,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       clearInterval(poll);
       release();
       useCartStore.setState({ isLoading: false });
-      useNativeSharedCartStore.setState({
-        enabled: false,
-        accountsEnabled: false,
-        status: 'loading',
-        snapshot: null,
-        metadataReady: false,
-        mergeConflicts: [],
-        mergeConflictReason: undefined,
-        refresh: null,
-        prepare: null,
-        pair: null,
-        chooseLegacy: null,
-        savedCart: null,
-        loadSavedCart: null,
-        linkAccount: null,
-        checkoutReview: null,
-        prepareCheckoutReview: null,
-      });
+      useNativeSharedCartStore.setState({ ...DISABLED_SHARED_CART_STATE });
     };
   }, [
     options.enabled,

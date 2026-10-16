@@ -163,7 +163,14 @@ export async function POST(request: NextRequest, props: RouteProps) {
     operationId: mutation.idempotencyKey,
     expectedVersion: parsed.data.expectedVersion,
     lines: parsed.data.line_items?.map((line) => ({
-      item: { productId: line.item.id },
+      item: {
+        productId: line.item.id,
+        ...(line.item.variant_id ? { variantId: line.item.variant_id } : {}),
+        ...(line.item.condition ? { condition: line.item.condition } : {}),
+        ...(line.item.variant_attributes
+          ? { options: line.item.variant_attributes }
+          : {}),
+      },
       quantity: line.quantity,
     })),
   });

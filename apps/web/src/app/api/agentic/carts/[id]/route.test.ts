@@ -279,6 +279,50 @@ describe('/api/agentic/carts/[id]', () => {
     expect(body.line_items[0].quantity).toBe(2);
   });
 
+  it('forwards variant identity to the canonical cart on update', async () => {
+    mockMutation({
+      line_items: [
+        {
+          item: {
+            id: 'product-1',
+            variant_id: 'variant-9',
+            variant_attributes: { Color: 'Black' },
+            condition: 'used',
+          },
+          quantity: 2,
+        },
+      ],
+    });
+    createSupabaseMock({ cartResult: { data: null, error: null } });
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue({
+      body: { id: 'cart_123', status: 'active' },
+      status: 200,
+    });
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts/cart_123', {
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ id: 'cart_123' }) }
+    );
+    expect(response.status).toBe(200);
+    expect(handleCanonicalUcpCart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: [
+          {
+            item: {
+              productId: 'product-1',
+              variantId: 'variant-9',
+              condition: 'used',
+              options: { Color: 'Black' },
+            },
+            quantity: 2,
+          },
+        ],
+      })
+    );
+  });
+
   it('rejects updates to a migrated cart with a canonical refresh outcome', async () => {
     mockMutation({
       line_items: [{ item: { id: 'product-2' }, quantity: 2 }],

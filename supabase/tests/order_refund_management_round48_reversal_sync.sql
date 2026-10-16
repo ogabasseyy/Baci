@@ -2,8 +2,10 @@
 --
 -- Covers the refunded label flip from wallet/savings reversal rows
 -- for internal-only cancellations that never open the refund panel,
--- plus the mixed-order negative. Split per the 300-line boundary;
--- self-contained fixtures use the 9ef1 namespace and roll back.
+-- plus the mixed-order negative and the cash-like manual-coverage
+-- gate (an aggregate reversal match must not retire outstanding
+-- cash). Split per the 300-line boundary; self-contained fixtures
+-- use the 9ef1 namespace and roll back.
 --
 -- USAGE:
 --   supabase test db supabase/tests/order_refund_management_round48_reversal_sync.sql
@@ -85,7 +87,11 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000080', v_merchant_id, 'REFUND-080',
       100, 100, 'pending', 'cancelled', pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000081', v_merchant_id, 'REFUND-081',
-      100, 100, 'paid', 'cancelled', pg_catalog.now());
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000082', v_merchant_id, 'REFUND-082',
+      200, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000083', v_merchant_id, 'REFUND-083',
+      200, 100, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -108,7 +114,24 @@ BEGIN
       'completed', 'wallet', 'r48-80', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000096', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000081', 'payment', 100, 'NGN',
-      'completed', 'wallet', 'r48-81', '{}'::jsonb);
+      'completed', 'wallet', 'r48-81', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000097', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000082', 'payment', 100, 'NGN',
+      'completed', 'wallet', 'r48-82w', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000098', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000082', 'payment', 100, 'NGN',
+      'completed', 'cash', 'r48-82c', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000099', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000083', 'payment', 100, 'NGN',
+      'completed', 'wallet', 'r48-83w', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000100', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000083', 'payment', 100, 'NGN',
+      'completed', 'cash', 'r48-83c', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000101', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000083', 'refund', 100, 'NGN',
+      'completed', 'manual', 'cap-83-1',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000100'));
 
   INSERT INTO public.customer_wallet_transactions (
     wallet_id, customer_id, merchant_id, type, amount, balance_after,
@@ -121,7 +144,11 @@ BEGIN
     (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 300,
       'order_reversal', '9ef11000-0000-4000-8000-000000000079'),
     (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 400,
-      'order_reversal', '9ef11000-0000-4000-8000-000000000080');
+      'order_reversal', '9ef11000-0000-4000-8000-000000000080'),
+    (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 600,
+      'order_reversal', '9ef11000-0000-4000-8000-000000000082'),
+    (v_wallet_id, v_customer_id, v_merchant_id, 'adjustment', 100, 700,
+      'order_reversal', '9ef11000-0000-4000-8000-000000000083');
 
   -- Simulate a reversal that predates the migration: with the sync
   -- trigger disabled the insert leaves the label stale.
@@ -203,6 +230,20 @@ BEGIN
   IF v_status IS DISTINCT FROM 'refunded' THEN
     RAISE EXCEPTION 'pending reversal left status %, want refunded',
       v_status;
+  END IF;
+  -- An aggregate wallet match must not retire an outstanding cash
+  -- leg: no side effect will ever revisit it.
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000082';
+  IF v_status IS DISTINCT FROM 'paid' THEN
+    RAISE EXCEPTION 'outstanding cash retired by aggregate match, got %',
+      v_status;
+  END IF;
+  -- A cash leg with linked manual coverage does not block the flip.
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = '9ef11000-0000-4000-8000-000000000083';
+  IF v_status IS DISTINCT FROM 'refunded' THEN
+    RAISE EXCEPTION 'covered cash leg blocked the flip, got %', v_status;
   END IF;
   -- The predated reversal left the label stale; the shipped backfill
   -- repairs it without touching already-correct rows.

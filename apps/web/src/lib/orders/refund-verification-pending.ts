@@ -7,10 +7,9 @@ import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gatewa
 
 type ProbeClient = Pick<SupabaseClient, 'from'>;
 
-// Leg-check ceiling: the limit applies after the gateway filter,
-// so this only needs to exceed any plausible run of impostor rows
-// (values containing "paystack" that do not normalize to it)
-// ahead of a true Paystack leg.
+// Leg page size for the id-ordered pagination below: pages are
+// walked to exhaustion, so every candidate leg is scanned no
+// matter how many covered rows precede the uncovered one.
 const PROBE_LEG_LIMIT = 25;
 // Refund-check ceiling: linked refunds are small per order, and an
 // undercount only over-triggers the cap (the safe direction).
@@ -87,20 +86,40 @@ export async function isRefundVerificationPending(
     return false;
   }
   // Prefilter loosely (%paystack% catches padded legacy gateways);
-  // the exact normalized match below drops impostors.
-  const { data: legs, error: legsError } = await supabase
-    .from('transactions')
-    .select('id, amount, currency, gateway')
-    .in('order_id', orderIds)
-    .eq('transaction_type', 'payment')
-    .eq('status', 'completed')
-    .gt('amount', 0)
-    .ilike('gateway', '%paystack%')
-    .limit(PROBE_LEG_LIMIT);
-  if (legsError || !legs) {
-    return false;
+  // the exact normalized match below drops impostors. Paginate to
+  // exhaustion in id order: one unordered limit across every leg
+  // of up to 20 orders could fill with covered legs while the
+  // uncovered leg falls outside the slice, missing work the drain
+  // will select.
+  const legs: ProbeLeg[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const page = supabase
+      .from('transactions')
+      .select('id, amount, currency, gateway')
+      .in('order_id', orderIds)
+      .eq('transaction_type', 'payment')
+      .eq('status', 'completed')
+      .gt('amount', 0)
+      .ilike('gateway', '%paystack%')
+      .order('id', { ascending: true });
+    const { data, error } = await (cursor === null
+      ? page.limit(PROBE_LEG_LIMIT)
+      : page.gt('id', cursor).limit(PROBE_LEG_LIMIT));
+    if (error || !data) {
+      return false;
+    }
+    const rows = data as ProbeLeg[];
+    legs.push(...rows);
+    if (rows.length < PROBE_LEG_LIMIT) {
+      break;
+    }
+    cursor = rows[rows.length - 1]?.id ?? null;
+    if (cursor === null) {
+      break;
+    }
   }
-  const paystackLegs = (legs as ProbeLeg[]).filter(
+  const paystackLegs = legs.filter(
     (leg) => normalizePaymentGateway(leg.gateway) === 'PAYSTACK'
   );
   if (paystackLegs.length === 0) {

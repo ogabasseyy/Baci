@@ -6,10 +6,12 @@
 -- ledger returned every kobo; the transactions-scoped sync trigger
 -- never fires because no refund row lands. Flip the label from the
 -- reversal transaction itself when the internal reversals alone cover
--- the paid amount and no external funded leg exists (mixed orders stay
--- with the normal flow, and cash-only orders still wait for the
--- merchant's manual record). A migration-time backfill covers
--- reversals that landed before this trigger existed.
+-- the paid amount, no external funded leg exists, and every cash-like
+-- leg has linked manual coverage (mixed orders stay with the normal
+-- flow; an aggregate wallet/savings match must not retire an
+-- outstanding cash leg no side effect will ever revisit). A
+-- migration-time backfill covers reversals that landed before this
+-- trigger existed.
 CREATE OR REPLACE FUNCTION private.internal_reversal_coverage_v1(
   p_order_id uuid, p_merchant_id uuid
 ) RETURNS numeric LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
@@ -55,7 +57,40 @@ BEGIN
                 public.normalized_gateway_name_v1(t.gateway), ''
               ) NOT IN (
             'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
-            'PAY_ON_DELIVERY'));
+            'PAY_ON_DELIVERY'))
+    -- Cash-like legs need full manual coverage before the label
+    -- flips: an aggregate wallet/savings match on an overfunded or
+    -- superseded ledger must not retire outstanding cash no side
+    -- effect will ever revisit. Mirrors the finalizer guard's
+    -- internal-leg coverage check exactly.
+    AND NOT EXISTS (
+      SELECT 1 FROM public.transactions leg
+       WHERE leg.order_id = o.id AND leg.merchant_id = o.merchant_id
+         AND leg.transaction_type = 'payment'
+         AND leg.status IN ('completed', 'refund_pending', 'refunded')
+         AND COALESCE(
+               public.normalized_gateway_name_v1(leg.gateway), ''
+             ) IN (
+           'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
+         AND (
+           SELECT COALESCE(SUM(refund.amount), 0)
+             FROM public.transactions refund
+            WHERE refund.order_id = o.id
+              AND refund.merchant_id = o.merchant_id
+              AND refund.transaction_type = 'refund'
+              AND refund.status IN ('completed', 'refunded')
+              AND refund.amount > 0
+              AND UPPER(BTRIM(refund.currency))
+                = UPPER(BTRIM(leg.currency))
+              AND public.normalized_gateway_name_v1(refund.gateway)
+                = 'MANUAL'
+              AND refund.metadata->>'payment_transaction_id'
+                = leg.id::text
+              AND (
+                refund.metadata->>'method' IS DISTINCT FROM 'paystack'
+                OR refund.metadata->>'provider_refund_status' = 'processed'
+              )
+         ) < leg.amount);
 END; $$;
 REVOKE ALL ON FUNCTION private.flip_internal_only_order_refunded(uuid, uuid)
   FROM PUBLIC, anon, authenticated;

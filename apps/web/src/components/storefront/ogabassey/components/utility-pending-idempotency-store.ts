@@ -116,24 +116,22 @@ export const PENDING_VTU_MINT_LOCK_NAME = 'baci:vtu-mint-lock/v1';
  * tabs loading "no lock" in the same instant can both confirm and
  * both mint. The runner in the sync module prefers navigator.locks
  * (a real mutex) and uses this only where locks are unavailable.
- * Bounded 1ms spin; TTL-gated steal for crashed holders. Null =
- * unacquired; the caller fails closed (no key, no POST).
+ * Timer-polled wait (Muse R151 M1): a busy-spin would block the
+ * main thread for the full budget — polls yield between attempts.
+ * TTL-gated steal for crashed holders. Null = unacquired; the
+ * caller fails closed (no key, no POST).
  */
 export const PENDING_VTU_MINT_LOCK_TTL_MS = 1000;
 export const PENDING_VTU_MINT_LOCK_WAIT_MS = 250;
+const PENDING_VTU_MINT_LOCK_POLL_MS = 10;
 
-function spinWaitMs(ms: number): number {
-  const end = Date.now() + ms;
-  let now = Date.now();
-  while (now < end) {
-    now = Date.now();
-  }
-  return now;
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function acquirePendingVtuMintLock(
+export async function acquirePendingVtuMintLock(
   now: number = Date.now()
-): string | null {
+): Promise<string | null> {
   if (typeof localStorage === 'undefined') {
     return `ssr-${now}`;
   }
@@ -148,7 +146,8 @@ export function acquirePendingVtuMintLock(
         return token;
       }
     }
-    at = spinWaitMs(1);
+    await sleepMs(PENDING_VTU_MINT_LOCK_POLL_MS);
+    at = Date.now();
   }
   return null;
 }

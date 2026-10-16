@@ -531,14 +531,14 @@ describe('keyed tombstones (6rrMIj)', () => {
   });
 
   it('serializes mint acquisition: a second contender waits out the budget (Codex R148 P1)', async () => {
-    const first = acquirePendingVtuMintLock();
+    const first = await acquirePendingVtuMintLock();
     if (!first) {
       throw new Error('first acquire must succeed on an empty lock');
     }
     // Tab B spins the ~250ms budget, then fails closed (null).
-    expect(acquirePendingVtuMintLock()).toBeNull();
+    expect(await acquirePendingVtuMintLock()).toBeNull();
     releasePendingVtuMintLock(first);
-    const second = acquirePendingVtuMintLock();
+    const second = await acquirePendingVtuMintLock();
     if (!second) {
       throw new Error('acquire must succeed after release');
     }
@@ -551,7 +551,7 @@ describe('keyed tombstones (6rrMIj)', () => {
       'crashed-holder',
       Date.now() - PENDING_VTU_MINT_LOCK_TTL_MS - 50
     );
-    const token = acquirePendingVtuMintLock();
+    const token = await acquirePendingVtuMintLock();
     if (!token) {
       throw new Error('expired lock must be stealable');
     }
@@ -559,7 +559,7 @@ describe('keyed tombstones (6rrMIj)', () => {
   });
 
   it('releases only the holding token (Codex R148 P1)', async () => {
-    const token = acquirePendingVtuMintLock();
+    const token = await acquirePendingVtuMintLock();
     if (!token) {
       throw new Error('acquire must succeed on an empty lock');
     }
@@ -667,5 +667,20 @@ describe('keyed tombstones (6rrMIj)', () => {
       })
     ).rejects.toThrow('undurable');
     expect(loadPendingVtuMintLock()).toBeNull();
+  }, 10000);
+
+  it('yields the event loop while waiting on a held mint (Muse R151 M1)', async () => {
+    // A busy-spin would block the main thread for the full ~250ms
+    // budget: the 10ms timer could only fire after acquisition
+    // settles. Timer-polled waits yield, so the timer wins.
+    savePendingVtuMintLock('tab-a', Date.now());
+    const order: string[] = [];
+    setTimeout(() => {
+      order.push('timer');
+    }, 10);
+    await expect(acquirePendingVtuMintLock()).resolves.toBeNull();
+    order.push('acquired');
+    expect(order).toEqual(['timer', 'acquired']);
+    clearPendingVtuMintLock();
   }, 10000);
 });

@@ -234,7 +234,9 @@ function getNavigatorLocks(): VtuNavigatorLocks | undefined {
   return (navigator as Navigator & { locks?: VtuNavigatorLocks }).locks;
 }
 
-export function runPendingVtuMintLocked<T>(fn: () => T): Promise<T | null> {
+export async function runPendingVtuMintLocked<T>(
+  fn: () => T
+): Promise<T | null> {
   const locks = getNavigatorLocks();
   if (locks) {
     // Deferred, not returned directly: some LockManager
@@ -246,7 +248,7 @@ export function runPendingVtuMintLocked<T>(fn: () => T): Promise<T | null> {
       locks.request(PENDING_VTU_MINT_LOCK_NAME, () => fn())
     );
   }
-  const token = acquirePendingVtuMintLock();
+  const token = await acquirePendingVtuMintLock();
   if (!token) {
     return Promise.resolve(null);
   }

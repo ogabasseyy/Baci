@@ -40,6 +40,27 @@ describe('vtuWalletOnlyChargeSchema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('rejects fractional and over-max walletAmount (Muse R151 L1)', () => {
+    // Both first-party UIs only ever produce whole naira; sub-naira
+    // precision must never reach the wallet-debit RPC.
+    for (const walletAmount of [100.5, 999.999, 500001]) {
+      const result = vtuWalletOnlyChargeSchema.safeParse({
+        ...baseAirtime,
+        walletAmount,
+      });
+      expect(result.success).toBe(false);
+    }
+    // Max boundary still accepted (amount raised: the cross-field
+    // rule requires walletAmount <= amount).
+    expect(
+      vtuWalletOnlyChargeSchema.safeParse({
+        ...baseAirtime,
+        amount: 500000,
+        walletAmount: 500000,
+      }).success
+    ).toBe(true);
+  });
+
   it('rejects walletAmount > amount via the cross-field rule', () => {
     const result = vtuWalletOnlyChargeSchema.safeParse({
       ...baseAirtime,

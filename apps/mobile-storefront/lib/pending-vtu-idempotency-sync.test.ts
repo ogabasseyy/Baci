@@ -138,16 +138,16 @@ describe('pending-vtu-idempotency-sync', () => {
     expect(hasNotedPendingVtuReference(scoped, 'REF-DIRECT')).toBe(true);
   });
 
-  it('serializes mint acquisition: a second contender waits out the budget (Codex R148 P1)', () => {
-    const first = vtuStore.acquirePendingVtuMintLock();
+  it('serializes mint acquisition: a second contender waits out the budget (Codex R148 P1)', async () => {
+    const first = await vtuStore.acquirePendingVtuMintLock();
     expect(typeof first).toBe('string');
     if (!first) {
       throw new Error('first acquire must succeed on an empty lock');
     }
     // Sibling tab spins the ~250ms budget, then fails closed (null).
-    expect(vtuStore.acquirePendingVtuMintLock()).toBeNull();
+    expect(await vtuStore.acquirePendingVtuMintLock()).toBeNull();
     vtuStore.releasePendingVtuMintLock(first);
-    const second = vtuStore.acquirePendingVtuMintLock();
+    const second = await vtuStore.acquirePendingVtuMintLock();
     if (!second) {
       throw new Error('acquire must succeed after release');
     }
@@ -155,20 +155,20 @@ describe('pending-vtu-idempotency-sync', () => {
     vtuStore.releasePendingVtuMintLock(second);
   }, 10000);
 
-  it('steals an expired lock immediately (Codex R148 P1)', () => {
+  it('steals an expired lock immediately (Codex R148 P1)', async () => {
     vtuStore.savePendingVtuMintLock(
       'crashed-holder',
       Date.now() - vtuStore.PENDING_VTU_MINT_LOCK_TTL_MS - 50
     );
-    const token = vtuStore.acquirePendingVtuMintLock();
+    const token = await vtuStore.acquirePendingVtuMintLock();
     if (!token) {
       throw new Error('expired lock must be stealable');
     }
     vtuStore.releasePendingVtuMintLock(token);
   });
 
-  it('releases only the holding token (Codex R148 P1)', () => {
-    const token = vtuStore.acquirePendingVtuMintLock();
+  it('releases only the holding token (Codex R148 P1)', async () => {
+    const token = await vtuStore.acquirePendingVtuMintLock();
     if (!token) {
       throw new Error('acquire must succeed on an empty lock');
     }
@@ -264,5 +264,20 @@ describe('pending-vtu-idempotency-sync', () => {
     } finally {
       g.navigator = priorNavigator;
     }
+  }, 10000);
+
+  it('yields the event loop while waiting on a held mint (Muse R151 M1, web mirror)', async () => {
+    // A busy-spin would block the JS thread for the full ~250ms
+    // budget: the 10ms timer could only fire after acquisition
+    // settles. Timer-polled waits yield, so the timer wins.
+    vtuStore.savePendingVtuMintLock('tab-a', Date.now());
+    const order: string[] = [];
+    setTimeout(() => {
+      order.push('timer');
+    }, 10);
+    await expect(vtuStore.acquirePendingVtuMintLock()).resolves.toBeNull();
+    order.push('acquired');
+    expect(order).toEqual(['timer', 'acquired']);
+    vtuStore.clearPendingVtuMintLock();
   }, 10000);
 });

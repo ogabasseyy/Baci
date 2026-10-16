@@ -18,8 +18,15 @@ import { applyPurchaseRequirements, purchaseSchemaBase } from './vtu';
  */
 export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
   .extend({
+    // Whole naira only (Muse R151 L1): fractional amounts would pass
+    // straight into the wallet-debit RPC while both first-party UIs
+    // only ever produce integers. The route's walletAmount === amount
+    // rule transitively forces amount integral too. Max mirrors the
+    // base amount bound.
     walletAmount: z
       .number()
+      .int()
+      .max(500000)
       .positive('walletAmount is required for wallet-only checkout'),
     // Auth user id the client captured before dispatch. The route
     // rejects a mismatch before any DB operation: a mid-flight sign-in

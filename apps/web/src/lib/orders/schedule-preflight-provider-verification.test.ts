@@ -128,7 +128,10 @@ describe('schedulePreflightProviderVerification', () => {
   });
 
   it('passes paired provider refunds through on success', async () => {
-    vi.mocked(checkCancellationRefundProvider).mockResolvedValue([{ kobo: 100, providerRefundId: 7 }, { kobo: 100, providerRefundId: 8 }]);
+    vi.mocked(checkCancellationRefundProvider).mockResolvedValue([
+      { kobo: 100, providerRefundId: 7 },
+      { kobo: 100, providerRefundId: 8 },
+    ]);
     const result = await schedulePreflightProviderVerification(input({}));
     expect(result).toEqual({
       verified: true,

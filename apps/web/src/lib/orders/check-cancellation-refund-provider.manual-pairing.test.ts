@@ -149,7 +149,10 @@ describe('checkCancellationRefundProvider manual pairing', () => {
           manual('merchant-ref-2', 1),
         ],
       })
-    ).resolves.toEqual([{ kobo: 100, providerRefundId: 7 }, { kobo: 100, providerRefundId: 8 }]);
+    ).resolves.toEqual([
+      { kobo: 100, providerRefundId: 7 },
+      { kobo: 100, providerRefundId: 8 },
+    ]);
     // A combined manual cannot cover two smaller provider rows.
     vi.mocked(listPaystackRefunds).mockResolvedValue([
       { id: 7, amount: 60, currency: 'NGN', status: 'processed' },

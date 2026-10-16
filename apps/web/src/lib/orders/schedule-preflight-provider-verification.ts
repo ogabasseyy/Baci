@@ -62,7 +62,10 @@ export async function schedulePreflightProviderVerification({
   reserveInitiation?: boolean;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transaction: GatewayPaymentTransaction & { gateway_reference: string };
-}): Promise<{ verified: boolean; pairedProviderRefunds: PairedProviderRefund[] }> {
+}): Promise<{
+  verified: boolean;
+  pairedProviderRefunds: PairedProviderRefund[];
+}> {
   // Reserve this verification plus one initiation leg before
   // starting another provider check: initiation paces itself per
   // leg, so one leg of room guarantees this run converts its

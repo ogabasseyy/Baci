@@ -57,17 +57,25 @@ export async function findPaystackRefundRowsByProviderId<
       if (cursor === null) return;
     }
   };
-  await scan('%paystack%', {
-    column: 'gateway_reference',
-    value: String(refundId),
-  }, 'PAYSTACK');
+  await scan(
+    '%paystack%',
+    {
+      column: 'gateway_reference',
+      value: String(refundId),
+    },
+    'PAYSTACK'
+  );
   if (matches.length < MAX_PROVIDER_REFUND_MATCHES) {
     // `->>` extracts the stored id as text whether the stamp wrote
     // a number or a string, mirroring the sweep's numeric predicate.
-    await scan('%manual%', {
-      column: 'metadata->>provider_refund_id',
-      value: String(refundId),
-    }, 'MANUAL');
+    await scan(
+      '%manual%',
+      {
+        column: 'metadata->>provider_refund_id',
+        value: String(refundId),
+      },
+      'MANUAL'
+    );
   }
   return matches;
 }

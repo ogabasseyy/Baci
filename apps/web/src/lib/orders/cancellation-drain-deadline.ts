@@ -98,12 +98,10 @@ const SIDE_EFFECT_PHASE_END_MS =
 
 /**
  * Absolute epoch-ms cutoff for refund verification for work started
- * at `startedAtMs`: the full phase end. After a full 60s reconcile
- * only ~30s remain before the 90s row-start deadline, so provider
- * preflight (76s) would defer on every backlog invocation; the
- * reconcile phase is capped (see below) whenever verification work
- * pends, and admitted refund steps verify against this later
- * cutoff. Row starts still gate on `cancellationDrainDeadlineMs`.
+ * at `startedAtMs`: the full phase end. The reconcile phase is
+ * capped (see below) whenever verification work pends, and
+ * admitted refund steps verify against this later cutoff. Row
+ * starts still gate on `cancellationDrainDeadlineMs`.
  */
 export function cancellationRefundDrainDeadlineMs(startedAtMs: number): number {
   return startedAtMs + SIDE_EFFECT_PHASE_END_MS;
@@ -120,8 +118,10 @@ export const CANCELLATION_REFUND_SETUP_ALLOWANCE_MS = 12_000;
 
 // Capped reconcile phase when refund verification pends: ends the
 // phase with the setup allowance plus the preflight budget
-// remaining before the phase end, so the first refund rows verify
-// instead of deferring on every backlog invocation. Shared with
+// remaining before the phase end, so manual legs (38s admission,
+// persisting stamps) verify instead of deferring on every backlog
+// invocation. Provider legs (76s admission) defer free under
+// backlog and proceed once it clears. Shared with
 // reconcile-worker-deadline ROW_START_SLACK_MS (row starts stop
 // that interval before this) and REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
 // (single-sourced above): keep the invariant test in lockstep.

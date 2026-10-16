@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { checkCancellationRefundProvider } from '@/lib/orders/check-cancellation-refund-provider';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
+import { REFUND_INITIATION_LEG_BUDGET_MS } from '@/lib/orders/initiate-paystack-cancellation-refunds';
 import type { CancellationOrder } from '@/lib/orders/order-cancellation-side-effect-types';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import { DeferredError } from '@/lib/orders/run-order-cancellation-side-effect';
@@ -13,19 +14,21 @@ import type { CancellationRefundLedgerRow } from './preflight-cancellation-refun
 const PREFLIGHT_PROVIDER_CALL_WORST_MS = 30_000;
 const PREFLIGHT_FINISH_WRITE_RESERVE_MS = 8_000;
 // Worst-case budget a refund verification needs before it may start:
-// the provider check plus the finish-write reserve. Initiation
-// self-gates per leg (it defers when its own call plus audit
-// reserve will not fit), so demanding an initiation leg here too
-// would idle every window between 38s and 76s even though a
-// verification plus a fast initiation fits them in practice —
-// under a 90s drain with reconciliation backlog, the first
-// verification would never start. Worst-case windows still verify
-// one leg, stamp manual proof, and defer the rest, so progress
-// persists instead of starving. Single source: the admission below
-// and the runner's post-claim execution gate (see
-// run-order-cancellation-side-effect) share it, so they cannot
-// drift apart. (The drain deliberately does NOT pre-skip refunds:
-// the claim itself finalizes cheap rows without a worker run.)
+// the provider check plus the finish-write reserve. Provider legs
+// additionally reserve one initiation leg (38s): provider
+// verification persists nothing in memory, so a run that verifies
+// and then finds initiation short burns an attempt for zero
+// progress: slow provider responses plus short windows would push
+// every leg to the human-review backstop. Manual legs skip the
+// initiation reserve:
+// their stamp persists, so a verify-only window still converges.
+// Windows between 38s and 76s defer provider legs (free: the reset
+// below keeps the resume on a fresh budget) while manual legs
+// still verify. Single source: the admission below and the
+// capped-reconcile phase (see cancellation-drain-deadline) share
+// the base budget, so they cannot drift apart. (The drain
+// deliberately does NOT pre-skip refunds: the claim itself
+// finalizes cheap rows without a worker run.)
 export const REFUND_PREFLIGHT_ADMISSION_BUDGET_MS =
   PREFLIGHT_PROVIDER_CALL_WORST_MS + PREFLIGHT_FINISH_WRITE_RESERVE_MS;
 
@@ -42,6 +45,7 @@ export async function schedulePreflightProviderVerification({
   linkedPaymentId,
   order,
   refundRows,
+  reserveInitiation = false,
   supabase,
   transaction,
 }: {
@@ -50,6 +54,7 @@ export async function schedulePreflightProviderVerification({
   linkedPaymentId: (row: { metadata: unknown }) => string | null;
   order: CancellationOrder;
   refundRows: CancellationRefundLedgerRow[];
+  reserveInitiation?: boolean;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
   transaction: GatewayPaymentTransaction & { gateway_reference: string };
 }): Promise<boolean> {
@@ -58,11 +63,13 @@ export async function schedulePreflightProviderVerification({
   // leg, so one leg of room guarantees this run converts its
   // verified prefix into initiated refunds. Reserving the whole
   // outstanding set instead starves multi-leg orders behind every
-  // window shorter than the full worst case.
-  if (
-    deadlineMs !== undefined &&
-    deadlineMs - Date.now() < REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
-  ) {
+  // window shorter than the full worst case. Manual legs pass
+  // reserveInitiation=false: their stamp persists, so they converge
+  // without initiating in the same run.
+  const admissionBudgetMs =
+    REFUND_PREFLIGHT_ADMISSION_BUDGET_MS +
+    (reserveInitiation ? REFUND_INITIATION_LEG_BUDGET_MS : 0);
+  if (deadlineMs !== undefined && deadlineMs - Date.now() < admissionBudgetMs) {
     if (hasVerifiedPrefix) {
       return false;
     }

@@ -18,6 +18,8 @@ SET search_path = ''
 AS $$
 DECLARE
   v_order record;
+  v_total_returned numeric;
+  v_paid numeric;
 BEGIN
   IF (SELECT auth.role()) IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'service_role_required' USING ERRCODE = '42501';
@@ -26,7 +28,7 @@ BEGIN
     RAISE EXCEPTION 'invalid_cancellation_side_effect';
   END IF;
 
-  SELECT o.merchant_id, o.currency
+  SELECT o.merchant_id, o.currency, o.amount_paid
     INTO v_order
     FROM public.orders o
    WHERE o.id = p_order_id
@@ -115,24 +117,91 @@ BEGIN
   IF p_step = 'refund' AND private.cancellation_refund_legs_covered_v1(
     p_order_id, v_order.merchant_id, v_order.currency
   ) THEN
-    -- Every funded leg has terminal refund evidence, but the last leg may
-    -- have landed through a silent self-terminal refund no worker
-    -- observes: run the aggregate finalization (order transition,
-    -- settlement reversal, notifications, review close) before
-    -- completing the row, or the order stays paid permanently.
-    PERFORM public.finalize_refunded_cancellation_order_v1(
-      p_order_id, v_order.merchant_id, NULL
-    );
-    INSERT INTO public.order_cancellation_side_effects AS side_effect (
-      order_id, merchant_id, step, status, claim_token, completed_at, attempts
-    ) VALUES (
-      p_order_id, v_order.merchant_id, p_step, 'completed',
-      p_claim_token, now(), 0
-    )
-    ON CONFLICT (order_id, step) DO UPDATE SET
-      status = 'completed',
-      completed_at = COALESCE(side_effect.completed_at, now()),
-      error = NULL;
+    -- Per-leg coverage is not total coverage: on a legacy or
+    -- drifted order the funded rows can sum to less than
+    -- amount_paid, and finalizing then would mark the order
+    -- refunded while the manager still reports an outstanding
+    -- balance no leg can accept. Total returned money mirrors
+    -- the manager: per-leg-capped terminal coverage, self-terminal
+    -- external legs, and internal money (the greater of funded
+    -- wallet/savings face — pending reversal is trusted to the
+    -- reversal ledger — and already-reversed sums, so each kobo
+    -- counts once however the sync labels its leg).
+    v_paid := COALESCE(v_order.amount_paid, 0);
+    SELECT private.capped_refund_coverage_v1(
+        p_order_id, v_order.merchant_id, v_order.currency)
+      + COALESCE((SELECT SUM(amount) FROM public.transactions
+         WHERE order_id = p_order_id
+           AND merchant_id = v_order.merchant_id
+           AND transaction_type = 'payment' AND status = 'refunded'
+           AND amount > 0
+           AND UPPER(BTRIM(currency)) = UPPER(BTRIM(v_order.currency))
+           AND COALESCE(public.normalized_gateway_name_v1(gateway), '')
+             NOT IN ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH',
+               'MANUAL', 'PAY_ON_DELIVERY')), 0)
+      + GREATEST(
+          COALESCE((SELECT SUM(amount) FROM public.transactions
+             WHERE order_id = p_order_id
+               AND merchant_id = v_order.merchant_id
+               AND transaction_type = 'payment'
+               AND status IN ('completed', 'refund_pending')
+               AND amount > 0
+               AND UPPER(BTRIM(currency)) = UPPER(BTRIM(v_order.currency))
+               AND COALESCE(public.normalized_gateway_name_v1(gateway), '')
+                 IN ('WALLET', 'SAVINGS')), 0),
+          COALESCE((SELECT SUM(t.amount)
+             FROM public.customer_wallet_transactions t
+            WHERE t.source_id = p_order_id
+              AND t.merchant_id = v_order.merchant_id
+              AND t.source_type = 'order_reversal'), 0)
+          + COALESCE((SELECT SUM(r.amount)
+             FROM public.customer_savings_redemptions r
+            WHERE r.order_id = p_order_id
+              AND r.merchant_id = v_order.merchant_id
+              AND r.metadata ? 'reversed_at'), 0))
+      INTO v_total_returned;
+    IF v_total_returned >= v_paid THEN
+      -- Every funded leg has terminal refund evidence, but the last leg may
+      -- have landed through a silent self-terminal refund no worker
+      -- observes: run the aggregate finalization (order transition,
+      -- settlement reversal, notifications, review close) before
+      -- completing the row, or the order stays paid permanently.
+      PERFORM public.finalize_refunded_cancellation_order_v1(
+        p_order_id, v_order.merchant_id, NULL
+      );
+      INSERT INTO public.order_cancellation_side_effects AS side_effect (
+        order_id, merchant_id, step, status, claim_token, completed_at, attempts
+      ) VALUES (
+        p_order_id, v_order.merchant_id, p_step, 'completed',
+        p_claim_token, now(), 0
+      )
+      ON CONFLICT (order_id, step) DO UPDATE SET
+        status = 'completed',
+        completed_at = COALESCE(side_effect.completed_at, now()),
+        error = NULL;
+    ELSE
+      -- Ledger gap: every leg is covered yet paid-minus-returned
+      -- stays positive with no leg able to accept it. Finalizing
+      -- would contradict the manager's outstanding balance, and
+      -- claiming for the worker would complete the same way with
+      -- no actionable legs — so quarantine with the gap evidence
+      -- for review instead. Recording the missing coverage
+      -- re-arms the row through the manual path once the ledger
+      -- is repaired.
+      INSERT INTO public.order_cancellation_side_effects AS side_effect (
+        order_id, merchant_id, step, status, claim_token, error, attempts
+      ) VALUES (
+        p_order_id, v_order.merchant_id, p_step, 'delivery_uncertain',
+        p_claim_token,
+        'Refund ledger gap: returned ' || v_total_returned::text
+          || ' of paid ' || v_paid::text
+          || ' with every leg covered; requires review',
+        0
+      )
+      ON CONFLICT (order_id, step) DO UPDATE SET
+        status = 'delivery_uncertain',
+        error = EXCLUDED.error;
+    END IF;
   ELSE
     INSERT INTO public.order_cancellation_side_effects AS side_effect (
       order_id, merchant_id, step, status, claim_token, attempts

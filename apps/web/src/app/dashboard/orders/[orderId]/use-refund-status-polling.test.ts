@@ -20,11 +20,18 @@ const summary = {
   history: [],
 } as unknown as RefundSummary;
 
-function Harness({ terminal }: { terminal: boolean }) {
+function Harness({
+  hasInitialSummary = false,
+  terminal,
+}: {
+  hasInitialSummary?: boolean;
+  terminal: boolean;
+}) {
   const [current, setCurrent] = useState<RefundSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const revision = useRef(0);
   useRefundStatusPolling({
+    hasInitialSummary,
     onError: setError,
     onSummary: setCurrent,
     orderId: 'order-1',
@@ -75,6 +82,21 @@ describe('useRefundStatusPolling', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(120_000);
     });
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+  });
+  it('skips the mount fetch with a server summary but still polls', async () => {
+    render(
+      React.createElement(Harness, {
+        hasInitialSummary: true,
+        terminal: false,
+      })
+    );
+    await act(async () => {});
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    await act(async () => {});
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
   it('surfaces load errors without polling past them', async () => {

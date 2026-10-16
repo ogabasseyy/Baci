@@ -1,7 +1,8 @@
 -- REGRESSION TEST: aggregate claim completion.
 --
 -- Covers fully manual finalization, partial/uncovered routing,
--- legacy refunded rows, cash-only completion, and notifications.
+-- legacy refunded rows, cash-only completion, ledger-gap
+-- quarantine, and notifications.
 -- Split from order_refund_management.sql per the 300-line boundary;
 -- self-contained fixtures use the 9ef1 namespace and roll back.
 --
@@ -90,6 +91,9 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000016', v_merchant_id, 'REFUND-016',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000019', v_merchant_id, 'REFUND-019',
+      100, 100, 'paid', 'cancelled'),
+    -- Drifted ledger: funded rows sum to 60 against 100 paid.
+    ('9ef11000-0000-4000-8000-000000000025', v_merchant_id, 'REFUND-025',
       100, 100, 'paid', 'cancelled');
 
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
@@ -97,7 +101,8 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000001',
       '9ef11000-0000-4000-8000-000000000002',
       '9ef11000-0000-4000-8000-000000000016',
-      '9ef11000-0000-4000-8000-000000000019');
+      '9ef11000-0000-4000-8000-000000000019',
+      '9ef11000-0000-4000-8000-000000000025');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -123,7 +128,10 @@ BEGIN
         'provider_refund_status', 'processed')),
     ('9ef12000-0000-4000-8000-000000000028', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000019', 'payment', 100, 'NGN',
-      'completed', 'cash', 'cash-19', '{}'::jsonb);
+      'completed', 'cash', 'cash-19', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000030', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000025', 'payment', 60, 'NGN',
+      'completed', 'cash', 'cash-25', '{}'::jsonb);
 
   -- Order 001's side effect sits in its post-manage terminal state:
   -- the record file's successful retry reset attempts to 0, so the
@@ -169,7 +177,14 @@ BEGIN
       'completed', 'manual', 'cashonly-1#1',
       jsonb_build_object(
         'payment_transaction_id', '9ef12000-0000-4000-8000-000000000028',
-        'method', 'cash', 'reference', 'cashonly-1'));
+        'method', 'cash', 'reference', 'cashonly-1')),
+    ('9ef12000-0000-4000-8000-000000000031',
+      '9ef10100-0000-4000-8000-000000000001',
+      '9ef11000-0000-4000-8000-000000000025', 'refund', 60, 'NGN',
+      'completed', 'manual', 'drifted-1#1',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000030',
+        'method', 'cash', 'reference', 'drifted-1'));
 END;
 $fixtures$;
 
@@ -224,6 +239,35 @@ BEGIN
     '9ef13000-0000-4000-8000-000000000019');
   IF v_status <> 'completed' THEN
     RAISE EXCEPTION 'cash-only coverage did not finalize, got %', v_status;
+  END IF;
+  -- A drifted ledger (legs sum below amount_paid) with full
+  -- per-leg coverage quarantines the gap instead of finalizing:
+  -- the manager still reports the paid-minus-returned balance
+  -- outstanding with no leg able to accept it.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000025', 'refund',
+    '9ef13000-0000-4000-8000-000000000025');
+  IF v_status <> 'delivery_uncertain' THEN
+    RAISE EXCEPTION 'ledger gap did not quarantine, got %', v_status;
+  END IF;
+  IF v_won THEN
+    RAISE EXCEPTION 'ledger-gap claim won the row it quarantined';
+  END IF;
+  SELECT error INTO v_label FROM public.order_cancellation_side_effects
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000025'
+     AND step = 'refund';
+  IF v_label IS NULL OR v_label NOT LIKE 'Refund ledger gap%' THEN
+    RAISE EXCEPTION 'ledger-gap quarantine lacks gap evidence: %', v_label;
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+   WHERE id = '9ef11000-0000-4000-8000-000000000025';
+  IF v_label = 'refunded' THEN
+    RAISE EXCEPTION 'ledger-gap order finalized despite the gap';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.paystack_cancellation_refund_notifications
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000025') THEN
+    RAISE EXCEPTION 'ledger-gap finalization sent notifications';
   END IF;
   -- The aggregate claim completed the fully manual order; the
   -- self-terminal PayPal leg flipped its label on landing.

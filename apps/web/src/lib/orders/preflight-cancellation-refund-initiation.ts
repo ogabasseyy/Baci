@@ -177,7 +177,8 @@ export async function preflightCancellationRefundInitiation({
   const hasVerifiedPrefix = () =>
     verifiedPaystackLegIds.size > 0 || verifiedManualPaystackLegIds.length > 0;
   const verifyLeg = async (
-    transaction: GatewayPaymentTransaction & { gateway_reference: string }
+    transaction: GatewayPaymentTransaction & { gateway_reference: string },
+    reserveInitiation: boolean
   ): Promise<boolean> => {
     const verified = await schedulePreflightProviderVerification({
       deadlineMs,
@@ -185,14 +186,17 @@ export async function preflightCancellationRefundInitiation({
       linkedPaymentId,
       order,
       refundRows: refundRows ?? [],
+      reserveInitiation,
       supabase,
       transaction,
     });
     if (!verified) budgetShortfall = true;
     return verified;
   };
+  // Provider legs initiate in this run, so their verification
+  // reserves an initiation leg; manual legs only stamp proof.
   for (const transaction of paystackLegs) {
-    if (!(await verifyLeg(transaction))) break;
+    if (!(await verifyLeg(transaction, true))) break;
     verifiedPaystackLegIds.add(transaction.id);
   }
   // A verified manual claim persists its proof before the caller
@@ -204,7 +208,7 @@ export async function preflightCancellationRefundInitiation({
   // quarantines) their unverified claims next run.
   const budgetSkippedManualLegIds: string[] = [];
   for (const [manualIndex, transaction] of manualVerifyLegs.entries()) {
-    if (!(await verifyLeg(transaction))) {
+    if (!(await verifyLeg(transaction, false))) {
       budgetSkippedManualLegIds.push(
         ...manualVerifyLegs.slice(manualIndex).map((skipped) => skipped.id)
       );

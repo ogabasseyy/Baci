@@ -89,6 +89,7 @@ export function OrderRefundPanel({
   const terminal =
     summary?.status === 'refunded' || summary?.status === 'requires_review';
   useRefundStatusPolling({
+    hasInitialSummary: initialSummary !== undefined,
     onError: setError,
     onSummary: setSummary,
     orderId,

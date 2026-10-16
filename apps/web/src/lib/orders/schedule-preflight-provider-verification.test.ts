@@ -56,16 +56,48 @@ describe('schedulePreflightProviderVerification', () => {
     );
   });
 
-  // A 40s remaining window verifies instead of deferring: initiation
-  // self-gates per leg, so admission must not demand a 76s worst
-  // case that starves verification under backlog.
-  it('admits verification in a window shorter than verify-plus-initiation', async () => {
+  // A 40s window admits manual-leg verification (the stamp
+  // persists) but defers provider legs: without the initiation
+  // reserve the run would verify and then refuse to initiate,
+  // burning an attempt for zero in-memory progress.
+  it('admits manual verification in a window shorter than verify-plus-initiation', async () => {
     const start = 1_000_000_000_000;
     vi.spyOn(Date, 'now').mockReturnValue(start);
     try {
       await expect(
         schedulePreflightProviderVerification(
           input({ deadlineMs: start + 40_000 })
+        )
+      ).resolves.toBe(true);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('defers provider legs without room for verification plus initiation', async () => {
+    const start = 1_000_000_000_000;
+    vi.spyOn(Date, 'now').mockReturnValue(start);
+    let error: unknown;
+    try {
+      error = await schedulePreflightProviderVerification(
+        input({ deadlineMs: start + 40_000, reserveInitiation: true })
+      ).catch((reason: unknown) => reason);
+    } finally {
+      vi.restoreAllMocks();
+    }
+    expect(error).toBeInstanceOf(DeferredError);
+    expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
+    expect(tryResetCancellationSideEffectAttempts).toHaveBeenCalled();
+  });
+
+  it('admits provider legs with room for verification plus initiation', async () => {
+    const start = 1_000_000_000_000;
+    vi.spyOn(Date, 'now').mockReturnValue(start);
+    try {
+      await expect(
+        schedulePreflightProviderVerification(
+          input({ deadlineMs: start + 80_000, reserveInitiation: true })
         )
       ).resolves.toBe(true);
     } finally {

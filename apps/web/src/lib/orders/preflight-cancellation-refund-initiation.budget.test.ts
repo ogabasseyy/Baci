@@ -43,14 +43,29 @@ describe('preflightCancellationRefundInitiation budget deferral', () => {
     expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledWith({ attempts: 0 });
   });
-  it('verifies in a window that fits verification but not a full initiation leg', async () => {
-    // 60s covers the 38s verification admission but not a 76s
-    // verify-plus-initiate worst case: initiation self-gates per
-    // leg, so the run must verify now (persistent progress under
-    // backlog) instead of deferring before doing anything.
-    const result = await preflightCancellationRefundInitiation(
+  it('defers provider legs in a window that fits verification but not initiation', async () => {
+    // 60s covers the 38s verification admission but not the 76s
+    // verify-plus-initiate admission: provider verification
+    // persists nothing, so verifying now would burn an attempt and
+    // then refuse to initiate. Defer free instead.
+    const update = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnThis(),
+    });
+    const from = vi.fn().mockReturnValue({ update });
+    const error = await preflightCancellationRefundInitiation(
       preflightInput({
         deadlineMs: Date.now() + 60_000,
+        supabase: { from } as never,
+      })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeferredError);
+    expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
+    expect(update).toHaveBeenCalledWith({ attempts: 0 });
+  });
+  it('verifies provider legs in a window that fits verification plus initiation', async () => {
+    const result = await preflightCancellationRefundInitiation(
+      preflightInput({
+        deadlineMs: Date.now() + 80_000,
       })
     );
     expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(1);
@@ -106,18 +121,19 @@ describe('preflightCancellationRefundInitiation budget deferral', () => {
   it('names skipped manual legs so settle defers instead of quarantining them', async () => {
     // A slow ordinary verification consumes the window before the
     // manual claim verifies: the skipped leg must resume next run,
-    // never quarantine as mismatched this run. 40s consumed of a
-    // 70s window leaves 30s, under the 38s verification admission.
+    // never quarantine as mismatched this run. 60s consumed of a
+    // 90s window leaves 30s, under the 38s manual verification
+    // admission (the provider leg admitted at 90s >= 76s).
     const start = 1_000_000_000_000;
     let nowCalls = 0;
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => {
       nowCalls += 1;
-      return nowCalls <= 2 ? start : start + 40_000;
+      return nowCalls <= 2 ? start : start + 60_000;
     });
     try {
       const result = await preflightCancellationRefundInitiation(
         preflightInput({
-          deadlineMs: start + 70_000,
+          deadlineMs: start + 90_000,
           manualLinkedLegIds: new Set(['payment-2']),
           mismatchedIds: new Set(['payment-2']),
           refundRows: [
@@ -179,21 +195,22 @@ describe('preflightCancellationRefundInitiation budget deferral', () => {
     expect(checkCancellationRefundProvider).toHaveBeenCalledTimes(2);
   });
   it('returns the verified prefix when the window runs short mid-run', async () => {
-    // Four legs under a 70s workflow window: the first
-    // verification fits, the second does not (40s consumed leaves
-    // 30s, under the 38s admission). The run must initiate its
-    // verified prefix and resume the rest — never discard verified
-    // work by deferring before doing anything on every invocation.
+    // Four legs under a 90s workflow window: the first
+    // verification fits (90s clears the 76s provider admission),
+    // the second does not (60s consumed leaves 30s). The run must
+    // initiate its verified prefix and resume the rest — never
+    // discard verified work by deferring before doing anything on
+    // every invocation.
     const start = 1_000_000_000_000;
     let nowCalls = 0;
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => {
       nowCalls += 1;
-      return nowCalls <= 2 ? start : start + 40_000;
+      return nowCalls <= 2 ? start : start + 60_000;
     });
     try {
       const result = await preflightCancellationRefundInitiation(
         preflightInput({
-          deadlineMs: start + 70_000,
+          deadlineMs: start + 90_000,
           order: { ...baseOrder, amount_paid: 400 } as never,
           transactions: fourPaystackLegs() as never,
         })

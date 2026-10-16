@@ -87,7 +87,20 @@ interface IdempotencyRowState {
 
 function buildSupabase(
   state: IdempotencyRowState,
-  options?: { requestingCustomerId?: string }
+  options?: {
+    requestingCustomerId?: string;
+    /**
+     * Replay owner binding row (Muse R119). Undefined = derive a
+     * matching row from the live idempotency state; null = the
+     * transaction row is missing; object = as given (mismatch).
+     */
+    transactionBinding?: {
+      customer_id: string | null;
+      id: string;
+      merchant_id: string | null;
+      status: string | null;
+    } | null;
+  }
 ): MockSupabase {
   // The route resolves the requesting customer before validating
   // ownership of an existing idempotency row. Default the lookup to the
@@ -140,6 +153,35 @@ function buildSupabase(
               eq: vi.fn(() => ({
                 maybeSingle: byUserIdMaybeSingle,
               })),
+            })),
+          })),
+        };
+      }
+      if (table === 'vtu_transactions') {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn().mockImplementation(() => {
+                // Lazily derived: the fresh path inserts the key row
+                // after this mock is built.
+                const binding =
+                  options?.transactionBinding !== undefined
+                    ? options.transactionBinding
+                    : state.row
+                      ? {
+                          id: state.row.vtu_transaction_id,
+                          customer_id: state.row.customer_id,
+                          merchant_id: state.row.merchant_id,
+                          status: 'processing',
+                        }
+                      : {
+                          id: 'vtu-tx-new',
+                          customer_id: 'customer-1',
+                          merchant_id: 'merchant-1',
+                          status: 'processing',
+                        };
+                return Promise.resolve({ data: binding, error: null });
+              }),
             })),
           })),
         };
@@ -898,16 +940,30 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
                 })),
               })),
             })),
-            select: vi.fn(() => ({
+            select: vi.fn((columns?: string) => ({
               eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: {
-                    id: 'vtu-tx-mine',
-                    metadata: { provider: 'kuda' },
-                    status: 'pending',
-                  },
-                  error: null,
-                }),
+                maybeSingle: vi.fn().mockResolvedValue(
+                  columns === 'id, customer_id, merchant_id, status'
+                    ? // Replay owner binding (Muse R119): the winner's
+                      // row belongs to the key owner.
+                      {
+                        data: {
+                          id: 'vtu-tx-winner',
+                          customer_id: 'customer-1',
+                          merchant_id: 'merchant-1',
+                          status: 'processing',
+                        },
+                        error: null,
+                      }
+                    : {
+                        data: {
+                          id: 'vtu-tx-mine',
+                          metadata: { provider: 'kuda' },
+                          status: 'pending',
+                        },
+                        error: null,
+                      }
+                ),
               })),
             })),
             update: vi.fn((payload: Record<string, unknown>) => {
@@ -1093,6 +1149,70 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(status).toBe(400);
     expect(body).toMatchObject({
       error: expect.stringMatching(/storefront/i),
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
+  it('replay binding: transaction row owned by another customer rejects with 400, no fulfill', async () => {
+    // Muse R119 MEDIUM: the key-row guards passed, but the
+    // transaction row points at a different customer (orphan
+    // leftover, manual repair). Fulfilling would debit/refund the
+    // wrong customer — bind key↔tx before fulfilling.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+    };
+    supabaseMockRef.current = buildSupabase(state, {
+      transactionBinding: {
+        id: 'vtu-tx-existing',
+        customer_id: 'OTHER-CUSTOMER',
+        merchant_id: 'merchant-1',
+        status: 'processing',
+      },
+    });
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(400);
+    expect(body).toMatchObject({
+      error: expect.stringMatching(/does not belong to this purchase/i),
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
+  it('replay binding: missing transaction row rejects with 400, no fulfill', async () => {
+    // The key survived but its transaction row is gone: terminal
+    // for this key (400 rotates to a fresh purchase), never fulfill
+    // into the void.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+    };
+    supabaseMockRef.current = buildSupabase(state, {
+      transactionBinding: null,
+    });
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(400);
+    expect(body).toMatchObject({
+      error: expect.stringMatching(/no longer exists/i),
     });
     expect(mockFulfill).not.toHaveBeenCalled();
   });

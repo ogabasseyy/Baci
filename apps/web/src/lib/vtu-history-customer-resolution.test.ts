@@ -72,7 +72,11 @@ describe('resolveHistoryMerchantCustomer', () => {
     const result = await resolveHistoryMerchantCustomer({
       merchantSlug: 'ogabassey',
       supabase,
-      user: { email: 'customer@example.com', id: 'user-1' },
+      user: {
+        email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
+        id: 'user-1',
+      },
     });
 
     expect(result).toEqual({
@@ -80,6 +84,29 @@ describe('resolveHistoryMerchantCustomer', () => {
       kind: 'ok',
       merchantId: 'merchant-1',
     });
+  });
+
+  it('never queries the email fallback for an unverified address', async () => {
+    // Muse R119 MEDIUM: the email claim alone proves nothing. The
+    // error slotted for the email lookup proves the query never
+    // runs — a run would surface customerError instead.
+    const { supabase } = buildSupabase([
+      { data: { id: 'merchant-1' }, error: null },
+      { data: null, error: null },
+      { data: null, error: { message: 'must not run' } },
+    ]);
+
+    const result = await resolveHistoryMerchantCustomer({
+      merchantSlug: 'ogabassey',
+      supabase,
+      user: {
+        email: 'customer@example.com',
+        email_confirmed_at: null,
+        id: 'user-1',
+      },
+    });
+
+    expect(result).toEqual({ kind: 'noCustomer' });
   });
 
   it('returns noCustomer for mismatched, unlinked, or email-less callers', async () => {
@@ -100,7 +127,13 @@ describe('resolveHistoryMerchantCustomer', () => {
       const result = await resolveHistoryMerchantCustomer({
         merchantSlug: 'ogabassey',
         supabase,
-        user: { email: 'customer@example.com', id: 'user-1' },
+        // Verified: the fallback runs and the same-user rejection
+        // is genuinely exercised (not vacuously gated).
+        user: {
+          email: 'customer@example.com',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
+          id: 'user-1',
+        },
       });
 
       expect(result).toEqual({ kind: 'noCustomer' });

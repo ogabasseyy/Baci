@@ -56,6 +56,28 @@ async function findExistingIdempotencyRow(
   return data ?? null;
 }
 
+interface ReplayTransactionBinding {
+  customer_id: string | null;
+  id: string;
+  merchant_id: string | null;
+  status: string | null;
+}
+
+async function findReplayTransactionBinding(
+  supabase: SupabaseClient,
+  transactionId: string
+): Promise<ReplayTransactionBinding | null> {
+  const { data, error } = await supabase
+    .from('vtu_transactions')
+    .select('id, customer_id, merchant_id, status')
+    .eq('id', transactionId)
+    .maybeSingle();
+  if (error) {
+    throw new Error(`Failed to look up replay transaction: ${error.message}`);
+  }
+  return (data as ReplayTransactionBinding | null) ?? null;
+}
+
 /**
  * Wallet-only VTU checkout (no gateway; `walletAmount === amount`
  * enforced — partial coverage unsupported, gateways stubbed). Flow:
@@ -138,6 +160,41 @@ export async function POST(request: NextRequest) {
         return createErrorResponse(
           'Idempotency-Key already used with a different request payload. Generate a fresh key for the new purchase.',
           409
+        );
+      }
+      // Owner binding (Muse R119 MEDIUM): the guards above validated
+      // the IDEMPOTENCY row's owner, but fulfillment debits/refunds
+      // from the TRANSACTION row — bind them, or a key↔tx
+      // inconsistency (orphan leftovers, manual repair) would
+      // transact as the wrong customer. 400 rotates the key (fresh
+      // purchase); a missing row is equally terminal for this key.
+      const bound = await findReplayTransactionBinding(
+        supabase,
+        existing.vtu_transaction_id
+      );
+      if (!bound) {
+        return createErrorResponse(
+          'Purchase for this Idempotency-Key no longer exists. Please start a new purchase.',
+          400
+        );
+      }
+      if (
+        bound.customer_id !== existing.customer_id ||
+        bound.merchant_id !== existing.merchant_id
+      ) {
+        // The key itself is the unguessable replay credential — log
+        // the transaction id instead (Muse R108 MEDIUM).
+        console.error('Idempotency-Key transaction owner mismatch:', {
+          keyCustomerId: existing.customer_id,
+          keyMerchantId: existing.merchant_id,
+          status: bound.status,
+          transactionCustomerId: bound.customer_id,
+          transactionId: bound.id,
+          transactionMerchantId: bound.merchant_id,
+        });
+        return createErrorResponse(
+          'Idempotency-Key does not belong to this purchase.',
+          400
         );
       }
       // Current-attempt overlay: the retry carries the freshest
@@ -234,6 +291,35 @@ export async function POST(request: NextRequest) {
           return createErrorResponse(
             'Idempotency-Key already used with a different request payload. Generate a fresh key for the new purchase.',
             409
+          );
+        }
+        // Same owner binding as the replay path: the winner's
+        // transaction row must belong to the key's owner.
+        const racedBound = await findReplayTransactionBinding(
+          supabase,
+          racedExisting.vtu_transaction_id
+        );
+        if (!racedBound) {
+          return createErrorResponse(
+            'Purchase for this Idempotency-Key no longer exists. Please start a new purchase.',
+            400
+          );
+        }
+        if (
+          racedBound.customer_id !== racedExisting.customer_id ||
+          racedBound.merchant_id !== racedExisting.merchant_id
+        ) {
+          console.error('Idempotency-Key transaction owner mismatch:', {
+            keyCustomerId: racedExisting.customer_id,
+            keyMerchantId: racedExisting.merchant_id,
+            status: racedBound.status,
+            transactionCustomerId: racedBound.customer_id,
+            transactionId: racedBound.id,
+            transactionMerchantId: racedBound.merchant_id,
+          });
+          return createErrorResponse(
+            'Idempotency-Key does not belong to this purchase.',
+            400
           );
         }
         // Same current-attempt overlay as the replay path (user

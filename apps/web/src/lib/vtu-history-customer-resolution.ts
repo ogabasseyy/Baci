@@ -28,7 +28,11 @@ export async function resolveHistoryMerchantCustomer({
 }: {
   supabase: SupabaseClient;
   merchantSlug: string;
-  user: { id: string; email?: string | null };
+  user: {
+    id: string;
+    email?: string | null;
+    email_confirmed_at?: string | null;
+  };
 }): Promise<HistoryMerchantCustomerResolution> {
   // Alias-aware (mirrors checkout): a processing tab open across a
   // store rename polls with the stale slug; without the fallback the
@@ -86,7 +90,12 @@ export async function resolveHistoryMerchantCustomer({
     };
   }
 
-  if (user.email) {
+  // The email fallback needs a VERIFIED email (Muse R119 MEDIUM):
+  // the claim alone proves nothing. Same-user acceptance stays as
+  // defense in depth. (Phone-only sessions resolve by user_id
+  // above — their rows are linked at session claim — so gating the
+  // email fallback cannot lock them out.)
+  if (user.email && user.email_confirmed_at) {
     // Keep this GET read-only. VTU checkout resolves and links email-matched
     // customers through resolveVtuCustomer before creating payment rows.
     const { data: customerByEmail, error: customerByEmailError } =

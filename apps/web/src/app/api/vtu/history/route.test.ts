@@ -248,7 +248,13 @@ describe('GET /api/vtu/history', () => {
     vtuTransactionUpdateSelectPromise = null;
     mockCustomerUpdateEq.mockResolvedValue({ data: null, error: null });
     mockAuthenticateApiRequest.mockResolvedValue({
-      user: { id: 'user-1', email: 'customer@example.com' },
+      // Verified session: the history email fallback requires a
+      // confirmed address (Muse R119), mirroring production logins.
+      user: {
+        id: 'user-1',
+        email: 'customer@example.com',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
+      },
       error: null,
       supabase: {},
     });

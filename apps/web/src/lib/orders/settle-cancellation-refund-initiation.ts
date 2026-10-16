@@ -56,6 +56,9 @@ export async function settleCancellationRefundInitiation({
   // claims resume next run, so quarantining them now would
   // permanently strand legitimate claims behind delivery_uncertain.
   const skippedLegIds = new Set(budgetSkippedManualLegIds ?? []);
+  // Order-side currency for the gates below (legs keep strict
+  // matching; see the settled-leg gate).
+  const orderCurrency = normalizeRefundMoneyField(order.currency) || 'NGN';
   const refundIds = await initiatePaystackCancellationRefunds({
     deadlineMs,
     isLastAttempt,
@@ -65,12 +68,20 @@ export async function settleCancellationRefundInitiation({
     supabase,
     transactions: initiationTransactions,
   });
+  // Unresolved mismatched legs, shared by the withheld quarantine
+  // and the settled-leg currency gate below: foreign legs belong to
+  // the currency gate (it names the specific cause after clean
+  // initiation), so the withheld call only takes currency-matching
+  // legs and the generic error cannot shadow it.
+  const pendingMismatched = mismatchedTransactions.filter(
+    (transaction) =>
+      !verifiedLegIds.has(transaction.id) && !skippedLegIds.has(transaction.id)
+  );
   await quarantineWithheldCancellationRefundLegs({
     auditBlockedTransactions,
-    mismatchedTransactions: mismatchedTransactions.filter(
+    mismatchedTransactions: pendingMismatched.filter(
       (transaction) =>
-        !verifiedLegIds.has(transaction.id) &&
-        !skippedLegIds.has(transaction.id)
+        normalizeRefundMoneyField(transaction.currency) === orderCurrency
     ),
     order,
     supabase,
@@ -100,8 +111,10 @@ export async function settleCancellationRefundInitiation({
   // initiation instead of completing silently. Manual and budget
   // deferrals above take precedence: the resumed run reaches this
   // branch once nothing else is outstanding.
-  const orderCurrency = normalizeRefundMoneyField(order.currency) || 'NGN';
-  const foreignSettledLegs = initiationTransactions.filter(
+  const foreignSettledLegs = [
+    ...initiationTransactions,
+    ...pendingMismatched,
+  ].filter(
     (transaction) =>
       refundedPaymentIds.has(transaction.id) &&
       (!normalizeRefundMoneyField(transaction.currency) ||

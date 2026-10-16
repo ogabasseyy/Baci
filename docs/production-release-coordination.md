@@ -115,8 +115,9 @@ node .github/scripts/release-production.mjs --approve-production --approve-prebu
 
 This optional approval reaches the migration job only on a coordinated manual
 dispatch; ordinary main pushes keep the partial-history rejection. Capped passes
-defer every migration write until the existing hook probes complete. The uncapped
-pass installs only the new closed gate before any other pending migration. Its
+defer the gate upgrade while still applying migrations at or below the cap so the
+existing hook probes can complete. The uncapped pass installs only the new closed
+gate before any remaining pending migration. Its
 transaction locks and rechecks the migration identities and empty preview table;
 changed history, an existing gate, or saved previews aborts the repair. Do not
 clear previews or modify orders to make that check pass. Any other partial state

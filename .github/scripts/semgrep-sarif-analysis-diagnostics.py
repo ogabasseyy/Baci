@@ -66,9 +66,14 @@ def validate():
         report = json.loads(pathlib.Path("semgrep.raw.json").read_text())
         if not isinstance(report, dict):
             raise ValueError("invalid report object")
+        results = report.get("results")
         errors = report.get("errors")
         paths = report.get("paths")
-        if not isinstance(errors, list) or not isinstance(paths, dict):
+        if (
+            not isinstance(results, list)
+            or not isinstance(errors, list)
+            or not isinstance(paths, dict)
+        ):
             raise ValueError("missing analysis diagnostics")
         scanned = paths.get("scanned")
         if not isinstance(scanned, list) or not scanned:

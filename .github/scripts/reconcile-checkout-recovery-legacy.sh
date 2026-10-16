@@ -5,10 +5,10 @@ reconcile_checkout_recovery_legacy() {
   local version="${gate%%_*}" name="${gate#*_}"
   local cursor='20261013213516_customer_checkout_shipping_recovery_context'
   local expected='' next guard
-  if [ -n "$migration_max_version" ] && [[ "$migration_max_version" < "$version" ]]; then
-    echo 'Legacy recovery reconciliation deferred by version cap; no migration writes.'
-    # Leave every mutation until the uncapped pass; hook probes still run.
-    exit 0
+  if [ -n "$migration_max_version" ] && LC_ALL=C [ "$version" \> "$migration_max_version" ]; then
+    echo "Legacy recovery reconciliation deferred above MIGRATION_MAX_VERSION $migration_max_version."
+    # Defer only the gate upgrade; capped passes still apply earlier hook restores.
+    return 0
   fi
   while [ "$cursor" != "$gate" ]; do
     expected="${expected}${expected:+,}('${cursor%%_*}','${cursor#*_}')"

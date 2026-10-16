@@ -28,13 +28,14 @@ function validate(report, { empty = false, sarif = true, requested = ['probe.ts'
   }
 }
 
-const complete = { errors: [], paths: { scanned: ['probe.ts'] } };
+const complete = { results: [], errors: [], paths: { scanned: ['probe.ts'] } };
 test('complete zero-error analysis passes and preserves unfiltered SARIF', () => {
   assert.equal(validate(complete).status, 0);
 });
 for (const [name, report] of [
   ['missing', undefined], ['malformed', '{'], ['null', null],
-  ['missing diagnostics', {}], ['no scanned files', { errors: [], paths: { scanned: [] } }],
+  ['missing diagnostics', {}], ['missing results', { errors: [], paths: { scanned: ['probe.ts'] } }],
+  ['non-list results', { ...complete, results: {} }], ['no scanned files', { results: [], errors: [], paths: { scanned: [] } }],
   ['warning parse error', { ...complete, errors: [{ level: 'warn', type: 'PartialParsing', message: 'PRIVATE_SOURCE_SNIPPET' }] }],
   ['internal scanner error', { ...complete, errors: [{ level: 'error', type: 'InternalError' }] }],
 ]) {
@@ -59,9 +60,21 @@ test('all scan modes retain raw diagnostics and enforce warning errors', () => {
   assert.match(workflow, /            semgrep\.analysis-status\.json/);
 });
 
-test('base filter checkout precedes fail-closed diagnostics validation', () => {
+test('base filter checkout precedes fail-closed diagnostics validation and PR target selection runs without tokens', () => {
+  assert.ok(workflow.indexOf('- name: Select targeted Semgrep PR files') < workflow.indexOf('- name: Run targeted Semgrep for security-relevant PR changes'));
+  assert.ok(workflow.indexOf('- name: Run targeted Semgrep for security-relevant PR changes') < workflow.indexOf('- name: Checkout base filter implementation'));
   assert.ok(workflow.indexOf('- name: Checkout base filter implementation') < workflow.indexOf('- name: Verify complete Semgrep analysis'));
   assert.ok(workflow.indexOf('- name: Verify complete Semgrep analysis') < workflow.indexOf('- name: Drop audited checkout finding from SARIF'));
+  const parsedWorkflow = parse(workflow);
+  const steps = parsedWorkflow.jobs.semgrep.steps;
+  const selectorStep = steps.find((step) => step.name === 'Select targeted Semgrep PR files');
+  const validateStep = steps.find((step) => step.name === 'Verify complete Semgrep analysis and preserve raw SARIF');
+  const scanStep = steps.find((step) => step.name === 'Run targeted Semgrep for security-relevant PR changes');
+  assert.deepEqual(Object.keys(selectorStep.env ?? {}), ['PR_BASE_REF']);
+  assert.match(selectorStep.run, /git show "origin\/\$\{PR_BASE_REF\}:\$\{diagnostics_helper\}"/);
+  assert.ok(!('SEMGREP_APP_TOKEN' in (validateStep.env ?? {})) && !('GITHUB_TOKEN' in (validateStep.env ?? {})));
+  assert.match(validateStep.run, /base-filter\/\$\{diagnostics_helper\}/);
+  assert.doesNotMatch(scanStep.run, /semgrep-sarif-analysis-diagnostics\.py/);
 });
 
 test('shell scripts read GitHub context through environment variables', () => {
@@ -90,7 +103,7 @@ test('reported skipped targets fail closed', () => {
   assert.notEqual(validate({ ...complete, paths: { ...complete.paths, skipped: [{ path: 'oversized.ts', reason: 'exceeded_size_limit' }] } }).status, 0);
 });
 test('a complete requested set including whitespace paths passes', () => {
-  assert.equal(validate({ errors: [], paths: { scanned: ['probe.ts', 'space name.ts'] } }, { requested: ['probe.ts', 'space name.ts'] }).status, 0);
+  assert.equal(validate({ results: [], errors: [], paths: { scanned: ['probe.ts', 'space name.ts'] } }, { requested: ['probe.ts', 'space name.ts'] }).status, 0);
 });
 
 test('an unterminated requested-target manifest fails closed', () => {

@@ -151,9 +151,8 @@ jobs:
           # Required to diff against the PR base branch for targeted scans.
           fetch-depth: 0
 
-      - name: Run targeted Semgrep for security-relevant PR changes
+      - name: Fetch PR base ref for targeted Semgrep
         if: github.event_name == 'pull_request'
-        id: semgrep_pr
         shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -171,7 +170,31 @@ jobs:
           GIT_ASKPASS="$fetch_askpass" GIT_TERMINAL_PROMPT=0 \
             git -c credential.helper= fetch --no-tags origin \
             "${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
-          python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py pr-targets "$PR_BASE_REF"
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Select targeted Semgrep PR files
+        if: github.event_name == 'pull_request'
+        id: semgrep_pr_targets
+        shell: bash
+        run: |
+          diagnostics_helper=.github/scripts/semgrep-sarif-analysis-diagnostics.py
+          if git cat-file -e "origin/${PR_BASE_REF}:${diagnostics_helper}" 2>/dev/null; then
+            base_helper_dir="$(mktemp -d)"
+            trap 'rm -rf "$base_helper_dir"' EXIT
+            git show "origin/${PR_BASE_REF}:${diagnostics_helper}" > "${base_helper_dir}/semgrep-sarif-analysis-diagnostics.py"
+            diagnostics_helper="${base_helper_dir}/semgrep-sarif-analysis-diagnostics.py"
+          fi
+          python3 "$diagnostics_helper" pr-targets "$PR_BASE_REF"
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+
+      - name: Run targeted Semgrep for security-relevant PR changes
+        if: github.event_name == 'pull_request'
+        id: semgrep_pr
+        shell: bash
+        run: |
           mapfile -d '' -t changed_files < semgrep.requested-targets
 
           if [ ${#changed_files[@]} -eq 0 ]; then
@@ -186,8 +209,6 @@ jobs:
           # --strict also fails on warning-level analysis errors.
           semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
         env:
-          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-          GITHUB_TOKEN: ${{ github.token }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
@@ -251,7 +272,15 @@ jobs:
         env:
           SCAN_EVENT_NAME: ${{ github.event_name }}
           EMPTY_PR_SCOPE: ${{ github.event_name == 'pull_request' && steps.semgrep_pr.outputs.scanned == 'false' }}
-        run: python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py validate
+        run: |
+          diagnostics_helper=.github/scripts/semgrep-sarif-analysis-diagnostics.py
+          if [ "$SCAN_EVENT_NAME" = "pull_request" ] && [ -f "${GITHUB_WORKSPACE}/base-filter/${diagnostics_helper}" ]; then
+            diagnostics_helper="${GITHUB_WORKSPACE}/base-filter/${diagnostics_helper}"
+          fi
+          python3 "$diagnostics_helper" validate
+          if [ "$EMPTY_PR_SCOPE" != "true" ]; then
+            python3 -c 'import json, pathlib, sys; sys.exit(0 if isinstance(json.loads(pathlib.Path("semgrep.raw.json").read_text()).get("results"), list) else 1)'
+          fi
 
       - name: Preserve unfiltered Semgrep diagnostics
         if: always() && (github.event_name != 'pull_request' || steps.semgrep_pr.outputs.scanned != 'false')

@@ -156,10 +156,15 @@ test('approved legacy reconciliation applies only the closed gate in one transac
   assert.doesNotMatch(result.requests[1].query, /CREATE TABLE private.customer_checkout_shipping_recovery_previews/);
   assert.match(result.requests[1].query, /COMMIT;$/);
 });
-test('approved legacy reconciliation defers all writes under an earlier cap', () => {
+test('approved legacy reconciliation defers the gate under an earlier cap while applying earlier migrations', () => {
   const result = runApplier(completeHistory.slice(0, -1), { reconcile: true, cap: completeHistory.at(-2).version, extraPending: true });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.equal(result.requests.length, 1);
+  assert.equal(result.requests.length, 2);
+  assert.match(result.requests[1].query, /SELECT 42;/);
+  assert.doesNotMatch(result.requests[1].query, /checkout_shipping_recovery_release_activation/);
+  const noExtra = runApplier(completeHistory.slice(0, -1), { reconcile: true, cap: completeHistory.at(-2).version });
+  assert.equal(noExtra.status, 0, noExtra.stdout + noExtra.stderr);
+  assert.equal(noExtra.requests.length, 1);
 });
 test('approved reconciliation installs the gate before an older unrelated pending migration', () => {
   const result = runApplier(completeHistory.slice(0, -1), { reconcile: true, extraPending: true });

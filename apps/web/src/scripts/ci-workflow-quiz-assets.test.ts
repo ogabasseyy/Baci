@@ -192,7 +192,10 @@ describe('CI workflow quiz asset coverage', () => {
   it('keeps root Next config in targeted security scans', () => {
     expect(securityWorkflow).toContain("- 'next.config.ts'");
     expect(securityWorkflow).toContain(
-      'python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py pr-targets'
+      'diagnostics_helper=.github/scripts/semgrep-sarif-analysis-diagnostics.py'
+    );
+    expect(securityWorkflow).toContain(
+      'python3 "$diagnostics_helper" pr-targets "$PR_BASE_REF"'
     );
     expect(securityWorkflow).toMatch(
       /scan_targets=\([\s\S]*?\n\s+next\.config\.ts\n/

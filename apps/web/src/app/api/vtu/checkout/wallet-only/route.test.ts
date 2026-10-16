@@ -83,6 +83,7 @@ interface IdempotencyRowState {
   } | null;
   insertCalls: number;
   rpcCalls?: Array<{ fn: string; args: Record<string, unknown> }>;
+  customerUpdateCalls?: Array<{ values: unknown }>;
 }
 
 function buildSupabase(
@@ -100,6 +101,22 @@ function buildSupabase(
       merchant_id: string | null;
       status: string | null;
     } | null;
+    /**
+     * Replay owner customer row (Muse R128). Default = linked to the
+     * auth user; null = vanished row; user_id null = unlinked guest
+     * the claim step must bind before fulfillment.
+     */
+    customerRow?: {
+      email: string | null;
+      id: string;
+      user_id: string | null;
+    } | null;
+    /**
+     * Link-UPDATE match row (Muse R128). Null = the atomic claim
+     * matched zero rows (lost race); the helper re-reads and fails
+     * closed unless the winner linked to this same user.
+     */
+    linkResult?: { id: string } | null;
   }
 ): MockSupabase {
   // The route resolves the requesting customer before validating
@@ -107,6 +124,18 @@ function buildSupabase(
   // user's "customer-1" id so happy/replay paths pass; tests that
   // exercise the cross-customer collision pass a different value here.
   const requestingCustomerId = options?.requestingCustomerId ?? 'customer-1';
+  const customerRow =
+    options?.customerRow !== undefined
+      ? options.customerRow
+      : {
+          email: 'c@example.com',
+          id: requestingCustomerId,
+          user_id: AUTH_USER_ID,
+        };
+  const linkResult =
+    options?.linkResult !== undefined
+      ? options.linkResult
+      : { id: requestingCustomerId };
   return {
     from: vi.fn((table: string) => {
       if (table === 'vtu_idempotency_keys') {
@@ -143,18 +172,38 @@ function buildSupabase(
         //   (and a fallback by email; the route doesn't exercise that
         //   path under the default test config because the user_id
         //   lookup already returns a row).
-        const byUserIdMaybeSingle = vi.fn().mockResolvedValue({
-          data: { id: requestingCustomerId, email: 'c@example.com' },
+        // Also serves the R128 replay-owner claim read
+        // (select.eq(id).maybeSingle) and its atomic link update
+        // (update.eq(id).is(user_id null).select.maybeSingle).
+        const customerMaybeSingle = vi.fn().mockResolvedValue({
+          data: customerRow,
+          error: null,
+        });
+        const linkMaybeSingle = vi.fn().mockResolvedValue({
+          data: linkResult,
           error: null,
         });
         return {
           select: vi.fn(() => ({
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
-                maybeSingle: byUserIdMaybeSingle,
+                maybeSingle: customerMaybeSingle,
               })),
+              maybeSingle: customerMaybeSingle,
             })),
           })),
+          update: vi.fn((values: unknown) => {
+            state.customerUpdateCalls?.push({ values });
+            return {
+              eq: vi.fn(() => ({
+                is: vi.fn(() => ({
+                  select: vi.fn(() => ({
+                    maybeSingle: linkMaybeSingle,
+                  })),
+                })),
+              })),
+            };
+          }),
         };
       }
       if (table === 'vtu_transactions') {
@@ -820,15 +869,22 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           };
         }
         if (table === 'customers') {
+          // R128 replay-owner claim: single-eq read for a linked row.
+          const customerMaybeSingle = vi.fn().mockResolvedValue({
+            data: {
+              id: 'customer-1',
+              email: 'c@example.com',
+              user_id: AUTH_USER_ID,
+            },
+            error: null,
+          });
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
                 eq: vi.fn(() => ({
-                  maybeSingle: vi.fn().mockResolvedValue({
-                    data: { id: 'customer-1', email: 'c@example.com' },
-                    error: null,
-                  }),
+                  maybeSingle: customerMaybeSingle,
                 })),
+                maybeSingle: customerMaybeSingle,
               })),
             })),
           };
@@ -936,15 +992,22 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           };
         }
         if (table === 'customers') {
+          // R128 replay-owner claim: single-eq read for a linked row.
+          const customerMaybeSingle = vi.fn().mockResolvedValue({
+            data: {
+              id: 'customer-1',
+              email: 'c@example.com',
+              user_id: AUTH_USER_ID,
+            },
+            error: null,
+          });
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
                 eq: vi.fn(() => ({
-                  maybeSingle: vi.fn().mockResolvedValue({
-                    data: { id: 'customer-1', email: 'c@example.com' },
-                    error: null,
-                  }),
+                  maybeSingle: customerMaybeSingle,
                 })),
+                maybeSingle: customerMaybeSingle,
               })),
             })),
           };
@@ -1126,6 +1189,24 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
             })),
           };
         }
+        if (table === 'customers') {
+          // R128 replay-owner claim: linked row short-circuits.
+          const customerMaybeSingle = vi.fn().mockResolvedValue({
+            data: {
+              id: 'customer-1',
+              email: 'c@example.com',
+              user_id: AUTH_USER_ID,
+            },
+            error: null,
+          });
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: customerMaybeSingle,
+              })),
+            })),
+          };
+        }
         return {
           select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
         };
@@ -1187,15 +1268,22 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
           };
         }
         if (table === 'customers') {
+          // R128 replay-owner claim: single-eq read for a linked row.
+          const customerMaybeSingle = vi.fn().mockResolvedValue({
+            data: {
+              id: 'customer-1',
+              email: 'c@example.com',
+              user_id: AUTH_USER_ID,
+            },
+            error: null,
+          });
           return {
             select: vi.fn(() => ({
               eq: vi.fn(() => ({
                 eq: vi.fn(() => ({
-                  maybeSingle: vi.fn().mockResolvedValue({
-                    data: { id: 'customer-1', email: 'c@example.com' },
-                    error: null,
-                  }),
+                  maybeSingle: customerMaybeSingle,
                 })),
+                maybeSingle: customerMaybeSingle,
               })),
             })),
           };
@@ -1267,7 +1355,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     // Muse R127 MEDIUM (pre-guard probe): the rejection carries a
     // static string — no stored row fields (tx id, owner ids).
-    expect(body.error).not.toMatch(/vtu-tx-other|OTHER-CUSTOMER/);
+    expect((body as { error: string }).error).not.toMatch(
+      /vtu-tx-other|OTHER-CUSTOMER/
+    );
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 
@@ -1296,7 +1386,112 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       error: expect.stringMatching(/storefront/i),
     });
     // Muse R127 MEDIUM (pre-guard probe): static string only.
-    expect(body.error).not.toMatch(/vtu-tx-other|merchant-OTHER/);
+    expect((body as { error: string }).error).not.toMatch(
+      /vtu-tx-other|merchant-OTHER/
+    );
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
+  it('replay: unlinked email-matched owner is claimed before fulfillment', async () => {
+    // Muse R128 MEDIUM: legacy/manual key rows can reference an
+    // unlinked guest customer. The replay must bind it to the
+    // verified-email caller after the guards (R86: never link before
+    // rejection) and before the overlay needs customers.user_id —
+    // never debit an unbound row.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      customerUpdateCalls: [],
+    };
+    supabaseMockRef.current = buildSupabase(state, {
+      customerRow: {
+        email: 'c@example.com',
+        id: 'customer-1',
+        user_id: null,
+      },
+    });
+    mockAuthenticate.mockResolvedValue({
+      user: {
+        id: AUTH_USER_ID,
+        email: 'c@example.com',
+        email_confirmed_at: '2026-01-02T00:00:00.000Z',
+      },
+      error: null,
+      supabase: userSupabaseMockRef.current,
+    });
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(200);
+    expect(state.customerUpdateCalls).toEqual([
+      { values: { user_id: AUTH_USER_ID } },
+    ]);
+    expect(mockFulfill).toHaveBeenCalledWith({
+      supabase: expect.anything(),
+      transactionId: 'vtu-tx-existing',
+    });
+  });
+
+  it('replay: vanished replay owner rejects with 400, no fulfill', async () => {
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+    };
+    supabaseMockRef.current = buildSupabase(state, { customerRow: null });
+
+    const { status, body } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(400);
+    expect(body).toMatchObject({
+      error: expect.stringMatching(/fresh key/i),
+    });
+    expect(mockFulfill).not.toHaveBeenCalled();
+  });
+
+  it('replay: owner linked to another user after the guards rejects with 400, no fulfill', async () => {
+    // Lost the post-guard race: the row was claimed by someone else
+    // between ownership resolution and the claim read. Fail closed.
+    const state: IdempotencyRowState = {
+      row: {
+        key: VALID_KEY,
+        vtu_transaction_id: 'vtu-tx-existing',
+        customer_id: 'customer-1',
+        merchant_id: 'merchant-1',
+        request_fingerprint: VALID_BODY_FINGERPRINT,
+      },
+      insertCalls: 0,
+      customerUpdateCalls: [],
+    };
+    supabaseMockRef.current = buildSupabase(state, {
+      customerRow: {
+        email: 'c@example.com',
+        id: 'customer-1',
+        user_id: 'other-user-id',
+      },
+    });
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(status).toBe(400);
+    expect(state.customerUpdateCalls).toEqual([]);
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 

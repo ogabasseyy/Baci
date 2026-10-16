@@ -12,7 +12,7 @@ export const EXPECTED_PENDING_VTU_REPLAY_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261012233000_scope_vtu_replay_attributes_to_owner.sql',
-    sha256: '1926b355a8bdca86e5c9743e6a93f8e3a1deccd805f70a359862d053a273d9ae',
+    sha256: 'ae5ebac23fc04de04affbbb05e6c7d5ed200815411db75e5bfa7237678a2dca7',
   },
   {
     repositoryPath:

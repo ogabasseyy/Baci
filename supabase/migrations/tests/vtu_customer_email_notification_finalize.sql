@@ -6,11 +6,33 @@
 --
 -- This script intentionally mutates inside a transaction and rolls back.
 -- Covers migrations 20261016120000 + 20261016123000 (Codex R127
--- P2): the finalize RPC must persist the send outcome AND release the
--- lease in one fenced UPDATE — never one without the other.
+-- P2) + 20261016130000 (Codex R128 P2): the finalize RPC must persist
+-- the send outcome AND release the lease in one fenced UPDATE — never
+-- one without the other — and the claim RPC must then refuse rows
+-- carrying the unknown marker while staying retryable after definite
+-- failures and across pairs.
 -- =============================================
 
 BEGIN;
+
+-- Foreign-key parents (Codex R128 P1): vtu_transactions.merchant_id
+-- and .customer_id are real FKs, and DISABLE TRIGGER USER does not
+-- suspend PostgreSQL's internal FK triggers — without these rows the
+-- first insert aborts on a clean migrated database.
+ALTER TABLE public.merchants DISABLE TRIGGER USER;
+INSERT INTO public.merchants (id, email, business_name, slug)
+VALUES
+  ('01ac0000-0000-4000-8000-00000000ab10',
+    'vtu-email-finalize-merchant@example.com', 'VTU Email Finalize Merchant',
+    'vtu-email-finalize-merchant');
+ALTER TABLE public.merchants ENABLE TRIGGER USER;
+
+ALTER TABLE public.customers DISABLE TRIGGER USER;
+INSERT INTO public.customers (id, merchant_id, email)
+VALUES
+  ('01ac0000-0000-4000-8000-00000000ab20',
+    '01ac0000-0000-4000-8000-00000000ab10', 'buyer@example.com');
+ALTER TABLE public.customers ENABLE TRIGGER USER;
 
 ALTER TABLE public.vtu_transactions DISABLE TRIGGER USER;
 INSERT INTO public.vtu_transactions (
@@ -122,14 +144,27 @@ BEGIN
   IF (v_meta ->> 'customerEmailNotificationSentDeliveryOutcome') <> 'unknown' THEN
     RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: finalize did not mirror the legacy unknown marker';
   END IF;
-  -- Lease freed: a fresh claim succeeds (sent=false keeps it retryable).
+  -- Lease freed BUT terminal: a fresh receipt claim after an
+  -- unknown finalize is refused — the outcome marker, not the lease
+  -- flag, blocks it (Codex R128 P2: the atomic claim is the backstop
+  -- for workers holding pre-finalize snapshots).
   v_meta := public.claim_vtu_customer_email_notification_attempt(
     v_receipt,
     'customerReceiptEmailNotificationAttempted',
     'customerReceiptEmailNotificationSent'
   );
+  IF v_meta IS NOT NULL THEN
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: re-claim after unknown finalize was not refused';
+  END IF;
+  -- Cross-pair pin (Codex R107 P2): the receipt unknown must not
+  -- block the distinct token-ready claim on the same row.
+  v_meta := public.claim_vtu_customer_email_notification_attempt(
+    v_receipt,
+    'customerTokenEmailNotificationAttempted',
+    'customerTokenEmailNotificationSent'
+  );
   IF v_meta IS NULL THEN
-    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: re-claim after finalize did not succeed';
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: token claim after receipt unknown did not succeed';
   END IF;
 
   -- Case 4: wrong generation finalizes nothing and touches nothing.
@@ -180,19 +215,23 @@ BEGIN
   IF v_meta ? 'customerTokenEmailNotificationSentDeliveryOutcome' THEN
     RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: failed finalize wrote an outcome key';
   END IF;
-
-  -- Case 6: success finalize persists sent=true with NO outcome key
-  -- and the sent flag then blocks every re-claim (Codex R127 P2
-  -- success half: no 15-minute re-send window after a crash).
+  -- Definite failures stay retryable: no marker was written, so a
+  -- fresh claim succeeds (proves the R128 guard is unknown-specific).
   v_meta := public.claim_vtu_customer_email_notification_attempt(
     v_token,
     'customerTokenEmailNotificationAttempted',
     'customerTokenEmailNotificationSent'
   );
   IF v_meta IS NULL THEN
-    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: re-claim before success finalize did not succeed';
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: re-claim after failed finalize did not succeed';
   END IF;
   v_stamp := v_meta ->> 'customerTokenEmailNotificationAttemptedAt';
+
+  -- Case 6: success finalize persists sent=true with NO outcome key
+  -- and the sent flag then blocks every re-claim (Codex R127 P2
+  -- success half: no 15-minute re-send window after a crash).
+  -- Finalizes case 5's re-claimed lease: no second claim is possible
+  -- while this generation is held.
   v_meta := public.finalize_vtu_customer_email_notification_attempt(
     v_token,
     'customerTokenEmailNotificationAttempted',

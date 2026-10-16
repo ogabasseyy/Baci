@@ -14,6 +14,25 @@
 
 BEGIN;
 
+-- Foreign-key parents (Codex R128 P1): vtu_transactions.merchant_id
+-- and .customer_id are real FKs, and DISABLE TRIGGER USER does not
+-- suspend PostgreSQL's internal FK triggers — without these rows the
+-- first insert aborts on a clean migrated database.
+ALTER TABLE public.merchants DISABLE TRIGGER USER;
+INSERT INTO public.merchants (id, email, business_name, slug)
+VALUES
+  ('01ac0000-0000-4000-8000-00000000ab10',
+    'vtu-email-pair-merchant@example.com', 'VTU Email Pair Merchant',
+    'vtu-email-pair-merchant');
+ALTER TABLE public.merchants ENABLE TRIGGER USER;
+
+ALTER TABLE public.customers DISABLE TRIGGER USER;
+INSERT INTO public.customers (id, merchant_id, email)
+VALUES
+  ('01ac0000-0000-4000-8000-00000000ab20',
+    '01ac0000-0000-4000-8000-00000000ab10', 'buyer@example.com');
+ALTER TABLE public.customers ENABLE TRIGGER USER;
+
 ALTER TABLE public.vtu_transactions DISABLE TRIGGER USER;
 INSERT INTO public.vtu_transactions (
   id, merchant_id, customer_id, type, network_provider, phone_number,

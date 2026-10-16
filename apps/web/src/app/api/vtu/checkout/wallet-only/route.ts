@@ -9,8 +9,7 @@ import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import { findExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
 import { cleanupOrphanVtuTransactionAfterKeyRace } from '@/lib/vtu-orphan-transaction-cleanup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
-import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
-import { verifyReplayTransactionBinding } from '@/lib/vtu-replay-binding';
+import { fulfillReplayVtuTransaction } from '@/lib/vtu-replay-fulfillment';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
 
@@ -116,32 +115,16 @@ export async function POST(request: NextRequest) {
           409
         );
       }
-      // Owner binding: the key row's owner was validated above;
-      // the transaction row must match before fulfilling.
-      const binding = await verifyReplayTransactionBinding({
-        supabase,
+      // Shared replay tail: binding → owner claim → overlay →
+      // fulfill (Muse R128 extraction; guards above compare against
+      // the requesting ownership).
+      return fulfillReplayVtuTransaction({
+        authSupabase: auth.supabase,
+        input,
         keyRow: existing,
-      });
-      if ('error' in binding) {
-        return createErrorResponse(binding.error, 400);
-      }
-      // Current-attempt overlay: the retry carries the freshest
-      // phone/reference; attempt-1's snapshot must not win. Runs on
-      // the AUTHENTICATED user client (never service role for this
-      // user-facing write): the patch RPC enforces row ownership
-      // from the JWT, and the refresh pre-read resolves through the
-      // ownership-scoped RPC (no customer table projection).
-      await overlayReplayAttributes({
-        supabase: auth.supabase,
-        transactionId: existing.vtu_transaction_id,
-        customerPhone: input.customerPhone,
-        validationReference: input.validationReference,
-      });
-      const replayedFulfillment = await fulfillPendingVtuTransaction({
         supabase,
-        transactionId: existing.vtu_transaction_id,
+        user: auth.user,
       });
-      return mapFulfillmentToResponse(replayedFulfillment);
     }
 
     const prepared = await preparePendingVtuTransaction({
@@ -236,28 +219,15 @@ export async function POST(request: NextRequest) {
             409
           );
         }
-        // Same owner binding as the replay path: the winner's
-        // transaction row must belong to the key's owner.
-        const racedBinding = await verifyReplayTransactionBinding({
-          supabase,
+        // Shared replay tail (guards above compare against the
+        // prepared row instead of the requesting ownership).
+        return fulfillReplayVtuTransaction({
+          authSupabase: auth.supabase,
+          input,
           keyRow: racedExisting,
-        });
-        if ('error' in racedBinding) {
-          return createErrorResponse(racedBinding.error, 400);
-        }
-        // Same current-attempt overlay as the replay path (user
-        // client, ownership-enforced RPC — see above).
-        await overlayReplayAttributes({
-          supabase: auth.supabase,
-          transactionId: racedExisting.vtu_transaction_id,
-          customerPhone: input.customerPhone,
-          validationReference: input.validationReference,
-        });
-        const replayedFulfillment = await fulfillPendingVtuTransaction({
           supabase,
-          transactionId: racedExisting.vtu_transaction_id,
+          user: auth.user,
         });
-        return mapFulfillmentToResponse(replayedFulfillment);
       }
       // Log internally; don't leak the raw DB error to the client.
       // The key itself is the unguessable replay credential — log

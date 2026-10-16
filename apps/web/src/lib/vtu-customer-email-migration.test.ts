@@ -133,6 +133,58 @@ describe('VTU customer email notification finalize migration', () => {
     expect(sql).toContain('failed finalize wrote an outcome key');
     expect(sql).toContain('success finalize did not release with sent=true');
     expect(sql).toContain('re-claim after success finalize was not refused');
+    expect(sql).toContain('re-claim after unknown finalize was not refused');
+    expect(sql).toContain('token claim after receipt unknown did not succeed');
+    expect(sql).toContain('re-claim after failed finalize did not succeed');
     expect(sql).toContain('ROLLBACK;');
+  });
+
+  it('seeds the foreign-key parents the inserts reference', () => {
+    // Codex R128 P1: DISABLE TRIGGER USER does not suspend the
+    // internal FK triggers, so both email regressions must insert
+    // their merchant/customer parents first.
+    const sql = readFileSync(finalizeRegressionPath, 'utf8');
+    const pairSql = readFileSync(
+      resolve(
+        __dirname,
+        '../../../../supabase/migrations/tests/vtu_customer_email_notification_key_pairs.sql'
+      ),
+      'utf8'
+    );
+
+    for (const body of [sql, pairSql]) {
+      expect(body).toContain(
+        'ALTER TABLE public.merchants DISABLE TRIGGER USER;'
+      );
+      expect(body).toContain('INSERT INTO public.merchants');
+      expect(body).toContain(
+        'ALTER TABLE public.customers DISABLE TRIGGER USER;'
+      );
+      expect(body).toContain('INSERT INTO public.customers');
+    }
+  });
+});
+
+describe('VTU customer email notification claim-guard migration', () => {
+  const guardMigrationPath = resolve(
+    __dirname,
+    '../../../../supabase/migrations/20261016130000_guard_vtu_customer_email_claim_against_unknown.sql'
+  );
+
+  it('rejects the unknown marker in the atomic claim fence', () => {
+    const sql = readFileSync(guardMigrationPath, 'utf8');
+
+    expect(sql).toContain(
+      'CREATE OR REPLACE FUNCTION public.claim_vtu_customer_email_notification_attempt'
+    );
+    expect(sql).toContain("p_sent_key || 'DeliveryOutcome'");
+    expect(sql).toContain(
+      "COALESCE(metadata ->> v_outcome_key, '') <> 'unknown'"
+    );
+    expect(sql).toContain('Mismatched VTU customer email metadata key pair');
+    expect(sql).toContain(
+      'GRANT EXECUTE ON FUNCTION public.claim_vtu_customer_email_notification_attempt(uuid, text, text)'
+    );
+    expect(sql).toContain('TO service_role;');
   });
 });

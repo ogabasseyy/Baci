@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react-native';
 import { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { walletKeys } from '@/hooks/wallet-query';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
+import { clearPendingVtuKeys } from '@/lib/pending-vtu-idempotency';
 import * as vtuStore from '@/lib/pending-vtu-idempotency-store';
 
 const mockUseMerchantPaymentSettings = jest.fn();
@@ -59,6 +60,11 @@ jest.mock('expo-crypto', () => ({
 describe('useUtilityPayment', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Suite-level isolation (Muse R128 low): this suite exercises
+    // the real pending-key module, whose MMKV mock buckets persist
+    // across tests in a file — clear the registry + snapshot so a
+    // future descriptor reuse cannot inherit leaked state.
+    clearPendingVtuKeys();
     mockNextUuid = 0;
     mockAuthState.session = { access_token: 'token-123' };
     mockAuthState.customer = { id: 'customer-a' };

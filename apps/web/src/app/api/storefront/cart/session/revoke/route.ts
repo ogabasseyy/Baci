@@ -5,6 +5,7 @@ import {
   readCartJsonBody,
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
+import { checkCartQuota } from '@/lib/cart/request-quota';
 import {
   cartErrorResponse,
   cartJsonResponse,
@@ -39,6 +40,12 @@ export async function POST(request: NextRequest): Promise<Response> {
         }),
     });
     if (!context.ok) return cartErrorResponse(context.error);
+    const quota = await checkCartQuota({
+      merchantId: context.merchant.id,
+      operation: 'session_revoke',
+      subject: context.principal.principalId,
+    });
+    if (!quota.allowed) return cartErrorResponse('quota_exceeded');
     const body = await readCartJsonBody(request);
     if (!body.ok || !cartRevokeRequestSchema.safeParse(body.body).success)
       return cartErrorResponse('invalid_request');

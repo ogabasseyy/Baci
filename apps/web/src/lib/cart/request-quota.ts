@@ -12,6 +12,7 @@ export type CartQuotaOperation =
   | 'handoff_redeem'
   | 'handoff_preview'
   | 'legacy_bridge'
+  | 'session_revoke'
   | 'checkout_prepare';
 
 export interface CartQuotaInput {
@@ -53,6 +54,10 @@ export const CART_QUOTA_BUDGETS: Record<
   legacy_bridge: { limit: 120, windowMs: 60 * 1000 },
   // Checkout review preparation: per-submit plus refresh retries.
   checkout_prepare: { limit: 60, windowMs: 60 * 1000 },
+  // Device revocation is a sign-out action: rare per principal, and
+  // credential-bearing (expired proofs verify inside a grace window),
+  // so it fails closed on quota degradation like other credential ops.
+  session_revoke: { limit: 60, windowMs: 60 * 60 * 1000 },
 };
 
 export type WindowCounter = { count: number; resetTime: number };
@@ -202,6 +207,7 @@ const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
   'account_link',
   'handoff_issue',
   'legacy_bridge',
+  'session_revoke',
 ]);
 
 /**

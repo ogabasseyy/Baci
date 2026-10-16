@@ -2,6 +2,7 @@ import type { NextRequest } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { revokeCartDeviceGrants } from '@/lib/cart/device-session';
 import { resolveCartRequestContext } from '@/lib/cart/request-context';
+import { checkCartQuota } from '@/lib/cart/request-quota';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { POST } from './route';
 
@@ -14,6 +15,7 @@ vi.mock('@/lib/cart/request-context', async (importOriginal) => ({
 }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: vi.fn() }));
 vi.mock('@/lib/supabase/anon', () => ({ createAnonClient: () => ({}) }));
+vi.mock('@/lib/cart/request-quota', () => ({ checkCartQuota: vi.fn() }));
 vi.mock('@/lib/slug-alias-cache', () => ({ getCurrentSlugForAlias: vi.fn() }));
 const request = (body = '{}') =>
   new Request('https://shop.example/api/storefront/cart/session/revoke', {
@@ -26,6 +28,12 @@ beforeEach(() => {
   vi.mocked(resolveCartRequestContext).mockResolvedValue({
     ok: false,
     error: 'missing_proof',
+  });
+  vi.mocked(checkCartQuota).mockResolvedValue({
+    allowed: true,
+    limit: 60,
+    remaining: 59,
+    resetTime: 0,
   });
 });
 it('resolves revocation context without an enrollment feature lookup', async () => {
@@ -59,6 +67,34 @@ it('rejects malformed or caller-selected tenant/grant fields', async () => {
   });
   expect((await POST(request('{bad'))).status).toBe(400);
   expect((await POST(request('{"merchantId":"other"}'))).status).toBe(400);
+  expect(revokeCartDeviceGrants).not.toHaveBeenCalled();
+});
+it('blocks revocation when the per-principal quota is exceeded', async () => {
+  vi.mocked(resolveCartRequestContext).mockResolvedValue({
+    ok: true,
+    merchant: { id: 'm', slug: 'shop', customDomain: null },
+    principal: {
+      merchantId: 'm',
+      cartId: 'c',
+      grantId: 'g',
+      principalId: 'p',
+      scope: 'session' as const,
+      allowedOperations: [],
+      expiresAt: '2099-01-01T00:00:00Z',
+    },
+  });
+  vi.mocked(checkCartQuota).mockResolvedValue({
+    allowed: false,
+    limit: 60,
+    remaining: 0,
+    resetTime: 0,
+  });
+  expect((await POST(request())).status).toBe(429);
+  expect(checkCartQuota).toHaveBeenCalledWith({
+    merchantId: 'm',
+    operation: 'session_revoke',
+    subject: 'p',
+  });
   expect(revokeCartDeviceGrants).not.toHaveBeenCalled();
 });
 it('clears only the resolved merchant cookie after idempotent scoped revocation', async () => {

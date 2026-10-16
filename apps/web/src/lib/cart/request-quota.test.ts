@@ -152,34 +152,18 @@ describe('checkCartQuota degraded store', () => {
     ).resolves.toMatchObject({ allowed: false });
   });
 
-  it('keeps the legacy bridge available in production without Redis up to its boundary', async () => {
+  it('fails the legacy bridge closed in production without Redis', async () => {
     __resetCartQuotaStoreForTesting();
     vi.stubEnv('NODE_ENV', 'production');
-    let last: Awaited<ReturnType<typeof checkCartQuota>> | null = null;
-    for (let index = 0; index < 120; index++) {
-      last = await checkCartQuota({
-        merchantId: MERCHANT_ID,
-        operation: 'legacy_bridge',
-        subject: 'a'.repeat(64),
-      });
-      expect(last.allowed).toBe(true);
-    }
-    expect(last?.limit).toBe(120);
+    // Server-to-server bridge traffic can retry after the outage;
+    // a degraded per-instance budget must not multiply its limits.
     await expect(
       checkCartQuota({
         merchantId: MERCHANT_ID,
         operation: 'legacy_bridge',
         subject: 'a'.repeat(64),
       })
-    ).resolves.toMatchObject({ allowed: false, remaining: 0 });
-    // A different legacy token keeps its own budget.
-    await expect(
-      checkCartQuota({
-        merchantId: MERCHANT_ID,
-        operation: 'legacy_bridge',
-        subject: 'b'.repeat(64),
-      })
-    ).resolves.toMatchObject({ allowed: true });
+    ).resolves.toMatchObject({ allowed: false });
   });
 
   it('keeps authenticated operations on the degraded memory budget', async () => {

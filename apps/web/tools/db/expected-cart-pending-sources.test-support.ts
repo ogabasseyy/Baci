@@ -254,4 +254,9 @@ export const EXPECTED_CART_PENDING_SOURCES = [
       'supabase/migrations/20261015164000_commerce_cart_cleanup_indexes.sql',
     sha256: '691dd65d9ec4e73c082d0bb2e3c99a2f750f4ade01c1e004dada790edb6c1d1d',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015165000_commerce_cart_receive_receiver_only.sql',
+    sha256: 'f186af4294f328834e1a4651f7d79d39771c3b36146f75d7e815414563f42b15',
+  },
 ] as const;

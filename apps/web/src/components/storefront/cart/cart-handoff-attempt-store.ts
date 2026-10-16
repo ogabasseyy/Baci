@@ -65,11 +65,22 @@ export function loadAttemptBody(
 
 const ACTIVE_HANDOFF_KEY = 'baci-cart-handoff-active';
 
-export function recordActiveHandoff(token: string, handoffId: string): void {
+export function recordActiveHandoff(
+  token: string,
+  handoffId: string,
+  merchantSlug?: string | null
+): void {
   try {
+    // Preserve a previously recorded merchant scope when the caller
+    // does not know it yet (consumed previews return merchant: null,
+    // but the replay still needs the slug to resolve the merchant).
+    const existing = loadActiveHandoff();
+    const slug =
+      merchantSlug ??
+      (existing?.handoffId === handoffId ? existing.merchantSlug : null);
     window.sessionStorage.setItem(
       ACTIVE_HANDOFF_KEY,
-      JSON.stringify({ token, handoffId })
+      JSON.stringify({ token, handoffId, merchantSlug: slug })
     );
   } catch {
     /* Storage is optional; the in-page flow continues regardless. */
@@ -79,6 +90,7 @@ export function recordActiveHandoff(token: string, handoffId: string): void {
 export function loadActiveHandoff(): {
   token: string;
   handoffId: string;
+  merchantSlug: string | null;
 } | null {
   try {
     const stored = window.sessionStorage.getItem(ACTIVE_HANDOFF_KEY);
@@ -94,7 +106,14 @@ export function loadActiveHandoff(): {
       parsed.token &&
       parsed.handoffId
     ) {
-      return { token: parsed.token, handoffId: parsed.handoffId };
+      return {
+        token: parsed.token,
+        handoffId: parsed.handoffId,
+        merchantSlug:
+          'merchantSlug' in parsed && typeof parsed.merchantSlug === 'string'
+            ? parsed.merchantSlug
+            : null,
+      };
     }
   } catch {
     /* Storage is optional. */

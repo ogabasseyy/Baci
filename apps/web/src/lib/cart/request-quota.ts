@@ -194,11 +194,13 @@ const FAIL_CLOSED_OPERATIONS: ReadonlySet<CartQuotaOperation> = new Set([
   // Credential-minting and account-linking operations also fail
   // closed: a degraded per-instance budget would multiply their
   // limits by the instance count exactly while the system is
-  // degraded. Authenticated cart commands, checkout preparation, and
-  // the token-authenticated legacy bridge stay on the degraded
-  // memory budget for availability.
+  // degraded. The token-authenticated legacy bridge fails closed
+  // too — it is server-to-server and can retry, unlike shopper
+  // traffic. Authenticated cart commands and checkout preparation
+  // stay on the degraded memory budget for availability.
   'account_link',
   'handoff_issue',
+  'legacy_bridge',
 ]);
 
 /**

@@ -71,6 +71,14 @@ DO $$ BEGIN
  IF public.commerce_cart_receive_authorized('cart:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb') THEN RAISE EXCEPTION 'foreign tenant allowed'; END IF;
  IF public.commerce_cart_receive_authorized('cart:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222223') THEN RAISE EXCEPTION 'foreign guest cart allowed'; END IF;
 END $$;
+-- The broader shopper role must not satisfy receive authorization
+-- directly (20261015165000): only the receive-only token subscribes.
+\ir ../migrations/20261015165000_commerce_cart_receive_receiver_only.sql
+SELECT set_config('request.jwt.claims', jsonb_build_object('role','commerce_cart_shopper','cart_scope','session','cart_id','22222222-2222-4222-8222-222222222222','cart_merchant_id','11111111-1111-4111-8111-111111111111','cart_grant_id','66666666-6666-4666-8666-666666666666','cart_principal_id','guest-a1','exp',extract(epoch FROM now()+interval '5 minutes'))::text,true);
+DO $$ BEGIN
+ IF public.commerce_cart_receive_authorized('cart:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222') THEN RAISE EXCEPTION 'shopper role must not receive directly'; END IF;
+END $$;
+SELECT set_config('request.jwt.claims', jsonb_build_object('role','commerce_cart_receiver','cart_scope','session','cart_id','22222222-2222-4222-8222-222222222222','cart_merchant_id','11111111-1111-4111-8111-111111111111','cart_grant_id','66666666-6666-4666-8666-666666666666','cart_principal_id','guest-a1','exp',extract(epoch FROM now()+interval '5 minutes'))::text,true);
 INSERT INTO realtime.messages(topic,event,payload,private) VALUES ('cart:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222','cart_changed','{}',true),('cart:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222223','cart_changed','{}',true);
 SELECT set_config('realtime.topic','cart:11111111-1111-4111-8111-111111111111:22222222-2222-4222-8222-222222222222',true);
 SET LOCAL ROLE commerce_cart_receiver;

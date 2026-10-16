@@ -11,6 +11,7 @@ import {
 } from '@/lib/cart/merchant-resolution';
 import { checkCartQuota, readCartJsonBody } from '@/lib/cart/request-context';
 import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
+import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
 import { legacyMcpBridgeRequestSchema } from '@/schemas/cart-legacy-bridge';
@@ -22,6 +23,11 @@ export async function POST(request: NextRequest) {
     ?.match(/^Bearer legacy_mcp_([a-f0-9]{64})$/)?.[1];
   if (!token || !/^[a-f0-9]{64}$/.test(token))
     return cartErrorResponse('unauthorized');
+  // Uniform CSRF gate with every sibling cart mutation; the
+  // capability-header check above already passed, and header
+  // credentials are never attached automatically by browsers.
+  const csrf = await checkCsrfProtection(request);
+  if (!csrf.valid) return cartErrorResponse('forbidden');
   try {
     // Validate the body shape before any database lookup: malformed
     // payloads must not drive alias, merchant, or feature resolution.

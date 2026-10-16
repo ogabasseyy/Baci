@@ -112,7 +112,8 @@ logging never records request headers for these routes.
   against the real worker scheduler.
 - Quota degradation is an explicit pre-activation gate: when the
   Redis quota store is degraded, anonymous/enumeration operations
-  fail closed, but authenticated operations (commands, snapshot,
+  and the server-to-server legacy bridge fail closed, but
+  authenticated shopper operations (commands, snapshot,
   checkout_prepare) deliberately fall back to per-instance in-memory
   counters, so one valid proof's effective budget multiplies by the
   instance count for the outage duration. Before any merchant is

@@ -14,6 +14,7 @@ import { CartPage } from './cart-page';
 
 interface CartPageWrapperProps {
   merchantId: string;
+  merchantSlug?: string;
   vatEnabled?: boolean;
   vatRate?: number;
 }
@@ -28,7 +29,7 @@ interface CartPageWrapperProps {
  * never reaches the server, and the one-time transfer links keep working
  * unchanged when no pairing is present.
  */
-export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 }: CartPageWrapperProps) {
+export function CartPageWrapper({ merchantId, merchantSlug, vatEnabled = false, vatRate = 7.5 }: CartPageWrapperProps) {
   const searchParams = useSearchParams();
   const { addToCart, cart, isHydrated } = useCart();
   const { toast } = useToast();
@@ -36,6 +37,7 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
   // Both server and browser render the same initial tree; read the fragment
   // after hydration and retain it when the continuation strips the URL.
   const [pairing, setPairing] = useState<ReturnType<typeof parseHandoffPairing>>(null);
+  const [pairingChecked, setPairingChecked] = useState(false);
   useEffect(() => {
     // After a reload the fragment is already redacted; fall back to
     // the tab-scoped locator recorded before redaction so an
@@ -43,6 +45,7 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     setPairing(
       parseHandoffPairing(window.location.hash) ?? loadActiveHandoff()
     );
+    setPairingChecked(true);
   }, []);
   const processedRef = useRef(false);
   const blockedNoticeRef = useRef(false);
@@ -123,8 +126,11 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
     return <CartHandoff token={pairing.token} handoffId={pairing.handoffId} />;
   }
 
-  // Wait for persisted items before deciding whether the cart is empty.
-  if (!isHydrated || isLoading) {
+  // Until the fragment check completes, the ordinary subtree (whose
+  // account panel bootstraps on mount) must stay unmounted: its
+  // uncancellable bootstrap could land after handoff redemption and
+  // overwrite the cart-bound proof with a cart-less one.
+  if (!pairingChecked || !isHydrated || isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-store-background">
         <div className="text-center" role="status">
@@ -140,7 +146,7 @@ export function CartPageWrapper({ merchantId, vatEnabled = false, vatRate = 7.5 
   return (
     <>
       <CartImportConflicts />
-      <CartAccountLink />
+      <CartAccountLink merchantSlug={merchantSlug} />
       <CartPage vatEnabled={vatEnabled} vatRate={vatRate} />
     </>
   );

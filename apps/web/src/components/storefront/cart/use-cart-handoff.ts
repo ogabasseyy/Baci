@@ -9,6 +9,7 @@ import {
   clearAttemptBody,
   clearHandoffAttempt,
   fetchJson,
+  loadActiveHandoff,
   loadAttemptBody,
   loadOrCreateAttemptId,
   lockedAttemptChoice,
@@ -95,10 +96,20 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         return null;
       }
       setPreview(payload);
+      if (payload.merchant?.slug)
+        recordActiveHandoff(token, handoffId, payload.merchant.slug);
       if (payload.status === 'pending') {
         await loadDestination(payload.merchant?.slug ?? null);
       } else {
         setDestChecked(true);
+        if (payload.status === 'expired') {
+          // Terminal: drop the attempt and locator so later cart-page
+          // loads do not restore this dead continuation.
+          clearHandoffAttempt(handoffId);
+          clearActiveHandoff(handoffId);
+          setLockedChoice(null);
+          setSentBody(null);
+        }
         if (payload.status === 'consumed') {
           // A link consumed by our own earlier attempt (whose success
           // response or replacement cookie was lost) replays its
@@ -106,7 +117,14 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
           // by someone else has no local body and simply ends here.
           const persistedBody = loadAttemptBody(handoffId);
           if (persistedBody) {
-            await postRedeem(persistedBody, payload.merchant?.slug);
+            // Consumed previews return merchant: null; replay under
+            // the merchant scope recorded while the link was pending.
+            await postRedeem(
+              persistedBody,
+              loadActiveHandoff()?.merchantSlug ??
+                payload.merchant?.slug ??
+                undefined
+            );
           } else {
             // Terminal with nothing to replay: drop the locator so
             // later cart-page loads do not restore this dead handoff.

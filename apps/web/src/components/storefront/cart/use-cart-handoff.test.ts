@@ -229,6 +229,7 @@ it('replays the persisted attempt when the preview reports consumed', async () =
       JSON.stringify({ cart: { ...snapshot, cartId: 'dest-cart', version: 3 } })
     );
   const bodies: Record<string, unknown>[] = [];
+  const urls: string[] = [];
   const replaceMock = vi.fn();
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -260,14 +261,17 @@ it('replays the persisted attempt when the preview reports consumed', async () =
     .mockResolvedValueOnce(
       new Response(
         JSON.stringify({
+          // Production consumed previews return merchant: null; the
+          // replay must use the scope recorded while pending.
           status: 'consumed',
-          merchant: { id: 'merchant-1', slug: 'shop' },
-          snapshot,
+          merchant: null,
+          snapshot: null,
           expiresAt: '2099-01-01T00:00:00Z',
         })
       )
     )
-    .mockImplementation(async (_url: string, init?: RequestInit) => {
+    .mockImplementation(async (url: string, init?: RequestInit) => {
+      urls.push(url);
       if (init?.body) bodies.push(JSON.parse(String(init.body)));
       return new Response(JSON.stringify({ cart: snapshot }), {
         status: 200,
@@ -278,6 +282,7 @@ it('replays the persisted attempt when the preview reports consumed', async () =
   });
   expect(bodies).toHaveLength(2);
   expect(bodies[1]).toEqual(bodies[0]);
+  expect(urls.some((url) => url.includes('merchantSlug=shop'))).toBe(true);
   expect(replaceMock).toHaveBeenCalled();
   expect(result.current.lockedChoice).toBeNull();
 });

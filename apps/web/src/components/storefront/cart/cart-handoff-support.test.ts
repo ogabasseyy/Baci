@@ -27,6 +27,7 @@ it('keeps an active handoff locator across recoverable attempt resets', () => {
   expect(loadActiveHandoff()).toEqual({
     token: 'pairing-secret',
     handoffId: 'handoff-reload',
+    merchantSlug: null,
   });
   // Recoverable resets (proof-boundary, version conflict) keep the
   // locator so a reload can still reconstruct the pending handoff;

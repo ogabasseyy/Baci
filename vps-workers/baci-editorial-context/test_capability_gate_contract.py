@@ -24,6 +24,7 @@ _check_spec.loader.exec_module(check)
 
 CI = """on:
   push:
+    branches: [main]
   pull_request:
   merge_group:
 jobs:

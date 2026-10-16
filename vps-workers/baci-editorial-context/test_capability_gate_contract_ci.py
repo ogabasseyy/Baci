@@ -19,6 +19,7 @@ _check_spec.loader.exec_module(check)
 
 CI = """on:
   push:
+    branches: [main]
   pull_request:
   merge_group:
 jobs:
@@ -46,6 +47,7 @@ class ContractCiTests(unittest.TestCase):
     def test_relocation_into_never_running_job_fails(self):
         ci = """on:
   push:
+    branches: [main]
   pull_request:
   merge_group:
 jobs:
@@ -75,8 +77,7 @@ jobs:
         self.assertIn("unconditional", failures[0])
 
     def test_spaced_job_condition_fails(self):
-        # Valid YAML permits whitespace before the colon: `if : false`
-        # skips the job exactly like `if: false`.
+        # Whitespace before the colon is YAML-equivalent: `if : false` still skips the job.
         ci = CI.replace(
             "  changes:\n    runs-on: ubuntu-24.04\n",
             "  changes:\n    if : false\n    runs-on: ubuntu-24.04\n",
@@ -130,8 +131,7 @@ jobs:
         self.assertIn("main", failures[0])
 
     def test_types_narrowing_fails(self):
-        # types: [opened] drops synchronize updates — the PR pushes most
-        # likely to touch cited sources after initial review.
+        # types: [opened] drops synchronize updates that touch cited sources after review.
         typed = CI.replace(
             "  pull_request:\n", "  pull_request:\n    types: [opened]\n", 1
         )
@@ -140,8 +140,7 @@ jobs:
         self.assertIn("types", failures[0])
 
     def test_branch_substring_does_not_match_main(self):
-        # GitHub matches globs, not substrings: [domain] and [not-main]
-        # contain "main" but never match the main branch.
+        # GitHub matches globs, not substrings: [domain]/[not-main] never match main.
         for branches in ("[domain]", "[not-main]"):
             ci = CI.replace("  pull_request:\n", f"  pull_request:\n    branches: {branches}\n", 1)
             failures = check.ci_failures(ci)
@@ -283,6 +282,7 @@ jobs:
     def test_fake_comment_cannot_satisfy(self):
         ci = """on:
   push:
+    branches: [main]
   pull_request:
   merge_group:
 jobs:

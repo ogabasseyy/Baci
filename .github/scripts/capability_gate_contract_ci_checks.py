@@ -65,7 +65,9 @@ def _ordered_branch_match(subs, trig, lines, end):
             pats.append(item.group(1))
             j += 1
         for raw in pats:
-            for part in _strip_comment(raw).strip().strip("[]").split(","):
+            inner = _strip_comment(raw).strip().strip("[]")
+            parts = _FLOW_SPLIT.split(inner) if ('"' in inner or "'" in inner) else inner.split(",")
+            for part in parts:
                 pat = _decode_scalar(part.strip()).strip("'\"")
                 if not pat:
                     continue
@@ -107,14 +109,7 @@ def _decoded_key(raw):
 
 
 def _without_block_scalars(lines):
-    """Blank block-scalar content lines (indices preserved).
-
-    A multiline `name: |` can otherwise smuggle the pinned step text into a
-    scalar body while the job never invokes the gate: structure scans must
-    not match inside scalar bodies. Literal (`|`) and folded (`>`) headers
-    (with chomping/indent indicators) open a scalar; content is every
-    following line indented past the header, blanks included.
-    """
+    """Blank block-scalar bodies (indices preserved): structure scans must not match scalar text."""
     scrubbed = list(lines)
     scalar_indent = None
     for i, line in enumerate(scrubbed):
@@ -124,7 +119,7 @@ def _without_block_scalars(lines):
                 scrubbed[i] = ""
                 continue
             scalar_indent = None
-        if re.match(r"^\s*[^#\s].*:\s*[|>][-+]?[0-9]?\s*(#.*)?$", line):
+        if re.match(r"^\s*[^#\s].*:\s*[|>][-+0-9]*\s*(#.*)?$", line):
             scalar_indent = len(line) - len(line.lstrip())
     return scrubbed
 
@@ -147,21 +142,19 @@ _JOB_CONDITION = re.compile(r"^    [\"']?(if|needs|continue-on-error)[\"']?\s*:"
 EXPECTED_PRECEDING_CHECKOUT = "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 # Interpreter/shell startup preloads: inheriting one of these at workflow
 # scope runs PR-controlled code before the gate's python3 starts.
-_STARTUP_ENV = frozenset({"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV", "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB", "PERLLIB", "RUBYLIB", "RUBYOPT"})
+_STARTUP_ENV = frozenset({"PATH", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV", "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB", "PERLLIB", "RUBYLIB", "RUBYOPT"})
 _NEXT_STEP = re.compile(r"^      -(\s|$)")
 _TRIGGER_KEY = re.compile(r"^  (\S[^:\n]*?)\s*:\s*(.*)$")
 _TRIGGER_SUBKEY = re.compile(r"^    (\S[^:\n]*?)\s*:\s*(.*)$")
 _TRIGGER_ITEM = re.compile(r"^      -\s(.*)$")
+_FLOW_SPLIT = re.compile(
+    r""",(?=(?:[^"'\\\n]*(?:"[^"\\\n]*(?:\\.[^"\\\n]*)*"|'[^'\n]*(?:''[^'\n]*)*'))*[^"'\n]*$)"""
+)
 
 
 def trigger_failures(ci_text):
-    """The gate must stay wired to the events that need it, unnarrowed.
-
-    Key presence alone is not enough: retargeted branches or path filters
-    silence the gate for main PRs without touching the asserted step block.
-    Commented lines never fire, so they cannot satisfy the check.
-    """
-    lines = ci_text.splitlines()
+    """The gate must stay wired to the events that need it, unnarrowed."""
+    lines = _without_block_scalars(ci_text.splitlines())
     subs, end = _on_block_subs(lines)
     if subs is None:
         return ["ci.yml must declare workflow triggers"]
@@ -186,12 +179,16 @@ def trigger_failures(ci_text):
                 failures.append(f"ci.yml must not narrow the {trig} trigger with types:")
         if _ordered_branch_match(subs, trig, lines, end) is False:
             failures.append(f"ci.yml must keep an exact main match in the {trig} branches:")
+    # Exact push scope, canonically spelled: extra or wildcard branches would mint Quality Gate contexts for branch SHAs.
+    lone = [(rest, idx) for key, rest, idx in subs.get("push", []) if key == "branches"]
+    if "push" in subs and (len(lone) != 1 or re.sub(r"[\s\"']", "", _strip_comment(lone[0][0]).strip()) != "[main]"):
+        failures.append("ci.yml must scope push to exactly branches: [main]:")
     return failures
 
 
 def ci_failures(ci_text):
     """Exact invocation block bound to an unconditional executing job."""
-    lines = ci_text.splitlines()
+    lines = _without_block_scalars(ci_text.splitlines())
     failures = trigger_failures(ci_text)
     if any(re.match(r"""^"[^"\n]*\\[^"\n]*"\s*:""", line) for line in lines if line.strip() and not line.strip().startswith("#")):
         failures.append("ci.yml top-level keys must use plain spelling: escapes execute decoded")
@@ -215,9 +212,9 @@ def ci_failures(ci_text):
                     key = stripped.split(":")[0].strip().strip("\"'")
                     failures.append(f"ci.yml top-level env must not preload startup code ({key})")
                     break
-    # Structure scans must not match inside block scalars: a multiline `name: |`
-    # can smuggle the pinned step text while the job calls a reusable workflow.
-    lines = _without_block_scalars(lines)
+    # Structure scans must not match inside block scalars (scrubbed above):
+    # a multiline `name: |` can smuggle the pinned step text while the job
+    # calls a reusable workflow.
     starts = [i for i, line in enumerate(lines) if _norm(line) == _norm(STEP_NAME_LINE)]
     if len(starts) != 1:
         return failures + ["ci.yml must invoke the capability gate exactly once"]

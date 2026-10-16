@@ -7,6 +7,7 @@ import datetime as dt
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -140,6 +141,54 @@ class CapabilityGateMainTests(unittest.TestCase):
                                 self.assertEqual(gate.main(), 1)
             finally:
                 os.chdir(previous)
+
+    def test_ci_invokes_capability_gate_unconditionally(self):
+        # The gate cannot notice its own caller changing: if ci.yml drops or
+        # conditions the invocation, cited-source changes bypass re-review.
+        # Lives here (not in the register pattern) so the scheduled
+        # freshness job only runs register-scoped tests.
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/ci.yml"
+        action = repo / ".github/actions/capability-gate/action.yml"
+        if not workflow.exists() or not action.exists():
+            self.skipTest("CI workflow or gate action unavailable")
+        lines = workflow.read_text().splitlines()
+        starts = [i for i, line in enumerate(lines) if line.strip() == "- name: Test capability register binding"]
+        self.assertEqual(len(starts), 1, "ci.yml must invoke the capability gate exactly once")
+        self.assertEqual(lines[starts[0]], "      - name: Test capability register binding")
+        headers = [i for i, line in enumerate(lines) if re.match(r"^  [A-Za-z0-9_.\-]+:", line)]
+        job_start = max(i for i in headers if i < starts[0])
+        later = [i for i in headers if i > starts[0]]
+        job = lines[job_start : later[0] if later else len(lines)]
+        self.assertFalse(
+            any(re.match(r"^    (if|needs):", line) for line in job),
+            "gate job must stay unconditional (no job-level if:/needs:)",
+        )
+        step = []
+        for line in lines[starts[0] + 1:]:
+            if re.match(r"^      - ", line):
+                break
+            if line.strip() and not line.strip().startswith("#"):
+                step.append(line)
+        self.assertEqual(step, ["        uses: ./.github/actions/capability-gate"])
+
+    def test_freshness_probe_falls_back_to_broken(self):
+        # If register_status.py itself errors, the probe must still emit a
+        # routable status instead of an empty one that files no issue.
+        # Lives here (not in the register pattern) so the scheduled
+        # freshness job only runs register-scoped tests.
+        repo = Path(__file__).resolve().parents[2]
+        workflow = repo / ".github/workflows/capability-register-freshness.yml"
+        if not workflow.exists():
+            self.skipTest("freshness workflow unavailable")
+        text = workflow.read_text()
+        probe = [line for line in text.splitlines() if "register_status.py" in line]
+        self.assertEqual(len(probe), 1, "probe must invoke register_status.py exactly once")
+        self.assertIn("|| echo broken", probe[0])
+        # A multi-line capture would write a bare second line that matches
+        # no routing step, so the value must be sanitized before writing.
+        self.assertIn('case "$status" in fresh|stale|broken)', text)
+        self.assertIn('echo "status=$status" >> "$GITHUB_OUTPUT"', text)
 
 
 if __name__ == "__main__":

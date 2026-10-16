@@ -34,6 +34,7 @@ def _workflow_text():
 
 CI = """on:
   push:
+    branches: [main]
   pull_request:
   merge_group:
 jobs:

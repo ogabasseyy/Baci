@@ -36,6 +36,20 @@ const UNCONFIRMED_SHIPPING_ERROR_CODES = new Set([
   'EXISTING_SHIPMENT_QUOTE_MISMATCH',
 ]);
 
+// Only errors traced to lookup/validation before carrier submission belong
+// here. A new server/proxy code alone does not prove that booking failed.
+const DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES = new Set([
+  'SHIPMENT_BOOKING_LOCK_FAILED',
+  'MERCHANT_LOOKUP_FAILED',
+  'MERCHANT_SENDER_REQUIRED',
+  'QUOTE_ECONOMICS_LOOKUP_FAILED',
+  'QUOTE_METADATA_LOOKUP_FAILED',
+  'QUOTE_REFRESH_PERSIST_FAILED',
+  'QUOTE_REFRESH_ORDER_UPDATE_FAILED',
+  'GIGL_AUTHENTICATION_FAILED',
+  'GIGL_INTERNATIONAL_COUNTRY_LOOKUP_FAILED',
+]);
+
 interface OrderStatusContext {
   previousOrderQueries: [readonly unknown[], Order | undefined][];
   previousOrders: [readonly unknown[], InfiniteData<OrdersPage> | undefined][];
@@ -113,15 +127,15 @@ async function updateOrderStatus(
       payload && typeof payload === 'object' && typeof payload.code === 'string'
         ? payload.code
         : undefined;
-    // An untyped server failure may follow a committed carrier booking or
-    // local order-update failure. Explicit post-submit/shared-stage codes
-    // also require reconciliation; preserve other business rejections below.
+    // Server failures require reconciliation unless their code proves that
+    // submission never began. Shared/post-submit codes stay indeterminate
+    // at any HTTP status; preserve other business rejections below.
     if (
       status === 'shipped' &&
       (UNCONFIRMED_SHIPPING_ERROR_CODES.has(errorCode ?? '') ||
         (response.status >= 500 &&
           response.status <= 599 &&
-          !errorCode?.trim()))
+          !DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES.has(errorCode ?? '')))
     ) {
       throw unconfirmedShippingResult();
     }

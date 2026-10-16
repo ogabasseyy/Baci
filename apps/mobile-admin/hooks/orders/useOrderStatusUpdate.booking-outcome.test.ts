@@ -90,14 +90,19 @@ describe('provider booking result through the real status mutation and shipment 
     });
   });
 
-  it('closes the flow after SHIPMENT_SAVE_FAILED even though the response is a typed HTTP 500', async () => {
+  it.each([
+    [500, 'SHIPMENT_SAVE_FAILED'],
+    [500, 'INTERNAL_ERROR'],
+    [502, 'BOOKING_FAILED'],
+    [500, 'INVENTORY_CONFIRMATION_FAILED'],
+  ])('closes the flow after an indeterminate typed HTTP %s/%s', async (status, code) => {
     mocks.fetch.mockResolvedValue(
       new Response(
         JSON.stringify({
           error: 'Carrier booked but local shipment could not be saved',
-          code: 'SHIPMENT_SAVE_FAILED',
+          code,
         }),
-        { status: 500 }
+        { status }
       )
     );
     const { actions, setShowShipmentFlow } = useBookingActions();
@@ -113,5 +118,39 @@ describe('provider booking result through the real status mutation and shipment 
     expect(mocks.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['order', 'order-1'],
     });
+  });
+  it.each([
+    [400, 'SHIPPING_QUOTE_RECEIVER_MISMATCH'],
+    [401, 'UNAUTHORIZED'],
+    [504, 'GIGL_AUTHENTICATION_FAILED'],
+    [502, 'GIGL_INTERNATIONAL_COUNTRY_LOOKUP_FAILED'],
+    [500, 'SHIPMENT_BOOKING_LOCK_FAILED'],
+    [500, 'MERCHANT_LOOKUP_FAILED'],
+    [500, 'MERCHANT_SENDER_REQUIRED'],
+    [500, 'QUOTE_ECONOMICS_LOOKUP_FAILED'],
+    [500, 'QUOTE_METADATA_LOOKUP_FAILED'],
+    [500, 'QUOTE_REFRESH_PERSIST_FAILED'],
+    [500, 'QUOTE_REFRESH_ORDER_UPDATE_FAILED'],
+    [400, 'UNKNOWN_INPUT_ERROR'],
+  ])('keeps the definitive pre-booking HTTP %s/%s error in the flow', async (status, code) => {
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'Explicit server rejection',
+          code,
+        }),
+        { status }
+      )
+    );
+    const { actions, setShowShipmentFlow } = useBookingActions();
+
+    await actions.proceedFromShipmentMethod();
+
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+    expect(setShowShipmentFlow).not.toHaveBeenCalled();
+    expect(mocks.alert).toHaveBeenCalledWith(
+      'Error',
+      'Explicit server rejection'
+    );
   });
 });

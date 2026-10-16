@@ -239,34 +239,14 @@ describe('order shipping transport failures', () => {
   });
 
   it.each([
-    [400, 'SHIPPING_QUOTE_RECEIVER_MISMATCH'],
-    [401, 'UNAUTHORIZED'],
-    [504, 'GIGL_AUTHENTICATION_FAILED'],
-    [502, 'GIGL_INTERNATIONAL_COUNTRY_LOOKUP_FAILED'],
-  ])('preserves the explicit server business code for HTTP %i', async (status, code) => {
-    mocks.fetch.mockResolvedValue(
-      new Response(
-        JSON.stringify({ error: 'Explicit server rejection', code }),
-        { status }
-      )
-    );
-
-    await expect(
-      useOrderStatusMutation().mutate({ orderId: 'order-1', status: 'shipped' })
-    ).rejects.toMatchObject({
-      name: 'OrderStatusUpdateError',
-      code,
-      message: 'Explicit server rejection',
-    });
-    expect(mocks.fetch).toHaveBeenCalledOnce();
-  });
-
-  it('preserves a typed post-booking code outside a shipping request', async () => {
+    'SHIPMENT_SAVE_FAILED',
+    'INTERNAL_ERROR',
+  ])('preserves typed code %s outside a shipping request', async (code) => {
     mocks.fetch.mockResolvedValue(
       new Response(
         JSON.stringify({
           error: 'Original server error',
-          code: 'SHIPMENT_SAVE_FAILED',
+          code,
         }),
         { status: 500 }
       )
@@ -277,7 +257,7 @@ describe('order shipping transport failures', () => {
         status: 'processing',
       })
     ).rejects.toMatchObject({
-      code: 'SHIPMENT_SAVE_FAILED',
+      code,
       message: 'Original server error',
     });
     expect(mocks.fetch).toHaveBeenCalledOnce();

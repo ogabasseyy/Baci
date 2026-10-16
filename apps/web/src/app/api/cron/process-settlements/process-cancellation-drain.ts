@@ -8,7 +8,10 @@ import {
 } from '@/lib/orders/cancellation-drain-deadline';
 import { cancellationSideEffectDrainLimit } from '@/lib/orders/cancellation-side-effect-drain-limit';
 import { drainFailedOrderCancellationSideEffects } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
-import { isRefundVerificationPending } from '@/lib/orders/refund-verification-pending';
+import {
+  isRefundVerificationPendingBefore,
+  REFUND_VERIFICATION_PROBE_BUDGET_MS,
+} from '@/lib/orders/refund-verification-pending';
 import type { MerchantRefundPushSender } from '@/lib/payments/drain-paystack-refund-notifications';
 import { drainPaystackRefundNotifications } from '@/lib/payments/drain-paystack-refund-notifications';
 import { notificationDrainDeadlineMs } from '@/lib/payments/notification-drain-deadline';
@@ -51,9 +54,13 @@ export async function processCancellationDrain(
   // provider admission: a full reconcile leaves ~30s and every 76s
   // verification-plus-initiation defers on every backlog invocation.
   // A thrown probe outage fails closed (capped) like a returned
-  // read error: aborting here would skip every drain below.
-  const verificationPending = await isRefundVerificationPending(supabase).catch(
-    () => true
+  // read error: aborting here would skip every drain below. A slow
+  // probe fails closed the same way at its overall deadline: without
+  // the bound it would eat the invocation before any deadline is
+  // computed and every drain below would skip on a zero limit.
+  const verificationPending = await isRefundVerificationPendingBefore(
+    supabase,
+    workersStartedAt + REFUND_VERIFICATION_PROBE_BUDGET_MS
   );
   const workerDeadlineMs = reconcileWorkerDeadlineMs(
     workersStartedAt,

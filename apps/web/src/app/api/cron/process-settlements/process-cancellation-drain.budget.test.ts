@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   drainFailedOrderCancellationSideEffects: vi.fn(),
   drainPaystackRefundNotifications: vi.fn(),
-  isRefundVerificationPending: vi.fn(),
+  isRefundVerificationPendingBefore: vi.fn(),
   reconcileCompletedPaystackCancellationRefunds: vi.fn(),
   reconcilePendingPaystackCancellationRefunds: vi.fn(),
   sweepPaystackRefundRecoveryWatches: vi.fn(),
@@ -28,7 +28,8 @@ vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
     mocks.drainFailedOrderCancellationSideEffects,
 }));
 vi.mock('@/lib/orders/refund-verification-pending', () => ({
-  isRefundVerificationPending: mocks.isRefundVerificationPending,
+  REFUND_VERIFICATION_PROBE_BUDGET_MS: 10_000,
+  isRefundVerificationPendingBefore: mocks.isRefundVerificationPendingBefore,
 }));
 vi.mock('@/lib/payments/drain-paystack-refund-notifications', () => ({
   drainPaystackRefundNotifications: mocks.drainPaystackRefundNotifications,
@@ -61,7 +62,7 @@ describe('processCancellationDrain budget scheduling', () => {
       mock.mockReset();
     }
 
-    mocks.isRefundVerificationPending.mockResolvedValue(false);
+    mocks.isRefundVerificationPendingBefore.mockResolvedValue(false);
     mocks.drainFailedOrderCancellationSideEffects.mockResolvedValue({
       drained: [],
       failed: [],
@@ -89,7 +90,7 @@ describe('processCancellationDrain budget scheduling', () => {
   });
 
   it('caps the reconcile phase when refund verification pends', async () => {
-    mocks.isRefundVerificationPending.mockResolvedValue(true);
+    mocks.isRefundVerificationPendingBefore.mockResolvedValue(true);
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
     try {
       await processCancellationDrain(
@@ -104,7 +105,10 @@ describe('processCancellationDrain budget scheduling', () => {
     // The capped 32s phase ends with the setup allowance plus the
     // 76s preflight budget before the phase end; the row-start gate
     // sits two 8s provider reads inside it.
-    expect(mocks.isRefundVerificationPending).toHaveBeenCalledWith(supabase);
+    expect(mocks.isRefundVerificationPendingBefore).toHaveBeenCalledWith(
+      supabase,
+      1_010_000
+    );
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
     ).toHaveBeenCalledWith(supabase, 25, 1_016_000);
@@ -118,26 +122,37 @@ describe('processCancellationDrain budget scheduling', () => {
     );
   });
 
-  it('caps the reconcile phase when the verification probe throws', async () => {
-    // A transport-level probe outage must fail closed (capped),
-    // not abort the whole cron invocation before the drains run.
-    mocks.isRefundVerificationPending.mockRejectedValue(
-      new Error('transport down')
-    );
+  it('keeps drain budgets when the verification probe is slow', async () => {
+    // A degraded probe resolves at its 10s deadline (fail closed —
+    // the race itself is pinned at the probe level), so the
+    // reconcile phase caps and the side-effect and notification
+    // drains keep their reserved budget instead of skipping on a
+    // zero limit.
+    vi.useFakeTimers();
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    mocks.isRefundVerificationPendingBefore.mockImplementation(
+      () =>
+        new Promise<boolean>((resolve) => {
+          setTimeout(() => resolve(true), 10_000);
+        })
+    );
     try {
-      await processCancellationDrain(
+      const run = processCancellationDrain(
         supabase,
         mocks.sendEmail,
         mocks.notifyMerchant
       );
+      await vi.advanceTimersByTimeAsync(10_000);
+      await run;
     } finally {
       now.mockRestore();
+      vi.useRealTimers();
     }
     expect(
       mocks.reconcilePendingPaystackCancellationRefunds
     ).toHaveBeenCalledWith(supabase, 25, 1_016_000);
     expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalled();
+    expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalled();
   });
 
   it('skips the notification drain when the workers exhausted the cron budget', async () => {

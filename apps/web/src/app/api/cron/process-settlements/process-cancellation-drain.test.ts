@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   drainFailedOrderCancellationSideEffects: vi.fn(),
   drainPaystackRefundNotifications: vi.fn(),
-  isRefundVerificationPending: vi.fn(),
+  isRefundVerificationPendingBefore: vi.fn(),
   reconcileCompletedPaystackCancellationRefunds: vi.fn(),
   reconcilePendingPaystackCancellationRefunds: vi.fn(),
   sweepPaystackRefundRecoveryWatches: vi.fn(),
@@ -28,7 +28,8 @@ vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
     mocks.drainFailedOrderCancellationSideEffects,
 }));
 vi.mock('@/lib/orders/refund-verification-pending', () => ({
-  isRefundVerificationPending: mocks.isRefundVerificationPending,
+  REFUND_VERIFICATION_PROBE_BUDGET_MS: 10_000,
+  isRefundVerificationPendingBefore: mocks.isRefundVerificationPendingBefore,
 }));
 vi.mock('@/lib/payments/drain-paystack-refund-notifications', () => ({
   drainPaystackRefundNotifications: mocks.drainPaystackRefundNotifications,
@@ -61,7 +62,7 @@ describe('processCancellationDrain', () => {
       mock.mockReset();
     }
 
-    mocks.isRefundVerificationPending.mockResolvedValue(false);
+    mocks.isRefundVerificationPendingBefore.mockResolvedValue(false);
     mocks.drainFailedOrderCancellationSideEffects.mockResolvedValue({
       drained: [],
       failed: [],

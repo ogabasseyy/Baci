@@ -7,6 +7,14 @@ import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gatewa
 
 type ProbeClient = Pick<SupabaseClient, 'from'>;
 
+// Overall probe budget inside the cron invocation: the probe runs
+// before any deadline is computed, so a slow (not erroring) probe
+// would otherwise eat the 5-minute invocation and every drain
+// behind it computes a zero limit. Ten seconds of the 60s
+// reconcile phase; expiry fails closed (capped), the safe
+// direction the probe already uses for read errors.
+export const REFUND_VERIFICATION_PROBE_BUDGET_MS = 10_000;
+
 // Leg page size for the id-ordered pagination below: pages are
 // walked to exhaustion, so every candidate leg is scanned no
 // matter how many covered rows precede the uncovered one.
@@ -152,6 +160,34 @@ export async function isRefundVerificationPending(
   return paystackLegs.some(
     (leg) => !isLegCovered(leg, paystackLegs, refunds as ProbeRefund[])
   );
+}
+
+/**
+ * Probe with an overall deadline: resolves the probe result, or
+ * true when the deadline passes first (expired budget fails closed
+ * like a read error). The slow probe's reads are abandoned, not
+ * awaited, so a degraded probe degrades to the capped phase
+ * instead of consuming the invocation.
+ */
+export async function isRefundVerificationPendingBefore(
+  supabase: ProbeClient,
+  deadlineMs: number
+): Promise<boolean> {
+  const remainingMs = deadlineMs - Date.now();
+  if (remainingMs <= 0) {
+    return true;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      isRefundVerificationPending(supabase).catch(() => true),
+      new Promise<true>((resolve) => {
+        timer = setTimeout(() => resolve(true), remainingMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Whether two currency codes match like the coverage scan (nulls never match). */

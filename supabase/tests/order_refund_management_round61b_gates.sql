@@ -23,6 +23,8 @@ DECLARE
   v_owner_id uuid := 'b6110000-0000-4000-8000-000000000001';
   v_manager_id uuid := 'b6110000-0000-4000-8000-000000000002';
   v_merchant_id uuid := 'b6110100-0000-4000-8000-000000000001';
+  v_alien_id uuid := 'b6110000-0000-4000-8000-000000000009';
+  v_merchant_b_id uuid := 'b6110100-0000-4000-8000-000000000009';
 BEGIN
   INSERT INTO auth.users (
     id, instance_id, aud, role, email, encrypted_password,
@@ -36,12 +38,18 @@ BEGIN
     (v_manager_id, '00000000-0000-4000-8000-000000000000',
       'authenticated', 'authenticated', 'fail-manager@example.test',
       'test', pg_catalog.now(), pg_catalog.now(), pg_catalog.now(),
+      '{}'::jsonb, '{}'::jsonb),
+    (v_alien_id, '00000000-0000-4000-8000-000000000000',
+      'authenticated', 'authenticated', 'fail-alien@example.test',
+      'test', pg_catalog.now(), pg_catalog.now(), pg_catalog.now(),
       '{}'::jsonb, '{}'::jsonb);
 
   INSERT INTO public.merchants (id, user_id, email, business_name, slug)
   VALUES
     (v_merchant_id, v_owner_id, 'fail-owner@example.test',
-      'Failedgate Fixture', 'failedgate-fixture');
+      'Failedgate Fixture', 'failedgate-fixture'),
+    (v_merchant_b_id, v_alien_id, 'fail-alien@example.test',
+      'Failedgate Alien', 'failedgate-alien');
 
   INSERT INTO public.staff_members (
     merchant_id, user_id, email, name, role, permissions, status
@@ -59,7 +67,11 @@ BEGIN
     ('b6111000-0000-4000-8000-000000000092', v_merchant_id, 'FAIL-092',
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('b6111000-0000-4000-8000-000000000095', v_merchant_id, 'FAIL-095',
-      100, 100, 'refunded', 'cancelled', pg_catalog.now());
+      100, 100, 'refunded', 'cancelled', pg_catalog.now()),
+    -- Merchant-scoping control: own outstanding leg plus alien rows
+    -- that must not veto the panel flag.
+    ('b6111000-0000-4000-8000-000000000096', v_merchant_id, 'FAIL-096',
+      100, 100, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -101,7 +113,19 @@ BEGIN
         'method', 'paystack',
         'payment_transaction_id', 'b6112000-0000-4000-8000-000000000102',
         'provider_refund_status', 'processed',
-        'provider_refund_id', 7));
+        'provider_refund_id', 7)),
+    ('b6112000-0000-4000-8000-000000000104', v_merchant_id,
+      'b6111000-0000-4000-8000-000000000096', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pay-96', '{}'::jsonb),
+    -- Alien rows under merchant B on the same order: an unallocated
+    -- terminal refund (veto arm 2) and a foreign-currency leg
+    -- (veto arm 1). The manager ignores both; so must the flag.
+    ('b6112000-0000-4000-8000-000000000105', v_merchant_b_id,
+      'b6111000-0000-4000-8000-000000000096', 'refund', 100, 'NGN',
+      'completed', 'paystack', 'alien-96-r', '{}'::jsonb),
+    ('b6112000-0000-4000-8000-000000000106', v_merchant_b_id,
+      'b6111000-0000-4000-8000-000000000096', 'payment', 100, 'USD',
+      'completed', 'stripe', 'alien-96-p', '{}'::jsonb);
 END;
 $fixtures$;
 
@@ -198,6 +222,17 @@ BEGIN
   END IF;
   IF (v_result->>'canRecordManual')::boolean IS DISTINCT FROM true THEN
     RAISE EXCEPTION 'stamped failure hid manual, got %',
+      v_result->>'canRecordManual';
+  END IF;
+
+  -- Cross-merchant rows veto nothing: the alien refund and foreign
+  -- leg sit under merchant B, so the merchant-scoped flag matches
+  -- the merchant-scoped manager and still advertises recovery.
+  SELECT public.manage_order_refund(
+    'b6111000-0000-4000-8000-000000000096'
+  ) INTO v_result;
+  IF (v_result->>'canRecordManual')::boolean IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'alien rows vetoed manual, got %',
       v_result->>'canRecordManual';
   END IF;
 END;

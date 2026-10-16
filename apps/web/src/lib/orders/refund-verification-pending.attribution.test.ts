@@ -73,6 +73,27 @@ describe('isRefundVerificationPending unlinked attribution', () => {
     await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
   });
 
+  it('ignores linked refunds from another candidate order', async () => {
+    // A malformed refund from candidate B names candidate A's leg
+    // id: without order scoping it would cover A's leg and hide
+    // the pending verification from the probe.
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(
+        chain({ data: [{ order_id: 'order-1' }], error: null })
+      )
+      .mockReturnValueOnce(
+        chain({ data: [{ order_id: 'order-2' }], error: null })
+      )
+      .mockReturnValueOnce(chain({ data: [leg], error: null }))
+      .mockReturnValueOnce(
+        chain({ data: [refund({ order_id: 'order-2' })], error: null })
+      );
+    const supabase = { from } as never;
+
+    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
+  });
+
   it('ignores unlinked refunds when several Paystack legs exist', async () => {
     const leg2 = { ...leg, id: 'leg-2' };
     const from = vi

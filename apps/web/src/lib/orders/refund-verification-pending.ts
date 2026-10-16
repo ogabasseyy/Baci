@@ -171,7 +171,15 @@ function isLegCovered(
       : 0;
   let covered = 0;
   for (const row of refunds) {
-    if (row.metadata?.payment_transaction_id === leg.id) {
+    // Scope linked rows to the leg's own order like the unlinked
+    // branch below: the batch spans every candidate order, so a
+    // malformed refund from another order naming this leg's id
+    // must not count as coverage (the worker scopes its ledger
+    // read per order and would still require preflight).
+    if (
+      row.order_id === leg.order_id &&
+      row.metadata?.payment_transaction_id === leg.id
+    ) {
       covered += covering(row);
     }
   }

@@ -100,7 +100,7 @@ test('protected-branch manifest includes tracked source files with spaces', () =
   const root = mkdtempSync(join(tmpdir(), 'baci-semgrep-push-scope-'));
   try {
     assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
-    for (const path of ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/config.json', 'apps/web/src/lib/probe.py', '.github/scripts/semgrep-sarif-analysis-diagnostics.py', 'outside.ts']) {
+    for (const path of ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/config.json', 'apps/web/src/lib/probe.py', '.github/scripts/semgrep-sarif-analysis-diagnostics.py', 'next.config.ts', 'outside.ts']) {
       mkdirSync(join(root, path, '..'), { recursive: true });
       writeFileSync(join(root, path), 'fixture');
     }
@@ -108,7 +108,7 @@ test('protected-branch manifest includes tracked source files with spaces', () =
     const targets = workflow.split('          scan_targets=(\n')[1].split('          )')[0].trim().split(/\s+/);
     const result = spawnSync('python3', [helper, 'push-targets', ...targets], { cwd: root, encoding: 'utf8', env: { ...process.env, GITHUB_WORKSPACE: root } });
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(readFileSync(join(root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean).sort(), ['.github/scripts/semgrep-sarif-analysis-diagnostics.py', 'apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts']);
+    assert.deepEqual(readFileSync(join(root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean).sort(), ['.github/scripts/semgrep-sarif-analysis-diagnostics.py', 'apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'next.config.ts']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

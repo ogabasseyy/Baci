@@ -18,7 +18,7 @@ const workflow = readFileSync(
 );
 const helper = fileURLToPath(new URL('./semgrep-sarif-analysis-diagnostics.py', import.meta.url));
 
-function fixture(name = 'probe.ts') {
+function fixture(name = 'probe.ts', directory = 'apps/web/src/lib') {
   const root = mkdtempSync(join(tmpdir(), 'baci-security-scope-'));
   const git = (...args) => {
     const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
@@ -33,9 +33,9 @@ function fixture(name = 'probe.ts') {
   git('commit', '-qm', 'base');
   git('update-ref', 'refs/remotes/origin/main', git('rev-parse', 'HEAD'));
   git('checkout', '-qb', 'feature');
-  mkdirSync(join(root, 'apps/web/src/lib'), { recursive: true });
+  mkdirSync(join(root, directory), { recursive: true });
   writeFileSync(
-    join(root, 'apps/web/src/lib', name),
+    join(root, directory, name),
     'export const value = 1;'
   );
   git('add', '.');
@@ -123,6 +123,17 @@ test('unrelated Python files retain their existing excluded PR scope', () => {
     const result = f.run();
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.paths, []);
+  } finally {
+    rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a root Next config change remains in targeted PR scope', () => {
+  const f = fixture('next.config.ts', '.');
+  try {
+    const result = f.run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.paths, ['next.config.ts']);
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }

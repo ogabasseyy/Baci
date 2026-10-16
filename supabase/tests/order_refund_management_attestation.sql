@@ -142,6 +142,53 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'unattested replay mutated the audit note';
   END IF;
+
+  -- A replay while the worker holds the step claimed still reads
+  -- back status, but the note rewrite freezes: audit metadata must
+  -- not mutate in the states the processing gate protects.
+  SET LOCAL ROLE service_role;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.order_cancellation_side_effects
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+      AND step = 'refund'
+  ) THEN
+    RAISE EXCEPTION 'manual record left no side-effect row to claim';
+  END IF;
+  UPDATE public.order_cancellation_side_effects SET status = 'claimed'
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+     AND step = 'refund';
+  SET LOCAL ROLE authenticated;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1',
+    'frozen-note', true) INTO v_result;
+  IF EXISTS (
+    SELECT 1 FROM public.transactions
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+      AND metadata->>'reference' = 'attested-1'
+      AND metadata->>'note' = 'frozen-note'
+  ) THEN
+    RAISE EXCEPTION 'claimed-step replay mutated the audit note';
+  END IF;
+  -- Unfrozen, the same replay applies the annotation correction.
+  SET LOCAL ROLE service_role;
+  UPDATE public.order_cancellation_side_effects
+     SET status = 'failed', error = NULL
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+     AND step = 'refund';
+  SET LOCAL ROLE authenticated;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
+    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1',
+    'applied-note', true) INTO v_result;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.transactions
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
+      AND metadata->>'reference' = 'attested-1'
+      AND metadata->>'note' = 'applied-note'
+  ) THEN
+    RAISE EXCEPTION 'unfrozen replay skipped the annotation correction';
+  END IF;
   -- Peer identity stays out of the payload at the SQL source, so
   -- direct RPC callers bypassing the route mask see none either.
   SELECT public.manage_order_refund(

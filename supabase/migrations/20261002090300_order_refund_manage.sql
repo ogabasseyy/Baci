@@ -189,12 +189,12 @@ BEGIN
         OR COALESCE(length(p_note),0)>500 THEN
         RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';
       END IF;
-      -- Idempotent replay short-circuit (extracted helper): same
-      -- transfer refreshes the note and reads back status, mismatched
-      -- money raises, and no prior rows proceed to recording.
-      p_action := private.apply_manual_refund_replay_v1(
-        p_order_id, p_amount, p_refunded_at, p_method, p_reference,
-        p_note);
+      -- Idempotent replay short-circuit: same transfer reads back status.
+      -- It skips the processing gate by design, so freeze its note
+      -- rewrite under the same condition.
+      p_action := private.apply_manual_refund_replay_v1(p_order_id,
+        p_amount, p_refunded_at, p_method, p_reference, p_note,
+        v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0 OR v_has_movement_evidence);
     END IF;
     IF p_action <> 'status' AND (v_step_status IN ('claimed','delivery_uncertain') OR v_pending>0
       OR v_has_movement_evidence) THEN

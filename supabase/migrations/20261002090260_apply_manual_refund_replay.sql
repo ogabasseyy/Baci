@@ -5,10 +5,16 @@
 -- mismatched money raises manual_reference_conflict; no prior rows
 -- returns 'manual' so the record helper runs. Called only from
 -- private.manage_order_refund after the confirmation attestation, so
--- unattested callers never reach the note rewrite.
+-- unattested callers never reach the note rewrite. When the caller
+-- passes p_note_frozen (worker holds the step claimed/uncertain, or
+-- pending/movement evidence exists), the note rewrite is skipped but
+-- the idempotent status read-back still succeeds: audit metadata
+-- stays frozen in exactly the states the processing gate protects.
+DROP FUNCTION IF EXISTS private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text);
 CREATE OR REPLACE FUNCTION private.apply_manual_refund_replay_v1(
   p_order_id uuid, p_amount numeric, p_refunded_at timestamptz,
-  p_method text, p_reference text, p_note text
+  p_method text, p_reference text, p_note text,
+  p_note_frozen boolean DEFAULT false
 ) RETURNS text LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_replay jsonb;
@@ -29,8 +35,10 @@ BEGIN
     -- differing note is an annotation correction, not a new
     -- transfer (a new reference would double-record the money),
     -- so refresh it on every leg row instead of keeping stale
-    -- audit text.
-    IF COALESCE(v_replay->>'note','') IS DISTINCT FROM COALESCE(p_note,'') THEN
+    -- audit text — unless the caller froze notes (claimed step or
+    -- pending evidence), in which case the correction waits.
+    IF NOT COALESCE(p_note_frozen,false)
+      AND COALESCE(v_replay->>'note','') IS DISTINCT FROM COALESCE(p_note,'') THEN
       UPDATE public.transactions SET metadata = metadata ||
         jsonb_build_object('note',p_note)
         WHERE order_id=p_order_id AND transaction_type='refund'
@@ -41,10 +49,10 @@ BEGIN
   END IF;
   RETURN 'manual';
 END; $$;
-REVOKE ALL ON FUNCTION private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text)
+REVOKE ALL ON FUNCTION private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text,boolean)
   FROM PUBLIC,anon,authenticated;
 -- Mirrors record_manual_order_refund: service_role fires the manager,
 -- and authenticated EXECUTE keeps any hypothetical direct call on the
 -- clean schema-USAGE denial instead of the crashing function-ACL path.
-GRANT EXECUTE ON FUNCTION private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text)
+GRANT EXECUTE ON FUNCTION private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text,boolean)
   TO service_role, authenticated;

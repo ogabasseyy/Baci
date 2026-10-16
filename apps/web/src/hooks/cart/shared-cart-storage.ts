@@ -115,6 +115,11 @@ export const subscribeCartSessionGeneration = (
  * Persistable view of the linked display: temp optimistic lines never
  * persist, and link markers stay out of storage (the stable server id
  * is the one marker kept, so a reload still matches confirmed lines).
+ * Voucher credentials never persist either: the token/award pair is a
+ * replayable credential, and the authorized snapshot rehydrates it
+ * in memory on reload, so the at-rest display shell keeps no secret.
+ * (The one-time legacy import reads the cache before the first
+ * confirmed save, while legacy-written lines still carry theirs.)
  */
 export const stripUnconfirmedDisplayLines = (
   display: SharedCartDisplayItem[]
@@ -125,6 +130,8 @@ export const stripUnconfirmedDisplayLines = (
       const {
         pendingTempId: _pendingTempId,
         hydrationFailed: _hydrationFailed,
+        quizVoucherToken: _quizVoucherToken,
+        quizAwardId: _quizAwardId,
         ...rest
       } = line;
       return rest as CartItem;

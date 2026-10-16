@@ -189,6 +189,28 @@ describe('cart-storage', () => {
     expect(getSharedCartImportReceipt('ogabassey')).toBeNull();
   });
 
+  it('never persists voucher credentials in the display cache', () => {
+    const persistable = stripUnconfirmedDisplayLines([
+      {
+        cartItemId: 'line-2',
+        id: 'prod-2',
+        name: 'Voucher phone',
+        pendingTempId: null,
+        price: 0,
+        quantity: 1,
+        quizAwardId: 'award-secret',
+        quizVoucherToken: 'token-secret',
+        serverLineId: 'line-2',
+      },
+    ] as SharedCartDisplayItem[]);
+
+    expect(persistable).toHaveLength(1);
+    expect(JSON.stringify(persistable)).not.toContain('token-secret');
+    expect(JSON.stringify(persistable)).not.toContain('award-secret');
+    expect(persistable[0]).not.toHaveProperty('quizVoucherToken');
+    expect(persistable[0]).not.toHaveProperty('quizAwardId');
+  });
+
   it('strips unconfirmed temp lines before persisting the display', () => {
     const persistable = stripUnconfirmedDisplayLines([
       {

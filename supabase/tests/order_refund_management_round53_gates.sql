@@ -6,8 +6,10 @@
 -- reversal, processed-refund notifications, and review closure
 -- never ran. A processed verdict must now run the shared
 -- aggregate finalization for BNPL orders; a nonterminal verdict
--- must still leave them untouched. Self-contained fixtures use
--- the b531 namespace and roll back.
+-- must still leave them untouched. The coverage scan also counts
+-- legacy refunded rows as terminal evidence like the claim and
+-- executor rules. Self-contained fixtures use the b531 namespace
+-- and roll back.
 --
 -- USAGE:
 --   supabase test db supabase/tests/order_refund_management_round53_gates.sql
@@ -43,7 +45,9 @@ BEGIN
     ('b5311000-0000-4000-8000-000000000091', v_merchant_id, 'BNPL-091',
       100, 100, 'bnpl_approved', 'cancelled', pg_catalog.now()),
     ('b5311000-0000-4000-8000-000000000092', v_merchant_id, 'BNPL-092',
-      100, 100, 'bnpl_approved', 'cancelled', pg_catalog.now());
+      100, 100, 'bnpl_approved', 'cancelled', pg_catalog.now()),
+    ('b5311000-0000-4000-8000-000000000093', v_merchant_id, 'BNPL-093',
+      200, 200, 'bnpl_approved', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -64,7 +68,24 @@ BEGIN
       'b5311000-0000-4000-8000-000000000092', 'refund', 100, 'NGN',
       'refund_pending', 'paystack', '123457',
       jsonb_build_object(
-        'payment_transaction_id', 'b5312000-0000-4000-8000-000000000093'));
+        'payment_transaction_id', 'b5312000-0000-4000-8000-000000000093')),
+    ('b5312000-0000-4000-8000-000000000095', v_merchant_id,
+      'b5311000-0000-4000-8000-000000000093', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pay-93a', '{}'::jsonb),
+    ('b5312000-0000-4000-8000-000000000096', v_merchant_id,
+      'b5311000-0000-4000-8000-000000000093', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'pay-93b', '{}'::jsonb),
+    ('b5312000-0000-4000-8000-000000000097', v_merchant_id,
+      'b5311000-0000-4000-8000-000000000093', 'refund', 100, 'NGN',
+      'refunded', 'paystack', '123458',
+      jsonb_build_object(
+        'payment_transaction_id', 'b5312000-0000-4000-8000-000000000095',
+        'provider_refund_status', 'processed')),
+    ('b5312000-0000-4000-8000-000000000098', v_merchant_id,
+      'b5311000-0000-4000-8000-000000000093', 'refund', 100, 'NGN',
+      'refund_pending', 'paystack', '123459',
+      jsonb_build_object(
+        'payment_transaction_id', 'b5312000-0000-4000-8000-000000000096'));
 END;
 $fixtures$;
 
@@ -120,6 +141,33 @@ BEGIN
   WHERE id = 'b5311000-0000-4000-8000-000000000092';
   IF v_label <> 'bnpl_approved' THEN
     RAISE EXCEPTION 'control order finalized early, got %', v_label;
+  END IF;
+
+  -- A legacy refunded row covers its leg like a completed one: once
+  -- the remaining Paystack leg settles, finalization runs instead
+  -- of stranding reversal, notifications, and review closure. The
+  -- label alone cannot prove it (the transactions sync trigger
+  -- flips it on the verdict write either way): the processed
+  -- notifications exist only when the shared finalization ran.
+  SELECT public.record_verified_paystack_cancellation_refund_v1(
+    'b5312000-0000-4000-8000-000000000098', 'processed', 987654323,
+    10000, 'NGN'
+  ) INTO v_verdict;
+  IF v_verdict <> 'processed' THEN
+    RAISE EXCEPTION 'legacy verdict misreported, got %', v_verdict;
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+  WHERE id = 'b5311000-0000-4000-8000-000000000093';
+  IF v_label <> 'refunded' THEN
+    RAISE EXCEPTION 'legacy-covered order not finalized, got %', v_label;
+  END IF;
+  SELECT count(*) INTO v_notifications
+  FROM public.paystack_cancellation_refund_notifications
+  WHERE order_id = 'b5311000-0000-4000-8000-000000000093'
+    AND event_type IN ('processed_customer_email', 'processed_merchant_push');
+  IF v_notifications <> 2 THEN
+    RAISE EXCEPTION 'legacy finalization stranded, notifications got %',
+      v_notifications;
   END IF;
 END;
 $refund_round53_gates$;

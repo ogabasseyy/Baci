@@ -62,6 +62,6 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261016000000_admit_bnpl_to_reconciliation_finalization.sql',
-    sha256: '39baafe27ccf921602ce14c19de07c5d2fb2c369c300c74c40cd47098a337927',
+    sha256: '192529970279f9c8755d096856bcaae255108a55ce0a4d44dc51d7c23850b676',
   },
 ];

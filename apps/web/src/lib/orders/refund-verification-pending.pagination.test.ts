@@ -15,6 +15,7 @@ const leg = {
   currency: 'NGN',
   gateway: 'paystack',
   id: 'leg-1',
+  order_id: 'order-1',
 };
 
 function refund(legId: string) {
@@ -22,6 +23,7 @@ function refund(legId: string) {
     amount: 100,
     currency: 'NGN',
     metadata: { payment_transaction_id: legId },
+    order_id: 'order-1',
   };
 }
 

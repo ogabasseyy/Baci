@@ -3,8 +3,12 @@
 -- paid), but this Paystack reconciliation caller skipped it: for a
 -- cancelled mixed BNPL order whose provider refund settled after the
 -- worker completed, settlement reversal, processed-refund
--- notifications, and review closure never ran. All other behavior is
--- unchanged from 20260928184300.
+-- notifications, and review closure never ran. The coverage scan
+-- also counts legacy refunded rows as terminal evidence, matching
+-- the claim and executor rules: a mixed order with one legacy
+-- covered leg would otherwise strand finalization after the
+-- remaining Paystack leg settles. All other behavior is unchanged
+-- from 20260928184300.
 --
 CREATE OR REPLACE FUNCTION public.record_verified_paystack_cancellation_refund_v1(
   p_refund_id uuid,
@@ -197,7 +201,10 @@ BEGIN
           -- gate (whitespace-trimmed, uppercased; missing gateways
           -- never match).
           AND public.normalized_gateway_name_v1(r.gateway) = public.normalized_gateway_name_v1(p.gateway)
-          AND r.status = 'completed'
+          -- Terminal evidence is completed or refunded (legacy
+          -- provider-confirmed rows), mirroring the aggregate
+          -- claim and the executor coverage rules.
+          AND r.status IN ('completed', 'refunded')
           AND r.amount > 0
           AND upper(btrim(r.currency)) = upper(btrim(p.currency))
           -- A locally completed Paystack refund counts only after this RPC

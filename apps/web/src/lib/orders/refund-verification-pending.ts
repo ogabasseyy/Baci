@@ -20,6 +20,7 @@ type ProbeLeg = {
   currency: string | null;
   gateway: string;
   id: string;
+  order_id: string;
 };
 
 type ProbeRefund = {
@@ -30,6 +31,7 @@ type ProbeRefund = {
     payment_transaction_id?: string;
     provider_refund_status?: string;
   } | null;
+  order_id: string;
 };
 
 /**
@@ -96,7 +98,7 @@ export async function isRefundVerificationPending(
   for (;;) {
     const page = supabase
       .from('transactions')
-      .select('id, amount, currency, gateway')
+      .select('id, amount, currency, gateway, order_id')
       .in('order_id', orderIds)
       .eq('transaction_type', 'payment')
       .eq('status', 'completed')
@@ -127,7 +129,7 @@ export async function isRefundVerificationPending(
   }
   const { data: refunds, error: refundsError } = await supabase
     .from('transactions')
-    .select('amount, currency, metadata')
+    .select('amount, currency, metadata, order_id')
     .in('order_id', orderIds)
     .eq('transaction_type', 'refund')
     .in('status', ['completed', 'refunded'])
@@ -172,14 +174,20 @@ function isLegCovered(
     }
   }
   // Legacy refunds carry no payment link: attribute them to the
-  // sole Paystack leg like the scan attributes to the sole
-  // external leg (narrowed to Paystack; multi-gateway legacy
-  // shapes over-trigger, the safe direction).
-  if (paystackLegs.length === 1) {
+  // sole Paystack leg of their own order, like the scan attributes
+  // to the sole external leg (narrowed to Paystack; multi-gateway
+  // legacy shapes over-trigger, the safe direction). Never across
+  // orders: one candidate's unlinked refund must not cover another
+  // candidate's leg.
+  const orderLegs = paystackLegs.filter(
+    (candidate) => candidate.order_id === leg.order_id
+  );
+  if (orderLegs.length === 1) {
     for (const row of refunds) {
       if (
-        row.metadata === null ||
-        row.metadata?.payment_transaction_id === undefined
+        row.order_id === leg.order_id &&
+        (row.metadata === null ||
+          row.metadata?.payment_transaction_id === undefined)
       ) {
         covered += covering(row);
       }

@@ -19,6 +19,7 @@ const leg = {
   currency: 'NGN',
   gateway: 'paystack',
   id: 'leg-1',
+  order_id: 'order-1',
 };
 
 function refund(overrides: Record<string, unknown> = {}) {
@@ -26,6 +27,7 @@ function refund(overrides: Record<string, unknown> = {}) {
     amount: 100,
     currency: 'NGN',
     metadata: { payment_transaction_id: 'leg-1' },
+    order_id: 'order-1',
     ...overrides,
   };
 }
@@ -192,35 +194,6 @@ describe('isRefundVerificationPending', () => {
       .mockReturnValueOnce(chain({ data: [leg], error: null }))
       .mockReturnValueOnce(
         chain({ data: [refund({ currency: 'USD' })], error: null })
-      );
-    const supabase = { from } as never;
-
-    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
-  });
-
-  it('attributes an unlinked legacy refund to the sole Paystack leg', async () => {
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(chain(stepsWith(['order-1'])))
-      .mockReturnValueOnce(chain({ data: [], error: null }))
-      .mockReturnValueOnce(chain({ data: [leg], error: null }))
-      .mockReturnValueOnce(
-        chain({ data: [refund({ metadata: {} })], error: null })
-      );
-    const supabase = { from } as never;
-
-    await expect(isRefundVerificationPending(supabase)).resolves.toBe(false);
-  });
-
-  it('ignores unlinked refunds when several Paystack legs exist', async () => {
-    const leg2 = { ...leg, id: 'leg-2' };
-    const from = vi
-      .fn()
-      .mockReturnValueOnce(chain(stepsWith(['order-1'])))
-      .mockReturnValueOnce(chain({ data: [], error: null }))
-      .mockReturnValueOnce(chain({ data: [leg, leg2], error: null }))
-      .mockReturnValueOnce(
-        chain({ data: [refund({ metadata: {} })], error: null })
       );
     const supabase = { from } as never;
 

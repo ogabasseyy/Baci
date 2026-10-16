@@ -12,6 +12,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { isSameCartLine } from '@/stores/cart-line';
 import { useCartStore } from '@/stores/cart-store';
 import { showCartToast } from './cart-notifications';
 import { createUpdateQuantityMutation } from './cart-quantity-mutation';
@@ -115,14 +116,45 @@ export function useCart() {
 
       // Capture current state for rollback (read fresh from store to avoid stale closure)
       const previousItems = [...useCartStore.getState().items];
+      const previousLine = previousItems.find((line) =>
+        isSameCartLine(line, item)
+      );
 
       // Optimistically add to cart (instant UI update)
       addItemToStore(item);
+      const addedLine = useCartStore
+        .getState()
+        .items.find((line) => isSameCartLine(line, item));
 
-      // Store rollback function (L11 fix: uses trackRollback to enforce size limit)
+      // Store rollback function (L11 fix: uses trackRollback to enforce size limit).
+      // Line-scoped: a failed add removes only what it wrote — never a
+      // whole-cart snapshot — so a concurrent successful add survives a
+      // sibling's stock failure, and an untouched check skips the
+      // rollback when a newer edit already moved the line.
       trackRollback(rollbackId, () => {
-        // Restore previous state
-        useCartStore.setState({ items: previousItems });
+        if (!addedLine) {
+          return;
+        }
+        useCartStore.setState((state) => {
+          const current = state.items.find((i) => i.id === addedLine.id);
+          // Concurrently removed, or touched since our write: leave
+          // alone — never resurrect, never clobber the newer state.
+          if (!current || current.quantity !== addedLine.quantity) {
+            return state;
+          }
+          if (previousLine == null) {
+            return {
+              items: state.items.filter((i) => i.id !== addedLine.id),
+            };
+          }
+          return {
+            items: state.items.map((i) =>
+              i.id === addedLine.id
+                ? { ...i, quantity: previousLine.quantity }
+                : i
+            ),
+          };
+        });
       });
 
       return { rollbackId, previousItems };

@@ -54,8 +54,8 @@ describe('fetchLiveOfferRepriceMap', () => {
   it('maps live rows by offer id with their conditions', async () => {
     mockGetOffers.mockResolvedValue({
       'offer-product': [
-        { id: 'offer-7', price: 280000, condition: 'used' },
-        { id: 'offer-9', price: null, condition: 'new' },
+        { id: 'offer-7', price: 280000, condition: 'used', stock_quantity: 4 },
+        { id: 'offer-9', price: null, condition: 'new', stock_quantity: 2 },
       ],
     });
 
@@ -66,6 +66,7 @@ describe('fetchLiveOfferRepriceMap', () => {
       price: 280000,
       productId: 'offer-product',
       condition: 'used',
+      stockQuantity: 4,
     });
     expect(map.has('offer-9')).toBe(false);
   });
@@ -94,7 +95,12 @@ describe('resolveOfferLinePrice', () => {
   const rows = new Map([
     [
       'offer-7',
-      { price: 280000, productId: 'offer-product', condition: 'used' },
+      {
+        price: 280000,
+        productId: 'offer-product',
+        condition: 'used',
+        stockQuantity: 4,
+      },
     ],
   ]);
 
@@ -121,7 +127,12 @@ describe('resolveOfferLinePrice', () => {
         new Map([
           [
             'offer-7',
-            { price: 0, productId: 'offer-product', condition: 'used' },
+            {
+              price: 0,
+              productId: 'offer-product',
+              condition: 'used',
+              stockQuantity: 4,
+            },
           ],
         ])
       )
@@ -136,6 +147,7 @@ describe('resolveOfferLinePrice', () => {
               price: Number.NaN,
               productId: 'offer-product',
               condition: 'used',
+              stockQuantity: 4,
             },
           ],
         ])
@@ -208,7 +220,12 @@ describe('resolveLegacyOfferId', () => {
     return new Map(
       rows.map((row) => [
         row.id,
-        { price: 1, productId: row.product, condition: row.condition },
+        {
+          price: 1,
+          productId: row.product,
+          condition: row.condition,
+          stockQuantity: null,
+        },
       ])
     );
   }

@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { renderHook } from '@testing-library/react-native';
 
 const mockReconcile = jest.fn();
+const mockIsRestored = jest.fn();
 let mockSettingsData: { shipping_insurance_enabled: boolean } | undefined;
 let mockDataUpdatedAt = Date.now();
 
@@ -11,6 +12,10 @@ jest.mock('./useMerchantPaymentSettings', () => ({
     data: mockSettingsData,
     dataUpdatedAt: mockDataUpdatedAt,
   }),
+}));
+jest.mock('@/stores/cart-assurance-config', () => ({
+  isRestoredPaymentSettingsData: (...args: unknown[]) =>
+    mockIsRestored(...args),
 }));
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: (selector: (state: object) => unknown) =>
@@ -24,6 +29,8 @@ describe('useWarmMerchantPaymentSettings', () => {
     jest.clearAllMocks();
     mockSettingsData = undefined;
     mockDataUpdatedAt = Date.now();
+    // Network-fresh by default; restore cases opt in per test.
+    mockIsRestored.mockReturnValue(false);
   });
 
   it('reconciles pending lines once the settings load', () => {
@@ -57,15 +64,39 @@ describe('useWarmMerchantPaymentSettings', () => {
     expect(mockReconcile).toHaveBeenCalledWith(true);
   });
 
-  it('reconciles at most once per mount even across refetches', () => {
+  it('skips a fresh restore and reconciles once the network value lands', () => {
+    mockSettingsData = { shipping_insurance_enabled: true };
+    mockIsRestored.mockReturnValue(true);
+    const { rerender } = renderHook(() => useWarmMerchantPaymentSettings());
+
+    expect(mockReconcile).not.toHaveBeenCalled();
+    expect(mockIsRestored).toHaveBeenCalledWith(mockDataUpdatedAt);
+
+    mockIsRestored.mockReturnValue(false);
+    // Distinct from the pre-render stamp: the same millisecond would leave
+    // the effect deps unchanged and the reconcile would never re-run.
+    mockDataUpdatedAt += 1;
+    rerender({});
+
+    expect(mockReconcile).toHaveBeenCalledTimes(1);
+    expect(mockReconcile).toHaveBeenCalledWith(true);
+  });
+
+  it('reconciles once per loaded value but again on a newer load', () => {
     mockSettingsData = { shipping_insurance_enabled: true };
     const { rerender } = renderHook(() => useWarmMerchantPaymentSettings());
 
     expect(mockReconcile).toHaveBeenCalledTimes(1);
 
-    mockDataUpdatedAt = Date.now();
+    // Same loaded value re-rendered: no duplicate reconcile.
     rerender({});
 
     expect(mockReconcile).toHaveBeenCalledTimes(1);
+
+    // A newer network load reconciles lines stamped pending since.
+    mockDataUpdatedAt = Date.now() + 1000;
+    rerender({});
+
+    expect(mockReconcile).toHaveBeenCalledTimes(2);
   });
 });

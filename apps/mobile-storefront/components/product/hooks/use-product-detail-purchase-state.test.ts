@@ -378,3 +378,23 @@ it('compares the strict pool against the product-wide cart total', () => {
   );
   expect(result.current.canPurchase).toBe(false);
 });
+
+it.each([
+  true,
+  false,
+])('blocks purchase while an exact offer link hydrates (pending=%s)', (pending) => {
+  const { result } = renderHook(() =>
+    useProductDetailPurchaseState(
+      routeData({
+        product: { id: 'p1', price: 100, manage_stock: false } as Product,
+        routeOfferHydrationPending: pending,
+      }),
+      0,
+      null,
+      0
+    )
+  );
+  // The unmanaged parent is purchasable on its own; only the pending
+  // exact-link gate may disable it.
+  expect(result.current.canPurchase).toBe(!pending);
+});

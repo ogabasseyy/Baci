@@ -1,7 +1,7 @@
 -- Disposable test database only. Access helpers model explicit owner/staff grants.
-CREATE ROLE anon;
-CREATE ROLE authenticated;
-CREATE ROLE service_role;
+DO $$ BEGIN CREATE ROLE anon; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE authenticated; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE ROLE service_role; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 CREATE TABLE public.notifications(id uuid PRIMARY KEY, sent_at timestamptz, delivery_state text, message text);
 CREATE TABLE public.merchant_notifications(notification_id uuid, merchant_id uuid);
 CREATE TABLE public.fixture_merchant_access(user_id text, merchant_id uuid);

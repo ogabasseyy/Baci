@@ -867,6 +867,21 @@ BEGIN
     RAISE EXCEPTION 'offer multi-term search failed: %', v_ids;
   END IF;
 
+  -- Deleting the offer nulls the live FK but the row still displays the
+  -- snapshotted reference, so searching it must still find the order.
+  DELETE FROM public.product_offers
+  WHERE id = '55555555-5555-4555-8555-555555555555';
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['55555555-5555']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'deleted-offer snapshot search failed: %', v_ids;
+  END IF;
+
   -- The displayed line condition is a client search token, so the server
   -- must match it too; no other field carries this value.
   SELECT array_agg(order_id)

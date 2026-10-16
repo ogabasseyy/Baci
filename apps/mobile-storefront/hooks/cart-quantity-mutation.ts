@@ -33,6 +33,12 @@ export interface UpdateQuantityContext {
   previousQuantity: number | undefined;
   /** Pre-write per-line snapshot for a guarded negotiation restore. */
   previousItems: CartItem[];
+  /**
+   * Post-write per-line snapshot: the rollback restores negotiation
+   * only while a line still matches this, so a concurrent negotiation
+   * that landed after our write wins over the failed stock request.
+   */
+  appliedItems: CartItem[];
   previousNegotiationActive: boolean;
   /** Post-write flag, to detect concurrent flag writers on rollback. */
   appliedNegotiationActive: boolean;
@@ -117,6 +123,7 @@ export function createUpdateQuantityMutation({
         appliedQuantity: postState.items.find((i) => i.id === id)?.quantity,
         previousQuantity,
         previousItems,
+        appliedItems: postState.items,
         previousNegotiationActive,
         appliedNegotiationActive: postState.cartWideNegotiationActive,
       };
@@ -141,24 +148,41 @@ export function createUpdateQuantityMutation({
           const previousById = new Map(
             context.previousItems.map((item) => [item.id, item])
           );
+          const appliedById = new Map(
+            context.appliedItems.map((item) => [item.id, item])
+          );
           const restored = state.items.map((item) => {
             const previous = previousById.get(item.id);
             // Concurrently added lines have no snapshot: preserve them.
             if (!previous) return item;
+            const applied = appliedById.get(item.id);
+            // Negotiation restores only while the line still holds
+            // exactly what our write left: a concurrent negotiation
+            // that landed after us wins over this failed request.
+            const negotiationUntouched =
+              applied != null &&
+              item.negotiatedPrice === applied.negotiatedPrice &&
+              item.negotiationStatus === applied.negotiationStatus;
             if (item.id === context.id) {
               return {
                 ...item,
                 quantity: previousQuantity,
-                negotiatedPrice: previous.negotiatedPrice,
-                negotiationStatus: previous.negotiationStatus,
+                ...(negotiationUntouched
+                  ? {
+                      negotiatedPrice: previous.negotiatedPrice,
+                      negotiationStatus: previous.negotiationStatus,
+                    }
+                  : {}),
               };
             }
             // Our write may have stripped sibling group negotiation;
-            // restore it only when the sibling itself is untouched.
+            // restore it only when the sibling itself is untouched
+            // since our write and our write actually changed it.
             if (
               item.quantity !== previous.quantity ||
-              (item.negotiatedPrice === previous.negotiatedPrice &&
-                item.negotiationStatus === previous.negotiationStatus)
+              !negotiationUntouched ||
+              (applied?.negotiatedPrice === previous.negotiatedPrice &&
+                applied?.negotiationStatus === previous.negotiationStatus)
             ) {
               return item;
             }

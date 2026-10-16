@@ -12,9 +12,13 @@ jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
 }));
 
 const mockGetQueryState = jest.fn();
+const mockRefetchQueries = jest.fn<() => Promise<unknown[]>>();
 jest.mock('@/lib/query-client', () => ({
   get queryClient() {
-    return { getQueryState: mockGetQueryState };
+    return {
+      getQueryState: mockGetQueryState,
+      refetchQueries: mockRefetchQueries,
+    };
   },
 }));
 
@@ -22,13 +26,17 @@ describe('nativeAssurancePolicy', () => {
   beforeEach(() => {
     jest.resetModules();
     mockGetQueryState.mockReset();
+    mockRefetchQueries.mockReset();
+    mockRefetchQueries.mockResolvedValue([]);
   });
 
   it('resolves the live shipping-insurance toggle from the query cache', async () => {
-    mockGetQueryState.mockReturnValue({
+    // Lazily timestamped: the read happens after the module load, so the
+    // value counts as network-fresh rather than restored.
+    mockGetQueryState.mockImplementation(() => ({
       data: { shipping_insurance_enabled: true },
       dataUpdatedAt: Date.now(),
-    });
+    }));
     const { nativeAssurancePolicy: policy } = await import(
       './cart-assurance-config'
     );
@@ -38,6 +46,23 @@ describe('nativeAssurancePolicy', () => {
       shippingInsuranceEnabled: true,
     });
     expect(mockGetQueryState).toHaveBeenCalledWith(['test-payment-settings']);
+    expect(mockRefetchQueries).not.toHaveBeenCalled();
+  });
+
+  it('fails a fresh restore to unknown and kicks a refetch', async () => {
+    // Persisted a minute ago (inside the stale window) but before this
+    // session started: the merchant may have disabled the toggle since.
+    mockGetQueryState.mockReturnValue({
+      data: { shipping_insurance_enabled: true },
+      dataUpdatedAt: Date.now() - 60 * 1000,
+    });
+    const { nativeAssurancePolicy: policy } = await import(
+      './cart-assurance-config'
+    );
+    expect(policy().shippingInsuranceEnabled).toBeUndefined();
+    expect(mockRefetchQueries).toHaveBeenCalledWith({
+      queryKey: ['test-payment-settings'],
+    });
   });
 
   it('fails a stale persisted restore to unknown so add-time defaults opt-out', async () => {

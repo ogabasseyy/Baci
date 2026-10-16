@@ -11,6 +11,10 @@ export type LiveOfferRepriceRow = {
   price: number;
   productId: string;
   condition: string | null;
+  // Live allocation; null only when the projection omits it (the column
+  // itself is NOT NULL). A null stock skips the allocation check rather
+  // than blocking checkout on a read gap — the order RPC arbitrates.
+  stockQuantity: number | null;
 };
 
 export type LiveOfferRepriceMap = Map<string, LiveOfferRepriceRow>;
@@ -192,6 +196,7 @@ export async function fetchLiveOfferRepriceMap(
           price: Number(offer.price),
           productId,
           condition: offer.condition ?? null,
+          stockQuantity: offer.stock_quantity ?? null,
         });
       }
     }

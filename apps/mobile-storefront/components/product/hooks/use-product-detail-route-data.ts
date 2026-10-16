@@ -11,6 +11,7 @@ import { getFirstRouteParamValue } from '../product-detail-route-params';
 import { getFallbackVariantSelections } from './get-fallback-variant-selections';
 import { getFirstImageIndexForColor } from './get-first-image-index-for-color';
 import { getSelectionSyncSignature } from './get-selection-sync-signature';
+import { resolveRouteOfferState } from './use-product-detail-route-offer';
 import { useProductDetailSelection } from './use-product-detail-selection';
 
 /**
@@ -105,47 +106,14 @@ export function useProductDetailRouteData({
   const routeBaseInventoryHydrationError = routeBaseInventoryHydrationFailed
     ? 'Availability could not be loaded. Check your connection and try again.'
     : null;
-  // Search/compare entry points forward the advertised matched offer id.
-  // Accept it only when it names one of this product's own offers on a
-  // product that actually carries condition offers with a live hydration:
-  // a failed offer fetch preserves the row's prior offers array, so an
-  // id match alone would accept a stale identity and skip the retry
-  // error path. The condition-compatibility check happens at selection
-  // time so a later condition change on the PDP is never pinned to a
-  // stale offer.
-  const routeOfferId =
-    routeOfferIdParam &&
-    product?.has_condition_offers === true &&
-    product?.offers_hydration_failed !== true &&
-    routeOfferRow != null
-      ? routeOfferIdParam
-      : null;
-  // An exact offer link whose offer fetch failed must not render as an
-  // offerless product: the requested identity would be silently dropped
-  // and the shopper could add a different price/condition than opened.
-  // Surface the existing error path (retry via refetch) instead.
-  const routeOfferHydrationFailed =
-    routeOfferIdParam != null &&
-    routeOfferIdParam.length > 0 &&
-    product?.offers_hydration_failed === true;
-  // Exact-match contract, second half: when offers hydrated successfully but
-  // the link's offer id is absent (removed or sold), the offer is unavailable
-  // — falling back to the parent default would silently advertise a live
-  // price for a dead link.
-  const routeOfferMissingFromHydratedOffers =
-    routeOfferIdParam != null &&
-    routeOfferIdParam.length > 0 &&
-    product?.offers_hydration_failed !== true &&
-    product != null &&
-    (product.has_condition_offers !== true ||
-      (Array.isArray(product.offers) && routeOfferRow == null));
-  const routeOfferUnavailable =
-    routeOfferHydrationFailed || routeOfferMissingFromHydratedOffers;
-  const routeOfferHydrationError = routeOfferUnavailable
-    ? routeOfferMissingFromHydratedOffers
-      ? 'This offer is no longer available. It may have been removed or sold.'
-      : 'This offer could not be loaded. Check your connection and try again.'
-    : null;
+  // The condition-compatibility check happens at selection time so a
+  // later condition change on the PDP is never pinned to a stale offer.
+  const {
+    routeOfferHydrationError,
+    routeOfferHydrationFailed,
+    routeOfferHydrationPending,
+    routeOfferId,
+  } = resolveRouteOfferState({ product, routeOfferIdParam, routeOfferRow });
   const routeSelectionSignature = JSON.stringify({
     attributes: Object.fromEntries(
       Object.entries(routeSelectionAttributes).sort(([a], [b]) =>
@@ -288,6 +256,7 @@ export function useProductDetailRouteData({
     reviewsState,
     routeBaseInventoryHydrationFailed,
     routeOfferHydrationFailed,
+    routeOfferHydrationPending,
     routeOfferId,
     routeParams,
     routeVariantHydrationFailed,

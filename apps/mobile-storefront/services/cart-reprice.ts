@@ -20,17 +20,20 @@ import { createLogger } from '@/lib/logger';
 import { supabase } from '@/lib/supabase';
 import type { CartItem } from '@/stores/cart-store';
 import {
+  type OfferLineAllocation,
+  reconcileOfferLineAllocations,
+  repriceExactOfferLine,
+} from './cart-reprice-exact-offer';
+import {
   collectLegacyOfferLineProductIds,
   collectOfferLineProductIds,
   fetchLiveOfferRepriceMap,
-  getDriftedOfferCondition,
   hasLinePriceDrift,
   isParentPricedOfferlessLine,
   pickChangedConditionById,
   pickChangedOfferIdById,
   pickChangedPriceById,
   resolveLegacyOfferId,
-  resolveOfferLinePrice,
 } from './cart-reprice-offer-lines';
 import type { RepriceResult } from './cart-reprice-types';
 import { EMPTY_REPRICE_RESULT } from './cart-reprice-types';
@@ -138,6 +141,10 @@ export async function repriceCartItems(
       offerIdById: {},
       adoptions: [],
     };
+    // Exact-offer lines (including mid-loop legacy adoptions) priced
+    // against a live row: reconciled post-loop against the live
+    // allocation, mirroring the order RPC's per-offer aggregate check.
+    const offerLineAllocations: OfferLineAllocation[] = [];
     for (const item of items) {
       // Voucher reward lines (quiz awards, price 0) are validated by the
       // voucher flow, not the catalog — never reprice them, or a free award
@@ -209,44 +216,19 @@ export async function repriceCartItems(
         effectiveItem.offer_id.length > 0
       ) {
         if (!offerLookupFailed && !offerParentFailed) {
-          const live = resolveOfferLinePrice(effectiveItem, offerPrice);
-          if (!live || !offerEligibleParents.has(item.product_id)) {
-            result.unavailable.push({ id: item.id, name: item.name });
-          } else {
-            result.priceById[item.id] = live.price;
-            // A merchant-edited condition refreshes with the price so the
-            // line matches what checkout will accept.
-            const driftedCondition = getDriftedOfferCondition(
-              item.condition,
-              live.condition
-            );
-            if (driftedCondition) {
-              result.conditionById[item.id] = driftedCondition;
-            }
-            // Line basis (not unit): checkout rejects an extended-total
-            // drift past tolerance, so a sub-tolerance unit move on
-            // quantity > 1 must still surface and refresh.
-            if (hasLinePriceDrift(live.price, item.price, item.quantity)) {
-              result.changes.push({
-                id: item.id,
-                name: item.name,
-                oldPrice: item.price,
-                newPrice: live.price,
-              });
-            }
-            // A condition-only refresh still reconciles (conditionById
-            // above) but must not masquerade as a price move: identical
-            // old/new prices would render "X to X" and abort checkout
-            // with a misleading "prices changed" message.
-            if (driftedCondition && item.condition) {
-              result.conditionChanges.push({
-                id: item.id,
-                name: item.name,
-                oldCondition: item.condition,
-                newCondition: driftedCondition,
-              });
-            }
-          }
+          // The enclosing predicate narrowed offer_id to a non-empty
+          // string; re-key it so the callee's type carries the proof.
+          repriceExactOfferLine({
+            effectiveItem: {
+              ...effectiveItem,
+              offer_id: effectiveItem.offer_id,
+            },
+            item,
+            offerEligibleParents,
+            offerLineAllocations,
+            offerPrice,
+            result,
+          });
         }
         continue;
       }
@@ -282,6 +264,10 @@ export async function repriceCartItems(
         });
       }
     }
+
+    // A merchant edit or concurrent order can deplete an offer below the
+    // cart's aggregate take after the price lookup.
+    reconcileOfferLineAllocations({ offerLineAllocations, offerPrice, result });
 
     return result;
   } catch (error) {

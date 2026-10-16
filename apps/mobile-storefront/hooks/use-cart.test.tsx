@@ -302,4 +302,122 @@ describe('useCart stock validation', () => {
       queryClient.clear();
     }
   });
+
+  it('keeps a concurrent successful add when a sibling add fails validation', async () => {
+    type StockResult = { available: boolean; currentStock: number };
+    let releaseFirst!: (result: StockResult) => void;
+    const firstGate = new Promise<StockResult>((resolve) => {
+      releaseFirst = resolve;
+    });
+    mockCheckStock
+      .mockImplementationOnce(() => firstGate)
+      .mockImplementationOnce(async () => ({
+        available: true,
+        currentStock: 9,
+      }));
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+        queries: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+      },
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useCart(), { wrapper });
+
+    try {
+      act(() => {
+        result.current.addToCart({
+          product_id: 'product-1',
+          slug: 'redmi-note-14',
+          name: 'Redmi Note 14',
+          price: 220000,
+          quantity: 1,
+        });
+      });
+      act(() => {
+        result.current.addToCart({
+          product_id: 'product-2',
+          slug: 'galaxy-a55',
+          name: 'Galaxy A55',
+          price: 310000,
+          quantity: 1,
+        });
+      });
+      await waitFor(() => {
+        expect(mockCheckStock).toHaveBeenCalledTimes(2);
+      });
+      // Let the second (successful) validation settle first.
+      await act(async () => {});
+      await act(async () => {
+        releaseFirst({ available: false, currentStock: 0 });
+      });
+
+      await waitFor(() => {
+        expect(useCartStore.getState().items).toHaveLength(1);
+      });
+      expect(useCartStore.getState().items[0].product_id).toBe('product-2');
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
+  });
+
+  it('preserves a concurrent negotiation when a quantity edit fails', async () => {
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'redmi-note-14',
+      name: 'Redmi Note 14',
+      price: 220000,
+      quantity: 1,
+    });
+    const lineId = useCartStore.getState().items[0].id;
+
+    type StockResult = { available: boolean; currentStock: number };
+    let release!: (result: StockResult) => void;
+    const gate = new Promise<StockResult>((resolve) => {
+      release = resolve;
+    });
+    mockCheckStock.mockImplementationOnce(() => gate);
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+        queries: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+      },
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useCart(), { wrapper });
+
+    try {
+      act(() => {
+        result.current.updateQuantity(lineId, 5);
+      });
+      await waitFor(() => {
+        expect(mockCheckStock).toHaveBeenCalledTimes(1);
+      });
+      // A newer negotiation lands while the stock check is pending.
+      act(() => {
+        useCartStore.getState().applyNegotiatedPrice(lineId, 150000);
+      });
+      await act(async () => {
+        release({ available: false, currentStock: 1 });
+      });
+
+      await waitFor(() => {
+        expect(useCartStore.getState().items[0].quantity).toBe(1);
+      });
+      expect(useCartStore.getState().items[0]).toMatchObject({
+        negotiatedPrice: 150000,
+        negotiationStatus: 'accepted',
+      });
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
+  });
 });

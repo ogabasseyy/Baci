@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { isRestoredPaymentSettingsData } from '@/stores/cart-assurance-config';
 import { useCartStore } from '@/stores/cart-store';
 import {
   MERCHANT_PAYMENT_SETTINGS_STALE_MS,
@@ -30,11 +31,17 @@ export function useWarmMerchantPaymentSettings(): void {
     if (data === undefined) {
       return;
     }
-    // Freshness-gated: only a fetch completed after this hook mounted
-    // counts. dataUpdatedAt from before the mount is a restored persist
-    // value whose refetch may still be in flight (staleTime expiry does
-    // not guarantee the background fetch has landed yet).
-    if (reconciledAtRef.current !== null) {
+    // Restore-gated: a fresh restore (restart inside the stale window)
+    // passes the freshness check below, but the merchant may have flipped
+    // the toggle since it was persisted. Only a fetch completed after
+    // this session started reconciles pending lines; anything older waits
+    // for the network value. The guard is per-loaded-value (not once per
+    // mount) so a LATER fetch still reconciles lines stamped pending by a
+    // later add — the action itself no-ops when nothing is pending.
+    if (isRestoredPaymentSettingsData(dataUpdatedAt)) {
+      return;
+    }
+    if (reconciledAtRef.current === dataUpdatedAt) {
       return;
     }
     if (Date.now() - dataUpdatedAt > MERCHANT_PAYMENT_SETTINGS_STALE_MS) {

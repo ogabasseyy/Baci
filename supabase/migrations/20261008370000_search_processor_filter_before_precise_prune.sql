@@ -75,7 +75,7 @@ BEGIN
     LEFT JOIN LATERAL (
       SELECT opt.variant_id, opt.offer_id, opt.condition, opt.effective_price
       FROM public.get_storefront_search_price_options(p.merchant_id, p.id) opt
-      WHERE (condition_filter IS NULL OR opt.condition = ANY(CASE condition_filter WHEN 'used' THEN ARRAY['used','uk_used'] WHEN 'open_box' THEN ARRAY['open_box','refurbished'] ELSE ARRAY[condition_filter] END))
+      WHERE (condition_filter IS NULL OR storefront_search_private.normalize_condition_for_match(opt.condition) = ANY(CASE condition_filter WHEN 'used' THEN ARRAY['used'] WHEN 'open_box' THEN ARRAY['open_box'] ELSE ARRAY[condition_filter] END))
         AND (min_price_filter IS NULL OR opt.effective_price >= min_price_filter)
         AND (max_price_filter IS NULL OR opt.effective_price <= max_price_filter)
       ORDER BY opt.effective_price ASC NULLS LAST, opt.variant_id NULLS LAST, opt.offer_id NULLS LAST LIMIT 1

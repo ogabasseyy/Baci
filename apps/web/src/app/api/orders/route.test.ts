@@ -3413,7 +3413,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -3424,7 +3424,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     expect(response.status).toBe(201);
     expect(rpcSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        p_checkout_idempotency_key: 'checkout-key-1',
+        p_checkout_idempotency_key: 'checkout-key-0001',
         p_checkout_request_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
       })
     );
@@ -3471,7 +3471,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -3547,7 +3547,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -3645,7 +3645,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           savings_amount: 500,
@@ -3659,9 +3659,9 @@ describe('POST /api/orders — checkout idempotency', () => {
     expect(rpcSpy).toHaveBeenCalledWith(
       'create_storefront_order_with_savings',
       expect.objectContaining({
-        p_checkout_idempotency_key: 'checkout-key-1',
+        p_checkout_idempotency_key: 'checkout-key-0001',
         p_checkout_request_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
-        p_savings_idempotency_key: 'order:checkout-key-1:savings',
+        p_savings_idempotency_key: 'order:checkout-key-0001:savings',
       })
     );
   });
@@ -3768,7 +3768,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           items: [
@@ -3830,7 +3830,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'card',
@@ -3860,7 +3860,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -3873,6 +3873,27 @@ describe('POST /api/orders — checkout idempotency', () => {
       code: 'CHECKOUT_IDEMPOTENCY_CONFLICT',
       error:
         'This checkout request was already used for a different cart, customer, or delivery payload.',
+    });
+  });
+
+  it.each([
+    'short-key',
+    'x'.repeat(129),
+  ])('rejects a degenerate idempotency key (%s) instead of replaying on it', async (key) => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': key },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          payment_method: 'card',
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      code: 'CHECKOUT_IDEMPOTENCY_KEY_INVALID',
     });
   });
 
@@ -3891,7 +3912,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -4123,7 +4144,7 @@ describe('POST /api/orders — product cache revalidation after order creation',
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify(baseOrderPayload),
       })
     );

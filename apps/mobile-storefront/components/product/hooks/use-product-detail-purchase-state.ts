@@ -69,8 +69,12 @@ export function useProductDetailPurchaseState(
         ? routeData.product.base_available_units
         : 0
       : Number.POSITIVE_INFINITY;
-  const canPurchase =
-    routeData.product?.has_variants === true
+  // An exact offer link with offers still hydrating must not offer the
+  // parent-price path: the advertised identity is unresolved, and the
+  // refetch may still fail (error path) or miss (unavailable path).
+  const canPurchase = routeData.routeOfferHydrationPending
+    ? false
+    : routeData.product?.has_variants === true
       ? Boolean(resolvedVariantPurchaseSelection) && selectedVariantCanPurchase
       : routeData.product
         ? (!selectedConditionOffer &&

@@ -32,6 +32,7 @@ DECLARE
   v_has_item_variant_id boolean := false;
   v_has_item_supplier_name boolean := false;
   v_has_item_offer_id boolean := false;
+  v_has_item_offer_id_snapshot boolean := false;
   v_has_item_offer_grade boolean := false;
   v_has_item_offer_condition_notes boolean := false;
   v_has_product_metadata boolean := false;
@@ -163,6 +164,11 @@ BEGIN
     EXISTS (
       SELECT 1 FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'order_items'
+        AND column_name = 'offer_id_snapshot'
+    ),
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'order_items'
         AND column_name = 'offer_grade'
     ),
     EXISTS (
@@ -189,6 +195,7 @@ BEGIN
     v_has_item_variant_id,
     v_has_item_supplier_name,
     v_has_item_offer_id,
+    v_has_item_offer_id_snapshot,
     v_has_item_offer_grade,
     v_has_item_offer_condition_notes,
     v_has_product_metadata,
@@ -299,10 +306,18 @@ BEGIN
   END IF;
 
   -- Stored offer identity mirrors the client search tokens (full offer
-  -- id plus the snapshotted grade/notes shown on transaction rows).
+  -- id plus the snapshotted grade/notes shown on transaction rows). The
+  -- snapshot survives ON DELETE SET NULL on the live id, so search it too:
+  -- otherwise the reference displayed on a historical row is unfindable.
   IF v_has_item_offer_id THEN
     v_sql := v_sql || $query$
                 OR oi.offer_id::text ILIKE search_patterns.pattern ESCAPE '\'
+    $query$;
+  END IF;
+
+  IF v_has_item_offer_id_snapshot THEN
+    v_sql := v_sql || $query$
+                OR oi.offer_id_snapshot::text ILIKE search_patterns.pattern ESCAPE '\'
     $query$;
   END IF;
 

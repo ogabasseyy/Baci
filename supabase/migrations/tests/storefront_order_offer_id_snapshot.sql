@@ -23,12 +23,15 @@ DECLARE
   v_merchant_id uuid := '0be00000-0000-4000-8000-000000000001';
   v_product_id uuid := '0be00000-0000-4000-8000-000000000002';
   v_offer_id uuid := '0be00000-0000-4000-8000-000000000003';
+  v_offer_id_b uuid := '0be00000-0000-4000-8000-000000000004';
   v_order_id uuid;
   v_line record;
   v_forged record;
   v_projected jsonb;
   v_mutation_blocked boolean := false;
   v_line_flip_blocked boolean := false;
+  v_reassign_blocked boolean := false;
+  v_label_rewrite_blocked boolean := false;
 BEGIN
   INSERT INTO public.merchants (id, email, business_name, slug, is_published)
   VALUES (v_merchant_id, 'offer-snapshot@example.com',
@@ -43,6 +46,11 @@ BEGIN
     price, stock_quantity, status, grade, condition_notes)
   VALUES (v_offer_id, v_product_id, v_merchant_id, 'used', 400000, 5,
     'active', 'A', 'Light scratches');
+
+  INSERT INTO public.product_offers (id, product_id, merchant_id, condition,
+    price, stock_quantity, status, grade, condition_notes)
+  VALUES (v_offer_id_b, v_product_id, v_merchant_id, 'used', 390000, 5,
+    'active', 'B', 'Moderate wear');
 
   BEGIN
     SELECT o.id INTO v_order_id
@@ -86,6 +94,32 @@ BEGIN
   END IF;
   DELETE FROM public.order_items
   WHERE order_id = v_order_id AND name = 'Forged line';
+
+  -- Freeze: re-pointing the live offer id to another valid offer
+  -- fails closed, so restock can never credit an offer checkout
+  -- never decremented.
+  BEGIN
+    UPDATE public.order_items
+    SET offer_id = v_offer_id_b
+    WHERE order_id = v_order_id;
+  EXCEPTION WHEN raise_exception THEN
+    v_reassign_blocked := true;
+  END;
+  IF NOT v_reassign_blocked THEN
+    RAISE EXCEPTION 'expected offer_id reassignment to fail, but it succeeded';
+  END IF;
+
+  -- Freeze: rewriting the purchased labels fails closed.
+  BEGIN
+    UPDATE public.order_items
+    SET offer_grade = 'B', offer_condition_notes = 'Moderate wear'
+    WHERE order_id = v_order_id;
+  EXCEPTION WHEN raise_exception THEN
+    v_label_rewrite_blocked := true;
+  END;
+  IF NOT v_label_rewrite_blocked THEN
+    RAISE EXCEPTION 'expected offer label rewrite to fail, but it succeeded';
+  END IF;
 
   -- Deleting the offer nulls the live FK (ON DELETE SET NULL) while the
   -- snapshot keeps the exact purchased identity for fulfillment.

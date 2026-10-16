@@ -97,9 +97,40 @@ function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
 }
 
+// Both storefront clients mint high-entropy keys (web: UUID, native: 16
+// random bytes encoded), but the header is attacker-controlled: a short or
+// colliding key lets one shopper replay another's pending order. Reject a
+// PRESENT-but-degenerate key fail-closed instead of downgrading it to an
+// anonymous retry. Bounds mirror the orders CHECK constraint and the replay
+// probe so route, RPC, and probe agree on what a key is.
+export const CHECKOUT_IDEMPOTENCY_KEY_MIN_BYTES = 16;
+export const CHECKOUT_IDEMPOTENCY_KEY_MAX_BYTES = 128;
+
 function getRequestIdempotencyKey(request: NextRequest) {
   const headerValue = request.headers.get('idempotency-key')?.trim();
   return headerValue ? headerValue : null;
+}
+
+function validateRequestIdempotencyKey(
+  requestIdempotencyKey: string | null
+): NextResponse | null {
+  if (requestIdempotencyKey === null) {
+    return null;
+  }
+  const keyBytes = Buffer.byteLength(requestIdempotencyKey, 'utf8');
+  if (
+    keyBytes < CHECKOUT_IDEMPOTENCY_KEY_MIN_BYTES ||
+    keyBytes > CHECKOUT_IDEMPOTENCY_KEY_MAX_BYTES
+  ) {
+    return NextResponse.json(
+      {
+        code: 'CHECKOUT_IDEMPOTENCY_KEY_INVALID',
+        error: 'The checkout idempotency key is malformed',
+      },
+      { status: 400 }
+    );
+  }
+  return null;
 }
 
 function getSavingsRedemptionIdempotencyKey({
@@ -553,6 +584,14 @@ export async function POST(request: NextRequest) {
     const requestIdempotencyKey = hasVoucherItem
       ? null
       : getRequestIdempotencyKey(request);
+    // Voucher orders drop the header key entirely, so a degenerate key is
+    // only dangerous on the path that uses it.
+    if (!hasVoucherItem) {
+      const invalidKeyResponse = validateRequestIdempotencyKey(
+        requestIdempotencyKey
+      );
+      if (invalidKeyResponse) return invalidKeyResponse;
+    }
     const verifiedQuizVoucherAwardIdsByIndex = new Map<number, string>();
     if (payment_method === 'uba_redvault') {
       const availability = getRedvaultPaymentAvailability();

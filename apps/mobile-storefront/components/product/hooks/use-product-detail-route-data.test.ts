@@ -89,6 +89,42 @@ it('fails closed when the offer id is absent from hydrated offers', () => {
   expect(result.current.error).toMatch(/no longer available/);
 });
 
+it('marks an exact offer link pending while cached rows omit offers', () => {
+  mockParams = { slug: 'phone', offer_id: 'o1' };
+  // Cache-seeded rows omit `offers` until the detail refetch lands: not
+  // failed, not yet an array. Neither missing nor failed fires, so the
+  // pending flag is what blocks the parent-price purchase path.
+  const cached = { ...product, offers: undefined };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product: cached,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  expect(result.current.routeOfferHydrationPending).toBe(true);
+  expect(result.current.routeOfferId).toBeNull();
+  expect(result.current.routeOfferHydrationFailed).toBe(false);
+  expect(result.current.error).toBeNull();
+});
+
+it('clears the pending flag once offers hydrate', () => {
+  mockParams = { slug: 'phone', offer_id: 'o1' };
+  const { result } = renderHook(() =>
+    useProductDetailRouteData({
+      product,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as never)
+  );
+
+  expect(result.current.routeOfferHydrationPending).toBe(false);
+  expect(result.current.routeOfferId).toBe('o1');
+});
+
 it('fails closed when an exact offer link meets a hydration failure', () => {
   mockParams = { slug: 'phone', offer_id: 'o1' };
   const marked = {

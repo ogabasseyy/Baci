@@ -56,11 +56,14 @@ function setVariantOverrides(result: VariantsResponse) {
 }
 const mockGetOffers =
   jest.fn<
-    (
-      productIds: string[]
-    ) => Promise<Record<
+    (productIds: string[]) => Promise<Record<
       string,
-      Array<{ id: string; price: number | null; condition?: string | null }>
+      Array<{
+        id: string;
+        price: number | null;
+        condition?: string | null;
+        stock_quantity?: number | null;
+      }>
     > | null>
   >();
 const productQuery = {} as ProductQuery;
@@ -280,6 +283,69 @@ describe('repriceCartItems', () => {
         newPrice: 300000.75,
       },
     ]);
+  });
+
+  it('flags every line on an offer depleted below the aggregate take', async () => {
+    const lines = [
+      createCartItem({
+        id: 'offer-line-a',
+        product_id: 'offer-product',
+        offer_id: 'offer-7',
+        price: 300000,
+        quantity: 2,
+      }),
+      createCartItem({
+        id: 'offer-line-b',
+        product_id: 'offer-product',
+        offer_id: 'offer-7',
+        price: 300000,
+        quantity: 1,
+      }),
+    ];
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [
+        { id: 'offer-7', price: 300000, condition: 'used', stock_quantity: 2 },
+      ],
+    });
+
+    const result = await repriceCartItems(lines, 'merchant-1');
+
+    expect(result.unavailable).toEqual([
+      { id: 'offer-line-a', name: 'iPhone 13' },
+      { id: 'offer-line-b', name: 'iPhone 13' },
+    ]);
+  });
+
+  it('keeps offer lines available when the aggregate fits the allocation', async () => {
+    const offerLine = createCartItem({
+      id: 'offer-line',
+      product_id: 'offer-product',
+      offer_id: 'offer-7',
+      price: 300000,
+      quantity: 2,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'offer-product', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'offer-product': [
+        { id: 'offer-7', price: 300000, condition: 'used', stock_quantity: 2 },
+      ],
+    });
+
+    const result = await repriceCartItems([offerLine], 'merchant-1');
+
+    expect(result.unavailable).toEqual([]);
+    expect(result.priceById).toEqual({ 'offer-line': 300000 });
   });
 
   it('fails open when product lookup fails', async () => {

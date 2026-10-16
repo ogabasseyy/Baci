@@ -73,7 +73,10 @@ describe('useUtilityRetainedSettlement', () => {
   it('skips suppressed completions so their replay presents', async () => {
     // Codex R68 6rwG9F: the terminal result was never shown — the
     // pass must not delete it; the retry replays the unseen outcome
-    // instead of minting fresh and debiting twice.
+    // instead of minting fresh and debiting twice. Since R115 the
+    // reference list excludes completed entries (markSettled was a
+    // no-op for them), so the pass never fetches — same outcome,
+    // fewer reads; the replay still presents via the stale guard.
     rememberPendingVtuPurchase('{"suppressed":true}', 'key-suppressed');
     notePendingVtuReference('{"suppressed":true}', 'VTU-SUPPRESSED');
     markPendingVtuCompleted('{"suppressed":true}');
@@ -91,7 +94,7 @@ describe('useUtilityRetainedSettlement', () => {
     renderHook(() => useUtilityRetainedSettlement(input));
     await act(async () => {});
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(recallPendingVtuKey('{"suppressed":true}')).toBe('key-suppressed');
     expect(
       isStalePendingVtuSuccess('{"suppressed":true}', 'VTU-SUPPRESSED')
@@ -224,9 +227,13 @@ describe('useUtilityRetainedSettlement', () => {
         return {
           transactions: [
             {
+              // The history projection always emits refund_skipped
+              // (fail-closed parser: a missing flag keeps polling
+              // rather than claiming without proof).
               request_reference: 'VTU-FAIL-DONE',
               status: 'failed',
               refund_pending: false,
+              refund_skipped: false,
               refunded_to_wallet: 500,
             },
           ],
@@ -239,6 +246,7 @@ describe('useUtilityRetainedSettlement', () => {
               request_reference: 'VTU-FAIL-OPEN',
               status: 'failed',
               refund_pending: true,
+              refund_skipped: false,
             },
           ],
         };
@@ -258,6 +266,31 @@ describe('useUtilityRetainedSettlement', () => {
     expect(recallPendingVtuKey('{"fail-done":true}')).toBeUndefined();
     expect(recallPendingVtuKey('{"fail-open":true}')).toBe('key-fail-open');
     expect(recallPendingVtuKey('{"still-out":true}')).toBe('key-still-out');
+  });
+
+  it('forgets skipped-refund failures like confirmed ones', async () => {
+    // Codex R124 P2: a skipped refund (no charge was made) is
+    // terminal like a confirmation — leaving the key would replay
+    // the old failed row as a 400 instead of purchasing.
+    rememberPendingVtuPurchase('{"fail-skipped":true}', 'key-fail-skipped');
+    notePendingVtuReference('{"fail-skipped":true}', 'VTU-FAIL-SKIPPED');
+    const fetchMock = mockHistory(() => ({
+      transactions: [
+        {
+          request_reference: 'VTU-FAIL-SKIPPED',
+          status: 'failed',
+          refund_pending: false,
+          refund_skipped: true,
+        },
+      ],
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderHook(() => useUtilityRetainedSettlement(input));
+    await act(async () => {});
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(recallPendingVtuKey('{"fail-skipped":true}')).toBeUndefined();
   });
 
   it('skips reference-less entries and stays idle without references', async () => {

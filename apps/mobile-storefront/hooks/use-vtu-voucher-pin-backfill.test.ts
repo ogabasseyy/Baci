@@ -535,7 +535,7 @@ describe('useVtuVoucherPinBackfill', () => {
         pin: null,
         status: 'successful',
         refundConfirmed: false,
-      refundSkipped: false,
+        refundSkipped: false,
       })
     );
     expect(recallPendingVtuKey('hook-token')).toBeNull();
@@ -657,7 +657,7 @@ describe('useVtuVoucherPinBackfill', () => {
         pin: '1234-5678',
         status: 'successful',
         refundConfirmed: false,
-      refundSkipped: false,
+        refundSkipped: false,
       })
     );
   });

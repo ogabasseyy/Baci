@@ -101,14 +101,17 @@ export function ProductCardSkeleton() {
  * Product Grid Skeleton (2 columns)
  */
 export function ProductGridSkeleton({ count = 4 }: { count?: number }) {
+  // Static decorative placeholders: positional ids are stable keys
+  // because the list never reorders (only its length varies).
+  const items = Array.from({ length: count }, (_, position) => position);
   return (
     <View style={styles.grid}>
-      {Array.from({ length: count }).map((_, index) => (
+      {items.map((position) => (
         <View
-          key={`grid-skeleton-item-${index}`}
+          key={`grid-skeleton-item-${position}`}
           style={[
             styles.gridItem,
-            index % 2 === 0 ? styles.gridLeft : styles.gridRight,
+            position % 2 === 0 ? styles.gridLeft : styles.gridRight,
           ]}
         >
           <ProductCardSkeleton />

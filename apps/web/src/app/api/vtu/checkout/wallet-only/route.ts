@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     // operation: a sign-in between capture and POST swaps the ambient
     // cookie. 403 (not 409): nothing was recorded, so clients KEEP
     // the key — 409 would rotate it and debit twice after switch-back.
-    if (input.expectedUserId && input.expectedUserId !== auth.user.id) {
+    if (input.expectedUserId !== auth.user.id) {
       return createErrorResponse(
         'Account changed during checkout. Please try again.',
         403
@@ -173,30 +173,45 @@ export async function POST(request: NextRequest) {
         request_fingerprint: requestFingerprint,
       });
     if (insertError) {
-      // Likely a parallel submit won the PRIMARY KEY race. Two steps:
-      //   1. Remove our orphan vtu_transactions row (verified delete
-      //      with a terminal failed-mark fallback): unreferenced from
-      //      the idempotency table, it must not survive pending — a
-      //      pending-scan reconciler could otherwise re-fulfill it
-      //      into a SECOND debit (the redeem RPC's per-id idempotency
-      //      would NOT block a fresh source).
-      //   2. Re-fetch the winner's row and replay it.
+      // Likely a parallel submit won the PRIMARY KEY race — but
+      // re-read the mapping BEFORE treating our row as an orphan
+      // (Codex R124 P2): an insert whose response was lost commits
+      // anyway, so the "loser" may be the mapped winner. Cleaning
+      // up our own row would delete it (spurious terminal 400) or,
+      // when the delete fails and the failed-mark lands, strand the
+      // key on a failed row whose no_collection_evidence marker
+      // misses the refund dispatcher's no_charge shortcut — every
+      // replay throws the split-without-debit invariant as a 500
+      // while both clients retain on 5xx (stuck key). A missing
+      // mapping means our insert truly failed (a committed winner
+      // is always visible to this re-read), so the prepared row is
+      // a genuine orphan. Two steps:
+      //   1. Re-fetch the winner's row.
+      //   2. Unless the winner is us, remove our orphan row
+      //      (verified delete with a terminal failed-mark
+      //      fallback): unreferenced from the idempotency table, it
+      //      must not survive pending — a pending-scan reconciler
+      //      could otherwise re-fulfill it into a SECOND debit (the
+      //      redeem RPC's per-id idempotency would NOT block a
+      //      fresh source). Then replay the winner.
       // The cleanup outcome never masks the replay (Muse R55 HIGH).
-      const cleanupOutcome = await cleanupOrphanVtuTransactionAfterKeyRace({
-        merchantId: prepared.merchant.id,
-        supabase,
-        transactionId: prepared.transaction.id,
-      });
-      if (cleanupOutcome === 'unresolved') {
-        console.error(
-          'Orphan VTU cleanup unresolved after idempotency-key race; row may strand pending:',
-          { transactionId: prepared.transaction.id }
-        );
-      }
       const racedExisting = await findExistingIdempotencyRow(
         supabase,
         idempotencyKey
       );
+      if (racedExisting?.vtu_transaction_id !== prepared.transaction.id) {
+        const cleanupOutcome = await cleanupOrphanVtuTransactionAfterKeyRace({
+          merchantId: prepared.merchant.id,
+          supabase,
+          transactionId: prepared.transaction.id,
+        });
+        if (cleanupOutcome === 'unresolved') {
+          console.error(
+            'Orphan VTU cleanup unresolved after idempotency-key race; row may strand pending:',
+            { transactionId: prepared.transaction.id }
+          );
+        }
+      }
       if (racedExisting) {
         // Same ownership + fingerprint guards as the replay path (no
         // privilege-escalation via PK race, no changed-intent replay).

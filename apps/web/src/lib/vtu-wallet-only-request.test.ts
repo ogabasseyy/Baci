@@ -11,6 +11,7 @@ const VALID_BODY = {
   walletAmount: 1000,
   phoneNumber: '08012345678',
   networkProvider: 'MTN',
+  expectedUserId: '11111111-2222-4333-8444-555555555555',
 };
 
 function makeRequest({

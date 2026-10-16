@@ -119,10 +119,16 @@ export function useUtilityRetainedSettlement({
         // Success settles via mark-stale (suppressed completions are
         // skipped so their replay presents — R68 6rwG9F). Refunded
         // failure forgets: nothing was delivered, so the retry is
-        // correctly a fresh charge attempt.
+        // correctly a fresh charge attempt. Skipped-refund failures
+        // (no charge was made) are equally terminal (Codex R124
+        // P2, matching isTerminalBackfill): leaving the key would
+        // replay the old failed row as a 400 instead of purchasing.
         if (parsed.successful) {
           markSettledPendingVtuByReference(outcome.reference);
-        } else if (parsed.failed && parsed.refundConfirmed) {
+        } else if (
+          parsed.failed &&
+          (parsed.refundConfirmed || parsed.refundSkipped)
+        ) {
           forgetPendingVtuByReference(outcome.reference);
         }
       }

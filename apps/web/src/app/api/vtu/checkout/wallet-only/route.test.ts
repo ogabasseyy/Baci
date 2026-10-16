@@ -201,6 +201,8 @@ function buildSupabase(
   };
 }
 
+const AUTH_USER_ID = '11111111-1111-4111-8111-111111111111';
+
 const VALID_BODY = {
   merchantSlug: 'ogabassey',
   type: 'airtime',
@@ -208,6 +210,7 @@ const VALID_BODY = {
   walletAmount: 1000,
   phoneNumber: '08012345678',
   networkProvider: 'MTN',
+  expectedUserId: AUTH_USER_ID,
 };
 
 // The route injects `source: 'checkout'` before parsing; the schema
@@ -249,7 +252,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       insertCalls: 0,
     });
     mockAuthenticate.mockResolvedValue({
-      user: { id: 'user-1', email: 'c@example.com' },
+      user: { id: AUTH_USER_ID, email: 'c@example.com' },
       error: null,
       supabase: userSupabaseMockRef.current,
     });
@@ -297,7 +300,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     // (ownership-enforced RPC) — never fall back to service role, so
     // a missing user client fails the request instead.
     mockAuthenticate.mockResolvedValue({
-      user: { id: 'user-1', email: 'c@example.com' },
+      user: { id: AUTH_USER_ID, email: 'c@example.com' },
       error: null,
       supabase: null,
     });
@@ -382,6 +385,28 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       (supabaseMockRef.current?.from as ReturnType<typeof vi.fn>).mock.calls
     ).toHaveLength(0);
     expect(mockPrepare).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing expectedUserId with 400 (binding is required)', async () => {
+    // Muse R124: the account-switch binding must be a
+    // server-enforced invariant, not a per-client courtesy — a
+    // hand-crafted request omitting the field must not silently
+    // debit the ambient session for a foreign payload.
+    const { expectedUserId: _omitted, ...bodyWithoutBinding } = VALID_BODY;
+    expect(_omitted).toBe(AUTH_USER_ID);
+    const state: IdempotencyRowState = { row: null, insertCalls: 0 };
+    supabaseMockRef.current = buildSupabase(state);
+
+    const { status } = await callRoute(
+      makeRequest({
+        idempotencyKey: VALID_KEY,
+        body: bodyWithoutBinding,
+      })
+    );
+
+    expect(status).toBe(400);
+    expect(mockPrepare).not.toHaveBeenCalled();
+    expect(mockFulfill).not.toHaveBeenCalled();
   });
 
   it('proceeds when the captured user matches the session', async () => {
@@ -561,7 +586,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       rpcCalls: [],
     };
     mockAuthenticate.mockResolvedValue({
-      user: { id: 'user-1', email: 'c@example.com' },
+      user: { id: AUTH_USER_ID, email: 'c@example.com' },
       error: null,
       supabase: buildSupabase(userState),
     });
@@ -623,7 +648,7 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
       rpcCalls: [],
     };
     mockAuthenticate.mockResolvedValue({
-      user: { id: 'user-1', email: 'c@example.com' },
+      user: { id: AUTH_USER_ID, email: 'c@example.com' },
       error: null,
       supabase: buildSupabase(userState),
     });
@@ -1002,6 +1027,123 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     });
     expect(mockFulfill).toHaveBeenCalledWith(
       expect.objectContaining({ transactionId: 'vtu-tx-winner' })
+    );
+  });
+
+  it('PK-race recovery: skips orphan cleanup when the re-read winner is our own row', async () => {
+    // Codex R124 P2: an idempotency-key INSERT whose response was
+    // lost commits anyway — the "loser" is the mapped winner.
+    // Cleaning up our own row would delete it (spurious terminal
+    // 400 on replay) or, when the delete fails and the failed-mark
+    // lands, strand the key on a failed row whose
+    // no_collection_evidence marker misses the refund
+    // dispatcher's no_charge shortcut (500 stuck-loop: both
+    // clients retain on 5xx). The branch must re-read first and
+    // replay our own row untouched.
+    let lookupCallCount = 0;
+    const ownRow = {
+      key: VALID_KEY,
+      vtu_transaction_id: 'vtu-tx-mine',
+      customer_id: 'customer-1',
+      merchant_id: 'merchant-1',
+      request_fingerprint: VALID_BODY_FINGERPRINT,
+    };
+    const deleteSpy = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            select: vi.fn(() => ({
+              maybeSingle: vi.fn().mockResolvedValue({
+                data: { id: 'vtu-tx-mine' },
+                error: null,
+              }),
+            })),
+          })),
+        })),
+      })),
+    }));
+    const updateSpy = vi.fn(() => ({
+      eq: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          select: vi.fn(() => ({
+            maybeSingle: vi
+              .fn()
+              .mockResolvedValue({ data: { id: 'vtu-tx-mine' }, error: null }),
+          })),
+        })),
+      })),
+    }));
+    mockPrepare.mockResolvedValue({
+      transaction: { id: 'vtu-tx-mine', merchant_id: 'merchant-1' },
+      customer: { id: 'customer-1', email: 'c@example.com' },
+      merchant: { id: 'merchant-1' },
+    });
+    mockFulfill.mockResolvedValue({
+      amount: 1000,
+      reference: 'VTU-REF-MINE',
+      status: 'successful',
+    });
+    supabaseMockRef.current = {
+      from: vi.fn((table: string) => {
+        if (table === 'vtu_idempotency_keys') {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn(() => {
+                  lookupCallCount += 1;
+                  return Promise.resolve({
+                    data: lookupCallCount === 1 ? null : ownRow,
+                    error: null,
+                  });
+                }),
+              })),
+            })),
+            // The insert committed; only its response was lost.
+            insert: vi.fn(() =>
+              Promise.resolve({
+                data: null,
+                error: { message: 'connection reset' },
+              })
+            ),
+          };
+        }
+        if (table === 'vtu_transactions') {
+          return {
+            delete: deleteSpy,
+            update: updateSpy,
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: {
+                    id: 'vtu-tx-mine',
+                    customer_id: 'customer-1',
+                    merchant_id: 'merchant-1',
+                    status: 'pending',
+                  },
+                  error: null,
+                }),
+              })),
+            })),
+          };
+        }
+        return {
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn() })) })),
+        };
+      }),
+      rpc: vi.fn(() => Promise.resolve({ data: null, error: null })),
+    };
+
+    const { status } = await callRoute(
+      makeRequest({ idempotencyKey: VALID_KEY })
+    );
+
+    expect(lookupCallCount).toBe(2);
+    expect(status).toBe(200);
+    // Our own row is replayed, never cleaned up.
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(mockFulfill).toHaveBeenCalledWith(
+      expect.objectContaining({ transactionId: 'vtu-tx-mine' })
     );
   });
 

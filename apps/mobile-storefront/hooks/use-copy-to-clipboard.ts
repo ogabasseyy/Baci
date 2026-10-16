@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { triggerHaptic } from '@/hooks/use-haptics';
 import { setClipboardString } from '@/lib/clipboard';
 
@@ -21,19 +21,21 @@ export function useCopyToClipboard({
   const isMountedRef = useRef(true);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearFeedbackTimer = () => {
+  // Stable identity: touches refs only, so the unmount effect below
+  // can depend on it and still run exactly once.
+  const clearFeedbackTimer = useCallback(() => {
     if (feedbackTimeoutRef.current) {
       clearTimeout(feedbackTimeoutRef.current);
       feedbackTimeoutRef.current = null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
       clearFeedbackTimer();
     };
-  }, []);
+  }, [clearFeedbackTimer]);
 
   const clearFeedback = () => {
     clearFeedbackTimer();

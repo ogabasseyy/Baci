@@ -110,7 +110,7 @@ describe('fetchVoucherPin', () => {
         pin: null,
         status: null,
         refundPending: null,
-      refundSkipped: null,
+        refundSkipped: null,
       });
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally {
@@ -296,7 +296,7 @@ describe('fetchVoucherPin', () => {
         pin: null,
         status: null,
         refundPending: null,
-      refundSkipped: null,
+        refundSkipped: null,
       });
     } finally {
       jest.useRealTimers();
@@ -329,7 +329,7 @@ describe('fetchVoucherPin', () => {
         pin: null,
         status: null,
         refundPending: null,
-      refundSkipped: null,
+        refundSkipped: null,
       });
       expect(fetchSpy).toHaveBeenCalledWith(
         expect.stringContaining('/api/vtu/history?'),
@@ -353,7 +353,12 @@ describe('fetchVoucherPin', () => {
 
     mockCurrentUserId.value = 'user-2';
     const switched = await fetchVoucherPin(input);
-    expect(switched).toEqual({ pin: null, status: null, refundPending: null, refundSkipped: null });
+    expect(switched).toEqual({
+      pin: null,
+      status: null,
+      refundPending: null,
+      refundSkipped: null,
+    });
     expect(recallPendingVtuKey('fetch-switched')).toBe('key-switched');
 
     mockCurrentUserId.value = 'user-1';

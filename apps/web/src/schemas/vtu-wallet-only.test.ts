@@ -21,6 +21,7 @@ describe('vtuWalletOnlyChargeSchema', () => {
     phoneNumber: '08012345678',
     networkProvider: 'MTN',
     source: 'checkout' as const,
+    expectedUserId: '11111111-2222-4333-8444-555555555555',
   };
 
   it('accepts walletAmount === amount (the full-coverage happy path)', () => {
@@ -52,19 +53,23 @@ describe('vtuWalletOnlyChargeSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('accepts an optional expectedUserId UUID for route-side binding', () => {
+  it('requires expectedUserId UUID for route-side binding', () => {
+    // Muse R124: the account-switch binding is a server-enforced
+    // invariant — omission must fail closed, not silently debit
+    // the ambient session.
     const withId = vtuWalletOnlyChargeSchema.safeParse({
       ...baseAirtime,
       walletAmount: 1000,
-      expectedUserId: '11111111-2222-4333-8444-555555555555',
     });
     expect(withId.success).toBe(true);
 
+    const { expectedUserId: _omitted, ...withoutIdBody } = baseAirtime;
+    expect(_omitted).toBeDefined();
     const withoutId = vtuWalletOnlyChargeSchema.safeParse({
-      ...baseAirtime,
+      ...withoutIdBody,
       walletAmount: 1000,
     });
-    expect(withoutId.success).toBe(true);
+    expect(withoutId.success).toBe(false);
 
     const invalidId = vtuWalletOnlyChargeSchema.safeParse({
       ...baseAirtime,

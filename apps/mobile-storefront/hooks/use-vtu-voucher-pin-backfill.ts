@@ -187,7 +187,6 @@ export function useVtuVoucherPinBackfill({
       data?.status === 'failed' &&
       data?.refundPending === false &&
       data?.refundSkipped === false,
-    refundSkipped:
-      data?.status === 'failed' && data?.refundSkipped === true,
+    refundSkipped: data?.status === 'failed' && data?.refundSkipped === true,
   };
 }

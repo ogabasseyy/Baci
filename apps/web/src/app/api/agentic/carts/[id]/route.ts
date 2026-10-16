@@ -235,7 +235,10 @@ export async function POST(request: NextRequest, props: RouteProps) {
   const updatePayload = buildUcpCartUpdate({
     buyer: parsed.data.buyer,
     existingBuyer: coerceJsonRecord(cartResult.cart.buyer),
-    items: toPersistedUcpItems(calculation.lineItems),
+    items:
+      parsed.data.line_items !== undefined
+        ? toPersistedUcpItems(calculation.lineItems)
+        : undefined,
     shippingAddress,
   });
   let updateQuery = context.supabase

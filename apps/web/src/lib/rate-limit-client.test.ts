@@ -55,6 +55,14 @@ describe('getTrustedClientIdentifier', () => {
     ).toBe('unknown');
   });
 
+  it('does not trust a nonempty non-sentinel VERCEL value', () => {
+    vi.stubEnv('VERCEL', 'yes');
+    vi.stubEnv('CART_TRUST_PROXY_HEADERS', '');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': '192.0.2.44' }))
+    ).toBe('unknown');
+  });
+
   it('uses x-real-ip when the platform guarantees it', () => {
     vi.stubEnv('VERCEL', '1');
     expect(

@@ -485,6 +485,41 @@ describe('/api/agentic/carts/[id]', () => {
 
     expect(response.status).toBe(409);
   });
+  it('preserves stored lines on a metadata-only update', async () => {
+    mockMutation({ buyer: { email: 'new@example.com' } });
+    mockCalculation();
+    const { updateChain } = createSupabaseMock({
+      cartResult: {
+        data: {
+          agent_id: 'openai-agent',
+          buyer: { email: 'buyer@example.com' },
+          cart_id: 'cart_123',
+          cart_items: [{ id: 'product-1', quantity: 1 }],
+          checkout_session_id: null,
+          currency: 'NGN',
+          id: 'row-1',
+          merchant_id: 'merchant-1',
+          metadata: {},
+          shipping_address: null,
+          status: 'active',
+        },
+        error: null,
+      },
+    });
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts/cart_123', {
+        body: JSON.stringify({ buyer: { email: 'new@example.com' } }),
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ id: 'cart_123' }) }
+    );
+    expect(response.status).toBe(200);
+    expect(updateChain.update).toHaveBeenCalledWith(
+      expect.not.objectContaining({ cart_items: expect.anything() })
+    );
+  });
+
   it('reloads canonical identity after migration fences a racing update', async () => {
     mockMutation({ line_items: [{ item: { id: 'product-1' }, quantity: 1 }] });
     mockCalculation();

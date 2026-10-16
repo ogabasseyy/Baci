@@ -43,7 +43,7 @@ try:
  tests=(root/'supabase/tests/commerce_cart_verified_legacy_bridge.sql').read_text()
  if '--baseline' in sys.argv:
   tests=tests.split('-- Negotiation accepted')[0]+tests[tests.index('DO $$ DECLARE failures text;'):]
- sql+='\n'+tests+'\n'+(root/'supabase/tests/commerce_cart_final_legacy_composition.sql').read_text()+'\nROLLBACK;'
+ sql+='\n'+tests+'\n'+(root/'supabase/tests/commerce_cart_final_legacy_composition.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_variant_predicates.sql').read_text()+'\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55491','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-bridge-sql.log','w'),stderr=subprocess.STDOUT,cwd=root)
  print('PASS' if r.returncode==0 else 'FAIL')
  if r.returncode: print(pathlib.Path('/tmp/cart-bridge-sql.log').read_text()[-2800:])

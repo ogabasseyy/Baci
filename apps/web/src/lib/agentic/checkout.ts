@@ -235,7 +235,15 @@ export async function calculateCheckoutSession(
       id: `line_${productId}_${variantId ?? 'base'}_${
         requestedItem.condition ?? 'new'
       }_${createHash('sha256')
-        .update(JSON.stringify(variantAttributes ?? {}))
+        .update(
+          JSON.stringify(
+            Object.fromEntries(
+              Object.entries(variantAttributes ?? {}).sort(([a], [b]) =>
+                a < b ? -1 : a > b ? 1 : 0
+              )
+            )
+          )
+        )
         .digest('hex')
         .slice(0, 8)}`,
       item: {

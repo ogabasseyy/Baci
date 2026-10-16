@@ -298,6 +298,7 @@ describe('getTrustedClientIdentifier (cart quota identity)', () => {
   });
 
   it('uses the platform-set x-real-ip when present', () => {
+    vi.stubEnv('VERCEL', '1');
     expect(
       getTrustedClientIdentifier(
         requestWith({

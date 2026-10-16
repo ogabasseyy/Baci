@@ -67,7 +67,7 @@ export function getTrustedClientIdentifier(request: NextRequest): string {
   // other deployment the header is client-suppliable, so it collapses
   // into the shared 'unknown' bucket instead of resetting budgets.
   const proxyGuaranteed =
-    Boolean(process.env.VERCEL?.trim()) ||
+    process.env.VERCEL === '1' ||
     process.env.CART_TRUST_PROXY_HEADERS?.trim() === 'true';
   if (proxyGuaranteed) {
     const realIp = request.headers.get('x-real-ip');

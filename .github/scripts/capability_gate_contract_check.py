@@ -66,7 +66,7 @@ BASE_PINS = {
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
     ".github/scripts/capability_gate_contract_ci_checks.py": "eefa8714dd8a321130ec1f9f855d2a6bed77310a0a0b2a9bf6ad5821c553118c",
-    ".github/scripts/capability_gate_contract_workflow_checks.py": "7a6a5daecabb8f4d821118ac605b07e9de508579b1a8716930cca351934104bf",
+    ".github/scripts/capability_gate_contract_workflow_checks.py": "0ac6533a6a8c2c885fa480bca7aeee2e26f0c785b85862ef71a8cecb169f8f8a",
     ".github/workflows/capability-register-freshness.yml": "7496fead7a21713f6864b61ee828b1718350dd3034571c73381d5402f5ae27df",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
@@ -87,6 +87,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/prompt_builder.py": "59997648a8c05f9fdbba5d4a9849e96a066ae4d316a2a9d465e0e1ef58aed3ae",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "5c1d9f517170f0d4528a086964655cabb849c3886c8cea8bc83693ae6c557c4e",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_scope.py": "1f0ed42aef159ce2890e792d63361d93691c50cb3aefc254fa302b8db42eaa44",
     "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }
@@ -188,17 +189,18 @@ def undeclared_suite_files(repo_root, declared):
     The gate discovers every matching test module in the checkout, so a
     newly added module runs even when no pin changed. Requiring every suite
     Python file to be declared forces the addition itself into review.
+    Symlinks are rejected outright: a `json` directory symlink never matches
+    rglob("*.py"), yet the gate's own `import json` would resolve the linked
+    package first and execute its __init__ before any check runs.
     """
     root = Path(repo_root)
     try:
-        found = sorted(path.relative_to(root).as_posix() for path in root.joinpath(SUITE_DIR).rglob("*.py"))
+        entries = sorted(path.relative_to(root).as_posix() for path in root.joinpath(SUITE_DIR).rglob("*"))
     except OSError:
         return ["suite directory unreadable"]
-    return [
-        f"undeclared suite file: {rel} (declare it in BASE_PINS in {CHECKER})"
-        for rel in found
-        if rel not in declared
-    ]
+    undeclared = [f"undeclared suite file: {rel} (declare it in BASE_PINS in {CHECKER})" for rel in entries if rel.endswith(".py") and rel not in declared]
+    links = [f"suite must not contain symlinks: {rel}" for rel in entries if Path(root, rel).is_symlink()]
+    return undeclared + links
 
 
 def declared_checker_pin(workflow_text):
@@ -241,6 +243,14 @@ def checker_file_failures(repo_root, base_pin, declared_pin):
     return [f"checker script changed without a pin update (refresh PINNED_CHECKER_SHA256 in {WORKFLOW})"], []
 
 
+def execution_scope_failures(workflow_text):
+    """The checker runs at the workspace root: an override would run a mirror tree."""
+    code = [line for line in workflow_text.splitlines() if line.strip() and not line.strip().startswith("#")]
+    if any(re.match(r"^\s*[\"']?(working-directory|defaults)[\"']?\s*:", line) for line in code):
+        return ["contract workflow must not override working-directory or defaults"]
+    return []
+
+
 def main(root=None, checker_pin=None):
     # Root defaults to the process working directory — never the script's own
     # path: the workflow runs a base-owned copy from /tmp, where __file__
@@ -258,6 +268,7 @@ def main(root=None, checker_pin=None):
         failures.append("contract workflow missing")
         workflow_text = ""
     failures.extend(workflow_failures(workflow_text))
+    failures.extend(execution_scope_failures(workflow_text))
     try:
         declared = declared_pins(Path(root, CHECKER))
     except (OSError, ValueError, SyntaxError) as exc:

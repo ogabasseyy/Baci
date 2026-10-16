@@ -17,6 +17,9 @@ name: Capability Gate Contract
 # Residual limit: direct pushes to protected branches bypass PR guards;
 # branch protection with required reviews plus the gate-contract required
 # check is the remaining layer (owner action).
+# Dependence note: the base fetch below runs without stored credentials,
+# which succeeds because this repository is public; a private setting
+# would need an explicit token for that step.
 
 on:
   pull_request_target:
@@ -35,7 +38,7 @@ env:
   # Baseline hash of the checker script itself. The checker cannot pin
   # itself, so the base-owned workflow carries the baseline and passes it as
   # argv[1]; a same-PR checker change declares its new hash here.
-  PINNED_CHECKER_SHA256: e030330c52466395020d58245f152bc2e3b414bb2524623423c4b525f1fad20d
+  PINNED_CHECKER_SHA256: 483c8c21ac6029d969cc4436d64b55caa9f75fd1b837724a81006c307989a7c9
 
 jobs:
   gate-contract:

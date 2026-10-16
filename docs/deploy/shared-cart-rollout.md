@@ -97,6 +97,16 @@ secret still rotates both together: outstanding handoff links and
 session proofs minted before a rotation stop verifying, so rotate
 only with enrollment drained or accept re-issuing live handoff links.
 
+Compromise recovery is stricter than routine rotation: retired
+secrets stay acceptable for a bounded 24-hour grace based on the
+proof's issued-at claim, so a compromised retired secret can mint
+backdated proofs until that window closes. Rotation alone is
+therefore never compromise recovery. The mandatory runbook step is
+to revoke the live grants issued under the retired secret for every
+affected merchant/cart (forcing shoppers through a fresh bootstrap)
+and only then treat the rotation as complete; record the revocation
+in the activation evidence.
+
 ## Rollback
 
 - Disable new enrollment/realtime first. Migrated carts keep canonical
@@ -159,4 +169,9 @@ guest carts to the canonical shared cart.
   enrolled, put an operator alert on the throttled
   `Cart quota store degraded` warning and confirm the multi-instance
   multiplication is accepted for the pilot, or keep enrollment closed
-  until the store is highly available.
+  until the store is highly available. The same acceptance covers the
+  bounded in-memory store's eviction policy: past 4096 subjects the
+  soonest-expiring live counters are evicted first, so an attacker
+  driving many distinct subjects during an outage can reset other
+  subjects' degraded command/snapshot budgets; the operator alert is
+  the control that bounds how long that degraded mode may persist.

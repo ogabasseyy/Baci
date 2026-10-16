@@ -29,6 +29,7 @@ import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-c
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
+import { hasExistingCheckoutOrder } from '@/lib/checkout/has-existing-checkout-order';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
@@ -1192,9 +1193,22 @@ export async function POST(request: NextRequest) {
     // RPC, granted to anon/authenticated/service_role — the trust
     // boundary lives in the database, not the Next.js layer
     // (CodeRabbit High on PR #1622 round 7).
+    // A response-loss retry of an already-created order must replay
+    // it even if the merchant has since deactivated a condition
+    // offer: resolve the existing order first and let the condition
+    // pricing recompute price that offer at its stored price instead
+    // of failing closed before the RPC's replay path can run.
+    const isConditionReplay = requestIdempotencyKey
+      ? await hasExistingCheckoutOrder({
+          adminSupabase: createAdminClient(),
+          merchantId: merchant_id,
+          requestIdempotencyKey,
+        })
+      : false;
     let serverComputedTaxAmount: number;
     try {
       serverComputedTaxAmount = await computeAgenticOrderTax({
+        allowUnavailableConditionPrices: isConditionReplay,
         items: items.map((item) => ({
           product_id: item.product_id || item.productId || item.id,
           quantity: item.quantity,
@@ -1266,6 +1280,7 @@ export async function POST(request: NextRequest) {
     >;
     try {
       negotiationDiscount = await computeOrderNegotiationDiscount({
+        allowUnavailableConditionPrices: isConditionReplay,
         items: orderItemsPayload,
         merchantId: merchant_id,
         supabase,
@@ -1722,6 +1737,7 @@ export async function POST(request: NextRequest) {
 
       try {
         canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
+          allowUnavailableConditionPrices: isConditionReplay,
           items: orderItemsPayload,
           merchantId: merchant_id,
           supabase,
@@ -1817,6 +1833,7 @@ export async function POST(request: NextRequest) {
       if (canonicalOrderSubtotal == null) {
         try {
           canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
+            allowUnavailableConditionPrices: isConditionReplay,
             items: orderItemsPayload,
             merchantId: merchant_id,
             supabase,

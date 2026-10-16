@@ -61,6 +61,10 @@ export interface GPTMessage {
 export interface CheckoutItem {
   id: string;
   quantity: number;
+  /** Full UCP lane identity, persisted so a migrated cart can be recovered. */
+  variant_id?: string;
+  condition?: string;
+  variant_attributes?: Record<string, string>;
 }
 
 interface AgenticProduct {

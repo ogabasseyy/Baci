@@ -156,10 +156,32 @@ export async function POST(request: NextRequest) {
   const shippingAddress = adaptUcpShippingAddressToAgentic(
     parsed.data.shipping_address
   );
-  const normalizedItems = calculation.lineItems.map((lineItem) => ({
-    id: lineItem.item.id,
-    quantity: lineItem.item.quantity,
-  }));
+  // Persist the full lane identity in the durable session row: if the
+  // canonical migration commits but the full-identity replace fails,
+  // the follow-up read recovers the requested variant/condition from
+  // this row instead of continuing with the generic product.
+  const parsedByProduct = new Map<string, typeof parsed.data.line_items>();
+  for (const line of parsed.data.line_items) {
+    const queue = parsedByProduct.get(line.item.id) ?? [];
+    queue.push(line);
+    parsedByProduct.set(line.item.id, queue);
+  }
+  const normalizedItems = calculation.lineItems.map((lineItem) => {
+    const parsedLine = parsedByProduct.get(lineItem.item.id)?.shift();
+    return {
+      id: lineItem.item.id,
+      quantity: lineItem.item.quantity,
+      ...(parsedLine?.item.variant_id
+        ? { variant_id: parsedLine.item.variant_id }
+        : {}),
+      ...(parsedLine?.item.condition
+        ? { condition: parsedLine.item.condition }
+        : {}),
+      ...(parsedLine?.item.variant_attributes
+        ? { variant_attributes: parsedLine.item.variant_attributes }
+        : {}),
+    };
+  });
   const { error } = await supabase.from('agentic_cart_sessions').insert(
     buildUcpCartInsert({
       agentId: mutation.agentId,

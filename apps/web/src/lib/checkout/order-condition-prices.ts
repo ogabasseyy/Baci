@@ -23,7 +23,8 @@ type ConditionPrice = {
 export async function loadOrderConditionPrices(
   items: ConditionItem[],
   merchantId: string,
-  client: SupabaseClient
+  client: SupabaseClient,
+  options?: { allowUnavailable?: boolean }
 ): Promise<Map<string, number>> {
   const productIds = [
     ...new Set(
@@ -43,6 +44,7 @@ export async function loadOrderConditionPrices(
   for (const row of (data ?? []) as ConditionPrice[]) {
     if (
       row.status !== 'active' &&
+      !options?.allowUnavailable &&
       items.some(
         (item) =>
           !item.variant_id &&
@@ -54,11 +56,15 @@ export async function loadOrderConditionPrices(
     const price = Number(row.price);
     if (
       !productIds.includes(row.product_id) ||
-      row.status !== 'active' ||
+      (row.status !== 'active' && !options?.allowUnavailable) ||
       !Number.isFinite(price) ||
       price < 0
     )
       continue;
+    // Idempotent replays (allowUnavailable) price a since-deactivated
+    // offer at its stored price so the recomputation matches the
+    // original order and the RPC can replay it; fresh orders keep
+    // failing closed above.
     prices.set(JSON.stringify([row.product_id, row.condition]), price);
   }
   return prices;

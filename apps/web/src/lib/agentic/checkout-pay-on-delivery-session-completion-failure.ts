@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readAgenticSharedCartBinding } from '@/lib/agentic/checkout-completion-payloads';
 import { compensatePayOnDeliveryFinalizationFailure } from '@/lib/agentic/checkout-pay-on-delivery-compensation';
 import type { AgenticMetadata } from '@/lib/agentic/checkout-storage';
 import {
@@ -71,6 +72,7 @@ export async function handlePayOnDeliverySessionCompletionFailure({
   }
 
   await compensatePayOnDeliveryFinalizationFailure({
+    bound: Boolean(readAgenticSharedCartBinding(metadata)),
     finalizationClaim,
     merchantId,
     metadata,

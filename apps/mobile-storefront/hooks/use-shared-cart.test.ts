@@ -112,11 +112,11 @@ it('discards canonical ownership when enrollment turns off', async () => {
     (p: typeof options) => useSharedCart(p, deps),
     { initialProps: { ...options, enabled: false } }
   );
-  expect(mockLegacyCart.current.sharedCartRef).toBeUndefined();
-  expect(mockLegacyCart.current.items).toEqual([]);
-  // The abandoned canonical generation is rotated so the next legacy
-  // cart cannot inherit its frozen credit choices or order attempt.
-  expect(mockLegacyCart.current.checkoutGeneration).not.toBe('generation-old');
+  // A placeholder disabled mount (enrollment still loading) must not
+  // retire the persisted cart before the real merchant record lands.
+  expect(mockLegacyCart.current.sharedCartRef).toBeDefined();
+  expect(mockLegacyCart.current.items).toEqual([{ id: 'item-1' }]);
+  expect(mockLegacyCart.current.checkoutGeneration).toBe('generation-old');
   // An initial disabled mount (enrollment still loading) must not
   // retire the persisted session before the real merchant record lands.
   expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith(
@@ -131,6 +131,11 @@ it('discards canonical ownership when enrollment turns off', async () => {
       `baci.cart.session.${options.merchantId}`
     )
   );
+  // The committed disable retires the canonical reference and rotates
+  // its checkout generation.
+  expect(mockLegacyCart.current.sharedCartRef).toBeUndefined();
+  expect(mockLegacyCart.current.items).toEqual([]);
+  expect(mockLegacyCart.current.checkoutGeneration).not.toBe('generation-old');
 });
 
 it('surfaces an initial refresh failure as an error state for retry', async () => {

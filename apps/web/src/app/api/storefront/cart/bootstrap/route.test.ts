@@ -244,17 +244,20 @@ describe('POST /api/storefront/cart/bootstrap', () => {
     expect(payload.proof.startsWith('cp1.')).toBe(true);
   });
 
-  it('keeps the body proof off the browsable root host', async () => {
+  it('rejects hint-selected bootstrap on the browsable root host', async () => {
+    // Tenant selection by client hint is confined to the native API
+    // hosts; the browsable apex must identify the merchant by host.
     const response = await postBootstrap({
       headers: { authorization: 'Bearer [REDACTED]' },
       noCsrf: true,
       url: 'https://usebaci.com/api/storefront/cart/bootstrap?merchantSlug=ogabassey',
     });
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(404);
     const payload = await response.json();
+    expect(payload.code).toBe('merchant_unresolved');
     expect(payload.proof).toBeUndefined();
-    expect(response.headers.get('set-cookie')).toContain('cp1.');
+    expect(response.headers.get('set-cookie')).toBeNull();
   });
 
   it('rejects browser requests without a CSRF token', async () => {

@@ -146,10 +146,12 @@ export async function computeOrderNegotiationDiscount({
   merchantId,
   supabase,
   vatRegistered,
+  allowUnavailableConditionPrices,
 }: {
   items: NegotiationDiscountItem[];
   merchantId: string;
   supabase: SupabaseClient;
+  allowUnavailableConditionPrices?: boolean;
   // The route passes `merchant.vat_registration_status === 'registered'`.
   // Non-registered merchants charge no VAT, so the discount must not gross up.
   vatRegistered: boolean;
@@ -227,7 +229,8 @@ export async function computeOrderNegotiationDiscount({
   const conditionPrices = await loadOrderConditionPrices(
     items,
     merchantId,
-    supabase
+    supabase,
+    { allowUnavailable: allowUnavailableConditionPrices }
   );
 
   const productMap = new Map(products.map((product) => [product.id, product]));

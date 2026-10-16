@@ -66,7 +66,6 @@ export async function retireEnrollmentSession(
  */
 export function retireLegacySharedCart(deps: {
   getLegacy: () => {
-    sharedCartRef?: unknown;
     checkoutGeneration: string;
   };
   clearLegacy: (nextGeneration: string) => void;
@@ -74,8 +73,10 @@ export function retireLegacySharedCart(deps: {
   persistGeneration: (generation: string) => void;
   releaseGeneration: (generation: string) => void;
 }): void {
+  // Callers invoke this only after a committed enabled period; the
+  // canonical lifecycle owned the checkout generation for its whole
+  // duration, even if the reference itself was already published away.
   const legacy = deps.getLegacy();
-  if (!legacy.sharedCartRef) return;
   const nextGeneration = deps.mintGeneration();
   deps.clearLegacy(nextGeneration);
   deps.persistGeneration(nextGeneration);

@@ -118,10 +118,12 @@ export async function computeAgenticOrderTax({
   items,
   merchantId,
   supabase,
+  allowUnavailableConditionPrices,
 }: {
   items: AgenticTaxItem[];
   merchantId: string;
   supabase: SupabaseClient;
+  allowUnavailableConditionPrices?: boolean;
 }): Promise<number> {
   if (items.length === 0 || !merchantId) {
     return 0;
@@ -234,7 +236,8 @@ export async function computeAgenticOrderTax({
   const conditionPrices = await loadOrderConditionPrices(
     items,
     merchantId,
-    supabase
+    supabase,
+    { allowUnavailable: allowUnavailableConditionPrices }
   );
 
   const productMap = new Map((products ?? []).map((p) => [p.id, p]));

@@ -24,7 +24,7 @@ it('returns the canonical cart scoped by the authenticated route', async () => {
     canonical: vi
       .fn()
       .mockResolvedValue({ status: 200, body: { id: 'cart-a' } }),
-    load: vi.fn(),
+    load: vi.fn().mockResolvedValue({ cart: null, error: null }),
     respond: vi.fn(),
   };
   const response = await readUcpCart(input, deps);
@@ -36,7 +36,46 @@ it('returns the canonical cart scoped by the authenticated route', async () => {
     agentId: 'agent-a',
     action: 'read',
   });
-  expect(deps.load).not.toHaveBeenCalled();
+});
+
+it('replays stored lane identity when the canonical cart lost it at create', async () => {
+  const cart = {
+    agent_id: 'agent-a',
+    status: 'active',
+    cart_items: [{ id: 'prod-1', quantity: 1, variant_id: 'variant-1' }],
+  };
+  const canonical = vi
+    .fn()
+    .mockResolvedValueOnce({
+      status: 200,
+      body: {
+        id: 'cart-a',
+        line_items: [{ item: { id: 'prod-1', quantity: 1 } }],
+      },
+    })
+    .mockResolvedValueOnce({
+      status: 200,
+      body: {
+        id: 'cart-a',
+        line_items: [
+          { item: { id: 'prod-1', variant_id: 'variant-1', quantity: 1 } },
+        ],
+      },
+    });
+  const deps = {
+    canonical,
+    load: vi.fn().mockResolvedValue({ cart, error: null }),
+    respond: vi.fn(),
+  };
+  const response = await readUcpCart(input, deps);
+  expect(response.status).toBe(200);
+  expect(canonical).toHaveBeenCalledTimes(2);
+  expect(canonical.mock.calls[1][0]).toMatchObject({
+    action: 'update',
+    lines: [
+      { item: { productId: 'prod-1', variantId: 'variant-1' }, quantity: 1 },
+    ],
+  });
 });
 it('hides a missing legacy cart after a canonical bypass', async () => {
   const deps = {

@@ -203,7 +203,26 @@ export function coerceUcpCartItems(value: unknown): CheckoutItem[] {
       return [];
     }
 
-    return [{ id: id.trim(), quantity }];
+    const variantAttributes =
+      isRecord(item.variant_attributes) &&
+      Object.values(item.variant_attributes).every(
+        (value) => typeof value === 'string'
+      )
+        ? (item.variant_attributes as Record<string, string>)
+        : undefined;
+    return [
+      {
+        id: id.trim(),
+        quantity,
+        ...(typeof item.variant_id === 'string' && item.variant_id
+          ? { variant_id: item.variant_id }
+          : {}),
+        ...(typeof item.condition === 'string' && item.condition
+          ? { condition: item.condition }
+          : {}),
+        ...(variantAttributes ? { variant_attributes: variantAttributes } : {}),
+      },
+    ];
   });
 }
 

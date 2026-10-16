@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AGENTIC_PAYMENT_METHOD_PAY_ON_DELIVERY } from '@/config/agentic-payment-methods';
 import type { calculateCheckoutSession } from '@/lib/agentic/checkout';
+import { readAgenticSharedCartBinding } from '@/lib/agentic/checkout-completion-payloads';
 import type { AgenticCheckoutBuyer } from '@/lib/agentic/checkout-completion-response';
 import { sendAgenticOrderCreatedWebhook } from '@/lib/agentic/checkout-order-dispatch';
 import { buildOrderFinalizationClaim } from '@/lib/agentic/checkout-order-finalization-claim';
@@ -139,6 +140,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
         sessionId: sanitizeForLog(sessionId),
       });
       await compensatePayOnDeliveryFinalizationFailure({
+        bound: Boolean(readAgenticSharedCartBinding(finalizationMetadata)),
         finalizationClaim,
         merchantId,
         metadata: finalizationMetadata,

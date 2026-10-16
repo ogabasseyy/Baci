@@ -40,16 +40,18 @@ it('rotates and releases the checkout generation when retiring the shared refere
   expect(releaseGeneration).toHaveBeenCalledWith('generation-old');
 });
 
-it('leaves the legacy cart untouched without a shared reference', () => {
+it('rotates even when the shared reference was already published away', () => {
   const clearLegacy = jest.fn();
+  const releaseGeneration = jest.fn();
   retireLegacySharedCart({
     getLegacy: () => ({ checkoutGeneration: 'generation-old' }),
     clearLegacy,
     mintGeneration: () => 'generation-new',
     persistGeneration: jest.fn(),
-    releaseGeneration: jest.fn(),
+    releaseGeneration,
   });
-  expect(clearLegacy).not.toHaveBeenCalled();
+  expect(clearLegacy).toHaveBeenCalledWith('generation-new');
+  expect(releaseGeneration).toHaveBeenCalledWith('generation-old');
 });
 
 it('retries retirement after a transient storage failure', async () => {

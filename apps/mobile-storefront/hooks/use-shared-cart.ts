@@ -92,12 +92,15 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
   });
   useEffect(() => {
     if (!options.enabled) {
-      // Enrollment off: discard canonical ownership and retire the session.
+      // Enrollment off after a committed enabled period only: cold
+      // starts pass through a placeholder disabled state first.
+      const wasEnabled = enrollmentTransition.current.wasEnabled;
       void retireEnrollmentSession(
         enrollmentTransition.current,
         options.merchantId,
         (merchantId) => cartSessionStorage.remove(merchantId)
       );
+      if (!wasEnabled) return;
       retireLegacySharedCart({
         getLegacy: () => useCartStore.getState(),
         clearLegacy: (checkoutGeneration) =>

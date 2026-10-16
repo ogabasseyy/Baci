@@ -132,6 +132,26 @@ describe('condition offer order parity', () => {
       )
     ).resolves.toEqual(new Map());
   });
+  it('prices a deactivated offer at its stored price for idempotent replays', async () => {
+    const db = {
+      rpc: vi.fn(async () => ({
+        data: [
+          {
+            product_id: 'p1',
+            condition: 'used',
+            price: 60,
+            status: 'inactive',
+          },
+        ],
+        error: null,
+      })),
+    };
+    const prices = await loadOrderConditionPrices([item], 'm1', db as never, {
+      allowUnavailable: true,
+    });
+    expect(orderConditionPrice(prices, item)).toBe(60);
+  });
+
   it('does not query for omitted conditions or variants', async () => {
     const db = client();
     await loadOrderConditionPrices(

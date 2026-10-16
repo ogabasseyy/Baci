@@ -56,7 +56,9 @@ describe('applyUtilityWalletSuccessOutcome', () => {
       expect.objectContaining({ submitAmount: 500, submitBalance: 5000 })
     );
     expect(input.setTransactionRef).toHaveBeenCalledWith('REF-1');
-    expect(input.markAttemptShown).toHaveBeenCalledWith('scoped-1');
+    // Generation-bound settle (Codex R137 P1): the shown-mark
+    // carries the key so a re-minted generation never inherits it.
+    expect(input.markAttemptShown).toHaveBeenCalledWith('scoped-1', 'k');
     expect(input.setStep).toHaveBeenCalledWith('success');
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Purchase Successful' })

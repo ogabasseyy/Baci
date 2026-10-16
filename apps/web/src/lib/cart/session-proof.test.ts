@@ -346,9 +346,12 @@ describe('verifyCartSessionProof', () => {
       secret: SECRET,
     });
 
+    // Retired acceptance is a short 24-hour grace: one hour after
+    // retirement the previous secret still verifies, forcing
+    // re-bootstrap within a day rather than a full proof lifetime.
     const duringRotation = verifyCartSessionProof(proof, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-17T04:01:00Z'),
+      now: new Date('2026-10-13T05:01:00Z'),
       previousSecrets: [{ retireAt: '2026-10-13T04:00:00Z', secret: SECRET }],
       secret: ROTATED_SECRET,
     });
@@ -356,7 +359,7 @@ describe('verifyCartSessionProof', () => {
 
     const afterRemoval = verifyCartSessionProof(proof, {
       environment: ENVIRONMENT,
-      now: new Date('2026-10-17T04:01:00Z'),
+      now: new Date('2026-10-13T05:01:00Z'),
       secret: ROTATED_SECRET,
     });
     expect(afterRemoval).toEqual({ error: 'invalid_proof', ok: false });

@@ -6,13 +6,11 @@ import { isUserFacingCheckoutError } from '@/lib/vtu-checkout-error-classifier';
 import { resolveRequestingOwnership } from '@/lib/vtu-checkout-ownership';
 import { fulfillPendingVtuTransaction } from '@/lib/vtu-fulfillment';
 import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
+import { findExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
 import { cleanupOrphanVtuTransactionAfterKeyRace } from '@/lib/vtu-orphan-transaction-cleanup';
 import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
-import {
-  findExistingIdempotencyRow,
-  verifyReplayTransactionBinding,
-} from '@/lib/vtu-replay-binding';
+import { verifyReplayTransactionBinding } from '@/lib/vtu-replay-binding';
 import { computeVtuWalletRequestFingerprint } from '@/lib/vtu-wallet-fingerprint';
 import { parseWalletOnlyCheckoutRequest } from '@/lib/vtu-wallet-only-request';
 

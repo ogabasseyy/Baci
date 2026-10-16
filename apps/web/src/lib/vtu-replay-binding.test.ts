@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  findExistingIdempotencyRow,
-  verifyReplayTransactionBinding,
-} from './vtu-replay-binding';
+import { verifyReplayTransactionBinding } from './vtu-replay-binding';
 
 const KEY_ROW = {
   key: 'key-1',
@@ -25,38 +22,6 @@ function buildSupabase(responses: Record<string, unknown>) {
     })),
   } as never;
 }
-
-describe('findExistingIdempotencyRow', () => {
-  it('returns the key row on a hit', async () => {
-    const supabase = buildSupabase({
-      vtu_idempotency_keys: { data: KEY_ROW, error: null },
-    });
-
-    await expect(
-      findExistingIdempotencyRow(supabase, 'key-1')
-    ).resolves.toEqual(KEY_ROW);
-  });
-
-  it('returns null on a miss', async () => {
-    const supabase = buildSupabase({
-      vtu_idempotency_keys: { data: null, error: null },
-    });
-
-    await expect(
-      findExistingIdempotencyRow(supabase, 'key-1')
-    ).resolves.toBeNull();
-  });
-
-  it('throws fail-closed on a lookup error', async () => {
-    const supabase = buildSupabase({
-      vtu_idempotency_keys: { data: null, error: { message: 'boom' } },
-    });
-
-    await expect(findExistingIdempotencyRow(supabase, 'key-1')).rejects.toThrow(
-      /Failed to look up idempotency key/
-    );
-  });
-});
 
 describe('verifyReplayTransactionBinding', () => {
   it('binds a transaction row owned by the key owner', async () => {

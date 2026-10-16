@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { ExistingIdempotencyRow } from './vtu-idempotency-key-lookup';
 
 /**
  * Idempotency-key replay binding for the wallet-only checkout route.
@@ -8,33 +9,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * fulfillment debits/refunds from the TRANSACTION row — this module
  * binds the two before any replay fulfills, so a key↔tx
  * inconsistency (orphan leftovers, manual repair) can never
- * transact as the wrong customer.
+ * transact as the wrong customer. The key-row lookup lives in
+ * `vtu-idempotency-key-lookup.ts` (Codex R122 P1, one primary
+ * export per file); merging the two lookups into one operation
+ * was rejected because the route runs ownership + fingerprint
+ * guards between them and the error precedence must not change.
  */
-
-export interface ExistingIdempotencyRow {
-  key: string;
-  vtu_transaction_id: string;
-  customer_id: string;
-  merchant_id: string;
-  request_fingerprint: string;
-}
-
-export async function findExistingIdempotencyRow(
-  supabase: SupabaseClient,
-  key: string
-): Promise<ExistingIdempotencyRow | null> {
-  const { data, error } = await supabase
-    .from('vtu_idempotency_keys')
-    .select(
-      'key, vtu_transaction_id, customer_id, merchant_id, request_fingerprint'
-    )
-    .eq('key', key)
-    .maybeSingle();
-  if (error) {
-    throw new Error(`Failed to look up idempotency key: ${error.message}`);
-  }
-  return data ?? null;
-}
 
 export interface ReplayTransactionBinding {
   customer_id: string | null;

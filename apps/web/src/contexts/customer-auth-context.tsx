@@ -99,11 +99,17 @@ export function CustomerAuthProvider({
   // See react.dev "Adjusting some state when a prop changes".
   const [prevMerchantSlug, setPrevMerchantSlug] = useState(merchantSlug);
   if (merchantSlug !== prevMerchantSlug) {
+    // Render-phase state reset ONLY (react.dev "Adjusting some state
+    // when a prop changes"): React discards these setStates if it
+    // abandons the render. The live-identity publish MUST NOT live
+    // here — the module mutation cannot roll back, so a speculative
+    // render would report a merchant switch that never committed and
+    // discard a healthy in-flight checkout (Codex R129 P2). It runs
+    // in the committed session effect below instead.
     setPrevMerchantSlug(merchantSlug);
     setIsLoading(true);
     setUser(null);
     setCustomer(null);
-    publishCustomerIdentity(null, null, merchantSlug);
     setOtpState(null);
   }
 
@@ -113,6 +119,11 @@ export function CustomerAuthProvider({
 
   useEffect(() => {
     let cancelled = false;
+
+    // Publish the storefront reset only after commit (Codex R129 P2):
+    // runs on mount and every committed merchantSlug change,
+    // synchronously before the async session load below.
+    publishCustomerIdentity(null, null, merchantSlug);
 
     void loadCustomerSession(
       merchantSlug,

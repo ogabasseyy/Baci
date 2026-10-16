@@ -87,13 +87,6 @@ FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.set_vtu_transaction_replay_attributes(uuid, text, text)
 TO service_role, authenticated;
 
--- Idempotent (Muse R128 LOW): environments where the earlier
--- replay-overlay work was applied manually or partially already have
--- this policy — a bare CREATE POLICY would abort the whole migration
--- and block every subsequent one in the chain.
-DROP POLICY IF EXISTS "Customers can view own VTU transactions"
-ON public.vtu_transactions;
-
 CREATE POLICY "Customers can view own VTU transactions"
 ON public.vtu_transactions FOR SELECT
 USING (

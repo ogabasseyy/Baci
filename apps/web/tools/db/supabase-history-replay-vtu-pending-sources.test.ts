@@ -7,13 +7,13 @@ import { VTU_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-pe
 describe('VTU replay sources', () => {
   it('keeps every branch migration in the explicit pending registry input', () => {
     const migrations = VTU_PENDING_REPLAY_SOURCE_ROWS.split('\n');
-    expect(migrations).toHaveLength(9);
+    expect(migrations).toHaveLength(10);
     expect(migrations.at(-1)).toContain(
-      '20261016010000_serialize_vtu_refund_retry.sql'
+      '20261016131000_idempotent_vtu_replay_owner_policy.sql'
     );
     const filenames = migrations.map((entry) => entry.split(' ')[1]);
     expect(filenames).toEqual([...filenames].sort());
-    expect(new Set(filenames).size).toBe(9);
+    expect(new Set(filenames).size).toBe(10);
 
     for (const entry of migrations) {
       const [digest, filename] = entry.split(' ');

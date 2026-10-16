@@ -6,7 +6,6 @@ import { mapFulfillmentToResponse } from '@/lib/vtu-fulfillment-response';
 import type { ExistingIdempotencyRow } from '@/lib/vtu-idempotency-key-lookup';
 import { overlayReplayAttributes } from '@/lib/vtu-replay-attribute-overlay';
 import { verifyReplayTransactionBinding } from '@/lib/vtu-replay-binding';
-import { claimReplayCustomerOwner } from '@/lib/vtu-replay-owner-claim';
 import type { VtuWalletOnlyChargeInput } from '@/schemas/vtu-wallet-only';
 
 type ReplayAuthUser = NonNullable<
@@ -14,12 +13,12 @@ type ReplayAuthUser = NonNullable<
 >;
 
 /**
- * Shared replay tail (Muse R128 MEDIUM extraction): binding → owner
- * claim → current-attempt overlay → fulfill. Moved verbatim from the
- * wallet-only route's two replay sites (main replay + PK-race winner
- * replay), which ran identical sequences — the owner claim between
- * binding and overlay is the only addition. Guards (customer,
- * merchant, fingerprint) stay at the call sites: they compare against
+ * Shared replay tail (Muse R128 extraction): binding → owner
+ * presence → current-attempt overlay → fulfill. Moved verbatim from
+ * the wallet-only route's two replay sites (main replay + PK-race
+ * winner replay), which ran identical sequences — the owner-presence
+ * check is the only addition. Guards (customer, merchant,
+ * fingerprint) stay at the call sites: they compare against
  * different baselines (requesting ownership vs the prepared row).
  */
 export async function fulfillReplayVtuTransaction({
@@ -44,17 +43,24 @@ export async function fulfillReplayVtuTransaction({
   if ('error' in binding) {
     return NextResponse.json({ error: binding.error }, { status: 400 });
   }
-  // Owner claim: legacy/manual key rows can reference an unlinked
-  // guest customer. Fulfilling without binding would debit a row
-  // never linked to the caller (and the overlay below would silently
-  // no-op on it). Runs after ALL guards (R86: never link before
-  // rejection) and before the overlay needs customers.user_id.
-  const claimedOwner = await claimReplayCustomerOwner({
-    customerId: keyRow.customer_id,
-    supabase,
-    user,
-  });
-  if (!claimedOwner) {
+  // Owner presence (Muse R128 medium, Codex R129 P1): legacy/manual
+  // key rows can reference an unlinked guest customer, a vanished
+  // row, or a row since claimed by someone else. The replay path is
+  // READ-ONLY for customers (approved exception: linking happens
+  // only on the fresh path inside prepare), so an unbound owner
+  // rejects to a fresh-key 400 instead of debiting a row never
+  // linked to the caller. Lookup ERRORS throw (500, key kept): a 400
+  // would rotate the key and risk a second debit under a fresh key
+  // for an already-debited transaction.
+  const { data: ownerRow, error: ownerError } = await supabase
+    .from('customers')
+    .select('id, user_id')
+    .eq('id', keyRow.customer_id)
+    .maybeSingle();
+  if (ownerError) {
+    throw new Error(`Failed to resolve replay owner: ${ownerError.message}`);
+  }
+  if (!ownerRow || ownerRow.user_id !== user.id) {
     return NextResponse.json(
       {
         error:

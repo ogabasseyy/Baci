@@ -100,6 +100,31 @@ class ContractAdversarialTests(unittest.TestCase):
         self.assertTrue(failures)
         self.assertIn("PATH", failures[0])
 
+    def test_checkout_with_block_must_match_exactly(self):
+        # A `repository:` entry redirects the pre-gate checkout to an
+        # attacker workspace whose local action replaces the real gate.
+        checkout = (
+            "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n"
+            "        with:\n"
+            "          fetch-depth: 0\n"
+            "          persist-credentials: false\n"
+        )
+        ci = CI.replace(
+            "      - name: Test capability register binding\n",
+            checkout + "      - name: Test capability register binding\n",
+            1,
+        )
+        self.assertNotEqual(ci, CI)
+        self.assertEqual(check.ci_failures(ci), [])
+        evil = ci.replace(
+            "          persist-credentials: false\n",
+            "          persist-credentials: false\n          repository: attacker/gate-bypass\n",
+            1,
+        )
+        failures = check.ci_failures(evil)
+        self.assertTrue(failures)
+        self.assertIn("with block", failures[0])
+
     def test_indented_scalar_header_does_not_hide_steps(self):
         # The pinned text inside `concurrency: |2-` is scalar content while
         # the flow-style steps run `exit 0`: no violation may be reported.

@@ -140,6 +140,7 @@ def _strip_comment(value):
 _JOB_HEADER = re.compile(r"^  [A-Za-z0-9_.\-]+\s*:")
 _JOB_CONDITION = re.compile(r"^    [\"']?(if|needs|continue-on-error)[\"']?\s*:")
 EXPECTED_PRECEDING_CHECKOUT = "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
+EXPECTED_CHECKOUT_WITH = ["fetch-depth: 0", "persist-credentials: false"]
 # Interpreter/shell startup preloads: inheriting one of these at workflow
 # scope runs PR-controlled code before the gate's python3 starts.
 _STARTUP_ENV = frozenset({"PATH", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV", "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB", "PERLLIB", "RUBYLIB", "RUBYOPT"})
@@ -254,7 +255,7 @@ def ci_failures(ci_text):
     # overwrite the checked-out gate code, and job- or step-level startup env
     # (PYTHONPATH/sitecustomize, BASH_ENV, NODE_OPTIONS) preloads PR code
     # before the gate's python3 starts. Only the pinned checkout may precede it.
-    checkout_with = False
+    checkout_with = None
     for line in lines[job_start:start]:
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
@@ -264,23 +265,24 @@ def ci_failures(ci_text):
         if re.match(r"^-\s+[\"']?uses[\"']?\s*:", stripped):
             if stripped != EXPECTED_PRECEDING_CHECKOUT:
                 return failures + ["only the pinned checkout may precede the capability gate"]
-            checkout_with = False
+            checkout_with = []
             continue
-        if checkout_with:
+        if checkout_with is not None:
             if len(line) - len(line.lstrip()) > 6 and line.strip():
                 if re.search(r"[\"']?ref[\"']?\s*:", stripped):
                     return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
+                if not re.match(r"^['\"]?with['\"]?\s*:\s*(#.*)?$", stripped):
+                    checkout_with.append(_norm(stripped))
                 continue
-            checkout_with = False
-        if re.match(r"^with\s*:", stripped):
-            checkout_with = True
-            if re.search(r"[\"']?ref[\"']?\s*:", stripped):
-                return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
-            continue
+            if sorted(_norm(w) for w in checkout_with) != EXPECTED_CHECKOUT_WITH:
+                return failures + ["capability gate checkout must keep exactly its pinned with block"]
+            checkout_with = None
         if re.match(r"^(-\s+)?[\"']?run[\"']?\s*:", stripped):
             return failures + ["no PR-controlled steps may precede the capability gate"]
         if re.match(r"^['\"]?env['\"]?\s*:", stripped):
             return failures + ["capability gate job must not set environment (startup injection)"]
+    if checkout_with is not None and sorted(_norm(w) for w in checkout_with) != EXPECTED_CHECKOUT_WITH:
+        return failures + ["capability gate checkout must keep exactly its pinned with block"]
     code = []
     for line in lines[start + 1 :]:
         if _NEXT_STEP.match(line):

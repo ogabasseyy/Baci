@@ -526,6 +526,40 @@ describe('POST /api/payments/klump/webhook', () => {
     );
   });
 
+  it('files reconciliation when the paid update was filtered out by a payment-only cancellation', async () => {
+    // mark_abandoned_orders cancelled only payment_status: the update
+    // predicates exclude the row, so the webhook must reconcile the
+    // existing cancelled order instead of confirming inventory on it.
+    mocks.createAdminClient.mockReturnValue(
+      createSupabaseMock({
+        orderUpdateResult: { data: null, error: null },
+        preUpdateOrderStatusResult: {
+          data: { payment_status: 'cancelled', shipping_status: 'pending' },
+          error: null,
+        },
+      })
+    );
+
+    const rawBody = JSON.stringify(successfulPayload);
+    const response = await POST(
+      createRequest(successfulPayload, signPayload(rawBody, 'klump-secret'))
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      message: 'Klump payment recorded; order was cancelled, filed for review',
+      success: true,
+    });
+    expect(mocks.recordMerchantSettlement).not.toHaveBeenCalled();
+    expect(mocks.notifyNewOrder).not.toHaveBeenCalled();
+    expect(mocks.reconciliationInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'payment_received_after_cancellation',
+      })
+    );
+  });
+
   it('validates rounded Klump payments against merchant_amount when the stored order total is fractional', async () => {
     const payload = {
       ...successfulPayload,

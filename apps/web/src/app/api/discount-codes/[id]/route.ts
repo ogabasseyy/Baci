@@ -157,6 +157,19 @@ export async function PATCH(
           { status: 404 }
         );
       }
+      // A concurrent rename can slip between the prefix pre-check and
+      // this UPDATE; the DB guard then raises instead of corrupting,
+      // so map it to the same 400 the pre-check would have returned.
+      if (
+        updateData.code &&
+        isReservedDiscountCodePrefix(updateData.code) &&
+        error.message?.includes('prefix RDM- is reserved')
+      ) {
+        return NextResponse.json(
+          { error: 'Code prefix RDM- is reserved for loyalty redemptions' },
+          { status: 400 }
+        );
+      }
       // A used code's identity is immutable (DB trigger) so retries can still
       // resolve the original code string.
       if (error.message?.includes('discount_code_rename_not_allowed')) {

@@ -172,11 +172,20 @@ describe('POST /api/storefront/loyalty/enroll', () => {
 
   it('returns success when the customer is already enrolled', async () => {
     // Lost-response retry: the original enrollment committed, so the
-    // retry converges on success and the caller refetches status.
-    mocks.mockRpc.mockResolvedValue({
-      data: { success: false, error: 'already_enrolled' },
-      error: null,
-    });
+    // retry converges on success with the persisted enrollment fields
+    // for the caller's receipt.
+    mocks.mockRpc.mockImplementation(async (fn: string) =>
+      fn === 'get_loyalty_status'
+        ? {
+            data: {
+              points_balance: 120,
+              current_tier: 'Silver',
+              referral_code: 'REF12345',
+            },
+            error: null,
+          }
+        : { data: { success: false, error: 'already_enrolled' }, error: null }
+    );
 
     const response = await POST(
       createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
@@ -187,7 +196,12 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     expect(body).toEqual({
       success: true,
       message: 'Already enrolled in loyalty program',
-      data: { already_enrolled: true },
+      data: {
+        already_enrolled: true,
+        points_balance: 120,
+        tier: 'silver',
+        referral_code: 'REF12345',
+      },
     });
   });
 

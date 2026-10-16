@@ -122,12 +122,36 @@ export async function POST(request: NextRequest) {
     const result = data as EnrollRpcResult | null;
     if (!result?.success && result?.error === 'already_enrolled') {
       // Lost-response retry: the first attempt committed, so converge
-      // on that result instead of surfacing a failure. The caller
-      // refetches status on any success and renders the enrollment.
+      // on that result instead of surfacing a failure. Return the
+      // persisted enrollment fields so the caller's success receipt
+      // shows the real balance/tier/referral code, not empty defaults.
+      const { data: statusData } = await supabase.rpc('get_loyalty_status', {
+        p_merchant_id: parsed.data.merchant_id,
+        p_customer_id: parsed.data.customer_id,
+      });
+      const status = (statusData ?? {}) as {
+        points_balance?: unknown;
+        current_tier?: unknown;
+        referral_code?: unknown;
+      };
       return NextResponse.json({
         success: true,
         message: 'Already enrolled in loyalty program',
-        data: { already_enrolled: true },
+        data: {
+          already_enrolled: true,
+          points_balance:
+            typeof status.points_balance === 'number'
+              ? status.points_balance
+              : 0,
+          tier:
+            typeof status.current_tier === 'string'
+              ? status.current_tier.toLowerCase()
+              : 'bronze',
+          referral_code:
+            typeof status.referral_code === 'string'
+              ? status.referral_code
+              : null,
+        },
       });
     }
     if (!result?.success) {

@@ -27,6 +27,7 @@ const CODE_ID = '11111111-1111-4111-8111-111111111111';
 let currentRow: { code: string } | null = { code: 'SALE10' };
 let currentError: { message: string } | null = null;
 let updatedRow: Record<string, unknown> | null = null;
+let updateError: { code?: string; message: string } | null = null;
 const updateCall = vi.fn();
 
 function selectChain() {
@@ -49,15 +50,20 @@ function updateChain() {
         select: () => ({
           single: () =>
             Promise.resolve(
-              currentRow === null
-                ? {
-                    data: null,
-                    error: { code: 'PGRST116', message: 'no rows returned' },
-                  }
-                : {
-                    data: updatedRow ?? { id: CODE_ID, code: currentRow?.code },
-                    error: null,
-                  }
+              updateError
+                ? { data: null, error: updateError }
+                : currentRow === null
+                  ? {
+                      data: null,
+                      error: { code: 'PGRST116', message: 'no rows returned' },
+                    }
+                  : {
+                      data: updatedRow ?? {
+                        id: CODE_ID,
+                        code: currentRow?.code,
+                      },
+                      error: null,
+                    }
             ),
         }),
       }),
@@ -102,6 +108,7 @@ describe('PATCH /api/discount-codes/[id] RDM- reservation', () => {
     currentRow = { code: 'SALE10' };
     currentError = null;
     updatedRow = null;
+    updateError = null;
     checkCsrfProtection.mockResolvedValue({ valid: true, response: null });
     hasPermission.mockReturnValue(true);
     getMerchantForApiRequest.mockResolvedValue({ merchantId: 'merchant-1' });
@@ -125,6 +132,21 @@ describe('PATCH /api/discount-codes/[id] RDM- reservation', () => {
 
     expect(response.status).toBe(404);
     expect(updateCall).toHaveBeenCalled();
+  });
+
+  it('maps the DB reserved-prefix guard to the same 400 on a raced rename', async () => {
+    currentRow = { code: 'RDM-LEGACY' };
+    updateError = {
+      message: 'discount code prefix RDM- is reserved for loyalty redemptions',
+    };
+
+    const response = await patchRequest({ code: 'rdm-legacy' });
+
+    expect(response.status).toBe(400);
+    const payload = await response.json();
+    expect(payload.error).toBe(
+      'Code prefix RDM- is reserved for loyalty redemptions'
+    );
   });
 
   it('allows resubmitting an unchanged legacy RDM- code', async () => {

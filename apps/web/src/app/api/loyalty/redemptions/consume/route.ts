@@ -27,6 +27,13 @@ type ConsumeRpcResult = {
  * consume_loyalty_redemption RPC performs the atomic single-use update
  * under the caller's merchant access (owner or staff), which the
  * owner-only RLS policy on reward_redemptions cannot express.
+ *
+ * Intended caller: the merchant staff fulfillment client (dashboard /
+ * mobile admin) that presents a customer's manual reward code at
+ * fulfillment; it supplies a per-attempt idempotency_key so a
+ * lost-response retry replays the receipt. No storefront caller
+ * exists by design — this is staff-only (authenticated, CSRF-checked,
+ * marketing:edit-gated), and the contract is pinned by route.test.ts.
  */
 export async function POST(request: NextRequest) {
   try {

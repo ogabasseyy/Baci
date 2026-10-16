@@ -381,6 +381,33 @@ export async function POST(request: NextRequest) {
       order = existingOrder;
     }
 
+    // The update predicates exclude payment-cancelled orders, so a
+    // late capture for one lands here with updatedOrder null: file it
+    // for review instead of confirming inventory on an unpaid order
+    // (which rejects and would retry the webhook into a loop).
+    if (
+      order &&
+      (order.payment_status === 'cancelled' ||
+        order.payment_status === 'canceled')
+    ) {
+      const reviewFiled = await handlePaymentForCancelledOrder({
+        gatewayReference: referenceResult.data,
+        order,
+        reason:
+          'Klump payment captured for an order cancelled before finalization',
+        transactionId: transaction.id,
+      });
+      if (!reviewFiled) {
+        return errorResponse('Payment reconciliation review unavailable', 500);
+      }
+
+      return NextResponse.json({
+        message:
+          'Klump payment recorded; order was cancelled, filed for review',
+        success: true,
+      });
+    }
+
     if (order) {
       try {
         await ensurePaidOrderInventoryConfirmed(

@@ -50,9 +50,11 @@ export const eventPipelineFrozenRoutes = {
   // payment, notification and credential authority remain unchanged.
   // Re-pinned after extracting bound-order dispatch and the shared
   // condition-offer response from the route; payment, notification
-  // and credential authority remain unchanged.
+  // and credential authority remain unchanged. Re-pinned again after
+  // merging the GIGL checkout-pin changes from main; the cart binding
+  // dispatch is unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '861aca0fc094d77596709a5beca4145d5ea1bec21dc329d04edb2a6dd19e393c',
+    'b95140b5420c6fbc38fd6b7e73074b092992b4289dbb91dfaf5eff7e2de7ce10',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

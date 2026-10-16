@@ -99,7 +99,11 @@ export async function GET(request: NextRequest) {
             allowedOperations: upgraded.allowedOperations,
             cartId: upgraded.cartId,
             grantId: upgraded.grantId,
-            grantExpiresAt: result.cart.expiresAt,
+            // Cap at the live grant expiry: another linked session can
+            // extend the cart beyond this grant, and a proof that
+            // outlives its grant verifies but cannot authorize.
+            grantExpiresAt:
+              upgraded.liveGrantExpiresAt ?? result.cart.expiresAt,
             merchantId: context.merchant.id,
             principalId: upgraded.principalId,
             scope: 'session',

@@ -68,10 +68,10 @@ describe('rate-limit route matching', () => {
     }
   });
 
-  it('keeps the authenticated legacy bridge off the shared storefront IP bucket', () => {
+  it('bounds unauthenticated legacy bridge traffic per IP', () => {
     expect(getRateLimitConfig('/api/storefront/cart/legacy')).toMatchObject({
       pattern: '/api/storefront/cart/legacy',
-      config: { maxRequests: 100_000, windowMs: 60_000 },
+      config: { maxRequests: 600, windowMs: 60_000 },
     });
   });
 

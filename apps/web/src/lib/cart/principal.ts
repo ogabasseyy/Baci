@@ -19,6 +19,8 @@ export interface CartPrincipal {
   allowedOperations: CartCommand['type'][];
   /** False for pre-ops-claim proofs; see VerifiedCartSession. */
   operationsClaimPresent?: boolean;
+  /** Authoritative live grant expiry loaded from the database, when known. */
+  liveGrantExpiresAt?: string;
   expiresAt: string;
 }
 

@@ -70,10 +70,13 @@ async function main(): Promise<void> {
   process.once('SIGINT', stop);
   do {
     const status = await runCartEventsOnce({ cleanup });
-    if (status !== 0) {
+    if (status !== 0 && !loop) {
       process.exitCode = status;
       break;
     }
+    // In --loop mode a failed pass is retryable: the worker token may
+    // rotate between passes, so wait and retry instead of exiting on
+    // the first failure near a rotation boundary.
     if (loop && !stopped)
       await new Promise((resolve) => setTimeout(resolve, 1000));
   } while (loop && !stopped);

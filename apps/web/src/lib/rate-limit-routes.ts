@@ -34,12 +34,14 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   // Handoff preview is unauthenticated and redemption carries a
   // single-use capability: bound below the storefront ceiling.
   '/api/storefront/cart/handoff': { maxRequests: 20, windowMs: 60_000 },
-  // The MCP legacy bridge is an authenticated server-to-server
-  // capability behind one egress identity: a per-IP bucket here would
-  // couple every merchant/token to the broker's address. The route
-  // enforces the real budget per merchant + legacy token, so the
-  // proxy ceiling is set high enough never to bind first.
-  '/api/storefront/cart/legacy': { maxRequests: 100_000, windowMs: 60_000 },
+  // The MCP legacy bridge is a server-to-server capability behind one
+  // egress identity, but middleware runs before the route authenticates
+  // the legacy token: this per-IP ceiling is the pre-authentication
+  // abuse bound on merchant resolution. It stays well above the
+  // route's per merchant + token budget (120/min) so legitimate broker
+  // traffic is not coupled, while rotating forged tokens cannot drive
+  // unbounded resolution work from one address.
+  '/api/storefront/cart/legacy': { maxRequests: 600, windowMs: 60_000 },
   '/api/storefront/negotiation-evidence': {
     maxRequests: 10,
     windowMs: 60_000,

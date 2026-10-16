@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
+import { CartEmptyState } from '@/components/cart/CartEmptyState';
 import CartLoadedView from '@/components/cart/CartLoadedView';
 import CartStateView from '@/components/cart/CartStateView';
 import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel';
@@ -222,21 +223,12 @@ export default function CartScreen() {
 
   if (items.length === 0) {
     return (
-      <>
-        {/* The account panel owns the saved-cart load: it must mount
-            on the empty state too, or a saved account cart is
-            unreachable exactly when the device cart is empty. */}
-        <SharedCartStatusPanel />
-        <NativeCartAccountPanel />
-        <CartStateView
-          variant="empty"
-          colorScheme={colorScheme}
-          colors={colors}
-          isRetrying={false}
-          onRetry={handleRetryCartLoad}
-          onStartShopping={() => router.push('/')}
-        />
-      </>
+      <CartEmptyState
+        colorScheme={colorScheme}
+        colors={colors}
+        onRetry={handleRetryCartLoad}
+        onStartShopping={() => router.push('/')}
+      />
     );
   }
 

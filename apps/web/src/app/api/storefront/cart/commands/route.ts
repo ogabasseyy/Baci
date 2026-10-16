@@ -1,6 +1,9 @@
 import type { NextRequest } from 'next/server';
 import { getCartProofEnvironment } from '@/lib/cart/cart-runtime-env';
-import { upgradeLegacySessionPrincipal } from '@/lib/cart/grant-operations';
+import {
+  loadLiveGrantOperations,
+  upgradeLegacySessionPrincipal,
+} from '@/lib/cart/grant-operations';
 import {
   checkCartQuota,
   createAnonMerchantFeatureLookup,
@@ -108,11 +111,21 @@ export async function POST(request: NextRequest) {
       );
     }
     // The mutation has already committed. A renewed proof must never
-    // outlive the grant, so if reissue crosses the grant expiry the
-    // committed cart is returned without a new proof instead of
-    // surfacing the committed change as a 503; the existing proof and
+    // outlive the grant: reload the (just-renewed) grant's authoritative
+    // expiry and cap the proof there; the cart expiry alone can exceed
+    // this grant when another linked session extended the cart. If the
+    // reload fails, fall back to the incoming proof's expiry, which
+    // never exceeds the grant as issued. If reissue crosses the grant
+    // expiry the committed cart is returned without a new proof instead
+    // of surfacing the committed change as a 503; the existing proof and
     // cookie govern until they expire, and retries replay by
     // operation id.
+    const liveGrant = await loadLiveGrantOperations(client, principal);
+    const proofGrantExpiry = liveGrant
+      ? Date.parse(liveGrant.grantExpiresAt) < Date.parse(result.cart.expiresAt)
+        ? liveGrant.grantExpiresAt
+        : result.cart.expiresAt
+      : principal.expiresAt;
     let proof: string | null = null;
     try {
       proof = issueCartSessionProof(
@@ -120,7 +133,7 @@ export async function POST(request: NextRequest) {
           allowedOperations: principal.allowedOperations,
           cartId: principal.cartId,
           grantId: principal.grantId,
-          grantExpiresAt: result.cart.expiresAt,
+          grantExpiresAt: proofGrantExpiry,
           merchantId: context.merchant.id,
           principalId: principal.principalId,
           scope: 'session',

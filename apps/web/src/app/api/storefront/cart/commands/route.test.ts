@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   capturedPrincipal: null as CartPrincipal | null,
   cartError: null as unknown,
   cartPayload: null as unknown,
+  grantAuthority: null as unknown,
   merchantError: null as unknown,
   merchantRows: [] as unknown[],
 }));
@@ -55,10 +56,11 @@ vi.mock('@/lib/cart/scoped-client', () => ({
   createCartScopedClient: (principal: CartPrincipal) => {
     mocks.capturedPrincipal = principal;
     return {
-      rpc: vi.fn(async () => ({
-        data: mocks.cartPayload,
-        error: mocks.cartError,
-      })),
+      rpc: vi.fn(async (name: string) =>
+        name === 'commerce_cart_grant_operations' && mocks.grantAuthority
+          ? { data: mocks.grantAuthority, error: null }
+          : { data: mocks.cartPayload, error: mocks.cartError }
+      ),
     };
   },
 }));
@@ -136,6 +138,7 @@ beforeEach(() => {
   mocks.capturedPrincipal = null;
   mocks.cartError = null;
   mocks.cartPayload = null;
+  mocks.grantAuthority = null;
   mocks.merchantError = null;
   mocks.merchantRows = [
     {
@@ -254,6 +257,43 @@ describe('POST /api/storefront/cart/commands', () => {
       ok: true,
       session: { cartId: CART_ID, grantId: GRANT_ID },
     });
+  });
+
+  it('caps the renewed proof at the live grant expiry, not the cart expiry', async () => {
+    const cartExpiry = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000
+    ).toISOString();
+    const grantExpiry = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    mocks.grantAuthority = {
+      ok: true,
+      allowedOperations: ['add'],
+      grantExpiresAt: grantExpiry,
+    };
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      replayed: false,
+      state: rawState({ expiresAt: cartExpiry, lines: [rawLine()] }),
+    };
+    const response = await postCommand({
+      body: addCommand('cap-proof'),
+      headers: {
+        cookie: `baci-cart-11111111-1111-4111-8111-111111111111=${sessionProof()}`,
+      },
+    });
+    expect(response.status).toBe(200);
+    const setCookie = response.headers.get('set-cookie') ?? '';
+    const cookieProof = setCookie.match(/baci-cart-[^=]+=([^;]+)/)?.[1] ?? '';
+    const verified = verifyCartSessionProof(cookieProof, {
+      secret: TEST_SECRET,
+      environment: 'test',
+    });
+    expect(verified).toMatchObject({ ok: true });
+    if (verified.ok) {
+      expect(Date.parse(verified.session.expiresAt)).toBeLessThanOrEqual(
+        Date.parse(grantExpiry) + 1000
+      );
+    }
   });
 
   it('returns the committed cart when proof reissue hits a config failure', async () => {

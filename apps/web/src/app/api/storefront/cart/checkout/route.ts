@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
       Date.parse(result.grantExpiresAt) < Date.parse(desiredProofExpiry)
         ? result.grantExpiresAt
         : desiredProofExpiry;
-    let proof: string | null = null;
+    let proof: string;
     try {
       proof = issueCartSessionProof(
         {
@@ -138,15 +138,17 @@ export async function POST(request: NextRequest) {
         { environment: getCartProofEnvironment() }
       );
     } catch (error) {
-      // Preparation already committed the session: return the reviewed
-      // snapshot without a renewed proof (the incoming proof governs
-      // until it expires) rather than failing a committed checkout.
+      // Preparation is idempotent on operationId, so fail retryably:
+      // reporting success without the renewed proof would strand the
+      // shopper once the incoming proof expires, while a replay can
+      // mint the proof against the already-committed session.
       console.error('Cart session proof reissue failed after prepare', {
         message: error instanceof Error ? error.message : 'unknown',
       });
+      return cartErrorResponse('temporarily_unavailable');
     }
     const response = cartJsonResponse({
-      ...(proof && requestUsesDeviceProof(request) ? { proof } : {}),
+      ...(requestUsesDeviceProof(request) ? { proof } : {}),
       replayed: result.replayed,
       sessionReused: result.sessionReused,
       snapshot: result.snapshot,

@@ -13,28 +13,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export interface LiveGrantAuthority {
+  allowedOperations: CartCommand['type'][];
+  grantExpiresAt: string;
+}
+
 /**
- * Loads the live grant's stored operations for a session principal.
- * Returns null when the grant is not live for this principal or the
- * reply is malformed; callers fail closed rather than guessing.
+ * Loads the live grant's stored operations and authoritative expiry
+ * for a session principal. Returns null when the grant is not live
+ * for this principal or the reply is malformed; callers fail closed
+ * rather than guessing.
  */
 export async function loadLiveGrantOperations(
   client: SupabaseClient,
   principal: CartPrincipal
-): Promise<CartCommand['type'][] | null> {
+): Promise<LiveGrantAuthority | null> {
   if (principal.scope !== 'session' || !principal.cartId || !principal.grantId)
     return null;
   const response = await client.rpc('commerce_cart_grant_operations');
   if (response.error || !isRecord(response.data)) return null;
   const data = response.data;
   if (data.ok !== true || !Array.isArray(data.allowedOperations)) return null;
+  if (
+    typeof data.grantExpiresAt !== 'string' ||
+    !Number.isFinite(Date.parse(data.grantExpiresAt))
+  )
+    return null;
   const operations: CartCommand['type'][] = [];
   for (const operation of data.allowedOperations) {
     if (typeof operation !== 'string' || !KNOWN_OPERATIONS.has(operation))
       return null;
     operations.push(operation as CartCommand['type']);
   }
-  return operations;
+  return { allowedOperations: operations, grantExpiresAt: data.grantExpiresAt };
 }
 
 /**
@@ -49,11 +60,12 @@ export async function upgradeLegacySessionPrincipal(
 ): Promise<CartPrincipal | null> {
   if (principal.scope !== 'session' || principal.operationsClaimPresent)
     return principal;
-  const operations = await loadLiveGrantOperations(client, principal);
-  if (!operations) return null;
+  const liveGrant = await loadLiveGrantOperations(client, principal);
+  if (!liveGrant) return null;
   return {
     ...principal,
-    allowedOperations: operations,
+    allowedOperations: liveGrant.allowedOperations,
+    liveGrantExpiresAt: liveGrant.grantExpiresAt,
     operationsClaimPresent: true,
   };
 }

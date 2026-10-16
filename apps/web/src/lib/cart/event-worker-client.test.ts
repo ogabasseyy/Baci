@@ -50,6 +50,49 @@ it('uses only the scoped cart worker token, with no persisted shopper auth', () 
   });
 });
 
+it('accepts a token expiring in under five minutes but rejects an expired one', () => {
+  const create = vi.fn();
+  const nearExpiry = [
+    Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url'),
+    Buffer.from(
+      JSON.stringify({
+        role: 'commerce_cart_worker',
+        exp: Math.floor(now.getTime() / 1000) + 60,
+      })
+    ).toString('base64url'),
+    'signature',
+  ].join('.');
+  const env = {
+    NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: 'public',
+  };
+  createCartEventWorkerClient(
+    { ...env, COMMERCE_CART_WORKER_JWT: nearExpiry },
+    create,
+    now
+  );
+  expect(create).toHaveBeenCalledTimes(1);
+
+  const expired = [
+    Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64url'),
+    Buffer.from(
+      JSON.stringify({
+        role: 'commerce_cart_worker',
+        exp: Math.floor(now.getTime() / 1000) - 1,
+      })
+    ).toString('base64url'),
+    'signature',
+  ].join('.');
+  expect(() =>
+    createCartEventWorkerClient(
+      { ...env, COMMERCE_CART_WORKER_JWT: expired },
+      create,
+      now
+    )
+  ).toThrow('Cart event worker authority unavailable');
+  expect(create).toHaveBeenCalledTimes(1);
+});
+
 it('re-reads a rotated worker token from file on each construction', () => {
   const dir = mkdtempSync(join(tmpdir(), 'cart-worker-'));
   const file = join(dir, 'worker.jwt');

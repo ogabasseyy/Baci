@@ -50,7 +50,11 @@ export function createCartEventWorkerClient(
       !('exp' in claims) ||
       typeof claims.exp !== 'number' ||
       !Number.isFinite(claims.exp) ||
-      claims.exp * 1000 <= now.getTime() + 300000
+      // Accept the token until its actual expiry: the loop re-reads
+      // the token file on every pass, so a near-expiry token can
+      // finish a batch and the next pass picks up the rotated token
+      // instead of the worker dying minutes before rotation.
+      claims.exp * 1000 <= now.getTime()
     )
       throw fail();
     const endpoint = new URL(url);

@@ -250,6 +250,31 @@ describe('POST /api/storefront/cart/checkout', () => {
     expect(payload.snapshot.estimates.subtotalMinor).toBe(25000);
   });
 
+  it('fails retryably when the renewed proof cannot be minted', async () => {
+    mocks.cartPayload = {
+      code: null,
+      ok: true,
+      // A grant expiry in the past makes proof issuance throw after the
+      // idempotent preparation has already committed.
+      grantExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+      replayed: false,
+      sessionExpiresAt: new Date(Date.now() + 25 * 60 * 1000).toISOString(),
+      sessionReused: false,
+      snapshot: rawSnapshot(),
+    };
+
+    const response = await postPrepare({
+      body: prepareBody(),
+      headers: proofHeaders(),
+    });
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({
+      code: 'temporarily_unavailable',
+    });
+    expect(response.headers.get('set-cookie')).toBeNull();
+  });
+
   it('extends a short-lived proof to the prepared session expiry', async () => {
     const sessionExpiresAt = new Date(Date.now() + 30 * 60 * 1000);
     mocks.cartPayload = {

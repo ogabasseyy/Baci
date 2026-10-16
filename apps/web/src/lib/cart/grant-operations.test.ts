@@ -24,10 +24,14 @@ it('loads the live grant operations for a legacy principal', async () => {
   const client = clientReturning({
     ok: true,
     allowedOperations: ['add', 'remove'],
+    grantExpiresAt: '2099-06-01T00:00:00.000Z',
   });
   await expect(
     loadLiveGrantOperations(client as never, basePrincipal)
-  ).resolves.toEqual(['add', 'remove']);
+  ).resolves.toEqual({
+    allowedOperations: ['add', 'remove'],
+    grantExpiresAt: '2099-06-01T00:00:00.000Z',
+  });
   expect(client.rpc).toHaveBeenCalledWith('commerce_cart_grant_operations');
 });
 
@@ -35,6 +39,7 @@ it('upgrades a legacy principal with the verified grant operations', async () =>
   const client = clientReturning({
     ok: true,
     allowedOperations: ['add', 'set_quantity'],
+    grantExpiresAt: '2099-06-01T00:00:00.000Z',
   });
   const upgraded = await upgradeLegacySessionPrincipal(
     client as never,
@@ -42,6 +47,7 @@ it('upgrades a legacy principal with the verified grant operations', async () =>
   );
   expect(upgraded?.allowedOperations).toEqual(['add', 'set_quantity']);
   expect(upgraded?.operationsClaimPresent).toBe(true);
+  expect(upgraded?.liveGrantExpiresAt).toBe('2099-06-01T00:00:00.000Z');
 });
 
 it('fails closed when the grant is not live or the reply is malformed', async () => {
@@ -49,6 +55,12 @@ it('fails closed when the grant is not live or the reply is malformed', async ()
     { ok: false, code: 'unauthorized' },
     { ok: true, allowedOperations: ['teleport'] },
     { ok: true, allowedOperations: 'add' },
+    { ok: true, allowedOperations: ['add'] },
+    {
+      ok: true,
+      allowedOperations: ['add'],
+      grantExpiresAt: 'not-a-date',
+    },
     null,
   ]) {
     const client = clientReturning(reply);
@@ -63,7 +75,11 @@ it('fails closed when the grant is not live or the reply is malformed', async ()
 });
 
 it('passes claimed principals through without an RPC', async () => {
-  const client = clientReturning({ ok: true, allowedOperations: [] });
+  const client = clientReturning({
+    ok: true,
+    allowedOperations: [],
+    grantExpiresAt: '2099-06-01T00:00:00.000Z',
+  });
   const claimed = { ...basePrincipal, operationsClaimPresent: true };
   await expect(
     upgradeLegacySessionPrincipal(client as never, claimed)

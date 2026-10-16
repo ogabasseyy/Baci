@@ -73,7 +73,9 @@ export function captureCartPairingLink(path: string, config: Config): string {
     url.searchParams.has('handoff') ||
     url.searchParams.has('hid');
   if (!pairing) return path;
-  update(null);
+  // A malformed or foreign pairing link must not wipe a valid pending
+  // pairing captured moments earlier: the pending link is replaced
+  // only after the incoming one fully validates below.
   try {
     // An explicitly empty root is the fail-closed signal from hosts
     // whose root cannot be derived: never substitute the production

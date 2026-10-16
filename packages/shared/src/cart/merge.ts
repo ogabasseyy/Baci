@@ -108,7 +108,8 @@ export function planCartMerge(
         if (
           cartLineIdentity(previous.item) !== cartLineIdentity(line.item) ||
           previous.quantity !== line.quantity ||
-          Boolean(previous.hasAssurance) !== Boolean(line.hasAssurance)
+          Boolean(previous.hasAssurance) !== Boolean(line.hasAssurance) ||
+          !attachmentsEqual(attachmentsOf(previous), attachmentsOf(line))
         ) {
           return {
             ok: false,

@@ -2,11 +2,12 @@
 
 Status: local implementation evidence only. No deployment, live
 migration, customer-cart mutation, order, or payment has occurred.
-Review state at head `2ac59726e0` (round 38): Codex and Muse reviews
-completed on that head; the six Codex threads from that round are
-addressed in the following head. Fresh GitHub CI and full DB replay
-must be green on the final head before merge; activation remains
-separately gated in `docs/deploy/shared-cart-rollout.md`.
+Review state at head `2059108616` (round 41): Codex and Muse reviews
+completed on that head; findings are addressed in the following head.
+DB Replay CI passed on `a0837d0d07` and local replay converged at
+`2059108616`. Fresh GitHub CI on the final head must be green before
+merge; activation remains separately gated in
+`docs/deploy/shared-cart-rollout.md`.
 
 ## Executed locally
 
@@ -39,8 +40,8 @@ separately gated in `docs/deploy/shared-cart-rollout.md`.
   without building a cart projection. Backfill requires a verified caller
   identity; absence is never treated as merchant-wide permission.
 - Fresh GitHub CI (including DB replay) green on the final reviewed
-  head; local replay converged at `2ac59726e0`, CI confirmation on the
-  final head is still required.
+  head; local replay converged at `2059108616` and DB Replay CI passed
+  at `a0837d0d07`, CI confirmation on the final head is still required.
 
 ## Invariants checked by design
 

@@ -31,6 +31,22 @@ it('captures only trusted HTTPS handoffs and removes pairing fragments before ro
   ).toBe('/cart');
   expect(peekCartPairingLink()).not.toBeNull();
 });
+it('keeps a valid pending pairing when a later invalid link arrives', () => {
+  const valid = `https://shop.example.com/cart#handoff=${token()}&hid=${hid}`;
+  expect(captureCartPairingLink(valid, config)).toBe('/cart');
+  expect(peekCartPairingLink()?.handoffId).toBe(hid);
+  // Foreign host, tenant mismatch, and malformed token deliveries all
+  // strip to /cart without discarding the pending valid pairing.
+  for (const path of [
+    `https://evil.example/cart#handoff=${token()}&hid=${hid}`,
+    `https://shop.example.com/cart#handoff=${token({ merchantId: hid })}&hid=${hid}`,
+    `https://shop.example.com/cart#handoff=ch1.not-json.sig&hid=${hid}`,
+  ]) {
+    expect(captureCartPairingLink(path, config)).toBe('/cart');
+    expect(peekCartPairingLink()?.handoffId).toBe(hid);
+  }
+});
+
 it('captures the relative path shape redirectSystemPath delivers', () => {
   const path = `/cart#handoff=${token()}&hid=${hid}`;
   expect(captureCartPairingLink(path, config)).toBe('/cart');

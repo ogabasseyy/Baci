@@ -38,6 +38,37 @@ describe('planCartMerge handoff references', () => {
     if (result.ok) expect(result.lines).toHaveLength(1);
   });
 
+  it('rejects a repeated line id differing only in attachments', () => {
+    const withVoucher = {
+      ...line(2),
+      voucherToken: 'voucher-one',
+      voucherAwardId: 'dddddddd-3000-4000-8000-000000000001',
+    };
+    const result = planCartMerge(
+      snapshot([line(2)]),
+      snapshot([withVoucher]),
+      [],
+      { handoffReferences: true }
+    );
+    expect(result).toMatchObject({
+      code: 'merge_conflict',
+      ok: false,
+      reason: 'duplicate_identity',
+    });
+    const withNegotiation = {
+      ...line(2),
+      negotiatedUnitPriceMinor: 2000,
+      negotiationStatus: 'accepted' as const,
+    };
+    const second = planCartMerge(
+      snapshot([line(2)]),
+      snapshot([withNegotiation]),
+      [],
+      { handoffReferences: true }
+    );
+    expect(second).toMatchObject({ ok: false, reason: 'duplicate_identity' });
+  });
+
   it('rejects a repeated line id with different content', () => {
     const result = planCartMerge(snapshot([line(2)]), snapshot([line(5)]), [], {
       handoffReferences: true,

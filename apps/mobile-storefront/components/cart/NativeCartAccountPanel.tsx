@@ -27,7 +27,13 @@ export function NativeCartAccountPanel() {
   const savedCart = useNativeSharedCartStore((state) => state.savedCart);
   const colors = Colors[useColorScheme() ?? 'light'];
   const operationRef = useRef<string | null>(null);
-  const inFlight = useRef(false);
+  // Owner-scoped flight guard: a stale attempt from a previous
+  // account owner never blocks the new owner's first choice, and its
+  // finally only clears its own scope.
+  const inFlight = useRef<{
+    userId: string | null;
+    generation: number;
+  } | null>(null);
   const pendingInput = useRef<
     Parameters<NonNullable<typeof linkAccount>>[0] | null
   >(null);
@@ -100,9 +106,10 @@ export function NativeCartAccountPanel() {
   async function run(
     input: Parameters<NonNullable<typeof linkAccount>>[0]
   ): Promise<void> {
-    if (inFlight.current || (!pendingInput.current && !savedReady)) return;
     const scope = ownerScopeRef.current;
-    inFlight.current = true;
+    if (inFlight.current === scope || (!pendingInput.current && !savedReady))
+      return;
+    inFlight.current = scope;
     pendingInput.current ??= JSON.parse(JSON.stringify(input)) as typeof input;
     setPending(true);
     try {
@@ -131,7 +138,7 @@ export function NativeCartAccountPanel() {
         'Linking was interrupted. Retry to finish with the same request.'
       );
     } finally {
-      inFlight.current = false;
+      if (inFlight.current === scope) inFlight.current = null;
     }
   }
   const plan =
@@ -252,21 +259,43 @@ export function NativeCartAccountPanel() {
           </Pressable>
         </>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
-        disabled={pending || !savedReady}
-        onPress={() =>
-          void run({
-            operationId: operationId(),
-            choice: 'keep_current',
-            expectedSavedCartId: saved?.cartId ?? null,
-          })
-        }
-      >
-        <Text style={{ color: colors.primary }}>
-          Keep this cart on my account
-        </Text>
-      </Pressable>
+      {saved && !current ? (
+        <>
+          <Text style={{ color: colors.text }}>
+            You have a saved account cart with {saved.lines.length} item(s).
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={pending || !savedReady}
+            onPress={() =>
+              void run({
+                operationId: operationId(),
+                choice: 'use_saved',
+                expectedSavedCartId: saved.cartId,
+              })
+            }
+          >
+            <Text style={{ color: colors.primary }}>Use saved cart</Text>
+          </Pressable>
+        </>
+      ) : null}
+      {current ? (
+        <Pressable
+          accessibilityRole="button"
+          disabled={pending || !savedReady}
+          onPress={() =>
+            void run({
+              operationId: operationId(),
+              choice: 'keep_current',
+              expectedSavedCartId: saved?.cartId ?? null,
+            })
+          }
+        >
+          <Text style={{ color: colors.primary }}>
+            Keep this cart on my account
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

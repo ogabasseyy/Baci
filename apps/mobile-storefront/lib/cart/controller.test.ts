@@ -303,3 +303,15 @@ it('retires the local canonical reference after losing an expired capability', a
   expect(s.repairLegacy).toHaveBeenCalledWith([]);
   expect(s.receipts.clear).toHaveBeenCalledWith(merchant, 'old');
 });
+
+it('bootstraps before reading the saved account cart on a fresh install', async () => {
+  const { client, controller } = setup();
+  const savedAccountCart = jest.fn().mockResolvedValue({ cart: snapshot });
+  Object.assign(client, { savedAccountCart });
+  await expect(controller.savedCart()).resolves.toMatchObject({
+    cartId: '22222222-2222-4222-8222-222222222222',
+  });
+  expect(client.bootstrap).toHaveBeenCalledTimes(1);
+  expect(client.create).not.toHaveBeenCalled();
+  expect(savedAccountCart).toHaveBeenCalledTimes(1);
+});

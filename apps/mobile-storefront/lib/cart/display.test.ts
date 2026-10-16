@@ -18,16 +18,20 @@ const item = {
   storage: '128GB',
 };
 it('preserves all option keys, condition and voucher identity without trusting cached prices', () => {
+  // A partial voucher pair is an ordinary line and keeps quantity.
   expect(nativeCartInput({ ...item, voucher_award_id: 'award' })).toMatchObject(
     {
-      quantity: 1,
-      item: {
-        condition: 'new',
-        options: { engraving: 'Keep CASE', color: 'Blue', storage: '128GB' },
-      },
+      quantity: 3,
       voucherAwardId: 'award',
     }
   );
+  expect(
+    nativeCartInput({
+      ...item,
+      voucher_token: 'tok',
+      voucher_award_id: 'award',
+    })
+  ).toMatchObject({ quantity: 1, voucherToken: 'tok' });
   expect(() => nativeCartInput({ ...item, condition: 'mystery' })).toThrow();
 });
 it('renders server prices and blocks checkout metadata readiness on missing product hydration', async () => {

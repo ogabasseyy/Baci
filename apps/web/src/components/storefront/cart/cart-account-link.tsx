@@ -1,7 +1,7 @@
 'use client';
 
 import type { CartMergeResolution, CartSnapshot } from '@baci/shared/cart';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
@@ -58,17 +58,18 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
   const authenticated = Boolean(auth?.isAuthenticated);
   const sharedRef = cart.sharedCartRef;
 
-  const ensureSavedCart = useCallback(async () => {
-    // A fresh browser may hold no cart proof at all: establish the
-    // bootstrap authority the account read/link requires before
-    // loading the saved cart. The retry path repeats this sequence so
-    // a failed bootstrap (network, 429, 503) can recover instead of
-    // repeating an unauthorized account read.
+  // A fresh browser may hold no cart proof at all: establish the
+  // bootstrap authority the account read/link requires before
+  // loading the saved cart. The retry path repeats this sequence so
+  // a failed bootstrap (network, 429, 503) can recover instead of
+  // repeating an unauthorized account read. (Plain function: React
+  // Compiler owns memoization in this repo.)
+  async function ensureSavedCart() {
     if (!sharedRef) {
       await bootstrapSharedCart(props.merchantSlug ?? undefined);
     }
     await loadSavedCart();
-  }, [loadSavedCart, props.merchantSlug, sharedRef]);
+  }
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: Stable loader reads scope from refs; merchant and shopper changes must trigger a fresh saved-cart observation.
   useEffect(() => {
@@ -78,8 +79,9 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
     auth?.user?.id,
     props.merchantSlug,
     cart.sharedCartAccountsEnabled,
-    ensureSavedCart,
+    loadSavedCart,
     scopeKey,
+    sharedRef?.cartId,
   ]);
 
   if (!authenticated || !cart.sharedCartAccountsEnabled) return null;

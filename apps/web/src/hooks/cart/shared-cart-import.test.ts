@@ -155,17 +155,35 @@ describe('planLegacyImport', () => {
     expect(planned.conflicts[0].item).toEqual({ productId: 'prod-1' });
   });
 
-  it('truncates beyond the line cap with an explicit warning', () => {
+  it('blocks beyond the line cap instead of truncating lines', () => {
     const local = Array.from({ length: 25 }, (_, index) =>
       cartItem({ id: `prod-${index}`, quantity: 1 })
     );
     const planned = planLegacyImport(local, null, null);
 
-    expect(planned).toMatchObject({ kind: 'create' });
-    if (planned.kind !== 'create') throw new Error('expected create plan');
-    expect(planned.lines).toHaveLength(20);
-    expect(planned.warnings).toEqual(['too_many_lines']);
+    expect(planned).toMatchObject({
+      kind: 'blocked',
+      code: 'too_many_lines',
+      lineCount: 25,
+    });
   });
+});
+
+it('keeps quantity for partial voucher pairs when adopting a legacy line', () => {
+  expect(
+    displayLineToInputLine(
+      cartItem({ quizVoucherToken: 'voucher', quantity: 3 })
+    )
+  ).toMatchObject({ quantity: 3 });
+  expect(
+    displayLineToInputLine(
+      cartItem({
+        quizVoucherToken: 'voucher',
+        quizAwardId: 'award',
+        quantity: 3,
+      })
+    )
+  ).toMatchObject({ quantity: 1 });
 });
 
 it('preserves selected assurance when adopting a legacy line', () => {

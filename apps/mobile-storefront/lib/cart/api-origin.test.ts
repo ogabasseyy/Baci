@@ -20,6 +20,7 @@ describe('cart API origin transport policy', () => {
     expect(isAllowedCartApiProtocol(new URL('http://10.0.0.4:4193'))).toBe(
       true
     );
+    expect(isAllowedCartApiProtocol(new URL('http://[::1]:4193'))).toBe(true);
   });
 
   it('rejects plain HTTP to public hosts and non-HTTP schemes', () => {

@@ -29,7 +29,7 @@ export function displayLineToInputLine(item: CartItem): CartInputLine {
   if (item.hasAssurance !== undefined) line.hasAssurance = item.hasAssurance;
   if (item.quizVoucherToken) line.voucherToken = item.quizVoucherToken;
   if (item.quizAwardId) line.voucherAwardId = item.quizAwardId;
-  if (line.voucherToken ?? line.voucherAwardId) line.quantity = 1;
+  if (line.voucherToken && line.voucherAwardId) line.quantity = 1;
   if (
     item.negotiationStatus === 'pending' ||
     item.negotiationStatus === 'accepted' ||
@@ -143,18 +143,23 @@ export function planLegacyImport(
   if (clamped) warnings.push('quantity_clamped');
 
   if (!server || !cartId) {
-    const truncated =
-      lines.length > SHARED_CART_MAX_LINES
-        ? lines.slice(0, SHARED_CART_MAX_LINES)
-        : lines;
-    if (truncated.length < lines.length) warnings.push('too_many_lines');
-    const fingerprint = truncated
+    // Never silently drop lines on first import: an over-capacity
+    // cache blocks with the same actionable outcome as the
+    // server-cart path until the shopper makes room.
+    if (lines.length > SHARED_CART_MAX_LINES) {
+      return {
+        kind: 'blocked',
+        code: 'too_many_lines',
+        lineCount: lines.length,
+      };
+    }
+    const fingerprint = lines
       .map((line) => JSON.stringify(line))
       .sort()
       .join('|');
     return {
       kind: 'create',
-      lines: truncated,
+      lines,
       operationId: `import:create:${fnv1aHex(fingerprint)}`,
       warnings,
     };

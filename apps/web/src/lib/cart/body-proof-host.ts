@@ -1,4 +1,4 @@
-import { isPrivateLanHost, requestHost } from './merchant-resolution';
+import { isPrivateLanHost, requestHost } from './merchant-host';
 
 function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
   return (

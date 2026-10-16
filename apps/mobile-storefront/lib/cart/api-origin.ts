@@ -13,7 +13,9 @@ export function isAllowedCartApiProtocol(base: URL): boolean {
   return (
     host === 'localhost' ||
     host === '127.0.0.1' ||
+    // WHATWG URL keeps brackets on IPv6 literals in some runtimes.
     host === '::1' ||
+    host === '[::1]' ||
     /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
     /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
     /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host)

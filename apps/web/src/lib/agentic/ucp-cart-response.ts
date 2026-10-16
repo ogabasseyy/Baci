@@ -13,14 +13,16 @@ export function buildUcpCartResponse({
   totals,
 }: {
   cartId: string;
-  continueUrl: string;
+  continueUrl?: string | null;
   currency: string;
   lineItems: GPTLineItem[];
   status: UcpCartInternalStatus;
   totals: GPTTotal[];
 }) {
   return {
-    continue_url: continueUrl,
+    // Optional per the UCP cart contract: omit rather than emit an
+    // empty unusable continuation when no handoff was issued.
+    ...(continueUrl ? { continue_url: continueUrl } : {}),
     currency: currency.toUpperCase(),
     id: cartId,
     line_items: lineItems.map((lineItem) => ({

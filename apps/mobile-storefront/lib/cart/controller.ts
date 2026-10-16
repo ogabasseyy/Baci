@@ -266,13 +266,21 @@ export function createNativeCartController(
       serial(async () => {
         if (!options.client.savedAccountCart)
           throw new NativeCartError('temporarily_unavailable');
+        // A fresh install holds no proof: bootstrap one (without
+        // creating a cart) so the account read can authorize.
+        if (!(await options.client.context())) {
+          await options.client.bootstrap();
+          assertCurrent();
+        }
         const reply = await options.client.savedAccountCart();
         assertCurrent();
         return reply.cart ?? null;
       }),
     linkAccount: (input: NativeAccountLinkInput) =>
       serial(async () => {
-        await ensureCart();
+        // Adopting the saved cart needs no destination cart; creating
+        // an empty one first would replace the saved-cart pointer.
+        if (input.choice !== 'use_saved') await ensureCart();
         options.status('pending');
         await accept(await coordinator.linkAccount(input));
       }),

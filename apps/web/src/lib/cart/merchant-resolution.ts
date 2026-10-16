@@ -10,7 +10,19 @@ import {
 
 import { storefrontAuthMerchantRpcRowSchema } from '@/schemas/storefront-auth-merchant';
 
+import {
+  isSharedPlatformHost,
+  normalizeHeader,
+  requestHost,
+} from './merchant-host';
 import type { CartMerchantContext } from './principal';
+
+export {
+  isPrivateLanHost,
+  normalizeHeader,
+  normalizeHost,
+  requestHost,
+} from './merchant-host';
 
 export interface CartRouteMerchant extends CartMerchantContext {
   customDomain: string | null;
@@ -74,25 +86,6 @@ export const MERCHANT_HINT_QUERY_PARAMS = [
   'merchant_slug',
   'merchant',
 ] as const;
-
-export function normalizeHost(value: string | null): string {
-  return (value ?? '').split(':')[0]?.trim().toLowerCase() ?? '';
-}
-
-export function requestHost(request: Request): string {
-  const header = normalizeHost(request.headers.get('host'));
-  if (header) return header;
-  try {
-    return new URL(request.url).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-export function normalizeHeader(value: string | null): string | null {
-  const normalized = value?.trim().toLowerCase();
-  return normalized ? normalized : null;
-}
 
 /**
  * Proxies set merchant headers authoritatively, but a route must still
@@ -173,35 +166,6 @@ export async function resolvePublished(
  * published-store mapping plus the retired-slug alias table. Only
  * published stores resolve; client input never overrides the host.
  */
-/**
- * Private-LAN development hosts, mirroring the native client's
- * dev-only API origin policy: the mobile app may call a LAN address
- * with an explicit merchantSlug hint, so the hint must govern there
- * too instead of the IP being treated as a merchant identifier.
- * Anchored IPv4 patterns reject look-alike hostnames.
- */
-export function isPrivateLanHost(host: string): boolean {
-  return (
-    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
-    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host)
-  );
-}
-
-function isSharedPlatformHost(host: string, rootDomain: string): boolean {
-  return (
-    host === rootDomain ||
-    host === `www.${rootDomain}` ||
-    // The native clients call the api.* origin with an explicit
-    // merchantSlug hint; 'api' is a platform host, never a merchant.
-    host === `api.${rootDomain}` ||
-    host === `api-staging.${rootDomain}` ||
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    isPrivateLanHost(host)
-  );
-}
-
 export async function resolveCartMerchant(
   request: Request,
   deps: ResolveCartMerchantDeps

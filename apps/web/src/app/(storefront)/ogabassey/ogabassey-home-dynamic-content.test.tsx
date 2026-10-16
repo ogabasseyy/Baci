@@ -215,10 +215,10 @@ describe('OgabasseyHomeDynamicContent', () => {
     }>;
     const boundaries = children.filter((child) => child?.type === Suspense);
     expect(boundaries).toHaveLength(2);
-    for (const [index, marker, minHeight] of [
-      [0, 'data-ogabassey-product-reserve', 'min-h-[1200px]'],
-      [1, 'data-ogabassey-discovery-reserve', 'min-h-[280px]'],
-    ] as [number, string, string][]) {
+    for (const [index, marker, minHeightClass, minHeightPx] of [
+      [0, 'data-ogabassey-product-reserve', 'min-h-[1200px]', '1200px'],
+      [1, 'data-ogabassey-discovery-reserve', 'min-h-[280px]', '280px'],
+    ] as [number, string, string, string][]) {
       const fallback = boundaries[index]?.props?.fallback;
       expect(fallback).not.toBeNull();
       const reserve = (
@@ -232,7 +232,10 @@ describe('OgabasseyHomeDynamicContent', () => {
       expect(reserve['aria-hidden']).toBe('true');
       expect(
         (reserve.children as { props: Record<string, unknown> }).props.className
-      ).toBe(minHeight);
+      ).toBe(minHeightClass);
+      expect(
+        (reserve.children as { props: Record<string, unknown> }).props.style
+      ).toEqual({ minHeight: minHeightPx });
     }
   });
 

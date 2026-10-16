@@ -1,5 +1,6 @@
 import { Suspense } from 'react';
 import { OgabasseyHomeHeroReserveFallback } from '@/app/(storefront)/ogabassey/ogabassey-home-hero-reserve-fallback';
+import { OgabasseyHomeStaticShellHead } from '@/app/(storefront)/ogabassey/ogabassey-home-static-shell-head';
 import { OgabasseyStaticHomePageContent } from '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content';
 import { OgabasseyStaticResourceHints } from '@/app/(storefront)/ogabassey/ogabassey-static-resource-hints';
 
@@ -11,6 +12,7 @@ export function OgabasseyStaticHomePage({
   return (
     <>
       <OgabasseyStaticResourceHints />
+      <OgabasseyHomeStaticShellHead />
       {/*
         The reserve lives outside the async content: that component awaits
         the hero-shell lookup before it returns its own inner Suspense, so

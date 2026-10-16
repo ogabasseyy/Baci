@@ -84,6 +84,27 @@ describe('verifySharedCartOrderProof', () => {
     ).toEqual({ ok: false });
   });
 
+  it('does not treat a proof for another merchant as authority for this one', () => {
+    // Proofs are cryptographically merchant-bound: a session proof for
+    // merchant A presented on an order naming merchant B verifies for
+    // neither the binding check nor the carries-authority check, so the
+    // caller is an ordinary legacy guest for B and gains no A-cart
+    // authority by naming B.
+    const request = new Request('http://localhost/api/orders', {
+      headers: { 'x-cart-proof': proofFor(CART_ID) },
+    });
+    const otherMerchant = '99999999-9999-4999-8999-999999999999';
+    expect(requestCarriesSharedCartSessionProof(request, otherMerchant)).toBe(
+      false
+    );
+    expect(
+      verifySharedCartOrderProof(request, {
+        cartId: CART_ID,
+        merchantId: otherMerchant,
+      })
+    ).toEqual({ ok: false });
+  });
+
   it('detects cart authority from any candidate when another is stale', () => {
     const request = new Request('http://localhost/api/orders', {
       headers: {

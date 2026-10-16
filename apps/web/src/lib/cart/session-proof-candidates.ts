@@ -9,6 +9,15 @@ const MIN_SECRET_LENGTH = 32;
  * than its retirement, and only until one maximum proof lifetime
  * past that retirement has elapsed; after that no proof it signed
  * verifies, however it is dated.
+ *
+ * Accepted rotation trade-off: the issuance timestamp is read from
+ * the proof before its signature is verified, so a compromised
+ * retired secret can mint new proofs with a backdated issuance and
+ * they verify until one maximum proof lifetime after retirement —
+ * in effect the retired key remains fully powerful for up to that
+ * window. Rotation therefore retires issuance immediately at every
+ * issuer, and operators treat a leaked retired secret as live until
+ * the window closes.
  */
 export function verificationSecretCandidates(input: {
   currentSecret: string;

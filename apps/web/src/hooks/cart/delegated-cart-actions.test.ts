@@ -97,10 +97,11 @@ it('keeps the group deal when the matching line is already at the quantity cap',
     negotiatedPrice: undefined,
     negotiationStatus: undefined,
   });
-  s.actions.addToCart(
+  const accepted = s.actions.addToCart(
     { id: 'capped', manage_stock: false, stock: 10 } as never,
     1
   );
+  expect(accepted).toBe(false);
   expect(s.shared.addToCart).not.toHaveBeenCalled();
   expect(s.shared.repriceLine).not.toHaveBeenCalled();
   expect(s.active.current).toBe(true);
@@ -114,6 +115,18 @@ it('still voids the group deal for an add below the cap', () => {
   expect(s.shared.addToCart).toHaveBeenCalledOnce();
   expect(s.calls).toEqual(['reprice:a', 'reprice:b']);
   expect(s.active.current).toBe(false);
+});
+it('keeps the group deal when its own negotiated line is at the cap after the void', () => {
+  const s = setup();
+  s.shared.cart[0].quantity = 10;
+  const accepted = s.actions.addToCart(
+    { id: 'p', manage_stock: false, stock: 10 } as never,
+    1
+  );
+  expect(accepted).toBe(false);
+  expect(s.shared.addToCart).not.toHaveBeenCalled();
+  expect(s.shared.repriceLine).not.toHaveBeenCalled();
+  expect(s.active.current).toBe(true);
 });
 it('routes clearing to canonical state and clears the local group flag', () => {
   const s = setup();

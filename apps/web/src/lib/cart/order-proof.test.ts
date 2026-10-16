@@ -161,6 +161,37 @@ describe('verifySharedCartOrderProof', () => {
     ).toBe(false);
   });
 
+  it("detects cart material in another merchant's session cookie without authorizing it", () => {
+    const otherMerchant = '77777777-7777-4777-8777-777777777777';
+    const crossMerchant = new Request('http://localhost/api/orders', {
+      headers: {
+        cookie: `${cartSessionCookieName(otherMerchant)}=cp1.stale.stale`,
+      },
+    });
+    // Presented material for any merchant blocks the legacy fall-through
+    // when the body names this merchant...
+    expect(requestPresentsCartProofMaterial(crossMerchant, MERCHANT_ID)).toBe(
+      true
+    );
+    // ...but the proof's inner merchant binding, not the cookie name,
+    // decides authorization: it never authorizes the merchant named
+    // only by the cookie when the proof was minted for another.
+    const validCross = new Request('http://localhost/api/orders', {
+      headers: {
+        cookie: `${cartSessionCookieName(otherMerchant)}=${proofFor(CART_ID)}`,
+      },
+    });
+    expect(
+      requestCarriesSharedCartSessionProof(validCross, otherMerchant)
+    ).toBe(false);
+    expect(
+      verifySharedCartOrderProof(validCross, {
+        cartId: CART_ID,
+        merchantId: otherMerchant,
+      })
+    ).toEqual({ ok: false });
+  });
+
   it('accepts a valid cookie proof when the header proof is stale', () => {
     const request = new Request('http://localhost/api/orders', {
       headers: {

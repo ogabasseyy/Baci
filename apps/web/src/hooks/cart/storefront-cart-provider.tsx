@@ -347,8 +347,12 @@ export function StorefrontCartProvider({
     const normalizedOptions = gated.options;
 
     if (delegated) {
-      delegatedActions.addToCart(productForCart, quantity, normalizedOptions);
-      noteAddedProduct(productForCart);
+      const accepted = delegatedActions.addToCart(
+        productForCart,
+        quantity,
+        normalizedOptions
+      );
+      if (accepted) noteAddedProduct(productForCart);
       return;
     }
 

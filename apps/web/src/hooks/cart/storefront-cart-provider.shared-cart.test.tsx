@@ -213,6 +213,26 @@ describe('StorefrontCartProvider shared-cart delegation', () => {
     expect(result.current.cartTotal).toBe(100);
   });
 
+  it('does not announce an upsell for a delegated add at the quantity cap', async () => {
+    mockAdopted([cartLine({ quantity: 10, lineTotalMinor: 100000 })]);
+    vi.mocked(fetchSharedCartProducts).mockResolvedValue(
+      new Map([['prod-1', product()]])
+    );
+    const { result } = renderHook(() => useCart(), {
+      wrapper: delegatedWrapper(),
+    });
+    await waitFor(() => expect(result.current.cart).toHaveLength(1));
+    expect(result.current.cart[0]?.quantity).toBe(10);
+
+    act(() => {
+      result.current.addToCart(product(), 1);
+    });
+
+    expect(result.current.lastAddedProduct).toBeNull();
+    expect(result.current.showUpsell).toBe(false);
+    expect(sendSharedCartCommand).not.toHaveBeenCalled();
+  });
+
   it('restarts delegated adoption after an external session clear', async () => {
     mockAdopted();
     const { result } = renderHook(() => useCart(), {

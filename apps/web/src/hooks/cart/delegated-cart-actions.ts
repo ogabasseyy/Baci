@@ -4,8 +4,8 @@ import { SHARED_CART_MAX_QUANTITY_PER_LINE } from '@baci/shared/cart';
 import type { RefObject } from 'react';
 import type { Product } from '@/lib/products';
 import type { AddToCartOptions, SharedCartDisplayItem } from './cart-types';
+import { delegatedAddCanBeAccepted } from './delegated-add-preflight';
 import {
-  delegatedAddCanBeAccepted,
   delegatedLineTarget,
   planGroupDealVoid,
 } from './storefront-cart-delegation';
@@ -144,12 +144,22 @@ export function createDelegatedCartActions(
     applyCartWideNegotiation,
     addToCart(product: Product, quantity: number, options?: AddToCartOptions) {
       // A capped, out-of-stock, or variant-blocked add is a no-op in
-      // the shared hook; it must not void the group deal on its way out.
-      if (!delegatedAddCanBeAccepted(shared.cart, product, quantity, options)) {
-        return;
+      // the shared hook; it must not void the group deal on its way
+      // out, and the provider must not announce it as added.
+      if (
+        !delegatedAddCanBeAccepted(
+          shared.cart,
+          product,
+          quantity,
+          options,
+          cartWideNegotiationActiveRef.current
+        )
+      ) {
+        return false;
       }
       voidDelegatedGroupDeal();
       shared.addToCart(product, quantity, options);
+      return true;
     },
     clearCart() {
       setCartWideNegotiationActive(false);

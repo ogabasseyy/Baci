@@ -11,10 +11,8 @@ import {
   ORDER_BINDING_RPC_NAMES,
   selectOrderBindingVariant,
 } from '@/lib/cart/order-binding';
-import {
-  dispatchOrderCreation,
-  getSharedCartOrderAuthority,
-} from '@/lib/cart/order-route-binding';
+import { dispatchOrderCreation } from '@/lib/cart/order-creation-dispatch';
+import { getSharedCartOrderAuthority } from '@/lib/cart/order-route-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {

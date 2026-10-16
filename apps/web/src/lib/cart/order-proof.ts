@@ -25,7 +25,15 @@ function presentedCartProofs(request: Request, merchantId: string): string[] {
   const cookieName = cartSessionCookieName(merchantId);
   for (const part of (request.headers.get('cookie') ?? '').split(';')) {
     const [name, ...rest] = part.split('=');
-    if (name?.trim() === cookieName && rest.length > 0) {
+    // Collect every merchant-namespaced cart session cookie, not only
+    // the submitted merchant's: a cookie scoped to merchant A presented
+    // with a body naming merchant B is still presented cart authority,
+    // and the merchant checks below (verified session merchant must
+    // equal the submitted merchant) keep it from authorizing B.
+    const isCartSessionCookie =
+      name?.trim() === cookieName ||
+      (name?.trim().startsWith('baci-cart-') ?? false);
+    if (isCartSessionCookie && rest.length > 0) {
       try {
         candidates.add(decodeURIComponent(rest.join('=').trim()));
       } catch {

@@ -1,3 +1,4 @@
+import { REFUND_INITIATION_LEG_BUDGET_MS } from '@/lib/orders/initiate-paystack-cancellation-refunds';
 import { REFUND_PREFLIGHT_ADMISSION_BUDGET_MS } from '@/lib/orders/schedule-preflight-provider-verification';
 
 // vps-workers aborts POST /api/cron/process-settlements after 5 minutes
@@ -117,15 +118,17 @@ export function cancellationRefundDrainDeadlineMs(startedAtMs: number): number {
 export const CANCELLATION_REFUND_SETUP_ALLOWANCE_MS = 12_000;
 
 // Capped reconcile phase when refund verification pends: ends the
-// phase with the setup allowance plus the preflight budget
-// remaining before the phase end, so manual legs (38s admission,
-// persisting stamps) verify instead of deferring on every backlog
-// invocation. Provider legs (76s admission) defer free under
-// backlog and proceed once it clears. Shared with
-// reconcile-worker-deadline ROW_START_SLACK_MS (row starts stop
-// that interval before this) and REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
-// (single-sourced above): keep the invariant test in lockstep.
+// phase with the setup allowance plus the provider admission
+// (verification plus one initiation leg) remaining before the
+// phase end, so queued refunds verify AND initiate instead of
+// deferring on every backlog invocation. Reconcile degrades to
+// the shorter phase while verification pends and catches up
+// after. Shared with reconcile-worker-deadline ROW_START_SLACK_MS
+// (row starts stop that interval before this) and the admission
+// budgets (single-sourced above): keep the invariant test in
+// lockstep.
 export const CAPPED_RECONCILE_PHASE_MS =
   SIDE_EFFECT_PHASE_END_MS -
   REFUND_PREFLIGHT_ADMISSION_BUDGET_MS -
+  REFUND_INITIATION_LEG_BUDGET_MS -
   CANCELLATION_REFUND_SETUP_ALLOWANCE_MS;

@@ -279,12 +279,13 @@ BEGIN
   -- reads admit view-only callers without refund permission or CSRF
   -- protection, so letting them reach this UPDATE would persist
   -- refunds from a read-only path, including while the step still
-  -- awaits trusted finalization.
+  -- awaits trusted finalization. The label gates must clear too.
   IF p_action <> 'status' AND v_remaining <= 0 AND v_refunded > 0 THEN
     UPDATE public.orders o SET payment_status = 'refunded', updated_at = now()
      WHERE o.id = p_order_id AND o.merchant_id = v_order.merchant_id
        AND o.payment_status IS DISTINCT FROM 'refunded'
-       AND o.shipping_status IN ('cancelled', 'canceled');
+       AND o.shipping_status IN ('cancelled', 'canceled')
+       AND private.refund_label_gates_clear_v1(p_order_id, v_order.merchant_id, v_order.currency);
   END IF;
   -- Response shaping lives in the response helper (part 3).
   RETURN private.refund_status_response(p_order_id,

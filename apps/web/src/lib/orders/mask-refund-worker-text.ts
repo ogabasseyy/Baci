@@ -35,8 +35,9 @@ const REFUND_EVENT_DETAIL_KEYS = new Set([
 // and nothing renders it.
 const REFUND_EVENT_KEYS = new Set(['id', 'action', 'date', 'details']);
 // History keys the timeline reads. recorded_by is dropped with the
-// same reasoning as actor; reference stays (the panel renders it,
-// and it is the merchant's own data on an order they can view).
+// same reasoning as actor; reference and note stay (the panel
+// renders both, and they are the merchant's own data on an order
+// they can view).
 const REFUND_HISTORY_KEYS = new Set([
   'id',
   'amount',
@@ -44,6 +45,7 @@ const REFUND_HISTORY_KEYS = new Set([
   'method',
   'reference',
   'date',
+  'note',
 ]);
 function maskRefundEventDetails(details: unknown): unknown {
   if (details === null || details === undefined) return details;

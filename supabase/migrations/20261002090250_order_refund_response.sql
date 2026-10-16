@@ -36,6 +36,7 @@ BEGIN
     'method',COALESCE(h.metadata->>'method',h.gateway),
     'reference',COALESCE(h.metadata->>'reference',h.gateway_reference),
     'date',COALESCE(h.metadata->>'refunded_at',to_json(h.created_at)#>>'{}'),
+    'note',h.metadata->>'note',
     'recorded_by',h.metadata->>'recorded_by')
     ORDER BY h.created_at DESC),'[]') INTO v_history
     FROM (SELECT id,amount,status,metadata,gateway,gateway_reference,created_at

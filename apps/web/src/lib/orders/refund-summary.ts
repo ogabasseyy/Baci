@@ -44,6 +44,7 @@ export interface RefundSummary {
     method: string;
     reference: string;
     date: string;
+    note: string | null;
     recorded_by: string | null;
   }>;
   // Pin candidates for Paystack attestations: completed Paystack

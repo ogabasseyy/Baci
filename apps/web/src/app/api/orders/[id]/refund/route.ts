@@ -33,6 +33,7 @@ const KNOWN_REFUND_ERRORS: Record<string, string> = {
     'Confirm that the money already moved before recording',
   retry_too_soon: 'Please wait a minute before retrying',
 };
+const KNOWN_REFUND_ERROR_KEYS = new Set(Object.keys(KNOWN_REFUND_ERRORS));
 
 // HTTP status per known application error. Genuine state conflicts
 // (busy, already done, reference race, review-blocked) stay 409;
@@ -119,7 +120,10 @@ async function handle(
     // failures coded while unknown text falls back to internal_error.
     // Lowercase first: without it, uppercase letters act as
     // delimiters and a wrapper that uppercases the RAISE text would
-    // miss every match. Match only application-raised classes: a
+    // miss every match. Scan in message order: a wrapped message
+    // naming two known tokens maps to the first one the database
+    // raised, not whichever key the dictionary inserted first.
+    // Match only application-raised classes: a
     // constraint or engine error that happens to echo a
     // merchant-controlled value containing a known token (e.g. a
     // crafted 23505 message) must not be mistaken for the
@@ -130,9 +134,7 @@ async function handle(
     const matchedError = ['P0001', '22023', '42501', '28000', 'P0002'].includes(
       error.code ?? ''
     )
-      ? Object.keys(KNOWN_REFUND_ERRORS).find((known) =>
-          messageTokens.includes(known)
-        )
+      ? messageTokens.find((token) => KNOWN_REFUND_ERROR_KEYS.has(token))
       : undefined;
     const code = matchedError ?? 'internal_error';
     // A matched application error carries its own semantic status;

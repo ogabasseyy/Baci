@@ -56,6 +56,7 @@ describe('OrderRefundTimeline', () => {
             date: 'also-not-a-date',
             id: 'refund-9',
             method: 'mystery_rail',
+            note: null,
             recorded_by: null,
             reference: 'odd-1',
             status: 'weird_state',
@@ -82,8 +83,19 @@ describe('OrderRefundTimeline', () => {
             date: '2026-09-28T12:00:00Z',
             id: 'refund-1',
             method: 'bank_transfer',
+            note: 'Counter payment confirmed',
             recorded_by: 'merchant-1',
             reference: 'bank-1',
+            status: 'completed',
+          },
+          {
+            amount: 10,
+            date: '2026-09-28T12:00:00Z',
+            id: 'refund-2',
+            method: 'bank_transfer',
+            note: null,
+            recorded_by: null,
+            reference: 'bank-2',
             status: 'completed',
           },
         ]}
@@ -91,5 +103,9 @@ describe('OrderRefundTimeline', () => {
     );
     expect(screen.getByText(/₦27,574.83/)).toBeInTheDocument();
     expect(screen.getByText('bank-1')).toBeInTheDocument();
+    // Recorded notes surface in the timeline; missing notes
+    // render nothing (no empty annotation row).
+    expect(screen.getByText('Counter payment confirmed')).toBeInTheDocument();
+    expect(screen.queryByText('null')).not.toBeInTheDocument();
   });
 });

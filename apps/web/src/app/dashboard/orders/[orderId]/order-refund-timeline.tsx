@@ -68,6 +68,9 @@ export function OrderRefundTimeline({
               </p>
               <p className="break-all">{item.reference}</p>
               <p>{formatRefundActivityInstant(item.date)}</p>
+              {item.note ? (
+                <p className="break-words text-muted-foreground">{item.note}</p>
+              ) : null}
             </li>
           ))}
         </ul>

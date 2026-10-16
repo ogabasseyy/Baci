@@ -2,8 +2,9 @@
 --
 -- Covers retry/requeue, partial-manual gating, replay/idempotency,
 -- claimed-step blocking, and the bounded audit/history tails.
--- Split from order_refund_management.sql per the 300-line boundary;
--- self-contained fixtures use the 9ef1 namespace and roll back.
+-- Attestation scenarios split to order_refund_management_attestation.sql
+-- per the 300-line boundary; self-contained fixtures use the 9ef1
+-- namespace and roll back.
 --
 -- USAGE:
 --   supabase test db supabase/tests/order_refund_management.sql
@@ -86,12 +87,16 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000001', v_merchant_id, 'REFUND-001',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000008', v_merchant_id, 'REFUND-008',
+      100, 100, 'paid', 'cancelled'),
+    -- Full coverage beside an anomalous foreign-currency leg.
+    ('9ef11000-0000-4000-8000-000000000011', v_merchant_id, 'REFUND-011',
       100, 100, 'paid', 'cancelled');
 
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
   WHERE id IN (
       '9ef11000-0000-4000-8000-000000000001',
-      '9ef11000-0000-4000-8000-000000000008');
+      '9ef11000-0000-4000-8000-000000000008',
+      '9ef11000-0000-4000-8000-000000000011');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -102,7 +107,19 @@ BEGIN
       'completed', 'paystack', 'cap-1', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000012', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000008', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'cap-8', '{}'::jsonb);
+      'completed', 'paystack', 'cap-8', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000013', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000011', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'cap-11', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000014', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000011', 'payment', 50, 'USD',
+      'refunded', 'paystack', 'cap-11-fx', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000015', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000011', 'refund', 100, 'NGN',
+      'completed', 'paystack', '424244',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000013',
+        'provider_refund_status', 'processed'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error
@@ -111,7 +128,10 @@ BEGIN
       'failed', '9ef13000-0000-4000-8000-000000000001', 5,
       'Insufficient balance'),
     ('9ef11000-0000-4000-8000-000000000008', v_merchant_id, 'refund',
-      'claimed', '9ef13000-0000-4000-8000-000000000008', 1, NULL);
+      'claimed', '9ef13000-0000-4000-8000-000000000008', 1, NULL),
+    ('9ef11000-0000-4000-8000-000000000011', v_merchant_id, 'refund',
+      'failed', '9ef13000-0000-4000-8000-000000000011', 5,
+      'Settlement reversal pending');
 
   -- A long-pending refund accumulates audit events; the status response
   -- must bound them instead of growing every poll.
@@ -135,7 +155,6 @@ SELECT pg_catalog.set_config(
 DO $refund_manager$
 DECLARE
   v_result jsonb;
-  v_rejected boolean;
   v_label text;
 BEGIN
   -- Failed refunds are retryable, and a retry requeues exhausted work.
@@ -217,6 +236,11 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'note correction not persisted on replay';
   END IF;
+  -- The recorded note surfaces in the refund history payload the
+  -- timeline renders, including replay corrections.
+  IF (v_result->'history'->0->>'note') <> 'teller 4' THEN
+    RAISE EXCEPTION 'corrected note missing from refund history';
+  END IF;
   BEGIN
     PERFORM public.manage_order_refund(
       '9ef11000-0000-4000-8000-000000000001', 'manual', 25,
@@ -226,49 +250,7 @@ BEGIN
     IF SQLERRM <> 'manual_reference_conflict' THEN RAISE; END IF;
   END;
 
-  -- Recording attests money already moved: direct RPC callers must
-  -- attest too, and the ledger row keeps the proof.
-  BEGIN
-    PERFORM public.manage_order_refund(
-      '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'unconfirmed-1', NULL, false);
-    RAISE EXCEPTION 'unattested manual refund accepted';
-  EXCEPTION WHEN SQLSTATE '22023' THEN
-    IF SQLERRM <> 'refund_confirmation_required' THEN RAISE; END IF;
-  END;
-  PERFORM public.manage_order_refund(
-    '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-    '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1', NULL, true);
-  IF NOT EXISTS (
-    SELECT 1 FROM public.transactions
-    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
-      AND gateway_reference = 'attested-1#1'
-      AND metadata->>'confirmed' = 'true'
-  ) THEN
-    RAISE EXCEPTION 'merchant attestation not persisted on manual row';
-  END IF;
-
-  -- Replays attest too: the replay branch rewrites audit notes and
-  -- short-circuits to status before the record helper is reached, so
-  -- an unattested replay must fail without touching the stored note.
-  BEGIN
-    PERFORM public.manage_order_refund(
-      '9ef11000-0000-4000-8000-000000000001', 'manual', 10,
-      '2026-09-28T12:00:00Z', 'bank_transfer', 'attested-1', 'rewritten',
-      false);
-    RAISE EXCEPTION 'unattested replay accepted';
-  EXCEPTION WHEN SQLSTATE '22023' THEN
-    IF SQLERRM <> 'refund_confirmation_required' THEN RAISE; END IF;
-  END;
-  IF EXISTS (
-    SELECT 1 FROM public.transactions
-    WHERE order_id = '9ef11000-0000-4000-8000-000000000001'
-      AND metadata->>'reference' = 'attested-1'
-      AND metadata->>'note' = 'rewritten'
-  ) THEN
-    RAISE EXCEPTION 'unattested replay mutated the audit note';
-  END IF;
-
+  -- Attestation scenarios live in order_refund_management_attestation.sql.
   -- Claimed refunds block manual writes and management.
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000008'
@@ -285,15 +267,21 @@ BEGIN
     IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
   END;
 
-  -- Missing and foreign orders are indistinguishable to callers.
-  v_rejected := false;
-  BEGIN
-    PERFORM public.manage_order_refund('9ef1ffff-0000-4000-8000-000000000099');
-  EXCEPTION WHEN SQLSTATE '42501' THEN
-    v_rejected := SQLERRM = 'refund_forbidden';
-  END;
-  IF NOT v_rejected THEN
-    RAISE EXCEPTION 'missing order distinguishable from forbidden';
+  -- Missing-order indistinguishability lives in the tenancy suite.
+
+  -- A retry under full coverage re-arms the step but must not
+  -- persist the refunded label while an anomalous leg blocks the
+  -- label gates (the aggregate claim still refuses finalization).
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000011', 'retry'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 0 THEN
+    RAISE EXCEPTION 'anomalous order not fully covered';
+  END IF;
+  SELECT payment_status INTO v_label FROM public.orders
+   WHERE id = '9ef11000-0000-4000-8000-000000000011';
+  IF v_label = 'refunded' THEN
+    RAISE EXCEPTION 'retry persisted refunded past blocked label gates';
   END IF;
 
   -- Audit history stays bounded no matter how long a refund pends.

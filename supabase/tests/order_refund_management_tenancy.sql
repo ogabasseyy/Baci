@@ -218,4 +218,44 @@ BEGIN
 END;
 $refund_m2_isolation$;
 
+SET LOCAL ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', true);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef10000-0000-4000-8000-000000000003',
+  true
+);
+
+DO $refund_event_actor_confinement$
+DECLARE
+  v_action text;
+  v_rejected boolean;
+BEGIN
+  -- Missing and foreign orders are indistinguishable to callers.
+  v_rejected := false;
+  BEGIN
+    PERFORM public.manage_order_refund('9ef1ffff-0000-4000-8000-000000000099');
+  EXCEPTION WHEN SQLSTATE '42501' THEN
+    v_rejected := SQLERRM = 'refund_forbidden';
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'missing order distinguishable from forbidden';
+  END IF;
+  -- A view-only staffer reads event actions through REST, but
+  -- actor_id stays outside their column grant like the route mask.
+  SELECT action INTO v_action FROM public.order_refund_events
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000001';
+  IF v_action IS NULL THEN
+    RAISE EXCEPTION 'viewer lost event action reads';
+  END IF;
+  BEGIN
+    PERFORM actor_id FROM public.order_refund_events
+     WHERE order_id = '9ef11000-0000-4000-8000-000000000001';
+    RAISE EXCEPTION 'viewer read event actor_id directly';
+  EXCEPTION WHEN SQLSTATE '42501' THEN
+    NULL;
+  END;
+END;
+$refund_event_actor_confinement$;
+
 ROLLBACK;

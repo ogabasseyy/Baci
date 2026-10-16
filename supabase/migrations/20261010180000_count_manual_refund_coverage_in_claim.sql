@@ -121,45 +121,12 @@ BEGIN
     -- drifted order the funded rows can sum to less than
     -- amount_paid, and finalizing then would mark the order
     -- refunded while the manager still reports an outstanding
-    -- balance no leg can accept. Total returned money mirrors
-    -- the manager: per-leg-capped terminal coverage, self-terminal
-    -- external legs, and internal money (the greater of funded
-    -- wallet/savings face — pending reversal is trusted to the
-    -- reversal ledger — and already-reversed sums, so each kobo
-    -- counts once however the sync labels its leg).
+    -- balance no leg can accept. The shared total helper (also
+    -- used by the reconciliation predicate) computes returned
+    -- money the manager's way.
     v_paid := COALESCE(v_order.amount_paid, 0);
-    SELECT private.capped_refund_coverage_v1(
-        p_order_id, v_order.merchant_id, v_order.currency)
-      + COALESCE((SELECT SUM(amount) FROM public.transactions
-         WHERE order_id = p_order_id
-           AND merchant_id = v_order.merchant_id
-           AND transaction_type = 'payment' AND status = 'refunded'
-           AND amount > 0
-           AND UPPER(BTRIM(currency)) = UPPER(BTRIM(v_order.currency))
-           AND COALESCE(public.normalized_gateway_name_v1(gateway), '')
-             NOT IN ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH',
-               'MANUAL', 'PAY_ON_DELIVERY')), 0)
-      + GREATEST(
-          COALESCE((SELECT SUM(amount) FROM public.transactions
-             WHERE order_id = p_order_id
-               AND merchant_id = v_order.merchant_id
-               AND transaction_type = 'payment'
-               AND status IN ('completed', 'refund_pending')
-               AND amount > 0
-               AND UPPER(BTRIM(currency)) = UPPER(BTRIM(v_order.currency))
-               AND COALESCE(public.normalized_gateway_name_v1(gateway), '')
-                 IN ('WALLET', 'SAVINGS')), 0),
-          COALESCE((SELECT SUM(t.amount)
-             FROM public.customer_wallet_transactions t
-            WHERE t.source_id = p_order_id
-              AND t.merchant_id = v_order.merchant_id
-              AND t.source_type = 'order_reversal'), 0)
-          + COALESCE((SELECT SUM(r.amount)
-             FROM public.customer_savings_redemptions r
-            WHERE r.order_id = p_order_id
-              AND r.merchant_id = v_order.merchant_id
-              AND r.metadata ? 'reversed_at'), 0))
-      INTO v_total_returned;
+    v_total_returned := private.total_refund_returned_v1(
+      p_order_id, v_order.merchant_id, v_order.currency);
     IF v_total_returned >= v_paid THEN
       -- Every funded leg has terminal refund evidence, but the last leg may
       -- have landed through a silent self-terminal refund no worker

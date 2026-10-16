@@ -48,8 +48,8 @@ export async function processCancellationDrain(
   // Bound the parallel reconcile phase so the serial drains behind it keep
   // a guaranteed share of the invocation instead of computing zero limits.
   // When refund verification pends, cap the phase before it consumes the
-  // preflight budget: a full reconcile leaves ~30s and every 76s
-  // verification defers on every backlog invocation.
+  // provider admission: a full reconcile leaves ~30s and every 76s
+  // verification-plus-initiation defers on every backlog invocation.
   const workerDeadlineMs = reconcileWorkerDeadlineMs(
     workersStartedAt,
     (await isRefundVerificationPending(supabase))

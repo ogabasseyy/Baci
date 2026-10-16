@@ -13,6 +13,19 @@ CREATE OR REPLACE FUNCTION private.reconciliation_should_finalize_v1(
   p_payment_status text
 ) RETURNS boolean LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 BEGIN
+  -- Total coverage gates every arm below: on a drifted order the
+  -- funded rows can sum below amount_paid while per-leg scans
+  -- pass, and finalizing then would mark the order refunded while
+  -- the manager still reports an unreturnable outstanding
+  -- balance. Same shared helper as the aggregate claim.
+  IF private.total_refund_returned_v1(
+    p_order_id, p_merchant_id, p_currency
+  ) < COALESCE((
+    SELECT o.amount_paid FROM public.orders o
+     WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id
+  ), 0) THEN
+    RETURN false;
+  END IF;
   -- A mixed order (manual-covered leg A, provider leg B) finishes
   -- its side effect as completed; when B settles, legs_covered
   -- sees A's manual row and finalizes the whole order instead of

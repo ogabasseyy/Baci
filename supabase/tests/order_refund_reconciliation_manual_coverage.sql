@@ -4,7 +4,9 @@
 -- side effect as completed; when B settles, the Paystack
 -- reconciliation gate must run aggregate finalization for the whole
 -- order — not strand settlement reversal, notifications, and review
--- closure because A has no same-gateway provider row.
+-- closure because A has no same-gateway provider row. A drifted
+-- order (legs sum below amount_paid) must NOT finalize even with
+-- full per-leg coverage: total returned money gates the predicate.
 --
 -- USAGE:
 --   supabase test db supabase/tests/order_refund_reconciliation_manual_coverage.sql
@@ -43,10 +45,15 @@ BEGIN
     payment_status, shipping_status
   ) VALUES
     ('9ef11000-0000-4000-8000-000000000081', v_merchant_id, 'REFUND-081',
+      100, 100, 'paid', 'cancelled'),
+    -- Drifted ledger: funded rows sum to 60 against 100 paid.
+    ('9ef11000-0000-4000-8000-000000000082', v_merchant_id, 'REFUND-082',
       100, 100, 'paid', 'cancelled');
 
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
-  WHERE id = '9ef11000-0000-4000-8000-000000000081';
+  WHERE id IN (
+    '9ef11000-0000-4000-8000-000000000081',
+    '9ef11000-0000-4000-8000-000000000082');
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -69,7 +76,15 @@ BEGIN
       '9ef11000-0000-4000-8000-000000000081', 'refund', 40, 'NGN',
       'completed', 'paystack', '424242',
       jsonb_build_object(
-        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000103'));
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000103')),
+    ('9ef12000-0000-4000-8000-000000000105', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000082', 'payment', 60, 'NGN',
+      'completed', 'paystack', 'cap-82', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000106', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000082', 'refund', 60, 'NGN',
+      'completed', 'paystack', '424243',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000105'));
 END;
 $fixtures$;
 
@@ -93,6 +108,20 @@ BEGIN
     WHERE order_id = '9ef11000-0000-4000-8000-000000000081'
   ) THEN
     RAISE EXCEPTION 'reconciliation skipped finalization for manual-covered leg';
+  END IF;
+  -- The drifted order stamps its verdict but must not finalize:
+  -- 60 returned of 100 paid leaves a gap no leg can accept.
+  SELECT public.record_verified_paystack_cancellation_refund_v1(
+    '9ef12000-0000-4000-8000-000000000106', 'processed', 424243, 6000, 'NGN'
+  ) INTO v_verdict;
+  IF v_verdict <> 'processed' THEN
+    RAISE EXCEPTION 'drifted reconciliation did not process, got %', v_verdict;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.paystack_cancellation_refund_notifications
+    WHERE order_id = '9ef11000-0000-4000-8000-000000000082'
+  ) THEN
+    RAISE EXCEPTION 'drifted reconciliation finalized despite the ledger gap';
   END IF;
 END;
 $reconciliation_manual_coverage$;

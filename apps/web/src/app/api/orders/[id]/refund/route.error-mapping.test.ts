@@ -145,6 +145,24 @@ describe('order refund route error mapping', () => {
       code: 'manual_completion_required',
     });
   });
+  it('prefers the first known token in message order over dictionary order', async () => {
+    // already_refunded is inserted after not_authenticated in the
+    // dictionary, but the wrapped message raises it first: the
+    // mapping must follow the message, not the key order.
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: {
+        code: 'P0001',
+        message: 'already_refunded: settled, see not_authenticated context',
+      },
+    });
+    const response = await POST(request({ action: 'retry' }), context);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'This order has already been fully refunded',
+      code: 'already_refunded',
+    });
+  });
   it('does not match a known token embedded in a larger word', async () => {
     mocks.rpc.mockResolvedValue({
       data: null,

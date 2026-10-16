@@ -22,7 +22,12 @@ CREATE INDEX IF NOT EXISTS order_refund_events_order_id_idx ON public.order_refu
 CREATE INDEX IF NOT EXISTS order_refund_events_merchant_id_idx ON public.order_refund_events(merchant_id);
 ALTER TABLE public.order_refund_events ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.order_refund_events FROM PUBLIC,anon,authenticated;
-GRANT SELECT ON public.order_refund_events TO authenticated;
+-- Column-level read: view-only staff reach this table directly
+-- through REST under the policy below, so actor_id stays out of
+-- their grant exactly like the route mask drops it. The RPC path
+-- reads DEFINER-side and is unaffected.
+GRANT SELECT (id, order_id, merchant_id, action, details, created_at)
+  ON public.order_refund_events TO authenticated;
 GRANT ALL ON public.order_refund_events TO service_role;
 CREATE POLICY merchant_refund_events_read ON public.order_refund_events FOR SELECT TO authenticated
   USING (EXISTS (SELECT 1 FROM public.merchants m WHERE m.id=merchant_id AND m.user_id=auth.uid())

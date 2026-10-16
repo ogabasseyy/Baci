@@ -42,7 +42,14 @@ def _on_block_subs(lines):
             continue
         sub = _TRIGGER_SUBKEY.match(line)
         if sub and current is not None:
-            subs[current].append((sub.group(1), sub.group(2), i))
+            # A double-quoted subkey decodes escapes (`"br\x61nches"` is `branches`);
+            # unseen filters would pass while GitHub honors them. Other spellings pass through.
+            key = sub.group(1).strip()
+            if len(key) >= 2 and key.startswith('"') and key.endswith('"'):
+                key = _decode_scalar(key)
+            else:
+                key = key.strip("\"'")
+            subs[current].append((key, sub.group(2), i))
     return subs, end
 
 
@@ -147,24 +154,19 @@ _JOB_CONDITION = re.compile(r"^    [\"']?(if|needs|continue-on-error)[\"']?\s*:"
 EXPECTED_PRECEDING_CHECKOUT = "- uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1"
 # Interpreter/shell startup preloads: inheriting one of these at workflow
 # scope runs PR-controlled code before the gate's python3 starts.
-_STARTUP_ENV = frozenset({
-    "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV",
-    "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB",
-    "PERLLIB", "RUBYLIB", "RUBYOPT",
-})
+_STARTUP_ENV = frozenset({"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "BASH_ENV", "ENV", "LD_PRELOAD", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS", "PERL5LIB", "PERLLIB", "RUBYLIB", "RUBYOPT"})
 _NEXT_STEP = re.compile(r"^      -(\s|$)")
 _TRIGGER_KEY = re.compile(r"^  ([A-Za-z_]+)\s*:\s*(.*)$")
-_TRIGGER_SUBKEY = re.compile(r"^    [\"']?([A-Za-z_-]+)[\"']?\s*:\s*(.*)$")
+_TRIGGER_SUBKEY = re.compile(r"^    ([^:\n]+?)\s*:\s*(.*)$")
 _TRIGGER_ITEM = re.compile(r"^      -\s(.*)$")
 
 
 def trigger_failures(ci_text):
     """The gate must stay wired to the events that need it, unnarrowed.
 
-    Key presence alone is not enough: keeping ``pull_request`` while
-    retargeting its branches or adding path filters silences the gate for
-    main PRs without touching the asserted step block. Commented lines
-    never fire, so they cannot satisfy the check.
+    Key presence alone is not enough: retargeted branches or path filters
+    silence the gate for main PRs without touching the asserted step block.
+    Commented lines never fire, so they cannot satisfy the check.
     """
     lines = ci_text.splitlines()
     subs, end = _on_block_subs(lines)
@@ -220,9 +222,8 @@ def ci_failures(ci_text):
                     key = stripped.split(":")[0].strip().strip("\"'")
                     failures.append(f"ci.yml top-level env must not preload startup code ({key})")
                     break
-    # Structure scans must not match inside block scalars: a multiline
-    # `name: |` can smuggle the pinned step text while the job calls a
-    # reusable workflow instead of running any step.
+    # Structure scans must not match inside block scalars: a multiline `name: |`
+    # can smuggle the pinned step text while the job calls a reusable workflow.
     lines = _without_block_scalars(lines)
     starts = [i for i, line in enumerate(lines) if _norm(line) == _norm(STEP_NAME_LINE)]
     if len(starts) != 1:
@@ -241,24 +242,23 @@ def ci_failures(ci_text):
         return failures + ["capability gate job must stay unconditional (no job-level if:/needs:/continue-on-error:)"]
     # A job-level `uses:` turns the job into a reusable-workflow call (no
     # step ever runs); a `container:` swaps the python3 that runs the gate.
+    # Job-level env applies wherever it sits: an env block after the steps is still job-wide.
     for line in job:
         if re.match(r"^    [\"']?container[\"']?\s*:", line):
             return failures + ["capability gate job must not run in a PR-selected container"]
         if re.match(r"^    [\"']?uses[\"']?\s*:", line):
             return failures + ["capability gate job must not call a reusable workflow"]
-    # A checkout pinned to the base SHA would diff the base against itself
-    # and skip the suite while the contract stays green.
+        if re.match(r"^    [\"']?env[\"']?\s*:", line):
+            return failures + ["capability gate job must not set environment (startup injection)"]
+    # A checkout pinned to the base SHA would diff the base against itself and skip the suite.
     for line in lines[job_start:start]:
         stripped = line.strip()
         if stripped and not stripped.startswith("#") and re.match(r"^['\"]?ref['\"]?\s*:", stripped):
             return failures + ["capability gate checkout must not pin a ref (the gate diffs the PR candidate)"]
-    # PR-controlled code must not run before the gate: a preceding step
-    # could overwrite the checked-out gate code, which then runs while the
-    # contract (separate checkout) still sees pristine files. Only the exact
-    # pinned checkout may precede it — a local action runs PR code the same
-    # way a run: step does. Startup environments are rejected too: job- or
-    # step-level env can preload PR code (PYTHONPATH/sitecustomize, BASH_ENV)
-    # before the gate's python3 starts.
+    # PR-controlled code must not run before the gate: a preceding step could
+    # overwrite the checked-out gate code, and job- or step-level startup env
+    # (PYTHONPATH/sitecustomize, BASH_ENV, NODE_OPTIONS) preloads PR code
+    # before the gate's python3 starts. Only the pinned checkout may precede it.
     checkout_with = False
     for line in lines[job_start:start]:
         stripped = line.strip()

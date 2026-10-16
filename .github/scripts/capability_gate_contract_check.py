@@ -65,9 +65,9 @@ BASE_PINS = {
     ".github/actions/capability-gate/action.yml": "257823346da306434103d77e3a4facbcee0e536ee8b342678e14a73aa9d0b8b9",
     # No self-pin: a self-hash is a fixed point. The checker's own baseline
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
-    ".github/scripts/capability_gate_contract_ci_checks.py": "eefa8714dd8a321130ec1f9f855d2a6bed77310a0a0b2a9bf6ad5821c553118c",
+    ".github/scripts/capability_gate_contract_ci_checks.py": "57d88f206040d55179767b04a00f2a3d4150b9cd0b43c3eb56cec6ca596a0c9d",
     ".github/scripts/capability_gate_contract_workflow_checks.py": "0ac6533a6a8c2c885fa480bca7aeee2e26f0c785b85862ef71a8cecb169f8f8a",
-    ".github/workflows/capability-register-freshness.yml": "7496fead7a21713f6864b61ee828b1718350dd3034571c73381d5402f5ae27df",
+    ".github/workflows/capability-register-freshness.yml": "6e0618cc3824061f069ee5ec5f02b4e684256b88b7a0ff672fdd2c1501c06adc",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
     "vps-workers/baci-editorial-context/register_digests.py": "fb42b161df30abfa27d7178bdfff75dc4fbada4d65561d14168d20f7ca70b860",
@@ -80,14 +80,14 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "20b635c6a0a4395c1c29f8c8de3bd62054ebdda11951f6a8790a5e39a948a99a",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "1381bd0b024f0e1780915ab1aab614093af2d5a61b718224310e542b9d77411b",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "1b9fb9f7af6f8de7177b6183559f621e2f40e450c16c8f1aefa417a3b50e7f3a",
-    "vps-workers/baci-editorial-context/test_capability_register_binding.py": "04e3dfceeabed2b9b6d37cdca3c6c76fb70d68d6a0e698ec63a3dc28c6ff4478",
+    "vps-workers/baci-editorial-context/test_capability_register_binding.py": "686edaf2cde3f78a8430770d0df4449e79bd48d087cc19e6ee54bb3965fc4a13",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
     "vps-workers/baci-editorial-context/test_platform_capabilities.py": "7e05d5b4c325ffe55aa36a3812e1ed67d3d8646bdaa0b425c511dab2115bc987",
     "vps-workers/baci-editorial-context/test_platform_capability_prompt.py": "0c3b79f20946ecb17bd0684ed54d3cb97b0c2d7dcf3b0cebced76d9c25caccad",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/prompt_builder.py": "59997648a8c05f9fdbba5d4a9849e96a066ae4d316a2a9d465e0e1ef58aed3ae",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_exec.py": "5c1d9f517170f0d4528a086964655cabb849c3886c8cea8bc83693ae6c557c4e",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_scope.py": "1f0ed42aef159ce2890e792d63361d93691c50cb3aefc254fa302b8db42eaa44",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_scope.py": "98db2e43bb10b45cc85b6e87f41889a8d1fd1c767e2b81cf1a338df0df386551",
     "vps-workers/baci-editorial-context/test_capability_register_binding_dirs.py": "7b4ff9c060dda11ebff997c11afe29a990c73e9fc6890cadc4855133624c2a56",
     "vps-workers/baci-editorial-context/tests/fixtures/writer_stub/codex_content_agent/platform_capabilities.py": "e384cac8f670c565c2f767cd790d661c8ddad6627ecb17747cb82fa894c5d47b",
 }
@@ -97,22 +97,17 @@ def sha256_of(path):
 
 
 def declared_pins(checker_path):
-    """Read the BASE_PINS declaration from a checker copy without executing it."""
+    """Read the BASE_PINS declaration without executing it (exactly one assignment: Python runs the last)."""
     tree = ast.parse(Path(checker_path).read_text())
-    for node in tree.body:
-        if (
-            isinstance(node, ast.Assign)
-            and len(node.targets) == 1
-            and isinstance(node.targets[0], ast.Name)
-            and node.targets[0].id == "BASE_PINS"
-        ):
-            value = ast.literal_eval(node.value)
-            if not isinstance(value, dict) or not all(
-                isinstance(k, str) and isinstance(v, str) for k, v in value.items()
-            ):
-                raise ValueError("pin declaration malformed")
-            return value
-    raise ValueError("pin declaration missing")
+    matches = [node for node in tree.body if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and node.targets[0].id == "BASE_PINS"]
+    if len(matches) != 1:
+        raise ValueError("pin declaration duplicated" if matches else "pin declaration missing")
+    value = ast.literal_eval(matches[0].value)
+    if not isinstance(value, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in value.items()
+    ):
+        raise ValueError("pin declaration malformed")
+    return value
 
 
 def pin_failures(repo_root, base_pins, declared):
@@ -167,7 +162,9 @@ def pin_failures(repo_root, base_pins, declared):
                 and rel.endswith(".py")
                 and Path(repo_root, rel).is_file()
             )
-            shadow = in_scope and Path(rel).stem in _RESERVED_MODULE_NAMES
+            # Any component can be an importable package (json/__init__.py shadows `import json`).
+            parts = Path(rel).parent.parts + (Path(rel).stem,)
+            shadow = in_scope and any(p in _RESERVED_MODULE_NAMES for p in parts)
             if in_scope and not shadow:
                 kind = (
                     "suite" if fnmatch.fnmatchcase(Path(rel).name, "test_*capabilit*.py") else "helper"
@@ -204,19 +201,12 @@ def undeclared_suite_files(repo_root, declared):
 
 
 def declared_checker_pin(workflow_text):
-    """The PR-head workflow's declared checker hash, if any.
-
-    Comment lines never execute, so a commented entry must not count as a
-    declaration — otherwise the pin could be silenced while looking kept.
-    """
-    for line in workflow_text.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        match = re.match(r"PINNED_CHECKER_SHA256:\s*([0-9a-f]{64})\s*$", stripped)
-        if match:
-            return match.group(1)
-    return None
+    """The PR-head workflow's declared checker hash (comments never count; duplicates fail)."""
+    stripped = [line.strip() for line in workflow_text.splitlines()]
+    pins = [m.group(1) for s in stripped if s and not s.startswith("#") and (m := re.match(r"PINNED_CHECKER_SHA256:\s*([0-9a-f]{64})\s*$", s))]
+    if len(pins) > 1:
+        raise ValueError("checker pin duplicated")
+    return pins[0] if pins else None
 
 
 def checker_file_failures(repo_root, base_pin, declared_pin):
@@ -281,10 +271,13 @@ def main(root=None, checker_pin=None):
         pin_bad, notices = [], []
     failures.extend(pin_bad)
     failures.extend(undeclared_suite_files(root, declared))
-    if checker_pin is not None or declared_checker_pin(workflow_text) is not None:
-        self_bad, self_notices = checker_file_failures(
-            root, checker_pin, declared_checker_pin(workflow_text)
-        )
+    try:
+        declared_pin = declared_checker_pin(workflow_text)
+    except ValueError as exc:
+        failures.append(f"checker pin invalid: {exc}")
+        declared_pin = None
+    if checker_pin is not None or declared_pin is not None:
+        self_bad, self_notices = checker_file_failures(root, checker_pin, declared_pin)
         failures.extend(self_bad)
         notices.extend(self_notices)
     for notice in notices:

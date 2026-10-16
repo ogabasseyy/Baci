@@ -1,11 +1,12 @@
 """Execution-scope and suite-membership regressions (stdlib only).
 
-Round-16 findings: the push attestation must be scoped to exactly main
-(inclusion globs still match it), the checker must run at the workspace
-root (a working-directory/defaults override would execute a mirror tree
-while the pinned text matches), and the suite must contain no symlinks (a
-linked stdlib name would hijack imports before any check runs).
+Round-16/17 findings: the push attestation must be scoped to exactly main,
+the checker must run at the workspace root, the suite must contain no
+symlinks, job env is job-wide wherever it sits, escaped trigger subkeys
+decode like GitHub, shadow package components are rejected, and duplicate
+pin declarations fail.
 """
+import hashlib
 import importlib.util
 import tempfile
 import unittest
@@ -27,6 +28,20 @@ def _workflow_text():
     if not workflow.exists():
         raise unittest.SkipTest("contract workflow unavailable")
     return workflow.read_text()
+
+
+CI = """on:
+  push:
+  pull_request:
+  merge_group:
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Test capability register binding
+        uses: ./.github/actions/capability-gate
+      - uses: other/action@v1
+"""
 
 
 class ContractScopeTests(unittest.TestCase):
@@ -68,6 +83,71 @@ class ContractScopeTests(unittest.TestCase):
             (suite / "json").symlink_to(target, target_is_directory=True)
             failures = check.undeclared_suite_files(root, declared)
             self.assertTrue(any("symlinks" in f and "json" in f for f in failures))
+
+    def test_post_steps_job_env_fails(self):
+        # Job-level env applies wherever it sits in the mapping: an env
+        # block after the steps is still inherited by the gate step.
+        mutant = CI.replace(
+            "      - uses: other/action@v1\n",
+            "      - uses: other/action@v1\n    env:\n      PYTHONPATH: /payload\n",
+            1,
+        )
+        self.assertNotEqual(mutant, CI)
+        failures = check.ci_failures(mutant)
+        self.assertTrue(failures)
+        self.assertIn("must not set environment", " ".join(failures))
+
+    def test_escaped_trigger_subkeys_fail(self):
+        # `"br\x61nches"` decodes to `branches`: the [never] filter must be
+        # seen (and fail), not skipped as an unknown subkey.
+        mutant = CI.replace(
+            "  pull_request:\n",
+            '  pull_request:\n    "br\\x61nches": [never]\n',
+            1,
+        )
+        self.assertNotEqual(mutant, CI)
+        failures = check.ci_failures(mutant)
+        self.assertTrue(failures)
+        self.assertIn("main match", " ".join(failures))
+        text = _workflow_text()
+        esc_types = text.replace(
+            "    types: [opened, synchronize, reopened, edited]\n",
+            '    "typ\\x65s": [opened]\n',
+            1,
+        )
+        self.assertNotEqual(esc_types, text)
+        failures = check.workflow_failures(esc_types)
+        self.assertTrue(failures)
+        self.assertIn("full pull_request_target types", " ".join(failures))
+
+    def test_shadow_package_components_fail(self):
+        # json/__init__.py is classified by the stem __init__, yet the
+        # gate's `import json` would resolve the directory first.
+        with tempfile.TemporaryDirectory() as root:
+            pkg = Path(root, check.SUITE_DIR, "json")
+            pkg.mkdir(parents=True)
+            init = pkg / "__init__.py"
+            init.write_bytes(b"import os\n")
+            rel = f"{check.SUITE_DIR}/json/__init__.py"
+            digest = hashlib.sha256(init.read_bytes()).hexdigest()
+            failures, _ = check.pin_failures(root, {}, {rel: digest})
+            self.assertTrue(any("shadow the interpreter" in f for f in failures))
+
+    def test_duplicate_pin_declarations_fail(self):
+        # Python executes the LAST assignment: a second (weakened) dict
+        # would run while review parses the first.
+        with tempfile.TemporaryDirectory() as root:
+            dup = Path(root, "checker.py")
+            dup.write_text('BASE_PINS = {"a": "' + "0" * 64 + '"}\nBASE_PINS = {}\n')
+            with self.assertRaisesRegex(ValueError, "duplicated"):
+                check.declared_pins(dup)
+            text = _workflow_text()
+            anchor = "  PINNED_CHECKER_SHA256: "
+            idx = text.index(anchor)
+            eol = text.index("\n", idx)
+            doubled = text[:eol] + "\n  PINNED_CHECKER_SHA256: " + "0" * 64 + text[eol:]
+            with self.assertRaisesRegex(ValueError, "duplicated"):
+                check.declared_checker_pin(doubled)
 
 
 if __name__ == "__main__":

@@ -20,6 +20,11 @@ name: Capability Gate Contract
 # Dependence note: the base fetch below runs without stored credentials,
 # which succeeds because this repository is public; a private setting
 # would need an explicit token for that step.
+# Residual acceptance: the head checkout opts out of the v7 pwn-request
+# guard to materialize fork code in pull_request_target; head files are
+# only hashed/parsed (never executed) and the running checker is always
+# base-owned, but the checkout/git machinery itself touches the
+# attacker-controlled tree. No head-code execution path was found.
 
 on:
   pull_request_target:
@@ -38,7 +43,7 @@ env:
   # Baseline hash of the checker script itself. The checker cannot pin
   # itself, so the base-owned workflow carries the baseline and passes it as
   # argv[1]; a same-PR checker change declares its new hash here.
-  PINNED_CHECKER_SHA256: 483c8c21ac6029d969cc4436d64b55caa9f75fd1b837724a81006c307989a7c9
+  PINNED_CHECKER_SHA256: 4451537600e8f220e8fd3f33d265e8726b4f2c7a284b91c25891a5ba52c1b9bf
 
 jobs:
   gate-contract:

@@ -28,11 +28,15 @@ export interface CustomerRecord {
  * claim alone proves nothing — an account carrying a victim's
  * address must never link or spend as their guest row — and the
  * gate covers the byUserId hit too, so a row claimed before this
- * fix stays unspendable. Mirrors resolvePrimaryWalletIdentity's
- * `email_confirmed_at` gate: app logins (email OTP, Google, Apple)
- * always verify, so no legit session changes behavior, and the
- * gate holds under either hosted-confirmation setting. Every
- * caller already fails closed on null.
+ * fix stays unspendable. Either Supabase-confirmed identifier
+ * opens the authoritative user_id lookup: verified-email sessions
+ * AND verified-phone sessions (phone-auth storefront logins carry
+ * no email; the session route links their customer row by user_id
+ * via claim_customer_on_phone_auth — Codex R116 P1). The EMAIL
+ * fallback still requires a verified email: a phone-confirmed
+ * session with an unverified address attached must never link or
+ * spend as that address's row. Every caller already fails closed
+ * on null.
  *
  * Extracted from `vtu-pending-transaction.ts` per the 300-line Boy
  * Scout Rule (Codex R63 6ruGlr); the preparation module re-exports
@@ -56,7 +60,9 @@ export async function resolveVtuCustomer({
   strictLookups?: boolean;
   user: User;
 }) {
-  if (!user.email_confirmed_at || !user.email) {
+  const emailVerified = Boolean(user.email_confirmed_at && user.email);
+  const phoneVerified = Boolean(user.phone_confirmed_at && user.phone);
+  if (!emailVerified && !phoneVerified) {
     return null;
   }
   const { data: byUserId, error: byUserIdError } = await supabase
@@ -75,7 +81,10 @@ export async function resolveVtuCustomer({
     return byUserId as CustomerRecord;
   }
 
-  if (!user.email) {
+  // The email fallback needs a VERIFIED email — not just a claim. A
+  // phone-verified session carrying an unverified address must not
+  // link or spend as that address's row.
+  if (!emailVerified || !user.email) {
     return null;
   }
 

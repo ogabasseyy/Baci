@@ -16,6 +16,14 @@ export const VTU_REFUND_SKIPPED_KEY = 'refundSkipped';
 /** refundSkipped value: skipped for lack of collection evidence. */
 export const VTU_REFUND_SKIPPED_NO_COLLECTION = 'no_collection_evidence';
 
+/**
+ * refundSkipped value: the wallet-race branch ran with no card leg
+ * (Codex R116 P2) — the debit RPC rejected before charging anything,
+ * so no refund RPC ran and zero funds moved. Skipped, NOT issued:
+ * clients must report no-charge, never "refunded".
+ */
+export const VTU_REFUND_SKIPPED_NO_CHARGE = 'no_charge';
+
 /** Minimal row shape the evidence check needs. */
 export interface VtuCollectionEvidenceRow {
   customer_id?: string | null;

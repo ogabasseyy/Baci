@@ -19,7 +19,7 @@ import {
   VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY,
 } from '@/lib/vtu-metadata-fields';
 import { throwVtuPersistenceError } from '@/lib/vtu-persistence-error';
-import { throwIfVtuRefundUnconfirmed } from '@/lib/vtu-refund-guard';
+import { throwUnlessRefundSkippedWithoutCollection } from '@/lib/vtu-refund-guard';
 
 /** Minimal row shape (structural; the fulfillment row satisfies it). */
 export interface ConcurrentFailedRefundRow {
@@ -62,10 +62,15 @@ export async function resolveConcurrentFailedVtuTransaction({
   // legacy and never collected).
   const refundMetadata = { ...(row.metadata ?? {}) };
   const refund = await issueRefund(refundMetadata);
-  throwIfVtuRefundUnconfirmed({
+  // Skip-aware (Codex R116 P2): a no-charge/no-evidence marked row
+  // has nothing to confirm — throwing here would 500-loop a
+  // terminally failed row. Unmarked rows delegate to the strict
+  // unconfirmed check.
+  throwUnlessRefundSkippedWithoutCollection({
     row,
     refundIssued: refund.refundIssued,
     refundedAmount: refund.refundedAmount,
+    refundMetadata,
     failedMessage: row.error_message ?? undefined,
     failedMetadata: getSafeMetadataDiagnostics(refundMetadata),
     message: `Unable to confirm VTU refund before returning concurrent failed purchase for ${row.id}`,

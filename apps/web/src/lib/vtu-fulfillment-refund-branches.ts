@@ -2,6 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VtuTransactionRow } from '@/lib/vtu-fulfillment';
 import { setMetadataValue } from '@/lib/vtu-metadata-fields';
 import {
+  VTU_REFUND_SKIPPED_KEY,
+  VTU_REFUND_SKIPPED_NO_CHARGE,
+} from '@/lib/vtu-refund-collection-evidence';
+import {
   getVtuProviderLabel,
   type PaymentSplit,
 } from '@/lib/vtu-payment-split';
@@ -49,6 +53,13 @@ export function applyRefundMetadata(
   metadataChanged =
     setMetadataValue(metadata, 'refundContext', refundContextLabel) ||
     metadataChanged;
+  // Issuing supersedes any prior pass's skip verdict (a retry that
+  // debited after a no-charge race really did collect): a stale
+  // marker alongside refundIssued would lie to future readers.
+  if (VTU_REFUND_SKIPPED_KEY in metadata) {
+    delete metadata[VTU_REFUND_SKIPPED_KEY];
+    metadataChanged = true;
+  }
   return metadataChanged;
 }
 
@@ -138,16 +149,18 @@ export async function refundHybridWalletRace({
   paymentSplit: PaymentSplit;
 }): Promise<RefundBranchResult> {
   const guardStatus = expectedStatus ?? row.status;
-  // Wallet-only race (paymentSplit.card === 0): nothing to refund. Mark
-  // the row refunded for visibility but do NOT call the refund RPC — the
-  // wallet was never debited and no gateway charge was collected.
+  // Wallet-only race (paymentSplit.card <= 0): nothing was charged —
+  // the debit RPC rejected before debiting, and no gateway charge was
+  // collected. Record an explicit no-charge skip (Codex R116 P2), NOT
+  // an issued refund: no RPC runs, zero funds move, and clients must
+  // report no-charge rather than "refunded".
   if (paymentSplit.card <= 0) {
-    const metadataChanged = applyRefundMetadata(
+    const metadataChanged = setMetadataValue(
       metadata,
-      0,
-      'wallet_only_race'
+      VTU_REFUND_SKIPPED_KEY,
+      VTU_REFUND_SKIPPED_NO_CHARGE
     );
-    return { metadataChanged, refundIssued: true, refundedAmount: 0 };
+    return { metadataChanged, refundIssued: false, refundedAmount: 0 };
   }
   const { error: raceRefundError } = await supabase.rpc(
     'refund_customer_wallet_for_vtu',

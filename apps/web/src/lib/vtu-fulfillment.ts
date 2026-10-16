@@ -53,6 +53,10 @@ import { getVtuProviderLabel, readPaymentSplit } from '@/lib/vtu-payment-split';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import { restoreInterruptedPreVendVtuRow } from '@/lib/vtu-pre-vend-recovery';
 import {
+  VTU_REFUND_SKIPPED_KEY,
+  VTU_REFUND_SKIPPED_NO_CHARGE,
+} from '@/lib/vtu-refund-collection-evidence';
+import {
   RetryableVtuError,
   throwIfVtuRefundUnconfirmed,
   throwUnlessRefundSkippedWithoutCollection,
@@ -2323,14 +2327,21 @@ export async function fulfillPendingVtuTransaction({
           // still reads pending (Codex R115 P1).
           expectedStatus: 'processing',
         });
+        // No-charge honesty (Codex R116 P2): the wallet-only arm
+        // charged nothing, so "payment refunded" would be a lie —
+        // report that no charge was made instead. First-party fixed
+        // text, covered by the safe flag set above.
+        const raceNoCharge =
+          raceMetadata[VTU_REFUND_SKIPPED_KEY] === VTU_REFUND_SKIPPED_NO_CHARGE;
         const failedPayload: {
           error_message: string;
           metadata: Record<string, unknown>;
           status: 'failed';
           transaction_id: string | null;
         } = {
-          error_message:
-            'Wallet balance changed during checkout — payment refunded.',
+          error_message: raceNoCharge
+            ? 'Wallet balance changed during checkout — no charge was made.'
+            : 'Wallet balance changed during checkout — payment refunded.',
           metadata: raceMetadata,
           status: 'failed',
           transaction_id: row.transaction_id,
@@ -2355,14 +2366,17 @@ export async function fulfillPendingVtuTransaction({
           // and re-driving would run it again with no record of the
           // first — a double refund. Pre-existing crash window,
           // unchanged by the pre-vend restore. EXCEPTION (Codex R91
-          // P2): the zero-amount wallet-only result proves the
-          // card<=0 branch ran, which issues NO refund RPC — nothing
-          // can double-run, so restore to marked pending and let the
-          // next replay/cron re-drive (balance re-checked; vends or
-          // fails cleanly) instead of stranding the retained key on
-          // processing forever (never-debited strands match no
-          // recovery predicate by design, R39).
-          if (raceRefund.refundIssued && raceRefund.refundedAmount <= 0) {
+          // P2): the no-charge marker proves the card<=0 branch ran,
+          // which issues NO refund RPC — nothing can double-run, so
+          // restore to marked pending and let the next replay/cron
+          // re-drive (balance re-checked; vends or fails cleanly)
+          // instead of stranding the retained key on processing
+          // forever (never-debited strands match no recovery
+          // predicate by design, R39).
+          if (
+            raceMetadata[VTU_REFUND_SKIPPED_KEY] ===
+            VTU_REFUND_SKIPPED_NO_CHARGE
+          ) {
             await restoreInterruptedPreVendVtuRow({
               // Fixed user-safe template (flagged safe inside the
               // restore) — the raw persist error stays in the server

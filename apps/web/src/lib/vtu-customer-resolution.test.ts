@@ -267,6 +267,77 @@ describe('resolveVtuCustomer', () => {
     expect(customer).toBeNull();
     expect(supabase.from).not.toHaveBeenCalled();
   });
+
+  it('resolves a verified phone-only session by user_id', async () => {
+    // Codex R116 P1: phone-auth storefront logins carry no email;
+    // the session route links their customer row by user_id, so a
+    // phone-confirmed session must reach the authoritative lookup.
+    const { customerUpdate, supabase } = createResolveCustomerSupabase({
+      byUserId: { ...linkedCustomer, email: null },
+    });
+
+    const customer = await resolveVtuCustomer({
+      merchantId: 'merchant-1',
+      supabase,
+      user: {
+        email: undefined,
+        email_confirmed_at: undefined,
+        id: 'user-1',
+        phone: '08012345678',
+        phone_confirmed_at: '2026-01-01T00:00:00.000Z',
+      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
+    });
+
+    expect(customer?.id).toBe('customer-1');
+    expect(customerUpdate).not.toHaveBeenCalled();
+  });
+
+  it('refuses the email fallback for a phone session with an unverified address', async () => {
+    // The email fallback needs a VERIFIED email: a phone-confirmed
+    // session carrying an unverified address must not link or spend
+    // as that address's guest row.
+    const { customerUpdate, supabase } = createResolveCustomerSupabase({
+      byEmail: {
+        ...linkedCustomer,
+        user_id: null,
+      },
+    });
+
+    const customer = await resolveVtuCustomer({
+      merchantId: 'merchant-1',
+      supabase,
+      user: {
+        email: 'customer@example.com',
+        email_confirmed_at: null,
+        id: 'user-1',
+        phone: '08012345678',
+        phone_confirmed_at: '2026-01-01T00:00:00.000Z',
+      } as unknown as Parameters<typeof resolveVtuCustomer>[0]['user'],
+    });
+
+    expect(customer).toBeNull();
+    expect(customerUpdate).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unconfirmed phone session without any lookup', async () => {
+    const { supabase } = createResolveCustomerSupabase({
+      byUserId: linkedCustomer,
+    });
+
+    const customer = await resolveVtuCustomer({
+      merchantId: 'merchant-1',
+      supabase,
+      user: {
+        email: undefined,
+        id: 'user-1',
+        phone: '08012345678',
+        phone_confirmed_at: undefined,
+      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
+    });
+
+    expect(customer).toBeNull();
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
 });
 
 describe('resolveVtuCustomer strictLookups', () => {

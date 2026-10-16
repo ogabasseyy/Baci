@@ -4801,6 +4801,45 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(skippedPayload?.metadata).not.toHaveProperty('refundIssued');
     });
 
+    it('returns terminal failed (no throw, no RPC) when replaying a no-charge race row', async () => {
+      // The wallet-race arm charged nothing and marked the row
+      // no_charge. A confirm-only replay must return failed without
+      // throwing (nothing to confirm) and without calling the refund
+      // RPC — and must NOT trip the kuda_failure dispatch invariant
+      // on the split-without-debit shape.
+      const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          status: 'failed',
+          metadata: {
+            paymentSplit: { card: 0, wallet: 1000 },
+            refundSkipped: 'no_charge',
+          },
+          error_message:
+            'Wallet balance changed during checkout — no charge was made.',
+        },
+        rpcImpl,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: false,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({ status: 'failed' });
+      expect(result).not.toHaveProperty('refundedToWallet');
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'refund_customer_wallet_for_vtu',
+        expect.any(Object)
+      );
+      expect(rpcImpl).not.toHaveBeenCalledWith(
+        'reverse_vtu_wallet_payment',
+        expect.any(Object)
+      );
+    });
+
     it('refunds (never skips) a failed row with a metadata-linked completed gateway transaction', async () => {
       // Twin of the skip test (Codex R54 6rrFRE): the legacy charge
       // route stored its VTU link in transactions.metadata, left
@@ -5136,6 +5175,69 @@ describe('fulfillPendingVtuTransaction', () => {
       expect(mockCheckTransactionStatus).not.toHaveBeenCalled();
       expect(mockPurchaseAirtime).not.toHaveBeenCalled();
       expect(mockPurchaseBill).not.toHaveBeenCalled();
+    });
+
+    it('re-drives a no-charge race row on retry (self-healing vend)', async () => {
+      // Nothing was charged, so the retry is a fresh attempt, not a
+      // double-credit: the claim proceeds (no ledger row), the debit
+      // re-checks the balance, and a funded wallet vends. The stale
+      // no-charge marker must be cleared when value moves.
+      mockCheckTransactionStatus.mockResolvedValueOnce({
+        message: 'Original attempt failed',
+        status: 'failed',
+      });
+      mockPurchaseAirtime.mockResolvedValue({
+        success: true,
+        message: 'ok',
+        transactionId: 'kuda-redrive-1',
+        amount: 1000,
+        status: 'successful',
+      });
+      const rpcImpl = vi.fn((name: string) => {
+        if (name === 'redeem_vtu_wallet_payment') {
+          return Promise.resolve({
+            data: [{ success: true }],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      });
+      const updatePayloads: unknown[] = [];
+      const supabase = createPendingTransactionSupabaseMock({
+        transactionRow: {
+          ...FAILED_ROW_BASE,
+          type: 'airtime',
+          network_provider: 'MTN',
+          biller_name: null,
+          biller_item_code: null,
+          customer_identifier: null,
+          transaction_id: null,
+          status: 'failed',
+          metadata: {
+            paymentSplit: { card: 0, wallet: 1000 },
+            refundSkipped: 'no_charge',
+          },
+          error_message:
+            'Wallet balance changed during checkout — no charge was made.',
+        },
+        rpcImpl,
+        updatePayloads,
+      });
+
+      const result = await fulfillPendingVtuTransaction({
+        retryFailed: true,
+        supabase,
+        transactionId: 'vtu-1',
+      });
+
+      expect(result).toMatchObject({
+        reference: 'VTU-123',
+        status: 'successful',
+      });
+      expect(rpcImpl).toHaveBeenCalledWith(
+        'redeem_vtu_wallet_payment',
+        expect.objectContaining({ p_amount: 1000 })
+      );
     });
 
     it('throws VtuPersistenceError when refund RPC succeeded but metadata persistence fails', async () => {
@@ -5981,6 +6083,11 @@ describe('fulfillPendingVtuTransaction', () => {
         'refund_customer_wallet_for_vtu',
         expect.anything()
       );
+      // No-charge honesty (Codex R116 P2): nothing was debited, so
+      // the copy must not claim a refund.
+      expect(result).toMatchObject({
+        error: 'Wallet balance changed during checkout — no charge was made.',
+      });
       // Pin: the row.status MUST be persisted as 'failed' with an
       // explanatory error_message — otherwise the row stays in
       // 'pending' forever and the next webhook call re-runs the whole
@@ -5991,6 +6098,17 @@ describe('fulfillPendingVtuTransaction', () => {
           error_message: expect.stringMatching(/wallet balance/i),
         })
       );
+      const failedPersist = updatePayloads.find(
+        (payload): payload is Record<string, unknown> =>
+          typeof payload === 'object' &&
+          payload !== null &&
+          (payload as Record<string, unknown>).status === 'failed'
+      );
+      const failedMetadata = failedPersist?.metadata as
+        | Record<string, unknown>
+        | undefined;
+      expect(failedMetadata?.refundSkipped).toBe('no_charge');
+      expect(failedMetadata?.refundIssued).toBeUndefined();
     });
 
     it('throws VtuPersistenceError when wallet debit RPC fails with a non-balance error (DB outage etc.)', async () => {

@@ -13,6 +13,7 @@
  */
 import {
   VTU_REFUND_SKIPPED_KEY,
+  VTU_REFUND_SKIPPED_NO_CHARGE,
   VTU_REFUND_SKIPPED_NO_COLLECTION,
 } from '@/lib/vtu-refund-collection-evidence';
 
@@ -82,10 +83,10 @@ export function throwIfVtuRefundUnconfirmed({
 
 /**
  * Refund confirmation for legacy card-only rows: skips the throw
- * when the row was deliberately skipped for lack of collection
- * evidence (those rows never collected, so there is nothing to
- * confirm), and delegates to `throwIfVtuRefundUnconfirmed`
- * otherwise.
+ * when the row was deliberately skipped — no collection evidence
+ * (those rows never collected) or no charge (the wallet-race arm
+ * charged nothing, Codex R116 P2) — so there is nothing to
+ * confirm. Delegates to `throwIfVtuRefundUnconfirmed` otherwise.
  *
  * Extracted from vtu-fulfillment.ts per the 300-line Boy Scout Rule
  * (Codex R81 P1).
@@ -108,7 +109,9 @@ export function throwUnlessRefundSkippedWithoutCollection({
   row: VtuRefundGuardRow;
 }): void {
   if (
-    refundMetadata[VTU_REFUND_SKIPPED_KEY] !== VTU_REFUND_SKIPPED_NO_COLLECTION
+    refundMetadata[VTU_REFUND_SKIPPED_KEY] !==
+      VTU_REFUND_SKIPPED_NO_COLLECTION &&
+    refundMetadata[VTU_REFUND_SKIPPED_KEY] !== VTU_REFUND_SKIPPED_NO_CHARGE
   ) {
     throwIfVtuRefundUnconfirmed({
       failedMessage,

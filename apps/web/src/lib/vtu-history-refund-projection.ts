@@ -6,7 +6,10 @@
  * success view polls these fields to decide when a failed purchase
  * is truly settled.
  */
-import { VTU_REFUND_SKIPPED_NO_COLLECTION } from '@/lib/vtu-refund-collection-evidence';
+import {
+  VTU_REFUND_SKIPPED_NO_CHARGE,
+  VTU_REFUND_SKIPPED_NO_COLLECTION,
+} from '@/lib/vtu-refund-collection-evidence';
 import { requiresVtuCustomerWalletRefund } from '@/lib/vtu-refund-guard';
 
 export interface HistoryRefundProjection {
@@ -21,11 +24,12 @@ export interface HistoryRefundProjection {
    */
   refund_pending: boolean;
   /**
-   * Failed + refund deliberately skipped (no collection evidence —
-   * nothing was taken, so no credit runs). Skipped rows are NOT
-   * pending (pollers must stop), but clients must NOT report them
-   * as refunded either: refundConfirmed requires pending === false
-   * AND skipped === false (Codex R110 P2).
+   * Failed + refund deliberately skipped (no collection evidence
+   * or wallet-race no-charge — nothing was taken, so no credit
+   * runs). Skipped rows are NOT pending (pollers must stop), but
+   * clients must NOT report them as refunded either:
+   * refundConfirmed requires pending === false AND skipped ===
+   * false (Codex R110 P2).
    */
   refund_skipped: boolean;
   /**
@@ -75,10 +79,13 @@ export function projectHistoryRefundFields({
   const totalRestored = cardLeg + walletLeg;
   // PostgREST returns numerics as strings; requires() needs a number.
   const amount = Number(row.amount);
-  // A deliberate no-evidence skip is terminally failed, not
-  // awaiting a refund: pollers must stop, not spin forever.
+  // A deliberate skip is terminally failed, not awaiting a
+  // refund: pollers must stop, not spin forever. Both reasons —
+  // no collection evidence and wallet-race no-charge (R116 P2) —
+  // mean nothing is owed.
   const refundSkipped =
-    shape.refundSkipped === VTU_REFUND_SKIPPED_NO_COLLECTION;
+    shape.refundSkipped === VTU_REFUND_SKIPPED_NO_COLLECTION ||
+    shape.refundSkipped === VTU_REFUND_SKIPPED_NO_CHARGE;
   return {
     refund_skipped: status === 'failed' && !refundIssued && refundSkipped,
     refund_pending:

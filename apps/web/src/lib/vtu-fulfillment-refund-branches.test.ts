@@ -52,6 +52,19 @@ describe('applyRefundMetadata', () => {
     expect(metadata.refundContext).toBe('card_only');
     expect(typeof metadata.refundedAt).toBe('string');
   });
+
+  it('clears a stale skip marker: issuing supersedes the prior pass verdict', () => {
+    // A retry that debited after a no-charge race really collected;
+    // leaving refundSkipped alongside refundIssued would lie to
+    // future readers (guards exempt marked rows from confirmation).
+    const metadata: Record<string, unknown> = { refundSkipped: 'no_charge' };
+
+    const changed = applyRefundMetadata(metadata, 400, 'card_only');
+
+    expect(changed).toBe(true);
+    expect(metadata.refundIssued).toBe(true);
+    expect(metadata).not.toHaveProperty('refundSkipped');
+  });
 });
 
 describe('refundHybridWalletRace', () => {
@@ -59,7 +72,7 @@ describe('refundHybridWalletRace', () => {
     vi.restoreAllMocks();
   });
 
-  it('marks wallet-only races refunded without calling the refund RPC', async () => {
+  it('records wallet-only races as a no-charge skip without calling the refund RPC', async () => {
     const { rpc, supabase } = createSupabase();
     const metadata: Record<string, unknown> = {};
 
@@ -70,12 +83,15 @@ describe('refundHybridWalletRace', () => {
       paymentSplit: { card: 0, wallet: 1000 },
     });
 
+    // No RPC ran and zero funds moved: skipped, NOT issued, so
+    // clients report no-charge rather than "refunded" (R116 P2).
     expect(result).toEqual({
       metadataChanged: true,
-      refundIssued: true,
+      refundIssued: false,
       refundedAmount: 0,
     });
-    expect(metadata.refundContext).toBe('wallet_only_race');
+    expect(metadata.refundSkipped).toBe('no_charge');
+    expect(metadata.refundIssued).toBeUndefined();
     expect(rpc).not.toHaveBeenCalled();
   });
 

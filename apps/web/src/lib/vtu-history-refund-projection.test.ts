@@ -22,7 +22,11 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'failed',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: 1000 });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: 1000,
+    });
   });
 
   it('reports the full restoration for wallet-only failures', () => {
@@ -40,7 +44,11 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'failed',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: 1000 });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: 1000,
+    });
   });
 
   it('flags failed debited rows with no issued refund as pending', () => {
@@ -53,7 +61,11 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'failed',
       })
-    ).toEqual({ refund_pending: true, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: true,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
   });
 
   it('keeps card-only failures pending until refundCardOnly lands', () => {
@@ -66,7 +78,11 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'failed',
       })
-    ).toEqual({ refund_pending: true, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: true,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
     // Wallet-race split rows without the debit marker: the card leg
     // is still owed until the race refund issues.
     expect(
@@ -75,7 +91,11 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'failed',
       })
-    ).toEqual({ refund_pending: true, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: true,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
   });
 
   it('clears pending for no-evidence skips: terminally failed, not owed', () => {
@@ -88,7 +108,30 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'failed',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: true, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: true,
+      refunded_to_wallet: null,
+    });
+  });
+
+  it('clears pending for wallet-race no-charge skips', () => {
+    // The race arm charged nothing, so no refund RPC ran: skipped,
+    // not pending, and never reported as refunded (R116 P2).
+    expect(
+      projectHistoryRefundFields({
+        metadata: {
+          paymentSplit: { card: 0, wallet: 1000 },
+          refundSkipped: 'no_charge',
+        },
+        row: CHECKOUT_ROW,
+        status: 'failed',
+      })
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: true,
+      refunded_to_wallet: null,
+    });
   });
 
   it('never flags rows that require no refund as pending', () => {
@@ -100,7 +143,11 @@ describe('projectHistoryRefundFields', () => {
         row: { ...CHECKOUT_ROW, source: 'admin' },
         status: 'failed',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
     // Zero amounts and missing customers are refund-guard rejects.
     expect(
       projectHistoryRefundFields({
@@ -108,14 +155,22 @@ describe('projectHistoryRefundFields', () => {
         row: { ...CHECKOUT_ROW, amount: 0 },
         status: 'failed',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
     expect(
       projectHistoryRefundFields({
         metadata,
         row: { ...CHECKOUT_ROW, customer_id: null },
         status: 'failed',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
     // PostgREST numerics arrive as strings — still a real amount.
     expect(
       projectHistoryRefundFields({
@@ -123,7 +178,11 @@ describe('projectHistoryRefundFields', () => {
         row: { ...CHECKOUT_ROW, amount: '1000' },
         status: 'failed',
       })
-    ).toEqual({ refund_pending: true, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: true,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
   });
 
   it('returns null when nothing was restored', () => {
@@ -135,7 +194,11 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'failed',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
   });
 
   it('never flags non-failed rows as pending', () => {
@@ -145,14 +208,22 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'successful',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
     expect(
       projectHistoryRefundFields({
         metadata: null,
         row: CHECKOUT_ROW,
         status: 'processing',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
   });
 
   it('tolerates malformed metadata', () => {
@@ -167,6 +238,10 @@ describe('projectHistoryRefundFields', () => {
         row: CHECKOUT_ROW,
         status: 'failed',
       })
-    ).toEqual({ refund_pending: false, refund_skipped: false, refunded_to_wallet: null });
+    ).toEqual({
+      refund_pending: false,
+      refund_skipped: false,
+      refunded_to_wallet: null,
+    });
   });
 });

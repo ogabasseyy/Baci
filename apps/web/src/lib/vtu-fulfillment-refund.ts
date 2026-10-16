@@ -6,6 +6,7 @@ import { throwVtuPersistenceError } from '@/lib/vtu-persistence-error';
 import {
   shouldSkipRefundWithoutCollectionEvidence,
   VTU_REFUND_SKIPPED_KEY,
+  VTU_REFUND_SKIPPED_NO_CHARGE,
   VTU_REFUND_SKIPPED_NO_COLLECTION,
 } from '@/lib/vtu-refund-collection-evidence';
 import {
@@ -38,9 +39,10 @@ function reconstructReplayRefundTotal({
       return paymentSplit.wallet + persisted;
     }
   }
-  // Every other branch (card_only, wallet_race / wallet_only_race,
-  // ledger sync) persists exactly what was restored. Legacy rows
-  // refunded before refundAmount existed fall back to the total.
+  // Every other branch (card_only, wallet_race, ledger sync)
+  // persists exactly what was restored. Legacy rows refunded before
+  // refundAmount existed fall back to the total. (The wallet-only
+  // race records a no-charge skip now, never an issued refund.)
   if (Number.isFinite(persisted)) {
     return persisted;
   }
@@ -144,6 +146,23 @@ export async function refundVtuToCustomerWallet({
 
   const paymentSplit = readPaymentSplit(metadata);
   const walletWasDebited = metadata.walletDebited === true;
+
+  if (
+    !walletWasDebited &&
+    paymentSplit &&
+    paymentSplit.card <= 0 &&
+    metadata[VTU_REFUND_SKIPPED_KEY] === VTU_REFUND_SKIPPED_NO_CHARGE
+  ) {
+    // A prior pass recorded that nothing was charged (wallet-race
+    // arm), this pass debited nothing either, and the split still
+    // has no card leg: terminally failed with nothing to confirm.
+    // Return without dispatching — the kuda_failure invariant
+    // branch below would otherwise throw on the
+    // split-without-debit shape. (When this pass DID debit, or the
+    // split gained a card leg, the marker is stale and dispatch
+    // proceeds normally — issuing clears it.)
+    return { metadataChanged: false, refundIssued: false, refundedAmount: 0 };
+  }
 
   // Dispatch by refund context. The branches were extracted into named
   // helpers so each can be reasoned about (and tested) in isolation. The

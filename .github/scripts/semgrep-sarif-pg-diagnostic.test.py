@@ -30,8 +30,9 @@ class DiagnosticTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = pathlib.Path(directory) / 'summary.json'
             def scan(arguments, **kwargs):
-                self.assertEqual(arguments[:8], ['semgrep', 'scan', '--strict', '--pro-intrafile',
-                                                '--config', 'auto', '--metrics', 'off'])
+                self.assertEqual(arguments[:6], ['semgrep', 'scan', '--strict', '--pro-intrafile',
+                                                '--config', 'auto'])
+                self.assertNotIn('--metrics', arguments)
                 self.assertNotIn('env', kwargs)  # existing CI token stays in inherited environment
                 raw_path = pathlib.Path(arguments[arguments.index('--json-output') + 1])
                 fixture = pathlib.Path(arguments[-1])
@@ -85,6 +86,30 @@ class DiagnosticTest(unittest.TestCase):
                         self.assertEqual(MODULE.run(output, pathlib.Path(directory)), 1)
                     self.assertNotIn(sentinel, output.read_text())
                     self.assertNotIn('nested', output.read_text())
+
+    def test_scanner_failures_keep_exit_status_and_fixed_failure_kind(self):
+        for outcome, report, expected_exit, kind in [
+            (2, None, 2, 'missing_report'),
+            (7, '{', 7, 'invalid_report'),
+            (0, '[]', 0, 'invalid_metadata'),
+            (OSError('PRIVATE_FAILURE'), None, None, 'launch_error'),
+            (MODULE.subprocess.TimeoutExpired('PRIVATE_FAILURE', 300), None, None, 'timeout'),
+        ]:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
+                output = pathlib.Path(directory) / 'summary.json'
+                def scan(arguments, **kwargs):
+                    if isinstance(outcome, Exception):
+                        raise outcome
+                    if report is not None:
+                        pathlib.Path(arguments[arguments.index('--json-output') + 1]).write_text(report)
+                    return type('Result', (), {'returncode': outcome})()
+                with patch.object(MODULE.subprocess, 'run', side_effect=scan):
+                    self.assertEqual(MODULE.run(output, pathlib.Path(directory)), 1)
+                saved = output.read_text()
+                self.assertNotIn('PRIVATE_FAILURE', saved)
+                summary = json.loads(saved)
+                self.assertEqual(summary['scanner_exit_code'], expected_exit)
+                self.assertEqual(summary['failure_kind'], kind)
 
     def test_workflow_requires_explicit_manual_input_and_preserves_full_scan(self):
         workflow = (ROOT / '.github/workflows/security.yml').read_text()

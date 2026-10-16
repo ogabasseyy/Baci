@@ -6,26 +6,24 @@ import { CONFIG } from '@/lib/config';
 const PLATFORM_API_ROOTS: Record<string, string> = {
   'api.usebaci.com': 'usebaci.com',
   'api-staging.usebaci.com': 'usebaci.com',
+  'usebaci.com': 'usebaci.com',
 };
 
 /**
  * Root domain the web issuer mints continuation URLs under
  * (<slug>.<root>, mirroring NEXT_PUBLIC_ROOT_DOMAIN). Prefer the
  * explicit mobile mirror; otherwise derive only from the known
- * platform API hosts or a bare root host. Any other API host shape
- * (a custom api.<merchant-domain>, staging-api.*, regional hosts)
- * cannot be derived safely and fails closed, so operators must set
- * EXPO_PUBLIC_ROOT_DOMAIN for those deployments.
+ * platform API hosts. Any other API host shape (a custom
+ * api.<merchant-domain>, staging-api.*, regional hosts, or an
+ * arbitrary bare domain) cannot be derived safely and fails closed,
+ * so operators must set EXPO_PUBLIC_ROOT_DOMAIN for those deployments.
  */
 export function derivePlatformRootDomain(
   apiHostname: string,
   explicitRootDomain?: string
 ): string | undefined {
   if (explicitRootDomain) return explicitRootDomain;
-  const platformRoot = PLATFORM_API_ROOTS[apiHostname];
-  if (platformRoot) return platformRoot;
-  if (/^(?:api-staging|api)\./.test(apiHostname)) return undefined;
-  return apiHostname.split('.').length <= 2 ? apiHostname : undefined;
+  return PLATFORM_API_ROOTS[apiHostname];
 }
 
 export function redirectSystemPath({

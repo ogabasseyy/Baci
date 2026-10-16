@@ -93,13 +93,23 @@ describe('redirectSystemPath', () => {
     );
   });
 
-  it('uses a bare root API host as the root itself', () => {
+  it('uses the platform apex API host as its own root', () => {
     mockEnv.apiUrl = 'https://usebaci.com';
     redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
 
     expect(mockCapture).toHaveBeenCalledWith(
       '/cart/link#handoff=token',
       expect.objectContaining({ platformRootDomain: 'usebaci.com' })
+    );
+  });
+
+  it('does not guess a root from an arbitrary bare API host', () => {
+    mockEnv.apiUrl = 'https://shop.example.com';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: '' })
     );
   });
 });

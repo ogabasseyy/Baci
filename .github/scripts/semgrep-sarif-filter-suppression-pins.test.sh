@@ -14,6 +14,14 @@ fail=0
 # rationale the line above that. A passing pin therefore proves the
 # specific finding occurrence is suppressed, not just that the file
 # mentions the rule somewhere.
+# Focus-line dependency: the anchor is the rule's reported line. For
+# the multi-line calls (push-alerts below, initialize's Juicyway site)
+# the nosemgrep sits above the template-literal line, not the call
+# opener, because the unsafe-formatstring rule reports the format-string
+# argument. If a rule update re-anchors the reported line, the pin stays
+# green while the live scan un-suppresses (fail-closed): a re-fired gate
+# on one of these sites means re-check placement against the rule's
+# current reported line, not just restoring the comment.
 pinned_above() { # file anchor-literal rule-id
   local file="$ROOT/$1" anchor="$2" rule="$3" n line prev prev2
   n="$(grep -cF "$anchor" "$file")"

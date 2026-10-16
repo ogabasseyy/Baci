@@ -37,11 +37,17 @@ out="$("$SCRIPT" "$base")" || {
 }
 
 # 2. Bogus base (the #3695 condition: deleted/missing base ref) must
-# exit nonzero instead of yielding an empty scope.
-if out="$("$SCRIPT" origin/nonexistent 2>/dev/null)"; then
+# exit nonzero instead of yielding an empty scope. The diagnostic must
+# land on stderr: the workflow caller captures stdout via $(...), so a
+# stdout diagnostic would be swallowed into a discarded variable.
+if out="$("$SCRIPT" origin/nonexistent 2>"$t/stderr")"; then
   echo "::error::bogus base did not fail closed (printed [$out])"
   fail=1
 fi
+grep -q 'failing closed' "$t/stderr" || {
+  echo "::error::bogus base diagnostic missing from stderr (git fatal noise does not count)"
+  fail=1
+}
 
 # 3. A diff touching only out-of-scope paths is a legitimate empty
 # scope (the skip path), not a failure.

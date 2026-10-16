@@ -37,20 +37,25 @@ jest.mock('@/lib/read-persisted-checkout-generation', () => ({
 }));
 jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
   merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+  MERCHANT_PAYMENT_SETTINGS_STALE_MS: 5 * 60 * 1000,
 }));
 jest.mock('@/lib/query-client', () => ({
-  queryClient: { getQueryData: jest.fn() },
+  queryClient: { getQueryState: jest.fn() },
 }));
 
 import { queryClient } from '@/lib/query-client';
 import { resetCartLineSequence, useCartStore } from './cart-store';
 
-const getQueryData = queryClient.getQueryData as jest.Mock;
+const getQueryState = (queryClient as { getQueryState: unknown })
+  .getQueryState as jest.Mock;
 
 describe('cart-store', () => {
   beforeEach(() => {
-    getQueryData.mockReset();
-    getQueryData.mockReturnValue({ shipping_insurance_enabled: true });
+    getQueryState.mockReset();
+    getQueryState.mockReturnValue({
+      data: { shipping_insurance_enabled: true },
+      dataUpdatedAt: Date.now(),
+    });
     resetCartLineSequence();
     useCartStore.setState({
       items: [],
@@ -83,7 +88,7 @@ describe('cart-store', () => {
   });
 
   it('fails new lines to opt-out when the insurance setting is unknown', () => {
-    getQueryData.mockReturnValue(undefined);
+    getQueryState.mockReturnValue(undefined);
     useCartStore.getState().addItem({
       product_id: 'unknown-setting-phone',
       slug: 'unknown-setting-phone',
@@ -95,7 +100,7 @@ describe('cart-store', () => {
   });
 
   it('stamps lines added while unknown so the warm-up can reconcile them', () => {
-    getQueryData.mockReturnValue(undefined);
+    getQueryState.mockReturnValue(undefined);
     useCartStore.getState().addItem({
       product_id: 'pending-phone',
       slug: 'pending-phone',
@@ -109,7 +114,7 @@ describe('cart-store', () => {
   });
 
   it('reconciles pending lines when the setting arrives affirmative', () => {
-    getQueryData.mockReturnValue(undefined);
+    getQueryState.mockReturnValue(undefined);
     useCartStore.getState().addItem({
       product_id: 'pending-phone',
       slug: 'pending-phone',
@@ -126,7 +131,7 @@ describe('cart-store', () => {
   });
 
   it('clears pending lines without flipping when the setting arrives off', () => {
-    getQueryData.mockReturnValue(undefined);
+    getQueryState.mockReturnValue(undefined);
     useCartStore.getState().addItem({
       product_id: 'pending-phone',
       slug: 'pending-phone',
@@ -143,7 +148,7 @@ describe('cart-store', () => {
   });
 
   it('lets an explicit toggle win over later reconciliation', () => {
-    getQueryData.mockReturnValue(undefined);
+    getQueryState.mockReturnValue(undefined);
     useCartStore.getState().addItem({
       product_id: 'pending-phone',
       slug: 'pending-phone',

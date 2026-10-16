@@ -5,7 +5,7 @@ import {
 } from './fetch-order-items-with-offer-fallback';
 
 const COLUMNS =
-  'id, product_id, offer_id, offer_grade, offer_condition_notes, offer_labels_snapshotted';
+  'id, product_id, offer_id, offer_id_snapshot, offer_grade, offer_condition_notes, offer_labels_snapshotted';
 
 function schemaCacheError(column: string) {
   return {
@@ -21,7 +21,7 @@ describe('stripMissingOrderOfferColumns', () => {
         'offer_grade',
         'offer_labels_snapshotted',
       ])
-    ).toBe('id,product_id,offer_id,offer_condition_notes');
+    ).toBe('id,product_id,offer_id,offer_id_snapshot,offer_condition_notes');
   });
 
   it('returns the selector untouched when nothing is missing', () => {
@@ -35,7 +35,7 @@ describe('stripMissingOrderOfferColumns', () => {
         ['offer_id']
       )
     ).toBe(
-      'id,product_id,offer_grade,offer_condition_notes,offer_labels_snapshotted,products(name,images,condition)'
+      'id,product_id,offer_id_snapshot,offer_grade,offer_condition_notes,offer_labels_snapshotted,products(name,images,condition)'
     );
   });
 });
@@ -69,7 +69,7 @@ describe('fetchOrderItemsWithOfferFallback', () => {
     expect(run).toHaveBeenCalledTimes(2);
     expect(run).toHaveBeenNthCalledWith(
       2,
-      'id,product_id,offer_id,offer_grade,offer_condition_notes'
+      'id,product_id,offer_id,offer_id_snapshot,offer_grade,offer_condition_notes'
     );
     expect(result.data).toEqual([{ id: '1' }]);
   });
@@ -97,7 +97,7 @@ describe('fetchOrderItemsWithOfferFallback', () => {
     expect(run).toHaveBeenCalledTimes(3);
     expect(run).toHaveBeenNthCalledWith(
       3,
-      'id,product_id,offer_condition_notes,offer_labels_snapshotted'
+      'id,product_id,offer_id_snapshot,offer_condition_notes,offer_labels_snapshotted'
     );
     expect(result.data).toEqual([{ id: '1' }]);
   });

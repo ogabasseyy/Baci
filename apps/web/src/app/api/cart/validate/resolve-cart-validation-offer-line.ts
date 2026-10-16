@@ -1,4 +1,5 @@
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { getBaseLineValidationKey } from '@/hooks/cart/cart-validation-keys';
 import { getEffectiveStock, type StockLike } from '@/lib/product-stock';
 
 export function getCartValidationKey(
@@ -274,6 +275,12 @@ export function getInvalidOfferLineKey({
     typeof strictPoolUnits === 'number' &&
     aggregateSimpleQuantity > strictPoolUnits
   ) {
+    // Base lines need their own key shape: a bare product id means
+    // product-wide removal, which would also delete the voucher
+    // sibling this check explicitly exempted from the pool.
+    if (!offerId) {
+      return getBaseLineValidationKey(strId);
+    }
     return getCartValidationKey(strId, undefined, offerId);
   }
 

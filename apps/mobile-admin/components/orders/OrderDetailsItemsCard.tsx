@@ -42,6 +42,11 @@ export function OrderDetailsItemsCard({
         );
         const imageUrl = item.display_image_url ?? item.image_url;
         const isLastItem = index === items.length - 1;
+        // The live FK nulls when the merchant deletes the offer, but the
+        // immutable snapshot keeps the exact purchased identity for
+        // fulfillment; fall back to it so the ref never goes blank.
+        const offerRef = item.offer_id ?? item.offer_id_snapshot;
+        const offerDeleted = !item.offer_id && Boolean(offerRef);
 
         // The row is a View with separate press targets: nesting the
         // copy control inside the select pressable would stack two
@@ -154,7 +159,7 @@ export function OrderDetailsItemsCard({
                 size={20}
               />
             </Pressable>
-            {item.offer_id ? (
+            {offerRef ? (
               // Truncated for scannability: an 8-char prefix can collide
               // across offers, so the full id stays one tap away via
               // copy (and in the accessibility label for screen
@@ -162,7 +167,7 @@ export function OrderDetailsItemsCard({
               // stopPropagation is needed.
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Copy full offer reference ${String(item.offer_id)}`}
+                accessibilityLabel={`Copy full offer reference ${String(offerRef)}`}
                 // 12px text/icon alone is far below the 44pt minimum
                 // target; expand the touch area without moving layout.
                 hitSlop={12}
@@ -170,7 +175,7 @@ export function OrderDetailsItemsCard({
                   // Clipboard writes can reject (permissions, web
                   // denial): surface a failure instead of failing
                   // silent on a ref the truncated label never confirms.
-                  copyOfferRef(String(item.offer_id)).catch(() => {
+                  copyOfferRef(String(offerRef)).catch(() => {
                     Alert.alert(
                       'Copy failed',
                       'Could not copy the offer reference. Please try again.'
@@ -182,7 +187,8 @@ export function OrderDetailsItemsCard({
                 <Text
                   style={[styles.itemVariant, { color: colors.textSecondary }]}
                 >
-                  ref {String(item.offer_id).slice(0, 8)}
+                  ref {String(offerRef).slice(0, 8)}
+                  {offerDeleted ? ' (deleted offer)' : ''}
                 </Text>
                 <Ionicons
                   color={colors.textSecondary}

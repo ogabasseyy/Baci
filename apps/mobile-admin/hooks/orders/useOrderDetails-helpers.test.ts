@@ -75,6 +75,36 @@ describe('mapOrderItems', () => {
     expect(result).toEqual([expect.objectContaining({ offer_id: 'offer-7' })]);
   });
 
+  it('carries the immutable offer snapshot for deleted-offer refs', () => {
+    const result = mapOrderItems([
+      {
+        condition: 'used',
+        has_assurance: null,
+        id: 'item-1',
+        image_url: null,
+        item_description: null,
+        name: 'Phone',
+        offer_id: null,
+        offer_id_snapshot: 'offer-7',
+        price: 80000,
+        product_match_status: 'linked',
+        product_id: 'product-1',
+        products: null,
+        quantity: 1,
+        variant_attributes: null,
+        variant_id: null,
+        variant_name: null,
+      },
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        offer_id: undefined,
+        offer_id_snapshot: 'offer-7',
+      }),
+    ]);
+  });
+
   it('carries the stored offer label snapshot for display', () => {
     const result = mapOrderItems([
       {

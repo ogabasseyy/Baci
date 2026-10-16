@@ -5,6 +5,7 @@ export interface OrderDetailsItem {
   condition?: string;
   display_condition?: string;
   offer_id?: string;
+  offer_id_snapshot?: string;
   offer_grade?: string;
   offer_condition_notes?: string;
   offer_labels_snapshotted?: boolean;

@@ -507,4 +507,59 @@ describe('storefront-cart-validation', () => {
       }),
     ]);
   });
+
+  it('removes only the base line on a base-scoped pool key, preserving vouchers', () => {
+    const result = applyValidationResults(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1-base',
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1-voucher',
+          quizAwardId: 'award-1',
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1::condition=used::offerId=offer-a',
+          condition: 'used',
+          offerId: 'offer-a',
+        }),
+      ],
+      {
+        invalidProductIds: ['product-1::base'],
+      }
+    );
+
+    expect(result.map((item) => item.cartItemId).sort()).toEqual([
+      'product-1-voucher',
+      'product-1::condition=used::offerId=offer-a',
+    ]);
+  });
+
+  it('still removes every line, vouchers included, on a dead-product bare id', () => {
+    const result = applyValidationResults(
+      [
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1-base',
+        }),
+        makeCartItem({
+          id: 'product-1',
+          cartItemId: 'product-1-voucher',
+          quizVoucherToken: 'tok-1',
+        }),
+        makeCartItem({
+          id: 'product-2',
+          cartItemId: 'product-2-base',
+        }),
+      ],
+      {
+        invalidProductIds: ['product-1'],
+      }
+    );
+
+    expect(result.map((item) => item.cartItemId)).toEqual(['product-2-base']);
+  });
 });

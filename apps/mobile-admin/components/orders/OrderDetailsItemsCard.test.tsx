@@ -294,6 +294,36 @@ describe('OrderDetailsItemsCard', () => {
     expect(screen.getByText('Offer: Grade A · Mint')).toBeInTheDocument();
   });
 
+  it('falls back to the immutable snapshot ref when the live offer was deleted', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount.toLocaleString('en-NG')}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: undefined,
+            offer_id_snapshot: '66666666-6666-4666-8666-666666666666',
+            offer_grade: 'A',
+            offer_condition_notes: 'Mint',
+            offer_labels_snapshotted: true,
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Offer: Grade A · Mint')).toBeInTheDocument();
+    expect(
+      screen.getByText('ref 66666666 (deleted offer)')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Copy full offer reference 66666666-6666-4666-8666-666666666666',
+      })
+    ).toBeInTheDocument();
+  });
+
   it('renders only the truncated ref when the offer labels are unresolved', () => {
     render(
       <OrderDetailsItemsCard

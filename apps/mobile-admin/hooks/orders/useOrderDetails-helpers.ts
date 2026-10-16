@@ -3,6 +3,7 @@ import { getJoinedRecord } from '@/lib/supabase-utils';
 
 interface OrderItemRow {
   offer_id?: string | null;
+  offer_id_snapshot?: string | null;
   offer_grade?: string | null;
   offer_condition_notes?: string | null;
   offer_labels_snapshotted?: boolean | null;
@@ -75,6 +76,7 @@ export function mapOrderItems(items: OrderItemRow[] | null | undefined) {
       image_url: item.image_url ?? undefined,
       name: itemName,
       offer_id: item.offer_id ?? undefined,
+      offer_id_snapshot: item.offer_id_snapshot ?? undefined,
       offer_grade: item.offer_grade ?? undefined,
       offer_condition_notes: item.offer_condition_notes ?? undefined,
       offer_labels_snapshotted: item.offer_labels_snapshotted ?? undefined,

@@ -36,6 +36,7 @@ const mockWarn = jest.fn();
 const mockRange =
   jest.fn<
     (...args: unknown[]) => Promise<{
+      data: Array<{ product_id: string }> | null;
       count: number | null;
       error: { message: string } | null;
     }>
@@ -116,7 +117,7 @@ describe('repriceCartItems', () => {
     mockGetOffers.mockReset();
     productQuery.in.mockResolvedValue({ data: [], error: null });
     setVariantOverrides({ data: [], error: null });
-    mockRange.mockResolvedValue({ count: 0, error: null });
+    mockRange.mockResolvedValue({ data: [], count: 0, error: null });
     mockGetOffers.mockResolvedValue({});
   });
 
@@ -696,7 +697,11 @@ describe('repriceCartItems', () => {
     mockGetOffers.mockResolvedValue({
       'offer-product': [{ id: 'offer-7', price: 280000 }],
     });
-    mockRange.mockResolvedValue({ count: 2, error: null });
+    mockRange.mockResolvedValue({
+      data: [{ product_id: 'offer-product' }],
+      count: 1,
+      error: null,
+    });
 
     const result = await repriceCartItems([offerLine], 'merchant-1');
 
@@ -704,6 +709,54 @@ describe('repriceCartItems', () => {
     expect(result.unavailable).toEqual([
       { id: 'offer-line', name: 'iPhone 13' },
     ]);
+    // One batched probe covers the whole cart.
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_storefront_product_variants',
+      { p_product_ids: ['offer-product'] },
+      { count: 'exact' }
+    );
+    expect(mockRange).toHaveBeenCalledTimes(1);
+  });
+
+  it('paginates the presence probe past a full page of rows', async () => {
+    const lineA = createCartItem({
+      id: 'line-a',
+      product_id: 'product-a',
+      offer_id: 'offer-a',
+      price: 280000,
+    });
+    const lineB = createCartItem({
+      id: 'line-b',
+      product_id: 'product-b',
+      offer_id: 'offer-b',
+      price: 280000,
+    });
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'product-a', price: 430000, has_condition_offers: true },
+        { id: 'product-b', price: 430000, has_condition_offers: true },
+      ],
+      error: null,
+    });
+    mockGetOffers.mockResolvedValue({
+      'product-a': [{ id: 'offer-a', price: 280000 }],
+      'product-b': [{ id: 'offer-b', price: 280000 }],
+    });
+    mockRange
+      .mockResolvedValueOnce({ data: [], count: 501, error: null })
+      .mockResolvedValueOnce({
+        data: [{ product_id: 'product-b' }],
+        count: 501,
+        error: null,
+      });
+
+    const result = await repriceCartItems([lineA, lineB], 'merchant-1');
+
+    expect(mockRange).toHaveBeenCalledTimes(2);
+    expect(mockRange).toHaveBeenNthCalledWith(1, 0, 499);
+    expect(mockRange).toHaveBeenNthCalledWith(2, 500, 999);
+    expect(result.priceById).toEqual({ 'line-a': 280000 });
+    expect(result.unavailable).toEqual([{ id: 'line-b', name: 'iPhone 13' }]);
   });
 
   it('skips offer lines when the live-variant probe fails', async () => {
@@ -723,6 +776,7 @@ describe('repriceCartItems', () => {
       'offer-product': [{ id: 'offer-7', price: 280000 }],
     });
     mockRange.mockResolvedValue({
+      data: null,
       count: null,
       error: { message: 'probe down' },
     });

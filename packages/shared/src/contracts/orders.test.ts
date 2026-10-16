@@ -114,6 +114,7 @@ describe('order column constants', () => {
         'image_url',
         'item_description',
         'offer_id',
+        'offer_id_snapshot',
         'offer_grade',
         'offer_condition_notes',
         'offer_labels_snapshotted',

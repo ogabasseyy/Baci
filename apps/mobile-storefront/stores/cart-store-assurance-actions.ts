@@ -33,9 +33,11 @@ export function createAssuranceActions(
             item.assurancePendingSetting === true
               ? {
                   ...item,
-                  hasAssurance: shippingInsuranceEnabled
-                    ? true
-                    : item.hasAssurance,
+                  // Falsy (disabled OR still-unknown-but-cleared) strips a
+                  // pending-add true to opted-out: no known merchant
+                  // service exists to cover the line, and the value was
+                  // never an explicit shopper toggle — just a default.
+                  hasAssurance: shippingInsuranceEnabled === true,
                   assurancePendingSetting: undefined,
                 }
               : item

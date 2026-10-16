@@ -1,6 +1,10 @@
 import { fetchWithCsrf } from '@/lib/api-client';
 import { logger } from '@/lib/logger';
 import type { CartItem } from './cart-types';
+import {
+  getBaseLineValidationKey,
+  isQuizVoucherLine,
+} from './cart-validation-keys';
 
 interface CartValidationResponse {
   invalidProductIds?: string[];
@@ -119,7 +123,32 @@ export const applyValidationResults = (
         item.variantId,
         item.offerId
       );
-      return !invalidIds.has(item.id) && !invalidIds.has(itemKey);
+      // An exact line-key match always removes — including voucher
+      // lines, whose key without an offer segment is the bare product
+      // id, so dead-product bare ids still clear them.
+      if (invalidIds.has(itemKey)) {
+        return false;
+      }
+      // Voucher lines redeem pre-reserved units outside every shared
+      // pool: exempt them from product-wide and sibling-line signals.
+      if (isQuizVoucherLine(item)) {
+        return true;
+      }
+      // A bare product id means the product itself is dead: remove
+      // every remaining line for it.
+      if (invalidIds.has(item.id)) {
+        return false;
+      }
+      // A base-line-scoped pool key removes only plain base lines —
+      // never variant, offer, or (above) voucher siblings.
+      if (
+        !item.variantId &&
+        !item.offerId &&
+        invalidIds.has(getBaseLineValidationKey(item.id))
+      ) {
+        return false;
+      }
+      return true;
     })
     .map((item) => {
       const priceChange = priceChanges.get(

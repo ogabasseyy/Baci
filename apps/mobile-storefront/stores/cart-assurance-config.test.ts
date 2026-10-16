@@ -8,23 +8,27 @@ jest.mock('@/lib/config', () => ({
 }));
 jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
   merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+  MERCHANT_PAYMENT_SETTINGS_STALE_MS: 5 * 60 * 1000,
 }));
 
-const mockGetQueryData = jest.fn();
+const mockGetQueryState = jest.fn();
 jest.mock('@/lib/query-client', () => ({
   get queryClient() {
-    return { getQueryData: mockGetQueryData };
+    return { getQueryState: mockGetQueryState };
   },
 }));
 
 describe('nativeAssurancePolicy', () => {
   beforeEach(() => {
     jest.resetModules();
-    mockGetQueryData.mockReset();
+    mockGetQueryState.mockReset();
   });
 
   it('resolves the live shipping-insurance toggle from the query cache', async () => {
-    mockGetQueryData.mockReturnValue({ shipping_insurance_enabled: true });
+    mockGetQueryState.mockReturnValue({
+      data: { shipping_insurance_enabled: true },
+      dataUpdatedAt: Date.now(),
+    });
     const { nativeAssurancePolicy: policy } = await import(
       './cart-assurance-config'
     );
@@ -33,11 +37,22 @@ describe('nativeAssurancePolicy', () => {
       merchantSlug: 'ogabassey',
       shippingInsuranceEnabled: true,
     });
-    expect(mockGetQueryData).toHaveBeenCalledWith(['test-payment-settings']);
+    expect(mockGetQueryState).toHaveBeenCalledWith(['test-payment-settings']);
+  });
+
+  it('fails a stale persisted restore to unknown so add-time defaults opt-out', async () => {
+    mockGetQueryState.mockReturnValue({
+      data: { shipping_insurance_enabled: true },
+      dataUpdatedAt: Date.now() - 24 * 60 * 60 * 1000,
+    });
+    const { nativeAssurancePolicy: policy } = await import(
+      './cart-assurance-config'
+    );
+    expect(policy().shippingInsuranceEnabled).toBeUndefined();
   });
 
   it('fails the setting to unknown when the cache read throws', async () => {
-    mockGetQueryData.mockImplementation(() => {
+    mockGetQueryState.mockImplementation(() => {
       throw new Error('QueryClient is not a constructor');
     });
     const { nativeAssurancePolicy: policy } = await import(

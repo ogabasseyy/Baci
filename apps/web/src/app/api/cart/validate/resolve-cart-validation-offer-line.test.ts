@@ -218,7 +218,7 @@ describe('getInvalidOfferLineKey', () => {
       strictPoolUnits: 1,
       parentEligible: true,
     };
-    expect(getInvalidOfferLineKey(base)).toBe(STR_ID);
+    expect(getInvalidOfferLineKey(base)).toBe(`${STR_ID}::base`);
     expect(
       getInvalidOfferLineKey({
         ...base,

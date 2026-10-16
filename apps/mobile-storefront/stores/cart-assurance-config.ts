@@ -1,5 +1,8 @@
 import type { PaymentSettings } from '@/hooks/useMerchantPaymentSettings';
-import { merchantPaymentSettingsQueryKey } from '@/hooks/useMerchantPaymentSettings';
+import {
+  MERCHANT_PAYMENT_SETTINGS_STALE_MS,
+  merchantPaymentSettingsQueryKey,
+} from '@/hooks/useMerchantPaymentSettings';
 import { CONFIG } from '@/lib/config';
 
 type NativeAssurancePolicy = {
@@ -16,9 +19,23 @@ function readCachedPaymentSettings(): PaymentSettings | undefined {
     // to unknown, and the shared policy fails unknown to opt-out.
     const { queryClient } =
       require('@/lib/query-client') as typeof import('@/lib/query-client');
-    return queryClient.getQueryData<PaymentSettings>(
+    const state = queryClient.getQueryState<PaymentSettings>(
       merchantPaymentSettingsQueryKey
     );
+    if (!state?.data) {
+      return undefined;
+    }
+    // Freshness-gated: the persister restores up to 24h-old successes, so
+    // a merchant toggle change would otherwise default new lines from a
+    // stale restore — and those lines would NOT be stamped pending, so no
+    // later reconciliation would correct them. Older than the query's own
+    // stale window reads as unknown (pending-stamped, reconciled fresh).
+    const updatedAt =
+      typeof state.dataUpdatedAt === 'number' ? state.dataUpdatedAt : 0;
+    if (Date.now() - updatedAt > MERCHANT_PAYMENT_SETTINGS_STALE_MS) {
+      return undefined;
+    }
+    return state.data;
   } catch {
     return undefined;
   }

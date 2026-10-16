@@ -62,13 +62,25 @@ export type OfferParentRow = {
   variant_model?: string | null;
 };
 
+type LiveVariantPresenceRow = {
+  product_id: string;
+};
+
+// Rows per presence-probe page. Carts hold few offer products with few
+// variants each, so one page almost always settles every candidate;
+// pathological variant counts paginate instead of stalling.
+const VARIANT_PRESENCE_PAGE_SIZE = 500;
+
 /**
- * Product ids with at least one live non-anchor variant, via the
- * anon-safe `get_storefront_product_variants` RPC (which already
- * excludes anchors — exactly the order RPC's NOT EXISTS semantics).
- * Direct `product_variants` reads are intentionally unavailable to
- * storefront clients. Probe failure fails open (`failed: true`) so
- * callers skip offer lines rather than guessing eligibility.
+ * Product ids with at least one live non-anchor variant, via a single
+ * batched call to the anon-safe `get_storefront_product_variants` RPC
+ * (which already excludes anchors — exactly the order RPC's NOT EXISTS
+ * semantics). Direct `product_variants` reads are intentionally
+ * unavailable to storefront clients. One round trip covers the whole
+ * cart however many offer products it holds; pagination only kicks in
+ * past a full page of rows, with early exit once every candidate is
+ * proven present. Probe failure fails open (`failed: true`) so callers
+ * skip offer lines rather than guessing eligibility.
  */
 async function fetchProductsWithLiveVariants(
   productIds: string[]
@@ -81,28 +93,46 @@ async function fetchProductsWithLiveVariants(
       )
     )
   );
-  for (const productId of unique) {
-    const { count, error } = await supabase
+  if (unique.length === 0) {
+    return { present, failed: false };
+  }
+  const candidates = new Set(unique);
+  let offset = 0;
+  for (;;) {
+    const { data, count, error } = await supabase
       .rpc(
         'get_storefront_product_variants',
-        { p_product_ids: [productId] },
+        { p_product_ids: unique },
         { count: 'exact' }
       )
-      .range(0, 0);
+      .range(offset, offset + VARIANT_PRESENCE_PAGE_SIZE - 1);
     if (
       error ||
       typeof count !== 'number' ||
       !Number.isSafeInteger(count) ||
-      count < 0
+      count < 0 ||
+      !Array.isArray(data)
     ) {
       log.warn('Reprice live-variant probe failed; skipping offer lines');
       return { present, failed: true };
     }
-    if (count > 0) {
-      present.add(productId);
+    for (const row of data as LiveVariantPresenceRow[]) {
+      if (
+        row &&
+        typeof row.product_id === 'string' &&
+        candidates.has(row.product_id)
+      ) {
+        present.add(row.product_id);
+      }
+    }
+    if (present.size >= unique.length) {
+      return { present, failed: false };
+    }
+    offset += VARIANT_PRESENCE_PAGE_SIZE;
+    if (offset >= count) {
+      return { present, failed: false };
     }
   }
-  return { present, failed: false };
 }
 
 /**

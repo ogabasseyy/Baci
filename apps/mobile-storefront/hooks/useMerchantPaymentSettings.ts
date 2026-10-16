@@ -98,11 +98,21 @@ export async function fetchMerchantPaymentSettings(): Promise<PaymentSettings> {
   return normalizePaymentSettings(isPaymentSettingsRow(data) ? data : null);
 }
 
+/**
+ * Freshness window for the payment-settings cache. The persisted cache
+ * restores up to 24h-old successes across sessions; assurance reads
+ * (add-time default, pending reconciliation) treat data older than this
+ * as unknown so a merchant toggle change cannot charge a withdrawn
+ * service from a stale restore. Single source: the query staleTime
+ * below and the synchronous cache readers share it.
+ */
+export const MERCHANT_PAYMENT_SETTINGS_STALE_MS = 5 * 60 * 1000;
+
 export function useMerchantPaymentSettings() {
   return useQuery({
     queryKey: merchantPaymentSettingsQueryKey,
     queryFn: fetchMerchantPaymentSettings,
-    staleTime: 5 * 60 * 1000,
+    staleTime: MERCHANT_PAYMENT_SETTINGS_STALE_MS,
   });
 }
 

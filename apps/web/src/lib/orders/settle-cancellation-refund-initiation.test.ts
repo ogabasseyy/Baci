@@ -161,4 +161,29 @@ describe('settleCancellationRefundInitiation', () => {
       })
     );
   });
+
+  it('quarantines an uncovered foreign-currency mismatch instead of completing', async () => {
+    // The withheld quarantine only takes currency-matching legs, so
+    // a foreign mismatch with no refund behind it would fall past
+    // both gates and complete with the anomalous leg uncovered. The
+    // currency gate quarantines every foreign mismatch, not only
+    // settled ones.
+    const foreignLeg = { ...paystackPayment, currency: 'USD', id: 'payment-9' };
+    vi.mocked(quarantineRefund).mockRejectedValueOnce(
+      new DeliveryUncertainError('Payment currency requires review')
+    );
+    const error = await settleCancellationRefundInitiation(
+      input({ mismatchedTransactions: [foreignLeg] as never })
+    ).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(DeliveryUncertainError);
+    expect(quarantineWithheldCancellationRefundLegs).toHaveBeenCalledWith(
+      expect.objectContaining({ mismatchedTransactions: [] })
+    );
+    expect(quarantineRefund).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: 'Payment currency requires review before refund',
+        transactions: [foreignLeg],
+      })
+    );
+  });
 });

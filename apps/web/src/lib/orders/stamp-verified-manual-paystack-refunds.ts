@@ -1,7 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PairedProviderRefund } from './check-cancellation-refund-provider';
 import { isUnverifiedManualPaystackRefund } from './is-unverified-manual-paystack-refund';
+import { normalizeRefundMoneyField } from './normalize-refund-money-field';
 
 interface StampableRefundRow {
+  amount: number;
+  currency?: string | null;
   gateway?: unknown;
   id: string;
   metadata: unknown;
@@ -19,21 +23,26 @@ interface StampableRefundRow {
  * the row counts. Already-stamped rows are skipped so retries and
  * re-verifications never refire the trigger. Throws on a failed
  * write: without the stamp the next run quarantines the leg again,
- * so fail loudly and let the retry re-verify instead. The paired
- * provider refund id persists per row (listing order; manuals pair
- * by fungible amount) so the finalized-contradiction sweep can
- * recheck stamped manuals by stored provider id. Rows without a
- * paired id keep the status-only stamp.
+ * so fail loudly and let the retry re-verify instead. Each row
+ * consumes the pair matching its own kobo amount and leg currency
+ * (multiset, so duplicate amounts pair one-to-one): provider
+ * listings need not arrive in ledger order, so positional pairing
+ * would cross-assign ids when amounts differ per row — and the
+ * finalized-contradiction sweep would then reject both associations
+ * as evidence mismatches. Rows without a pair keep the status-only
+ * stamp.
  */
 export async function stampVerifiedManualPaystackRefunds({
+  currency,
   linkedPaymentId,
-  providerRefundIds = [],
+  pairedProviderRefunds = [],
   refundRows,
   supabase,
   transactionId,
 }: {
+  currency: string;
   linkedPaymentId: (row: { metadata: unknown }) => string | null;
-  providerRefundIds?: number[];
+  pairedProviderRefunds?: PairedProviderRefund[];
   refundRows: StampableRefundRow[];
   supabase: Pick<SupabaseClient, 'from'>;
   transactionId: string;
@@ -44,12 +53,28 @@ export async function stampVerifiedManualPaystackRefunds({
       linkedPaymentId(row) === transactionId &&
       isUnverifiedManualPaystackRefund(row)
   );
-  for (const [index, row] of verified.entries()) {
+  const legCurrency = normalizeRefundMoneyField(currency);
+  const remainingPairs = [...pairedProviderRefunds];
+  for (const row of verified) {
     const metadata =
       row.metadata !== null && typeof row.metadata === 'object'
         ? row.metadata
         : {};
-    const providerRefundId = providerRefundIds[index];
+    // Same kobo formula the check paired with: only an exact
+    // same-currency amount consumes a pair, so a row the check never
+    // paired (foreign currency, unparseable amount) can never steal
+    // another row's proof.
+    const rowKobo = Math.round(Number(row.amount) * 100);
+    const pairIndex =
+      !Number.isSafeInteger(rowKobo) ||
+      rowKobo <= 0 ||
+      normalizeRefundMoneyField(row.currency) !== legCurrency
+        ? -1
+        : remainingPairs.findIndex((pair) => pair.kobo === rowKobo);
+    const providerRefundId =
+      pairIndex === -1
+        ? undefined
+        : remainingPairs.splice(pairIndex, 1)[0]?.providerRefundId;
     const { error } = await supabase
       .from('transactions')
       .update({

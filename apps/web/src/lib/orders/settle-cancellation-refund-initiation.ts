@@ -110,22 +110,29 @@ export async function settleCancellationRefundInitiation({
   // finalize, with no reclaimable row. Quarantine after clean
   // initiation instead of completing silently. Manual and budget
   // deferrals above take precedence: the resumed run reaches this
-  // branch once nothing else is outstanding.
-  const foreignSettledLegs = [
-    ...initiationTransactions,
-    ...pendingMismatched,
-  ].filter(
+  // branch once nothing else is outstanding. Uncovered foreign
+  // mismatches quarantine here too: the withheld call above only
+  // takes currency-matching legs, and refunded-only scoping would
+  // let an anomalous uncovered leg complete with no reclaimable
+  // row. Initiation legs stay refund-scoped (a clean foreign leg
+  // initiates above); mismatched legs never initiate, so every
+  // foreign one quarantines regardless of coverage.
+  const pendingMismatchedIds = new Set(
+    pendingMismatched.map((transaction) => transaction.id)
+  );
+  const foreignLegs = [...initiationTransactions, ...pendingMismatched].filter(
     (transaction) =>
-      refundedPaymentIds.has(transaction.id) &&
+      (refundedPaymentIds.has(transaction.id) ||
+        pendingMismatchedIds.has(transaction.id)) &&
       (!normalizeRefundMoneyField(transaction.currency) ||
         normalizeRefundMoneyField(transaction.currency) !== orderCurrency)
   );
-  if (foreignSettledLegs.length > 0) {
+  if (foreignLegs.length > 0) {
     await quarantineRefund({
       order,
       reason: 'Payment currency requires review before refund',
       supabase,
-      transactions: foreignSettledLegs,
+      transactions: foreignLegs,
     });
   }
   return { refundIds };

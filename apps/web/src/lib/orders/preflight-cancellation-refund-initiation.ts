@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { PairedProviderRefund } from '@/lib/orders/check-cancellation-refund-provider';
 import type { GatewayPaymentTransaction } from '@/lib/orders/gateway-payment-transaction';
 import { isUnverifiedManualPaystackRefund } from '@/lib/orders/is-unverified-manual-paystack-refund';
 import { normalizeRefundMoneyField } from '@/lib/orders/normalize-refund-money-field';
@@ -209,7 +210,10 @@ export async function preflightCancellationRefundInitiation({
   const verifyLeg = async (
     transaction: GatewayPaymentTransaction & { gateway_reference: string },
     reserveInitiation: boolean
-  ): Promise<{ verified: boolean; pairedProviderRefundIds: number[] }> => {
+  ): Promise<{
+    verified: boolean;
+    pairedProviderRefunds: PairedProviderRefund[];
+  }> => {
     const result = await schedulePreflightProviderVerification({
       deadlineMs,
       hasVerifiedPrefix: hasVerifiedPrefix(),
@@ -246,8 +250,9 @@ export async function preflightCancellationRefundInitiation({
       break;
     }
     await stampVerifiedManualPaystackRefunds({
+      currency: transaction.currency || order.currency || 'NGN',
       linkedPaymentId,
-      providerRefundIds: manualResult.pairedProviderRefundIds,
+      pairedProviderRefunds: manualResult.pairedProviderRefunds,
       refundRows: refundRows ?? [],
       supabase,
       transactionId: transaction.id,

@@ -44,7 +44,7 @@ describe('schedulePreflightProviderVerification', () => {
         schedulePreflightProviderVerification(
           input({ deadlineMs: start + 500_000 })
         )
-      ).resolves.toEqual({ verified: true, pairedProviderRefundIds: [] });
+      ).resolves.toEqual({ verified: true, pairedProviderRefunds: [] });
     } finally {
       vi.restoreAllMocks();
     }
@@ -68,7 +68,7 @@ describe('schedulePreflightProviderVerification', () => {
         schedulePreflightProviderVerification(
           input({ deadlineMs: start + 40_000 })
         )
-      ).resolves.toEqual({ verified: true, pairedProviderRefundIds: [] });
+      ).resolves.toEqual({ verified: true, pairedProviderRefunds: [] });
     } finally {
       vi.restoreAllMocks();
     }
@@ -99,7 +99,7 @@ describe('schedulePreflightProviderVerification', () => {
         schedulePreflightProviderVerification(
           input({ deadlineMs: start + 80_000, reserveInitiation: true })
         )
-      ).resolves.toEqual({ verified: true, pairedProviderRefundIds: [] });
+      ).resolves.toEqual({ verified: true, pairedProviderRefunds: [] });
     } finally {
       vi.restoreAllMocks();
     }
@@ -127,12 +127,15 @@ describe('schedulePreflightProviderVerification', () => {
     );
   });
 
-  it('passes paired provider ids through on success', async () => {
-    vi.mocked(checkCancellationRefundProvider).mockResolvedValue([7, 8]);
+  it('passes paired provider refunds through on success', async () => {
+    vi.mocked(checkCancellationRefundProvider).mockResolvedValue([{ kobo: 100, providerRefundId: 7 }, { kobo: 100, providerRefundId: 8 }]);
     const result = await schedulePreflightProviderVerification(input({}));
     expect(result).toEqual({
       verified: true,
-      pairedProviderRefundIds: [7, 8],
+      pairedProviderRefunds: [
+        { kobo: 100, providerRefundId: 7 },
+        { kobo: 100, providerRefundId: 8 },
+      ],
     });
   });
 
@@ -143,7 +146,7 @@ describe('schedulePreflightProviderVerification', () => {
         hasVerifiedPrefix: true,
       })
     );
-    expect(result).toEqual({ verified: false, pairedProviderRefundIds: [] });
+    expect(result).toEqual({ verified: false, pairedProviderRefunds: [] });
     expect(checkCancellationRefundProvider).not.toHaveBeenCalled();
     expect(tryResetCancellationSideEffectAttempts).not.toHaveBeenCalled();
   });
@@ -170,7 +173,7 @@ describe('schedulePreflightProviderVerification', () => {
     );
     // Settle initiates the verified prefix and resets on its own
     // deferred resume; no throw, no double reset here.
-    expect(result).toEqual({ verified: false, pairedProviderRefundIds: [] });
+    expect(result).toEqual({ verified: false, pairedProviderRefunds: [] });
     expect(tryResetCancellationSideEffectAttempts).not.toHaveBeenCalled();
   });
 

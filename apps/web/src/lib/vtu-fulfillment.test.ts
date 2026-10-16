@@ -113,6 +113,20 @@ interface PendingTransactionMockOptions {
    * R103 P2) — every other select is unaffected.
    */
   metadataRereadError?: { message: string };
+  /**
+   * Rows returned by the claim_failed_vtu_retry RPC (Codex R114).
+   * Defaults to a successful claim so existing retry tests keep
+   * vending; script a refusal to test the lost-race paths.
+   */
+  retryClaimData?: Record<string, unknown>[] | null;
+  retryClaimError?: { message: string } | null;
+  /**
+   * When set, customer_wallet_transactions reads serve this sequence
+   * (then repeat the last) instead of existingCustomerCashback —
+   * models a refund landing between the retry pre-check and the
+   * post-claim re-read (Codex R114).
+   */
+  ledgerReadSequence?: ({ amount: number } | null)[];
   updatePayloads?: unknown[];
 }
 
@@ -218,7 +232,17 @@ function createPendingTransactionSupabaseMock({
   updateErrors = {},
   updatePayloads = [],
   metadataRereadError,
+  retryClaimData = [
+    {
+      claimed: true,
+      claimed_updated_at: '2026-10-16T00:00:00.000Z',
+      refusal_reason: null,
+    },
+  ],
+  retryClaimError = null,
+  ledgerReadSequence,
 }: PendingTransactionMockOptions): SupabaseStub {
+  let ledgerReadIndex = 0;
   let purchaseUpdateAttempt = 0;
   // The first marker-shaped write always takes the submissionMarker
   // slot (unscripted → success: the normal pre-vend marker). Later
@@ -440,7 +464,17 @@ function createPendingTransactionSupabaseMock({
       }
 
       if (table === 'customer_wallet_transactions') {
-        const chain = makeMaybeSingleChain(existingCustomerCashbackMaybeSingle);
+        const ledgerMaybeSingle = ledgerReadSequence
+          ? vi.fn().mockImplementation(() => {
+              const row =
+                ledgerReadSequence[
+                  Math.min(ledgerReadIndex, ledgerReadSequence.length - 1)
+                ];
+              ledgerReadIndex += 1;
+              return Promise.resolve({ data: row, error: null });
+            })
+          : existingCustomerCashbackMaybeSingle;
+        const chain = makeMaybeSingleChain(ledgerMaybeSingle);
         return {
           select: vi.fn(() => chain),
         };
@@ -528,6 +562,13 @@ function createPendingTransactionSupabaseMock({
               }
             : null,
           error: null,
+        });
+      }
+
+      if (name === 'claim_failed_vtu_retry') {
+        return Promise.resolve({
+          data: retryClaimData,
+          error: retryClaimError,
         });
       }
 
@@ -2062,6 +2103,152 @@ describe('fulfillPendingVtuTransaction', () => {
     );
     expect(mockPurchaseAirtime).not.toHaveBeenCalled();
     expect(updatePayloads).toEqual([]);
+  });
+
+  it('returns failed with the refunded amount when the retry claim loses to a committed refund', async () => {
+    // A refund committed between the pre-check read and the atomic
+    // claim: the claim refuses already_refunded, and the retry must
+    // report failed-with-refund (re-reading the ledger for the amount)
+    // instead of re-vending on restored value.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Original attempt failed',
+      status: 'failed',
+    });
+
+    const supabase = createPendingTransactionSupabaseMock({
+      ledgerReadSequence: [null, { amount: 1000 }],
+      retryClaimData: [
+        {
+          claimed: false,
+          claimed_updated_at: null,
+          refusal_reason: 'already_refunded',
+        },
+      ],
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'failed',
+        metadata: {},
+        error_message: 'Temporary biller error',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      retryFailed: true,
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      amount: 1000,
+      reference: 'VTU-123',
+      refundedToWallet: 1000,
+      status: 'failed',
+    });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
+  it('returns processing when the retry claim finds the row already moved', async () => {
+    // Another writer flipped the row between the read and the claim:
+    // poll again instead of vending against a stale snapshot.
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Original attempt failed',
+      status: 'failed',
+    });
+
+    const supabase = createPendingTransactionSupabaseMock({
+      retryClaimData: [
+        {
+          claimed: false,
+          claimed_updated_at: null,
+          refusal_reason: 'status_moved',
+        },
+      ],
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'failed',
+        metadata: {},
+        error_message: 'Temporary biller error',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      retryFailed: true,
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toEqual({
+      amount: 1000,
+      reference: 'VTU-123',
+      status: 'processing',
+    });
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
+  it('throws when the retry claim RPC errors', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Original attempt failed',
+      status: 'failed',
+    });
+
+    const supabase = createPendingTransactionSupabaseMock({
+      retryClaimError: { message: 'claim blew up' },
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: null,
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'failed',
+        metadata: {},
+        error_message: 'Temporary biller error',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+      },
+    });
+
+    await expect(
+      fulfillPendingVtuTransaction({
+        retryFailed: true,
+        supabase,
+        transactionId: 'vtu-1',
+      })
+    ).rejects.toThrow(VtuPersistenceError);
+    expect(mockPurchaseAirtime).not.toHaveBeenCalled();
   });
 
   it('does not retry a failed transaction when retryFailed is false', async () => {
@@ -4331,6 +4518,7 @@ describe('fulfillPendingVtuTransaction', () => {
       p_amount: 1000,
       p_vtu_transaction_id: 'vtu-1',
       p_description: expect.stringContaining('Refund for failed'),
+      p_expected_status: 'failed',
     });
     expect(result).toEqual({
       amount: 1000,
@@ -4459,6 +4647,7 @@ describe('fulfillPendingVtuTransaction', () => {
         p_amount: 1000,
         p_customer_id: 'customer-1',
         p_description: expect.any(String),
+        p_expected_status: 'failed',
         p_merchant_id: 'merchant-1',
         p_vtu_transaction_id: 'vtu-1',
       });

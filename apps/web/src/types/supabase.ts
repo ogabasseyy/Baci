@@ -16564,6 +16564,14 @@ export type Database = {
           payload: Json;
         }[];
       };
+      claim_failed_vtu_retry: {
+        Args: { p_vtu_transaction_id: string };
+        Returns: {
+          claimed: boolean;
+          claimed_updated_at: string | null;
+          refusal_reason: string | null;
+        }[];
+      };
       claim_expense_private_receipt_cleanup_candidates: {
         Args: { p_limit?: number };
         Returns: {
@@ -20300,6 +20308,7 @@ export type Database = {
           p_amount: number;
           p_customer_id: string;
           p_description?: string;
+          p_expected_status?: string;
           p_merchant_id: string;
           p_vtu_transaction_id: string;
         };
@@ -20697,6 +20706,7 @@ export type Database = {
       };
       reverse_vtu_wallet_payment: {
         Args: {
+          p_expected_status?: string;
           p_merchant_id?: string;
           p_reason?: string;
           p_vtu_transaction_id: string;

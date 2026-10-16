@@ -59,6 +59,9 @@ export async function refundHybridKudaFailure({
       p_vtu_transaction_id: row.id,
       p_reason: `VTU vend failed: ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)}`,
       p_merchant_id: row.merchant_id,
+      // Lost-update guard (Codex R114): the RPC refuses when the row
+      // moved off the caller-observed status (a concurrent retry claim).
+      p_expected_status: row.status,
     }
   );
   if (reverseError) {
@@ -81,6 +84,7 @@ export async function refundHybridKudaFailure({
         p_amount: paymentSplit.card,
         p_vtu_transaction_id: row.id,
         p_description: `Refund (card portion) for failed ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)} purchase`,
+        p_expected_status: row.status,
       }
     );
     if (refundError) {
@@ -141,6 +145,7 @@ export async function refundHybridWalletRace({
       p_amount: paymentSplit.card,
       p_vtu_transaction_id: row.id,
       p_description: `Wallet balance changed during checkout — card portion refunded for ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)}`,
+      p_expected_status: row.status,
     }
   );
   if (raceRefundError) {
@@ -181,6 +186,7 @@ export async function refundCardOnly({
     p_amount: totalAmount,
     p_vtu_transaction_id: row.id,
     p_description: `Refund for failed ${VTU_TYPE_LABELS[row.type]} ${getVtuProviderLabel(row)} purchase ₦${row.amount}`,
+    p_expected_status: row.status,
   });
   if (error) {
     console.error('Failed to refund VTU payment to customer wallet:', {

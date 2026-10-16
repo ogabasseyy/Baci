@@ -2114,6 +2114,7 @@ export async function fulfillPendingVtuTransaction({
     });
   }
 
+  let claimedViaRetryRpc = false;
   if (row.status === 'failed' && retryFailed) {
     // Once a failed row has been refunded to the customer wallet, we MUST
     // NOT retry the same row. If the retry succeeded, the customer would
@@ -2151,17 +2152,79 @@ export async function fulfillPendingVtuTransaction({
     if (reconciliation.action === 'return') {
       return reconciliation.result;
     }
+    // Atomic claim (Codex R114): the pre-checks above read committed
+    // state, but a refund can commit between that read and the flip.
+    // claim_failed_vtu_retry locks the row, re-verifies status + ledger
+    // INSIDE the lock (serializing against the refund RPCs'
+    // expected-status check), and flips failed -> processing.
+    const { data: retryClaim, error: retryClaimError } = await supabase.rpc(
+      'claim_failed_vtu_retry',
+      { p_vtu_transaction_id: row.id }
+    );
+    if (retryClaimError) {
+      console.error('Failed to claim failed VTU transaction for retry:', {
+        error: retryClaimError.message,
+        transactionId,
+      });
+      throw new VtuPersistenceError(
+        `Failed to claim failed VTU transaction ${transactionId}: ${retryClaimError.message}`
+      );
+    }
+    const retryClaimRow = retryClaim?.[0] ?? null;
+    if (!retryClaimRow?.claimed) {
+      if (retryClaimRow?.refusal_reason === 'already_refunded') {
+        // A refund committed between the pre-check and the claim. The
+        // row is failed-with-value-restored: report it like the
+        // cached-flag path above (re-read the ledger for the amount —
+        // the flag may still be unset when the metadata persist lagged).
+        const refundLedger = await findExistingVtuRefundLedger({
+          row,
+          supabase,
+        });
+        return {
+          amount: Number(row.amount) || 0,
+          error:
+            row.error_message ||
+            'Original payment was refunded to wallet — please retry as a new purchase.',
+          reference: row.request_reference,
+          ...(refundLedger &&
+            refundLedger.amount > 0 && {
+              refundedToWallet: refundLedger.amount,
+            }),
+          status: 'failed',
+        };
+      }
+      // status_moved / missing: another writer owns the row now. Return
+      // processing so the client polls; the next read sees the moved
+      // status (or a 404 when the row is gone).
+      return {
+        amount: Number(row.amount) || 0,
+        reference: row.request_reference,
+        status: 'processing',
+      };
+    }
+    row.status = 'processing';
+    row.updated_at = retryClaimRow.claimed_updated_at ?? row.updated_at;
+    claimedViaRetryRpc = true;
   }
 
   const claimableStatus =
     row.status === 'failed' && retryFailed ? 'failed' : 'pending';
-  const { data: claimed, error: claimUpdateError } = await supabase
-    .from('vtu_transactions')
-    .update({ error_message: null, status: 'processing' })
-    .eq('id', transactionId)
-    .eq('status', claimableStatus)
-    .select('id, updated_at')
-    .maybeSingle();
+  // Failed rows with retryFailed already claimed atomically above (the
+  // row is processing now, so the fenced update would match zero rows);
+  // feed the claim through so the shared handling below applies.
+  const { data: claimed, error: claimUpdateError } = claimedViaRetryRpc
+    ? {
+        data: { id: transactionId, updated_at: row.updated_at },
+        error: null,
+      }
+    : await supabase
+        .from('vtu_transactions')
+        .update({ error_message: null, status: 'processing' })
+        .eq('id', transactionId)
+        .eq('status', claimableStatus)
+        .select('id, updated_at')
+        .maybeSingle();
 
   if (claimUpdateError) {
     console.error('Failed to claim VTU transaction for fulfillment:', {

@@ -133,6 +133,31 @@ class ContractScopeTests(unittest.TestCase):
             failures, _ = check.pin_failures(root, {}, {rel: digest})
             self.assertTrue(any("shadow the interpreter" in f for f in failures))
 
+    def test_inline_job_env_fails(self):
+        # A job-level `env: {BASH_ENV: ...}` marks the mapping open and skips
+        # the inline value: the pin check below would still see the top-level
+        # pin while Bash sources the PR file first.
+        text = _workflow_text()
+        mutant = text.replace(
+            "    timeout-minutes: 5\n    steps:\n",
+            "    timeout-minutes: 5\n    env: {BASH_ENV: attacker.sh}\n    steps:\n",
+            1,
+        )
+        self.assertNotEqual(mutant, text)
+        failures = check.workflow_failures(mutant)
+        self.assertTrue(failures)
+        self.assertIn("block mapping", " ".join(failures))
+
+    def test_native_extension_shadows_fail(self):
+        # json.so never matches rglob *.py, yet the gate's `import json`
+        # resolves the extension from the script directory first.
+        with tempfile.TemporaryDirectory() as root:
+            suite = Path(root, check.SUITE_DIR)
+            suite.mkdir(parents=True)
+            (suite / "json.so").write_bytes(b"ELF-fake")
+            failures = check.undeclared_suite_files(root, {})
+            self.assertTrue(any("shadow the interpreter" in f and "json.so" in f for f in failures))
+
     def test_duplicate_pin_declarations_fail(self):
         # Python executes the LAST assignment: a second (weakened) dict
         # would run while review parses the first.

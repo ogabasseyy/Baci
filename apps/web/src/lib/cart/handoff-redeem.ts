@@ -55,6 +55,31 @@ export interface RedeemHandoffInput {
   resolutions?: { item: CartItemIdentity; keep: 'incoming' | 'existing' }[];
 }
 
+/**
+ * Allowlist one side of a merge conflict for the route response. The
+ * SQL wrapper already strips credential-bearing fields, but the TS
+ * layer must not trust that alone: a future RPC replacement that
+ * forgets the wrapper would otherwise leak transferable voucher
+ * credentials and negotiated terms to the destination device. Only
+ * quantity and the presence flags the UI needs survive.
+ */
+function redactConflictSide(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) return {};
+  const side: Record<string, unknown> = {};
+  if (typeof value.quantity === 'number') side.quantity = value.quantity;
+  side.hasVoucher = Boolean(
+    value.hasVoucher || value.voucherToken || value.voucherAwardId
+  );
+  side.hasNegotiation = Boolean(
+    value.hasNegotiation ||
+      typeof value.negotiatedUnitPriceMinor === 'number' ||
+      (typeof value.negotiationStatus === 'string' &&
+        value.negotiationStatus !== 'none')
+  );
+  if (value.hasAssurance === true) side.hasAssurance = true;
+  return side;
+}
+
 export function parseConflicts(
   value: unknown
 ): HandoffConflictView[] | undefined {
@@ -83,8 +108,8 @@ export function parseConflicts(
       item.options = options;
     }
     conflicts.push({
-      existing: isRecord(entry.existing) ? entry.existing : {},
-      incoming: isRecord(entry.incoming) ? entry.incoming : {},
+      existing: redactConflictSide(entry.existing),
+      incoming: redactConflictSide(entry.incoming),
       item,
     });
   }

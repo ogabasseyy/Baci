@@ -132,12 +132,17 @@ describe('redeemCartHandoff', () => {
     expect(JSON.stringify(args)).not.toContain('ch1.');
   });
 
-  it('surfaces merge conflicts with both attachment sets', async () => {
+  it('surfaces merge conflicts with redacted attachment presence only', async () => {
     const client = clientReturning({
       code: 'merge_conflict',
       conflicts: [
         {
-          existing: { negotiatedUnitPriceMinor: 22000, quantity: 1 },
+          existing: {
+            negotiatedUnitPriceMinor: 22000,
+            quantity: 1,
+            voucherAwardId: 'award-1',
+            voucherToken: 'secret-token',
+          },
           incoming: { negotiatedUnitPriceMinor: 20000, quantity: 1 },
           item: { productId: '33333333-3333-4333-8333-333333333333' },
         },
@@ -163,6 +168,20 @@ describe('redeemCartHandoff', () => {
     if (!result.ok) {
       expect(result.code).toBe('merge_conflict');
       expect(result.conflicts).toHaveLength(1);
+      // Credential-bearing fields never reach the route response, even
+      // if the RPC regresses and returns them unredacted.
+      expect(result.conflicts?.[0]?.existing).toEqual({
+        hasNegotiation: true,
+        hasVoucher: true,
+        quantity: 1,
+      });
+      expect(result.conflicts?.[0]?.incoming).toEqual({
+        hasNegotiation: true,
+        hasVoucher: false,
+        quantity: 1,
+      });
+      expect(JSON.stringify(result.conflicts)).not.toContain('secret-token');
+      expect(JSON.stringify(result.conflicts)).not.toContain('22000');
     }
   });
 });

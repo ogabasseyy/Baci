@@ -167,29 +167,22 @@ export async function POST(request: NextRequest) {
   // Persist the full lane identity in the durable session row: if the
   // canonical migration commits but the full-identity replace fails,
   // the follow-up read recovers the requested variant/condition from
-  // this row instead of continuing with the generic product.
-  const parsedByProduct = new Map<string, typeof parsed.data.line_items>();
-  for (const line of parsed.data.line_items) {
-    const queue = parsedByProduct.get(line.item.id) ?? [];
-    queue.push(line);
-    parsedByProduct.set(line.item.id, queue);
-  }
-  const normalizedItems = calculation.lineItems.map((lineItem) => {
-    const parsedLine = parsedByProduct.get(lineItem.item.id)?.shift();
-    return {
-      id: lineItem.item.id,
-      quantity: lineItem.item.quantity,
-      ...(parsedLine?.item.variant_id
-        ? { variant_id: parsedLine.item.variant_id }
-        : {}),
-      ...(parsedLine?.item.condition
-        ? { condition: parsedLine.item.condition }
-        : {}),
-      ...(parsedLine?.item.variant_attributes
-        ? { variant_attributes: parsedLine.item.variant_attributes }
-        : {}),
-    };
-  });
+  // this row instead of continuing with the generic product. Build the
+  // persisted lines from the calculator's resolved lane identity, not
+  // by positional correlation with the request: when the calculator
+  // drops an invalid lane, a positional match would attach that lane's
+  // metadata to the next accepted line.
+  const normalizedItems = calculation.lineItems.map((lineItem) => ({
+    id: lineItem.item.id,
+    quantity: lineItem.item.quantity,
+    ...(lineItem.item.variant_id
+      ? { variant_id: lineItem.item.variant_id }
+      : {}),
+    ...(lineItem.item.condition ? { condition: lineItem.item.condition } : {}),
+    ...(lineItem.item.variant_attributes
+      ? { variant_attributes: lineItem.item.variant_attributes }
+      : {}),
+  }));
   const { error } = await supabase.from('agentic_cart_sessions').insert(
     buildUcpCartInsert({
       agentId: mutation.agentId,
@@ -240,13 +233,14 @@ export async function POST(request: NextRequest) {
     // Best effort: a failed clear leaves the marker set, and the
     // read-side lane-equality check still prevents a stale replay.
     try {
-      await supabase
+      const { error: clearError } = await supabase
         .from('agentic_cart_sessions')
         .update({
           metadata: { source: 'ucp', create_recovery_pending: false },
         })
         .eq('cart_id', cartId)
         .eq('merchant_id', merchant.id);
+      if (clearError) throw clearError;
     } catch (error) {
       logger.error({
         error: sanitizeForLog(error),

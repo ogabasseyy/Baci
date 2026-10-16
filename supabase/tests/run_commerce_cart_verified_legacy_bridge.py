@@ -14,7 +14,7 @@ try:
  sql=(root/'supabase/tests/commerce_cart_order_binding.sql').read_text().split('-- 7. Bound submission')[0]
  sql='\n'.join('\\i '+str((root/'supabase/tests'/s[4:]).resolve()) if s.startswith('\\ir ') else s for s in sql.splitlines())
  sql+="\nCREATE ROLE authenticator; CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(auth.jwt()->>'sub','')::uuid $$; CREATE TABLE public.customers(id uuid PRIMARY KEY,merchant_id uuid,user_id uuid);"
- sql+="\nCREATE TABLE public.mcp_guest_carts(token text PRIMARY KEY,items jsonb,expires_at timestamptz,version bigint,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now()); CREATE TABLE public.agentic_cart_sessions(id uuid DEFAULT gen_random_uuid(),cart_id text UNIQUE,merchant_id uuid,agent_id text,cart_items jsonb,currency text DEFAULT 'NGN',status text DEFAULT 'active',expires_at timestamptz DEFAULT now()+interval '7 days',updated_at timestamptz DEFAULT now());"
+ sql+="\nCREATE TABLE public.mcp_guest_carts(token text PRIMARY KEY,items jsonb,expires_at timestamptz,version bigint,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now()); CREATE TABLE public.agentic_cart_sessions(id uuid DEFAULT gen_random_uuid(),cart_id text UNIQUE,merchant_id uuid,agent_id text,cart_items jsonb,currency text DEFAULT 'NGN',status text DEFAULT 'active',expires_at timestamptz DEFAULT now()+interval '7 days',updated_at timestamptz DEFAULT now(),metadata jsonb NOT NULL DEFAULT '{}'::jsonb,migrated_to_cart_id uuid);"
  sql+='\n\\i '+str(root/'supabase/migrations/20261012050300_commerce_cart_legacy_migration.sql')
  for f in ['20261012050400_commerce_cart_create_grant.sql','20261012050500_commerce_cart_handoff.sql','20261014120001_commerce_cart_account_continuity.sql','20261014120100_commerce_cart_mutation_permissions.sql','20261014120200_commerce_cart_account_tables.sql','20261014120300_commerce_cart_account_functions.sql','20261014120400_commerce_cart_handoff_merge_guards.sql','20261014141000_commerce_cart_checkout_lifetime.sql','20261015090000_commerce_cart_negotiation_policy.sql','20261015100000_commerce_cart_mutation_permissions_restore.sql','20261015110000_commerce_cart_handoff_issue_device_guard.sql','20261015120000_commerce_cart_handoff_merchant_token.sql']:
   sql+='\n\\i '+str(root/'supabase/migrations'/f)
@@ -34,6 +34,11 @@ try:
  if '--baseline' not in sys.argv:
   for name in ['20261015141000_commerce_cart_mutation_lifetime_cap.sql','20261015142000_commerce_cart_replace_attachment_identity.sql','20261015143000_commerce_cart_handoff_attachment_lifetime.sql','20261015144000_commerce_cart_checkout_add_identity.sql','20261015145000_commerce_cart_checkout_complete_vouchers.sql','20261015150000_commerce_cart_agentic_checkout_economics.sql','20261015151000_commerce_cart_partial_voucher_binding.sql']:
    sql+='\n'+(root/'supabase/migrations'/name).read_text()
+  # Final installed cart chain after 15151000 (grant/expiry, receive,
+  # merge, preview-token, guard, legacy-bridge lanes, marker fence).
+  sql+='\nCREATE SCHEMA IF NOT EXISTS realtime; CREATE TABLE realtime.messages(extension text, private boolean, topic text); ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY; CREATE FUNCTION realtime.topic() RETURNS text LANGUAGE sql STABLE AS $$ SELECT NULL::text $$;'
+  for f in sorted((root/'supabase/migrations').glob('202610151[67]*.sql')):
+   sql+='\n\\i '+str(f)
  tests=(root/'supabase/tests/commerce_cart_verified_legacy_bridge.sql').read_text()
  if '--baseline' in sys.argv:
   tests=tests.split('-- Negotiation accepted')[0]+tests[tests.index('DO $$ DECLARE failures text;'):]

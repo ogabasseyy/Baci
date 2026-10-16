@@ -26,6 +26,32 @@ it.each([
 ])('rejects invalid bridge input %j', (value) => {
   expect(legacyMcpBridgeRequestSchema.safeParse(value).success).toBe(false);
 });
+it('preserves UCP lane fields in recovered owner lines', () => {
+  const parsed = legacyOwnerContextSchema.safeParse({
+    lines: [
+      {
+        item: {
+          condition: 'used',
+          options: { size: 'L' },
+          productId,
+          variantId: productId,
+        },
+        quantity: 1,
+      },
+    ],
+    ok: true,
+  });
+  expect(parsed.success).toBe(true);
+  if (parsed.success) {
+    expect(parsed.data.lines?.[0]?.item).toEqual({
+      condition: 'used',
+      options: { size: 'L' },
+      productId,
+      variantId: productId,
+    });
+  }
+});
+
 it('rejects malformed recovered owner authority', () => {
   expect(
     legacyOwnerContextSchema.safeParse({ ok: true, cartId: 'bad' }).success

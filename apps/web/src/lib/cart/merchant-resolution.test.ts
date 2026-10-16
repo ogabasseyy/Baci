@@ -344,6 +344,21 @@ describe('resolveCartMerchant', () => {
     expect(result).toEqual({ error: 'merchant_unavailable', ok: false });
   });
 
+  it('resolves unpublished stores for teardown when allowed', async () => {
+    const request = new Request(
+      'https://api.usebaci.com/api/storefront/cart/session/revoke?merchantSlug=ogabassey'
+    );
+
+    const result = await resolveCartMerchant(request, {
+      allowUnpublished: true,
+      resolveAlias: async () => null,
+      rootDomain: 'usebaci.com',
+      rpcClient: rpcClientReturning([merchantRow({ is_published: false })]),
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   it('fails closed with a retryable code when merchant lookup errors', async () => {
     const request = new Request(
       'https://api.usebaci.com/api/storefront/cart?merchantSlug=ogabassey'

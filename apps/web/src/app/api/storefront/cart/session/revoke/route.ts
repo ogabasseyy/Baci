@@ -30,6 +30,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       // merchant without the flag (the default) or mid-rollback must
       // still be able to retire device authority. No feature lookup.
       merchant: {
+        allowUnpublished: true,
         resolveAlias: getCurrentSlugForAlias,
         rpcClient: createAnonClient(),
       },

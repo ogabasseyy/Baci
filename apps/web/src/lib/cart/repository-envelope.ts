@@ -85,6 +85,7 @@ export class CartRepositoryError extends Error {
 }
 
 export const ERROR_CODES: ReadonlySet<string> = new Set([
+  'merchant_unavailable',
   'unauthorized',
   'not_found',
   'expired',

@@ -12,6 +12,7 @@ import {
   retireEnrollmentSession,
   retireLegacySharedCart,
 } from '@/lib/cart/enrollment-transition';
+import { dedupeMergeConflictItems } from '@/lib/cart/merge-conflict-items';
 import { NativeCartError } from '@/lib/cart/native-cart-error';
 import { clearMatchingCartPairingLink } from '@/lib/cart/pairing-link';
 import { pendingCartRequest } from '@/lib/cart/pending-request';
@@ -203,7 +204,7 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
         onMergeConflicts: (items, reason) => {
           if (isCurrent())
             useNativeSharedCartStore.setState({
-              mergeConflicts: items,
+              mergeConflicts: dedupeMergeConflictItems(items),
               mergeConflictReason: reason,
             });
         },

@@ -5,7 +5,14 @@ export const legacyOwnerContextSchema = z.object({
   lines: z
     .array(
       z.object({
-        item: z.object({ productId: z.uuid() }),
+        item: z.object({
+          productId: z.uuid(),
+          variantId: z.uuid().optional(),
+          condition: z
+            .enum(['new', 'used', 'open_box', 'refurbished'])
+            .optional(),
+          options: z.record(z.string(), z.string()).optional(),
+        }),
         quantity: z.number().int().min(1).max(10),
       })
     )

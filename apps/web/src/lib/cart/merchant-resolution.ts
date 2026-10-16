@@ -45,14 +45,12 @@ export interface ResolveCartMerchantDeps {
   rpcClient: MerchantRpcClient;
   resolveAlias: (slug: string) => Promise<string | null>;
   rootDomain?: string;
+  /** Teardown-only: revocation stays possible after unpublishing. */
+  allowUnpublished?: boolean;
   /** Pre-parsed merchantSlug hint from the JSON body, if any. */
   bodyHint?: string | null;
-  /**
-   * Shared-cart enrollment lookup. When provided, resolution fails
-   * closed unless the merchant carries the shared_cart feature, so the
-   * pilot gate holds on the server even where the UI hides the feature.
-   * Cart routes always provide it; other callers may omit it.
-   */
+  /** Enrollment lookup; when provided, resolution fails closed unless
+   * the merchant carries the shared_cart feature. */
   loadMerchantFeatures?: (
     merchantId: string
   ) => Promise<MerchantFeatureSource | null>;
@@ -130,7 +128,8 @@ export function queryHint(request: Request): string | null {
 
 export async function resolvePublished(
   rpcClient: MerchantRpcClient,
-  identifier: string
+  identifier: string,
+  allowUnpublished = false
 ): Promise<
   | { merchant: CartRouteMerchant; ok: true }
   | { error: 'merchant_unresolved' | 'merchant_unavailable'; ok: false }
@@ -147,7 +146,7 @@ export async function resolvePublished(
   if (!parsed.success) {
     return { error: 'merchant_unresolved', ok: false };
   }
-  if (!parsed.data.is_published) {
+  if (!parsed.data.is_published && !allowUnpublished) {
     return { error: 'merchant_unavailable', ok: false };
   }
   return {
@@ -162,10 +161,8 @@ export async function resolvePublished(
 
 /**
  * Trusted merchant resolution for cart routes. Proxy headers win when
- * they match the request Host; otherwise a slug/domain hint from the
- * query string or body is resolved through the established
- * published-store mapping plus the retired-slug alias table. Only
- * published stores resolve; client input never overrides the host.
+ * they match the request Host; otherwise a slug/domain hint resolves
+ * through the published-store mapping plus the retired-slug alias table.
  */
 export async function resolveCartMerchant(
   request: Request,
@@ -190,7 +187,11 @@ export async function resolveCartMerchant(
     identifier: string,
     requestedIdentifier?: string
   ): Promise<ResolveCartMerchantResult> => {
-    const resolved = await resolvePublished(deps.rpcClient, identifier);
+    const resolved = await resolvePublished(
+      deps.rpcClient,
+      identifier,
+      deps.allowUnpublished
+    );
     if (!resolved.ok || sharedHost) return resolved;
     const merchant = resolved.merchant;
     const domain = merchant.customDomain?.toLowerCase();
@@ -227,12 +228,10 @@ export async function resolveCartMerchant(
     }
     return result;
   };
-  // Client hints may select a tenant only on native API hosts (or dev
-  // hosts); on browsable shared hosts the host itself must identify the
-  // merchant — except path-routed storefronts (usebaci.com/<slug>), where
-  // a same-host Referer whose first segment is the slug is the signal.
-  // That is unauthenticated tenant *selection*, not trust: forging it only
-  // names a published merchant openable at /<slug>; credentials stay bound.
+  // Hints select a tenant only on native API hosts (or dev hosts); on
+  // shared hosts the host identifies the merchant, except path-routed
+  // storefronts where a same-host Referer slug is the (unauthenticated,
+  // selection-only) signal. Forging it gains no cross-tenant authority.
   const hintCandidate =
     queryHint(request) ?? deps.bodyHint?.trim().toLowerCase() ?? null;
   let hintAllowed = isHintPlatformHost(host, rootDomain);

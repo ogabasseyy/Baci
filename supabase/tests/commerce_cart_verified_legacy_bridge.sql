@@ -107,3 +107,21 @@ DO $$ BEGIN
  IF public.commerce_cart_resolve_merchant_currency(NULL,'Uganda') IS DISTINCT FROM 'UGX' THEN RAISE EXCEPTION 'Country currency mismatch: %','Uganda'; END IF;
  IF public.commerce_cart_resolve_merchant_currency(' usd ','Nigeria') IS DISTINCT FROM 'USD' OR public.commerce_cart_resolve_merchant_currency('invalid','Côte d''Ivoire') IS DISTINCT FROM 'XOF' OR public.commerce_cart_resolve_merchant_currency(NULL,'unknown') IS DISTINCT FROM 'NGN' THEN RAISE EXCEPTION 'Currency normalization/fallback mismatch'; END IF;
 END $$;
+DO $$ DECLARE merchant uuid:='11111111-1111-4111-8111-111111111111';
+BEGIN
+ INSERT INTO public.agentic_cart_sessions(cart_id,merchant_id,agent_id,cart_items,metadata,migrated_to_cart_id)
+ VALUES('ucp-marker',merchant,'agent-a','[]','{"source":"ucp","create_recovery_pending":true}','22222222-2222-4222-8222-222222222222');
+ -- Only flipping the recovery marker off is allowed on a migrated row.
+ UPDATE public.agentic_cart_sessions
+ SET metadata='{"source":"ucp","create_recovery_pending":false}'
+ WHERE cart_id='ucp-marker';
+ IF (SELECT metadata->>'create_recovery_pending' FROM public.agentic_cart_sessions WHERE cart_id='ucp-marker') IS DISTINCT FROM 'false'
+ THEN RAISE EXCEPTION 'Recovery marker clear was blocked on a migrated row'; END IF;
+ -- Any other write to the migrated row stays fenced.
+ BEGIN
+   UPDATE public.agentic_cart_sessions SET cart_items='[]' WHERE cart_id='ucp-marker';
+   RAISE EXCEPTION 'Migrated writer was not fenced after marker clear';
+ EXCEPTION WHEN raise_exception THEN
+   IF SQLERRM<>'migrated cart is read-only' THEN RAISE; END IF;
+ END;
+END $$;

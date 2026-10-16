@@ -152,7 +152,7 @@ export async function readUcpCart(
           // One-shot repair complete: clear the marker so later
           // legitimate updates are never reverted to these lanes.
           const metadata = (cartResult.cart as { metadata?: unknown }).metadata;
-          await input.supabase
+          const { error: clearError } = await input.supabase
             .from('agentic_cart_sessions')
             .update({
               metadata: {
@@ -164,6 +164,14 @@ export async function readUcpCart(
             })
             .eq('cart_id', input.cartId)
             .eq('merchant_id', input.merchant.id);
+          if (clearError) {
+            logger.error({
+              error: sanitizeForLog(clearError),
+              merchantId: input.merchant.id,
+              message: 'Failed to clear UCP create recovery marker',
+              route: 'ucp-cart-read',
+            });
+          }
           return NextResponse.json(recovered.body, {
             status: recovered.status,
           });

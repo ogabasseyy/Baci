@@ -77,6 +77,51 @@ describe('preview theme policy', () => {
     }
   });
 
+  it.each([
+    '0',
+    '0px',
+    '9999.999vmax',
+    '20%',
+    'calc(1rem + 2px - 0)',
+    'clamp(0, 20%, 3vw)',
+  ])('accepts the bounded length grammar %j', (value) => {
+    expect(candidate({ spacing: { md: value } }).success).toBe(true);
+  });
+
+  it.each([
+    'thin',
+    'medium',
+    'thick',
+    '2rem',
+    'calc(1px + 2em)',
+    'clamp(0, 2vh, 3vmin)',
+  ])('accepts border widths %j', (value) => {
+    expect(candidate({ borders: { width: { normal: value } } }).success).toBe(
+      true
+    );
+  });
+
+  it.each([
+    '-1px',
+    '10000px',
+    '1.0000rem',
+    'calc(1px+2px)',
+    'clamp(0, 1px)',
+    'calc(1px * 2px)',
+  ])('rejects unsupported length grammar %j', (value) => {
+    expect(candidate({ spacing: { md: value } }).success).toBe(false);
+  });
+
+  it.each([
+    '2%',
+    'calc(1px + 2%)',
+    'clamp(0, 2%, 3px)',
+  ])('rejects percentages in border widths %j', (value) => {
+    expect(candidate({ borders: { width: { normal: value } } }).success).toBe(
+      false
+    );
+  });
+
   it('rejects invalid spacing and easing grammar instead of accepting inert CSS', () => {
     expect(
       candidate({ spacing: { section: { paddingY: 'not-a-length' } } }).success

@@ -6,7 +6,7 @@ vi.mock('@/hooks/orders/useOrderGiglShipping', () => ({
   useOrderGiglShipping: shippingHook,
 }));
 vi.mock('@/lib/order-shipment', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/order-shipment')>();
+  const actual = await importOriginal<OrderShipmentModule>();
   return {
     ...actual,
     getOrderGiglInitialAddress: vi.fn(() => ({ address: '1 Allen' })),
@@ -14,6 +14,8 @@ vi.mock('@/lib/order-shipment', async (importOriginal) => {
 });
 
 import { useOrderDetailsGiglShipping } from './useOrderDetailsGiglShipping';
+
+type OrderShipmentModule = typeof import('@/lib/order-shipment');
 
 describe('useOrderDetailsGiglShipping', () => {
   it('only enables the owner wallet flow during the shipment method step', () => {

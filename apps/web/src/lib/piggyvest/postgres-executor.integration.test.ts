@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { piggyvestPostgresConfigurationSchema } from '@/schemas/piggyvest-postgres-configuration';
 import { createPiggyvestPostgresExecutor } from './postgres-executor';
 import { createPiggyvestPostgresInbox } from './postgres-inbox';
+import { PIGGYVEST_POSTGRES_STATEMENTS as statements } from './postgres-statements';
 import { quarantinePiggyvestInboxBatch } from './quarantine-inbox';
 import { createPiggyvestStagingRuntime } from './staging-runtime';
 
@@ -67,6 +68,27 @@ describe.skipIf(process.env.PIGGYVEST_RUN_LOCAL_POSTGRES !== '1')(
       } finally {
         vi.unstubAllGlobals();
         await admin?.end();
+      }
+    });
+
+    it('uses password-free local trust authentication without consulting ambient credentials', async () => {
+      vi.stubEnv('PGPASSWORD', 'synthetic-ambient-password');
+      try {
+        const execute = createPiggyvestPostgresExecutor({
+          ...configuration,
+          role: 'piggyvest_staging_ledger_worker',
+          password: undefined,
+        });
+        await expect(
+          execute(statements.readSavingsLedger.text, [
+            integrationId,
+            '11111111-1111-4111-8111-111111111111',
+            '22222222-2222-4222-8222-222222222221',
+            '33333333-3333-4333-8333-333333333333',
+          ])
+        ).resolves.toMatchObject({ rows: [{ result: expect.any(Object) }] });
+      } finally {
+        vi.unstubAllEnvs();
       }
     });
 

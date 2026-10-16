@@ -3,6 +3,8 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type NodeCryptoModule = typeof import('node:crypto');
+
 const mocks = vi.hoisted(() => ({
   createClient: vi.fn(),
   createScopedClient: vi.fn(),
@@ -20,7 +22,7 @@ vi.mock('@/env', () => ({
 vi.mock('server-only', () => ({}));
 
 vi.mock('node:crypto', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('node:crypto')>()),
+  ...(await importOriginal<NodeCryptoModule>()),
   randomUUID: () => 'evidence-uuid',
 }));
 

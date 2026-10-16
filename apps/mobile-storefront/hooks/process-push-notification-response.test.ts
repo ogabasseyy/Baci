@@ -7,13 +7,13 @@ import {
   jest,
 } from '@jest/globals';
 
+type PushNotificationsModule = typeof import('@/services/push-notifications');
+
 type NotificationResponse = import('expo-notifications').NotificationResponse;
 
 const mockClearBadge = jest.fn();
 const mockHandleNotificationResponse =
-  jest.fn<
-    typeof import('@/services/push-notifications')['handleNotificationResponse']
-  >();
+  jest.fn<PushNotificationsModule['handleNotificationResponse']>();
 const mockTrackNotificationInteraction = jest.fn();
 const mockWarn = jest.fn();
 

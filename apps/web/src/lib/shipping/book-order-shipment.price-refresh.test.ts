@@ -5,8 +5,12 @@ import {
   prepaidGiglCustomerCheckoutPayment,
 } from './book-order-shipment.refresh-fixtures.test-helper';
 
+type EnvModule = typeof import('@/env');
+type OrderShipmentBookingUtilsModule =
+  typeof import('@/lib/shipping/order-shipment-booking-utils');
+
 vi.mock('@/env', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/env')>();
+  const actual = await importOriginal<EnvModule>();
   return { ...actual, ...shippingQuoteEnvTestMock };
 });
 
@@ -20,10 +24,7 @@ vi.mock('@/lib/shipping', () => ({
 vi.mock(
   '@/lib/shipping/order-shipment-booking-utils',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/shipping/order-shipment-booking-utils')
-      >();
+    const actual = await importOriginal<OrderShipmentBookingUtilsModule>();
     return {
       ...actual,
       buildReceiver: vi.fn().mockReturnValue({

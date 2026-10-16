@@ -24,8 +24,7 @@ vi.mock('@/lib/search-transaction-review-orders', () => ({
 }));
 
 vi.mock('@/lib/transaction-review', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/lib/transaction-review')>();
+  const actual = await importOriginal<TransactionReviewModule>();
   return {
     buildTransactionReviewRangeFilters: () => ({}),
     filterTransactionOrders: actual.filterTransactionOrders,
@@ -34,6 +33,8 @@ vi.mock('@/lib/transaction-review', async (importOriginal) => {
 });
 
 import { useTransactionReview } from './useTransactionReview';
+
+type TransactionReviewModule = typeof import('@/lib/transaction-review');
 
 function createWrapper() {
   const queryClient = new QueryClient({

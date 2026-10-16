@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PilotLabCardPreload } from './lab-card-preload';
 import type { ProjectedPilotImage } from './next-image-adapter';
 
+type ReactDomModule = typeof import('react-dom');
+
 vi.mock('react-dom', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('react-dom')>();
+  const actual = await importOriginal<ReactDomModule>();
   return { ...actual, preload: vi.fn() };
 });
 

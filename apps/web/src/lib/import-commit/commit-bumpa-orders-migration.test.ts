@@ -44,10 +44,6 @@ function extractPopulateOrderItemTaxFunction() {
   );
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 describe('Bumpa imported order item RPC migration', () => {
   it('persists fulfillment detail patches in the generic item replacement RPC', () => {
     const replaceOrderItemsFunction = extractReplaceOrderItemsFunction();
@@ -151,42 +147,35 @@ describe('Bumpa imported order item RPC migration', () => {
   });
 
   it('restricts public imported-order replacement RPCs to the service role', () => {
-    for (const signature of [
-      'public.replace_order_items(UUID, JSONB, UUID, BOOLEAN, JSONB)',
-      'public.replace_imported_order_items(uuid, jsonb, uuid, jsonb, timestamptz)',
-    ]) {
-      const escapedSignature = escapeRegExp(signature);
-
-      expect(migrationSql).toMatch(
-        new RegExp(
-          `ALTER FUNCTION ${escapedSignature}\\s+OWNER TO postgres`,
-          'i'
-        )
-      );
-      expect(migrationSql).toMatch(
-        new RegExp(
-          `REVOKE ALL ON FUNCTION ${escapedSignature}\\s+FROM PUBLIC`,
-          'i'
-        )
-      );
-      expect(migrationSql).toMatch(
-        new RegExp(
-          `REVOKE ALL ON FUNCTION ${escapedSignature}\\s+FROM anon`,
-          'i'
-        )
-      );
-      expect(migrationSql).toMatch(
-        new RegExp(
-          `REVOKE ALL ON FUNCTION ${escapedSignature}\\s+FROM authenticated`,
-          'i'
-        )
-      );
-      expect(migrationSql).toMatch(
-        new RegExp(
-          `GRANT EXECUTE ON FUNCTION ${escapedSignature}\\s+TO service_role`,
-          'i'
-        )
-      );
-    }
+    expect(migrationSql).toMatch(
+      /ALTER FUNCTION public\.replace_order_items\(UUID, JSONB, UUID, BOOLEAN, JSONB\)\s+OWNER TO postgres/i
+    );
+    expect(migrationSql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.replace_order_items\(UUID, JSONB, UUID, BOOLEAN, JSONB\)\s+FROM PUBLIC/i
+    );
+    expect(migrationSql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.replace_order_items\(UUID, JSONB, UUID, BOOLEAN, JSONB\)\s+FROM anon/i
+    );
+    expect(migrationSql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.replace_order_items\(UUID, JSONB, UUID, BOOLEAN, JSONB\)\s+FROM authenticated/i
+    );
+    expect(migrationSql).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.replace_order_items\(UUID, JSONB, UUID, BOOLEAN, JSONB\)\s+TO service_role/i
+    );
+    expect(migrationSql).toMatch(
+      /ALTER FUNCTION public\.replace_imported_order_items\(uuid, jsonb, uuid, jsonb, timestamptz\)\s+OWNER TO postgres/i
+    );
+    expect(migrationSql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.replace_imported_order_items\(uuid, jsonb, uuid, jsonb, timestamptz\)\s+FROM PUBLIC/i
+    );
+    expect(migrationSql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.replace_imported_order_items\(uuid, jsonb, uuid, jsonb, timestamptz\)\s+FROM anon/i
+    );
+    expect(migrationSql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.replace_imported_order_items\(uuid, jsonb, uuid, jsonb, timestamptz\)\s+FROM authenticated/i
+    );
+    expect(migrationSql).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.replace_imported_order_items\(uuid, jsonb, uuid, jsonb, timestamptz\)\s+TO service_role/i
+    );
   });
 });

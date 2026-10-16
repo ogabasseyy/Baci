@@ -9,8 +9,7 @@ const { mockRpc, mockCredentialRpc, mockGetUser, mockMerchantForApiRequest } =
   }));
 
 vi.mock('@/lib/get-merchant-for-api-request', async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import('@/lib/get-merchant-for-api-request')>();
+  const original = await importOriginal<GetMerchantForApiRequestModule>();
   return {
     ...original,
     getMerchantForApiRequest: mockMerchantForApiRequest,
@@ -25,6 +24,9 @@ vi.mock('@/lib/jumia/jumia-credential-loader-client', () => ({
 
 import { createJumiaCredentialLoaderClient } from '@/lib/jumia/jumia-credential-loader-client';
 import { loadJumiaAuthorizationGrant } from '@/lib/jumia/load-jumia-authorization-grant';
+
+type GetMerchantForApiRequestModule =
+  typeof import('@/lib/get-merchant-for-api-request');
 
 const supabase = {
   rpc: mockRpc,

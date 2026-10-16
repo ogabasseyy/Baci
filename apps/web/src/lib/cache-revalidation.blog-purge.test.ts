@@ -16,8 +16,7 @@ vi.mock('@/lib/cloudflare-purge', () => ({
   purgeCloudflareUrls: (...args: unknown[]) => mockPurgeCloudflareUrls(...args),
 }));
 vi.mock('@/lib/storefront-purge-urls', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/lib/storefront-purge-urls')>();
+  const actual = await importOriginal<StorefrontPurgeUrlsModule>();
   return {
     ...actual,
     buildStorefrontBlogPurgeUrls: vi.fn(actual.buildStorefrontBlogPurgeUrls),
@@ -26,6 +25,8 @@ vi.mock('@/lib/storefront-purge-urls', async (importOriginal) => {
 
 import { revalidateBlogPosts } from '@/lib/cache-revalidation';
 import { buildStorefrontBlogPurgeUrls } from '@/lib/storefront-purge-urls';
+
+type StorefrontPurgeUrlsModule = typeof import('@/lib/storefront-purge-urls');
 
 describe('revalidateBlogPosts Cloudflare purge', () => {
   beforeEach(() => {

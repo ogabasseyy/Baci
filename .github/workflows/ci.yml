@@ -261,7 +261,9 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run web vitest shard
-        run: pnpm --filter @baci/web exec vitest run --shard=${{ matrix.shard }}/6
+        env:
+          VITEST_SHARD: ${{ matrix.shard }}
+        run: pnpm --filter @baci/web exec vitest run --shard="${VITEST_SHARD}/6"
 
   quality-db-replay:
     name: Quality Gate - DB Replay

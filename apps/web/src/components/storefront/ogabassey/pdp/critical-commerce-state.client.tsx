@@ -12,8 +12,7 @@ import {
 } from '@/components/storefront/ogabassey/variant-attributes';
 import { pruneSelectionsByVariantAvailability } from '@/components/storefront/ogabassey/variant-selection-pruning';
 import { recoverHiddenSelectionsFromUniqueVariant } from '@/components/storefront/ogabassey/recover-hidden-variant-selections';
-import { useCart } from '@/hooks/cart';
-import { findMergingCartLineIndex } from '@/hooks/cart/find-merging-cart-line';
+import { useCriticalCommerceCartActions } from './critical-commerce-cart-actions.client';
 import {
   DEFAULT_CRITICAL_PRICE_CURRENCY,
   getVariantAxesWithMultipleOptions,
@@ -21,10 +20,7 @@ import {
   pickInitialSelectedAttributes,
 } from './critical-commerce-selection';
 import { buildCriticalInitialVariantIntent } from './critical-commerce-initial-intent';
-import {
-  buildCriticalCartAddOptions,
-  useCriticalRouteOfferState,
-} from './critical-commerce-route-offer';
+import { useCriticalRouteOfferState } from './critical-commerce-route-offer';
 import {
   OgabasseyPdpCriticalCommerceContext,
   type OgabasseyPdpCriticalCommerceProviderProps,
@@ -180,24 +176,6 @@ export function OgabasseyPdpCriticalCommerceProvider({
     : null;
   const [quantity, setQuantity] = useState(maxQuantity === 0 ? 0 : 1);
   const [previousMaxQuantity, setPreviousMaxQuantity] = useState(maxQuantity);
-  // `cart` defaults for test doubles that stub only the cart actions.
-  const { addToCart, cart = [], setIsCartOpen } = useCart();
-  // Shared with handleAddToCart so the pre-add existence check below
-  // always agrees with the line the add merges into.
-  const cartAddOptions = buildCriticalCartAddOptions({
-    purchasableSelection: effectivePurchasableVariantSelection,
-    productForCart,
-    activeRouteOffer,
-  });
-  const mergingCartLineIndex = findMergingCartLineIndex(
-    cart,
-    productForCart,
-    cartAddOptions
-  );
-  const quantityInCart =
-    mergingCartLineIndex >= 0
-      ? (cart[mergingCartLineIndex]?.quantity ?? 0)
-      : 0;
 
   useEffect(() => {
     if (
@@ -276,14 +254,13 @@ export function OgabasseyPdpCriticalCommerceProvider({
     setSelectedAttributes(nextSelection);
   }
 
-  function handleAddToCart() {
-    if (!canAddToCart) {
-      return;
-    }
-
-    addToCart(productForCart, quantity, cartAddOptions);
-    setIsCartOpen(true);
-  }
+  const { handleAddToCart, quantityInCart } = useCriticalCommerceCartActions({
+    activeRouteOffer,
+    canAddToCart,
+    effectivePurchasableVariantSelection,
+    productForCart,
+    quantity,
+  });
 
   return (
     <OgabasseyPdpCriticalCommerceContext.Provider

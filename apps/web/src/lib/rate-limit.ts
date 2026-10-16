@@ -6,20 +6,26 @@ import { Ratelimit } from '@upstash/ratelimit';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { rateLimitDiagnostics } from './rate-limit-diagnostics';
+import {
+  checkMemoryRateLimit,
+  resetMemoryRateLimitStore,
+} from './rate-limit-memory';
 import { getRateLimitConfig } from './rate-limit-routes';
 import { getRedis } from './redis';
+
+export { cleanupRateLimitStore } from './rate-limit-memory';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface RateLimitConfig {
+export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
   failClosedWithoutRedis?: boolean;
 }
 
-interface RateLimitResult {
+export interface RateLimitResult {
   allowed: boolean;
   limit: number;
   remaining: number;
@@ -102,54 +108,6 @@ function getUpstashLimiter(config: RateLimitConfig): Ratelimit | null {
     upstashLimiters.set(key, limiter);
   }
   return limiter;
-}
-
-// ---------------------------------------------------------------------------
-// In-memory fallback (when Redis is unavailable)
-// ---------------------------------------------------------------------------
-
-const memoryStore = new Map<string, { count: number; resetTime: number }>();
-const MAX_STORE_SIZE = 10_000;
-const PRUNE_BATCH_SIZE = 100;
-
-function pruneStore(now: number): void {
-  if (memoryStore.size < MAX_STORE_SIZE) return;
-  let pruned = 0;
-  for (const [key, entry] of memoryStore) {
-    if (now > entry.resetTime) {
-      memoryStore.delete(key);
-      pruned++;
-      if (pruned >= PRUNE_BATCH_SIZE) break;
-    }
-  }
-}
-
-function checkMemoryRateLimit(
-  identifier: string,
-  pattern: string,
-  config: RateLimitConfig
-): RateLimitResult {
-  const key = `${identifier}:${pattern}`;
-  const now = Date.now();
-  pruneStore(now);
-
-  let entry = memoryStore.get(key);
-  if (!entry || now > entry.resetTime) {
-    entry = { count: 0, resetTime: now + config.windowMs };
-  }
-
-  entry.count++;
-  memoryStore.set(key, entry);
-
-  const allowed = entry.count <= config.maxRequests;
-  const remaining = Math.max(0, config.maxRequests - entry.count);
-
-  return {
-    allowed,
-    limit: config.maxRequests,
-    remaining,
-    resetTime: entry.resetTime,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -269,23 +227,6 @@ export function createRateLimitResponse(
 }
 
 // ---------------------------------------------------------------------------
-// Cleanup (in-memory fallback only)
-// ---------------------------------------------------------------------------
-
-export function cleanupRateLimitStore(): void {
-  const now = Date.now();
-  for (const [key, entry] of memoryStore.entries()) {
-    if (now > entry.resetTime) {
-      memoryStore.delete(key);
-    }
-  }
-}
-
-if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupRateLimitStore, 5 * 60 * 1000);
-}
-
-// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
@@ -295,7 +236,7 @@ export function __resetRateLimitStoreForTesting(): void {
       '__resetRateLimitStoreForTesting should only be called in test environment'
     );
   }
-  memoryStore.clear();
+  resetMemoryRateLimitStore();
   upstashLimiters.clear();
   rateLimitDiagnostics.reset();
 }

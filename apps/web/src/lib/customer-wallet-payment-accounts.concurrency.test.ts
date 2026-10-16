@@ -19,8 +19,10 @@ import {
   merchant,
 } from './customer-wallet-payment-accounts.test-utils';
 
+type PaystackModule = typeof import('@/lib/paystack');
+
 vi.mock('@/lib/paystack', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/paystack')>();
+  const actual = await importOriginal<PaystackModule>();
   return {
     ...actual,
     createDedicatedAccountForWallet: vi.fn(),

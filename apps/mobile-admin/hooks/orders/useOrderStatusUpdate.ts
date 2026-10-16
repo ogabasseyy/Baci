@@ -3,13 +3,52 @@ import type { InfiniteData } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BASE_URL } from '@/lib/api-client';
 import { useMerchant } from '../useMerchant';
-import { createAuthenticatedFetch } from './authenticated-fetch';
+import {
+  AuthenticatedFetchPreflightError,
+  createAuthenticatedFetchText,
+} from './authenticated-fetch';
 import { OrderStatusUpdateError } from './order-status-update-error';
 import type { OrdersPage } from './order-types';
 import { parseResponsePayload } from './response-utils';
 
 const ORDER_STATUS_UPDATE_TIMEOUT_MS = 15000;
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
+
+// These codes can follow submission or an existing/in-flight booking. Some
+// (for example ORDER_NOT_FOUND) are shared by pre- and post-submit guards,
+// so a typed response alone cannot establish that another booking is safe.
+const UNCONFIRMED_SHIPPING_ERROR_CODES = new Set([
+  'SHIPMENT_SAVE_FAILED',
+  'ORDER_REFUNDED_AFTER_BOOKING',
+  'SHIPMENT_BOOKING_STATE_CHECK_FAILED',
+  'ORDER_NOT_FOUND',
+  'MERCHANT_WALLET_COMPLETION_FAILED',
+  'MERCHANT_WALLET_RECONCILIATION_FAILED',
+  'MERCHANT_WALLET_SUBMISSION_FAILED',
+  'MERCHANT_WALLET_REFUND_FAILED',
+  'MERCHANT_WALLET_BOOKING_NOT_RETRYABLE',
+  'MERCHANT_WALLET_BOOKED_SHIPMENT_MISSING',
+  'SHIPMENT_BOOKING_IN_PROGRESS',
+  'SHIPMENT_BOOKING_LOCK_RELEASE_FAILED',
+  'EXISTING_SHIPMENT_LOOKUP_FAILED',
+  'INCOMPLETE_EXISTING_SHIPMENT',
+  'EXISTING_SHIPMENT_PROVIDER_MISMATCH',
+  'EXISTING_SHIPMENT_QUOTE_MISMATCH',
+]);
+
+// Only errors traced to lookup/validation before carrier submission belong
+// here. A new server/proxy code alone does not prove that booking failed.
+const DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES = new Set([
+  'SHIPMENT_BOOKING_LOCK_FAILED',
+  'MERCHANT_LOOKUP_FAILED',
+  'MERCHANT_SENDER_REQUIRED',
+  'QUOTE_ECONOMICS_LOOKUP_FAILED',
+  'QUOTE_METADATA_LOOKUP_FAILED',
+  'QUOTE_REFRESH_PERSIST_FAILED',
+  'QUOTE_REFRESH_ORDER_UPDATE_FAILED',
+  'GIGL_AUTHENTICATION_FAILED',
+  'GIGL_INTERNATIONAL_COUNTRY_LOOKUP_FAILED',
+]);
 
 interface OrderStatusContext {
   previousOrderQueries: [readonly unknown[], Order | undefined][];
@@ -19,6 +58,13 @@ interface OrderStatusContext {
 interface OrderStatusVariables {
   orderId: string;
   status: ShippingStatus;
+}
+
+function unconfirmedShippingResult(): OrderStatusUpdateError {
+  return new OrderStatusUpdateError(
+    'We could not confirm the shipping result. Check this order’s shipment status before booking again. If it remains unclear, contact support to avoid a duplicate shipment.',
+    'SHIPMENT_BOOKING_UNCONFIRMED'
+  );
 }
 
 async function updateOrderStatus(
@@ -33,8 +79,9 @@ async function updateOrderStatus(
   }
 
   let response: Response;
+  let responseText: string;
   try {
-    response = await createAuthenticatedFetch(
+    const result = await createAuthenticatedFetchText(
       url,
       {
         body: JSON.stringify({
@@ -49,6 +96,8 @@ async function updateOrderStatus(
       },
       ORDER_STATUS_UPDATE_TIMEOUT_MS
     );
+    response = result.response;
+    responseText = result.text;
   } catch (error: unknown) {
     if (IS_DEV_RUNTIME) {
       const message = error instanceof Error ? error.message : String(error);
@@ -60,13 +109,36 @@ async function updateOrderStatus(
       });
     }
 
+    // A lost fetch or response body cannot prove the carrier request failed.
+    // Authentication preflight errors are definitive: no request was sent.
+    if (
+      status === 'shipped' &&
+      !(error instanceof AuthenticatedFetchPreflightError)
+    ) {
+      throw unconfirmedShippingResult();
+    }
     throw error;
   }
 
-  const responseText = await response.text();
   const payload = parseResponsePayload(responseText);
 
   if (!response.ok) {
+    const errorCode =
+      payload && typeof payload === 'object' && typeof payload.code === 'string'
+        ? payload.code
+        : undefined;
+    // Server failures require reconciliation unless their code proves that
+    // submission never began. Shared/post-submit codes stay indeterminate
+    // at any HTTP status; preserve other business rejections below.
+    if (
+      status === 'shipped' &&
+      (UNCONFIRMED_SHIPPING_ERROR_CODES.has(errorCode ?? '') ||
+        (response.status >= 500 &&
+          response.status <= 599 &&
+          !DEFINITIVE_PRE_BOOKING_SERVER_ERROR_CODES.has(errorCode ?? '')))
+    ) {
+      throw unconfirmedShippingResult();
+    }
     const errorMessage =
       payload &&
       typeof payload === 'object' &&
@@ -86,15 +158,31 @@ async function updateOrderStatus(
 
     throw new OrderStatusUpdateError(
       errorMessage,
-      payload && typeof payload === 'object' && typeof payload.code === 'string'
-        ? payload.code
-        : undefined,
+      errorCode,
       payload && typeof payload === 'object' ? payload : undefined
     );
   }
 
   if (isCancellation) {
     return { id: orderId, shipping_status: 'cancelled' } as Order;
+  }
+
+  const acknowledgedOrder =
+    payload &&
+    typeof payload === 'object' &&
+    payload.order &&
+    typeof payload.order === 'object'
+      ? payload.order
+      : null;
+  if (
+    status === 'shipped' &&
+    (!acknowledgedOrder ||
+      !('id' in acknowledgedOrder) ||
+      acknowledgedOrder.id !== orderId ||
+      !('shipping_status' in acknowledgedOrder) ||
+      acknowledgedOrder.shipping_status !== 'shipped')
+  ) {
+    throw unconfirmedShippingResult();
   }
 
   if (

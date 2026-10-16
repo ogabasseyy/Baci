@@ -26,9 +26,7 @@ vi.mock('./shipping-quote-booking-economics', () => ({
   applyShippingQuoteBookingEconomicsToQuote: (quote: unknown) => quote,
 }));
 vi.mock('./assert-gigl-customer-checkout-prepaid', async (original) => ({
-  ...(await original<
-    typeof import('./assert-gigl-customer-checkout-prepaid')
-  >()),
+  ...(await original<AssertGiglCustomerCheckoutPrepaidModule>()),
   assertGiglCustomerCheckoutPrepaid: async () => undefined,
 }));
 vi.mock('./assert-current-shippable-order-payment', () => ({
@@ -53,6 +51,9 @@ vi.mock('./resolve-booking-merchant-sender', () => ({
 }));
 
 import { bookOrderShipment } from './book-order-shipment';
+
+type AssertGiglCustomerCheckoutPrepaidModule =
+  typeof import('./assert-gigl-customer-checkout-prepaid');
 
 const receiver = {
   name: 'Customer',

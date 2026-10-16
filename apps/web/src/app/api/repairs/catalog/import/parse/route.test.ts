@@ -20,13 +20,14 @@ vi.mock('@/lib/repairs/catalog-admin-auth', () => ({
 vi.mock('@/lib/repairs/import-context', () => ({ loadImportMatchContext }));
 vi.mock('@/lib/ensure-action-rate-limit', () => ({ ensureActionRateLimit }));
 vi.mock('@/lib/repairs/import-gemma', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/lib/repairs/import-gemma')>();
+  const actual = await importOriginal<ImportGemmaModule>();
   return { ...actual, parseRepairPriceList };
 });
 
 import { RepairsImportUnavailableError } from '@/lib/repairs/import-gemma';
 import { POST } from './route';
+
+type ImportGemmaModule = typeof import('@/lib/repairs/import-gemma');
 
 function okAuthz() {
   return { ok: true, access: { merchantId: 'm-1' }, supabase: {} };

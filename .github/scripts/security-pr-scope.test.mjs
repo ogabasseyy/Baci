@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
+import { parse } from 'yaml';
 import { fileURLToPath } from 'node:url';
 
 const workflow = readFileSync(
@@ -18,7 +19,7 @@ const workflow = readFileSync(
 );
 const helper = fileURLToPath(new URL('./semgrep-sarif-analysis-diagnostics.py', import.meta.url));
 
-function fixture(name = 'probe.ts', directory = 'apps/web/src/lib') {
+function fixture(name = 'probe.ts', directory = 'apps/web/src/lib', baseHelper, baseFiles = {}) {
   const root = mkdtempSync(join(tmpdir(), 'baci-security-scope-'));
   const git = (...args) => {
     const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
@@ -29,6 +30,14 @@ function fixture(name = 'probe.ts', directory = 'apps/web/src/lib') {
   git('config', 'user.name', 'Synthetic Test');
   git('config', 'user.email', 'test@example.test');
   writeFileSync(join(root, 'README.md'), 'base');
+  if (baseHelper) {
+    mkdirSync(join(root, '.github/scripts'), { recursive: true });
+    writeFileSync(join(root, '.github/scripts/semgrep-sarif-analysis-diagnostics.py'), baseHelper);
+  }
+  for (const [path, content] of Object.entries(baseFiles)) {
+    mkdirSync(join(root, path, '..'), { recursive: true });
+    writeFileSync(join(root, path), content);
+  }
   git('add', '.');
   git('commit', '-qm', 'base');
   git('update-ref', 'refs/remotes/origin/main', git('rev-parse', 'HEAD'));
@@ -91,21 +100,23 @@ for (const name of ['evil\nname.ts', 'évil.ts', 'space name.ts']) {
   });
 }
 
-test('a trusted diagnostics helper change is included in semantic scanning', () => {
-  const f = fixture('non-source.txt');
-  try {
-    mkdirSync(join(f.root, '.github/scripts'), { recursive: true });
-    const path = '.github/scripts/semgrep-sarif-analysis-diagnostics.py';
-    writeFileSync(join(f.root, path), 'print("fixture")');
-    f.git('add', '.');
-    f.git('commit', '-qm', 'diagnostics helper');
-    const result = f.run();
-    assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.paths, [path]);
-  } finally {
-    rmSync(f.root, { recursive: true, force: true });
-  }
-});
+for (const path of ['.github/scripts/semgrep-sarif-analysis-diagnostics.py', '.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py']) {
+  test(`trusted helper ${path} is included in semantic scanning`, () => {
+    const f = fixture('non-source.txt');
+    try {
+      mkdirSync(join(f.root, '.github/scripts'), { recursive: true });
+      writeFileSync(join(f.root, path), 'print("fixture")');
+      f.git('add', '.');
+      f.git('commit', '-qm', 'diagnostics helper');
+      const result = f.run();
+      assert.equal(result.status, 0, result.stderr);
+      assert.deepEqual(result.paths, [path]);
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
+}
+
 test('an actual non-source change produces an empty manifest', () => {
   const f = fixture('non-source.txt');
   try {
@@ -137,4 +148,82 @@ test('a root Next config change remains in targeted PR scope', () => {
   } finally {
     rmSync(f.root, { recursive: true, force: true });
   }
+});
+
+
+for (const baseKnowsDiagnostics of [false, true]) {
+  test(`base-pinned selection preserves unique NUL paths when base knows diagnostics: ${baseKnowsDiagnostics}`, () => {
+    const diagnosticPaths = ['.github/scripts/semgrep-sarif-pg-diagnostic.py', '.github/scripts/semgrep-sarif-pg-diagnostic.test.py'];
+    const basePaths = ['apps/web/src/lib/probe.ts', 'apps/web/src/lib/space name.ts', 'apps/web/src/lib/line\nbreak.ts', 'apps/web/src/lib/é.ts', 'apps/web/src/lib/e\u0301.ts'];
+    const selectedBasePaths = [...basePaths, ...(baseKnowsDiagnostics ? diagnosticPaths : [])];
+    const baseHelper = `import pathlib\npathlib.Path("semgrep.requested-targets").write_bytes(${JSON.stringify(selectedBasePaths.join('\0') + '\0')}.encode())\n`;
+    const f = fixture('probe.ts', 'apps/web/src/lib', baseHelper);
+    try {
+      for (const path of [...basePaths, ...diagnosticPaths, '.github/scripts/unrelated.py']) {
+        writeFileSync(join(f.root, path), 'print("synthetic")');
+      }
+      f.git('add', '.');
+      f.git('commit', '-qm', 'new diagnostics');
+      const selector = parse(workflow).jobs.semgrep.steps.find((step) => step.id === 'semgrep_pr_targets');
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', selector.run], {
+        cwd: f.root, encoding: 'utf8', env: { ...process.env, PR_BASE_REF: 'main', GITHUB_WORKSPACE: f.root },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const manifest = readFileSync(join(f.root, 'semgrep.requested-targets'), 'utf8');
+      assert.ok(manifest.endsWith('\0'));
+      const paths = manifest.split('\0').filter(Boolean);
+      assert.deepEqual(paths.sort(), [...basePaths, ...diagnosticPaths].sort());
+      assert.equal(paths.length, new Set(paths).size);
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
+}
+
+
+for (const baseKnowsDiagnostics of [false, true]) {
+  test(`ignore-only policy changes scan unchanged protected targets with diagnostic-aware base: ${baseKnowsDiagnostics}`, () => {
+    const baseFiles = {
+      'apps/web/src/lib/unchanged.ts': 'export const value = 1;',
+      'outside-protected-base/probe.ts': 'export const baseSelected = true;',
+      'packages/shared/scripts/check-module-size.mjs': 'console.log("synthetic");',
+      'packages/shared/scripts/check-module-size-report.mjs': 'console.log("synthetic");',
+      '.github/scripts/semgrep-sarif-pg-diagnostic.py': 'pass',
+      '.github/scripts/semgrep-sarif-pg-diagnostic.test.py': 'pass',
+      'docs/unrelated.ts': 'export const value = 1;',
+      'apps/web/src/lib/config.json': '{}',
+    };
+    let baseHelper = readFileSync(helper, 'utf8');
+    if (!baseKnowsDiagnostics) {
+      baseHelper = baseHelper
+        .replace('    ".github/scripts/semgrep-sarif-pg-diagnostic.py",\n', '')
+        .replace('    ".github/scripts/semgrep-sarif-pg-diagnostic.test.py",\n', '');
+    }
+    baseHelper += '\nif len(sys.argv) == 3 and sys.argv[1] == "pr-targets":\n    with open("semgrep.requested-targets", "ab") as manifest:\n        manifest.write(b"outside-protected-base/probe.ts\\0")\n';
+    const f = fixture('.semgrepignore', '.', baseHelper, baseFiles);
+    try {
+      const steps = parse(workflow).jobs.semgrep.steps;
+      const selector = steps.find((step) => step.id === 'semgrep_pr_targets');
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', selector.run], {
+        cwd: f.root, encoding: 'utf8', env: { ...process.env, PR_BASE_REF: 'main', GITHUB_WORKSPACE: f.root },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      const paths = readFileSync(join(f.root, 'semgrep.requested-targets'), 'utf8').split('\0').filter(Boolean);
+      assert.deepEqual(paths.sort(), [
+        '.github/scripts/semgrep-sarif-analysis-diagnostics.py',
+        ...Object.keys(baseFiles).filter((path) => !path.startsWith('docs/') && !path.endsWith('.json')),
+      ].sort());
+      const roots = (script) => script.match(/scan_targets=\(\n([\s\S]*?)\n\s*\)/)[1].trim().split(/\s+/);
+      assert.deepEqual(roots(selector.run), roots(steps.find((step) => step.id === 'semgrep_push').run));
+    } finally {
+      rmSync(f.root, { recursive: true, force: true });
+    }
+  });
+}
+
+test('ignore policy changes trigger Security and scope regression jobs', () => {
+  const changes = parse(workflow).jobs.changes.steps.find((step) => step.id === 'filter');
+  assert.ok(parse(changes.with.filters).semgrep_relevant.includes('.semgrepignore'));
+  const filters = parse(readFileSync(new URL('../filters/ci.yml', import.meta.url), 'utf8'));
+  assert.ok(filters.quiz_db.includes('.semgrepignore'));
 });

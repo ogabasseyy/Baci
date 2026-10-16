@@ -5,12 +5,13 @@ const mocks = vi.hoisted(() => ({
   client: { brand: 'test-intake-client' },
 }));
 vi.mock('@/lib/piggyvest/event-quarantine', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/lib/piggyvest/event-quarantine')>();
+  const actual = await importOriginal<EventQuarantineModule>();
   return { ...actual, recordQuarantineEvent: mocks.record };
 });
 
 import { quarantineAndAck } from './quarantine-and-ack';
+
+type EventQuarantineModule = typeof import('@/lib/piggyvest/event-quarantine');
 
 const rawBody = Buffer.from('{"event":"synthetic"}');
 

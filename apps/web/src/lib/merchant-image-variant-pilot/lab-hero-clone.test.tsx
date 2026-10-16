@@ -17,6 +17,8 @@ import {
   projectPilotOgabasseyMobile,
 } from './ogabassey-mobile-adapter';
 
+type ImageModule = typeof import('next/image');
+
 vi.mock('next/link', () => ({
   default: ({
     children,
@@ -31,7 +33,7 @@ vi.mock('next/link', () => ({
 // chain runs unmocked on the staged URL); only the terminal <Image> for
 // non-prioritized slides is a passthrough.
 vi.mock('next/image', async (importOriginal) => {
-  const original = await importOriginal<typeof import('next/image')>();
+  const original = await importOriginal<ImageModule>();
   return {
     ...original,
     default: (props: Record<string, unknown>) => {

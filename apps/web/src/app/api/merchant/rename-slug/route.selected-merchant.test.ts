@@ -1,6 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type ServerModule = typeof import('next/server');
+
 const mockAuthenticateApiRequest = vi.fn();
 const mockCheckCsrfProtection = vi.fn();
 const mockGetMerchantForApiRequest = vi.fn();
@@ -9,7 +11,7 @@ const merchantAId = '11111111-1111-4111-8111-111111111111';
 const merchantBId = '22222222-2222-4222-8222-222222222222';
 
 vi.mock('next/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next/server')>();
+  const actual = await importOriginal<ServerModule>();
   return { ...actual, after: vi.fn() };
 });
 vi.mock('@/lib/api-auth', () => ({

@@ -1,16 +1,15 @@
 import { JOINED_TITLE_CORRECTIONS } from '@/config/storefront-content-title-corrections';
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-}
+// Literal patterns keep the complete, fixed correction vocabulary auditable.
+const corrections = [
+  [/\bdonkeykong\b/giu, JOINED_TITLE_CORRECTIONS.donkeykong],
+  [/\bairpod\b/giu, JOINED_TITLE_CORRECTIONS.airpod],
+] as const;
 
 export function applyJoinedTitleCorrections(value: string) {
-  return Object.entries(JOINED_TITLE_CORRECTIONS).reduce(
-    (correctedValue, [joinedTitle, correction]) =>
-      correctedValue.replace(
-        new RegExp(`\\b${escapeRegExp(joinedTitle)}\\b`, 'giu'),
-        correction
-      ),
+  return corrections.reduce(
+    (correctedValue, [pattern, correction]) =>
+      correctedValue.replace(pattern, correction),
     value
   );
 }

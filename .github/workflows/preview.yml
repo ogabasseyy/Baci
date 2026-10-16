@@ -158,7 +158,11 @@ jobs:
           PREVIEW_REF: ${{ inputs.ref }}
         run: |
           ref="${PREVIEW_REF#refs/heads/}"; ref="${ref#refs/tags/}"
-          case "$ref" in ''|*[!A-Za-z0-9._/-]*) ref="$(git rev-parse --short HEAD)";; esac
+          case "$ref" in
+            ''|*[!A-Za-z0-9._/-]*)
+              ref="$(git rev-parse --short HEAD)"
+              ;;
+          esac
           { echo "VERCEL_GIT_COMMIT_SHA=$(git rev-parse HEAD)"; echo "VERCEL_GIT_COMMIT_REF=$ref"; } >>"$GITHUB_ENV"
       - name: Checkout trusted ops files
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

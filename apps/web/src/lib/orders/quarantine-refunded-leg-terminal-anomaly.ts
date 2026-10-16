@@ -81,6 +81,7 @@ export async function quarantineRefundedLegTerminalAnomaly({
     unverifiedLinkedLegIds,
   } = matchCancellationRefundCoverage({
     linkedPaymentId,
+    orderCurrency: order.currency,
     refundRows,
     soleCompletedLegId,
     transactions: legs,

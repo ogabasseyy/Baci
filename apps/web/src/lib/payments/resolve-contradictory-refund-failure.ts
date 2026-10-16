@@ -36,6 +36,7 @@ interface ReplacementRefundRow {
   gateway: string | null;
   id: string;
   metadata: {
+    method?: unknown;
     payment_transaction_id?: unknown;
     provider_refund_status?: unknown;
   } | null;
@@ -50,8 +51,11 @@ interface ReplacementRefundRow {
  * leg's valid replacement and alert falsely. A Paystack replacement
  * counts only after provider verification, mirroring the completion
  * ledger: a locally completed row Paystack later rejects must not
- * suppress the alert. Anything unmatchable or unparseable fails closed
- * so the contradiction is filed and alerted.
+ * suppress the alert. Manual Paystack claims need the same proof: a
+ * newer unattested merchant claim for provider money is not
+ * coverage, or a failed stamped manual would be silently superseded
+ * by a claim the provider never confirmed. Anything unmatchable or
+ * unparseable fails closed so the contradiction is filed and alerted.
  */
 function replacementMatchesFailedLeg(
   replacement: ReplacementRefundRow,
@@ -83,9 +87,21 @@ function replacementMatchesFailedLeg(
     return false;
   }
   // A locally completed Paystack refund counts only after it is
-  // provider-verified; other gateways keep local-status trust.
+  // provider-verified; other gateways keep local-status trust. A
+  // manual claim about provider money is a Paystack replacement in
+  // substance whatever its gateway label, so it needs the processed
+  // stamp too: without this a newer unverified merchant claim would
+  // silently supersede a failed stamped manual's alert. Trimmed and
+  // case-folded like the gateway above, so a padded spelling cannot
+  // dodge the proof while still matching as the same transfer.
+  const replacementMethod = replacement.metadata?.method;
+  const claimsPaystackMoney =
+    replacementGateway === 'PAYSTACK' ||
+    (replacementGateway === 'MANUAL' &&
+      typeof replacementMethod === 'string' &&
+      replacementMethod.trim().toLowerCase() === 'paystack');
   if (
-    replacementGateway === 'PAYSTACK' &&
+    claimsPaystackMoney &&
     replacement.metadata?.provider_refund_status !== 'processed'
   ) {
     return false;

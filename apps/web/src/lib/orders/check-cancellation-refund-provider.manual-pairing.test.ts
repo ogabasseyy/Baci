@@ -53,6 +53,43 @@ describe('checkCancellationRefundProvider manual pairing', () => {
       })
     ).resolves.toEqual([{ kobo: 100, providerRefundId: 7 }]);
   });
+  it('reserves stamped ids before pairing unstamped claims', async () => {
+    // A stamped partial and a newer same-sized partial: the old id is
+    // already persisted, so only the new provider refund pairs. Without
+    // reservation both rows would consume pairs and the stamp — which
+    // skips stamped rows — would persist the old id onto the new row
+    // while the new provider refund stays unlinked.
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: 8, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [
+          {
+            gateway_reference: 'merchant-ref-1',
+            amount: 1,
+            status: 'completed',
+            currency: 'NGN',
+            metadata: {
+              method: 'paystack',
+              provider_refund_id: 7,
+              provider_refund_status: 'processed',
+            },
+          },
+          {
+            gateway_reference: 'merchant-ref-2',
+            amount: 1,
+            status: 'completed',
+            currency: 'NGN',
+            metadata: { method: 'paystack' },
+          },
+        ],
+      })
+    ).resolves.toEqual([{ kobo: 100, providerRefundId: 8 }]);
+  });
+
   it('still blocks when manual Paystack rows cannot cover the provider refund', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
       { id: 7, amount: 200, currency: 'NGN', status: 'processed' },

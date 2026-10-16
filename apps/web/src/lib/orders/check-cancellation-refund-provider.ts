@@ -103,6 +103,32 @@ export async function checkCancellationRefundProvider({
       .filter((row) => row.status === 'processed')
       .map((row) => String(row.id))
   );
+  // IDs already persisted onto stamped rows are reserved before
+  // pairing: the proof stamp skips stamped rows, so pairing their
+  // ids to unstamped claims would cross-assign the old id to a new
+  // row (listing order is not guaranteed) while the new provider
+  // refund stays unlinked. Stamped rows prove themselves; only
+  // unstamped claims consume fresh pairs. A stamp whose id the
+  // listing no longer carries is the sweep's contradiction recheck,
+  // not this preflight's, so absence quarantines nothing here.
+  const reservedProviderIds = new Set<number>();
+  for (const item of knownRefunds) {
+    // Same filters as the candidate loop below: a corrupt stamp on a
+    // foreign-currency or non-Paystack row reserves nothing, so its id
+    // still pairs-or-quarantines instead of passing silently.
+    if (
+      (item.status === 'completed' || item.status === 'refunded') &&
+      item.metadata?.method === 'paystack' &&
+      normalizeRefundMoneyField(item.currency) ===
+        normalizeRefundMoneyField(currency) &&
+      item.metadata?.provider_refund_status === 'processed'
+    ) {
+      const stored = Number(item.metadata?.provider_refund_id);
+      if (Number.isSafeInteger(stored) && stored > 0) {
+        reservedProviderIds.add(stored);
+      }
+    }
+  }
   const manualCandidates: number[] = [];
   // Provider refunds consumed by manual pairings, returned so the
   // proof stamp can persist the paired id onto the matching row:
@@ -129,6 +155,13 @@ export async function checkCancellationRefundProvider({
       processedIds.has(item.gateway_reference.trim())
     )
       continue;
+    // Already stamped: its proof is persisted, so it must neither
+    // consume a fresh pair nor demand one from the listing.
+    if (
+      item.metadata?.provider_refund_status === 'processed' &&
+      reservedProviderIds.has(Number(item.metadata?.provider_refund_id))
+    )
+      continue;
     const kobo = Math.round(Number(item.amount) * 100);
     if (!Number.isSafeInteger(kobo) || kobo <= 0) continue;
     manualCandidates.push(kobo);
@@ -138,6 +171,11 @@ export async function checkCancellationRefundProvider({
     // amount/currency gate and the pairing below: a failed row must never
     // strand the refund behind review.
     if (row.status === 'failed') continue;
+    // Reserved by an existing stamp: already linked, nothing to prove.
+    if (row.status === 'processed' && reservedProviderIds.has(row.id)) {
+      reservedProviderIds.delete(row.id);
+      continue;
+    }
     const known = knownRefunds.find(
       (item) => (item.gateway_reference ?? '').trim() === String(row.id)
     );

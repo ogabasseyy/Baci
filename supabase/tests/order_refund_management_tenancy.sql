@@ -86,7 +86,10 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000001', v_merchant_id, 'REFUND-001',
       100, 100, 'paid', 'cancelled'),
     ('9ef11000-0000-4000-8000-000000000009', v_m2_id, 'REFUND-009',
-      10, 10, 'paid', 'cancelled');
+      10, 10, 'paid', 'cancelled'),
+    -- Ineligible control: never cancelled, so no refund rows.
+    ('9ef11000-0000-4000-8000-000000000010', v_merchant_id, 'REFUND-010',
+      100, 100, 'paid', 'processing');
 
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
   WHERE id IN (
@@ -169,6 +172,21 @@ BEGIN
   END;
   IF NOT v_rejected THEN
     RAISE EXCEPTION 'view-authorized staff recorded a manual refund';
+  END IF;
+  -- Status stays readable for ineligible orders (the panel gates on
+  -- visibility, not the RPC), but the ledger is empty by
+  -- construction — no manual records without cancelled_at, no
+  -- worker refunds without the cancelled claim — so no references,
+  -- notes, legs, events, or actions leak to viewers.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000010'
+  ) INTO v_result;
+  IF pg_catalog.jsonb_array_length(COALESCE(v_result->'history', '[]')) <> 0
+    OR pg_catalog.jsonb_array_length(COALESCE(v_result->'legs', '[]')) <> 0
+    OR pg_catalog.jsonb_array_length(COALESCE(v_result->'events', '[]')) <> 0
+    OR (v_result->>'canRecordManual')::boolean
+    OR (v_result->>'canRetry')::boolean THEN
+    RAISE EXCEPTION 'ineligible status exposed ledger or actions';
   END IF;
 END;
 $refund_viewer$;

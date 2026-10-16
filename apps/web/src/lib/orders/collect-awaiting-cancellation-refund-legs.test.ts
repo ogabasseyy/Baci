@@ -66,15 +66,16 @@ describe('collectAwaitingCancellationRefundLegs', () => {
   });
 
   it('leaves definitively rejected refunds out of review quarantine', () => {
-    // A failed row carrying the provider's failed stamp is
-    // provably dead: quarantining it would disable the retry and
-    // manual recovery the SQL manager exposes for the leg.
+    // A failed row carrying the provider's failed stamp but no
+    // recoverable provider identity is provably dead: quarantining
+    // it would disable the retry and manual recovery the SQL manager
+    // exposes for the leg.
     const { awaitingRefundPaymentIds, reviewRefundPaymentIds } =
       collectAwaitingCancellationRefundLegs({
         linkedPaymentId,
         refundRows: [
           {
-            gateway_reference: '48',
+            gateway_reference: 'merchant-48',
             metadata: {
               ...linked('payment-1'),
               provider_refund_status: 'failed',
@@ -90,6 +91,38 @@ describe('collectAwaitingCancellationRefundLegs', () => {
       });
     expect([...awaitingRefundPaymentIds]).toEqual([]);
     expect([...reviewRefundPaymentIds]).toEqual(['payment-2']);
+  });
+
+  it('reviews failed rows whose provider identity can still recover', () => {
+    // A failed stamp is not terminal when the row names a provider
+    // refund: the transition, sweep, and webhook all recheck failed
+    // rows for a later processed verdict, so excluding the leg would
+    // let a fresh retry double-refund if the original recovers.
+    const { awaitingRefundPaymentIds, reviewRefundPaymentIds } =
+      collectAwaitingCancellationRefundLegs({
+        linkedPaymentId,
+        refundRows: [
+          {
+            gateway_reference: '48',
+            metadata: {
+              ...linked('payment-1'),
+              provider_refund_status: 'failed',
+            },
+            status: 'failed',
+          },
+          {
+            gateway_reference: 'merchant-49',
+            metadata: {
+              ...linked('payment-2'),
+              provider_refund_id: 7,
+              provider_refund_status: 'failed',
+            },
+            status: 'failed',
+          },
+        ],
+      });
+    expect([...awaitingRefundPaymentIds]).toEqual([]);
+    expect([...reviewRefundPaymentIds]).toEqual(['payment-1', 'payment-2']);
   });
 
   it('handles a null row list', () => {

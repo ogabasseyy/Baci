@@ -141,6 +141,33 @@ export function findDisplayIndex(
   );
 }
 
+/**
+ * Attachment-lane identity for adds: the server merges an add only
+ * into the line whose voucher AND negotiation attachments match, so
+ * capacity checks and optimistic matching must compare the full lane
+ * (negotiated price in minor units, status normalized to 'none').
+ */
+export function displayLineMatchesAddLane(
+  line: SharedCartDisplayItem,
+  lane: {
+    voucherToken?: string;
+    voucherAwardId?: string;
+    negotiatedUnitPriceMinor?: number;
+    negotiationStatus?: string;
+  }
+): boolean {
+  const lineNegotiatedMinor =
+    line.negotiatedPrice != null
+      ? Math.round(line.negotiatedPrice * 100)
+      : undefined;
+  return (
+    (line.quizVoucherToken ?? undefined) === lane.voucherToken &&
+    (line.quizAwardId ?? undefined) === lane.voucherAwardId &&
+    lineNegotiatedMinor === lane.negotiatedUnitPriceMinor &&
+    (line.negotiationStatus ?? 'none') === (lane.negotiationStatus ?? 'none')
+  );
+}
+
 export function optimisticAddLine(
   intent: Extract<SharedCartIntent, { kind: 'add' }>
 ): SharedCartDisplayItem {
@@ -185,10 +212,18 @@ export function applyIntent(
     const index = display.findIndex(
       (line) =>
         identityKeyOfDisplay(line) === key &&
-        (line.quizVoucherToken ?? undefined) ===
-          (intent.input?.voucherToken ?? intent.attachments?.voucherToken) &&
-        (line.quizAwardId ?? undefined) ===
-          (intent.input?.voucherAwardId ?? intent.attachments?.voucherAwardId)
+        displayLineMatchesAddLane(line, {
+          voucherToken:
+            intent.input?.voucherToken ?? intent.attachments?.voucherToken,
+          voucherAwardId:
+            intent.input?.voucherAwardId ?? intent.attachments?.voucherAwardId,
+          negotiatedUnitPriceMinor:
+            intent.input?.negotiatedUnitPriceMinor ??
+            intent.attachments?.negotiatedUnitPriceMinor,
+          negotiationStatus:
+            intent.input?.negotiationStatus ??
+            intent.attachments?.negotiationStatus,
+        })
     );
     if (index === -1) {
       return [...display, optimisticAddLine(intent)];

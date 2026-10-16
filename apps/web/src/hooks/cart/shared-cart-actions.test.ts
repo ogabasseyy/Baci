@@ -696,6 +696,47 @@ describe('useSharedCart actions', () => {
     });
   });
 
+  it('does not let a capped negotiated line block an ordinary add', async () => {
+    // A negotiated line is a separate server lane from an ordinary
+    // line for the same product, so its quantity must not consume the
+    // ordinary add's per-line cap.
+    mockAdopted(3, [
+      cartLine({
+        negotiatedUnitPriceMinor: 9000,
+        negotiationStatus: 'accepted',
+        quantity: 10,
+      }),
+    ]);
+    vi.mocked(sendSharedCartCommand).mockResolvedValue({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({
+        lines: [
+          cartLine({
+            negotiatedUnitPriceMinor: 9000,
+            negotiationStatus: 'accepted',
+            quantity: 10,
+          }),
+          cartLine({ id: 'line-2', quantity: 5 }),
+        ],
+        version: 4,
+      }),
+      warnings: [],
+    });
+    const { result } = await linkedHook();
+
+    await act(async () => {
+      result.current.addToCart(product(), 5);
+    });
+
+    await waitFor(() =>
+      expect(vi.mocked(sendSharedCartCommand)).toHaveBeenCalledTimes(1)
+    );
+    expect(vi.mocked(sendSharedCartCommand).mock.calls[0]?.[0]).toMatchObject({
+      command: { quantity: 5, type: 'add' },
+    });
+  });
+
   it('does not let a voucher line eat into an ordinary add headroom', async () => {
     mockAdopted(3, [
       cartLine({

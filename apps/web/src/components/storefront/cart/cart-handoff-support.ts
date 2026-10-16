@@ -1,5 +1,9 @@
 import type { CartItemIdentity, CartSnapshot } from '@baci/shared/cart';
-import { type CartMergeResolution, planCartMerge } from '@baci/shared/cart';
+import {
+  type CartMergeResolution,
+  cartLineIdentity,
+  planCartMerge,
+} from '@baci/shared/cart';
 
 export interface PreviewMerchant {
   id: string;
@@ -113,6 +117,33 @@ export function redactHandoffFragment() {
     '',
     window.location.pathname + window.location.search
   );
+}
+
+/** Picks recorded against the current conflict set, as merge resolutions. */
+export function mergeResolutionList(
+  conflicts: MergeConflictView[],
+  resolutions: Record<string, 'incoming' | 'existing'>
+): CartMergeResolution[] {
+  return conflicts
+    .filter((conflict) => resolutions[cartLineIdentity(conflict.item)])
+    .map((conflict) => ({
+      item: conflict.item,
+      keep: resolutions[cartLineIdentity(conflict.item)] as
+        | 'incoming'
+        | 'existing',
+    }));
+}
+
+/** Every recorded pick as a resolution, resolving items from conflicts. */
+export function recordResolutionList(
+  conflicts: MergeConflictView[],
+  resolutions: Record<string, 'incoming' | 'existing'>
+): CartMergeResolution[] {
+  return Object.entries(resolutions).map(([key, keep]) => ({
+    item: conflicts.find((conflict) => cartLineIdentity(conflict.item) === key)
+      ?.item ?? { productId: key },
+    keep,
+  }));
 }
 
 /** Public previews carry opaque line ids; SQL reconstructs private offer lanes. */

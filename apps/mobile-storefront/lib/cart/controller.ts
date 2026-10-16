@@ -96,6 +96,22 @@ export function createNativeCartController(
     const context = await options.client.context();
     assertCurrent();
     let pending = await receipts.read(options.merchantId);
+    if (
+      !context &&
+      pending &&
+      pending.body &&
+      typeof pending.body === 'object' &&
+      'kind' in pending.body &&
+      pending.body.kind === 'create'
+    ) {
+      // A pending create whose bootstrap authority has expired can
+      // never be recovered: its actor check will fail forever. Retire
+      // the receipt so the preserved legacy items can bootstrap a
+      // fresh cart instead of stranding every refresh and write.
+      await receipts.clear(options.merchantId, pending.operationId);
+      assertCurrent();
+      pending = null;
+    }
     if (!context && options.getLegacy().sharedCartRef && options.repairLegacy) {
       // Retire the local generation after losing its device capability.
       if (pending)

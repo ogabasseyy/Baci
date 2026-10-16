@@ -16,6 +16,7 @@ import {
 import { isTerminalCart } from './shared-cart-queue';
 import {
   cartItemToIdentity,
+  displayLineMatchesAddLane,
   type SharedCartIntent,
 } from './shared-cart-reducer';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
@@ -86,8 +87,10 @@ export function createCartActions(context: SharedCartRuntime) {
       .filter(
         (line) =>
           cartLineIdentity(cartItemToIdentity(line)) === key &&
-          (line.quizVoucherToken ?? undefined) === voucherToken &&
-          (line.quizAwardId ?? undefined) === voucherAwardId
+          // A fresh add carries no negotiation attachments, so only
+          // the ordinary lane counts toward its per-line cap; a
+          // negotiated sibling is a separate server line.
+          displayLineMatchesAddLane(line, { voucherToken, voucherAwardId })
       )
       .reduce((sum, line) => sum + line.quantity, 0);
     let sendQuantity = Math.max(1, Math.floor(quantity));

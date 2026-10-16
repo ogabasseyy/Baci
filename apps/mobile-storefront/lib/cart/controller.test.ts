@@ -157,6 +157,26 @@ it('does not turn a failed authorized read into an empty or replacement cart', a
   expect(s.client.create).not.toHaveBeenCalled();
   expect(s.publish).not.toHaveBeenCalled();
 });
+it('retires an unrecoverable pending create after its bootstrap authority expires', async () => {
+  const s = setup();
+  s.receipts.read
+    .mockResolvedValueOnce({
+      actor: 'old',
+      operationId: 'old-create',
+      body: {
+        kind: 'create',
+        input: { operationId: 'old-create', lines: [] },
+      },
+    })
+    .mockResolvedValue(null);
+  await expect(s.controller.refresh()).resolves.not.toThrow();
+  expect(s.receipts.clear).toHaveBeenCalledWith(merchant, 'old-create');
+  // A later write bootstraps a fresh principal and creates normally.
+  await s.controller.write({ type: 'clear' });
+  expect(s.client.bootstrap).toHaveBeenCalledTimes(1);
+  expect(s.client.create).toHaveBeenCalledTimes(1);
+});
+
 it('does not bootstrap a new principal over unresolved durable intent', async () => {
   const s = setup();
   s.receipts.read.mockResolvedValue({

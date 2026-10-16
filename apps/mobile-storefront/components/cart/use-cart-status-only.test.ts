@@ -21,7 +21,7 @@ it.each([
   const { result } = renderHook(() => useCartStatusOnly(count));
   expect(result.current).toBe(expected);
 });
-it('stays status-only while a ready cart still lacks metadata or a snapshot', () => {
+it('stays status-only while a ready cart still lacks metadata, but not for an empty no-cart state', () => {
   useNativeSharedCartStore.setState({
     enabled: true,
     status: 'ready',
@@ -34,7 +34,9 @@ it('stays status-only while a ready cart still lacks metadata or a snapshot', ()
   act(() =>
     useNativeSharedCartStore.setState({ snapshot: null, metadataReady: true })
   );
-  expect(result.current).toBe(true);
+  // Ready with no server cart and no items is the normal empty-cart
+  // view, so the account panel can mount and offer a saved cart.
+  expect(result.current).toBe(false);
   act(() => useNativeSharedCartStore.setState({ snapshot: completeSnapshot }));
   expect(result.current).toBe(false);
 });

@@ -10,6 +10,9 @@ import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
  */
 export function useCartStatusOnly(itemCount: number): boolean {
   const enabled = useNativeSharedCartStore((state) => state.enabled);
+  // A settled ready state with no server cart and no local items is
+  // the normal empty-cart view: the account panel must mount there so
+  // it can bootstrap and offer a saved account cart.
   const status = useNativeSharedCartStore((state) => state.status);
   const snapshot = useNativeSharedCartStore((state) => state.snapshot);
   const metadataReady = useNativeSharedCartStore(
@@ -18,6 +21,7 @@ export function useCartStatusOnly(itemCount: number): boolean {
   const mergeConflicts = useNativeSharedCartStore(
     (state) => state.mergeConflicts
   );
+  if (status === 'ready' && !snapshot && itemCount === 0) return false;
   const panelHasContent = !(
     status === 'ready' &&
     snapshot &&

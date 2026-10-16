@@ -1,6 +1,5 @@
 'use client';
-import type { CartItemIdentity, CartSnapshot } from '@baci/shared/cart';
-import { cartLineIdentity } from '@baci/shared/cart';
+import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { buildCsrfHeaders } from '@/lib/csrf';
 import {
@@ -9,8 +8,10 @@ import {
   fetchJson,
   loadOrCreateAttemptId,
   type MergeConflictView,
+  mergeResolutionList,
   type PreviewResponse,
   planHandoffMerge as planMerge,
+  recordResolutionList,
   redactHandoffFragment,
 } from './cart-handoff-support';
 export function useCartHandoff(props: { token: string; handoffId: string }) {
@@ -168,6 +169,11 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
         setRedeemError(
           'One of the carts changed. Review the latest state and try again.'
         );
+        // Offer picks belong to the carts that were just superseded:
+        // clear them so the shopper reviews the refreshed offers
+        // instead of applying a stale incoming/existing choice.
+        setConflicts([]);
+        setResolutions({});
         await loadPreview();
         return false;
       }
@@ -207,10 +213,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       await postRedeem(base);
       return;
     }
-    const resolutionList = Object.entries(resolutions).map(([key, keep]) => ({
-      item: conflictItemForKey(key) ?? { productId: key },
-      keep,
-    }));
+    const resolutionList = recordResolutionList(conflicts, resolutions);
     const planned = planMerge(destCart, preview.snapshot, resolutionList);
     if (!planned.ok && planned.code === 'too_many_lines') {
       setRedeemError(
@@ -229,23 +232,9 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     });
   }
 
-  function conflictItemForKey(key: string): CartItemIdentity | null {
-    return (
-      conflicts.find((conflict) => cartLineIdentity(conflict.item) === key)
-        ?.item ?? null
-    );
-  }
-
   async function continueMerge(): Promise<void> {
     if (!preview?.snapshot || !destCart) return;
-    const resolutionList = conflicts
-      .filter((conflict) => resolutions[cartLineIdentity(conflict.item)])
-      .map((conflict) => ({
-        item: conflict.item,
-        keep: resolutions[cartLineIdentity(conflict.item)] as
-          | 'incoming'
-          | 'existing',
-      }));
+    const resolutionList = mergeResolutionList(conflicts, resolutions);
     if (resolutionList.length !== conflicts.length) {
       setRedeemError('Choose which version to keep for every listed item.');
       return;

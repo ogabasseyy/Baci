@@ -23,8 +23,9 @@
 # runs Phase 1 only: the blocking proof needs nothing past the lock
 # point, since unreached PL/pgSQL statements never compile. That is
 # the mode CI runs — the lock cannot be removed unnoticed — while
-# Phase 2's finalize-after-manual stays covered replay-natively by the
-# main suite's claim-finalize assertions.
+# Phase 2's finalize-after-manual stays covered replay-natively by
+# round62 (RPC-record then claim must finalize), and both locks are
+# pinned by source assertion in claim_anomalies.
 #
 # USAGE:
 #   bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
@@ -243,7 +244,7 @@ SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', false);
 SELECT pg_catalog.set_config('request.jwt.claim.sub', '$MANAGER_ID', false);
 SET ROLE authenticated;
 SELECT public.manage_order_refund('$ORDER_ID', 'manual', 100,
-  '2026-09-28T12:00:00Z', 'bank_transfer', 'race-1', NULL, true);
+  pg_catalog.now(), 'bank_transfer', 'race-1', NULL, true);
 SQL
 
 # Finalization reports we_won=false (no worker claim won), matching

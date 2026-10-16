@@ -209,6 +209,16 @@ BEGIN
   ) NOT LIKE '%FOR UPDATE%' THEN
     RAISE EXCEPTION 'claim lost its explicit orders lock';
   END IF;
+  -- The manager re-locks the same row after authorization: without
+  -- the re-lock a manual could commit between the worker's ledger
+  -- read and its provider POST. Match the statement shape, not the
+  -- prose comment, so deleting the lock fails even if the comment
+  -- stays.
+  IF pg_get_functiondef(
+    'private.manage_order_refund(uuid,text,numeric,timestamptz,text,text,text,boolean,uuid)'::regprocedure
+  ) NOT LIKE '%WHERE id=p_order_id FOR UPDATE;%' THEN
+    RAISE EXCEPTION 'manager lost its orders re-lock';
+  END IF;
 END;
 $refund_claim_anomalies$;
 ROLLBACK;

@@ -224,6 +224,10 @@ class CapabilityBindingTests(unittest.TestCase):
         probe = [line for line in text.splitlines() if "register_status.py" in line]
         self.assertEqual(len(probe), 1, "probe must invoke register_status.py exactly once")
         self.assertIn("|| echo broken", probe[0])
+        # A multi-line capture would write a bare second line that matches
+        # no routing step, so the value must be sanitized before writing.
+        self.assertIn('case "$status" in fresh|stale|broken)', text)
+        self.assertIn('echo "status=$status" >> "$GITHUB_OUTPUT"', text)
 
     def test_changed_cited_source_must_match_bound_revision(self):
         def git(repo, *args):

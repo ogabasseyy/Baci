@@ -184,6 +184,7 @@ jobs:
             exit 0
           fi
 
+          printf '%s\0' "${changed_files[@]}" > semgrep.requested-targets
           echo "scanned=true" >> "$GITHUB_OUTPUT"
           # Match the existing full CI engine; use only the existing entitlement.
           semgrep install-semgrep-pro
@@ -198,24 +199,41 @@ jobs:
       - name: Run scoped Semgrep on protected branch pushes
         if: github.event_name == 'push'
         id: semgrep_push
+        shell: bash
         run: |
-          semgrep install-semgrep-pro
-          semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json \
-            apps/web/src/app/api \
-            apps/web/src/lib \
-            apps/web/src/schemas \
-            apps/mobile-admin/app \
-            apps/mobile-admin/hooks \
-            apps/mobile-admin/lib \
-            apps/mobile-storefront/app \
-            apps/mobile-storefront/hooks \
-            apps/mobile-storefront/lib \
-            apps/mobile-storefront/services \
-            apps/mobile-storefront/stores \
-            packages/shared \
-            supabase/migrations \
-            next.config.ts \
+          scan_targets=(
+            apps/web/src/app/api
+            apps/web/src/lib
+            apps/web/src/schemas
+            apps/mobile-admin/app
+            apps/mobile-admin/hooks
+            apps/mobile-admin/lib
+            apps/mobile-storefront/app
+            apps/mobile-storefront/hooks
+            apps/mobile-storefront/lib
+            apps/mobile-storefront/services
+            apps/mobile-storefront/stores
+            packages/shared
+            supabase/migrations
+            next.config.ts
             .github/workflows
+          )
+          python3 - "${scan_targets[@]}" <<'PYTARGETS'
+          import os
+          import pathlib
+          import subprocess
+          import sys
+
+          paths = subprocess.check_output([
+              "git", "-c", f"safe.directory={os.environ['GITHUB_WORKSPACE']}",
+              "ls-files", "-z", "--", *sys.argv[1:]
+          ]).split(b"\0")
+          extensions = {".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".sql", ".yml", ".yaml"}
+          requested = [p for p in paths if p and pathlib.PurePosixPath(os.fsdecode(p)).suffix in extensions]
+          pathlib.Path("semgrep.requested-targets").write_bytes(b"\0".join(requested) + b"\0")
+          PYTARGETS
+          semgrep install-semgrep-pro
+          semgrep scan --error --strict --pro-intrafile --config auto --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${scan_targets[@]}"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
@@ -248,6 +266,7 @@ jobs:
       - name: Verify complete Semgrep analysis and preserve raw SARIF
         if: always()
         env:
+          SCAN_EVENT_NAME: ${{ github.event_name }}
           EMPTY_PR_SCOPE: ${{ github.event_name == 'pull_request' && steps.semgrep_pr.outputs.scanned == 'false' }}
         run: |
           python3 - <<'PYTHON'
@@ -276,6 +295,23 @@ jobs:
               scanned = paths.get("scanned")
               if not isinstance(scanned, list) or not scanned:
                   raise ValueError("no scanned paths")
+              if not all(isinstance(path, str) for path in scanned):
+                  raise ValueError("invalid scanned paths")
+              skipped = paths.get("skipped", [])
+              if not isinstance(skipped, list) or skipped:
+                  raise ValueError("reported skipped targets")
+              if os.environ.get("SCAN_EVENT_NAME") in ("pull_request", "push"):
+                  manifest = pathlib.Path("semgrep.requested-targets").read_bytes()
+                  if not manifest.endswith(b"\0") or b"\0\0" in manifest:
+                      raise ValueError("invalid requested targets")
+                  expected = {os.fsdecode(path) for path in manifest.split(b"\0") if path}
+                  if not expected:
+                      raise ValueError("empty requested targets")
+                  missing = expected.difference(scanned)
+                  if missing:
+                      status.update(reason="requested-targets-not-scanned", missing_count=len(missing))
+                      status_path.write_text(json.dumps(status))
+                      raise ValueError("requested targets were not scanned")
               if errors:
                   status.update(reason="analysis-errors", error_count=len(errors))
                   status_path.write_text(json.dumps(status))
@@ -299,6 +335,7 @@ jobs:
             semgrep.raw.json
             semgrep.raw.sarif
             semgrep.analysis-status.json
+            semgrep.requested-targets
           if-no-files-found: error
           retention-days: 7
 

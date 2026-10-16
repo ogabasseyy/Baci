@@ -581,7 +581,7 @@ function createPendingTransactionSupabaseMock({
                   ? (transactionRow.metadata as Record<string, unknown>)
                   : {}),
                 [String(args?.p_attempt_key)]: false,
-                [String(args?.p_sent_key)]: false,
+                [String(args?.p_sent_key)]: Boolean(args?.p_sent),
                 ...(args?.p_delivery_outcome === 'unknown'
                   ? {
                       [`${String(args?.p_sent_key)}DeliveryOutcome`]: 'unknown',
@@ -920,7 +920,7 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
         customerNotificationAttempted: true,
-        customerTokenEmailNotificationAttempted: true,
+        customerTokenEmailNotificationAttempted: false,
         customerTokenEmailNotificationSent: true,
       }),
     });
@@ -1041,7 +1041,7 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
         customerReceiptEmailNotificationSent: true,
-        customerTokenEmailNotificationAttempted: true,
+        customerTokenEmailNotificationAttempted: false,
         customerTokenEmailNotificationSent: true,
       }),
     });
@@ -1118,7 +1118,7 @@ describe('fulfillPendingVtuTransaction', () => {
     });
     expect(updatePayloads).toContainEqual({
       metadata: expect.objectContaining({
-        customerReceiptEmailNotificationAttempted: true,
+        customerReceiptEmailNotificationAttempted: false,
         customerReceiptEmailNotificationSent: true,
       }),
     });
@@ -1323,6 +1323,7 @@ describe('fulfillPendingVtuTransaction', () => {
         p_attempt_at: '2026-10-15T00:00:00.000Z',
         p_attempt_key: 'customerTokenEmailNotificationAttempted',
         p_delivery_outcome: 'failed',
+        p_sent: false,
         p_sent_key: 'customerTokenEmailNotificationSent',
         p_transaction_id: 'vtu-1',
       }
@@ -1405,6 +1406,7 @@ describe('fulfillPendingVtuTransaction', () => {
         p_attempt_at: '2026-10-15T00:00:00.000Z',
         p_attempt_key: 'customerTokenEmailNotificationAttempted',
         p_delivery_outcome: 'unknown',
+        p_sent: false,
       })
     );
     expect(updatePayloads).toContainEqual({
@@ -1528,6 +1530,17 @@ describe('fulfillPendingVtuTransaction', () => {
       'claim_vtu_customer_email_notification_attempt',
       expect.objectContaining({
         p_attempt_key: 'customerReceiptEmailNotificationAttempted',
+      })
+    );
+    // Codex R127 P2 (success half): sent=true reaches the row in the
+    // same fenced write that releases the lease — no 15-minute
+    // re-send window if the worker crashes before the merge.
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'finalize_vtu_customer_email_notification_attempt',
+      expect.objectContaining({
+        p_attempt_key: 'customerTokenEmailNotificationAttempted',
+        p_delivery_outcome: 'sent',
+        p_sent: true,
       })
     );
     expect(updatePayloads).toContainEqual({

@@ -1265,6 +1265,9 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(body).toMatchObject({
       error: expect.stringMatching(/idempotency/i),
     });
+    // Muse R127 MEDIUM (pre-guard probe): the rejection carries a
+    // static string — no stored row fields (tx id, owner ids).
+    expect(body.error).not.toMatch(/vtu-tx-other|OTHER-CUSTOMER/);
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 
@@ -1292,6 +1295,8 @@ describe('POST /api/vtu/checkout/wallet-only', () => {
     expect(body).toMatchObject({
       error: expect.stringMatching(/storefront/i),
     });
+    // Muse R127 MEDIUM (pre-guard probe): static string only.
+    expect(body.error).not.toMatch(/vtu-tx-other|merchant-OTHER/);
     expect(mockFulfill).not.toHaveBeenCalled();
   });
 

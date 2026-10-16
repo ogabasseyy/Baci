@@ -906,26 +906,29 @@ async function finalizeCustomerEmailNotificationAttempt({
   lease,
   metadata,
   row,
+  sent,
   state,
   supabase,
 }: {
-  deliveryOutcome: 'failed' | 'unknown';
+  deliveryOutcome: 'failed' | 'sent' | 'unknown';
   lease: CustomerEmailClaimLease;
   metadata: Record<string, unknown>;
   row: VtuTransactionRow;
+  sent: boolean;
   state: CustomerEmailNotificationState;
   supabase: SupabaseClient;
 }) {
-  // Failure/unknown outcomes (Codex R127 P2): the outcome AND the
-  // lease release persist in one fenced UPDATE, so a crash between
-  // the send and the settlement merge can neither lose the outcome
-  // nor free the lease for a duplicate send.
+  // Every send outcome (Codex R127 P2): the outcome AND the lease
+  // release persist in one fenced UPDATE, so a crash between the
+  // send and the settlement merge can neither lose the outcome nor
+  // free the lease for a duplicate send.
   const { data, error } = await supabase.rpc(
     'finalize_vtu_customer_email_notification_attempt',
     {
       p_attempt_at: lease.generation,
       p_attempt_key: state.attemptedKey,
       p_delivery_outcome: deliveryOutcome,
+      p_sent: sent,
       p_sent_key: state.sentKey,
       p_transaction_id: row.id,
     }
@@ -1177,17 +1180,23 @@ async function notifyVtuCustomerSuccess({
           sent: emailResult.success,
           state: emailNotificationState,
         }) || metadataChanged;
-      if (!emailResult.success && claimedEmailNotification) {
+      if (claimedEmailNotification) {
         // Finalize (not clear): the staged outcome above is only
         // local, so the outcome must reach the row in the SAME fenced
-        // write that releases the lease (Codex R127 P2).
+        // write that releases the lease — including on success, where
+        // a crash before the settlement merge would otherwise leave a
+        // retryable lease with no sent marker (Codex R127 P2).
         metadataChanged =
           (await finalizeCustomerEmailNotificationAttempt({
-            deliveryOutcome:
-              emailResult.deliveryOutcome === 'unknown' ? 'unknown' : 'failed',
+            deliveryOutcome: emailResult.success
+              ? 'sent'
+              : emailResult.deliveryOutcome === 'unknown'
+                ? 'unknown'
+                : 'failed',
             lease: claimedEmailNotification,
             metadata,
             row,
+            sent: emailResult.success,
             state: emailNotificationState,
             supabase,
           })) || metadataChanged;

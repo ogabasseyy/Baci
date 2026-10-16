@@ -5,9 +5,9 @@
 --   psql $DATABASE_URL -v ON_ERROR_STOP=1 -f supabase/migrations/tests/vtu_customer_email_notification_finalize.sql
 --
 -- This script intentionally mutates inside a transaction and rolls back.
--- Covers migration 20261016120000 (Codex R127 P2): the finalize RPC
--- must persist the failure/unknown outcome AND release the lease in one
--- fenced UPDATE — never one without the other.
+-- Covers migrations 20261016120000 + 20261016123000 (Codex R127
+-- P2): the finalize RPC must persist the send outcome AND release the
+-- lease in one fenced UPDATE — never one without the other.
 -- =============================================
 
 BEGIN;
@@ -44,6 +44,7 @@ BEGIN
       'customerReceiptEmailNotificationAttempted',
       'customerTokenEmailNotificationSent',
       '2026-10-16T00:00:00.000Z',
+      false,
       'failed'
     );
   EXCEPTION WHEN invalid_parameter_value THEN
@@ -53,7 +54,7 @@ BEGIN
     RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: mismatched finalize did not raise';
   END IF;
 
-  -- Case 2: success outcome raises (finalize is non-success only).
+  -- Case 2: sent/outcome mismatch raises in both directions.
   v_raised := false;
   BEGIN
     PERFORM public.finalize_vtu_customer_email_notification_attempt(
@@ -61,13 +62,30 @@ BEGIN
       'customerReceiptEmailNotificationAttempted',
       'customerReceiptEmailNotificationSent',
       '2026-10-16T00:00:00.000Z',
+      true,
+      'failed'
+    );
+  EXCEPTION WHEN invalid_parameter_value THEN
+    v_raised := true;
+  END;
+  IF NOT v_raised THEN
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: sent=true/outcome=failed finalize did not raise';
+  END IF;
+  v_raised := false;
+  BEGIN
+    PERFORM public.finalize_vtu_customer_email_notification_attempt(
+      v_receipt,
+      'customerReceiptEmailNotificationAttempted',
+      'customerReceiptEmailNotificationSent',
+      '2026-10-16T00:00:00.000Z',
+      false,
       'sent'
     );
   EXCEPTION WHEN invalid_parameter_value THEN
     v_raised := true;
   END;
   IF NOT v_raised THEN
-    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: outcome=sent finalize did not raise';
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: sent=false/outcome=sent finalize did not raise';
   END IF;
 
   -- Case 3: receipt unknown persists outcome + legacy mirrors and
@@ -83,6 +101,7 @@ BEGIN
     'customerReceiptEmailNotificationAttempted',
     'customerReceiptEmailNotificationSent',
     v_stamp,
+    false,
     'unknown'
   );
   IF v_meta IS NULL THEN
@@ -125,6 +144,7 @@ BEGIN
     'customerTokenEmailNotificationAttempted',
     'customerTokenEmailNotificationSent',
     '2000-01-01T00:00:00.000Z',
+    false,
     'failed'
   );
   IF v_meta IS NOT NULL THEN
@@ -147,6 +167,7 @@ BEGIN
     'customerTokenEmailNotificationAttempted',
     'customerTokenEmailNotificationSent',
     v_stamp,
+    false,
     'failed'
   );
   IF v_meta IS NULL THEN
@@ -158,6 +179,45 @@ BEGIN
   END IF;
   IF v_meta ? 'customerTokenEmailNotificationSentDeliveryOutcome' THEN
     RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: failed finalize wrote an outcome key';
+  END IF;
+
+  -- Case 6: success finalize persists sent=true with NO outcome key
+  -- and the sent flag then blocks every re-claim (Codex R127 P2
+  -- success half: no 15-minute re-send window after a crash).
+  v_meta := public.claim_vtu_customer_email_notification_attempt(
+    v_token,
+    'customerTokenEmailNotificationAttempted',
+    'customerTokenEmailNotificationSent'
+  );
+  IF v_meta IS NULL THEN
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: re-claim before success finalize did not succeed';
+  END IF;
+  v_stamp := v_meta ->> 'customerTokenEmailNotificationAttemptedAt';
+  v_meta := public.finalize_vtu_customer_email_notification_attempt(
+    v_token,
+    'customerTokenEmailNotificationAttempted',
+    'customerTokenEmailNotificationSent',
+    v_stamp,
+    true,
+    'sent'
+  );
+  IF v_meta IS NULL THEN
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: matched success finalize returned null';
+  END IF;
+  IF (v_meta ->> 'customerTokenEmailNotificationAttempted') <> 'false'
+    OR (v_meta ->> 'customerTokenEmailNotificationSent') <> 'true' THEN
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: success finalize did not release with sent=true';
+  END IF;
+  IF v_meta ? 'customerTokenEmailNotificationSentDeliveryOutcome' THEN
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: success finalize wrote an outcome key';
+  END IF;
+  v_meta := public.claim_vtu_customer_email_notification_attempt(
+    v_token,
+    'customerTokenEmailNotificationAttempted',
+    'customerTokenEmailNotificationSent'
+  );
+  IF v_meta IS NOT NULL THEN
+    RAISE EXCEPTION 'EMAIL-FINALIZE-REGRESSION: re-claim after success finalize was not refused';
   END IF;
 END $$;
 

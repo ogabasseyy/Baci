@@ -81,6 +81,10 @@ describe('VTU customer email notification finalize migration', () => {
     __dirname,
     '../../../../supabase/migrations/20261016120000_finalize_vtu_customer_email_notification_attempt.sql'
   );
+  const finalizeSuccessMigrationPath = resolve(
+    __dirname,
+    '../../../../supabase/migrations/20261016123000_finalize_vtu_customer_email_notification_success.sql'
+  );
   const finalizeRegressionPath = resolve(
     __dirname,
     '../../../../supabase/migrations/tests/vtu_customer_email_notification_finalize.sql'
@@ -103,15 +107,32 @@ describe('VTU customer email notification finalize migration', () => {
     expect(sql).toContain('TO service_role;');
   });
 
+  it('extends finalize to the success path with a sent/outcome consistency check', () => {
+    const sql = readFileSync(finalizeSuccessMigrationPath, 'utf8');
+
+    expect(sql).toContain(
+      'DROP FUNCTION IF EXISTS public.finalize_vtu_customer_email_notification_attempt(uuid, text, text, text, text);'
+    );
+    expect(sql).toContain('p_sent boolean');
+    expect(sql).toContain('Mismatched VTU customer email finalize outcome');
+    expect(sql).toContain(
+      'GRANT EXECUTE ON FUNCTION public.finalize_vtu_customer_email_notification_attempt(uuid, text, text, text, boolean, text)'
+    );
+    expect(sql).toContain('TO service_role;');
+  });
+
   it('ships a finalize live regression', () => {
     const sql = readFileSync(finalizeRegressionPath, 'utf8');
 
     expect(sql).toContain('EMAIL-FINALIZE-REGRESSION');
     expect(sql).toContain('mismatched finalize did not raise');
-    expect(sql).toContain('outcome=sent finalize did not raise');
+    expect(sql).toContain('sent=true/outcome=failed finalize did not raise');
+    expect(sql).toContain('sent=false/outcome=sent finalize did not raise');
     expect(sql).toContain('finalize did not persist the unknown marker');
     expect(sql).toContain('stale-generation finalize did not return null');
     expect(sql).toContain('failed finalize wrote an outcome key');
+    expect(sql).toContain('success finalize did not release with sent=true');
+    expect(sql).toContain('re-claim after success finalize was not refused');
     expect(sql).toContain('ROLLBACK;');
   });
 });

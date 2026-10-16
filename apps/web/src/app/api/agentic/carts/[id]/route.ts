@@ -11,6 +11,10 @@ import {
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
 import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
+import {
+  toCanonicalLaneLine,
+  toCheckoutLaneItem,
+} from '@/lib/agentic/ucp-cart-lane-items';
 import { ucpCartMigrationRaceOutcome } from '@/lib/agentic/ucp-cart-migration-race';
 import { readUcpCart } from '@/lib/agentic/ucp-cart-read-route';
 import { buildUcpCartResponse } from '@/lib/agentic/ucp-cart-response';
@@ -198,41 +202,11 @@ export async function POST(request: NextRequest, props: RouteProps) {
 
   const existingItems = coerceUcpCartItems(cartResult.cart.cart_items);
   const items =
-    parsed.data.line_items?.map((lineItem) => ({
-      id: lineItem.item.id,
-      quantity: lineItem.quantity,
-      ...(lineItem.item.variant_id
-        ? { variant_id: lineItem.item.variant_id }
-        : {}),
-      ...(lineItem.item.condition
-        ? { condition: lineItem.item.condition }
-        : {}),
-      ...(lineItem.item.variant_attributes
-        ? { variant_attributes: lineItem.item.variant_attributes }
-        : {}),
-    })) ?? existingItems;
+    parsed.data.line_items?.map(toCheckoutLaneItem) ?? existingItems;
   // Replacement intent is planned through the canonical cart contract;
   // the loaded row's committed timestamp is the concurrency precondition.
   const replacement = planUcpCartReplacement({
-    lines: items.map((item) => ({
-      item: {
-        productId: item.id,
-        ...(item.variant_id ? { variantId: item.variant_id } : {}),
-        ...(item.condition
-          ? {
-              condition: item.condition as
-                | 'new'
-                | 'used'
-                | 'open_box'
-                | 'refurbished',
-            }
-          : {}),
-        ...(item.variant_attributes
-          ? { options: item.variant_attributes }
-          : {}),
-      },
-      quantity: item.quantity,
-    })),
+    lines: items.map(toCanonicalLaneLine),
     updatedAt: ucpCartVersionPrecondition(cartResult.cart),
   });
   if (!replacement.ok) {

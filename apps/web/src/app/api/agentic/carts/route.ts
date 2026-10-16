@@ -12,6 +12,7 @@ import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
+import { toCheckoutLaneItem } from '@/lib/agentic/ucp-cart-lane-items';
 import { buildUcpCartResponse } from '@/lib/agentic/ucp-cart-response';
 import { buildUcpCartInsert } from '@/lib/agentic/ucp-cart-storage';
 import { adaptUcpShippingAddressToAgentic } from '@/lib/agentic/ucp-request-adapters';
@@ -134,17 +135,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const items = parsed.data.line_items.map((lineItem) => ({
-    id: lineItem.item.id,
-    quantity: lineItem.quantity,
-    ...(lineItem.item.variant_id
-      ? { variant_id: lineItem.item.variant_id }
-      : {}),
-    ...(lineItem.item.condition ? { condition: lineItem.item.condition } : {}),
-    ...(lineItem.item.variant_attributes
-      ? { variant_attributes: lineItem.item.variant_attributes }
-      : {}),
-  }));
+  const items = parsed.data.line_items.map(toCheckoutLaneItem);
   const currency = parsed.data.currency;
   let calculation: Awaited<ReturnType<typeof calculateCheckoutSession>>;
   try {

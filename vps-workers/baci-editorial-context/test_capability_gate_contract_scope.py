@@ -169,6 +169,54 @@ class ContractScopeTests(unittest.TestCase):
             self.assertEqual(rc, 1)
             self.assertIn("ubuntu-24.04", buf.getvalue())
 
+    def test_extra_trigger_fails(self):
+        # An extra trigger (workflow_dispatch, pull_request, merge_group)
+        # mints same-named skipped contexts that satisfy branch protection
+        # without ever running the guard.
+        text = _workflow_text()
+        extra = text.replace("\npermissions:\n", "\n  workflow_dispatch:\npermissions:\n", 1)
+        self.assertNotEqual(extra, text)
+        failures = check.workflow_failures(extra)
+        self.assertTrue(failures)
+        self.assertIn("exactly the pull_request_target and push", " ".join(failures))
+        quoted = text.replace("  push:\n", '  "push":\n', 1)
+        self.assertNotEqual(quoted, text)
+        self.assertEqual(check.workflow_failures(quoted), [])
+
+    def test_escaped_top_level_env_fails(self):
+        # `"e\x6ev"` executes as `env` to GitHub: top-level rejection must
+        # fire in both guarded workflows (plain-quoted keys still work).
+        mutant = CI.replace(
+            "jobs:\n",
+            '"e\\x6ev": {PYTHONPATH: /payload}\njobs:\n',
+            1,
+        )
+        self.assertNotEqual(mutant, CI)
+        self.assertTrue(check.ci_failures(mutant))
+        text = _workflow_text()
+        wmutant = text.replace(
+            "permissions:\n",
+            '"e\\x6ev": {PYTHONPATH: /payload}\npermissions:\n',
+            1,
+        )
+        self.assertNotEqual(wmutant, text)
+        failures = check.workflow_failures(wmutant)
+        self.assertTrue(failures)
+        self.assertIn("plain spelling", " ".join(failures))
+
+    def test_ci_runner_pinned(self):
+        # The gate job could otherwise move to a self-hosted runner while
+        # the pinned steps still match.
+        mutant = CI.replace(
+            "    runs-on: ubuntu-24.04\n",
+            "    runs-on: [self-hosted, Linux, X64, baci-deploy]\n",
+            1,
+        )
+        self.assertNotEqual(mutant, CI)
+        failures = check.ci_failures(mutant)
+        self.assertTrue(failures)
+        self.assertIn("ubuntu-24.04", " ".join(failures))
+
     def test_no_executable_step_before_checker(self):
         # A run step smuggled ahead of the checkout would execute PR code
         # before the base-owned checker starts.

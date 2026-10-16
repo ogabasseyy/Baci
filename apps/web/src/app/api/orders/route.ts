@@ -797,7 +797,7 @@ export async function POST(request: NextRequest) {
               claimedOrderId = claimedItem?.order_id ?? null;
             }
             if (claimedOrderId) {
-              const { data: claimedOrder, error: claimedOrderError } =
+              let { data: claimedOrder, error: claimedOrderError } =
                 await supabase
                   .from('orders')
                   .select(
@@ -854,6 +854,40 @@ export async function POST(request: NextRequest) {
                       { status: 503 }
                     );
                   }
+                  // A successful RPC call is not proof of transition:
+                  // re-read the stored row and only report paid when
+                  // the finalizer actually marked it paid.
+                  const { data: refreshedOrder, error: refreshError } =
+                    await supabase
+                      .from('orders')
+                      .select(
+                        'id, order_number, tracking_token, subtotal, shipping_fee, discount_amount, tax_amount, total, customer_id, customer_email, customer_name, customer_phone, payment_status, shipping_status, payment_method, shipping_address, merchant_id'
+                      )
+                      .eq('id', claimedOrder.id)
+                      .eq('customer_id', soleRow.customer_id)
+                      .maybeSingle();
+                  if (
+                    refreshError ||
+                    !refreshedOrder ||
+                    refreshedOrder.payment_status !== 'paid'
+                  ) {
+                    logger.error({
+                      message:
+                        'Quiz voucher replay finalize did not transition the order',
+                      error: refreshError,
+                      orderId: claimedOrder.id,
+                      awardId: soleAwardId,
+                    });
+                    return NextResponse.json(
+                      {
+                        code: 'QUIZ_VOUCHER_LOOKUP_FAILED',
+                        error:
+                          'Could not verify your quiz prize right now. Please try again.',
+                      },
+                      { status: 503 }
+                    );
+                  }
+                  claimedOrder = refreshedOrder;
                 }
                 return NextResponse.json(
                   {

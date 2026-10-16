@@ -1,19 +1,25 @@
 import { isPrivateLanHost, requestHost } from './merchant-host';
 
-function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
+function isBodyProofPlatformHost(
+  host: string,
+  rootDomain: string,
+  environment: string | undefined
+): boolean {
+  // Loopback and private-LAN hosts are development surfaces only: in
+  // production they must never receive the script-readable body proof,
+  // matching the loopback handling for handoff redemption.
+  const isLocalHost =
+    host === 'localhost' || host === '127.0.0.1' || isPrivateLanHost(host);
   return (
-    // Only the programmatic api.* surfaces (plus dev loopback/LAN)
-    // receive the script-readable body proof. The browsable root and
-    // www hosts serve web pages, so they stay on the httpOnly-cookie
-    // path like merchant subdomains: a bootstrap proof is a replayable
-    // Bearer [REDACTED] that upgrades into a full session proof.
+    // Only the programmatic api.* surfaces (plus non-production dev
+    // loopback/LAN) receive the script-readable body proof. The
+    // browsable root and www hosts serve web pages, so they stay on
+    // the httpOnly-cookie path like merchant subdomains: a bootstrap
+    // proof is a replayable Bearer [REDACTED] that upgrades into a
+    // full session proof.
     host === `api.${rootDomain}` ||
     host === `api-staging.${rootDomain}` ||
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    // Native dev builds call private-LAN origins and require the
-    // body proof, mirroring merchant resolution's hint-governed hosts.
-    isPrivateLanHost(host)
+    (environment !== 'production' && isLocalHost)
   );
 }
 
@@ -28,12 +34,17 @@ function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
  */
 export function requestUsesSharedPlatformHost(
   request: Request,
-  rootDomain?: string
+  rootDomain?: string,
+  environment: string | undefined = process.env.NODE_ENV
 ): boolean {
   const resolvedRoot = (
     rootDomain ??
     process.env.NEXT_PUBLIC_ROOT_DOMAIN ??
     'usebaci.com'
   ).toLowerCase();
-  return isBodyProofPlatformHost(requestHost(request), resolvedRoot);
+  return isBodyProofPlatformHost(
+    requestHost(request),
+    resolvedRoot,
+    environment
+  );
 }

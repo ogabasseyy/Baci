@@ -9,7 +9,11 @@ import { ERROR_CODES } from './repository-envelope';
  * The preview is unauthenticated, so credential-bearing and
  * shopper-private line fields never leave with it — even if the preview
  * RPC regresses, the route response cannot carry a quiz voucher token,
- * a voucher award reference or negotiated terms.
+ * a voucher award reference or negotiated terms. Effective line prices
+ * (including an accepted negotiated price folded into the unit price,
+ * and zero-priced voucher lines) ARE intentionally disclosed: the
+ * pairing-token holder is reviewing this cart's totals in order to
+ * choose whether to redeem it.
  */
 export function redactPreviewSnapshot(snapshot: CartSnapshot): CartSnapshot {
   return {

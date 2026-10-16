@@ -24,6 +24,27 @@ it('rejects look-alike LAN hostnames', () => {
   }
 });
 
+it('keeps body proofs off local hosts in production', () => {
+  for (const url of [
+    'http://localhost:3000/api/storefront/cart/bootstrap',
+    'http://127.0.0.1:3000/api/storefront/cart/bootstrap',
+    'http://192.168.100.70:4193/api/storefront/cart/bootstrap',
+    'http://10.0.0.5:4193/api/storefront/cart/bootstrap',
+  ]) {
+    expect(
+      requestUsesSharedPlatformHost(new Request(url), undefined, 'production')
+    ).toBe(false);
+  }
+  // The programmatic production API surface still receives body proofs.
+  expect(
+    requestUsesSharedPlatformHost(
+      new Request('https://api.usebaci.com/api/storefront/cart/bootstrap'),
+      undefined,
+      'production'
+    )
+  ).toBe(true);
+});
+
 it('keeps body proofs off merchant and arbitrary deployment hosts', () => {
   for (const url of [
     'https://usebaci.com/api/storefront/cart/bootstrap',

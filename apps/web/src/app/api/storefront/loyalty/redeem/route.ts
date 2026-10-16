@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 import { checkCsrfProtection } from '@/lib/csrf';
+import { logMalformedLoyaltyResult } from '@/lib/log-malformed-loyalty-result';
 import { logger } from '@/lib/logger';
 import { getRedemptionInstructions } from '@/lib/loyalty-redemption-instructions';
 import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
@@ -193,17 +194,10 @@ export async function POST(request: NextRequest) {
 
     const validated = storefrontLoyaltyRedeemResultSchema.safeParse(result);
     if (!validated.success) {
-      // Never log the raw payload: it carries the newly issued
-      // spendable redemption code. Issue paths/codes identify drift.
-      logger.error({
-        message: 'Malformed redemption result',
-        error: {
-          issues: validated.error.issues.map((issue) => ({
-            code: issue.code,
-            path: issue.path,
-          })),
-        },
-      });
+      logMalformedLoyaltyResult(
+        'Malformed redemption result',
+        validated.error.issues
+      );
       return NextResponse.json(
         { error: 'Failed to process redemption' },
         { status: 500 }

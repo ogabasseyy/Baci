@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
+import { logMalformedLoyaltyResult } from '@/lib/log-malformed-loyalty-result';
 import { logger } from '@/lib/logger';
 import { toCatalogReward } from '@/lib/loyalty-reward-catalog';
 import {
@@ -174,17 +175,10 @@ export async function GET(request: NextRequest) {
     const validated =
       storefrontLoyaltyStatusResultSchema.safeParse(normalizedResult);
     if (!validated.success) {
-      // Never log the raw payload: it carries spendable redemption
-      // codes. Issue paths/codes identify the drift without secrets.
-      logger.error({
-        message: 'Malformed loyalty status result',
-        error: {
-          issues: validated.error.issues.map((issue) => ({
-            code: issue.code,
-            path: issue.path,
-          })),
-        },
-      });
+      logMalformedLoyaltyResult(
+        'Malformed loyalty status result',
+        validated.error.issues
+      );
       return NextResponse.json(
         { error: 'Failed to fetch loyalty data' },
         { status: 500 }

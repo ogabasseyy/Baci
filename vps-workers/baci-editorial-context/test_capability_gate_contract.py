@@ -209,12 +209,27 @@ class ContractCheckTests(unittest.TestCase):
             failures, notices = check.pin_failures(root, {}, {rel: digest})
             self.assertEqual(failures, [])
             self.assertTrue(any("new suite file" in n for n in notices))
-            # A non-test module never qualifies, even with a matching
-            # digest: sitecustomize and stdlib shadows are not executed.
+            # A non-test helper IS declarable with its actual digest: it
+            # has no baseline to betray either, and its content is in the
+            # diff. Without this a helper would be neither pinned nor
+            # pinnable.
+            (suite / "helpers_capability.py").write_bytes(b"VALUE = 1\n")
+            helper = f"{check.SUITE_DIR}/helpers_capability.py"
+            both = {rel: digest, helper: check.sha256_of(Path(root, helper))}
+            hfail, hnote = check.pin_failures(root, {}, both)
+            self.assertEqual(hfail, [])
+            self.assertTrue(any("new helper file" in n for n in hnote))
+            # Interpreter-hijack names stay undeclarable even with a
+            # matching digest: sitecustomize and stdlib shadows load
+            # without ever matching test discovery.
             (suite / "sitecustomize.py").write_bytes(b"import os\n")
             shadow = f"{check.SUITE_DIR}/sitecustomize.py"
             shade, _ = check.pin_failures(root, {}, {shadow: check.sha256_of(Path(root, shadow))})
-            self.assertTrue(any("unknown pin" in f for f in shade))
+            self.assertTrue(any("shadow the interpreter" in f for f in shade))
+            (suite / "re.py").write_bytes(b"import os\n")
+            std = f"{check.SUITE_DIR}/re.py"
+            std_fail, _ = check.pin_failures(root, {}, {std: check.sha256_of(Path(root, std))})
+            self.assertTrue(any("shadow the interpreter" in f for f in std_fail))
             # A mismatched hash fails: otherwise a benign file could declare
             # a future payload's digest, then land it silently in a later PR.
             wrong, _ = check.pin_failures(root, {}, {rel: "ab" * 32})
@@ -225,6 +240,29 @@ class ContractCheckTests(unittest.TestCase):
             self.assertTrue(any("unknown pin" in f for f in bad))
             missing, _ = check.pin_failures(root, {}, {f"{check.SUITE_DIR}/ghost.py": "ab" * 32})
             self.assertTrue(any("unknown pin" in f for f in missing))
+
+    def test_push_trigger_must_stay_main_scoped(self):
+        # The attestation leg is self-attested: a bare, dropped, or
+        # retargeted push trigger lets any branch push mint the same-named
+        # context, so all three mutants must fail with a push failure.
+        text = _workflow_text()
+        block = (
+            "  push:\n"
+            "    # Self-attested leg: the attestation context must only ever be minted by\n"
+            "    # main itself, never by a push to any other branch.\n"
+            "    branches: [main]\n"
+        )
+        self.assertIn(block, text)
+        mutants = [
+            text.replace(block, "  push:\n", 1),
+            text.replace(block, "", 1),
+            text.replace(block, block.replace("[main]", "[other]"), 1),
+        ]
+        for mutant in mutants:
+            self.assertNotEqual(mutant, text)
+            failures = check.workflow_failures(mutant)
+            self.assertTrue(failures)
+            self.assertTrue(any("push" in f for f in failures))
 
     def test_workflow_checker_pin_matches_shipped_checker(self):
         # A stale bootstrap pin fails every later PR under the base-owned

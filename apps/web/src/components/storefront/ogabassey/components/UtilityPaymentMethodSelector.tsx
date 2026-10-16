@@ -12,6 +12,10 @@ interface UtilityPaymentMethodSelectorProps {
   showWalletRow: boolean;
   walletBalance: number;
   walletLoading: boolean;
+  // Selection state (payWithWallet), distinct from eligibility
+  // (canUseWallet): aria-checked must track selection so an eligible
+  // but unselected wallet is not announced as checked. Muse R132.
+  walletSelected: boolean;
 }
 
 export function UtilityPaymentMethodSelector({
@@ -22,6 +26,7 @@ export function UtilityPaymentMethodSelector({
   showWalletRow,
   walletBalance,
   walletLoading,
+  walletSelected,
 }: UtilityPaymentMethodSelectorProps) {
   const walletSubtitle = walletLoading
     ? 'Checking wallet balance...'
@@ -36,13 +41,15 @@ export function UtilityPaymentMethodSelector({
         <button
           type="button"
           role="radio"
-          aria-checked={canUseWallet}
+          aria-checked={walletSelected}
           disabled={!canUseWallet || isLoading}
           onClick={onSelectWallet}
           className={cn(
             'w-full rounded-xl border-2 p-3 text-left transition-all',
             'flex items-center gap-3',
-            'border-store-primary bg-store-primary/5',
+            walletSelected
+              ? 'border-store-primary bg-store-primary/5'
+              : 'border-gray-200 bg-white hover:border-gray-300',
             (!canUseWallet || isLoading) && 'cursor-not-allowed opacity-70'
           )}
         >

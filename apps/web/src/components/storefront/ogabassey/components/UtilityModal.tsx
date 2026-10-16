@@ -50,6 +50,7 @@ export const UtilityModal = ({
     setFundingAccount,
     setPayWithWallet,
     setWalletBalance,
+    payWithWallet,
     walletBalance,
     walletDvaEnabled,
     walletLoading,
@@ -224,6 +225,7 @@ export const UtilityModal = ({
                 showWalletRow={isAuthenticated}
                 walletBalance={walletBalance}
                 walletLoading={walletLoading}
+                walletSelected={payWithWallet}
               />
               {showFundingPanel && canFundByBankTransfer ? (
                 <UtilityWalletFundingPanel

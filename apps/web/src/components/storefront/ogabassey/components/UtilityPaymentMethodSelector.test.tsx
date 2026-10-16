@@ -19,6 +19,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={onSelectWallet}
         showWalletRow={true}
         walletBalance={500}
+        walletSelected={true}
         walletLoading={false}
       />
     );
@@ -37,6 +38,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={vi.fn()}
         showWalletRow={true}
         walletBalance={500}
+        walletSelected={true}
         walletLoading={false}
       />
     );
@@ -52,6 +54,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={vi.fn()}
         showWalletRow={true}
         walletBalance={500}
+        walletSelected={true}
         walletLoading={false}
       />
     );
@@ -72,6 +75,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={vi.fn()}
         showWalletRow={false}
         walletBalance={0}
+        walletSelected={false}
         walletLoading={true}
       />
     );
@@ -90,6 +94,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={vi.fn()}
         showWalletRow={true}
         walletBalance={0}
+        walletSelected={false}
         walletLoading={false}
       />
     );
@@ -113,6 +118,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={vi.fn()}
         showWalletRow={false}
         walletBalance={0}
+        walletSelected={false}
         walletLoading={false}
       />
     );
@@ -137,6 +143,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={vi.fn()}
         showWalletRow={true}
         walletBalance={0}
+        walletSelected={false}
         walletLoading={false}
       />
     );
@@ -159,6 +166,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={vi.fn()}
         showWalletRow={true}
         walletBalance={500}
+        walletSelected={true}
         walletLoading={false}
       />
     );
@@ -176,6 +184,7 @@ describe('UtilityPaymentMethodSelector', () => {
         onSelectWallet={vi.fn()}
         showWalletRow={true}
         walletBalance={500}
+        walletSelected={true}
         walletLoading={false}
       />
     );
@@ -183,5 +192,48 @@ describe('UtilityPaymentMethodSelector', () => {
     expect(
       screen.getByRole('radio', { name: /pay with wallet/i })
     ).toBeDisabled();
+  });
+
+  it('announces selection separately from eligibility', () => {
+    // Muse R132: aria-checked tracks payWithWallet (selection), not
+    // canUseWallet (eligibility) — an eligible but unselected wallet
+    // must not announce as checked, and the selected styling follows
+    // the same state.
+    const { rerender } = render(
+      <UtilityPaymentMethodSelector
+        canUseWallet={true}
+        isLoading={false}
+        onSelectWallet={vi.fn()}
+        showWalletRow={true}
+        walletBalance={500}
+        walletSelected={false}
+        walletLoading={false}
+      />
+    );
+
+    const unselected = screen.getByRole('radio', {
+      name: /pay with wallet/i,
+    });
+    expect(unselected).toHaveAttribute('aria-checked', 'false');
+    expect(unselected.className).toContain('border-gray-200');
+    expect(unselected.className).not.toContain('border-store-primary');
+
+    rerender(
+      <UtilityPaymentMethodSelector
+        canUseWallet={true}
+        isLoading={false}
+        onSelectWallet={vi.fn()}
+        showWalletRow={true}
+        walletBalance={500}
+        walletSelected={true}
+        walletLoading={false}
+      />
+    );
+
+    const selected = screen.getByRole('radio', {
+      name: /pay with wallet/i,
+    });
+    expect(selected).toHaveAttribute('aria-checked', 'true');
+    expect(selected.className).toContain('border-store-primary');
   });
 });

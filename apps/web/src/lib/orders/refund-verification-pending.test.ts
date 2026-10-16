@@ -213,14 +213,25 @@ describe('isRefundVerificationPending', () => {
     await expect(isRefundVerificationPending(supabase)).resolves.toBe(false);
   });
 
-  it('fails closed on a step-read error so a probe outage never shortens reconciliation', async () => {
+  it('fails closed on a failed-step-read error so the preflight window survives', async () => {
     const from = vi
       .fn()
       .mockReturnValueOnce(chain({ data: null, error: new Error('boom') }));
     const supabase = { from } as never;
 
-    await expect(isRefundVerificationPending(supabase)).resolves.toBe(false);
+    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
     expect(from).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed on a deferred-step-read error', async () => {
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(chain({ data: [], error: null }))
+      .mockReturnValueOnce(chain({ data: null, error: new Error('boom') }));
+    const supabase = { from } as never;
+
+    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
+    expect(from).toHaveBeenCalledTimes(2);
   });
 
   it('fails closed on a leg-read error', async () => {
@@ -231,7 +242,7 @@ describe('isRefundVerificationPending', () => {
       .mockReturnValueOnce(chain({ data: null, error: new Error('boom') }));
     const supabase = { from } as never;
 
-    await expect(isRefundVerificationPending(supabase)).resolves.toBe(false);
+    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
   });
 
   it('fails closed on a refund-read error', async () => {
@@ -243,6 +254,6 @@ describe('isRefundVerificationPending', () => {
       .mockReturnValueOnce(chain({ data: null, error: new Error('boom') }));
     const supabase = { from } as never;
 
-    await expect(isRefundVerificationPending(supabase)).resolves.toBe(false);
+    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
   });
 });

@@ -113,6 +113,15 @@ BEGIN
       (order_id, merchant_id, event_type)
     VALUES (v_order.id, v_order.merchant_id, 'failed_merchant_push')
     ON CONFLICT (order_id, event_type) DO NOTHING;
+    -- Round-61 P1: persist the repeat verdict as the row's provider
+    -- stamp before returning. The gates treat an unstamped failed
+    -- row as live (processed can still resurrect it); without this
+    -- write a confirming verdict would never clear them.
+    UPDATE public.transactions SET
+      metadata = coalesce(metadata, '{}'::jsonb)
+        || jsonb_build_object('provider_refund_status', v_status),
+      updated_at = now()
+    WHERE id = v_refund.id;
     RETURN 'already_failed';
   END IF;
   -- A repeat verdict is a no-op only when this leg already reflects

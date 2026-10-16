@@ -197,12 +197,25 @@ BEGIN
     -- effect (never drained again) while the manager still reports
     -- pending and a second provider refund could settle unnoticed.
     -- Mirrors the pending gate's nonterminal predicate verbatim;
-    -- only definitively failed rows are dead enough to ignore.
+    -- only definitively failed rows are dead enough to ignore,
+    -- and a failed provider row is definitive only once a fresh
+    -- provider check stamps non-acceptance (the verified-record
+    -- function still accepts a later processed verdict for it).
+    -- Rows without a provider refund id never gate: no verdict
+    -- can ever land on them, so they are provably dead.
     SELECT 1 FROM public.transactions in_flight
      WHERE in_flight.order_id = p_order_id
        AND in_flight.merchant_id = p_merchant_id
        AND in_flight.transaction_type = 'refund'
-       AND in_flight.status NOT IN ('completed', 'refunded', 'failed')
+       AND (in_flight.status NOT IN ('completed', 'refunded', 'failed')
+         OR (in_flight.status = 'failed'
+           AND in_flight.gateway_reference ~ '^[0-9]+$'
+           AND (public.normalized_gateway_name_v1(in_flight.gateway)
+             IS NOT DISTINCT FROM 'PAYSTACK'
+             OR (public.normalized_gateway_name_v1(in_flight.gateway) = 'MANUAL'
+               AND in_flight.metadata->>'method' = 'paystack'))
+           AND in_flight.metadata->>'provider_refund_status'
+             IS DISTINCT FROM 'failed'))
   ) AND NOT EXISTS (
     -- Anomalous terminal evidence blocks finalization exactly like
     -- the manager's pending gate: a currency-mismatched,

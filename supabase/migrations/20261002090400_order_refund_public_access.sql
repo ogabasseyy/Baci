@@ -71,13 +71,25 @@ BEGIN
              AND leg.status IN ('completed','refund_pending','refunded'))))
   AND NOT EXISTS (
     -- In-flight refund evidence blocks the label even when every
-    -- leg is terminally covered; only failed rows are dead enough
-    -- to ignore.
+    -- leg is terminally covered; only definitively failed rows
+    -- are dead enough to ignore, and a failed provider row is
+    -- definitive only once a fresh provider check stamps
+    -- non-acceptance (the verified-record function still accepts
+    -- a later processed verdict for it). Rows without a provider
+    -- refund id never gate: no verdict can ever land on them.
     SELECT 1 FROM public.transactions in_flight
      WHERE in_flight.order_id=p_order_id
        AND in_flight.merchant_id=p_merchant_id
        AND in_flight.transaction_type='refund'
-       AND in_flight.status NOT IN ('completed','refunded','failed'))
+       AND (in_flight.status NOT IN ('completed','refunded','failed')
+         OR (in_flight.status='failed'
+           AND in_flight.gateway_reference ~ '^[0-9]+$'
+           AND (public.normalized_gateway_name_v1(in_flight.gateway)
+             IS NOT DISTINCT FROM 'PAYSTACK'
+             OR (public.normalized_gateway_name_v1(in_flight.gateway)='MANUAL'
+               AND in_flight.metadata->>'method'='paystack'))
+           AND in_flight.metadata->>'provider_refund_status'
+             IS DISTINCT FROM 'failed')))
   AND NOT EXISTS (
     -- Anomalous terminal evidence blocks the label exactly like
     -- the manager's pending gate: a currency-mismatched,
@@ -243,4 +255,9 @@ BEGIN
 END; $$;
 REVOKE ALL ON FUNCTION private.backfill_cancelled_order_refund_status()
   FROM PUBLIC,anon,authenticated;
+-- Like the sibling helpers: service_role callers need EXECUTE, or
+-- the denial path segfaults the backend instead of raising (see
+-- the coverage migration). The round-61 suite calls it directly.
+GRANT EXECUTE ON FUNCTION private.backfill_cancelled_order_refund_status()
+  TO service_role, authenticated;
 SELECT private.backfill_cancelled_order_refund_status();

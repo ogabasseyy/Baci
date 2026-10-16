@@ -425,6 +425,7 @@ jobs:
           --sql-check supabase/tests/order_refund_management_round53_gates.sql
           --sql-check supabase/tests/order_refund_management_round56_gates.sql
           --sql-check supabase/tests/order_refund_management_round59_gates.sql
+          --sql-check supabase/tests/order_refund_management_round61_gates.sql
           --sql-check supabase/tests/order_refund_management_claims.sql
           --sql-check supabase/tests/order_refund_management_claim_routing.sql
           --sql-check supabase/tests/order_refund_management_claim_anomalies.sql

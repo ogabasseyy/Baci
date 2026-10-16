@@ -50,8 +50,10 @@ type ProbeRefund = {
  * excluded from initiation, so neither ever reaches preflight —
  * counting them would pin reconciliation at the cap indefinitely
  * while the reserved window goes unused. Small indexed reads;
- * fails closed (false) on any read error so a probe outage never
- * shortens reconciliation.
+ * fails closed (true) on any read error: a needlessly capped
+ * reconcile self-heals on the next run, while a missed
+ * reservation starves preflight under backlog indefinitely, and
+ * the same failure can defer the refund on every invocation.
  */
 export async function isRefundVerificationPending(
   supabase: ProbeClient
@@ -65,7 +67,7 @@ export async function isRefundVerificationPending(
     .order('claimed_at', { ascending: true })
     .limit(CANCELLATION_DRAIN_FETCH_LIMIT);
   if (failed.error || !failed.data) {
-    return false;
+    return true;
   }
   const deferred = await supabase
     .from('order_cancellation_side_effects')
@@ -75,7 +77,7 @@ export async function isRefundVerificationPending(
     .order('claimed_at', { ascending: true })
     .limit(CANCELLATION_DRAIN_FETCH_LIMIT);
   if (deferred.error || !deferred.data) {
-    return false;
+    return true;
   }
   const orderIds = [
     ...new Set(
@@ -109,7 +111,7 @@ export async function isRefundVerificationPending(
       ? page.limit(PROBE_LEG_LIMIT)
       : page.gt('id', cursor).limit(PROBE_LEG_LIMIT));
     if (error || !data) {
-      return false;
+      return true;
     }
     const rows = data as ProbeLeg[];
     legs.push(...rows);
@@ -136,7 +138,7 @@ export async function isRefundVerificationPending(
     .gt('amount', 0)
     .limit(PROBE_REFUND_LIMIT);
   if (refundsError || !refunds) {
-    return false;
+    return true;
   }
   return paystackLegs.some(
     (leg) => !isLegCovered(leg, paystackLegs, refunds as ProbeRefund[])

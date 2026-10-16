@@ -484,6 +484,11 @@ jobs:
       # Bumping the pin requires re-checking that the new CLI's bundled
       # esbuild version is still on the allow list.
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
+      - name: Normalize sensitive build placeholders
+        # CLI 57 writes [SENSITIVE] for unavailable runtime values. As in the
+        # Preview flow, normalize only that marker before build validation;
+        # actual Production values and runtime validation remain unchanged.
+        run: node .github/scripts/normalize-vercel-sensitive-placeholders.mjs .vercel/.env.production.local
       - name: Verify GIGL fallback token presence (defined, not validity) in Vercel Production
         # Presence-only: Vercel pulls sensitive values blank, so this
         # proves the Production key is DEFINED and injects a build-time

@@ -110,7 +110,7 @@ it('expires presented cart cookies when the proof is definitively invalid', asyn
           'baci-cart-11111111-1111-4111-8111-111111111111=cp1.dead.dead; other=1',
       },
       body: '{}',
-    })
+    }) as never
   );
   expect(response.status).toBe(401);
   const setCookie = response.headers.get('set-cookie') ?? '';

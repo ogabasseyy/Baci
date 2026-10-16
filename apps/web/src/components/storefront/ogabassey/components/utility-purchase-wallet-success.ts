@@ -20,7 +20,7 @@ interface UtilityWalletSuccessOutcomeInput {
   forgetScopedKey: (scoped: string) => void;
   isScopedReplay: (scoped: string, reference: string) => boolean;
   isScopedStale: (scoped: string, reference: string) => boolean;
-  markAttemptShown: (scoped: string | null) => void;
+  markAttemptShown: (scoped: string | null, key?: string) => void;
   noteScopedReference: (scoped: string, reference: string) => void;
   clearIntent: () => void;
   getCurrentBalance: () => number;
@@ -113,7 +113,7 @@ export function applyUtilityWalletSuccessOutcome({
     submitBalance,
   });
   setTransactionRef(result.reference);
-  markAttemptShown(scoped ?? null);
+  markAttemptShown(scoped ?? null, attempt?.key);
   setSuccessAmount(result.amount);
   setTransactionVoucherPin(result.voucherPin ?? null);
   // A 202 can still fail or be refunded: never the success screen.

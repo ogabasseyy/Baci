@@ -4,6 +4,8 @@ import {
   clearPendingVtuKeys,
   hasNotedPendingVtuReference,
   markPendingVtuCompleted,
+  recallPendingVtuKey,
+  rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
 import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import {
@@ -229,6 +231,33 @@ describe('useUtilityIdempotencyKey', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('settles only the shown generation when a newer key went live', () => {
+    // Codex R137 P1 (hook threading): mark carries the shown key
+    // through, so settle tombstones exactly it — a cross-tab
+    // buy-again under the same scope survives instead of being
+    // reaped (its retry would mint fresh and debit twice).
+    const { result } = renderHook(() =>
+      useUtilityIdempotencyKey({ customerId: 'customer-a' })
+    );
+
+    let scoped = '';
+    let shownKey = '';
+    act(() => {
+      const attempt = result.current.captureAttemptKey('SIG-SHOWN');
+      scoped = attempt.scoped;
+      shownKey = attempt.key;
+      result.current.markAttemptShown(scoped, shownKey);
+    });
+    // Cross-tab buy-again lands before the settle runs.
+    rememberPendingVtuPurchase(scoped, 'key-newer-generation');
+
+    act(() => {
+      result.current.settleShownAttempt();
+    });
+
+    expect(recallPendingVtuKey(scoped)).toBe('key-newer-generation');
   });
 });
 

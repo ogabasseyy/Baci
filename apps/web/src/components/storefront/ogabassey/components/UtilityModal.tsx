@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { WALLET_FUNDING_TELEMETRY } from '@/lib/posthog/wallet-funding-events';
 import { useWallet } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-wallet';
 import { useCustomerFormReset } from './use-customer-form-reset';
@@ -15,6 +14,7 @@ import { useUtilityRetainedSettlement } from './use-utility-retained-settlement'
 import { AirtimeDataForm } from './utility/AirtimeDataForm';
 import { BillPaymentForm } from './utility/BillPaymentForm';
 import { UtilityPaymentMethodSelector } from './UtilityPaymentMethodSelector';
+import { createSelectWalletHandler } from './utility-wallet-selection';
 import { UtilityWalletFundingPanel } from './UtilityWalletFundingPanel';
 import { UtilitySuccessView } from './UtilitySuccessView';
 import { UtilityTabs, type UtilityTabId } from './UtilityTabs';
@@ -140,19 +140,13 @@ export const UtilityModal = ({
     setStep,
   });
 
-  const handleSelectWallet = () => {
-    captureClientEvent(
-      WALLET_FUNDING_TELEMETRY.events.paymentMethodSelected,
-      {
-        method: 'wallet',
-        wallet_balance: walletBalance,
-        can_use_wallet: canUseWallet,
-        merchant_slug: merchant?.slug,
-        customer_id: customer?.id,
-      }
-    );
-    setPayWithWallet(true);
-  };
+  const handleSelectWallet = createSelectWalletHandler({
+    canUseWallet,
+    customerId: customer?.id,
+    merchantSlug: merchant?.slug,
+    setPayWithWallet,
+    walletBalance,
+  });
 
   const handleClose = () => {
     // A deliberate close abandons the draft: drop the persisted resume snapshot

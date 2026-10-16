@@ -5,6 +5,7 @@ import { useEffect, useRef } from 'react';
 import type { UtilityCheckoutResult } from './utility-checkout-submit';
 import {
   forgetPendingVtuPurchase,
+  forgetPendingVtuPurchaseGeneration,
   getPendingVtuKey,
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
@@ -43,7 +44,7 @@ interface UseUtilityIdempotencyKeyResult {
   isResultViewActive: () => boolean;
   isScopedReplay: (scoped: string, reference: string) => boolean;
   isScopedStale: (scoped: string, reference: string) => boolean;
-  markAttemptShown: (scoped: string | null) => void;
+  markAttemptShown: (scoped: string | null, key?: string) => void;
   noteScopedReference: (scoped: string, reference: string) => void;
   settleShownAttempt: () => void;
 }
@@ -139,7 +140,11 @@ export function useUtilityIdempotencyKey({
   // Scoped key of the attempt on the success/processing screen: the
   // voucher backfill settles it when a 202 later reports terminal, so
   // buy-again mints fresh instead of replaying the old vend as new.
+  // The shown GENERATION rides alongside (Codex R137 P1): settle
+  // runs after a render commit, so a newer same-scope key minted
+  // cross-tab in between must not be reaped by a scope-only delete.
   const shownAttemptScopedRef = useRef<string | null>(null);
+  const shownAttemptKeyRef = useRef<string | null>(null);
   // The owning modal unmounts on close: gate registry forgets on
   // this — an unmounted success must retain its key so reopening
   // replays instead of minting fresh and debiting twice (hyTj).
@@ -207,17 +212,28 @@ export function useUtilityIdempotencyKey({
     return hasNotedPendingVtuReference(scoped, reference);
   };
 
-  const markAttemptShown = (scoped: string | null) => {
+  const markAttemptShown = (scoped: string | null, key?: string) => {
     shownAttemptScopedRef.current = scoped;
+    shownAttemptKeyRef.current = key ?? null;
   };
 
   const settleShownAttempt = () => {
     // The backfill proved the shown 202 terminal: forget its retained
     // key so buy-again mints fresh instead of replaying the old vend
     // as a new success. Idempotent (a second call is a no-op).
-    if (shownAttemptScopedRef.current) {
-      forgetPendingVtuPurchase(shownAttemptScopedRef.current);
+    // Generation-bound when the shown key is known (Codex R137 P1):
+    // a scope-only delete here would reap a newer same-scope key
+    // minted cross-tab after the backfill's own forget.
+    const scoped = shownAttemptScopedRef.current;
+    const key = shownAttemptKeyRef.current;
+    if (scoped) {
+      if (key) {
+        forgetPendingVtuPurchaseGeneration(scoped, key);
+      } else {
+        forgetPendingVtuPurchase(scoped);
+      }
       shownAttemptScopedRef.current = null;
+      shownAttemptKeyRef.current = null;
     }
   };
 

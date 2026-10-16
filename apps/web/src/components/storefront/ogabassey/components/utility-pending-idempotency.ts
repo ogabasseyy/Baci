@@ -241,6 +241,30 @@ export function forgetPendingVtuPurchase(payloadSignature: string): void {
 }
 
 /**
+ * Settles ONE shown generation (Codex R137 P1): the backfill's
+ * reference-forget already deleted it, and the success view's
+ * settle runs after a render commit — so a newer same-scope key
+ * minted cross-tab in between may already be live (imported by the
+ * first forget's syncing persist). Deleting by scope here would
+ * reap that newer generation (or write a keyless tombstone over
+ * it); its retry would then mint fresh and debit twice. Instead
+ * delete only the named generation and tombstone exactly it — a
+ * newer key survives both the delete and the tombstone (key-bound
+ * merge/delete in the sync module).
+ */
+export function forgetPendingVtuPurchaseGeneration(
+  payloadSignature: string,
+  key: string
+): void {
+  const live = pendingVtuPurchases.get(payloadSignature);
+  if (live === undefined || live.key === key) {
+    pendingVtuPurchases.delete(payloadSignature);
+  }
+  noteForgottenVtuScope(payloadSignature, Date.now(), key);
+  persistPendingVtuPurchases();
+}
+
+/**
  * Recalled key, else mint + remember (mobile mirror). Throws when
  * the minted key is memory-only (R96 P1): aborts pre-POST, retry
  * re-mints once storage works. Recalled keys are already durable.

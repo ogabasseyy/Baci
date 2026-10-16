@@ -5,6 +5,7 @@ import {
   clearPendingVtuKeys,
   forgetPendingVtuByReference,
   forgetPendingVtuPurchase,
+  forgetPendingVtuPurchaseGeneration,
   getPendingVtuKey,
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
@@ -16,7 +17,11 @@ import {
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './utility-pending-idempotency';
-import { PERSISTED_VTU_KEY_TTL_MS } from './utility-pending-vtu-codec';
+import { loadPendingVtuSnapshot } from './utility-pending-idempotency-store';
+import {
+  PERSISTED_VTU_KEY_TTL_MS,
+  parsePendingVtuSnapshot,
+} from './utility-pending-vtu-codec';
 import { forgottenScopedKeys } from './utility-pending-vtu-sync';
 
 describe('utility-pending-idempotency', () => {
@@ -438,5 +443,54 @@ describe('utility-pending-idempotency', () => {
       'REF-B',
       'REF-C',
     ]);
+  });
+
+  it('settles only the shown generation when a newer same-scope key went live', () => {
+    // Codex R137 P1: the backfill forgets by reference, then the
+    // success view settles by scope after a render commit — a
+    // cross-tab buy-again minted in between is already live
+    // (imported by the first forget's syncing persist). A
+    // scope-only second delete would reap it (or keylessly
+    // tombstone over it); its retry would mint fresh and debit
+    // twice. The generation-bound settle leaves it untouched.
+    rememberPendingVtuPurchase('{"g":1}', 'key-G1');
+    notePendingVtuReference('{"g":1}', 'REF-G1');
+    forgetPendingVtuByReference('REF-G1');
+    // Cross-tab buy-again under the same scope (tab B's key).
+    rememberPendingVtuPurchase('{"g":1}', 'key-G2');
+
+    forgetPendingVtuPurchaseGeneration('{"g":1}', 'key-G1');
+
+    // The newer generation survives module + snapshot; the shown
+    // one stays forgotten under its own key binding. (Scope-spelling
+    // agnostic: the digest migration may dual-record raw+digest.)
+    expect(recallPendingVtuKey('{"g":1}')).toBe('key-G2');
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.forgotten.length).toBeGreaterThan(0);
+    for (const record of snapshot.forgotten) {
+      expect(record.key).toBe('key-G1');
+    }
+    expect(
+      snapshot.entries.some(([, entry]) => entry.key === 'key-G2')
+    ).toBe(true);
+  });
+
+  it('tombstones the shown generation even with no live entry', () => {
+    // Codex R137 P1: without a live entry the legacy settle
+    // degrades to a keyless tombstone (timestamp arbitration can
+    // suppress a same-millisecond newer key). The shown key is
+    // known here, so the tombstone binds it.
+    rememberPendingVtuPurchase('{"h":1}', 'key-H1');
+    notePendingVtuReference('{"h":1}', 'REF-H1');
+    forgetPendingVtuByReference('REF-H1');
+
+    forgetPendingVtuPurchaseGeneration('{"h":1}', 'key-H1');
+
+    expect(recallPendingVtuKey('{"h":1}')).toBeUndefined();
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.forgotten.length).toBeGreaterThan(0);
+    for (const record of snapshot.forgotten) {
+      expect(record.key).toBe('key-H1');
+    }
   });
 });

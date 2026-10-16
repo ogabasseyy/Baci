@@ -44,6 +44,7 @@ export function NativeCartAccountPanel() {
     Parameters<NonNullable<typeof linkAccount>>[0] | null
   >(null);
   const [pending, setPending] = useState(false);
+  const [linking, setLinking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [picks, setPicks] = useState<CartMergeResolution[]>([]);
   const [savedRead, setSavedRead] = useState<{
@@ -77,6 +78,7 @@ export function NativeCartAccountPanel() {
     operationRef.current = null;
     pendingInput.current = null;
     setPending(false);
+    setLinking(false);
     setNotice(null);
     setPicks([]);
   }, [userId]);
@@ -125,6 +127,7 @@ export function NativeCartAccountPanel() {
     inFlight.current = scope;
     pendingInput.current ??= JSON.parse(JSON.stringify(input)) as typeof input;
     setPending(true);
+    setLinking(true);
     try {
       await linkAccount?.(pendingInput.current);
       if (ownerScopeRef.current !== scope) return;
@@ -152,6 +155,7 @@ export function NativeCartAccountPanel() {
       );
     } finally {
       if (inFlight.current === scope) inFlight.current = null;
+      if (ownerScopeRef.current === scope) setLinking(false);
     }
   }
   const plan =
@@ -180,7 +184,7 @@ export function NativeCartAccountPanel() {
           </Text>
         </Pressable>
       ) : null}
-      {pending ? (
+      {pending && !linking ? (
         <Pressable
           accessibilityRole="button"
           onPress={() => {

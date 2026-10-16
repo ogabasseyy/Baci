@@ -48,8 +48,11 @@ export const eventPipelineFrozenRoutes = {
   // payment, notification and credential authority remain unchanged.
   // Re-pinned for the claimed-voucher replay re-read of the stored order;
   // payment, notification and credential authority remain unchanged.
+  // Re-pinned after extracting bound-order dispatch and the shared
+  // condition-offer response from the route; payment, notification
+  // and credential authority remain unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '50fafc8dab60ccd92086c24e0cafd36947e1bbc0816e390c88ecbb5908787334',
+    '861aca0fc094d77596709a5beca4145d5ea1bec21dc329d04edb2a6dd19e393c',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

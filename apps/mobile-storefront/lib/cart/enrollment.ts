@@ -1,3 +1,15 @@
+function hasCartFeature(
+  features: string[] | null | undefined,
+  feature: string
+): boolean {
+  // Match the web gate's normalization (trim + lowercase). Stored
+  // values should still be canonical exact lowercase: the SQL cart
+  // RPCs and realtime checks use exact jsonb containment.
+  return (
+    features?.some((value) => value.trim().toLowerCase() === feature) ?? false
+  );
+}
+
 /** Native activation is a separate explicit qualification gate; all_features cannot enable it. */
 export function nativeCartEnabled(
   merchant:
@@ -9,8 +21,8 @@ export function nativeCartEnabled(
     config.merchantId &&
       merchant?.id.toLowerCase() === config.merchantId.toLowerCase() &&
       merchant.slug === config.merchantSlug &&
-      merchant.premium_features?.includes('shared_cart') &&
-      merchant.premium_features.includes('shared_cart_native')
+      hasCartFeature(merchant.premium_features, 'shared_cart') &&
+      hasCartFeature(merchant.premium_features, 'shared_cart_native')
   );
 }
 
@@ -23,6 +35,6 @@ export function nativeCartAccountsEnabled(
 ): boolean {
   return Boolean(
     nativeCartEnabled(merchant, config) &&
-      merchant?.premium_features?.includes('shared_cart_accounts')
+      hasCartFeature(merchant?.premium_features, 'shared_cart_accounts')
   );
 }

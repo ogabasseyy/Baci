@@ -23,6 +23,17 @@ it('requires explicit shared and native enrollment plus the configured merchant 
   ).toBe(false);
 });
 
+it('matches stored feature values with web-style normalization', () => {
+  const merchant = {
+    id: 'a',
+    slug: 'alpha',
+    premium_features: [' Shared_Cart ', 'SHARED_CART_NATIVE'],
+  };
+  expect(
+    nativeCartEnabled(merchant, { merchantId: 'a', merchantSlug: 'alpha' })
+  ).toBe(true);
+});
+
 it('requires the separate accounts enrollment for account linking', () => {
   const merchant = {
     id: 'a',

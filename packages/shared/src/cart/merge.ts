@@ -224,15 +224,14 @@ export function planCartMerge(
     }
     const chosen =
       keep === 'incoming' ? incomingAttachments : existingAttachments;
+    const chosenLine = keep === 'incoming' ? incomingLine : existingLine;
     lines.push({
       ...chosen,
-      ...((keep === 'incoming' ? incomingLine : existingLine).hasAssurance
-        ? { hasAssurance: true }
-        : null),
+      ...(chosenLine.hasAssurance ? { hasAssurance: true } : null),
       item: existingLine.item,
-      quantity: hasVoucher(chosen)
-        ? 1
-        : Math.max(existingLine.quantity, incomingLine.quantity),
+      // The shopper chose this side as presented, quantity included;
+      // the max rule only applies to the equal-attachments branch.
+      quantity: hasVoucher(chosen) ? 1 : chosenLine.quantity,
     });
   }
 

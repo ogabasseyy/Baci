@@ -163,6 +163,45 @@ describe('planCartMerge', () => {
     }
   });
 
+  it("keeps the chosen side's quantity on conflict resolution", () => {
+    const existing = snapshot([
+      line(TECNO, 5, {
+        negotiatedUnitPriceMinor: 22000,
+        negotiationStatus: 'accepted',
+      }),
+    ]);
+    const incoming = snapshot([
+      line(TECNO, 2, {
+        negotiatedUnitPriceMinor: 20000,
+        negotiationStatus: 'accepted',
+      }),
+    ]);
+    const keepIncoming = planCartMerge(existing, incoming, [
+      { item: { productId: TECNO }, keep: 'incoming' },
+    ]);
+    expect(keepIncoming.ok).toBe(true);
+    if (keepIncoming.ok) {
+      expect(keepIncoming.lines).toEqual([
+        expect.objectContaining({
+          negotiatedUnitPriceMinor: 20000,
+          quantity: 2,
+        }),
+      ]);
+    }
+    const keepExisting = planCartMerge(existing, incoming, [
+      { item: { productId: TECNO }, keep: 'existing' },
+    ]);
+    expect(keepExisting.ok).toBe(true);
+    if (keepExisting.ok) {
+      expect(keepExisting.lines).toEqual([
+        expect.objectContaining({
+          negotiatedUnitPriceMinor: 22000,
+          quantity: 5,
+        }),
+      ]);
+    }
+  });
+
   it('requires a choice for conflicting voucher contexts', () => {
     const existing = snapshot([line(TECNO, 1, { voucherToken: 'tok-B' })]);
     const incoming = snapshot([line(TECNO, 1, { voucherToken: 'tok-A' })]);

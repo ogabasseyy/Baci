@@ -31,6 +31,24 @@ it('captures only trusted HTTPS handoffs and removes pairing fragments before ro
   ).toBe('/cart');
   expect(peekCartPairingLink()).not.toBeNull();
 });
+it('fails closed with an explicitly empty platform root', () => {
+  const staging = { ...config, platformRootDomain: '' };
+  expect(
+    captureCartPairingLink(
+      `https://alpha.usebaci.com/cart#handoff=${token()}&hid=${hid}`,
+      staging
+    )
+  ).toBe('/cart');
+  expect(peekCartPairingLink()).toBeNull();
+  // The merchant custom domain remains allowed without a root.
+  expect(
+    captureCartPairingLink(
+      `https://shop.example.com/cart#handoff=${token()}&hid=${hid}`,
+      staging
+    )
+  ).toBe('/cart');
+  expect(peekCartPairingLink()).not.toBeNull();
+});
 it('honours a configured non-default platform root domain', () => {
   const custom = { ...config, platformRootDomain: 'shops.example.net' };
   expect(

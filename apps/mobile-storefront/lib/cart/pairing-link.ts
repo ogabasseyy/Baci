@@ -61,12 +61,17 @@ export function captureCartPairingLink(path: string, config: Config): string {
   if (!pairing) return path;
   update(null);
   try {
+    // An explicitly empty root is the fail-closed signal from hosts
+    // whose root cannot be derived: never substitute the production
+    // root, or staging handoff links would silently fail (or worse,
+    // be validated against the wrong tenant root).
+    const configuredRoot = config.platformRootDomain?.trim().toLowerCase();
     const platformRoot =
-      config.platformRootDomain?.trim().toLowerCase() || 'usebaci.com';
-    const allowed = new Set([
-      config.merchantDomain.toLowerCase(),
-      `${config.merchantSlug}.${platformRoot}`.toLowerCase(),
-    ]);
+      configuredRoot === undefined ? 'usebaci.com' : configuredRoot;
+    const allowed = new Set([config.merchantDomain.toLowerCase()]);
+    if (platformRoot) {
+      allowed.add(`${config.merchantSlug}.${platformRoot}`.toLowerCase());
+    }
     if (
       !config.merchantId ||
       !config.merchantSlug ||

@@ -28,10 +28,10 @@ export function redirectSystemPath({
   initial: boolean;
 }): string {
   const apiHostname = new URL(EXPO_PUBLIC_API_URL).hostname;
-  const platformRootDomain = derivePlatformRootDomain(
-    apiHostname,
-    EXPO_PUBLIC_ROOT_DOMAIN
-  );
+  // Empty string is the fail-closed signal: capture must not
+  // substitute the production root for an underivable staging root.
+  const platformRootDomain =
+    derivePlatformRootDomain(apiHostname, EXPO_PUBLIC_ROOT_DOMAIN) ?? '';
   return captureCartPairingLink(path, {
     merchantId: CONFIG.MERCHANT_ID,
     merchantSlug: CONFIG.MERCHANT_SLUG,

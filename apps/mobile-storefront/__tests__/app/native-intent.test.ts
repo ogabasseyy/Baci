@@ -79,7 +79,7 @@ describe('redirectSystemPath', () => {
 
     expect(mockCapture).toHaveBeenCalledWith(
       '/cart/link#handoff=token',
-      expect.objectContaining({ platformRootDomain: undefined })
+      expect.objectContaining({ platformRootDomain: '' })
     );
   });
 

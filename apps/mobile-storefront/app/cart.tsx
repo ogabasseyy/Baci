@@ -222,14 +222,21 @@ export default function CartScreen() {
 
   if (items.length === 0) {
     return (
-      <CartStateView
-        variant="empty"
-        colorScheme={colorScheme}
-        colors={colors}
-        isRetrying={false}
-        onRetry={handleRetryCartLoad}
-        onStartShopping={() => router.push('/')}
-      />
+      <>
+        {/* The account panel owns the saved-cart load: it must mount
+            on the empty state too, or a saved account cart is
+            unreachable exactly when the device cart is empty. */}
+        <SharedCartStatusPanel />
+        <NativeCartAccountPanel />
+        <CartStateView
+          variant="empty"
+          colorScheme={colorScheme}
+          colors={colors}
+          isRetrying={false}
+          onRetry={handleRetryCartLoad}
+          onStartShopping={() => router.push('/')}
+        />
+      </>
     );
   }
 

@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
 import {
   buildAuthStatus,
   createMockCartState,
@@ -71,6 +77,30 @@ describe('CartScreen state', () => {
     expect(screen.getByText('Your cart is empty 🛒')).toBeTruthy();
     expect(screen.getByText('Start Shopping')).toBeTruthy();
     expect(screen.queryByText('Lenovo ThinkPad E16 Gen 2')).toBeNull();
+  });
+
+  it('mounts the saved-account loader on the empty cart state', async () => {
+    mockCartStateHolder.current = createMockCartState({
+      items: [],
+      itemCount: () => 0,
+      subtotal: () => 0,
+    });
+    const loadSavedCart = jest.fn(async () => undefined);
+    useNativeSharedCartStore.setState({
+      accountsEnabled: true,
+      accountUserId: 'user-1',
+      enabled: true,
+      linkAccount: jest.fn(async () => undefined) as never,
+      loadSavedCart: loadSavedCart as never,
+      metadataReady: true,
+      savedCart: null,
+      snapshot: { cartId: 'cart-1', lines: [] } as never,
+      status: 'ready',
+    });
+    render(<CartScreen />);
+    expect(screen.getByText('Your cart is empty 🛒')).toBeTruthy();
+    await waitFor(() => expect(loadSavedCart).toHaveBeenCalled());
+    expect(screen.getByText('Save this cart to your account')).toBeTruthy();
   });
 
   it('reacts when the shared cart is enabled without a status change', () => {

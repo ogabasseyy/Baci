@@ -47,6 +47,8 @@ jobs:
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test Sentry Storefront Release Provenance
         run: node --test .github/scripts/sentry-storefront-provenance.test.mjs
+      - name: Test pilot change-detection contract
+        run: node --test .github/scripts/pilot-change-detection-contract.test.mjs
       # paths-filter can't infer a base on merge_group events, so skip it there
       # and run every gate (the queue validates the full integration anyway).
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
@@ -259,7 +261,9 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/pnpm-install-cached
       - name: Run web vitest shard
-        run: pnpm --filter @baci/web exec vitest run --shard=${{ matrix.shard }}/6
+        env:
+          VITEST_SHARD: ${{ matrix.shard }}
+        run: pnpm --filter @baci/web exec vitest run "--shard=${VITEST_SHARD}/6"
 
   quality-db-replay:
     name: Quality Gate - DB Replay
@@ -419,6 +423,11 @@ jobs:
           --sql-check supabase/tests/order_refund_management_round47_gates.sql
           --sql-check supabase/tests/order_refund_management_round48_gates.sql
           --sql-check supabase/tests/order_refund_management_round48_reversal_sync.sql
+          --sql-check supabase/tests/order_refund_management_round51_gates.sql
+          --sql-check supabase/tests/order_refund_management_round53_gates.sql
+          --sql-check supabase/tests/order_refund_management_round56_gates.sql
+          --sql-check supabase/tests/order_refund_management_round59_gates.sql
+          --sql-check supabase/tests/order_refund_management_round61_gates.sql
           --sql-check supabase/tests/order_refund_management_claims.sql
           --sql-check supabase/tests/order_refund_management_claim_routing.sql
           --sql-check supabase/tests/order_refund_management_claim_anomalies.sql

@@ -264,6 +264,10 @@ BEGIN
       -- delivery_uncertain rows are under ops review.
       ON CONFLICT (order_id,step) DO UPDATE SET attempts=0,
         status=CASE WHEN s.status='completed' THEN 'failed' ELSE s.status END,
+        -- A reopened row finalizes anew: retaining the old
+        -- completion time would backdate the real finalization,
+        -- because the claim stamps COALESCE(completed_at, now()).
+        completed_at=CASE WHEN s.status='completed' THEN NULL ELSE s.completed_at END,
         error=NULL,result=jsonb_build_object('manual',true,'recorded_by',p_actor)
         RETURNING s.status,s.error,s.attempts,s.retry_requests INTO v_step_status,v_step_error,v_step_attempts,v_step_retry_requests;
     END IF;

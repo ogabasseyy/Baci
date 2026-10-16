@@ -2,19 +2,103 @@
 -- cancellations. cancel_order_as_merchant excludes internal gateways
 -- from refund-side-effect creation and never calls the refund manager,
 -- so a wallet- or savings-only order cancelled outside the refund
--- panel keeps payment_status='paid' forever even though the reversal
+-- panel keeps its paid-family status forever even though the reversal
 -- ledger returned every kobo; the transactions-scoped sync trigger
 -- never fires because no refund row lands. Flip the label from the
 -- reversal transaction itself when the internal reversals alone cover
--- the paid amount and no external funded leg exists (mixed orders stay
--- with the normal flow, and cash-only orders still wait for the
--- merchant's manual record).
+-- the paid amount, no external funded leg exists, and every cash-like
+-- leg has linked manual coverage (mixed orders stay with the normal
+-- flow; an aggregate wallet/savings match must not retire an
+-- outstanding cash leg no side effect will ever revisit). A
+-- migration-time backfill covers reversals that landed before this
+-- trigger existed.
+CREATE OR REPLACE FUNCTION private.internal_reversal_coverage_v1(
+  p_order_id uuid, p_merchant_id uuid
+) RETURNS numeric LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
+  -- Same internal-reversal measure as the transactions-scoped sync
+  -- trigger and the refund manager.
+  SELECT (SELECT COALESCE(sum(w.amount), 0)
+            FROM public.customer_wallet_transactions w
+           WHERE w.source_id = p_order_id
+             AND w.merchant_id = p_merchant_id
+             AND w.source_type = 'order_reversal')
+       + (SELECT COALESCE(sum(r.amount), 0)
+            FROM public.customer_savings_redemptions r
+           WHERE r.order_id = p_order_id
+             AND r.merchant_id = p_merchant_id
+             AND r.metadata ? 'reversed_at');
+$$;
+REVOKE ALL ON FUNCTION private.internal_reversal_coverage_v1(uuid, uuid)
+  FROM PUBLIC, anon, authenticated;
+-- Single flip predicate shared by the trigger and the backfill so
+-- the two can never disagree about which orders qualify.
+CREATE OR REPLACE FUNCTION private.flip_internal_only_order_refunded(
+  p_order_id uuid, p_merchant_id uuid
+) RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+BEGIN
+  UPDATE public.orders o
+     SET payment_status = 'refunded', updated_at = now()
+   WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id
+     AND o.shipping_status IN ('cancelled', 'canceled')
+     AND o.payment_status IN ('paid', 'partially_paid', 'pending')
+     AND o.amount_paid > 0
+     AND o.amount_paid <= private.internal_reversal_coverage_v1(
+       p_order_id, p_merchant_id)
+     -- Mirror the cancel-time side-effect gate negated: any external
+     -- funded leg keeps the label with the normal (transaction or
+     -- manager) flow, which also requires per-leg coverage.
+     AND NOT EXISTS (
+       SELECT 1 FROM public.transactions t
+        WHERE t.order_id = o.id AND t.merchant_id = o.merchant_id
+          AND t.transaction_type = 'payment'
+          AND t.status IN ('completed', 'refund_pending', 'refunded')
+          AND t.amount > 0
+          AND COALESCE(
+                public.normalized_gateway_name_v1(t.gateway), ''
+              ) NOT IN (
+            'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+            'PAY_ON_DELIVERY'))
+    -- Cash-like legs need full manual coverage before the label
+    -- flips: an aggregate wallet/savings match on an overfunded or
+    -- superseded ledger must not retire outstanding cash no side
+    -- effect will ever revisit. Mirrors the finalizer guard's
+    -- internal-leg coverage check exactly.
+    AND NOT EXISTS (
+      SELECT 1 FROM public.transactions leg
+       WHERE leg.order_id = o.id AND leg.merchant_id = o.merchant_id
+         AND leg.transaction_type = 'payment'
+         AND leg.status IN ('completed', 'refund_pending', 'refunded')
+         AND COALESCE(
+               public.normalized_gateway_name_v1(leg.gateway), ''
+             ) IN (
+           'STORE_CREDIT', 'CASH', 'MANUAL', 'PAY_ON_DELIVERY')
+         AND (
+           SELECT COALESCE(SUM(refund.amount), 0)
+             FROM public.transactions refund
+            WHERE refund.order_id = o.id
+              AND refund.merchant_id = o.merchant_id
+              AND refund.transaction_type = 'refund'
+              AND refund.status IN ('completed', 'refunded')
+              AND refund.amount > 0
+              AND UPPER(BTRIM(refund.currency))
+                = UPPER(BTRIM(leg.currency))
+              AND public.normalized_gateway_name_v1(refund.gateway)
+                = 'MANUAL'
+              AND refund.metadata->>'payment_transaction_id'
+                = leg.id::text
+              AND (
+                refund.metadata->>'method' IS DISTINCT FROM 'paystack'
+                OR refund.metadata->>'provider_refund_status' = 'processed'
+              )
+         ) < leg.amount);
+END; $$;
+REVOKE ALL ON FUNCTION private.flip_internal_only_order_refunded(uuid, uuid)
+  FROM PUBLIC, anon, authenticated;
 CREATE OR REPLACE FUNCTION private.sync_internal_only_refund_status()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_order_id uuid;
   v_merchant_id uuid;
-  v_reversed_internal numeric;
 BEGIN
   IF TG_TABLE_NAME = 'customer_wallet_transactions' THEN
     IF NEW.source_type IS DISTINCT FROM 'order_reversal'
@@ -39,45 +123,8 @@ BEGIN
   IF v_order_id IS NULL OR v_merchant_id IS NULL THEN
     RETURN NEW;
   END IF;
-  -- Same internal-reversal measure as the transactions-scoped sync
-  -- trigger and the refund manager.
-  SELECT (SELECT COALESCE(sum(w.amount), 0)
-            FROM public.customer_wallet_transactions w
-           WHERE w.source_id = v_order_id
-             AND w.merchant_id = v_merchant_id
-             AND w.source_type = 'order_reversal')
-       + (SELECT COALESCE(sum(r.amount), 0)
-            FROM public.customer_savings_redemptions r
-           WHERE r.order_id = v_order_id
-             AND r.merchant_id = v_merchant_id
-             AND r.metadata ? 'reversed_at')
-    INTO v_reversed_internal;
-  UPDATE public.orders o
-     SET payment_status = 'refunded', updated_at = now()
-   WHERE o.id = v_order_id AND o.merchant_id = v_merchant_id
-     AND o.shipping_status IN ('cancelled', 'canceled')
-     -- Funded states that can owe a balance: paid in full, or
-     -- partially paid with the remainder covered by reversal. A
-     -- partially paid cancellation whose reversals cover
-     -- amount_paid is just as terminal and must not keep polling
-     -- a paid-family label forever.
-     AND o.payment_status IN ('paid', 'partially_paid')
-     AND o.amount_paid > 0
-     AND o.amount_paid <= v_reversed_internal
-     -- Mirror the cancel-time side-effect gate negated: any external
-     -- funded leg keeps the label with the normal (transaction or
-     -- manager) flow, which also requires per-leg coverage.
-     AND NOT EXISTS (
-       SELECT 1 FROM public.transactions t
-        WHERE t.order_id = o.id AND t.merchant_id = o.merchant_id
-          AND t.transaction_type = 'payment'
-          AND t.status IN ('completed', 'refund_pending', 'refunded')
-          AND t.amount > 0
-          AND COALESCE(
-                public.normalized_gateway_name_v1(t.gateway), ''
-              ) NOT IN (
-            'WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
-            'PAY_ON_DELIVERY'));
+  PERFORM private.flip_internal_only_order_refunded(
+    v_order_id, v_merchant_id);
   RETURN NEW;
 END; $$;
 REVOKE ALL ON FUNCTION private.sync_internal_only_refund_status()
@@ -92,3 +139,25 @@ DROP TRIGGER IF EXISTS sync_internal_only_refund_status_savings
 CREATE TRIGGER sync_internal_only_refund_status_savings
   AFTER INSERT ON public.customer_savings_events
   FOR EACH ROW EXECUTE FUNCTION private.sync_internal_only_refund_status();
+-- Backfill reversals that landed before the triggers above existed.
+-- A callable function (not a bare statement) so the regression suite
+-- exercises the exact shipped predicate against a simulated
+-- pre-migration row instead of duplicating it.
+CREATE OR REPLACE FUNCTION private.backfill_internal_only_refund_status()
+RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN
+    SELECT o.id, o.merchant_id
+      FROM public.orders o
+     WHERE o.shipping_status IN ('cancelled', 'canceled')
+       AND o.payment_status IN ('paid', 'partially_paid', 'pending')
+       AND o.amount_paid > 0
+  LOOP
+    PERFORM private.flip_internal_only_order_refunded(r.id, r.merchant_id);
+  END LOOP;
+END; $$;
+REVOKE ALL ON FUNCTION private.backfill_internal_only_refund_status()
+  FROM PUBLIC, anon, authenticated;
+SELECT private.backfill_internal_only_refund_status();

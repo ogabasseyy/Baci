@@ -12,16 +12,10 @@ describe('StatusBadge', () => {
 
     expect(screen.getByText(scenario.status)).toBeInTheDocument();
   });
-  it('styles the Cancelled spelling like Canceled', () => {
-    const { container: cancelled } = render(
-      <StatusBadge status="Cancelled" type="shipping" />
-    );
-    const { container: canceled } = render(
-      <StatusBadge status="Canceled" type="shipping" />
-    );
 
-    expect(cancelled.querySelector('span')?.className).toBe(
-      canceled.querySelector('span')?.className
-    );
+  it('styles the Cancelled spelling like Canceled', () => {
+    render(<StatusBadge status="Cancelled" type="shipping" />);
+
+    expect(screen.getByText('Cancelled')).toHaveClass('bg-red-100');
   });
 });

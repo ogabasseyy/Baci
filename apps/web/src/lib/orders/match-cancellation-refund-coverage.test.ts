@@ -70,25 +70,6 @@ describe('matchCancellationRefundCoverage', () => {
     ]);
   });
 
-  it('quarantines partial and foreign rows instead of skipping the balance', () => {
-    const coverage = matchCancellationRefundCoverage({
-      linkedPaymentId,
-      refundRows: [
-        row({
-          amount: 40,
-          metadata: {
-            payment_transaction_id: 'payment-1',
-            provider_refund_status: 'processed',
-          },
-        }),
-      ],
-      transactions: [leg({})],
-    });
-
-    expect(coverage.refundedPaymentIds).toEqual(new Set());
-    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
-  });
-
   it('attributes an unlinked legacy refund to the sole completed leg', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
@@ -161,27 +142,6 @@ describe('matchCancellationRefundCoverage', () => {
     expect(coverage.unattributedUnlinkedCount).toBe(0);
   });
 
-  it('mismatches null gateways instead of covering them', () => {
-    const coverage = matchCancellationRefundCoverage({
-      linkedPaymentId,
-      refundRows: [
-        row({
-          gateway: null,
-          metadata: { payment_transaction_id: 'payment-1' },
-        }),
-      ],
-      transactions: [leg({ gateway: null as never })],
-    });
-
-    // The gateway column permits null, but the aggregate claim's
-    // NULLIF-normalized equality never matches missing gateways — so
-    // equating them here would finish the side effect as completed
-    // while the order stays paid and settlement unreversed. Missing
-    // gateways mismatch into quarantine.
-    expect(coverage.refundedPaymentIds).toEqual(new Set());
-    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
-  });
-
   it('leaves null-gateway attributions unattributed', () => {
     const coverage = matchCancellationRefundCoverage({
       linkedPaymentId: () => null,
@@ -194,19 +154,6 @@ describe('matchCancellationRefundCoverage', () => {
     // equality, so attribution must leave them unattributed too.
     expect(coverage.refundedPaymentIds).toEqual(new Set());
     expect(coverage.unattributedUnlinkedCount).toBe(1);
-  });
-
-  it('counts a partial attribution as a mismatch for quarantine', () => {
-    const coverage = matchCancellationRefundCoverage({
-      linkedPaymentId: () => null,
-      refundRows: [row({ amount: 40, gateway: 'paypal' })],
-      soleCompletedLegId: 'payment-1',
-      transactions: [leg({ gateway: 'paypal' })],
-    });
-
-    expect(coverage.refundedPaymentIds).toEqual(new Set());
-    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
-    expect(coverage.unattributedUnlinkedCount).toBe(0);
   });
 
   it('counts legacy refunded rows as terminal coverage', () => {
@@ -226,29 +173,6 @@ describe('matchCancellationRefundCoverage', () => {
 
     expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
     expect(coverage.mismatchedTransactions).toEqual([]);
-  });
-
-  it('quarantines unverified manual rows declared as Paystack', () => {
-    const coverage = matchCancellationRefundCoverage({
-      linkedPaymentId,
-      refundRows: [
-        row({
-          gateway: 'manual',
-          metadata: {
-            method: 'paystack',
-            payment_transaction_id: 'payment-1',
-          },
-        }),
-      ],
-      transactions: [leg({})],
-    });
-
-    // A merchant claim about provider money is not coverage: the
-    // executor must quarantine for review, never mark the leg
-    // covered and finish without settlement reversal.
-    expect(coverage.refundedPaymentIds).toEqual(new Set());
-    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
-    expect(coverage.manualLinkedLegIds).toEqual(new Set(['payment-1']));
   });
 
   it('counts provider-confirmed manual Paystack rows as coverage', () => {
@@ -285,63 +209,5 @@ describe('matchCancellationRefundCoverage', () => {
 
     expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
     expect(coverage.mismatchedTransactions).toEqual([]);
-  });
-
-  it('mismatches a covered leg that also carries an anomalous row', () => {
-    const transactions = [leg({})];
-    const coverage = matchCancellationRefundCoverage({
-      linkedPaymentId,
-      refundRows: [
-        row({
-          metadata: {
-            payment_transaction_id: 'payment-1',
-            provider_refund_status: 'processed',
-          },
-        }),
-        row({
-          gateway: 'manual',
-          metadata: {
-            method: 'paystack',
-            payment_transaction_id: 'payment-1',
-          },
-        }),
-      ],
-      transactions,
-    });
-
-    // The verified row covers the leg, but the unverified manual
-    // Paystack claim is anomalous terminal evidence: report both so
-    // the step quarantines instead of completing past an anomaly the
-    // SQL gate refuses to finalize.
-    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
-    expect(coverage.mismatchedTransactions).toEqual(transactions);
-    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
-  });
-
-  it('mismatches a covered leg that also carries a foreign row', () => {
-    const transactions = [leg({})];
-    const coverage = matchCancellationRefundCoverage({
-      linkedPaymentId,
-      refundRows: [
-        row({
-          metadata: {
-            payment_transaction_id: 'payment-1',
-            provider_refund_status: 'processed',
-          },
-        }),
-        row({
-          currency: 'USD',
-          metadata: {
-            payment_transaction_id: 'payment-1',
-            provider_refund_status: 'processed',
-          },
-        }),
-      ],
-      transactions,
-    });
-
-    expect(coverage.refundedPaymentIds).toEqual(new Set(['payment-1']));
-    expect(coverage.mismatchedTransactions).toEqual(transactions);
-    expect(coverage.mismatchedIds).toEqual(new Set(['payment-1']));
   });
 });

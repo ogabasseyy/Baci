@@ -105,7 +105,8 @@ BEGIN
       'completed', 'paystack', 'cap-52', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000079', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000052', 'refund', 5, 'NGN',
-      'failed', 'paystack', 'race-52#1', '{}'::jsonb),
+      'failed', 'paystack', 'race-52#1',
+      jsonb_build_object('provider_refund_status', 'failed')),
     ('9ef12000-0000-4000-8000-000000000023', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000017', 'payment', 100, 'NGN',
       'completed', 'paystack', 'cap-17', '{}'::jsonb),
@@ -159,7 +160,8 @@ BEGIN
     IF SQLERRM <> 'manual_reference_conflict' THEN RAISE; END IF;
   END;
 
-  -- The failed row above never counts as coverage or pending.
+  -- A provider-confirmed failed row never counts as coverage
+  -- or pending; an unstamped one stays gated (round-61 suite).
   SELECT public.manage_order_refund(
     '9ef11000-0000-4000-8000-000000000052'
   ) INTO v_result;

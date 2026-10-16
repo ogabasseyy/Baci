@@ -22,8 +22,24 @@ BEGIN
   -- negative row could cancel real in-flight money, opening
   -- recording the executor would refuse. Honest positive sums stay
   -- exact; corrupt rows pin the gate instead of erasing evidence.
+  -- A locally failed provider row stays pending until a fresh
+  -- provider check stamps non-acceptance: the verified-record
+  -- function still accepts a later processed verdict for it, so
+  -- an out-of-order or corrected provider event could complete
+  -- the same money after a manual recovery (double-pay). Only
+  -- rows carrying a provider refund id gate: without one no
+  -- verdict can ever land (the record function requires it), so
+  -- the row is provably dead. Other gateways keep local-status
+  -- trust and only provider-declared manuals join the gate,
+  -- mirroring the unverified arm below.
   RETURN (SELECT
     COALESCE(sum(CASE WHEN COALESCE(amount,0) <= 0 THEN 1 ELSE amount END) FILTER (WHERE status NOT IN ('completed','refunded','failed')
+      OR (status = 'failed'
+        AND gateway_reference ~ '^[0-9]+$'
+        AND (public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
+          OR (public.normalized_gateway_name_v1(gateway)='MANUAL'
+            AND metadata->>'method'='paystack'))
+        AND metadata->>'provider_refund_status' IS DISTINCT FROM 'failed')
       OR (status IN ('completed','refunded')
         AND (public.normalized_gateway_name_v1(gateway) IS NOT DISTINCT FROM 'PAYSTACK'
           OR (public.normalized_gateway_name_v1(gateway)='MANUAL'

@@ -1,0 +1,109 @@
+import type { PilotLabArm } from './lab-arm';
+import { PilotLabCardPreload } from './lab-card-preload';
+import type { PilotLabConfig } from './lab-config';
+import {
+  LAB_GRID_FILLERS,
+  labCardSlot,
+  labProductFixture,
+  pilotLabFillerImageUrl,
+} from './lab-fixtures';
+import type { PilotBindingStatus } from './lab-index';
+import { PilotLabNotOptimized } from './lab-not-optimized';
+import { LabStoreGrid } from './lab-store-grid';
+import type { PilotLabStore } from './lab-store-registry';
+import { resolveBinding } from './lab-store-resolve';
+import { projectPilotNextImage } from './next-image-adapter';
+
+export { LAB_GRID_FILLERS };
+
+export function LabStoreGridSection({
+  arm,
+  basePath,
+  config,
+  origin,
+  status,
+  store,
+}: {
+  arm: PilotLabArm;
+  basePath: string;
+  config: PilotLabConfig;
+  origin: string;
+  status: PilotBindingStatus;
+  store: PilotLabStore;
+}) {
+  const { binding } = status;
+  if (status.status !== 'accepted') {
+    const stagedOriginal = config.originalUrlFor({
+      merchantId: binding.merchantId,
+      slotId: binding.slotId,
+    });
+    return (
+      <PilotLabNotOptimized
+        baselineSrc={stagedOriginal}
+        binding={binding}
+        reason={`binding status "${status.status}"${status.detail ? `: ${status.detail}` : ''}; the control path is retained and this slot is excluded from the optimized denominator.`}
+      />
+    );
+  }
+  const { resolved, stagedOriginal } = resolveBinding(config, binding);
+  if (!resolved || !stagedOriginal) {
+    return (
+      <PilotLabNotOptimized
+        baselineSrc={stagedOriginal}
+        binding={binding}
+        reason="binding has no staged tiers or verified original; refusing to render rather than mixing arms."
+      />
+    );
+  }
+  // Absolute staged URLs on the card path, both arms: the ORIGINAL card
+  // renderer (OptimizedImage) rejects relative URLs via isValidImageUrl and
+  // renders /placeholder.svg instead, so relative staged URLs cannot mount
+  // the real storefront grid. This mirrors production, where product images
+  // are absolute CDN URLs; the pilot clone projects the same absolute form
+  // so only the image bytes (not the URL shape) vary between arms.
+  const cardBaseUrl = `${origin}${config.baseUrl}`;
+  const cardOriginal = new URL(stagedOriginal, origin).href;
+  const fillerImageUrls = LAB_GRID_FILLERS.map((_, index) =>
+    pilotLabFillerImageUrl(origin, index)
+  );
+  const mountedProduct = labProductFixture({
+    imageHint: `${binding.assetId} lab product`,
+    imageLarge: cardOriginal,
+    name: `${store.storeName} Lab Product`,
+  });
+  const slot = labCardSlot(mountedProduct);
+  const projection =
+    arm === 'pilot'
+      ? projectPilotNextImage({
+          baseUrl: cardBaseUrl,
+          slot,
+          tiers: resolved.tiers,
+        })
+      : null;
+  if (arm === 'pilot' && !projection) {
+    return (
+      <PilotLabNotOptimized
+        binding={binding}
+        reason="card projection is empty for the pilot arm."
+      />
+    );
+  }
+  return (
+    <section
+      data-pilot-lab-binding={`${binding.merchantId}/${binding.assetId}`}
+      data-pilot-lab-slot={binding.slotId}
+    >
+      {arm === 'pilot' && projection ? (
+        <PilotLabCardPreload projection={projection} />
+      ) : null}
+      <LabStoreGrid
+        arm={arm}
+        basePath={basePath}
+        fillerImageUrls={fillerImageUrls}
+        fillers={LAB_GRID_FILLERS}
+        mountedProduct={mountedProduct}
+        mountedProjection={projection}
+      />
+    </section>
+  );
+}

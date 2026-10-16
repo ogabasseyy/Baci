@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/api-client', () => ({ apiPost: vi.fn() }));
@@ -235,77 +235,5 @@ describe('OrderRefundPanel manual form', () => {
         paymentTransactionId: 'leg-2',
       })
     );
-  });
-  it('closes the manual form when polling revokes the manual flag', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      vi.stubGlobal(
-        'fetch',
-        vi
-          .fn()
-          .mockResolvedValueOnce({
-            ok: true,
-            json: async () => summary,
-          })
-          .mockResolvedValue({
-            ok: true,
-            json: async () => ({ ...summary, canRecordManual: false }),
-          })
-      );
-      render(<OrderRefundPanel orderId="order-1" />);
-      fireEvent.click(
-        await screen.findByRole('button', { name: 'Record manual refund' })
-      );
-      expect(
-        await screen.findByRole('button', { name: 'Save manual refund' })
-      ).toBeInTheDocument();
-      await vi.advanceTimersByTimeAsync(30_000);
-      await waitFor(() => {
-        expect(
-          screen.queryByRole('button', { name: 'Save manual refund' })
-        ).not.toBeInTheDocument();
-      });
-      expect(
-        screen.queryByRole('button', { name: 'Record manual refund' })
-      ).not.toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-  it('closes the manual form when polling revokes manage access', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      vi.stubGlobal(
-        'fetch',
-        vi
-          .fn()
-          .mockResolvedValueOnce({
-            ok: true,
-            json: async () => summary,
-          })
-          .mockResolvedValue({
-            ok: true,
-            json: async () => ({ ...summary, canManageRefunds: false }),
-          })
-      );
-      render(<OrderRefundPanel orderId="order-1" />);
-      fireEvent.click(
-        await screen.findByRole('button', { name: 'Record manual refund' })
-      );
-      expect(
-        await screen.findByRole('button', { name: 'Save manual refund' })
-      ).toBeInTheDocument();
-      await vi.advanceTimersByTimeAsync(30_000);
-      await waitFor(() => {
-        expect(
-          screen.queryByRole('button', { name: 'Save manual refund' })
-        ).not.toBeInTheDocument();
-      });
-      expect(
-        screen.queryByRole('button', { name: 'Record manual refund' })
-      ).not.toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });

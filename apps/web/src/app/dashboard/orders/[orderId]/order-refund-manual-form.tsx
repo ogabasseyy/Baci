@@ -79,7 +79,7 @@ export function OrderRefundManualForm({
       <Label htmlFor="refund-method">Method</Label>
       <select
         id="refund-method"
-        className="w-full rounded-md border p-2"
+        className="w-full rounded-md border border-input bg-background p-2 text-foreground"
         value={method}
         onChange={(e) => onMethodChange(e.target.value)}
       >
@@ -93,7 +93,7 @@ export function OrderRefundManualForm({
           <Label htmlFor="refund-leg">Paystack capture</Label>
           <select
             id="refund-leg"
-            className="w-full rounded-md border p-2"
+            className="w-full rounded-md border border-input bg-background p-2 text-foreground"
             required
             value={legId}
             onChange={(e) => onLegIdChange(e.target.value)}

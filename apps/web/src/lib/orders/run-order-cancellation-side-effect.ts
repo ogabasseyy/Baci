@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import type { Json } from '@/types/supabase';
 
 export type OrderCancellationSideEffectStep = 'refund' | 'customer_email';
@@ -24,22 +23,12 @@ export class DeliveryUncertainError extends Error {}
 export class DeferredError extends Error {}
 
 export async function runOrderCancellationSideEffect({
-  deadlineMs,
   execute,
-  executeAdmissionBudgetMs,
   orderId,
   step,
   supabase,
 }: {
-  /** Invocation deadline; gates the worker run, never the claim. */
-  deadlineMs?: number;
   execute: () => Promise<Json | undefined>;
-  /**
-   * Minimum remaining budget to start the worker run after a won
-   * claim. Rows the claim finalizes cheaply (no worker run follows)
-   * never see this gate.
-   */
-  executeAdmissionBudgetMs?: number;
   orderId: string;
   step: OrderCancellationSideEffectStep;
   supabase: Pick<SupabaseClient, 'from' | 'rpc'>;
@@ -66,38 +55,20 @@ export async function runOrderCancellationSideEffect({
   let status: 'completed' | 'failed' | 'delivery_uncertain' | 'deferred' =
     'completed';
   let errorMessage: string | null = null;
-  // The claim won, so no cheap finalization applied and the worker run
-  // follows: admit it only when its verification budget still fits.
-  // Gating here (instead of before the claim) keeps the cheap
-  // claim/finalization path open under backlog: a pre-claim skip would
-  // starve fully covered rows whose settlement reversal and review
-  // closure need no provider call at all.
-  const executeAdmitted =
-    executeAdmissionBudgetMs === undefined ||
-    deadlineMs === undefined ||
-    deadlineMs - Date.now() >= executeAdmissionBudgetMs;
-  if (!executeAdmitted) {
-    // Defer without consuming a retry attempt: the claim already
-    // accounted one, and burning the five-attempt budget on
-    // budget-only skips would cap the row permanently. Best-effort:
-    // when the reset fails the resume re-enters this branch while the
-    // budget is still short and retries it then.
-    await tryResetCancellationSideEffectAttempts(supabase, orderId, step);
-    status = 'deferred';
-    errorMessage =
-      'Too little budget remains to run the claimed cancellation step';
-  } else {
-    try {
-      result = await execute();
-    } catch (error) {
-      status =
-        error instanceof DeliveryUncertainError
-          ? 'delivery_uncertain'
-          : error instanceof DeferredError
-            ? 'deferred'
-            : 'failed';
-      errorMessage = error instanceof Error ? error.message : String(error);
-    }
+  // No budget gate here: cheap worker paths (unsupported-gateway
+  // quarantine, manual deferral) must run even in a short window,
+  // and the verification budget is enforced precisely where a leg
+  // needing provider verification is scheduled.
+  try {
+    result = await execute();
+  } catch (error) {
+    status =
+      error instanceof DeliveryUncertainError
+        ? 'delivery_uncertain'
+        : error instanceof DeferredError
+          ? 'deferred'
+          : 'failed';
+    errorMessage = error instanceof Error ? error.message : String(error);
   }
 
   const { data: finished, error: finishError } = await supabase.rpc(

@@ -9,15 +9,18 @@ import {
   type OrderCancellationSideEffectStep,
   runOrderCancellationSideEffect,
 } from '@/lib/orders/run-order-cancellation-side-effect';
-import { REFUND_PREFLIGHT_ADMISSION_BUDGET_MS } from '@/lib/orders/schedule-preflight-provider-verification';
 import {
   type CancellationDrainCandidateRow,
   selectCancellationDrainCandidates,
 } from '@/lib/orders/select-cancellation-drain-candidates';
 import { zeptomailSendAdmissionBudgetMs } from '@/lib/zeptomail-send-budget';
 
-const DEFAULT_LIMIT = 10;
-const MAX_ATTEMPTS = 5;
+// Per-status fetch ceiling: both cron callers bound `limit` through
+// their drain-limit helpers (max 10), and the default covers direct
+// callers. The verification probe mirrors these slices, so export
+// them rather than letting the two selection orders drift apart.
+export const CANCELLATION_DRAIN_FETCH_LIMIT = 10;
+export const CANCELLATION_DRAIN_MAX_ATTEMPTS = 5;
 const STALE_CLAIM_MINUTES = 15;
 
 export interface CancellationSideEffectDrainSummary {
@@ -41,12 +44,14 @@ export async function drainFailedOrderCancellationSideEffects({
   supabase,
   deadlineMs,
   emailDeadlineMs,
-  limit = DEFAULT_LIMIT,
+  refundDeadlineMs,
+  limit = CANCELLATION_DRAIN_FETCH_LIMIT,
   sendCancellationEmail,
 }: {
   supabase: SupabaseClient;
   deadlineMs?: number;
   emailDeadlineMs?: number;
+  refundDeadlineMs?: number;
   limit?: number;
   sendCancellationEmail: CancellationEmailSender;
 }): Promise<CancellationSideEffectDrainSummary> {
@@ -60,6 +65,12 @@ export async function drainFailedOrderCancellationSideEffects({
   // deadline leaves no room after a full reconcile phase. Callers
   // that pass none keep the legacy shared-deadline behavior.
   const emailCutoff = emailDeadlineMs ?? deadlineMs;
+  // Refund verification runs against its own later cutoff for the
+  // same reason: the reconcile phase is capped whenever
+  // verification work pends, and admitted refund steps verify
+  // against the full phase end. Callers that pass none keep the
+  // legacy shared-deadline behavior.
+  const refundCutoff = refundDeadlineMs ?? deadlineMs;
   // When the email admission budget is already short, customer_email rows
   // can never be admitted this run — yet the SQL limit counts them, so a
   // limit-1 fetch returning only an old email starves the refund behind
@@ -74,7 +85,7 @@ export async function drainFailedOrderCancellationSideEffects({
     .from('order_cancellation_side_effects')
     .select(select)
     .eq('status', 'failed')
-    .lt('attempts', MAX_ATTEMPTS);
+    .lt('attempts', CANCELLATION_DRAIN_MAX_ATTEMPTS);
   if (emailAdmissionShort) {
     failedFetch.neq('step', 'customer_email');
   }
@@ -152,7 +163,7 @@ export async function drainFailedOrderCancellationSideEffects({
     emailDeadlineMs,
     failedRows: (failedRows ?? []) as CancellationDrainCandidateRow[],
     limit,
-    maxAttempts: MAX_ATTEMPTS,
+    maxAttempts: CANCELLATION_DRAIN_MAX_ATTEMPTS,
   });
 
   for (const candidate of candidates.values()) {
@@ -187,12 +198,12 @@ export async function drainFailedOrderCancellationSideEffects({
       });
       continue;
     }
-    // No pre-claim budget skip for refund steps: the claim RPC
-    // finalizes fully covered rows cheaply (no provider call), so
-    // skipping it under backlog would starve their settlement
-    // reversal and review closure indefinitely. The verification
-    // budget gates the post-claim worker run inside the runner
-    // instead, where only rows that may enter preflight see it.
+    // No budget skip for refund steps: the claim RPC finalizes
+    // fully covered rows cheaply (no provider call), and the
+    // verification budget is enforced inside the worker run only
+    // once a leg needing provider verification is scheduled —
+    // cheap paths like unsupported-gateway quarantine must still
+    // run under backlog.
     try {
       const { data: order, error: orderError } = await supabase
         .from('orders')
@@ -241,18 +252,17 @@ export async function drainFailedOrderCancellationSideEffects({
       }
 
       const status = await runOrderCancellationSideEffect({
-        ...(step === 'refund'
-          ? {
-              deadlineMs,
-              executeAdmissionBudgetMs: REFUND_PREFLIGHT_ADMISSION_BUDGET_MS,
-            }
-          : {}),
         orderId,
         step,
         supabase,
         execute: () =>
           executeOrderCancellationSideEffect({
-            deadlineMs: step === 'customer_email' ? emailCutoff : deadlineMs,
+            deadlineMs:
+              step === 'customer_email'
+                ? emailCutoff
+                : step === 'refund'
+                  ? refundCutoff
+                  : deadlineMs,
             isLastAttempt: candidate.isLastAttempt,
             merchant,
             order,

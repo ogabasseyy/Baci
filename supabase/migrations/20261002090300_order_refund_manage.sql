@@ -291,18 +291,15 @@ BEGIN
     v_manual_partial := private.manual_refund_partial_v1(
       p_order_id, v_remaining);
   END IF;
-  -- Internal-only reversals satisfy the refund without touching the
-  -- refund ledger, so the transactions-scoped sync trigger never
-  -- persists the terminal label: without this the response reports
-  -- refunded while the order row stays paid, and a dashboard refresh
-  -- reverts the panel while reporting stays stale. Persist before
-  -- exposing. Transaction-driven zeros already flipped via the
-  -- trigger, so the UPDATE's own predicate scopes it to the
-  -- internal-only (and legacy-drift) remainder; cancelled-only and
-  -- merchant-scoped like the trigger. Mutations only: status stays
-  -- a pure read, and the internal-only sync trigger persists the
-  -- terminal label when reversals land (the retry backstop heals
-  -- legacy drift on the next re-arm).
+  -- Internal-only remainders whose label no trigger persisted still
+  -- need the terminal label before a mutation response exposes
+  -- refunded (the reversal-ledger sync and backfill own
+  -- wallet/savings flips at the ledger; the retry backstop heals
+  -- legacy drift on the next re-arm). Mutations only: status
+  -- reads admit view-only callers without refund permission or CSRF
+  -- protection, so letting them reach this UPDATE would persist
+  -- refunds from a read-only path, including while the step still
+  -- awaits trusted finalization.
   IF p_action <> 'status' AND v_remaining <= 0 AND v_refunded > 0 THEN
     UPDATE public.orders o SET payment_status = 'refunded', updated_at = now()
      WHERE o.id = p_order_id AND o.merchant_id = v_order.merchant_id

@@ -1,3 +1,5 @@
+import { REFUND_PREFLIGHT_ADMISSION_BUDGET_MS } from '@/lib/orders/schedule-preflight-provider-verification';
+
 // vps-workers aborts POST /api/cron/process-settlements after 5 minutes
 // (see timeoutMs in vps-workers/jobs/run-web-cron.mjs). Shared with
 // cancellation-side-effect-drain-limit: keep both budgets identical.
@@ -86,3 +88,44 @@ export function cancellationEmailDrainDeadlineMs(startedAtMs: number): number {
     CANCELLATION_EMAIL_LOOKUP_ALLOWANCE_MS
   );
 }
+
+// End of the reconcile + side-effect phase: the invocation budget
+// minus the safety margin and the notification reserve. Both the
+// email cutoff above and the refund verification cutoff below must
+// stay within it (see the invariant tests).
+const SIDE_EFFECT_PHASE_END_MS =
+  INVOCATION_BUDGET_MS - SAFETY_MARGIN_MS - NOTIFICATION_RESERVE_MS;
+
+/**
+ * Absolute epoch-ms cutoff for refund verification for work started
+ * at `startedAtMs`: the full phase end. After a full 60s reconcile
+ * only ~30s remain before the 90s row-start deadline, so provider
+ * preflight (76s) would defer on every backlog invocation; the
+ * reconcile phase is capped (see below) whenever verification work
+ * pends, and admitted refund steps verify against this later
+ * cutoff. Row starts still gate on `cancellationDrainDeadlineMs`.
+ */
+export function cancellationRefundDrainDeadlineMs(startedAtMs: number): number {
+  return startedAtMs + SIDE_EFFECT_PHASE_END_MS;
+}
+
+// Setup allowance ahead of the first provider check: the 76s
+// admission runs only after candidate selection, the order/merchant
+// reads, and the claim RPC, so a cap that leaves exactly the
+// preflight budget defers the first verification on any positive
+// setup latency. Sized like the email allowances (4s reads plus an
+// 8s single-write claim); shared with the capped phase below: keep
+// the invariant test in lockstep.
+export const CANCELLATION_REFUND_SETUP_ALLOWANCE_MS = 12_000;
+
+// Capped reconcile phase when refund verification pends: ends the
+// phase with the setup allowance plus the preflight budget
+// remaining before the phase end, so the first refund rows verify
+// instead of deferring on every backlog invocation. Shared with
+// reconcile-worker-deadline ROW_START_SLACK_MS (row starts stop
+// that interval before this) and REFUND_PREFLIGHT_ADMISSION_BUDGET_MS
+// (single-sourced above): keep the invariant test in lockstep.
+export const CAPPED_RECONCILE_PHASE_MS =
+  SIDE_EFFECT_PHASE_END_MS -
+  REFUND_PREFLIGHT_ADMISSION_BUDGET_MS -
+  CANCELLATION_REFUND_SETUP_ALLOWANCE_MS;

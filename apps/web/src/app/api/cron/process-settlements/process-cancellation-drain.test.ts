@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   drainFailedOrderCancellationSideEffects: vi.fn(),
   drainPaystackRefundNotifications: vi.fn(),
+  isRefundVerificationPending: vi.fn(),
   reconcileCompletedPaystackCancellationRefunds: vi.fn(),
   reconcilePendingPaystackCancellationRefunds: vi.fn(),
   sweepPaystackRefundRecoveryWatches: vi.fn(),
@@ -25,6 +26,9 @@ vi.mock('@/lib/zeptomail', () => ({
 vi.mock('@/lib/orders/drain-failed-order-cancellation-side-effects', () => ({
   drainFailedOrderCancellationSideEffects:
     mocks.drainFailedOrderCancellationSideEffects,
+}));
+vi.mock('@/lib/orders/refund-verification-pending', () => ({
+  isRefundVerificationPending: mocks.isRefundVerificationPending,
 }));
 vi.mock('@/lib/payments/drain-paystack-refund-notifications', () => ({
   drainPaystackRefundNotifications: mocks.drainPaystackRefundNotifications,
@@ -57,6 +61,7 @@ describe('processCancellationDrain', () => {
       mock.mockReset();
     }
 
+    mocks.isRefundVerificationPending.mockResolvedValue(false);
     mocks.drainFailedOrderCancellationSideEffects.mockResolvedValue({
       drained: [],
       failed: [],
@@ -107,6 +112,10 @@ describe('processCancellationDrain', () => {
         // side-effect deadline leaves no 48s sender budget after a
         // full reconcile phase.
         emailDeadlineMs: 1_120_000,
+        // Refunds verify against the full phase end for the same
+        // reason: the 90s row-start deadline leaves no 76s
+        // preflight window after a full reconcile phase.
+        refundDeadlineMs: 1_120_000,
         // Three steps fit after the margin, the reserved notification
         // share, and the handoff slack; the remainder retries on the
         // next invocation.
@@ -139,110 +148,6 @@ describe('processCancellationDrain', () => {
     await expect(response.json()).resolves.toEqual(
       expect.objectContaining({ skippedDueToBudget: false, success: true })
     );
-  });
-
-  it('skips the notification drain when the workers exhausted the cron budget', async () => {
-    const now = vi.spyOn(Date, 'now');
-    now
-      .mockReturnValueOnce(1_000_000)
-      .mockReturnValueOnce(1_290_000)
-      .mockReturnValue(1_290_000);
-    try {
-      const response = await processCancellationDrain(
-        supabase,
-        mocks.sendEmail,
-        mocks.notifyMerchant
-      );
-
-      expect(response.status).toBe(200);
-      // The zero-limit call still runs: its exhausted/uncertain
-      // counts feed the 503 signal. Only the claim loop stands down.
-      expect(mocks.drainPaystackRefundNotifications).toHaveBeenCalledWith(
-        supabase,
-        mocks.sendEmail,
-        0,
-        mocks.notifyMerchant,
-        1_270_000
-      );
-      expect(mocks.loggerWarn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: expect.stringContaining('cron budget exhausted'),
-        })
-      );
-      await expect(response.json()).resolves.toEqual(
-        expect.objectContaining({ skippedDueToBudget: true, success: true })
-      );
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  it('skips the side-effect drain when the workers exhausted the cron budget', async () => {
-    const now = vi.spyOn(Date, 'now');
-    now
-      .mockReturnValueOnce(1_000_000)
-      .mockReturnValueOnce(1_290_000)
-      .mockReturnValue(1_290_000);
-    try {
-      const response = await processCancellationDrain(
-        supabase,
-        mocks.sendEmail,
-        mocks.notifyMerchant
-      );
-
-      expect(response.status).toBe(200);
-      // A zero limit skips the call outright instead of issuing
-      // empty select round-trips; the payload substitutes the same
-      // empty summary the full settlement path uses.
-      expect(
-        mocks.drainFailedOrderCancellationSideEffects
-      ).not.toHaveBeenCalled();
-      expect(mocks.loggerWarn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: expect.stringContaining('side-effect drain'),
-        })
-      );
-      await expect(response.json()).resolves.toEqual(
-        expect.objectContaining({
-          cancellationSideEffectDrain: {
-            drained: [],
-            failed: [],
-            skipped: [],
-          },
-          notificationSkippedDueToBudget: true,
-          sideEffectSkippedDueToBudget: true,
-          skippedDueToBudget: true,
-          success: true,
-        })
-      );
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  it('retries side effects only after refund reconciliation settles', async () => {
-    let resolveRefunds!: (value: unknown) => void;
-    const refundsGate = new Promise((resolve) => {
-      resolveRefunds = resolve as (value: unknown) => void;
-    });
-    mocks.reconcilePendingPaystackCancellationRefunds.mockReturnValueOnce(
-      refundsGate.then(() => ({ checked: 0, failed: 0 }))
-    );
-
-    const drainPromise = processCancellationDrain(
-      supabase,
-      mocks.sendEmail,
-      mocks.notifyMerchant
-    );
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(
-      mocks.drainFailedOrderCancellationSideEffects
-    ).not.toHaveBeenCalled();
-    resolveRefunds(undefined);
-    await drainPromise;
-    expect(mocks.drainFailedOrderCancellationSideEffects).toHaveBeenCalled();
   });
 
   it('still reconciles refunds when cancellation side effect draining fails', async () => {

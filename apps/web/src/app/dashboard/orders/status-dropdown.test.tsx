@@ -48,19 +48,22 @@ describe('StatusDropdown', () => {
     expect(onStatusUpdate).toHaveBeenCalledWith('ORD-001', 'Shipped');
   });
 
-  it('shows no actions for the Cancelled spelling', async () => {
+  it.each([
+    'Canceled',
+    'Cancelled',
+  ] as const)('offers no actions for terminal status %s', async (shippingStatus) => {
     const user = userEvent.setup();
 
     render(
       <StatusDropdown
-        order={makeOrder({ shippingStatus: 'Cancelled' })}
+        order={makeOrder({ shippingStatus })}
         onStatusUpdate={vi.fn()}
       />
     );
 
-    await user.click(screen.getByRole('button', { name: /cancelled/i }));
+    await user.click(screen.getByRole('button'));
     expect(
-      screen.getByRole('menuitem', { name: /no actions available/i })
+      await screen.findByRole('menuitem', { name: /no actions available/i })
     ).toBeInTheDocument();
   });
 });

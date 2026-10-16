@@ -12,27 +12,27 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261002090200_order_refund_record_helpers.sql',
-    sha256: '349bf739f819629f1b2afd84ac3cac929e9faf915c852a044f0c9bd561e91ebd',
+    sha256: '4c20f5434829fd067a1e0ae84272e7a48e8358ea001afe1382b3b9fc4527a845',
   },
   {
     repositoryPath:
       'supabase/migrations/20261002090250_order_refund_response.sql',
-    sha256: '0a11c9009a26906c71ddc8243a058d87845334bca2d38e0c7e63663f34aeffbf',
+    sha256: '6355b63a6caff7047572b73bf9d05d6a2c8f86f08fbb0cfd7710cfe45c72b3b0',
   },
   {
     repositoryPath:
       'supabase/migrations/20261002090275_order_refund_pending.sql',
-    sha256: '789ad1a6cd3a16c37198ac0a83715350b227a4edc3f09909c338c3e179802eae',
+    sha256: '8c298ad43ccdc50bcaa35331a9c25f29d9a85f155dd2a014d36cb193e751c185',
   },
   {
     repositoryPath:
       'supabase/migrations/20261002090300_order_refund_manage.sql',
-    sha256: 'c6af541fb1501c302a06167be16ece1b2003c017ad375428fdfb634a41280b3d',
+    sha256: '742dfd17c629d094145e075ee55d71bc49f98ff3004a2173b73eae65ba28b4c2',
   },
   {
     repositoryPath:
       'supabase/migrations/20261002090400_order_refund_public_access.sql',
-    sha256: '9494b1713be3f8b884f9ac78ad38ea4f21fceae78889d131d9967dcc07c005dd',
+    sha256: '39efb44aff68598482a7baa3567df605e387a949dc38a51f07096d45365a7757',
   },
   {
     repositoryPath:
@@ -42,7 +42,7 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261010170000_cancellation_refund_legs_covered.sql',
-    sha256: 'c67f31d48de45e8fb4dccc626f212a6fee7f685d0bb5137270bd400606b788af',
+    sha256: '8a4bbad80e049a6a59794487b11743b267eb0af0ca1f5e38c06857eddcb7c984',
   },
   {
     repositoryPath:
@@ -57,11 +57,11 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   {
     repositoryPath:
       'supabase/migrations/20261015120000_sync_internal_only_refund_status.sql',
-    sha256: '4029a7d7081efa8e1d2f01381c184bcb0767e09df3e1d3f8dc7730cb46723888',
+    sha256: '7217e2cc256dc9ec24c3a2efed8e0f08c80c7f0cee7d04be212ebb662c2788ca',
   },
   {
     repositoryPath:
-      'supabase/migrations/20261015130000_reconcile_manual_leg_coverage.sql',
-    sha256: '502a6c9ec40be4fa7869ceff8c9aeed75daf6898879ed2c51d142afa77e04b78',
+      'supabase/migrations/20261016000000_admit_bnpl_to_reconciliation_finalization.sql',
+    sha256: '7944a34f03e2081c4096fd4c630a05aefa44ddb6fbf623ed9cc9254b0e5debfb',
   },
 ];

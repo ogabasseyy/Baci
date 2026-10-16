@@ -10,8 +10,8 @@ import type {
 } from '@/lib/orders/order-cancellation-side-effect-types';
 import { preflightCancellationRefundCoverage } from '@/lib/orders/preflight-cancellation-refund-coverage';
 import { preflightCancellationRefundInitiation } from '@/lib/orders/preflight-cancellation-refund-initiation';
+import { probeRefundedLegManualPending } from '@/lib/orders/probe-refunded-leg-manual-pending';
 import { quarantineInternalOnlyManualPaystack } from '@/lib/orders/quarantine-internal-only-manual-paystack';
-import { quarantineRefundedLegTerminalAnomaly } from '@/lib/orders/quarantine-refunded-leg-terminal-anomaly';
 import { tryResetCancellationSideEffectAttempts } from '@/lib/orders/reset-cancellation-side-effect-attempts';
 import {
   DeferredError,
@@ -78,21 +78,14 @@ export async function executeOrderCancellationSideEffect({
     isExternalPaymentGateway(t.gateway)
   );
   const soleCompletedLeg = soleCompletedCancellationLeg(transactions);
-  // Probe refunded legs even in mixed orders: skipping it would
-  // complete past anomalies the SQL gate refuses to finalize. Its
-  // manual-pending refunded legs merge into the settle deferral below
-  // so clean siblings initiate first, then the step waits for the
-  // merchant instead of completing with money still outstanding.
-  let refundedManualPendingLegIds = new Set<string>();
-  if (actionableLegs.length < linkLegs.length) {
-    ({ refundedManualPendingLegIds } =
-      await quarantineRefundedLegTerminalAnomaly({
-        legs: linkLegs,
-        order,
-        soleCompletedLegId: soleCompletedLeg?.id ?? null,
-        supabase,
-      }));
-  }
+  // Refunded-leg probe; merges into the settle deferral below.
+  const refundedManualPendingLegIds = await probeRefundedLegManualPending({
+    actionableLegCount: actionableLegs.length,
+    linkLegs,
+    order,
+    soleCompletedLegId: soleCompletedLeg?.id ?? null,
+    supabase,
+  });
   if (actionableLegs.length === 0) {
     // Every leg self-terminalized and anomaly-free: defer for claim.
     await tryResetCancellationSideEffectAttempts(supabase, order.id, step);

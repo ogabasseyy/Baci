@@ -66,6 +66,8 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000074', v_merchant_id, 'REFUND-074',
       100, 100, 'paid', 'cancelled', NULL),
     ('9ef11000-0000-4000-8000-000000000075', v_merchant_id, 'REFUND-075',
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    ('9ef11000-0000-4000-8000-000000000076', v_merchant_id, 'REFUND-076',
       100, 100, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
@@ -112,7 +114,22 @@ BEGIN
       'completed', 'paystack', 'r48-74', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000090', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000075', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'r48-75', '{}'::jsonb);
+      'completed', 'paystack', 'r48-75', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000096', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000076', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'r48-76', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000097', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000076', 'refund', 100, 'NGN',
+      'completed', 'paystack', 'pp-76-verified',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000096',
+        'provider_refund_status', 'processed')),
+    ('9ef12000-0000-4000-8000-000000000098', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000076', 'refund', 0, 'USD',
+      'completed', 'paystack', 'pp-76-zero-foreign',
+      jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000096',
+        'provider_refund_status', 'processed'));
 
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts
@@ -121,6 +138,8 @@ BEGIN
       'failed', '9ef13000-0000-4000-8000-000000000072', 0),
     ('9ef11000-0000-4000-8000-000000000073', v_merchant_id, 'refund',
       'failed', '9ef13000-0000-4000-8000-000000000073', 0),
+    ('9ef11000-0000-4000-8000-000000000076', v_merchant_id, 'refund',
+      'failed', '9ef13000-0000-4000-8000-000000000076', 0),
     ('9ef11000-0000-4000-8000-000000000074', v_merchant_id, 'refund',
       'failed', '9ef13000-0000-4000-8000-000000000074', 1);
 
@@ -214,6 +233,16 @@ BEGIN
     RAISE EXCEPTION 'per-leg failed-only escape refused, refunded % remaining %',
       v_result->>'refunded', v_result->>'remaining';
   END IF;
+  -- A zero-amount foreign row pins the pending gate even beside full
+  -- verified coverage: absence of money is not absence of evidence.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000076'
+  ) INTO v_result;
+  IF v_result->>'status' <> 'processing'
+    OR (v_result->>'pending')::numeric <= 0 THEN
+    RAISE EXCEPTION 'zero foreign row not pending, %/%',
+      v_result->>'status', v_result->>'pending';
+  END IF;
 END;
 $refund_round48_gates$;
 
@@ -242,6 +271,15 @@ BEGIN
     '9ef13000-0000-4000-8000-000000000073');
   IF v_status <> 'claimed' THEN
     RAISE EXCEPTION 'unverified extra finalized, got %', v_status;
+  END IF;
+  -- A zero-amount foreign row vetoes finalization like any anomaly:
+  -- completing would strand the manager on processing forever.
+  SELECT we_won, current_status INTO v_won, v_status
+  FROM public.claim_order_cancellation_side_effect(
+    '9ef11000-0000-4000-8000-000000000076', 'refund',
+    '9ef13000-0000-4000-8000-000000000076');
+  IF v_status <> 'claimed' THEN
+    RAISE EXCEPTION 'zero foreign anomaly finalized, got %', v_status;
   END IF;
 END;
 $refund_round48_claims$;

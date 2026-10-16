@@ -13,7 +13,6 @@ vi.mock('@/lib/orders/run-order-cancellation-side-effect', () => ({
 }));
 
 import { drainFailedOrderCancellationSideEffects } from './drain-failed-order-cancellation-side-effects';
-import { REFUND_PREFLIGHT_ADMISSION_BUDGET_MS } from './schedule-preflight-provider-verification';
 
 function terminalQuery(data: unknown, error: Error | null = null) {
   const query = {
@@ -34,7 +33,7 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
     mocks.run.mockResolvedValue('completed');
   });
 
-  it('claims a refund step even when its verification budget will not fit', async () => {
+  it('runs a refund step with no budget gate of its own', async () => {
     const candidate = {
       attempts: 1,
       claimed_at: '2026-07-21T00:00:00Z',
@@ -54,26 +53,25 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
         })
       )
       .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
-    // One ms short of the 38s verification budget: the claim still
-    // runs (it finalizes fully covered rows cheaply), and the budget
-    // gates only the post-claim worker run inside the runner.
+    // One ms of budget left: the claim still runs (it finalizes
+    // fully covered rows cheaply) and cheap worker paths like
+    // unsupported-gateway quarantine still execute. The verification
+    // budget is enforced inside the worker run only once a leg
+    // needing provider verification is scheduled.
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
 
     try {
-      const deadlineMs = 1_240_000 + REFUND_PREFLIGHT_ADMISSION_BUDGET_MS - 1;
       const result = await drainFailedOrderCancellationSideEffects({
-        deadlineMs,
+        deadlineMs: 1_240_001,
         sendCancellationEmail: vi.fn(),
         supabase: { from } as never,
       });
 
       expect(mocks.run).toHaveBeenCalledWith(
-        expect.objectContaining({
-          deadlineMs,
-          executeAdmissionBudgetMs: REFUND_PREFLIGHT_ADMISSION_BUDGET_MS,
-          orderId: 'order-1',
-          step: 'refund',
-        })
+        expect.objectContaining({ orderId: 'order-1', step: 'refund' })
+      );
+      expect(mocks.run.mock.calls[0][0]).not.toHaveProperty(
+        'executeAdmissionBudgetMs'
       );
       expect(result.drained).toEqual([{ orderId: 'order-1', step: 'refund' }]);
     } finally {
@@ -81,8 +79,7 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
     }
   });
 
-  it('admits a refund at exactly the verification budget boundary', async () => {
-    expect(REFUND_PREFLIGHT_ADMISSION_BUDGET_MS).toBe(38_000);
+  it('runs a refund against the separate refund cutoff', async () => {
     const candidate = {
       attempts: 1,
       claimed_at: '2026-07-21T00:00:00Z',
@@ -105,20 +102,25 @@ describe('drainFailedOrderCancellationSideEffects refund admission', () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
 
     try {
-      const deadlineMs = 1_240_000 + REFUND_PREFLIGHT_ADMISSION_BUDGET_MS;
       const result = await drainFailedOrderCancellationSideEffects({
-        deadlineMs,
+        deadlineMs: 1_270_000,
+        refundDeadlineMs: 1_296_000,
         sendCancellationEmail: vi.fn(),
         supabase: { from } as never,
       });
 
       expect(mocks.run).toHaveBeenCalledWith(
-        expect.objectContaining({
-          deadlineMs,
-          executeAdmissionBudgetMs: REFUND_PREFLIGHT_ADMISSION_BUDGET_MS,
-          orderId: 'order-1',
-          step: 'refund',
-        })
+        expect.objectContaining({ orderId: 'order-1', step: 'refund' })
+      );
+      // The mocked runner never invokes the closure: call through
+      // to prove the refund cutoff (not the shared deadline) reaches
+      // the executor's verification budget.
+      const runArg = mocks.run.mock.calls[0]?.[0] as {
+        execute: () => Promise<unknown>;
+      };
+      await runArg.execute();
+      expect(mocks.execute).toHaveBeenCalledWith(
+        expect.objectContaining({ deadlineMs: 1_296_000 })
       );
       expect(result.drained).toEqual([{ orderId: 'order-1', step: 'refund' }]);
     } finally {

@@ -5,9 +5,10 @@
 // explicit jest.mock('expo-crypto', factory) keep their factory.
 const { createHash, randomBytes, randomUUID } = require('node:crypto');
 
+// MD2/MD4 are intentionally not advertised: Node's crypto cannot
+// compute them, so advertising them would promise digests this mock
+// then rejects as unsupported.
 const CryptoDigestAlgorithm = {
-  MD2: 'MD2',
-  MD4: 'MD4',
   MD5: 'MD5',
   SHA1: 'SHA-1',
   SHA224: 'SHA-224',

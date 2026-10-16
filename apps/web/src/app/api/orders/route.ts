@@ -12,8 +12,8 @@ import {
   selectOrderBindingVariant,
 } from '@/lib/cart/order-binding';
 import {
+  dispatchOrderCreation,
   getSharedCartOrderAuthority,
-  submitSharedCartOrderBinding,
 } from '@/lib/cart/order-route-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
@@ -35,6 +35,7 @@ import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-mercha
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
+import { conditionOfferUnavailableResponse } from '@/lib/checkout/order-condition-response';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
@@ -1206,13 +1207,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (taxError) {
       if (taxError instanceof OrderConditionUnavailableError)
-        return NextResponse.json(
-          {
-            error: 'Condition offer unavailable; refresh your cart',
-            details: 'invalid_condition_offer',
-          },
-          { status: 400 }
-        );
+        return conditionOfferUnavailableResponse();
       // Codex P2 (PR #1622 round 7): malformed item ids (Zod only
       // validates as `string`) cascade into Postgres's UUID parser
       // as code 22P02. Pre-route-side-recompute, the RPC's own
@@ -1280,13 +1275,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (negotiationDiscountError) {
       if (negotiationDiscountError instanceof OrderConditionUnavailableError)
-        return NextResponse.json(
-          {
-            error: 'Condition offer unavailable; refresh your cart',
-            details: 'invalid_condition_offer',
-          },
-          { status: 400 }
-        );
+        return conditionOfferUnavailableResponse();
       if (isCanonicalOrderSubtotalUuidError(negotiationDiscountError)) {
         logger.warn({
           error: negotiationDiscountError,
@@ -1737,13 +1726,7 @@ export async function POST(request: NextRequest) {
         });
       } catch (subtotalError) {
         if (subtotalError instanceof OrderConditionUnavailableError)
-          return NextResponse.json(
-            {
-              error: 'Condition offer unavailable; refresh your cart',
-              details: 'invalid_condition_offer',
-            },
-            { status: 400 }
-          );
+          return conditionOfferUnavailableResponse();
         if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
           return NextResponse.json(
             { error: 'Failed to create order', details: 'invalid_items' },
@@ -1838,13 +1821,7 @@ export async function POST(request: NextRequest) {
           });
         } catch (subtotalError) {
           if (subtotalError instanceof OrderConditionUnavailableError)
-            return NextResponse.json(
-              {
-                error: 'Condition offer unavailable; refresh your cart',
-                details: 'invalid_condition_offer',
-              },
-              { status: 400 }
-            );
+            return conditionOfferUnavailableResponse();
           if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
             return NextResponse.json(
               { error: 'Failed to create order', details: 'invalid_items' },
@@ -2299,28 +2276,16 @@ export async function POST(request: NextRequest) {
     // reviewed cart generation atomically. Binding-level failures return
     // early; inner order rejections keep their message and fall through
     // to the existing mapper below.
-    const { bound, failure: bindingFailure } =
-      await submitSharedCartOrderBinding(
-        { client: orderRpcClient },
-        {
-          args: orderCreateRpcArgs as Record<string, unknown>,
-          binding: shared_cart,
-          principalId: sharedCartPrincipalId,
-          variant: orderVariant,
-        }
-      );
-    if (bindingFailure) return bindingFailure;
-    const { data: orderRows, error: orderError } = bound
-      ? {
-          data: bound.ok ? bound.order : null,
-          error: bound.ok
-            ? null
-            : {
-                code: bound.code === 'order_rejected' ? 'P0001' : 'XX000',
-                message: bound.message,
-              },
-        }
-      : await orderRpcClient.rpc(orderCreateRpcName, orderCreateRpcArgs);
+    const dispatched = await dispatchOrderCreation({
+      args: orderCreateRpcArgs as Record<string, unknown>,
+      binding: shared_cart,
+      client: orderRpcClient,
+      principalId: sharedCartPrincipalId,
+      rpcName: orderCreateRpcName,
+      variant: orderVariant,
+    });
+    if (dispatched.failure) return dispatched.failure;
+    const { orderRows, orderError } = dispatched;
 
     const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;
 

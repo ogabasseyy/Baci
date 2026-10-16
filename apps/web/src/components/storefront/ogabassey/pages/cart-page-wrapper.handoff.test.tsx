@@ -92,6 +92,45 @@ describe('CartPageWrapper handoff', () => {
     ).toBeInTheDocument();
   });
 
+  it('restores a scoped locator on its own merchant cart page', async () => {
+    mockSearch('');
+    window.history.pushState({}, '', '/shop-a/cart');
+    sessionStorage.setItem(
+      'baci-cart-handoff-active',
+      JSON.stringify({
+        token: 'ch1.saved',
+        handoffId: 'handoff-saved',
+        merchantSlug: 'shop-a',
+      })
+    );
+
+    render(<CartPageWrapper merchantId="merchant-1" merchantSlug="shop-a" />);
+
+    expect(
+      await screen.findByText(
+        'Handoff continuation for handoff-saved with ch1.saved'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("ignores merchant A's scoped locator on merchant B's cart page", async () => {
+    mockSearch('');
+    window.history.pushState({}, '', '/shop-b/cart');
+    sessionStorage.setItem(
+      'baci-cart-handoff-active',
+      JSON.stringify({
+        token: 'ch1.saved',
+        handoffId: 'handoff-saved',
+        merchantSlug: 'shop-a',
+      })
+    );
+
+    render(<CartPageWrapper merchantId="merchant-1" merchantSlug="shop-b" />);
+
+    expect(await screen.findByText('Cart page')).toBeInTheDocument();
+    expect(screen.queryByText(/Handoff continuation/)).not.toBeInTheDocument();
+  });
+
   it('holds the item transfer while a handoff pairing owns the surface', async () => {
     mockSearch('item_id=55555555-5555-4555-8555-555555555555&qty=2');
     window.history.pushState(

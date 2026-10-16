@@ -7,6 +7,7 @@ import {
   verifySharedCartOrderProof,
 } from './order-proof';
 import {
+  dispatchOrderCreation,
   getSharedCartOrderAuthority,
   submitSharedCartOrderBinding,
 } from './order-route-binding';
@@ -116,6 +117,45 @@ it.each([
     principalId: 'owner',
     sessionId: 'session',
     variant: 'base',
+  });
+});
+it('dispatches legacy orders through the variant RPC when unbound', async () => {
+  const rpc = vi.fn(async () => ({ data: [{ id: 'order-1' }], error: null }));
+  const client = { rpc } as never;
+  const result = await dispatchOrderCreation({
+    args: input.args,
+    binding: undefined,
+    client,
+    principalId: null,
+    rpcName: 'create_storefront_order',
+    variant: 'base',
+  });
+  expect(result).toEqual({
+    failure: null,
+    orderRows: [{ id: 'order-1' }],
+    orderError: null,
+  });
+  expect(rpc).toHaveBeenCalledWith('create_storefront_order', input.args);
+  expect(submitCartBoundOrder).not.toHaveBeenCalled();
+});
+it('maps bound inner rejections to the legacy mapper shape', async () => {
+  vi.mocked(submitCartBoundOrder).mockResolvedValue({
+    ok: false,
+    code: 'order_rejected',
+    message: 'order_total_mismatch',
+  });
+  const result = await dispatchOrderCreation({
+    args: input.args,
+    binding,
+    client: deps.client,
+    principalId: 'owner',
+    rpcName: 'create_storefront_order',
+    variant: 'base',
+  });
+  expect(result).toEqual({
+    failure: null,
+    orderRows: null,
+    orderError: { code: 'P0001', message: 'order_total_mismatch' },
   });
 });
 it('preserves inner order rejections for the existing order mapper', async () => {

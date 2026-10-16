@@ -19,7 +19,7 @@ it('locks an attempt to its first choice until cleared', () => {
   expect(lockedAttemptChoice('handoff-lock')).toBeNull();
 });
 
-it('keeps an active handoff locator for reload until the attempt clears', () => {
+it('keeps an active handoff locator across recoverable attempt resets', () => {
   sessionStorage.clear();
   localStorage.clear();
   expect(loadActiveHandoff()).toBeNull();
@@ -28,8 +28,11 @@ it('keeps an active handoff locator for reload until the attempt clears', () => 
     token: 'pairing-secret',
     handoffId: 'handoff-reload',
   });
+  // Recoverable resets (proof-boundary, version conflict) keep the
+  // locator so a reload can still reconstruct the pending handoff;
+  // only terminal outcomes clear it explicitly.
   clearHandoffAttempt('handoff-reload');
-  expect(loadActiveHandoff()).toBeNull();
+  expect(loadActiveHandoff()).not.toBeNull();
 });
 
 it('preserves the redemption attempt after a response is lost', () => {

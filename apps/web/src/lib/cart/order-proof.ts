@@ -1,6 +1,9 @@
 import { getCartProofEnvironment } from './cart-runtime-env';
 import { cartSessionCookieName } from './principal';
-import { verifyCartSessionProof } from './session-proof';
+import {
+  CART_SESSION_PROOF_VERSION,
+  verifyCartSessionProof,
+} from './session-proof';
 
 export type SharedCartOrderProofResult =
   | { ok: true; principalId: string }
@@ -51,6 +54,23 @@ function verifyCandidate(proof: string) {
  * checkout binding: such a request must never fall through to the
  * legacy direct order RPC.
  */
+/**
+ * True when the request presents cart-proof-shaped material (a cp1
+ * candidate via header, Bearer, or the merchant session cookie) even
+ * if it no longer verifies — expired, revoked, or forged. Presented
+ * but invalid cart authority must fail closed rather than silently
+ * downgrade a shared-cart shopper to the legacy order path; only a
+ * request with no cart credential at all is an ordinary legacy guest.
+ */
+export function requestPresentsCartProofMaterial(
+  request: Request,
+  merchantId: string
+): boolean {
+  return presentedCartProofs(request, merchantId).some((proof) =>
+    proof.startsWith(`${CART_SESSION_PROOF_VERSION}.`)
+  );
+}
+
 export function requestCarriesSharedCartSessionProof(
   request: Request,
   merchantId: string

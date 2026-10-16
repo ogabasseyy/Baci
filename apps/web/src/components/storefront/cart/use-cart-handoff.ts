@@ -1,9 +1,11 @@
 'use client';
 import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { fetchDestinationCart } from './cart-handoff-destination';
 import { postHandoffRedeem } from './cart-handoff-redeem';
 import {
   type Choice,
+  clearActiveHandoff,
   clearAttemptBody,
   clearHandoffAttempt,
   fetchJson,
@@ -60,43 +62,16 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
   async function loadDestination(slug: string | null): Promise<void> {
     setDestChecked(false);
     setDestinationError(null);
-    const url = slug
-      ? `/api/storefront/cart?merchantSlug=${encodeURIComponent(slug)}`
-      : '/api/storefront/cart';
-    try {
-      const response = await fetchJson(url);
-      const payload = (await response.json()) as {
-        cart?: CartSnapshot;
-        code?: string;
-      };
-      if (!response.ok) {
-        if (
-          response.status === 401 &&
-          ['missing_proof', 'expired_proof', 'invalid_proof'].includes(
-            payload.code ?? ''
-          )
-        ) {
-          bootstrapRequired.current = true;
-        } else if (
-          response.status !== 404 ||
-          !['not_found', 'expired'].includes(payload.code ?? '')
-        ) {
-          setDestinationError(
-            'Could not check your existing cart. Please try again.'
-          );
-          return;
-        }
-        setDestCart(null);
-      } else {
-        bootstrapRequired.current = false;
-        setDestCart(payload.cart ?? null);
-      }
-      setDestChecked(true);
-    } catch {
+    const result = await fetchDestinationCart(slug);
+    if (result.status === 'error') {
       setDestinationError(
         'Could not check your existing cart. Please try again.'
       );
+      return;
     }
+    bootstrapRequired.current = result.bootstrapRequired;
+    setDestCart(result.cart);
+    setDestChecked(true);
   }
 
   async function loadPreview(): Promise<PreviewResponse | null> {
@@ -130,8 +105,13 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
           // receipt when the persisted body is resent; a link consumed
           // by someone else has no local body and simply ends here.
           const persistedBody = loadAttemptBody(handoffId);
-          if (persistedBody)
+          if (persistedBody) {
             await postRedeem(persistedBody, payload.merchant?.slug);
+          } else {
+            // Terminal with nothing to replay: drop the locator so
+            // later cart-page loads do not restore this dead handoff.
+            clearActiveHandoff(handoffId);
+          }
         }
       }
       return payload;
@@ -170,6 +150,9 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
           clearHandoffAttempt(handoffId);
           setLockedChoice(null);
           setSentBody(null);
+        },
+        onTerminalOutcome: () => {
+          clearActiveHandoff(handoffId);
         },
         onMergeConflict: () => {
           clearAttemptBody(handoffId);

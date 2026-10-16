@@ -1,4 +1,8 @@
-import { type CartMergeResolution, planCartMerge } from '@baci/shared/cart';
+import {
+  type CartMergeResolution,
+  cartLineIdentity,
+  planCartMerge,
+} from '@baci/shared/cart';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -202,7 +206,8 @@ export function NativeCartAccountPanel() {
               setPicks((existing) => [
                 ...existing.filter(
                   (candidate) =>
-                    JSON.stringify(candidate.item) !== JSON.stringify(pick.item)
+                    cartLineIdentity(candidate.item) !==
+                    cartLineIdentity(pick.item)
                 ),
                 pick,
               ])

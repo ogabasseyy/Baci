@@ -4,6 +4,16 @@ import {
   cartLineIdentity,
   planCartMerge,
 } from '@baci/shared/cart';
+import { clearAttemptBody } from './cart-handoff-attempt-store';
+
+export {
+  clearActiveHandoff,
+  clearAttemptBody,
+  loadActiveHandoff,
+  loadAttemptBody,
+  recordActiveHandoff,
+  recordAttemptBody,
+} from './cart-handoff-attempt-store';
 
 export interface PreviewMerchant {
   id: string;
@@ -110,128 +120,25 @@ export function recordAttemptChoice(handoffId: string, choice: Choice): void {
   }
 }
 
-function attemptBodyStorageKey(handoffId: string): string {
-  return `${attemptStorageKey(handoffId)}:body`;
-}
-
-const attemptBodies = new Map<string, Record<string, unknown>>();
-
 /**
- * The exact redemption body sent for an unresolved attempt. Retries
- * resend it verbatim: replaying by attempt id applies the original
- * receipt, so rebuilding lines/resolutions after an indeterminate
- * response could contradict what the shopper now sees selected.
+ * Reset an attempt's identity, choice, and persisted body. The
+ * active-handoff locator deliberately survives: recoverable outcomes
+ * (proof-boundary and version-conflict resets) refresh the UI for a
+ * retry, and a reload after that refresh must still reconstruct the
+ * pending handoff. Terminal outcome handlers clear the locator
+ * explicitly via clearActiveHandoff.
  */
-export function recordAttemptBody(
-  handoffId: string,
-  body: Record<string, unknown>
-): void {
-  const key = attemptBodyStorageKey(handoffId);
-  attemptBodies.set(key, body);
-  try {
-    window.localStorage.setItem(key, JSON.stringify(body));
-  } catch {
-    /* Use the tab cache. */
-  }
-}
-
-/**
- * Release only the persisted body (a definitive merge_conflict asks
- * for fresh picks); the attempt id and locked choice stay so the
- * retry keeps its identity.
- */
-export function clearAttemptBody(handoffId: string): void {
-  attemptBodies.delete(attemptBodyStorageKey(handoffId));
-  try {
-    window.localStorage.removeItem(attemptBodyStorageKey(handoffId));
-  } catch {
-    /* Storage may be disabled. */
-  }
-}
-
-export function loadAttemptBody(
-  handoffId: string
-): Record<string, unknown> | null {
-  const key = attemptBodyStorageKey(handoffId);
-  const cached = attemptBodies.get(key);
-  if (cached) return cached;
-  try {
-    const stored = window.localStorage.getItem(key);
-    if (!stored) return null;
-    const parsed: unknown = JSON.parse(stored);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      const body = parsed as Record<string, unknown>;
-      attemptBodies.set(key, body);
-      return body;
-    }
-  } catch {
-    /* Storage is optional; the tab cache still holds the body. */
-  }
-  return null;
-}
-
-/** Redemption already committed; optional browser cleanup cannot undo success. */
 export function clearHandoffAttempt(handoffId: string): void {
   const key = attemptStorageKey(handoffId);
   attemptIds.delete(key);
   attemptChoices.delete(attemptChoiceStorageKey(handoffId));
-  attemptBodies.delete(attemptBodyStorageKey(handoffId));
+  clearAttemptBody(handoffId);
   try {
     window.localStorage.removeItem(key);
     window.localStorage.removeItem(attemptChoiceStorageKey(handoffId));
-    window.localStorage.removeItem(attemptBodyStorageKey(handoffId));
-    const active = loadActiveHandoff();
-    if (active?.handoffId === handoffId)
-      window.sessionStorage.removeItem(ACTIVE_HANDOFF_KEY);
   } catch {
     /* Storage may be disabled. */
   }
-}
-
-const ACTIVE_HANDOFF_KEY = 'baci-cart-handoff-active';
-
-/**
- * Tab-scoped locator for an in-progress handoff. The pairing secret
- * lives in the URL fragment, which the continuation immediately
- * redacts; without this record a browser reload after an
- * indeterminate redemption could never reconstruct the flow or
- * replay its persisted attempt. Session storage dies with the tab.
- */
-export function recordActiveHandoff(token: string, handoffId: string): void {
-  try {
-    window.sessionStorage.setItem(
-      ACTIVE_HANDOFF_KEY,
-      JSON.stringify({ token, handoffId })
-    );
-  } catch {
-    /* Storage is optional; the in-page flow continues regardless. */
-  }
-}
-
-export function loadActiveHandoff(): {
-  token: string;
-  handoffId: string;
-} | null {
-  try {
-    const stored = window.sessionStorage.getItem(ACTIVE_HANDOFF_KEY);
-    if (!stored) return null;
-    const parsed: unknown = JSON.parse(stored);
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      'token' in parsed &&
-      'handoffId' in parsed &&
-      typeof parsed.token === 'string' &&
-      typeof parsed.handoffId === 'string' &&
-      parsed.token &&
-      parsed.handoffId
-    ) {
-      return { token: parsed.token, handoffId: parsed.handoffId };
-    }
-  } catch {
-    /* Storage is optional. */
-  }
-  return null;
 }
 
 export function formatMinor(minor: number, currency: string): string {

@@ -17,6 +17,7 @@ function deps(overrides: Partial<HandoffRedeemDeps> = {}): HandoffRedeemDeps {
     setResolutions: vi.fn(),
     setLoadError: vi.fn(),
     onAttemptConsumed: vi.fn(),
+    onTerminalOutcome: vi.fn(),
     onMergeConflict: vi.fn(),
     refreshPreview: vi.fn(async () => null),
     ...overrides,
@@ -83,6 +84,7 @@ it('consumes the attempt after a consumed-handoff reply', async () => {
   const redeemDeps = deps();
   await expect(postHandoffRedeem(redeemDeps, {})).resolves.toBe(false);
   expect(redeemDeps.onAttemptConsumed).toHaveBeenCalledTimes(1);
+  expect(redeemDeps.onTerminalOutcome).toHaveBeenCalledTimes(1);
   expect(redeemDeps.setLoadError).toHaveBeenCalledWith(
     expect.stringMatching(/already used/)
   );

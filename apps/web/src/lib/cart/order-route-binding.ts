@@ -8,6 +8,7 @@ import {
 } from './order-binding';
 import {
   requestCarriesSharedCartSessionProof,
+  requestPresentsCartProofMaterial,
   verifySharedCartOrderProof,
 } from './order-proof';
 
@@ -24,8 +25,13 @@ export function getSharedCartOrderAuthority(
   if (!binding) {
     // A request carrying shared-cart session authority must submit
     // its reviewed checkout binding; without one it must not fall
-    // through to the legacy direct order path.
-    if (requestCarriesSharedCartSessionProof(request, merchantId)) {
+    // through to the legacy direct order path. Presented but expired
+    // or invalid cart material fails closed the same way — only a
+    // request with no cart credential at all is a legacy guest.
+    if (
+      requestCarriesSharedCartSessionProof(request, merchantId) ||
+      requestPresentsCartProofMaterial(request, merchantId)
+    ) {
       return {
         ok: false,
         response: NextResponse.json(

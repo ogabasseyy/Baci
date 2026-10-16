@@ -38,6 +38,11 @@ export async function GET(request: NextRequest): Promise<Response> {
     if (!quota.allowed) return cartErrorResponse('quota_exceeded');
     const result = await getCartRealtimeAccess(context.principal);
     if (!result.ok) return cartErrorResponse(result.code);
+    // Deliberate exemption from the device-only body-credential rule:
+    // this is not a session proof. It is a receive-only, five-minute,
+    // single-cart-topic subscription token that the browser client
+    // must hold to call realtime setAuth; it cannot read or mutate
+    // cart state through any cart API.
     return cartJsonResponse({
       topic: result.topic,
       token: result.token,

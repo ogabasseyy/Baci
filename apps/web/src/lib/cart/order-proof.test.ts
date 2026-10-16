@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   requestCarriesSharedCartSessionProof,
+  requestPresentsCartProofMaterial,
   verifySharedCartOrderProof,
 } from './order-proof';
 import { cartSessionCookieName } from './principal';
@@ -123,6 +124,37 @@ describe('verifySharedCartOrderProof', () => {
     );
     expect(
       requestCarriesSharedCartSessionProof(
+        new Request('http://localhost/api/orders'),
+        MERCHANT_ID
+      )
+    ).toBe(false);
+  });
+
+  it('detects presented cart material even when it no longer verifies', () => {
+    const stale = new Request('http://localhost/api/orders', {
+      headers: { 'x-cart-proof': 'cp1.stale.stale' },
+    });
+    expect(requestCarriesSharedCartSessionProof(stale, MERCHANT_ID)).toBe(
+      false
+    );
+    expect(requestPresentsCartProofMaterial(stale, MERCHANT_ID)).toBe(true);
+    const cookieStale = new Request('http://localhost/api/orders', {
+      headers: {
+        cookie: `${cartSessionCookieName(MERCHANT_ID)}=cp1.stale.stale`,
+      },
+    });
+    expect(requestPresentsCartProofMaterial(cookieStale, MERCHANT_ID)).toBe(
+      true
+    );
+    // Non-cart credentials (e.g. account JWTs) are not cart material.
+    const accountOnly = new Request('http://localhost/api/orders', {
+      headers: { authorization: 'Bearer [REDACTED]' },
+    });
+    expect(requestPresentsCartProofMaterial(accountOnly, MERCHANT_ID)).toBe(
+      false
+    );
+    expect(
+      requestPresentsCartProofMaterial(
         new Request('http://localhost/api/orders'),
         MERCHANT_ID
       )

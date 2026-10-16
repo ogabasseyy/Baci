@@ -12,6 +12,8 @@ export interface HandoffRedeemDeps {
   setLoadError(value: string | null): void;
   /** Attempt and its locked choice are consumed: clear both stores. */
   onAttemptConsumed(): void;
+  /** Terminal outcome: also clear the tab-scoped handoff locator. */
+  onTerminalOutcome(): void;
   /** Definitive merge conflict: release the sent body for fresh picks. */
   onMergeConflict(): void;
   refreshPreview(): Promise<unknown>;
@@ -63,6 +65,7 @@ export async function postHandoffRedeem(
     };
     if (response.ok) {
       deps.onAttemptConsumed();
+      deps.onTerminalOutcome();
       window.location.replace(
         window.location.pathname + window.location.search
       );
@@ -108,6 +111,7 @@ export async function postHandoffRedeem(
     }
     if (payload.code === 'handoff_consumed') {
       deps.onAttemptConsumed();
+      deps.onTerminalOutcome();
       deps.setLoadError(
         'This link was already used. Ask the sender for a fresh one.'
       );
@@ -115,6 +119,7 @@ export async function postHandoffRedeem(
     }
     if (payload.code === 'expired') {
       deps.onAttemptConsumed();
+      deps.onTerminalOutcome();
       deps.setLoadError(
         'This link has expired. Ask the sender for a fresh one.'
       );

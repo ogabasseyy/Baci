@@ -1,4 +1,4 @@
-import type { CartItemIdentity } from '@baci/shared/cart';
+import { type CartItemIdentity, cartLineIdentity } from '@baci/shared/cart';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -12,7 +12,7 @@ import Colors from '@/constants/Colors';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
 function conflictKey(item: CartItemIdentity): string {
-  return JSON.stringify(item);
+  return cartLineIdentity(item);
 }
 export function SharedCartStatusPanel() {
   const state = useNativeSharedCartStore();

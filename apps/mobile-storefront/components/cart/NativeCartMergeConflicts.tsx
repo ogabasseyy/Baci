@@ -1,4 +1,8 @@
-import type { CartMergeConflict, CartMergeResolution } from '@baci/shared/cart';
+import {
+  type CartMergeConflict,
+  type CartMergeResolution,
+  cartLineIdentity,
+} from '@baci/shared/cart';
 import { Pressable, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 
@@ -23,7 +27,7 @@ export function NativeCartMergeConflicts({
   // product-level choice the contract actually applies.
   const seenItems = new Set<string>();
   const productConflicts = conflicts.filter((conflict) => {
-    const key = JSON.stringify(conflict.item);
+    const key = cartLineIdentity(conflict.item);
     if (seenItems.has(key)) return false;
     seenItems.add(key);
     return true;

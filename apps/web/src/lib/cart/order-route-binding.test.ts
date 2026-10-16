@@ -3,6 +3,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { submitCartBoundOrder } from './order-binding';
 import {
   requestCarriesSharedCartSessionProof,
+  requestPresentsCartProofMaterial,
   verifySharedCartOrderProof,
 } from './order-proof';
 import {
@@ -12,6 +13,7 @@ import {
 
 vi.mock('./order-proof', () => ({
   requestCarriesSharedCartSessionProof: vi.fn(() => false),
+  requestPresentsCartProofMaterial: vi.fn(() => false),
   verifySharedCartOrderProof: vi.fn(),
 }));
 vi.mock('./order-binding', () => ({ submitCartBoundOrder: vi.fn() }));
@@ -52,6 +54,16 @@ it('fails closed when shared-cart session authority omits its binding', async ()
     code: 'SHARED_CART_BINDING_REQUIRED',
   });
   expect(submitCartBoundOrder).not.toHaveBeenCalled();
+});
+it('fails closed when cart proof material is presented but no longer verifies', async () => {
+  vi.mocked(requestPresentsCartProofMaterial).mockReturnValue(true);
+  const authority = getSharedCartOrderAuthority(request, undefined, 'merchant');
+  expect(authority.ok).toBe(false);
+  if (authority.ok) throw new Error('expired cart material downgraded');
+  expect(authority.response.status).toBe(401);
+  expect(await authority.response.json()).toMatchObject({
+    code: 'SHARED_CART_BINDING_REQUIRED',
+  });
 });
 it('forwards only verified preparing-principal authority for the submitted cart and merchant', () => {
   vi.mocked(verifySharedCartOrderProof).mockReturnValue({

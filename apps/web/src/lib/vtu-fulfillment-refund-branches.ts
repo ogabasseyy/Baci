@@ -2,15 +2,15 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VtuTransactionRow } from '@/lib/vtu-fulfillment';
 import { setMetadataValue } from '@/lib/vtu-metadata-fields';
 import {
-  VTU_REFUND_SKIPPED_KEY,
-  VTU_REFUND_SKIPPED_NO_CHARGE,
-} from '@/lib/vtu-refund-collection-evidence';
-import {
   getVtuProviderLabel,
   type PaymentSplit,
 } from '@/lib/vtu-payment-split';
 import { VTU_TYPE_LABELS } from '@/lib/vtu-pending-transaction';
 import { throwVtuPersistenceError } from '@/lib/vtu-persistence-error';
+import {
+  VTU_REFUND_SKIPPED_KEY,
+  VTU_REFUND_SKIPPED_NO_CHARGE,
+} from '@/lib/vtu-refund-collection-evidence';
 
 /**
  * Failed-vend refund branches, moved here from vtu-fulfillment
@@ -236,6 +236,36 @@ export async function refundCardOnly({
     'card_only'
   );
   return { metadataChanged, refundIssued: true, refundedAmount: totalAmount };
+}
+
+export async function findExistingVtuReversalLedger({
+  row,
+  supabase,
+}: {
+  row: VtuTransactionRow;
+  supabase: SupabaseClient;
+}): Promise<{ amount: number } | null> {
+  if (!row.customer_id) return null;
+  const { data, error } = await supabase
+    .from('customer_wallet_transactions')
+    .select('amount')
+    .eq('customer_id', row.customer_id)
+    .eq('merchant_id', row.merchant_id)
+    .eq('source_type', 'vtu_wallet_reversal')
+    .eq('source_id', row.id)
+    .eq('type', 'adjustment')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    // Fail closed, like the refund-leg lookup: an unverifiable
+    // ledger must never green-light a completion decision.
+    throwVtuPersistenceError(
+      `Failed to verify VTU reversal ledger: ${error.message}`
+    );
+  }
+  if (!data) return null;
+  return { amount: Number(data.amount) || 0 };
 }
 
 export async function findExistingVtuRefundLedger({

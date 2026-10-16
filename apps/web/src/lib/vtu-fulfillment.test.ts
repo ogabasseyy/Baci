@@ -2105,18 +2105,49 @@ describe('fulfillPendingVtuTransaction', () => {
     expect(updatePayloads).toEqual([]);
   });
 
-  it('returns failed with the refunded amount when the retry claim loses to a committed refund', async () => {
+  it('completes both refund legs when the retry claim loses to a committed refund', async () => {
     // A refund committed between the pre-check read and the atomic
-    // claim: the claim refuses already_refunded, and the retry must
-    // report failed-with-refund (re-reading the ledger for the amount)
-    // instead of re-vending on restored value.
+    // claim: the claim refuses already_refunded. The retry must
+    // re-enter the idempotent refund helper (a hybrid refund may have
+    // restored only the wallet leg) and report failed with the
+    // ledger-verified total — never re-vend on restored value.
+    // Provider error text is redacted to the fixed refunded fallback
+    // (no first-party safe flag on this row).
     mockCheckTransactionStatus.mockResolvedValueOnce({
       message: 'Original attempt failed',
       status: 'failed',
     });
+    const rpcImpl = vi.fn((name: string) =>
+      Promise.resolve(
+        name === 'refund_customer_wallet_for_vtu'
+          ? {
+              data: [
+                {
+                  success: true,
+                  new_balance: 1700,
+                  transaction_id: 'ledger-card-1',
+                },
+              ],
+              error: null,
+            }
+          : name === 'reverse_vtu_wallet_payment'
+            ? {
+                data: [
+                  {
+                    success: false,
+                    reversed_amount: 0,
+                    new_balance: 1000,
+                    reversal_transaction_id: null,
+                  },
+                ],
+                error: null,
+              }
+            : { data: null, error: null }
+      )
+    );
 
     const supabase = createPendingTransactionSupabaseMock({
-      ledgerReadSequence: [null, { amount: 1000 }],
+      ledgerReadSequence: [null, { amount: 700 }, { amount: 300 }],
       retryClaimData: [
         {
           claimed: false,
@@ -2124,6 +2155,7 @@ describe('fulfillPendingVtuTransaction', () => {
           refusal_reason: 'already_refunded',
         },
       ],
+      rpcImpl,
       transactionRow: {
         id: 'vtu-1',
         merchant_id: 'merchant-1',
@@ -2135,7 +2167,10 @@ describe('fulfillPendingVtuTransaction', () => {
         request_reference: 'VTU-123',
         transaction_id: null,
         status: 'failed',
-        metadata: {},
+        metadata: {
+          paymentSplit: { card: 700, wallet: 300 },
+          walletDebited: true,
+        },
         error_message: 'Temporary biller error',
         merchant_commission: 0,
         customer_cashback: 0,
@@ -2154,11 +2189,80 @@ describe('fulfillPendingVtuTransaction', () => {
 
     expect(result).toMatchObject({
       amount: 1000,
+      error:
+        'Original payment was refunded to wallet — please retry as a new purchase.',
       reference: 'VTU-123',
       refundedToWallet: 1000,
       status: 'failed',
     });
+    // Both legs ran through the idempotent helper (reverse no-op'd
+    // on the already-restored leg; the card leg completed).
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'reverse_vtu_wallet_payment',
+      expect.objectContaining({ p_expected_status: 'failed' })
+    );
+    expect(rpcImpl).toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.objectContaining({ p_amount: 700 })
+    );
     expect(mockPurchaseAirtime).not.toHaveBeenCalled();
+  });
+
+  it('returns first-party copy verbatim on the refund-race path when flagged safe', async () => {
+    mockCheckTransactionStatus.mockResolvedValueOnce({
+      message: 'Original attempt failed',
+      status: 'failed',
+    });
+    const rpcImpl = vi.fn(() => Promise.resolve({ data: null, error: null }));
+
+    const supabase = createPendingTransactionSupabaseMock({
+      ledgerReadSequence: [null, { amount: 700 }, { amount: 300 }],
+      retryClaimData: [
+        {
+          claimed: false,
+          claimed_updated_at: null,
+          refusal_reason: 'already_refunded',
+        },
+      ],
+      rpcImpl,
+      transactionRow: {
+        id: 'vtu-1',
+        merchant_id: 'merchant-1',
+        customer_id: 'customer-1',
+        type: 'airtime',
+        network_provider: 'MTN',
+        phone_number: '08012345678',
+        amount: 1000,
+        request_reference: 'VTU-123',
+        transaction_id: null,
+        status: 'failed',
+        metadata: {
+          paymentSplit: { card: 700, wallet: 300 },
+          walletDebited: true,
+          [VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY]: true,
+        },
+        error_message:
+          'Wallet balance changed during checkout — no charge was made.',
+        merchant_commission: 0,
+        customer_cashback: 0,
+        biller_name: null,
+        biller_item_code: null,
+        customer_identifier: null,
+        source: 'checkout',
+      },
+    });
+
+    const result = await fulfillPendingVtuTransaction({
+      retryFailed: true,
+      supabase,
+      transactionId: 'vtu-1',
+    });
+
+    expect(result).toMatchObject({
+      error: 'Wallet balance changed during checkout — no charge was made.',
+      refundedToWallet: 1000,
+      status: 'failed',
+    });
   });
 
   it('returns processing when the retry claim finds the row already moved', async () => {
@@ -5109,6 +5213,10 @@ describe('fulfillPendingVtuTransaction', () => {
 
       expect(result).toMatchObject({
         amount: 1000,
+        // Provider error text redacted: no first-party safe flag on
+        // this row, so the fixed refunded fallback applies (R117 P1).
+        error:
+          'Original payment was refunded to wallet — please retry as a new purchase.',
         reference: 'VTU-123',
         refundedToWallet: 1000,
         status: 'failed',

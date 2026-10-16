@@ -11,13 +11,25 @@ const ROW = {
   type: 'airtime',
 };
 
-function createSupabase(ledgerData: { amount: number } | null = null) {
-  const maybeSingle = vi.fn(() =>
-    Promise.resolve({ data: ledgerData, error: null })
-  );
+function createSupabase(
+  ledgerData: { amount: number } | null = null,
+  reversalLedgerData: { amount: number } | null = null
+) {
+  const filters = new Map<string, unknown>();
+  const maybeSingle = vi.fn(() => {
+    // Route card-leg vs reversal-leg lookups by their source_type
+    // filter so partial-refund states can be modeled.
+    if (filters.get('source_type') === 'vtu_wallet_reversal') {
+      return Promise.resolve({ data: reversalLedgerData, error: null });
+    }
+    return Promise.resolve({ data: ledgerData, error: null });
+  });
   const chain: Record<string, unknown> = {};
   chain.select = vi.fn(() => chain);
-  chain.eq = vi.fn(() => chain);
+  chain.eq = vi.fn((field: string, value: unknown) => {
+    filters.set(field, value);
+    return chain;
+  });
   chain.order = vi.fn(() => chain);
   chain.limit = vi.fn(() => chain);
   chain.maybeSingle = maybeSingle;
@@ -136,5 +148,37 @@ describe('refundVtuToCustomerWallet invariant', () => {
       refundedAmount: 400,
     });
     expect(metadata.refundContext).toBe('wallet_race');
+  });
+
+  it('completes the card leg when only the reversal leg is in the ledger', async () => {
+    // A hybrid refund restored the wallet leg then died before the
+    // card leg (R117 P1): throwing here would strand the card
+    // portion while the retry path reports the row refunded. The
+    // race arm completes the card leg instead.
+    const { rpc, supabase } = createSupabase(null, { amount: 600 });
+    const metadata: Record<string, unknown> = {
+      paymentSplit: { card: 400, wallet: 600 },
+      walletDebited: false,
+    };
+
+    const result = await refundVtuToCustomerWallet({
+      metadata,
+      row: { ...ROW, source: 'checkout' } as never,
+      supabase,
+    });
+
+    expect(result).toEqual({
+      metadataChanged: true,
+      refundIssued: true,
+      refundedAmount: 400,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'refund_customer_wallet_for_vtu',
+      expect.objectContaining({ p_amount: 400 })
+    );
+    expect(rpc).not.toHaveBeenCalledWith(
+      'reverse_vtu_wallet_payment',
+      expect.anything()
+    );
   });
 });

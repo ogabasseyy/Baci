@@ -67,7 +67,10 @@ import {
   writeVtuProviderSubmissionMarkerOrRestore,
 } from './vtu-fulfillment-recovery';
 import { refundVtuToCustomerWallet } from './vtu-fulfillment-refund';
-import { findExistingVtuRefundLedger } from './vtu-fulfillment-refund-branches';
+import {
+  findExistingVtuRefundLedger,
+  findExistingVtuReversalLedger,
+} from './vtu-fulfillment-refund-branches';
 import { mergeVtuSettlementMetadata } from './vtu-settlement-metadata';
 
 export type { RetryableVtuErrorContext } from '@/lib/vtu-refund-guard';
@@ -2139,6 +2142,15 @@ export async function fulfillPendingVtuTransaction({
     const ledgerRefund = cachedRefundIssued
       ? null
       : await findExistingVtuRefundLedger({ row, supabase });
+    // Provider-authored error text must never reach the client (the
+    // confirm route serializes fulfillment.error): first-party copy
+    // returns verbatim only with the safe flag, else the fixed
+    // refunded fallback (Codex R117 P1).
+    const refundedErrorCopy =
+      existingMetadata[VTU_CUSTOMER_SAFE_ERROR_MESSAGE_KEY] === true &&
+      row.error_message
+        ? row.error_message
+        : 'Original payment was refunded to wallet — please retry as a new purchase.';
     if (cachedRefundIssued || ledgerRefund) {
       const refundAmount =
         Number(existingMetadata.refundAmount) ||
@@ -2147,9 +2159,7 @@ export async function fulfillPendingVtuTransaction({
         0;
       return {
         amount: Number(row.amount) || 0,
-        error:
-          row.error_message ||
-          'Original payment was refunded to wallet — please retry as a new purchase.',
+        error: refundedErrorCopy,
         reference: row.request_reference,
         ...(refundAmount > 0 && { refundedToWallet: refundAmount }),
         status: 'failed',
@@ -2180,24 +2190,60 @@ export async function fulfillPendingVtuTransaction({
     const retryClaimRow = retryClaim?.[0] ?? null;
     if (!retryClaimRow?.claimed) {
       if (retryClaimRow?.refusal_reason === 'already_refunded') {
-        // A refund committed between the pre-check and the claim. The
-        // row is failed-with-value-restored: report it like the
-        // cached-flag path above (re-read the ledger for the amount —
-        // the flag may still be unset when the metadata persist lagged).
-        const refundLedger = await findExistingVtuRefundLedger({
+        // A refund committed between the pre-check and the claim —
+        // but possibly only PART of it: a hybrid refund that
+        // restored the wallet leg and died before the card leg trips
+        // the same refusal. Re-enter the idempotent refund helper to
+        // complete any missing leg before reporting terminal (Codex
+        // R117 P1); returning here would strand the card portion
+        // while the client rotates the key and stops polling.
+        const completionMetadata = { ...(row.metadata ?? {}) };
+        const completion = await refundVtuToCustomerWallet({
+          expectedStatus: 'failed',
+          metadata: completionMetadata,
+          requireCollectionEvidence: true,
           row,
           supabase,
         });
+        if (completion.metadataChanged) {
+          const { error: completionMetadataError } = await supabase
+            .from('vtu_transactions')
+            .update({ metadata: completionMetadata })
+            .eq('id', row.id)
+            .eq('status', 'failed');
+          if (completionMetadataError) {
+            throw new VtuPersistenceError(
+              `Failed to persist refund-race completion metadata for ${row.id}: ${completionMetadataError.message}`
+            );
+          }
+        }
+        throwUnlessRefundSkippedWithoutCollection({
+          failedMessage: row.error_message ?? undefined,
+          failedMetadata: getSafeMetadataDiagnostics(completionMetadata),
+          message: `Unable to confirm VTU refund before returning refund-race failed purchase for ${row.id}`,
+          refundIssued: completion.refundIssued,
+          refundedAmount: completion.refundedAmount,
+          refundMetadata: completionMetadata,
+          row,
+        });
+        // Both legs verified from the ledger AFTER completion, so a
+        // leg issued by this pass counts too. The legs are disjoint
+        // source_types — no double-count.
+        const cardLedger = await findExistingVtuRefundLedger({
+          row,
+          supabase,
+        });
+        const reversalLedger = await findExistingVtuReversalLedger({
+          row,
+          supabase,
+        });
+        const refundAmount =
+          (cardLedger?.amount || 0) + (reversalLedger?.amount || 0);
         return {
           amount: Number(row.amount) || 0,
-          error:
-            row.error_message ||
-            'Original payment was refunded to wallet — please retry as a new purchase.',
+          error: refundedErrorCopy,
           reference: row.request_reference,
-          ...(refundLedger &&
-            refundLedger.amount > 0 && {
-              refundedToWallet: refundLedger.amount,
-            }),
+          ...(refundAmount > 0 && { refundedToWallet: refundAmount }),
           status: 'failed',
         };
       }

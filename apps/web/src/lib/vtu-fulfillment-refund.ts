@@ -12,6 +12,7 @@ import {
 import {
   applyRefundMetadata,
   findExistingVtuRefundLedger,
+  findExistingVtuReversalLedger,
   refundCardOnly,
   refundHybridKudaFailure,
   refundHybridWalletRace,
@@ -199,9 +200,14 @@ export async function refundVtuToCustomerWallet({
     //   - refund row exists → wallet-race already compensated; sync
     //     metadata and return so the customer isn't stuck in a 500
     //     loop after a transient metadata-persist failure.
-    //   - no refund row → genuine invariant violation (vend was
-    //     attempted, wallet never debited, no compensation issued).
-    //     Fail closed so the webhook retries with a clean slate.
+    //   - reversal row exists (but no refund row) → a hybrid refund
+    //     restored the wallet leg, then died before the card leg
+    //     (Codex R117 P1). Run the race arm to complete the card
+    //     leg — throwing here would strand it while the retry path
+    //     reports the row refunded.
+    //   - neither → genuine invariant violation (vend was attempted,
+    //     wallet never debited, no compensation issued). Fail closed
+    //     so the webhook retries with a clean slate.
     const existingRefund = await findExistingVtuRefundLedger({
       row,
       supabase,
@@ -217,6 +223,19 @@ export async function refundVtuToCustomerWallet({
         refundIssued: true,
         refundedAmount: existingRefund.amount,
       };
+    }
+    const existingReversal = await findExistingVtuReversalLedger({
+      row,
+      supabase,
+    });
+    if (existingReversal) {
+      return await refundHybridWalletRace({
+        metadata,
+        row,
+        supabase,
+        expectedStatus,
+        paymentSplit,
+      });
     }
     throwVtuPersistenceError(
       `Refund dispatch invariant violated for ${row.id}: paymentSplit present, walletDebited=false, refundContext=kuda_failure, no ledger refund row`

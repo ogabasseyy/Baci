@@ -173,6 +173,21 @@ export async function resolvePublished(
  * published-store mapping plus the retired-slug alias table. Only
  * published stores resolve; client input never overrides the host.
  */
+/**
+ * Private-LAN development hosts, mirroring the native client's
+ * dev-only API origin policy: the mobile app may call a LAN address
+ * with an explicit merchantSlug hint, so the hint must govern there
+ * too instead of the IP being treated as a merchant identifier.
+ * Anchored IPv4 patterns reject look-alike hostnames.
+ */
+export function isPrivateLanHost(host: string): boolean {
+  return (
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host) ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(host)
+  );
+}
+
 function isSharedPlatformHost(host: string, rootDomain: string): boolean {
   return (
     host === rootDomain ||
@@ -182,7 +197,8 @@ function isSharedPlatformHost(host: string, rootDomain: string): boolean {
     host === `api.${rootDomain}` ||
     host === `api-staging.${rootDomain}` ||
     host === 'localhost' ||
-    host === '127.0.0.1'
+    host === '127.0.0.1' ||
+    isPrivateLanHost(host)
   );
 }
 

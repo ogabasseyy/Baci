@@ -1,4 +1,4 @@
-import { requestHost } from './merchant-resolution';
+import { isPrivateLanHost, requestHost } from './merchant-resolution';
 
 function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
   return (
@@ -7,7 +7,10 @@ function isBodyProofPlatformHost(host: string, rootDomain: string): boolean {
     host === `api.${rootDomain}` ||
     host === `api-staging.${rootDomain}` ||
     host === 'localhost' ||
-    host === '127.0.0.1'
+    host === '127.0.0.1' ||
+    // Native dev builds call private-LAN origins and require the
+    // body proof, mirroring merchant resolution's hint-governed hosts.
+    isPrivateLanHost(host)
   );
 }
 

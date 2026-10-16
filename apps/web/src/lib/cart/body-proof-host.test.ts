@@ -9,8 +9,20 @@ it('allows body proofs only on API, root, and local hosts', () => {
     'https://api-staging.usebaci.com/api/storefront/cart/bootstrap',
     'http://localhost:3000/api/storefront/cart/bootstrap',
     'http://127.0.0.1:3000/api/storefront/cart/bootstrap',
+    'http://192.168.100.70:4193/api/storefront/cart/bootstrap',
+    'http://10.0.0.5:4193/api/storefront/cart/bootstrap',
+    'http://172.16.0.5:4193/api/storefront/cart/bootstrap',
   ]) {
     expect(requestUsesSharedPlatformHost(new Request(url))).toBe(true);
+  }
+});
+
+it('rejects look-alike LAN hostnames', () => {
+  for (const url of [
+    'http://192.168.100.70.evil.test/api/storefront/cart/bootstrap',
+    'http://172.32.0.5:4193/api/storefront/cart/bootstrap',
+  ]) {
+    expect(requestUsesSharedPlatformHost(new Request(url))).toBe(false);
   }
 });
 

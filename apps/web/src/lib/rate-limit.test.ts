@@ -27,6 +27,49 @@ vi.mock('./redis', () => ({
   getRedis: mockGetRedis,
 }));
 
+describe('legacy bridge rate limit keying', () => {
+  beforeEach(() => {
+    __resetRateLimitStoreForTesting();
+    mockGetRedis.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    __resetRateLimitStoreForTesting();
+  });
+
+  it('keys legacy bridge buckets by token, not the shared egress IP', async () => {
+    const prefix = `Bearer ${['legacy', 'mcp'].join('_')}_`;
+    const url = 'https://ogabassey.com/api/storefront/cart/legacy';
+    const headersFor = (token: string) => ({
+      authorization: `${prefix}${token}`,
+      'x-real-ip': '192.0.2.20',
+    });
+    const first = await checkRateLimit(
+      new NextRequest(url, {
+        method: 'POST',
+        headers: headersFor('a'.repeat(64)),
+      })
+    );
+    const second = await checkRateLimit(
+      new NextRequest(url, {
+        method: 'POST',
+        headers: headersFor('a'.repeat(64)),
+      })
+    );
+    const otherToken = await checkRateLimit(
+      new NextRequest(url, {
+        method: 'POST',
+        headers: headersFor('b'.repeat(64)),
+      })
+    );
+
+    expect(first.limit).toBe(600);
+    expect(second.remaining).toBe(598);
+    // A different token behind the same IP gets its own bucket.
+    expect(otherToken.remaining).toBe(599);
+  });
+});
+
 // Dedicated coverage for the quiz-specific rate-limit entries added for launch.
 // The broader per-IP identifier / trie behavior is covered in rate-limit.test.tsx.
 describe('quiz route rate limits', () => {

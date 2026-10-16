@@ -68,7 +68,7 @@ describe('rate-limit route matching', () => {
     }
   });
 
-  it('bounds unauthenticated legacy bridge traffic per IP', () => {
+  it('bounds unauthenticated legacy bridge traffic per token bucket', () => {
     expect(getRateLimitConfig('/api/storefront/cart/legacy')).toMatchObject({
       pattern: '/api/storefront/cart/legacy',
       config: { maxRequests: 600, windowMs: 60_000 },

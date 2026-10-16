@@ -39,7 +39,11 @@ export function useCartCheckoutSnapshot() {
     offerKey,
   ]);
   const latest = useRef(key);
-  latest.current = `${key}:${retryCount}`;
+  // Advance only after commit so an interrupted render cannot
+  // invalidate the still-committed checkout preparation.
+  useEffect(() => {
+    latest.current = `${key}:${retryCount}`;
+  });
 
   useEffect(() => {
     let active = true;

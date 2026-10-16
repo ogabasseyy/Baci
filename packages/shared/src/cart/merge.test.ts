@@ -183,9 +183,12 @@ describe('planCartMerge', () => {
   });
 
   it('pins voucher merges to quantity one', () => {
+    const awardId = '66666666-6666-4666-8666-666666666666';
     const result = planCartMerge(
       snapshot([line(TECNO, 2)]),
-      snapshot([line(TECNO, 1, { voucherToken: 'tok-A' })]),
+      snapshot([
+        line(TECNO, 1, { voucherToken: 'tok-A', voucherAwardId: awardId }),
+      ]),
       [{ item: { productId: TECNO }, keep: 'incoming' }]
     );
 
@@ -194,6 +197,29 @@ describe('planCartMerge', () => {
       expect(result.lines).toEqual([
         expect.objectContaining({ quantity: 1, voucherToken: 'tok-A' }),
       ]);
+    }
+  });
+
+  it('keeps quantity for partial voucher pairs', () => {
+    const awardId = '66666666-6666-4666-8666-666666666666';
+    for (const attachments of [
+      { voucherToken: 'tok-only' },
+      { voucherAwardId: awardId },
+    ]) {
+      const result = planCartMerge(
+        snapshot([line(TECNO, 3, attachments)]),
+        snapshot([line(CHARGER, 1)])
+      );
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.lines).toContainEqual(
+          expect.objectContaining({
+            item: { productId: TECNO },
+            quantity: 3,
+          })
+        );
+      }
     }
   });
 
@@ -261,9 +287,11 @@ it('keeps sibling lanes intact when a base-item resolution is supplied', () => {
   if (result.ok) {
     expect(result.lines).toHaveLength(3);
     expect(result.lines.map((entry) => entry.quantity)).toEqual([3, 1, 1]);
-    expect(
-      result.lines.map((entry) => entry.voucherAwardId ?? null)
-    ).toEqual([null, 'award-a', 'award-b']);
+    expect(result.lines.map((entry) => entry.voucherAwardId ?? null)).toEqual([
+      null,
+      'award-a',
+      'award-b',
+    ]);
   }
 });
 it('preserves assurance for a disjoint import and overlapping identical contexts', () => {

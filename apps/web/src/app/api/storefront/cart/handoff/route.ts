@@ -165,15 +165,19 @@ export async function GET(request: NextRequest) {
       handoffId,
       handoffToken
     );
-    if (merchantId) {
-      const quota = await checkCartQuota({
-        merchantId,
-        operation: 'handoff_preview',
-        subject: getTrustedClientIdentifier(request),
-      });
-      if (!quota.allowed) {
-        return cartErrorResponse('quota_exceeded');
-      }
+    if (!merchantId) {
+      // The locator is token-gated: a null result means the id/token
+      // pair is already proven invalid, so fail closed here instead of
+      // running the expensive preview RPC under only the fixed bucket.
+      return cartErrorResponse('not_found');
+    }
+    const quota = await checkCartQuota({
+      merchantId,
+      operation: 'handoff_preview',
+      subject: getTrustedClientIdentifier(request),
+    });
+    if (!quota.allowed) {
+      return cartErrorResponse('quota_exceeded');
     }
 
     const preview = await rpcPreviewHandoff(

@@ -6,6 +6,7 @@ vi.mock('./shared-cart-client', () => ({
 }));
 
 import { renderHook, waitFor } from '@testing-library/react';
+import { useEffect } from 'react';
 import { expect, it, vi } from 'vitest';
 import { useCartSendQueue } from './use-cart-send-queue';
 import { useSharedCartRuntime } from './use-shared-cart-runtime';
@@ -75,7 +76,10 @@ it('pins a replacement to its original base version and stops instead of rebasin
         },
       ],
     } as typeof runtime.state;
-    runtime.stateRef.current = state;
+    // Publish the fixture state after the runtime's own commit effect.
+    useEffect(() => {
+      runtime.stateRef.current = state;
+    });
     useCartSendQueue({
       ...runtime,
       state,
@@ -160,7 +164,10 @@ it('retries an unknown replacement outcome with the exact original command, rece
         },
       ],
     } as typeof runtime.state;
-    runtime.stateRef.current = state;
+    // Publish the fixture state after the runtime's own commit effect.
+    useEffect(() => {
+      runtime.stateRef.current = state;
+    });
     useCartSendQueue({
       ...runtime,
       state,

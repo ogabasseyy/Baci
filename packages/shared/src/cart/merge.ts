@@ -56,7 +56,9 @@ function attachmentsEqual(
 }
 
 function hasVoucher(attachments: CartLineAttachments): boolean {
-  return Boolean(attachments.voucherToken ?? attachments.voucherAwardId);
+  // Only a complete token-and-award pair is voucher-backed; a partial
+  // pair is an ordinary priced line and keeps its stored quantity.
+  return Boolean(attachments.voucherToken && attachments.voucherAwardId);
 }
 
 /**

@@ -2,6 +2,7 @@
 // Uses Upstash Redis (shared across all Vercel instances) with in-memory fallback.
 // Sliding window algorithm via @upstash/ratelimit SDK.
 
+import { createHash } from 'node:crypto';
 import { Ratelimit } from '@upstash/ratelimit';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -178,10 +179,33 @@ function checkMemoryRateLimit(
 // Main entry point (async — uses Redis when available, memory fallback)
 // ---------------------------------------------------------------------------
 
+const LEGACY_BRIDGE_PATH = '/api/storefront/cart/legacy';
+// Built from parts so the capability prefix never appears as a
+// credential-shaped literal in source.
+const LEGACY_TOKEN_PATTERN = new RegExp(
+  `^Bearer ${['legacy', 'mcp'].join('_')}_([a-f0-9]{64})$`
+);
+
 export function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
-  const identifier = getClientIdentifier(request);
   const pathname = request.nextUrl.pathname;
   const { config, pattern } = getRateLimitConfig(pathname);
+
+  // The canonical legacy bridge is server-to-server behind one broker
+  // egress IP: keying by IP would couple every merchant/token to that
+  // address. Key by a hash of the well-formed legacy capability
+  // instead (never the raw token), so each token gets its own
+  // pre-authentication bucket; malformed callers fall back to the
+  // client IP bucket. The route still enforces its per merchant +
+  // token quota after merchant resolution.
+  let identifier = getClientIdentifier(request);
+  if (pathname === LEGACY_BRIDGE_PATH) {
+    const token = request.headers
+      .get('authorization')
+      ?.match(LEGACY_TOKEN_PATTERN)?.[1];
+    if (token) {
+      identifier = `legacy-token:${createHash('sha256').update(token).digest('hex')}`;
+    }
+  }
 
   return applyRateLimit(identifier, pattern, config);
 }

@@ -329,6 +329,7 @@ describe('GET /api/storefront/cart/handoff', () => {
   }
 
   it('previews a pending grant without consuming or authenticating', async () => {
+    mocks.handoffMerchantId = MERCHANT_ID;
     mocks.previewPayload = {
       code: null,
       expiresAt: '2026-10-12T06:05:00.000Z',
@@ -357,6 +358,7 @@ describe('GET /api/storefront/cart/handoff', () => {
   });
 
   it('reports consumed and expired links as statuses, unknown as 404', async () => {
+    mocks.handoffMerchantId = MERCHANT_ID;
     for (const status of ['consumed', 'expired'] as const) {
       mocks.previewPayload = {
         code: null,
@@ -373,6 +375,25 @@ describe('GET /api/storefront/cart/handoff', () => {
     const missing = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
     expect(missing.status).toBe(404);
     expect((await missing.json()).code).toBe('not_found');
+  });
+
+  it('fails closed without the preview RPC when the locator resolves nothing', async () => {
+    mocks.handoffMerchantId = null;
+    mocks.previewPayload = {
+      code: null,
+      expiresAt: '2026-10-12T06:05:00.000Z',
+      merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
+      ok: true,
+      snapshot: rawState(),
+      status: 'pending',
+    };
+    const previewCallsBefore = mocks.previewCalls;
+
+    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+
+    expect(response.status).toBe(404);
+    expect((await response.json()).code).toBe('not_found');
+    expect(mocks.previewCalls).toBe(previewCallsBefore);
   });
 
   it('rejects missing and malformed preview ids', async () => {

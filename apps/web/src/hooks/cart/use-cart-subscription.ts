@@ -24,7 +24,11 @@ export function useCartSubscription(
 ): boolean {
   const [connected, setConnected] = useState(false);
   const latest = useRef(options);
-  latest.current = options;
+  // Advance only after commit so an interrupted render cannot publish
+  // an uncommitted cart/merchant/generation to the live subscription.
+  useEffect(() => {
+    latest.current = options;
+  });
   // biome-ignore lint/correctness/useExhaustiveDependencies: refs supply current actions/version; transport identity owns the connection.
   useEffect(() => {
     setConnected(false);

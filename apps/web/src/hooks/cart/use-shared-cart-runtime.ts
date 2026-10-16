@@ -1,7 +1,7 @@
 'use client';
 
 import type { CartSnapshot } from '@baci/shared/cart';
-import { useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import type { createSharedCart } from './shared-cart-client';
 import type {
   AdoptOutcome,
@@ -34,11 +34,15 @@ export function useSharedCartRuntime(options: UseSharedCartOptions) {
 
   const stateRef = useRef(state);
 
-  stateRef.current = state;
-
   const generationRef = useRef(sessionGeneration);
 
-  generationRef.current = sessionGeneration;
+  // Publish refs only after commit: an abandoned render must not let
+  // hydration, polling, or send operations observe an uncommitted
+  // generation/state and discard their completions as stale.
+  useEffect(() => {
+    stateRef.current = state;
+    generationRef.current = sessionGeneration;
+  });
 
   const adoptOutcomeRef = useRef<AdoptOutcome>('unknown');
 

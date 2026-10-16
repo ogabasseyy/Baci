@@ -14,6 +14,28 @@ import { parseResponsePayload } from './response-utils';
 const ORDER_STATUS_UPDATE_TIMEOUT_MS = 15000;
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
 
+// These codes can follow submission or an existing/in-flight booking. Some
+// (for example ORDER_NOT_FOUND) are shared by pre- and post-submit guards,
+// so a typed response alone cannot establish that another booking is safe.
+const UNCONFIRMED_SHIPPING_ERROR_CODES = new Set([
+  'SHIPMENT_SAVE_FAILED',
+  'ORDER_REFUNDED_AFTER_BOOKING',
+  'SHIPMENT_BOOKING_STATE_CHECK_FAILED',
+  'ORDER_NOT_FOUND',
+  'MERCHANT_WALLET_COMPLETION_FAILED',
+  'MERCHANT_WALLET_RECONCILIATION_FAILED',
+  'MERCHANT_WALLET_SUBMISSION_FAILED',
+  'MERCHANT_WALLET_REFUND_FAILED',
+  'MERCHANT_WALLET_BOOKING_NOT_RETRYABLE',
+  'MERCHANT_WALLET_BOOKED_SHIPMENT_MISSING',
+  'SHIPMENT_BOOKING_IN_PROGRESS',
+  'SHIPMENT_BOOKING_LOCK_RELEASE_FAILED',
+  'EXISTING_SHIPMENT_LOOKUP_FAILED',
+  'INCOMPLETE_EXISTING_SHIPMENT',
+  'EXISTING_SHIPMENT_PROVIDER_MISMATCH',
+  'EXISTING_SHIPMENT_QUOTE_MISMATCH',
+]);
+
 interface OrderStatusContext {
   previousOrderQueries: [readonly unknown[], Order | undefined][];
   previousOrders: [readonly unknown[], InfiniteData<OrdersPage> | undefined][];
@@ -91,12 +113,15 @@ async function updateOrderStatus(
       payload && typeof payload === 'object' && typeof payload.code === 'string'
         ? payload.code
         : undefined;
-    // Gateway failures can replace a response after the carrier accepted the
-    // request. Keep explicit API codes on their existing business-error path.
+    // An untyped server failure may follow a committed carrier booking or
+    // local order-update failure. Explicit post-submit/shared-stage codes
+    // also require reconciliation; preserve other business rejections below.
     if (
       status === 'shipped' &&
-      [502, 503, 504].includes(response.status) &&
-      !errorCode?.trim()
+      (UNCONFIRMED_SHIPPING_ERROR_CODES.has(errorCode ?? '') ||
+        (response.status >= 500 &&
+          response.status <= 599 &&
+          !errorCode?.trim()))
     ) {
       throw unconfirmedShippingResult();
     }

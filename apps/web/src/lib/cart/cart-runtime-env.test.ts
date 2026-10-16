@@ -20,20 +20,19 @@ describe('getCartProofEnvironment', () => {
     expect(getCartProofEnvironment()).toBe('preview');
 
     vi.stubEnv('VERCEL_ENV', '');
-    vi.stubEnv('HOSTNAME', 'vps-staging-1');
-    expect(getCartProofEnvironment()).toBe('production:vps-staging-1');
-
     vi.stubEnv('NODE_ENV', '');
     expect(getCartProofEnvironment()).toBe('development');
   });
 
   it('fails closed in production without a deployment discriminator', () => {
     vi.stubEnv('VERCEL_ENV', '');
-    vi.stubEnv('HOSTNAME', '');
     vi.stubEnv('NODE_ENV', 'production');
     expect(() => getCartProofEnvironment()).toThrow(
       'CART_PROOF_ENVIRONMENT is required'
     );
+
+    vi.stubEnv('CART_PROOF_ENVIRONMENT', 'vps-production-eu');
+    expect(getCartProofEnvironment()).toBe('vps-production-eu');
   });
 
   it('binds preview proofs to the unique deployment URL', () => {

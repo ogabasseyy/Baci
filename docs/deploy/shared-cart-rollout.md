@@ -76,7 +76,11 @@ flags remain disabled by default, and no merchant is enrolled.
    obtain the required review at the exact SHA.
 2. Apply pending cart migrations additively; provision cart roles and
    signing material through the approved environment process (no `.env`
-   edits are part of this change set).
+   edits are part of this change set). Every non-Vercel production
+   deployment must also provision one stable, deployment-unique
+   `CART_PROOF_ENVIRONMENT` shared by all its instances: proof issuance
+   and verification fail closed without it, and distinct deployments
+   must never share a value (or the master secret).
 3. Deploy compatible server adapters with enrollment still disabled.
 4. Activate terminal-cart retention explicitly (only with the release
    authorization): where pg_cron exists, run
@@ -141,6 +145,20 @@ bounded by platform/PostgREST rate limits and monitoring. The same
 activation check must confirm database statement logging does not
 persist RPC arguments (`log_statement` must not capture the preview
 calls), since the raw token now reaches the RPC as an argument.
+
+Voucher credential storage: committed cart lines persist the quiz
+voucher token in cleartext, and authenticated cart snapshots return it
+to verified grant holders of that cart, because the orders route's
+voucher verification consumes the client-presented token and the
+binding flow revalidates the committed pair. The token is
+user/product/variant/condition-bound and single-award, and the
+unauthenticated surfaces (handoff preview, merge conflicts) redact it;
+the accepted exposure is therefore database/backup holders and the
+cart's own grant holders, for the cart's lifetime (bounded by the
+terminal purge). Treat cart tables and any receipt payloads embedding
+snapshots as credential-bearing in backup/log handling; replacing the
+stored cleartext with a keyed hash is a recorded follow-up that must
+land before any broader (multi-merchant) voucher rollout.
 
 MCP canonical bridge: the bridge targets only origins allowlisted in
 `MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS` (default

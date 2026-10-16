@@ -1,5 +1,10 @@
 // --- Interfaces based on Spec ---
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  loadOrderConditionPrices,
+  OrderConditionUnavailableError,
+  orderConditionPrice,
+} from '@/lib/checkout/order-condition-prices';
 import { getEffectiveStock } from '@/lib/product-stock';
 import { coerceStorefrontManageStock } from '@/lib/storefront-agent-availability';
 
@@ -113,7 +118,9 @@ export async function calculateCheckoutSession(
 
   // Product and variant IDs are Postgres UUIDs. External IDs are left to the
   // per-item validation path below instead of being sent through UUID filters.
-  const productIds = items.map((i) => i.id);
+  const productIds = items.flatMap((i) =>
+    i.variant_id ? [i.id, i.variant_id] : [i.id]
+  );
   const lookupProductIds = Array.from(
     new Set(productIds.filter((id) => POSTGRES_UUID_PATTERN.test(id)))
   );
@@ -152,6 +159,29 @@ export async function calculateCheckoutSession(
     foundVariants = variants || [];
   }
 
+  // Condition offers are product-level lanes (no variant): resolve their
+  // prices up front so a lane request is never silently quoted as the
+  // generic product. An unavailable offer fails the line closed below.
+  let conditionPrices = new Map<string, number>();
+  let conditionUnavailable = false;
+  try {
+    conditionPrices = await loadOrderConditionPrices(
+      items.map((item) => ({
+        condition: item.condition === 'new' ? undefined : item.condition,
+        product_id: item.id,
+        variant_id: item.variant_id,
+      })),
+      merchantId,
+      supabase
+    );
+  } catch (error) {
+    if (error instanceof OrderConditionUnavailableError) {
+      conditionUnavailable = true;
+    } else {
+      throw error;
+    }
+  }
+
   const lineItems: GPTLineItem[] = [];
   const messages: GPTMessage[] = [];
 
@@ -160,7 +190,27 @@ export async function calculateCheckoutSession(
 
   for (const [index, requestedItem] of items.entries()) {
     const product = foundProducts.find((p) => p.id === requestedItem.id);
-    const variant = foundVariants.find((v) => v.id === requestedItem.id);
+    // An explicit variant lane must resolve to a variant of this product;
+    // otherwise the request would silently price as the generic parent.
+    const laneVariant = requestedItem.variant_id
+      ? foundVariants.find(
+          (v) =>
+            v.id === requestedItem.variant_id &&
+            v.product_id === requestedItem.id
+        )
+      : undefined;
+    if (requestedItem.variant_id && !laneVariant) {
+      messages.push({
+        type: 'error',
+        code: 'invalid',
+        path: `$.items[${index}]`,
+        content_type: 'plain',
+        content: `Variant ${requestedItem.variant_id} not found for item ${requestedItem.id}.`,
+      });
+      continue;
+    }
+    const variant =
+      laneVariant ?? foundVariants.find((v) => v.id === requestedItem.id);
 
     let price = 0;
     let title = '';
@@ -213,6 +263,32 @@ export async function calculateCheckoutSession(
       continue;
     }
 
+    // Product-level condition lanes price from the active condition
+    // offer, never from the generic product price.
+    if (
+      !requestedItem.variant_id &&
+      !variantId &&
+      requestedItem.condition &&
+      requestedItem.condition !== 'new'
+    ) {
+      const conditionPrice = orderConditionPrice(conditionPrices, {
+        condition: requestedItem.condition,
+        product_id: productId,
+        variant_id: variantId,
+      });
+      if (conditionUnavailable || conditionPrice === undefined) {
+        messages.push({
+          type: 'error',
+          code: 'invalid',
+          path: `$.items[${index}]`,
+          content_type: 'plain',
+          content: `Condition ${requestedItem.condition} is unavailable for item ${requestedItem.id}.`,
+        });
+        continue;
+      }
+      price = conditionPrice;
+    }
+
     // Check Stock
     if (stock !== null && stock < requestedItem.quantity) {
       messages.push({
@@ -234,6 +310,13 @@ export async function calculateCheckoutSession(
         product_id: productId,
         ...(variantId ? { variant_id: variantId } : {}),
         ...(variantAttributes ? { variant_attributes: variantAttributes } : {}),
+        ...(requestedItem.condition
+          ? {
+              condition: requestedItem.condition as NonNullable<
+                GPTLineItem['item']['condition']
+              >,
+            }
+          : {}),
         quantity: requestedItem.quantity,
         title,
       },

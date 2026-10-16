@@ -137,6 +137,13 @@ export async function POST(request: NextRequest) {
   const items = parsed.data.line_items.map((lineItem) => ({
     id: lineItem.item.id,
     quantity: lineItem.quantity,
+    ...(lineItem.item.variant_id
+      ? { variant_id: lineItem.item.variant_id }
+      : {}),
+    ...(lineItem.item.condition ? { condition: lineItem.item.condition } : {}),
+    ...(lineItem.item.variant_attributes
+      ? { variant_attributes: lineItem.item.variant_attributes }
+      : {}),
   }));
   const currency = parsed.data.currency;
   let calculation: Awaited<ReturnType<typeof calculateCheckoutSession>>;

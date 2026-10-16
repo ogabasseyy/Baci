@@ -201,12 +201,36 @@ export async function POST(request: NextRequest, props: RouteProps) {
     parsed.data.line_items?.map((lineItem) => ({
       id: lineItem.item.id,
       quantity: lineItem.quantity,
+      ...(lineItem.item.variant_id
+        ? { variant_id: lineItem.item.variant_id }
+        : {}),
+      ...(lineItem.item.condition
+        ? { condition: lineItem.item.condition }
+        : {}),
+      ...(lineItem.item.variant_attributes
+        ? { variant_attributes: lineItem.item.variant_attributes }
+        : {}),
     })) ?? existingItems;
   // Replacement intent is planned through the canonical cart contract;
   // the loaded row's committed timestamp is the concurrency precondition.
   const replacement = planUcpCartReplacement({
     lines: items.map((item) => ({
-      item: { productId: item.id },
+      item: {
+        productId: item.id,
+        ...(item.variant_id ? { variantId: item.variant_id } : {}),
+        ...(item.condition
+          ? {
+              condition: item.condition as
+                | 'new'
+                | 'used'
+                | 'open_box'
+                | 'refurbished',
+            }
+          : {}),
+        ...(item.variant_attributes
+          ? { options: item.variant_attributes }
+          : {}),
+      },
       quantity: item.quantity,
     })),
     updatedAt: ucpCartVersionPrecondition(cartResult.cart),

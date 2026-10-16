@@ -15,6 +15,10 @@ export type {
 };
 
 import { createNativeCartAccountOps } from './controller-account';
+import {
+  isUnrecoverablePromotion,
+  retireTerminalReference,
+} from './controller-terminal';
 import { hydrateNativeCart, nativeCartInput } from './display';
 import { pairNativeCart } from './native-cart-pairing';
 import type { CartPairingLink } from './pairing-link';
@@ -99,21 +103,7 @@ export function createNativeCartController(
     const context = await options.client.context();
     assertCurrent();
     let pending = await receipts.read(options.merchantId);
-    if (
-      !context &&
-      pending &&
-      pending.body &&
-      typeof pending.body === 'object' &&
-      'kind' in pending.body &&
-      (pending.body.kind === 'create' ||
-        pending.body.kind === 'handoff' ||
-        pending.body.kind === 'account')
-    ) {
-      // A pending promotion (create, handoff redemption, or account
-      // link) whose bootstrap authority has expired can never be
-      // recovered: its actor check will fail forever. Retire the
-      // receipt so the shopper can bootstrap fresh and re-initiate
-      // instead of stranding every refresh and write.
+    if (!context && pending && isUnrecoverablePromotion(pending)) {
       await receipts.clear(options.merchantId, pending.operationId);
       assertCurrent();
       pending = null;
@@ -198,20 +188,11 @@ export function createNativeCartController(
     }
     if (!context || context.cartId)
       throw new NativeCartError('refresh_required');
-    let legacy = options.getLegacy();
-    if (
-      legacy.sharedCartRef &&
-      terminalCartId &&
-      legacy.sharedCartRef.cartId === terminalCartId &&
+    const legacy = retireTerminalReference(
+      options.getLegacy(),
+      terminalCartId,
       options.repairLegacy
-    ) {
-      // Retire the published reference to the finished cart as part of
-      // starting the next generation; otherwise it would trip the
-      // reconnect guard below forever. The items survive for the
-      // fresh cart's lines.
-      options.repairLegacy(legacy.items);
-      legacy = options.getLegacy();
-    }
+    );
     if (legacy.sharedCartRef) throw new NativeCartError('reconnect_required');
     const created = await coordinator.create({
       operationId: options.newOperationId(),
@@ -232,6 +213,7 @@ export function createNativeCartController(
     accept,
     coordinator,
     ensureCart,
+    getTerminal: () => terminal,
     getIncoming: () => incoming,
     setIncoming: (next) => {
       incoming = next;

@@ -63,6 +63,12 @@ it('reads only bounded valid previous signing keys and rejects malformed configu
     vi.stubEnv('CART_SESSION_PREVIOUS_SECRETS', invalid);
     expect(getCartPreviousSessionSecrets()).toEqual([]);
   }
+  // One malformed entry must not discard the still-valid retired keys.
+  vi.stubEnv(
+    'CART_SESSION_PREVIOUS_SECRETS',
+    JSON.stringify([{ secret: 'short' }, entry, 'noise'])
+  );
+  expect(getCartPreviousSessionSecrets()).toEqual([entry]);
 });
 
 it('bounds long preview deployment identifiers without sharing deployment identity', () => {

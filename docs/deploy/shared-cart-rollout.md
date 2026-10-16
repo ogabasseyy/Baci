@@ -38,13 +38,14 @@ flags remain disabled by default, and no merchant is enrolled.
   without one, callers deliberately collapse into the single shared
   `unknown` bucket (fail-closed) rather than trusting a spoofable
   `x-forwarded-for`.
-- Terminal-cart retention: applying the migration chain schedules an
-  hourly pg_cron job (`commerce-cart-terminal-purge`, where pg_cron
-  exists) that deletes terminal carts (completed, expired, canceled)
-  older than 90 days in 500-row batches. The 90-day window is the
-  explicit retention decision for this feature; the job is a no-op
-  while the cart tables are empty and never touches active carts, so
-  migration application alone starts no shopper-visible behavior.
+- Terminal-cart retention: the purge function deletes terminal carts
+  (completed, expired, canceled) older than 90 days in 500-row batches;
+  the 90-day window is the explicit retention decision for this
+  feature. Migration application alone does NOT start it:
+  `20261015162000` unschedules the hourly pg_cron job
+  (`commerce-cart-terminal-purge`) that an earlier migration created,
+  so the destructive purge only runs after the activation step below
+  schedules it explicitly.
 - Worker token rotation: point `COMMERCE_CART_WORKER_JWT_FILE` at a
   rotator-managed file instead of setting `COMMERCE_CART_WORKER_JWT`
   directly; the worker re-reads the file on every batch, so a rotated
@@ -61,9 +62,13 @@ flags remain disabled by default, and no merchant is enrolled.
    signing material through the approved environment process (no `.env`
    edits are part of this change set).
 3. Deploy compatible server adapters with enrollment still disabled.
-4. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
+4. Activate terminal-cart retention explicitly (only with the release
+   authorization): where pg_cron exists, run
+   `SELECT cron.schedule('commerce-cart-terminal-purge', '37 * * * *', $cron$SELECT public.commerce_cart_purge_terminal_carts(interval '90 days', 500)$cron$);`
+   Migration application alone never schedules this job.
+5. Pilot one controlled merchant (Ogabassey), run the acceptance matrix
    in `docs/qa/shared-cart-acceptance.md`, then a second merchant.
-5. Expand only after convergence, checkout-binding and isolation
+6. Expand only after convergence, checkout-binding and isolation
    evidence pass at the deployed revision.
 
 ## Signing keys

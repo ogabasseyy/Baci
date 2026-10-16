@@ -14,6 +14,7 @@ export interface NativeCartWriteDeps {
   accept(next: CartSnapshot): Promise<void>;
   coordinator: ReturnType<typeof createCartCommandCoordinator>;
   ensureCart(): Promise<CartSnapshot>;
+  getTerminal(): boolean;
   getIncoming(): CartSnapshot | null;
   setIncoming(next: CartSnapshot | null): void;
   getLegacy(): { items: CartItem[] };
@@ -52,10 +53,13 @@ export function createNativeCartWrite(deps: NativeCartWriteDeps) {
         // A bound order already completed this cart server-side, so
         // clearing it is rejected as locked. Retire the finished
         // generation locally instead of failing the checkout that
-        // just succeeded; the next write starts a fresh session.
+        // just succeeded; the next write starts a fresh session. The
+        // lock alone does not prove that outcome — carts in checkout
+        // are locked too — so only swallow it once the refreshed cart
+        // is actually terminal.
         if (error instanceof NativeCartError && error.code === 'cart_locked') {
           await deps.refresh();
-          return;
+          if (deps.getTerminal()) return;
         }
         throw error;
       }

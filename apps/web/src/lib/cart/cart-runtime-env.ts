@@ -79,7 +79,10 @@ export function getCartPreviousSessionSecrets(): CartPreviousSessionSecret[] {
     if (!Array.isArray(value) || value.length > 8) return [];
     const entries: CartPreviousSessionSecret[] = [];
     for (const entry of value) {
-      if (!isRecord(entry)) return [];
+      // Skip malformed entries individually: one bad entry must not
+      // invalidate the whole rotation window and reject every proof
+      // minted under a still-valid retired key.
+      if (!isRecord(entry)) continue;
       const { retireAt, secret } = entry;
       if (
         typeof secret !== 'string' ||
@@ -87,7 +90,7 @@ export function getCartPreviousSessionSecrets(): CartPreviousSessionSecret[] {
         typeof retireAt !== 'string' ||
         !Number.isFinite(Date.parse(retireAt))
       )
-        return [];
+        continue;
       entries.push({ retireAt, secret: secret.trim() });
     }
     return entries;

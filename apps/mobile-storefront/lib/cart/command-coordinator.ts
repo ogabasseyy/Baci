@@ -34,6 +34,35 @@ interface CoordinatorOptions {
     clear(merchant: string, operationId: string): Promise<void>;
   };
 }
+// Definitive rejections prove this exact request did not commit, so its
+// key is released; uncertain outcomes keep the same request/key. Every
+// shared server rejection code except the two transient ones
+// (temporarily_unavailable, rate_limited) is non-retryable for the
+// identical request — replaying it would be rejected again and would
+// strand every later write behind pending_operation.
+const definitiveServerCodes: ReadonlySet<string> = new Set<CartErrorCode>([
+  'unauthorized',
+  'merchant_unavailable',
+  'not_found',
+  'expired',
+  'version_conflict',
+  'idempotency_conflict',
+  'invalid_item',
+  'cart_locked',
+  'refresh_required',
+  'merge_conflict',
+  'too_many_lines',
+  'handoff_consumed',
+]);
+
+function isDefinitiveRejection(error: unknown): boolean {
+  return (
+    error instanceof NativeCartError &&
+    !error.indeterminate &&
+    (definitiveServerCodes.has(error.code) || error.code === 'invalid_request')
+  );
+}
+
 /** Serializes sent operations and keeps the exact request until an acknowledged reply. */
 export function createCartCommandCoordinator(options: CoordinatorOptions) {
   const receipts = options.receipts ?? pendingCartRequest;
@@ -74,34 +103,7 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
               (await options.client.redeem?.(body.input)))
             : await options.client.command(body.input, body.cartId);
     } catch (error) {
-      // Definitive rejections prove this exact request did not commit, so
-      // its key is released; uncertain outcomes keep the same request/key.
-      // Every shared server rejection code except the two transient ones
-      // (temporarily_unavailable, rate_limited) is non-retryable for the
-      // identical request — replaying it would be rejected again and
-      // would strand every later write behind pending_operation.
-      const definitiveServerCodes: ReadonlySet<string> = new Set<CartErrorCode>(
-        [
-          'unauthorized',
-          'merchant_unavailable',
-          'not_found',
-          'expired',
-          'version_conflict',
-          'idempotency_conflict',
-          'invalid_item',
-          'cart_locked',
-          'refresh_required',
-          'merge_conflict',
-          'too_many_lines',
-          'handoff_consumed',
-        ]
-      );
-      if (
-        error instanceof NativeCartError &&
-        !error.indeterminate &&
-        (definitiveServerCodes.has(error.code) ||
-          error.code === 'invalid_request')
-      ) {
+      if (isDefinitiveRejection(error)) {
         await assertActor(request.actor);
         await receipts.clear(options.merchantId, request.operationId);
       }
@@ -153,17 +155,7 @@ export function createCartCommandCoordinator(options: CoordinatorOptions) {
         await options.client.linkAccount(body.input);
       } catch (error) {
         assertOwner();
-        if (
-          error instanceof NativeCartError &&
-          !error.indeterminate &&
-          [
-            'invalid_item',
-            'invalid_request',
-            'merge_conflict',
-            'version_conflict',
-            'refresh_required',
-          ].includes(error.code)
-        ) {
+        if (isDefinitiveRejection(error)) {
           await assertActor(request.actor);
           await receipts.clear(options.merchantId, request.operationId);
         }

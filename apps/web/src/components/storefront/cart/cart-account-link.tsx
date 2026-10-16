@@ -194,6 +194,16 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
               Use saved cart
             </Button>
             {sharedRef ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={choicesBlocked}
+                onClick={() => void link('keep_current')}
+              >
+                Keep current cart
+              </Button>
+            ) : null}
+            {sharedRef ? (
               plan?.ok ? (
                 <Button
                   type="button"

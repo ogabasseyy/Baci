@@ -118,8 +118,12 @@ function postBootstrap(init: {
 
 function cookieValue(setCookie: string | null, name: string): string | null {
   if (!setCookie) return null;
-  const match = setCookie.match(new RegExp(`${name}=([^;]+)`));
-  return match?.[1] ?? null;
+  const prefix = `${name}=`;
+  for (const part of setCookie.split(';')) {
+    const trimmed = part.trim();
+    if (trimmed.startsWith(prefix)) return trimmed.slice(prefix.length);
+  }
+  return null;
 }
 
 describe('POST /api/storefront/cart/bootstrap', () => {

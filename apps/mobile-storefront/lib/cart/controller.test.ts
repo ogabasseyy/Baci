@@ -143,6 +143,18 @@ it('retires a server-completed cart when clear is rejected as locked', async () 
     expect.objectContaining({ items: [] })
   );
 });
+it('surfaces cart_locked when the refreshed cart is only in checkout', async () => {
+  const s = setup();
+  s.connect();
+  await s.controller.refresh();
+  s.client.command.mockRejectedValue(new NativeCartError('cart_locked'));
+  s.client.read.mockResolvedValue({
+    cart: { ...snapshot, state: 'checkout' as const },
+  });
+  await expect(s.controller.write({ type: 'clear' })).rejects.toThrow(
+    expect.objectContaining({ code: 'cart_locked' })
+  );
+});
 it('clears the display for an expired cart instead of offering it for checkout', async () => {
   const s = setup();
   s.connect();

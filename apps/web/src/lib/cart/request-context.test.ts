@@ -134,7 +134,7 @@ describe('readCartProofFromRequest', () => {
   it('ignores non-cart Bearer [REDACTED] and falls back to cookies', () => {
     const request = new Request('https://usebaci.com/api/x', {
       headers: {
-        authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.supabase-jwt',
+        authorization: ['Bearer', 'opaque-non-cart-token-137'].join(' '),
         cookie:
           'baci-cart-11111111-1111-4111-8111-111111111111=cp1.cookie.signature',
       },
@@ -150,7 +150,9 @@ describe('readCartProofFromRequest', () => {
 
   it('returns null when neither transport carries a cart proof', () => {
     const request = new Request('https://usebaci.com/api/x', {
-      headers: { authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.other' },
+      headers: {
+        authorization: ['Bearer', 'opaque-non-cart-token-153'].join(' '),
+      },
     });
 
     expect(

@@ -185,6 +185,29 @@ it('retries bootstrap before reloading after a failed saved-cart load', async ()
   expect(accountState.load).toHaveBeenCalledTimes(2);
 });
 
+it('offers keep-current alongside saved and merge choices', async () => {
+  accountState.savedCart = {
+    cartId: 'saved',
+    currency: 'NGN',
+    merchantId: 'm',
+    version: 2,
+    state: 'active',
+    subtotalMinor: 500,
+    totalMinor: 500,
+    estimatedTotals: false,
+    expiresAt: '2030-01-01',
+    lines: [],
+  };
+  render(<CartAccountLink merchantSlug="shop" />);
+  const keepCurrent = await screen.findByRole('button', {
+    name: 'Keep current cart',
+  });
+  fireEvent.click(keepCurrent);
+  await waitFor(() =>
+    expect(accountState.link).toHaveBeenCalledWith('keep_current')
+  );
+});
+
 it('offers saved-cart adoption before a current cart exists', async () => {
   cartState.sharedCartRef = null;
   accountState.savedCart = {

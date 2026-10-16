@@ -9,7 +9,7 @@ vi.mock('@/lib/cart/device-session', () => ({
   revokeCartDeviceGrants: vi.fn(),
 }));
 vi.mock('@/lib/cart/request-context', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/cart/request-context')>()),
+  ...((await importOriginal()) as typeof import('@/lib/cart/request-context')),
   resolveCartRequestContext: vi.fn(),
 }));
 vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: vi.fn() }));

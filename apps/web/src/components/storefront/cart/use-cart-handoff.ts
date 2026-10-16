@@ -1,7 +1,7 @@
 'use client';
 import type { CartSnapshot } from '@baci/shared/cart';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { buildCsrfHeaders } from '@/lib/csrf';
+import { postHandoffRedeem } from './cart-handoff-redeem';
 import {
   type Choice,
   clearHandoffAttempt,
@@ -122,88 +122,30 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
     }
   }
 
-  async function postRedeem(body: Record<string, unknown>): Promise<boolean> {
-    setRedeeming(true);
-    setRedeemError(null);
-    try {
-      const slug = preview?.merchant?.slug;
-      if (bootstrapRequired.current) {
-        const bootstrap = await fetchJson('/api/storefront/cart/bootstrap', {
-          body: JSON.stringify(slug ? { merchantSlug: slug } : {}),
-          headers: {
-            'Content-Type': 'application/json',
-            ...buildCsrfHeaders(),
-          },
-          method: 'POST',
-        });
-        if (!bootstrap.ok) {
-          setRedeemError(
-            'Could not connect your cart session. Please try again.'
-          );
-          return false;
-        }
-        // Keep this retry identity after an indeterminate redeem response.
-        bootstrapRequired.current = false;
-      }
-      const url = slug
-        ? `/api/storefront/cart/handoff/redeem?merchantSlug=${encodeURIComponent(slug)}`
-        : '/api/storefront/cart/handoff/redeem';
-      const response = await fetchJson(url, {
-        body: JSON.stringify(body),
-        headers: { 'Content-Type': 'application/json', ...buildCsrfHeaders() },
-        method: 'POST',
-      });
-      const payload = (await response.json()) as {
-        code?: string;
-        conflicts?: MergeConflictView[];
-      };
-      if (response.ok) {
-        clearHandoffAttempt(handoffId);
-        setLockedChoice(null);
-        window.location.replace(
-          window.location.pathname + window.location.search
-        );
-        return true;
-      }
-      if (response.status === 409 && payload.code === 'merge_conflict') {
-        setConflicts(payload.conflicts ?? []);
-        setResolutions({});
-        return false;
-      }
-      if (response.status === 409 && payload.code === 'version_conflict') {
-        setRedeemError(
-          'One of the carts changed. Review the latest state and try again.'
-        );
-        // Offer picks belong to the carts that were just superseded:
-        // clear them so the shopper reviews the refreshed offers
-        // instead of applying a stale incoming/existing choice.
-        setConflicts([]);
-        setResolutions({});
-        await loadPreview();
-        return false;
-      }
-      if (payload.code === 'handoff_consumed') {
-        clearHandoffAttempt(handoffId);
-        setLockedChoice(null);
-        setLoadError(
-          'This link was already used. Ask the sender for a fresh one.'
-        );
-        return false;
-      }
-      if (payload.code === 'expired') {
-        clearHandoffAttempt(handoffId);
-        setLockedChoice(null);
-        setLoadError('This link has expired. Ask the sender for a fresh one.');
-        return false;
-      }
-      setRedeemError('Could not continue this cart. Please try again.');
-      return false;
-    } catch {
-      setRedeemError('Could not continue this cart. Check your connection.');
-      return false;
-    } finally {
-      setRedeeming(false);
-    }
+  function lockChoice(choice: Choice): void {
+    recordAttemptChoice(handoffId, choice);
+    setLockedChoice(choice);
+  }
+
+  function postRedeem(body: Record<string, unknown>): Promise<boolean> {
+    return postHandoffRedeem(
+      {
+        handoffId,
+        merchantSlug: preview?.merchant?.slug,
+        bootstrapRequired,
+        setRedeeming,
+        setRedeemError,
+        setConflicts,
+        setResolutions,
+        setLoadError,
+        onAttemptConsumed: () => {
+          clearHandoffAttempt(handoffId);
+          setLockedChoice(null);
+        },
+        refreshPreview: loadPreview,
+      },
+      body
+    );
   }
 
   async function act(choice: Choice): Promise<void> {
@@ -219,8 +161,6 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       );
       return;
     }
-    recordAttemptChoice(handoffId, choice);
-    setLockedChoice(choice);
     const attemptId = loadOrCreateAttemptId(handoffId);
     const base = {
       attemptId,
@@ -232,6 +172,10 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       token,
     };
     if (choice !== 'merge' || !destCart) {
+      // Lock only once a redemption is actually about to be sent:
+      // client-side preflight exits (capacity, conflicts) commit
+      // nothing, so the shopper must stay free to choose differently.
+      lockChoice(choice);
       await postRedeem(base);
       return;
     }
@@ -247,6 +191,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       setConflicts(planned.conflicts);
       return;
     }
+    lockChoice(choice);
     await postRedeem({
       ...base,
       lines: planned.lines,
@@ -280,8 +225,7 @@ export function useCartHandoff(props: { token: string; handoffId: string }) {
       );
       return;
     }
-    recordAttemptChoice(handoffId, 'merge');
-    setLockedChoice('merge');
+    lockChoice('merge');
     const attemptId = loadOrCreateAttemptId(handoffId);
     const ok = await postRedeem({
       attemptId,

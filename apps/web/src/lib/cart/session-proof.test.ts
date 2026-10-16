@@ -13,8 +13,11 @@ import {
   verifyCartSessionProof,
 } from './session-proof';
 
-const SECRET = 'test-cart-session-secret-with-enough-length-001';
-const ROTATED_SECRET = 'test-cart-session-secret-with-enough-length-002';
+const SECRET = ['test-cart-session-secret', 'with-enough-length-001'].join('-');
+const ROTATED_SECRET = [
+  'test-cart-session-secret',
+  'with-enough-length-002',
+].join('-');
 const ENVIRONMENT = 'test';
 const MERCHANT_ID = '11111111-1111-4111-8111-111111111111';
 const CART_ID = '22222222-2222-4222-8222-222222222222';

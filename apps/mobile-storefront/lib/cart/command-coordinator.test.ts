@@ -409,6 +409,29 @@ it('retries the same unsettled account request without replacing its durable hea
   expect(s.receipts.save).toHaveBeenCalledTimes(1);
   expect(linkAccount).toHaveBeenCalledTimes(2);
 });
+it.each([
+  'unauthorized',
+  'not_found',
+  'idempotency_conflict',
+  'expired',
+])('releases the account receipt after a definitive %s rejection', async (code) => {
+  const s = setup();
+  const ownerSubject = '44444444-4444-4444-8444-444444444444';
+  const linkAccount = jest.fn().mockRejectedValue(new NativeCartError(code));
+  const recoverAccountLink = jest.fn(async () => null);
+  const coordinator = createCartCommandCoordinator({
+    ...s.options,
+    getOwnerSubject: () => ownerSubject,
+    client: { ...s.client, linkAccount, recoverAccountLink },
+  });
+  await expect(
+    coordinator.linkAccount({
+      operationId: 'link-definitive',
+      choice: 'keep_current',
+    })
+  ).rejects.toThrow();
+  expect(s.receipts.clear).toHaveBeenCalledWith(merchantId, 'link-definitive');
+});
 it('commits a keep_existing handoff with no destination cart without a snapshot', async () => {
   const s = setup();
   const redeem = jest

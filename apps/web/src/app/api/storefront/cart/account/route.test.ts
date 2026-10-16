@@ -14,7 +14,7 @@ vi.mock('@/lib/cart/request-quota', () => ({
 }));
 vi.mock('@/lib/cart/account-request', async (importOriginal) => {
   const actual =
-    await importOriginal<typeof import('@/lib/cart/account-request')>();
+    (await importOriginal()) as typeof import('@/lib/cart/account-request');
   return { ...actual, resolveAccountCartRequest: vi.fn() };
 });
 vi.mock('@/lib/cart/account-link', () => ({

@@ -69,6 +69,76 @@ it('clears stale merge picks when redemption reports a version conflict', async 
   expect(result.current.conflicts).toEqual([]);
   expect(result.current.resolutions).toEqual({});
   expect(result.current.redeemError).toMatch(/changed/);
+  // The conflict definitively rejected the redemption, so the locked
+  // choice is released and the shopper may choose again.
+  expect(result.current.lockedChoice).toBeNull();
+});
+
+it('does not lock the choice when merge preflight exits without sending', async () => {
+  const snapshot = {
+    cartId: 'incoming-cart',
+    currency: 'NGN',
+    estimatedTotals: false,
+    expiresAt: '2099-01-01T00:00:00Z',
+    lines: [
+      {
+        id: 'incoming-line',
+        item: { productId: 'p1' },
+        quantity: 1,
+        unitPriceMinor: 100,
+        lineTotalMinor: 100,
+      },
+    ],
+    merchantId: 'merchant-1',
+    state: 'active',
+    subtotalMinor: 100,
+    totalMinor: 100,
+    version: 1,
+  };
+  const preview = () =>
+    new Response(
+      JSON.stringify({
+        status: 'pending',
+        merchant: { id: 'merchant-1', slug: 'shop' },
+        snapshot,
+        expiresAt: '2099-01-01T00:00:00Z',
+      })
+    );
+  const destination = () =>
+    new Response(
+      JSON.stringify({
+        cart: {
+          ...snapshot,
+          cartId: 'dest-cart',
+          version: 3,
+          lines: Array.from({ length: 21 }, (_, index) => ({
+            id: `dest-line-${index}`,
+            item: { productId: `p${index + 1}` },
+            quantity: 1,
+            unitPriceMinor: 100,
+            lineTotalMinor: 100,
+          })),
+        },
+      })
+    );
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(preview())
+      .mockResolvedValueOnce(destination())
+  );
+  const { result } = renderHook(() =>
+    useCartHandoff({ token: 'valid', handoffId: 'public-preflight' })
+  );
+  await waitFor(() => expect(result.current.destChecked).toBe(true));
+  await act(async () => {
+    await result.current.act('merge');
+  });
+  // Capacity preflight exits before anything is sent, so no choice
+  // may be locked yet and Connect stays available.
+  expect(result.current.lockedChoice).toBeNull();
+  expect(result.current.redeemError).toMatch(/too many/);
 });
 
 it.each([

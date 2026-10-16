@@ -119,9 +119,7 @@ vi.mock(
   '@/lib/payments/persist-paystack-dva-assignment',
   async (importOriginal) => {
     const actual =
-      await importOriginal<
-        typeof import('@/lib/payments/persist-paystack-dva-assignment')
-      >();
+      (await importOriginal()) as typeof import('@/lib/payments/persist-paystack-dva-assignment');
     // Default passthrough preserves the legacy RPC-less doubles every
     // invoice test relies on; individual tests override per-case (e.g. the
     // Pay for Me reservation, whose proof-bound RPC needs a live key).

@@ -7,6 +7,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { CartEmptyState } from '@/components/cart/CartEmptyState';
 import CartLoadedView from '@/components/cart/CartLoadedView';
 import CartStateView from '@/components/cart/CartStateView';
+import { CartStatusOnlyScreen } from '@/components/cart/CartStatusOnlyScreen';
 import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel';
 import PriceChangeModal from '@/components/cart/PriceChangeModal';
 import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
@@ -206,7 +207,7 @@ export default function CartScreen() {
   };
 
   const statusOnly = useCartStatusOnly(items.length);
-  if (statusOnly) return <SharedCartStatusPanel />;
+  if (statusOnly) return <CartStatusOnlyScreen />;
 
   if (hasCartLoadError) {
     return (

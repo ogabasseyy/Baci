@@ -76,29 +76,22 @@ export async function GET(request: NextRequest, props: RouteProps) {
 }
 
 export async function POST(request: NextRequest, props: RouteProps) {
-  if (!verifyAgenticApiKey(request)) {
+  if (!verifyAgenticApiKey(request))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const parsedParams = ucpCartRouteParamsSchema.safeParse(await props.params);
-  if (!parsedParams.success) {
+  if (!parsedParams.success)
     return NextResponse.json(
       { error: 'Invalid route params' },
       { status: 400 }
     );
-  }
-
   const mutation = await readAgenticMutationRequest({ request });
   if (!mutation.ok) return mutation.response;
-
   const parsed = ucpCartUpdateRequestSchema.safeParse(mutation.body);
-  if (!parsed.success) {
+  if (!parsed.success)
     return NextResponse.json(
       { error: 'Invalid request body' },
       { status: 400 }
     );
-  }
-
   const context = await resolveUcpCartContext(request);
   if (!context.ok) return context.response;
 
@@ -113,12 +106,11 @@ export async function POST(request: NextRequest, props: RouteProps) {
     route: UPDATE_CART_ROUTE,
     supabase: context.supabase,
   });
-  if (!idempotency.ok) {
+  if (!idempotency.ok)
     return NextResponse.json(
       { error: idempotency.error },
       { status: getAgenticIdempotencyErrorStatus(idempotency.error) }
     );
-  }
   if (idempotency.state === 'replay') {
     return NextResponse.json(idempotency.response, {
       headers: {
@@ -151,12 +143,11 @@ export async function POST(request: NextRequest, props: RouteProps) {
     route: UPDATE_CART_ROUTE,
     supabase: context.supabase,
   });
-  if (!replayReservation.ok) {
+  if (!replayReservation.ok)
     return respond(
       { error: replayReservation.error },
       getAgenticReplayErrorStatus(replayReservation.error)
     );
-  }
 
   const canonical = await handleCanonicalUcpCart({
     merchant: context.merchant,
@@ -187,35 +178,30 @@ export async function POST(request: NextRequest, props: RouteProps) {
     supabase: context.supabase,
   });
   if (cartResult.error) return respond({ error: 'Database error' }, 500);
-  if (!cartResult.cart) return respond({ error: 'Cart not found' }, 404);
   if (
+    !cartResult.cart ||
     ucpCartCallerMismatch(cartResult.cart, mutation.agentId, { mutation: true })
   ) {
     return respond({ error: 'Cart not found' }, 404);
   }
   const migratedOutcome = migratedCartRefreshOutcome(cartResult.cart);
-  if (migratedOutcome) {
+  if (migratedOutcome)
     return respond(migratedOutcome.body, migratedOutcome.status);
-  }
-  if (cartResult.cart.status !== 'active') {
+  if (cartResult.cart.status !== 'active')
     return respond({ error: 'Cart cannot be updated' }, 409);
-  }
 
   const existingItems = coerceUcpCartItems(cartResult.cart.cart_items);
   const items =
     parsed.data.line_items?.map(toCheckoutLaneItem) ?? existingItems;
-  // Replacement intent is planned through the canonical cart contract;
-  // the loaded row's committed timestamp is the concurrency precondition.
   const replacement = planUcpCartReplacement({
     lines: items.map(toCanonicalLaneLine),
     updatedAt: ucpCartVersionPrecondition(cartResult.cart),
   });
-  if (!replacement.ok) {
+  if (!replacement.ok)
     return respond(
       { code: replacement.code, error: 'Invalid cart items' },
       400
     );
-  }
   const currency = parsed.data.currency ?? cartResult.cart.currency;
   const shippingAddress =
     parsed.data.shipping_address !== undefined
@@ -228,26 +214,14 @@ export async function POST(request: NextRequest, props: RouteProps) {
     currency,
     context.merchant.id
   );
-  if (calculation.lineItems.length === 0) {
+  if (calculation.lineItems.length === 0)
     return respond({ error: 'No valid cart items' }, 400);
-  }
-  // A platform cart update is an atomic full replacement: when the
-  // caller submitted lines, every one must resolve. Persisting only
-  // the calculator's surviving lines would silently delete the
-  // rejected items from the stored cart.
   if (
     parsed.data.line_items !== undefined &&
     calculation.lineItems.length !== items.length
   ) {
-    return respond(
-      {
-        error: 'Invalid cart items',
-        messages: calculation.messages.filter(
-          (message) => message.type === 'error'
-        ),
-      },
-      400
-    );
+    const messages = calculation.messages.filter((m) => m.type === 'error');
+    return respond({ error: 'Invalid cart items', messages }, 400);
   }
 
   const updatePayload = buildUcpCartUpdate({

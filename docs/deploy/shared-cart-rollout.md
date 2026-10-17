@@ -111,6 +111,17 @@ affected merchant/cart (forcing shoppers through a fresh bootstrap)
 and only then treat the rotation as complete; record the revocation
 in the activation evidence.
 
+## Deployment checklist (migration chain)
+
+- Immediately after `20261015154000` applies and before any later
+  migration or enrollment step, inspect `cron.job` for a terminal-cart
+  purge job: the chain briefly schedules that purge mid-chain and
+  `20261015162000` unschedules it, so a deployment paused or restored
+  between the two must not resume enrollment until the final state is
+  confirmed unscheduled.
+- After the full chain applies, verify no purge job exists in
+  `cron.job`, and only then begin merchant enrollment.
+
 ## Rollback
 
 - Disable new enrollment/realtime first. Migrated carts keep canonical

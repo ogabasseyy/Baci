@@ -15,8 +15,8 @@ interface ReplaySnapshotRow {
 /**
  * Loads the immutable snapshot of the order already committed for
  * this (merchant, checkout idempotency key) through the narrowly
- * scoped `storefront_checkout_replay_snapshot` RPC on the request's
- * normal client — no service-role read on the guest-facing route. A
+ * scoped `storefront_checkout_replay_snapshot` RPC (service_role only)
+ * on the route's server-side admin client. A
  * confirmed snapshot means the current request is a response-loss
  * retry and must replay the original order instead of being re-judged
  * against the merchant's current catalog state. Probe errors are not

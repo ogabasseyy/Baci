@@ -56,8 +56,10 @@ export const eventPipelineFrozenRoutes = {
   // to the scoped storefront_checkout_replay_snapshot RPC (no service-role
   // client on the route); order authority paths are unchanged. Re-pinned
   // after shared-cart orders were barred from the REDVAULT draft rail.
+  // Re-pinned after the replay-snapshot probe moved to the admin client
+  // and the RPC was restricted to service_role.
   'apps/web/src/app/api/orders/route.ts':
-    '9c469f168ba7221a08583701da10638cc33e836d8c636f5e845adfce9f9865ab',
+    'eb2ff0ce9dae3dfb83915b1819391a169c24615b7818bfcf1865f564bd36cf29',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

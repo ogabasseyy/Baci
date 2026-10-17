@@ -1191,9 +1191,9 @@ export async function POST(request: NextRequest) {
     // The helper uses the caller's standard scoped client. The
     // single RLS-bypassing path (variant override lookup) goes
     // through the `get_order_variant_overrides` SECURITY DEFINER
-    // RPC, granted to anon/authenticated/service_role — the trust
-    // boundary lives in the database, not the Next.js layer
-    // (CodeRabbit High on PR #1622 round 7).
+    // RPC, granted to service_role only — the probe runs on the
+    // route's admin client so a leaked checkout idempotency key
+    // cannot be replayed against PostgREST directly.
     // A response-loss retry of an already-created order must replay
     // it even if the merchant has since deactivated a condition
     // offer: resolve the existing order first and let the condition
@@ -1201,7 +1201,7 @@ export async function POST(request: NextRequest) {
     // of failing closed before the RPC's replay path can run.
     const replaySnapshot = requestIdempotencyKey
       ? await loadCheckoutReplaySnapshot({
-          client: supabase,
+          client: createAdminClient(),
           merchantId: merchant_id,
           requestIdempotencyKey,
         })

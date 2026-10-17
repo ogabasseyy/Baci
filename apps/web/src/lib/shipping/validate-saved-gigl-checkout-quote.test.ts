@@ -1,4 +1,3 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { shippingService } from '@/lib/shipping';
 import {
@@ -7,20 +6,12 @@ import {
   PickupOptions,
   VehicleType,
 } from './providers/gigl.constants';
-import {
-  type OrderShipmentQuoteRecord,
-  refreshOrderShipmentQuote,
-} from './refresh-order-shipment-quote';
+import type { OrderShipmentQuoteRecord } from './refresh-order-shipment-quote';
+import { validateSavedGiglCheckoutQuote } from './validate-saved-gigl-checkout-quote';
 
 vi.mock('@/lib/shipping', () => ({
   shippingService: { getProviderQuotes: vi.fn() },
 }));
-vi.mock('./persist-refreshed-shipping-quote', () => ({
-  persistRefreshedShippingQuote: vi.fn(),
-}));
-const { persistRefreshedShippingQuote } = await import(
-  './persist-refreshed-shipping-quote'
-);
 const sender = {
   name: 'Shop',
   phone: '08000000000',
@@ -79,30 +70,20 @@ const fresh = {
   expiresAt: new Date('2099-01-01'),
   rawResponse: {},
 };
-// The new option is deliberately exercised before implementation.
-const options = {
-  orderId: 'order',
-  expectedShippingFee: 1100,
-  preserveSavedGiglCheckoutQuote: true,
-};
-const client = {} as SupabaseClient;
-
 describe('saved paid GIG quote validation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([fresh]);
-    vi.mocked(persistRefreshedShippingQuote).mockResolvedValue({ error: null });
   });
   it.each([
     '2020-01-01',
     '2099-01-01',
   ])('checks current prices and reuses the exact saved quote with expiry %s', async (expiry) => {
     const saved = { ...quote, expires_at: expiry };
-    expect(
-      await refreshOrderShipmentQuote(client, saved, 'GIGL', sender, options)
-    ).toBe(saved);
+    expect(await validateSavedGiglCheckoutQuote(saved, sender, 1100)).toBe(
+      saved
+    );
     expect(shippingService.getProviderQuotes).toHaveBeenCalledOnce();
-    expect(persistRefreshedShippingQuote).not.toHaveBeenCalled();
   });
   it.each([
     { price: 1101 },
@@ -115,12 +96,11 @@ describe('saved paid GIG quote validation', () => {
       { ...fresh, ...change },
     ]);
     await expect(
-      refreshOrderShipmentQuote(client, quote, 'GIGL', sender, options)
+      validateSavedGiglCheckoutQuote(quote, sender, 1100)
     ).rejects.toMatchObject({
       code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
       status: 409,
     });
-    expect(persistRefreshedShippingQuote).not.toHaveBeenCalled();
   });
   it.each([
     5,
@@ -149,12 +129,11 @@ describe('saved paid GIG quote validation', () => {
       },
     ]);
     await expect(
-      refreshOrderShipmentQuote(client, saved, 'GIGL', sender, options)
+      validateSavedGiglCheckoutQuote(saved, sender, 1100)
     ).rejects.toMatchObject({
       code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
       status: 409,
     });
-    expect(persistRefreshedShippingQuote).not.toHaveBeenCalled();
   });
   it('accepts a legacy saved rate without an origin station when current effective service matches', async () => {
     const service = {
@@ -176,37 +155,32 @@ describe('saved paid GIG quote validation', () => {
         }),
       },
     ]);
-    expect(
-      await refreshOrderShipmentQuote(client, saved, 'GIGL', sender, options)
-    ).toBe(saved);
+    expect(await validateSavedGiglCheckoutQuote(saved, sender, 1100)).toBe(
+      saved
+    );
   });
   it('reports unavailable pricing without claiming that details changed', async () => {
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([]);
     await expect(
-      refreshOrderShipmentQuote(client, quote, 'GIGL', sender, options)
+      validateSavedGiglCheckoutQuote(quote, sender, 1100)
     ).rejects.toMatchObject({ code: 'QUOTE_REFRESH_FAILED', status: 409 });
-    expect(persistRefreshedShippingQuote).not.toHaveBeenCalled();
   });
   it('rejects a saved quote bound to a different provider before fetching', async () => {
     await expect(
-      refreshOrderShipmentQuote(
-        client,
+      validateSavedGiglCheckoutQuote(
         { ...quote, provider: 'TOPSHIP' },
-        'GIGL',
         sender,
-        options
+        1100
       )
     ).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
   });
   it('requires confirmation for changed origin before requesting any tariff', async () => {
     await expect(
-      refreshOrderShipmentQuote(
-        client,
+      validateSavedGiglCheckoutQuote(
         quote,
-        'GIGL',
         { ...sender, address: 'New origin' },
-        options
+        1100
       )
     ).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();

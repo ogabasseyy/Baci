@@ -67,8 +67,14 @@ export function createCartEventWorkerClient(
     )
       throw fail();
     const endpoint = new URL(url);
+    const loopback =
+      endpoint.hostname === 'localhost' ||
+      endpoint.hostname === '127.0.0.1' ||
+      endpoint.hostname === '::1' ||
+      endpoint.hostname === '[::1]';
     if (
-      endpoint.protocol !== 'https:' ||
+      (endpoint.protocol !== 'https:' &&
+        !(endpoint.protocol === 'http:' && loopback)) ||
       endpoint.username ||
       endpoint.password
     )

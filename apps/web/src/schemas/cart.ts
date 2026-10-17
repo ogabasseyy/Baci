@@ -135,6 +135,18 @@ export const cartHandoffIssueRequestSchema = z.strictObject({
   operationId: operationIdSchema,
 });
 
+/** Bounded preview inputs for the public handoff preview route. */
+export const cartHandoffPreviewQuerySchema = z.strictObject({
+  handoff_id: z.uuid(),
+});
+
+export const cartHandoffPairingTokenSchema = z
+  .string()
+  .trim()
+  .min(4)
+  .max(512)
+  .regex(/^ch1\./);
+
 const handoffResolutionSchema = z.strictObject({
   item: cartItemIdentitySchema,
   keep: z.enum(['incoming', 'existing']),

@@ -21,7 +21,11 @@ import { checkCsrfProtection } from '@/lib/csrf';
 import { getTrustedClientIdentifier } from '@/lib/rate-limit';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
-import { cartHandoffIssueRequestSchema } from '@/schemas/cart';
+import {
+  cartHandoffIssueRequestSchema,
+  cartHandoffPairingTokenSchema,
+  cartHandoffPreviewQuerySchema,
+} from '@/schemas/cart';
 
 function rootDomain(): string {
   return process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? 'usebaci.com';
@@ -123,9 +127,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-const UUID_PATTERN =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
 /**
  * GET /api/storefront/cart/handoff?handoff_id=<uuid>
  *
@@ -136,10 +137,13 @@ const UUID_PATTERN =
  */
 export async function GET(request: NextRequest) {
   try {
-    const handoffId = request.nextUrl.searchParams.get('handoff_id');
-    if (!handoffId || !UUID_PATTERN.test(handoffId)) {
+    const parsedQuery = cartHandoffPreviewQuerySchema.safeParse({
+      handoff_id: request.nextUrl.searchParams.get('handoff_id'),
+    });
+    if (!parsedQuery.success) {
       return cartErrorResponse('invalid_request');
     }
+    const handoffId = parsedQuery.data.handoff_id;
 
     // Bound the expensive preview assembly before it runs: this endpoint
     // is unauthenticated, so a per-client budget applies first and the
@@ -162,10 +166,13 @@ export async function GET(request: NextRequest) {
     // this route (and proxy/APM pipelines must redact x-handoff-token
     // like an Authorization header) so the secret stays out of
     // telemetry. See docs/deploy/shared-cart-rollout.md.
-    const handoffToken = request.headers.get('x-handoff-token')?.trim();
-    if (!handoffToken?.startsWith('ch1.')) {
+    const parsedToken = cartHandoffPairingTokenSchema.safeParse(
+      request.headers.get('x-handoff-token')
+    );
+    if (!parsedToken.success) {
       return cartErrorResponse('not_found');
     }
+    const handoffToken = parsedToken.data;
 
     // Enforce the merchant-scoped budget before the preview RPC
     // assembles anything: resolve the merchant with the cheap locator.

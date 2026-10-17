@@ -50,6 +50,36 @@ it('uses only the scoped cart worker token, with no persisted shopper auth', () 
   });
 });
 
+it('allows loopback http but rejects non-loopback http', () => {
+  const create = vi.fn();
+  const jwt = token('commerce_cart_worker');
+  createCartEventWorkerClient(
+    {
+      COMMERCE_CART_WORKER_JWT: jwt,
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'public',
+    },
+    create,
+    now
+  );
+  expect(create).toHaveBeenCalledWith(
+    'http://127.0.0.1:54321',
+    'public',
+    expect.anything()
+  );
+  expect(() =>
+    createCartEventWorkerClient(
+      {
+        COMMERCE_CART_WORKER_JWT: jwt,
+        NEXT_PUBLIC_SUPABASE_URL: 'http://db.internal.example:54321',
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: 'public',
+      },
+      create,
+      now
+    )
+  ).toThrow('Cart event worker authority unavailable');
+});
+
 it('accepts a token expiring in under five minutes but rejects an expired one', () => {
   const create = vi.fn();
   const nearExpiry = [

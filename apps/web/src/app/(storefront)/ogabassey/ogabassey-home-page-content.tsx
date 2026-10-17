@@ -18,6 +18,9 @@ import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
 const OGABASSEY_DOMAIN_IDENTIFIER = new URL(OGABASSEY_URL).hostname;
 
 interface OgabasseyHomePageContentProps {
+  /** True only when the route segment itself proved the canonical custom domain
+   *  (`ogabassey.com`) beneath `OgabasseyStaticHomePage`. */
+  canonicalDomain?: boolean;
   /** Skip Hero's H1 when a parent already committed the document title. */
   omitDocumentHeading?: boolean;
   /** Optional alternate layout: omit the mobile carousel while preserving
@@ -48,6 +51,7 @@ export function resolveOgabasseyHomePathPrefix(
  * the visible product Hero, utility panel, and PDP links on both viewports.
  */
 export async function OgabasseyHomePageContent({
+  canonicalDomain = false,
   omitDocumentHeading = false,
   omitMobileCarousel = false,
   pathPrefix,
@@ -57,15 +61,17 @@ export async function OgabasseyHomePageContent({
   let merchant: Awaited<ReturnType<typeof getRequestScopedMerchant>>;
   let resolvedPathPrefix: string;
 
-  // On the canonical custom-domain route (`pathPrefix === ''` beneath
-  // `OgabasseyStaticHomePage`, which sets `omitDocumentHeading`), the merchant
-  // identifier is unambiguously `ogabassey.com` and the link prefix is always
+  // On the canonical custom-domain route (`canonicalDomain && pathPrefix === ''`
+  // beneath `OgabasseyStaticHomePage`, which sets `omitDocumentHeading`), the
+  // route segment proved `ogabassey.com` and the link prefix is always
   // root-relative (`''`). Resolving the cached merchant record directly here
   // avoids `connection()` and `headers()`, which Next.js 16 delays until
   // `RenderStage.Dynamic` (after ~146 KB of `<script>self.__next_f.push(...)`
   // chunks). That allows `<Hero>` to flush in `RenderStage.Static` in the
-  // initial HTML chunk while preserving the publication and tenant-id guards.
-  if (omitDocumentHeading && pathPrefix === '') {
+  // initial HTML chunk while preserving the publication (`!merchant.is_published`),
+  // 404 (`!merchant`), and tenant-id (`shellMerchantId === merchant.id`) guards
+  // bounded by the `merchant` `'use cache'` revalidation window (60s revalidate).
+  if (canonicalDomain && omitDocumentHeading && pathPrefix === '') {
     merchant = await getRequestScopedMerchant(OGABASSEY_DOMAIN_IDENTIFIER);
     resolvedPathPrefix = '';
   } else {

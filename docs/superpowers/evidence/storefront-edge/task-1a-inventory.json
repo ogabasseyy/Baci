@@ -25,7 +25,7 @@
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "b25184732b8befdda0e336013fcf242370f70771078114a9089bed969de007ae",
+  "routeTreeSha256": "a4a20fc0f6acc60539a748a672611fed4b481085792f6ee57752ebd4b20ba3b9",
   "routingProxyInputSha256": "7ab40fd3c3db2626fabce5a2b0197191b3350b11cb831afdad478ee5c92fb61d",
   "rows": [
     {
@@ -8495,5 +8495,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "9a344c8f733106d7726c081ed448f596b1916f36f67f293b3a12a2a804d73204"
+  "inventorySha256": "0437598854e5a5e2f35b0ce061ab947eb481b65476fe6072d1ed71cffd0ba28b"
 }

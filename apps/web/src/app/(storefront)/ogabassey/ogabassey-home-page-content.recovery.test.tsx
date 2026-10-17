@@ -54,6 +54,11 @@ vi.mock('next/navigation', () => ({
 vi.mock('./ogabassey-home-dynamic-content', () => ({
   OgabasseyHomeDynamicContent: () => <div />,
 }));
+vi.mock('@/components/storefront/store-not-published', () => ({
+  StoreNotPublished: ({ businessName }: { businessName: string }) => (
+    <div data-testid="store-not-published">{businessName}</div>
+  ),
+}));
 vi.mock('./ogabassey-home-recovery-hero', () => ({
   OgabasseyHomeRecoveryHero: ({
     omitMobileCarousel,
@@ -111,6 +116,7 @@ it('forwards omitMobileCarousel to recovery when shell slides are unavailable', 
 it('resolves the canonical custom-domain shell without awaiting connection() or headers()', async () => {
   render(
     await OgabasseyHomePageContent({
+      canonicalDomain: true,
       omitDocumentHeading: true,
       pathPrefix: '',
       shellMerchantId: null,
@@ -121,4 +127,54 @@ it('resolves the canonical custom-domain shell without awaiting connection() or 
   expect(getRequestScopedMerchant).toHaveBeenCalledWith('ogabassey.com');
   expect(connection).not.toHaveBeenCalled();
   expect(headers).not.toHaveBeenCalled();
+});
+
+it('still consults headers() when omitDocumentHeading and empty pathPrefix are passed without canonicalDomain', async () => {
+  vi.mocked(headers).mockResolvedValueOnce(
+    new Headers([['x-merchant-slug', 'other-merchant']])
+  );
+
+  render(
+    await OgabasseyHomePageContent({
+      omitDocumentHeading: true,
+      pathPrefix: '',
+      shellMerchantId: null,
+      shellSlides: null,
+    })
+  );
+
+  expect(connection).toHaveBeenCalledOnce();
+  expect(headers).toHaveBeenCalledOnce();
+  expect(getRequestScopedMerchant).toHaveBeenCalledWith('other-merchant');
+});
+
+it('enforces 404 and unpublished storefront guards on the canonicalDomain fast path', async () => {
+  vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce(null);
+  await expect(
+    OgabasseyHomePageContent({
+      canonicalDomain: true,
+      omitDocumentHeading: true,
+      pathPrefix: '',
+      shellMerchantId: 'merchant-1',
+      shellSlides: [],
+    })
+  ).rejects.toThrow('not-found');
+  expect(notFound).toHaveBeenCalledOnce();
+
+  vi.mocked(getRequestScopedMerchant).mockResolvedValueOnce({
+    ...merchant,
+    is_published: false,
+  });
+  render(
+    await OgabasseyHomePageContent({
+      canonicalDomain: true,
+      omitDocumentHeading: true,
+      pathPrefix: '',
+      shellMerchantId: 'merchant-1',
+      shellSlides: [],
+    })
+  );
+  expect(screen.getByTestId('store-not-published')).toHaveTextContent(
+    'OgaBassey'
+  );
 });

@@ -163,7 +163,7 @@ describe('storefront homepage metadata', () => {
     expect(mockResolveOgabasseyHomeHeroShell).not.toHaveBeenCalled();
   });
 
-  it('warms and awaits the OgaBassey home hero shell alongside merchant resolution', async () => {
+  it('warms and awaits the OgaBassey home hero shell alongside merchant resolution on the canonical domain', async () => {
     let resolveMerchant!: (
       value: Awaited<ReturnType<typeof getRequestScopedMerchant>>
     ) => void;
@@ -203,15 +203,27 @@ describe('storefront homepage metadata', () => {
     expect(settled).toBe(true);
   });
 
-  it('still resolves OgaBassey metadata when the hero shell warm promise rejects', async () => {
-    mockResolveOgabasseyHomeHeroShell.mockRejectedValueOnce(
-      new Error('shell failed')
+  it('warms the hero shell without blocking metadata on the /ogabassey path route', async () => {
+    mockResolveOgabasseyHomeHeroShell.mockImplementationOnce(
+      () => new Promise(() => {})
     );
 
     const metadata = await generateMetadata({
-      params: Promise.resolve({ slug: 'ogabassey.com' }),
+      params: Promise.resolve({ slug: 'ogabassey' }),
     });
 
+    expect(mockResolveOgabasseyHomeHeroShell).toHaveBeenCalledOnce();
     expect(metadata.title).toEqual({ absolute: OGABASSEY_TITLE });
+  });
+
+  it('propagates Next.js framework interrupts rethrown by the hero shell lookup', async () => {
+    const frameworkInterrupt = new Error('NEXT_PRERENDER_INTERRUPTED');
+    mockResolveOgabasseyHomeHeroShell.mockRejectedValueOnce(frameworkInterrupt);
+
+    await expect(
+      generateMetadata({
+        params: Promise.resolve({ slug: 'ogabassey.com' }),
+      })
+    ).rejects.toThrow('NEXT_PRERENDER_INTERRUPTED');
   });
 });

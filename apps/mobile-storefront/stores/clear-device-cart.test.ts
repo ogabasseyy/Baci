@@ -7,7 +7,10 @@ jest.mock('expo-crypto', () => ({
   randomUUID: () => '11111111-1111-4111-8111-111111111111',
 }));
 jest.mock('@/lib/cart/session-storage', () => ({
-  cartSessionStorage: { remove: jest.fn().mockResolvedValue(undefined) },
+  cartSessionStorage: {
+    remove: jest.fn().mockResolvedValue(undefined),
+    retire: jest.fn().mockResolvedValue(undefined),
+  },
 }));
 jest.mock('@/lib/persist-checkout-generation', () => ({
   persistCheckoutGenerationDetached: jest.fn(),
@@ -33,9 +36,10 @@ it('retires the shared reference and stored proof when no writer is mounted', as
   expect(useCartStore.setState).toHaveBeenCalledWith({
     sharedCartRef: undefined,
   });
-  expect(cartSessionStorage.remove).toHaveBeenCalledWith(
+  expect(cartSessionStorage.retire).toHaveBeenCalledWith(
     '11111111-1111-4111-8111-111111111111'
   );
+  expect(cartSessionStorage.remove).not.toHaveBeenCalled();
 });
 it('clears private local state even offline without sending a shared-cart clear command', async () => {
   const write = jest.fn();

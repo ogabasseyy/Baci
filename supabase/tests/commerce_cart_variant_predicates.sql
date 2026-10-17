@@ -19,4 +19,13 @@ BEGIN
   END IF;
 END $regression$;
 
+DO $regression$
+BEGIN
+  IF pg_get_functiondef(
+    'public.commerce_cart_mutate_authorized_impl(uuid, text, integer, jsonb)'::regprocedure
+  ) NOT LIKE '%cart_shared_clear_guard%' THEN
+    RAISE EXCEPTION 'shared clear guard missing from mutate implementation';
+  END IF;
+END $regression$;
+
 SELECT 'variant predicates ok' AS commerce_cart_variant_predicates;

@@ -62,6 +62,15 @@ it('replays stored lane identity when the canonical cart lost it at create', asy
           { item: { id: 'prod-1', variant_id: 'variant-1', quantity: 1 } },
         ],
       },
+    })
+    .mockResolvedValueOnce({
+      status: 200,
+      body: {
+        id: 'cart-a',
+        line_items: [
+          { item: { id: 'prod-1', variant_id: 'variant-1', quantity: 1 } },
+        ],
+      },
     });
   const deps = {
     canonical,
@@ -87,13 +96,14 @@ it('replays stored lane identity when the canonical cart lost it at create', asy
     deps
   );
   expect(response.status).toBe(200);
-  expect(canonical).toHaveBeenCalledTimes(2);
+  expect(canonical).toHaveBeenCalledTimes(3);
   expect(canonical.mock.calls[1][0]).toMatchObject({
     action: 'update',
     lines: [
       { item: { productId: 'prod-1', variantId: 'variant-1' }, quantity: 1 },
     ],
   });
+  expect(canonical.mock.calls[2][0]).toMatchObject({ action: 'read' });
 });
 it('hides a missing legacy cart after a canonical bypass', async () => {
   const deps = {
@@ -227,7 +237,11 @@ it('recovers an option-only lane the canonical cart configured differently', asy
         ],
       },
     })
-    .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } });
+    .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } })
+    .mockResolvedValueOnce({
+      status: 200,
+      body: { id: 'cart-a', marker: 'fresh-read' },
+    });
   const supabase = {
     from: vi.fn(() => ({
       update: vi.fn(() => ({
@@ -252,7 +266,11 @@ it('recovers an option-only lane the canonical cart configured differently', asy
     deps
   );
   expect(response.status).toBe(200);
-  expect(canonical).toHaveBeenCalledTimes(2);
+  // The answer comes from a fresh canonical read after the replay,
+  // never from the replay's recorded state.
+  expect(await response.json()).toMatchObject({ marker: 'fresh-read' });
+  expect(canonical).toHaveBeenCalledTimes(3);
+  expect(canonical.mock.calls[2][0]).toMatchObject({ action: 'read' });
   expect(canonical.mock.calls[1][0]).toMatchObject({
     action: 'update',
     lines: [

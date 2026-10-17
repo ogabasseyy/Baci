@@ -113,6 +113,7 @@ export async function createAgenticCheckoutOrder(
   // Wrap the call so a failure surfaces as a 500 the GPT-agent
   // caller can retry — distinct from the validation-shaped 400s
   // the RPC itself produces.
+  const sharedCartBinding = body.shared_cart ?? null;
   let computedTaxAmount: number;
   try {
     // CodeRabbit High (PR #1622 round 7): use the caller-supplied
@@ -126,22 +127,28 @@ export async function createAgenticCheckoutOrder(
       supabase,
     });
   } catch (taxError) {
-    if (taxError instanceof OrderConditionUnavailableError)
-      return {
-        data: { error: 'invalid_condition_offer' },
-        error: 'invalid_condition_offer',
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-      };
-    // Codex P2 (PR #1622 round 7): a malformed product_id /
-    // variant_id from the agentic caller cascades into Postgres
-    // 22P02 inside the helper. Mirror the storefront route — map
-    // UUID parse errors to a 400 with `invalid_items` (already
-    // in `CLIENT_ORDER_ERROR_CODES` and the agentic spec) so the
-    // GPT agent fixes its payload instead of treating this as
-    // an outage.
-    if (isTaxComputeUuidError(taxError)) {
+    if (taxError instanceof OrderConditionUnavailableError) {
+      if (!sharedCartBinding)
+        return {
+          data: { error: 'invalid_condition_offer' },
+          error: 'invalid_condition_offer',
+          ok: false,
+          status: 400,
+          statusText: 'Bad Request',
+        };
+      // A committed bound order must still replay when the offer has
+      // since been deactivated or changed: the binding path
+      // revalidates authoritatively in SQL, so fall through with the
+      // request tax and let it replay or fail closed there instead of
+      // refusing the retry at this mutable catalog read.
+      computedTaxAmount =
+        typeof body.tax_amount === 'number' ? body.tax_amount : 0;
+    } else if (isTaxComputeUuidError(taxError)) {
+      // A malformed product_id / variant_id from the agentic caller
+      // cascades into Postgres 22P02 inside the helper. Mirror the
+      // storefront route — map UUID parse errors to a 400 with
+      // `invalid_items` (already in CLIENT_ORDER_ERROR_CODES and
+      // the agentic spec) so the GPT agent fixes its payload.
       logger.warn({
         error: sanitizeForLog(taxError),
         message: 'Agentic checkout received malformed item identifier',
@@ -154,19 +161,20 @@ export async function createAgenticCheckoutOrder(
         status: 400,
         statusText: 'Bad Request',
       };
+    } else {
+      logger.error({
+        error: sanitizeForLog(taxError),
+        message: 'Agentic checkout VAT recompute failed',
+      });
+      return {
+        data: { error: 'Unable to compute order tax' },
+        error: 'Unable to compute order tax',
+        ok: false,
+        orderId: undefined,
+        status: 500,
+        statusText: 'Internal Server Error',
+      };
     }
-    logger.error({
-      error: sanitizeForLog(taxError),
-      message: 'Agentic checkout VAT recompute failed',
-    });
-    return {
-      data: { error: 'Unable to compute order tax' },
-      error: 'Unable to compute order tax',
-      ok: false,
-      orderId: undefined,
-      status: 500,
-      statusText: 'Internal Server Error',
-    };
   }
 
   const orderRpcArgs = buildAgenticOrderRpcArgs(
@@ -175,7 +183,6 @@ export async function createAgenticCheckoutOrder(
     computedTaxAmount
   );
 
-  const sharedCartBinding = body.shared_cart ?? null;
   const bindingOutcome = sharedCartBinding
     ? await submitSharedCartBindingOrder({
         boundPrincipalId: options?.boundPrincipalId ?? null,

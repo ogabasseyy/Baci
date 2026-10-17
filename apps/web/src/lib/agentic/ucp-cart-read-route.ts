@@ -199,8 +199,21 @@ export async function readUcpCart(
               route: 'ucp-cart-read',
             });
           }
-          return NextResponse.json(recovered.body, {
-            status: recovered.status,
+          // Never answer from the recovery replay itself: a
+          // concurrent legitimate update may have landed between
+          // the first read and the replay (and an idempotent replay
+          // returns its recorded state without mutating). Re-read
+          // canonical state and answer from that, so a stale lane
+          // set can never be presented — or built upon — as current.
+          const fresh = await deps.canonical({
+            merchant: input.merchant,
+            cartId: input.cartId,
+            agentId: input.agentId,
+            action: 'read',
+          });
+          const answer = fresh && fresh.status === 200 ? fresh : recovered;
+          return NextResponse.json(answer.body, {
+            status: answer.status,
           });
         }
       }

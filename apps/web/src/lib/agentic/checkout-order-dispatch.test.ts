@@ -643,6 +643,38 @@ describe('agentic checkout order dispatch — shared cart binding', () => {
     return { from: makeFromStub(), rpc } as unknown as SupabaseClient;
   }
 
+  it('replays a bound order when the condition offer is now inactive', async () => {
+    const rpc = vi.fn(async (name: string) => {
+      if (name === 'get_order_variant_overrides') {
+        return {
+          data: [
+            {
+              product_id: 'product-1',
+              condition: 'used',
+              status: 'inactive',
+              price: null,
+            },
+          ],
+          error: null,
+        };
+      }
+      return { data: BOUND_ENVELOPE, error: null };
+    });
+    const payload = boundPayload();
+    const result = await createAgenticCheckoutOrder(
+      {
+        ...payload,
+        items: payload.items.map((item) => ({ ...item, condition: 'used' })),
+      },
+      dispatchClient(rpc)
+    );
+    expect(result).toMatchObject({ ok: true, orderId: 'order-1' });
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
   it('submits a bound base order through the binding RPC', async () => {
     const rpc = vi
       .fn()

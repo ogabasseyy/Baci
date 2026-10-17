@@ -22,7 +22,15 @@ export async function clearDeviceCartForAccountTeardown(): Promise<void> {
     useCartStore.setState({ sharedCartRef: undefined });
     if (merchantId) {
       try {
-        await cartSessionStorage.remove(merchantId);
+        // Retire rather than delete: the retained proof stays
+        // available for the later server revocation flush on the
+        // next session establishment, instead of stranding live
+        // grant authority when no writer is mounted to revoke it.
+        if (cartSessionStorage.retire) {
+          await cartSessionStorage.retire(merchantId);
+        } else {
+          await cartSessionStorage.remove(merchantId);
+        }
       } catch {
         /* Storage may be unavailable; the reference is already gone. */
       }

@@ -117,7 +117,7 @@ export async function prepareLoyaltyCheckout({
   let codeDiscountType: 'fixed' | 'percentage';
   let codeDiscountValue: number;
   let codeMaximumDiscountAmount: number | null;
-  if (discountRow) {
+  if (discountRow?.is_active) {
     discountCodeId = discountRow.id;
     codeDiscountType =
       discountRow.discount_type === 'fixed_amount' ? 'fixed' : 'percentage';
@@ -129,14 +129,28 @@ export async function prepareLoyaltyCheckout({
       merchantId,
       code: requestedDiscountCode,
     });
-    if (!loyaltyResolution.ok) {
+    if (!loyaltyResolution.ok && discountRow) {
+      // An inactive merchant code with no loyalty match keeps the
+      // merchant path so the wrapper answers code_inactive (or replays
+      // its claimed order) exactly as before. A deactivated code that
+      // DOES match a loyalty redemption — e.g. a legacy collision
+      // reconciled by migration 20261010000025 — falls through to the
+      // loyalty redemption instead of dying as code_inactive.
+      discountCodeId = discountRow.id;
+      codeDiscountType =
+        discountRow.discount_type === 'fixed_amount' ? 'fixed' : 'percentage';
+      codeDiscountValue = Number(discountRow.discount_value);
+      codeMaximumDiscountAmount = discountRow.maximum_discount_amount;
+    } else if (!loyaltyResolution.ok) {
       return { ok: false, response: loyaltyResolution.response };
+    } else {
+      loyaltyRedemptionId = loyaltyResolution.redemptionId;
+      codeDiscountType = loyaltyResolution.discountType;
+      codeDiscountValue = loyaltyResolution.discountValue;
+      loyaltyMaxRedemptionPercentage =
+        loyaltyResolution.maxRedemptionPercentage;
+      codeMaximumDiscountAmount = null;
     }
-    loyaltyRedemptionId = loyaltyResolution.redemptionId;
-    codeDiscountType = loyaltyResolution.discountType;
-    codeDiscountValue = loyaltyResolution.discountValue;
-    loyaltyMaxRedemptionPercentage = loyaltyResolution.maxRedemptionPercentage;
-    codeMaximumDiscountAmount = null;
   }
 
   let canonicalOrderSubtotal: number | null;

@@ -116,15 +116,24 @@ export async function POST(request: NextRequest) {
         (loyaltyCode.reward_type !== 'discount_percentage' ||
           loyaltyValue <= 100)
       ) {
+        // A used code is a checkout replay candidate, not a fresh
+        // redemption: after a reload the shopper re-enters the code
+        // and this preview is how the applied discount is
+        // reconstructed so the persisted checkout key can reach the
+        // replay-aware order wrapper (which authoritatively decides
+        // replay vs already-used). Used codes therefore skip the
+        // used/expired/currency/minimum gates below; an unused code
+        // keeps every gate.
         if (
-          loyaltyCode.used ||
-          (loyaltyCode.expires_at &&
-            new Date(loyaltyCode.expires_at) < new Date())
+          !loyaltyCode.used &&
+          loyaltyCode.expires_at &&
+          new Date(loyaltyCode.expires_at) < new Date()
         ) {
           return invalidCodeResponse();
         }
         // Currency gate first (a mismatched code can never validate).
         if (
+          !loyaltyCode.used &&
           (loyaltyCode.reward_type !== 'discount_percentage' ||
             Number(loyaltyCode.minimum_order_amount) > 0) &&
           loyaltyCode.issuance_currency &&
@@ -138,6 +147,7 @@ export async function POST(request: NextRequest) {
         }
         // Accepted oracle (low): the minimum message stays distinct.
         if (
+          !loyaltyCode.used &&
           loyaltyCode.minimum_order_amount != null &&
           cart_total < Number(loyaltyCode.minimum_order_amount)
         ) {

@@ -45,14 +45,19 @@ describe('POST /api/storefront/discount/validate loyalty fallback', () => {
     expect(response.status).toBe(200);
     expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
   });
-  it('collapses an already-used loyalty code to generic invalid', async () => {
+  it('previews an already-used loyalty code for checkout replay', async () => {
+    // After a reload the shopper re-enters the code: the preview
+    // reconstructs the applied discount so the persisted checkout key
+    // reaches the replay-aware order wrapper, which decides replay
+    // vs already-used authoritatively.
     mockRpc((fn) =>
       fn === 'get_storefront_discount_code' ? [] : [loyaltyRow({ used: true })]
     );
 
     const body = await (await POST(request(baseBody))).json();
 
-    expect(body).toEqual({ valid: false, error: 'Invalid discount code' });
+    expect(body.valid).toBe(true);
+    expect(body.discount_code_id).toBeNull();
   });
   it('rejects a non-discount loyalty type as invalid', async () => {
     mockRpc((fn) =>

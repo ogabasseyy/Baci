@@ -83,7 +83,7 @@ describe('redemptionIdempotencyKeys fallback coordination', () => {
     redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-solo');
   });
 
-  it('mints immediately through the Map when storage is unusable', async () => {
+  it('fails closed when storage is unusable instead of minting a memory-only key', async () => {
     vi.stubGlobal('localStorage', {
       getItem: () => null,
       setItem: () => {
@@ -93,17 +93,12 @@ describe('redemptionIdempotencyKeys fallback coordination', () => {
     });
 
     const startedAt = Date.now();
-    const key = await redemptionIdempotencyKeys.forReward(
-      'm',
-      'c',
-      'reward-nostorage'
-    );
-    // No 30-second claim wait: unusable storage degrades to Map-only.
+    // No 30-second claim wait, and no ephemeral key: a memory-only key
+    // would vanish on reload and a retry would double-spend points.
+    await expect(
+      redemptionIdempotencyKeys.forReward('m', 'c', 'reward-nostorage')
+    ).rejects.toThrow('Unable to save redemption recovery');
     expect(Date.now() - startedAt).toBeLessThan(1_000);
-    expect(key).toMatch(UUID_PATTERN);
-    expect(
-      await redemptionIdempotencyKeys.forReward('m', 'c', 'reward-nostorage')
-    ).toBe(key);
 
     redemptionIdempotencyKeys.clearForReward('m', 'c', 'reward-nostorage');
   });

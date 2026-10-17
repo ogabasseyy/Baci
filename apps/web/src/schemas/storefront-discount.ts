@@ -41,6 +41,10 @@ export const storefrontDiscountCodeRowSchema = z.object({
     .nullish()
     .transform((v) => v ?? []),
   usage_limit_per_customer: z.coerce.number().nullable(),
+  // The order lookup includes inactive rows (replay), so prepare can
+  // tell a deactivated code from an active one; absent in older RPC
+  // shapes, where active is the only safe assumption.
+  is_active: z.boolean().catch(true),
 });
 
 export type StorefrontDiscountCodeRow = z.infer<

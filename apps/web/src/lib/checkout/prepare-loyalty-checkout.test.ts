@@ -34,7 +34,69 @@ const BASE = {
   items: ITEMS,
 };
 
+const INACTIVE_MERCHANT_ROW = {
+  id: '11111111-1111-4111-8111-111111111111',
+  code: 'RDM-COLLIDE1',
+  discount_type: 'fixed_amount',
+  discount_value: 500,
+  starts_at: null,
+  expires_at: null,
+  usage_limit: null,
+  usage_count: 0,
+  minimum_purchase_amount: null,
+  maximum_discount_amount: null,
+  description: null,
+  applies_to: 'all',
+  product_ids: [],
+  category_ids: [],
+  usage_limit_per_customer: null,
+  is_active: false,
+};
+
 describe('prepareLoyaltyCheckout', () => {
+  it('routes a deactivated merchant code to a matching loyalty redemption', async () => {
+    mockResolveLoyalty.mockResolvedValue({
+      ok: true,
+      redemptionId: '22222222-2222-4222-8222-222222222222',
+      discountType: 'fixed',
+      discountValue: 500,
+      maxRedemptionPercentage: null,
+    });
+
+    const result = await prepareLoyaltyCheckout({
+      ...BASE,
+      requestedDiscountCode: 'RDM-COLLIDE1',
+      supabase: clientWithRpc({ data: [INACTIVE_MERCHANT_ROW], error: null }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.loyaltyRedemptionId).toBe(
+        '22222222-2222-4222-8222-222222222222'
+      );
+      expect(result.discountCodeId).toBeNull();
+    }
+  });
+
+  it('keeps an inactive merchant code on the merchant path without a loyalty match', async () => {
+    mockResolveLoyalty.mockResolvedValue({
+      ok: false,
+      response: new Response(null, { status: 400 }),
+    });
+
+    const result = await prepareLoyaltyCheckout({
+      ...BASE,
+      requestedDiscountCode: 'RDM-COLLIDE1',
+      supabase: clientWithRpc({ data: [INACTIVE_MERCHANT_ROW], error: null }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.discountCodeId).toBe(INACTIVE_MERCHANT_ROW.id);
+      expect(result.loyaltyRedemptionId).toBeNull();
+    }
+  });
+
   it('rejects voucher combinations before any lookup', async () => {
     const result = await prepareLoyaltyCheckout({
       ...BASE,

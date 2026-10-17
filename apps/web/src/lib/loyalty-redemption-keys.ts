@@ -5,8 +5,9 @@
 // merchant/customer/reward until that intent redeems successfully. The
 // module Map is a read-through cache; localStorage is the durable
 // layer so a reload between a lost response and its retry replays
-// instead of re-spending. Storage failures (SSR, private mode) degrade
-// to Map-only rather than breaking redemption.
+// instead of re-spending. Minting fails closed when the key cannot be
+// persisted: a memory-only key would vanish on reload and a retry
+// would mint a second key, spending the shopper's points twice.
 //
 // First-write cross-tab races resolve to a single winner: when the
 // Web Locks API is available, minting runs inside a per-intent lock
@@ -50,8 +51,7 @@ const keysByIntent = new Map<string, string>();
 // Intents whose key reached durable storage. Only those are subject to
 // storage reconciliation on read: when storage later reads empty, the
 // key was cleared (here or in another tab after its success), so the
-// cached copy must not be reused. Intents that never persisted (SSR,
-// private mode) keep Map-only behavior.
+// cached copy must not be reused.
 const persistedIntents = new Set<string>();
 
 interface LockManagerLike {
@@ -142,8 +142,8 @@ function delay(ms: number): Promise<void> {
 // key) resume and mint a second key. Claims expire, so a crashed
 // claimant bounds the wait.
 async function coordinatedMint(intent: string): Promise<string> {
-  // Without usable storage there is nothing to coordinate through:
-  // degrade to the documented Map-only behavior immediately.
+  // Without usable storage there is nothing to coordinate through and
+  // nothing durable to mint into: mintKey fails closed there.
   if (!storageIsUsable()) return mintKey(intent);
   const existing = readStored(intent);
   if (existing) return existing;
@@ -217,8 +217,25 @@ function mintKey(intent: string): string {
   const fresh = crypto.randomUUID();
   keysByIntent.set(intent, fresh);
   writeStored(intent, fresh);
-  if (readStored(intent) === fresh) persistedIntents.add(intent);
-  return fresh;
+  const persisted = readStored(intent);
+  if (persisted === fresh) {
+    persistedIntents.add(intent);
+    return fresh;
+  }
+  if (persisted) {
+    // A simultaneous tab's key landed instead of ours: adopt the
+    // durable winner rather than compete with it.
+    keysByIntent.set(intent, persisted);
+    persistedIntents.add(intent);
+    return persisted;
+  }
+  // Fail closed: a key that exists only in this tab's memory dies on
+  // reload, and a shopper retrying after a lost redemption response
+  // would mint a second key and spend their points twice.
+  keysByIntent.delete(intent);
+  throw new Error(
+    'Unable to save redemption recovery. Please enable browser storage and try again.'
+  );
 }
 
 async function keyForReward(

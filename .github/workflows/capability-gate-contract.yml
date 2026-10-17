@@ -1,0 +1,91 @@
+name: Capability Gate Contract
+
+# Independent guard for the capability gate's own caller. The gate-contract
+# job runs from the BASE revision (pull_request_target): it extracts the
+# base-owned checker scripts and runs THOSE against the PR head, so a PR
+# that weakens the checker, the invocation, or any enforcement file cannot
+# silence the guard — the running logic always comes from the target branch.
+# The checker only reads PR files as data (hash + parse, never import or
+# execute). Enforcement files and their declared hashes live in
+# .github/scripts/capability_gate_contract_check.py (with text checks in its
+# companions); see its header for the refresh procedure.
+# The gate-attestation job runs only on push and only reports the merged
+# tree: it is self-attested defense-in-depth, never trusted. The two jobs
+# have different names on purpose — required branch protection must select
+# the gate-contract context, which a push event can never produce (its job
+# is event-gated out). Do NOT require the attestation context.
+# Residual limit: direct pushes to protected branches bypass PR guards;
+# branch protection with required reviews plus the gate-contract required
+# check is the remaining layer (owner action).
+# Dependence note: the base fetch below runs without stored credentials,
+# which succeeds because this repository is public; a private setting
+# would need an explicit token for that step.
+# Residual acceptance: the head checkout opts out of the v7 pwn-request
+# guard to materialize fork code in pull_request_target; head files are
+# only hashed/parsed (never executed) and the running checker is always
+# base-owned, but the checkout/git machinery itself touches the
+# attacker-controlled tree. No head-code execution path was found.
+# Declared pin updates pass with a notice on purpose (the pins are
+# tamper-evidence for reviewers, not tamper-proof): enforcement-path
+# changes still need owner review, and a green check alone is not
+# sufficient to merge them.
+
+on:
+  pull_request_target:
+    # edited covers base retargets, which otherwise would not re-run the
+    # base-owned checker even though it resolves scripts via base_ref.
+    types: [opened, synchronize, reopened, edited]
+  push:
+    # Self-attested leg: the attestation context must only ever be minted by
+    # main itself, never by a push to any other branch.
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  # Baseline hash of the checker script itself. The checker cannot pin
+  # itself, so the base-owned workflow carries the baseline and passes it as
+  # argv[1]; a same-PR checker change declares its new hash here.
+  PINNED_CHECKER_SHA256: 910106327fb9af30a28b687d2b4f00cc748ed60739294c3228a264fc28a2bba2
+
+jobs:
+  gate-contract:
+    name: Capability Gate Contract
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          # DELIBERATE: the head tree is data only — the scripts that read it
+          # always come from the base revision, so no head code executes.
+          allow-unsafe-pr-checkout: true
+      - name: Run base-owned contract check against the head
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.pull_request.head.sha }}" ]; then
+            rm -rf /tmp/cg-check && mkdir -p /tmp/cg-check
+            git fetch --no-tags --depth 1 origin "${{ github.base_ref }}"
+            git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py | tar -x -C /tmp/cg-check
+            CHECKER=/tmp/cg-check/.github/scripts/capability_gate_contract_check.py
+          else
+            CHECKER=.github/scripts/capability_gate_contract_check.py
+          fi
+          python3 "$CHECKER" "$PINNED_CHECKER_SHA256"
+  gate-attestation:
+    name: Capability Gate Contract Attestation
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Attest merged enforcement pins
+        shell: bash
+        run: python3 .github/scripts/capability_gate_contract_check.py "$PINNED_CHECKER_SHA256"

@@ -2,10 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { shippingQuoteEnvTestMock } from './shipping-quote-env.test-mock';
 
-vi.mock('@/env', async (original) => ({
-  ...(await original<typeof import('@/env')>()),
-  ...shippingQuoteEnvTestMock,
-}));
+type EnvModule = typeof import('@/env');
+
+vi.mock('@/env', async (original) => {
+  const actual = await original<EnvModule>();
+  return { ...actual, ...shippingQuoteEnvTestMock };
+});
 vi.mock('@/lib/shipping', () => ({
   shippingService: { getProviderQuotes: vi.fn(), bookShipment: vi.fn() },
 }));

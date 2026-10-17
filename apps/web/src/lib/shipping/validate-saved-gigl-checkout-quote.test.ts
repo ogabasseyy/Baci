@@ -175,6 +175,27 @@ describe('saved paid GIG quote validation', () => {
     ).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' });
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
   });
+  it.each([
+    { name: 'Different Shop' },
+    { phone: '08000000001' },
+  ])('requires consent before lookup when only the sender contact changed %j', async (changed) => {
+    await expect(
+      validateSavedGiglCheckoutQuote(quote, { ...sender, ...changed }, 1100)
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+  });
+  it('accepts equivalent sender name casing and phone formatting', async () => {
+    expect(
+      await validateSavedGiglCheckoutQuote(
+        quote,
+        { ...sender, name: '  SHOP ', phone: '+234 800 000 0000' },
+        1100
+      )
+    ).toBe(quote);
+  });
   it('requires confirmation for changed origin before requesting any tariff', async () => {
     await expect(
       validateSavedGiglCheckoutQuote(

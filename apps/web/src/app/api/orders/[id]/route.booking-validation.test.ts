@@ -233,6 +233,10 @@ describe('PATCH /api/orders/[id] booking validation failures', () => {
       'GIGL rejected the shipment booking request. Please correct the order details and try again.',
     ],
     [
+      'NO_SHIPPABLE_ITEMS',
+      'All order items have been refunded; there is nothing left to ship.',
+    ],
+    [
       'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
       'Shipping details, service or cost changed. Review and confirm before booking.',
     ],
@@ -283,7 +287,6 @@ describe('PATCH /api/orders/[id] booking validation failures', () => {
       { params: Promise.resolve({ id: 'order-1' }) }
     );
     const payload = await response.json();
-
     expect(response.status).toBe(status);
     expect(payload).toEqual({ error: message, code });
     expect(clearOrderShipmentBookingLock).toHaveBeenCalledWith(

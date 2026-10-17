@@ -40,8 +40,8 @@ const { bookOrderShipment } = await import('./book-order-shipment');
 const { shippingService } = await import('@/lib/shipping');
 
 const quoteSender = {
-  name: 'Ogabassey',
-  phone: '08000000000',
+  name: 'Merchant',
+  phone: '08000000002',
   address: '2 Olaide Tomori Street, Ikeja, 100001',
   city: 'Ikeja',
   state: 'Lagos',
@@ -200,7 +200,7 @@ describe('bookOrderShipment sender selection', () => {
     });
   });
 
-  it('uses the server-resolved merchant sender for a domestic shipment', async () => {
+  it('uses the server-resolved sender when saved sender contacts match', async () => {
     await bookOrderShipment(createSupabase(), 'merchant-1', 'order-1');
 
     expect(shippingService.bookShipment).toHaveBeenCalledWith(

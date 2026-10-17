@@ -1,3 +1,4 @@
+import { normalizePhoneToE164 } from '@baci/shared/lib';
 import { shippingService } from '@/lib/shipping';
 import { normalizeReceiverMatchText } from './international-quote-receiver-match';
 import { matchesGiglProviderRate } from './matches-gigl-provider-rate';
@@ -60,6 +61,11 @@ export async function validateSavedGiglCheckoutQuote(
     !request.sender ||
     !sender ||
     domesticSendersDiffer(request.sender, sender) ||
+    normalizeReceiverMatchText(request.sender.name) !==
+      normalizeReceiverMatchText(sender.name) ||
+    normalizePhoneToE164(request.sender.phone) === null ||
+    normalizePhoneToE164(request.sender.phone) !==
+      normalizePhoneToE164(sender.phone) ||
     normalizeReceiverMatchText(request.sender.address) !==
       normalizeReceiverMatchText(sender.address) ||
     normalizeReceiverMatchText(request.sender.postalCode) !==

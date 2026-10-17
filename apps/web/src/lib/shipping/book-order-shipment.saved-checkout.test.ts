@@ -109,6 +109,22 @@ describe('saved GIG checkout booking integration', () => {
     expect(shippingService.bookShipment).not.toHaveBeenCalled();
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
   });
+  it.each([
+    { business_name: 'Different store' },
+    { phone: '08000000002' },
+  ])('does not check prices or submit a booking when only current sender contact changes %j', async (change) => {
+    const client = await fixture();
+    const merchant = await client.from('merchants').select().single();
+    Object.assign(merchant.data, change);
+    await expect(
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
   it('returns a definitive pre-booking error if background checking fails', async () => {
     const client = await fixture();
     vi.mocked(shippingService.getProviderQuotes).mockRejectedValue(

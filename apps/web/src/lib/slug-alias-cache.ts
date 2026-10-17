@@ -107,106 +107,181 @@ export async function getCurrentSlugForAlias(
   return currentSlug;
 }
 
-async function resolveAliasMapping(oldSlug: string): Promise<string | null> {
-  const cached = aliasMappingCache.get(oldSlug);
-  if (cached) {
-    const ttl = cached.currentSlug === null ? NEGATIVE_TTL : POSITIVE_TTL;
-    if (Date.now() - cached.timestamp < ttl) {
-      return cached.currentSlug;
+/**
+ * Strict variant for API routes that must distinguish "no alias"
+ * (null) from "alias lookup failed" (throws). The proxy-facing
+ * default stays null-on-error — a failed lookup must not 500 the
+ * storefront — but routes map the throw to a retryable 5xx so a
+ * transient alias-DB blip doesn't present as a permanent 404 (which
+ * polling clients treat as terminal and never retry).
+ */
+export async function getCurrentSlugForAliasStrict(
+  oldSlug: string
+): Promise<string | null> {
+  const currentSlug = await resolveAliasMapping(oldSlug, true);
+  if (!currentSlug) {
+    return null;
+  }
+
+  if (await isSlugLive(oldSlug, true)) {
+    return null;
+  }
+
+  return currentSlug;
+}
+
+async function resolveAliasMapping(
+  oldSlug: string,
+  strict = false
+): Promise<string | null> {
+  // Strict callers bypass the cache read: a cached negative may have
+  // been produced by a failed LENIENT lookup (indistinguishable from
+  // a genuine miss), and trusting it would collapse a transient
+  // outage into a permanent 404/400 downstream. Strict paths only run
+  // on merchant misses, so the extra fetch is rare; the genuine
+  // result is still written back for lenient callers below.
+  if (!strict) {
+    const cached = aliasMappingCache.get(oldSlug);
+    if (cached) {
+      const ttl = cached.currentSlug === null ? NEGATIVE_TTL : POSITIVE_TTL;
+      if (Date.now() - cached.timestamp < ttl) {
+        return cached.currentSlug;
+      }
     }
   }
 
-  const currentSlug = await fetchAliasMapping(oldSlug);
+  // Strict failures throw before reaching the cache write, so a
+  // transient blip is never cached as a negative.
+  const currentSlug = await fetchAliasMapping(oldSlug, strict);
   evictIfFull(aliasMappingCache);
   aliasMappingCache.set(oldSlug, { currentSlug, timestamp: Date.now() });
   return currentSlug;
 }
 
-async function fetchAliasMapping(oldSlug: string): Promise<string | null> {
+async function fetchAliasMapping(
+  oldSlug: string,
+  strict = false
+): Promise<string | null> {
+  let result: { data: unknown; error: unknown };
   try {
     const supabase = createAnonClient();
 
-    const { data: alias, error } = await supabase
+    result = await supabase
       .from('merchant_slug_aliases')
       .select('merchants!inner(slug)')
       .eq('old_slug', oldSlug)
       .limit(1)
       .maybeSingle();
-
-    if (error) {
-      console.error('[Slug Alias Cache] Failed to resolve alias', {
-        oldSlug,
-        error,
-      });
-      return null;
-    }
-
-    if (!alias) {
-      return null;
-    }
-
-    const currentSlug =
-      (alias.merchants as unknown as { slug: string }).slug ?? null;
-
-    // Self-reference guard (NOT liveness): an alias row whose merchant still
-    // carries the same slug is a no-op and must never produce a redirect.
-    if (!currentSlug || currentSlug === oldSlug) {
-      return null;
-    }
-
-    return currentSlug;
   } catch (err) {
     console.error('[Slug Alias Cache] Error resolving alias', {
       oldSlug,
       error: err,
     });
+    if (strict) {
+      throw err;
+    }
     return null;
   }
-}
 
-async function isSlugLive(slug: string): Promise<boolean> {
-  const cached = livenessCache.get(slug);
-  if (cached && Date.now() - cached.timestamp < LIVENESS_TTL) {
-    return cached.isLive;
+  // Strict throws stay outside the try so the catch above doesn't log
+  // them a second time.
+  if (result.error) {
+    return handleAliasMappingError(oldSlug, result.error, strict);
   }
 
-  const isLive = await fetchSlugIsLive(slug);
+  const alias = result.data as { merchants: unknown } | null;
+  if (!alias) {
+    return null;
+  }
+
+  const currentSlug =
+    (alias.merchants as unknown as { slug: string }).slug ?? null;
+
+  // Self-reference guard (NOT liveness): an alias row whose merchant still
+  // carries the same slug is a no-op and must never produce a redirect.
+  if (!currentSlug || currentSlug === oldSlug) {
+    return null;
+  }
+
+  return currentSlug;
+}
+
+function handleAliasMappingError(
+  oldSlug: string,
+  error: unknown,
+  strict: boolean
+): null {
+  console.error('[Slug Alias Cache] Failed to resolve alias', {
+    oldSlug,
+    error,
+  });
+  if (strict) {
+    throw new Error(
+      `[Slug Alias Cache] alias lookup failed for slug: ${oldSlug}`
+    );
+  }
+  return null;
+}
+
+async function isSlugLive(slug: string, strict = false): Promise<boolean> {
+  // Strict callers bypass the cache read (same failure-negative
+  // reasoning as resolveAliasMapping: a cached live=true may be a
+  // fail-safe from a failed lenient liveness check).
+  if (!strict) {
+    const cached = livenessCache.get(slug);
+    if (cached && Date.now() - cached.timestamp < LIVENESS_TTL) {
+      return cached.isLive;
+    }
+  }
+
+  const isLive = await fetchSlugIsLive(slug, strict);
   evictIfFull(livenessCache);
   livenessCache.set(slug, { isLive, timestamp: Date.now() });
   return isLive;
 }
 
-async function fetchSlugIsLive(slug: string): Promise<boolean> {
+async function fetchSlugIsLive(slug: string, strict = false): Promise<boolean> {
+  let result: { data: unknown; error: unknown };
   try {
     const supabase = createAnonClient();
 
-    const { data, error } = await supabase
+    result = await supabase
       .from('merchants')
       .select('id')
       .eq('slug', slug)
       .limit(1)
       .maybeSingle();
-
-    if (error) {
-      // Fail safe: if we can't confirm the slug is free, treat it as LIVE so we
-      // do NOT 301 away from a store that may still be live under this slug. A
-      // straggler 404 on the retired URL is far less harmful than redirecting a
-      // live store's traffic away.
-      console.error('[Slug Alias Cache] Failed liveness check', {
-        slug,
-        error,
-      });
-      return true;
-    }
-
-    return Boolean(data);
   } catch (err) {
     console.error('[Slug Alias Cache] Error in liveness check', {
       slug,
       error: err,
     });
+    if (strict) {
+      throw err;
+    }
     return true;
   }
+
+  if (result.error) {
+    // Fail safe: if we can't confirm the slug is free, treat it as LIVE so we
+    // do NOT 301 away from a store that may still be live under this slug. A
+    // straggler 404 on the retired URL is far less harmful than redirecting a
+    // live store's traffic away. Strict callers throw instead: with a known
+    // alias mapping, unknown liveness is indeterminate (retryable), not live.
+    // The throw stays outside the try so the catch above doesn't double-log.
+    console.error('[Slug Alias Cache] Failed liveness check', {
+      slug,
+      error: result.error,
+    });
+    if (strict) {
+      throw new Error(
+        `[Slug Alias Cache] liveness lookup failed for slug: ${slug}`
+      );
+    }
+    return true;
+  }
+
+  return Boolean(result.data);
 }
 
 // Simple FIFO eviction, matching domain-cache-simple.ts.

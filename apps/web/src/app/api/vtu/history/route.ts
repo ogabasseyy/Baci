@@ -1,9 +1,15 @@
 import { after, type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { hasRecentBackfillSchedule } from '@/lib/vtu-backfill-pacing';
+import { resolveHistoryMerchantCustomer } from '@/lib/vtu-history-customer-resolution';
+import {
+  getPaymentStatusKey,
+  projectHistoryTransaction,
+} from '@/lib/vtu-history-transaction-projection';
 import {
   extractMetadataField,
-  hasRecentBackfillSchedule,
+  isReferenceLessProcessingTransaction,
   isString,
   MAX_TOKEN_BACKFILL_SCHEDULES,
   normalizeMetadata,
@@ -14,57 +20,6 @@ import {
 import { historyQuerySchema } from '@/schemas/vtu';
 
 const PAYMENT_STATUS_BATCH_SIZE = 250;
-
-type PaymentGateway = 'paystack' | 'korapay';
-
-function isPaymentGateway(value: unknown): value is PaymentGateway {
-  return value === 'paystack' || value === 'korapay';
-}
-
-function getPaymentStatusKey(gateway: string, reference: string): string {
-  return `${gateway}:${reference}`;
-}
-
-function parseHistoryNumber({
-  field,
-  invalidMessage,
-  transactionId,
-  value,
-}: {
-  field: string;
-  invalidMessage: string;
-  transactionId: unknown;
-  value: unknown;
-}) {
-  const amount = Number(value);
-  if (Number.isFinite(amount)) {
-    return amount;
-  }
-
-  console.error(invalidMessage, {
-    [field]: value,
-    transactionId,
-  });
-  return 0;
-}
-
-function parseHistoryAmount(value: unknown, transactionId: unknown) {
-  return parseHistoryNumber({
-    field: 'amount',
-    invalidMessage: 'Invalid VTU transaction amount in history response:',
-    transactionId,
-    value,
-  });
-}
-
-function parseHistoryCashback(value: unknown, transactionId: unknown) {
-  return parseHistoryNumber({
-    field: 'customerCashback',
-    invalidMessage: 'Invalid VTU customer cashback amount in history response:',
-    transactionId,
-    value,
-  });
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -81,6 +36,7 @@ export async function GET(request: NextRequest) {
       merchantSlug: searchParams.get('merchantSlug'),
       type: searchParams.get('type') ?? undefined,
       limit: searchParams.get('limit') ?? undefined,
+      reference: searchParams.get('reference') ?? undefined,
     });
 
     if (!parsed.success) {
@@ -91,61 +47,50 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = createAdminClient();
-    const { merchantSlug, type, limit } = parsed.data;
+    const { merchantSlug, type, limit, reference } = parsed.data;
 
-    const { data: merchant, error: merchantError } = await supabase
-      .from('merchants')
-      .select('id')
-      .eq('slug', merchantSlug)
-      .single();
-
-    if (merchantError || !merchant) {
+    const resolution = await resolveHistoryMerchantCustomer({
+      supabase,
+      merchantSlug,
+      user: auth.user,
+    });
+    if (
+      resolution.kind === 'merchantError' ||
+      resolution.kind === 'customerError'
+    ) {
+      return NextResponse.json(
+        { error: 'Failed to fetch history' },
+        { status: 500 }
+      );
+    }
+    if (resolution.kind === 'noMerchant') {
       return NextResponse.json(
         { error: 'Merchant not found' },
         { status: 404 }
       );
     }
-
-    let customer = null;
-
-    const { data: customerByUserId } = await supabase
-      .from('customers')
-      .select('id, user_id')
-      .eq('merchant_id', merchant.id)
-      .eq('user_id', auth.user.id)
-      .maybeSingle();
-
-    if (customerByUserId) {
-      customer = customerByUserId;
-    } else if (auth.user.email) {
-      // Keep this GET read-only. VTU checkout resolves and links email-matched
-      // customers through resolveVtuCustomer before creating payment rows.
-      const { data: customerByEmail } = await supabase
-        .from('customers')
-        .select('id, user_id')
-        .eq('merchant_id', merchant.id)
-        .eq('email', auth.user.email)
-        .maybeSingle();
-
-      if (customerByEmail) {
-        customer = customerByEmail;
-      }
-    }
-
-    if (!customer) {
+    if (resolution.kind === 'noCustomer') {
       return NextResponse.json({ transactions: [] });
     }
+    const { customerId, merchantId } = resolution;
 
     let query = supabase
       .from('vtu_transactions')
       .select(
-        'id, created_at, type, status, amount, network_provider, phone_number, biller_name, biller_item_code, customer_identifier, customer_name, request_reference, transaction_id, error_message, customer_cashback, metadata'
+        'id, created_at, type, status, amount, network_provider, phone_number, biller_name, biller_item_code, customer_identifier, customer_name, request_reference, transaction_id, error_message, customer_cashback, metadata, source, customer_id'
       )
-      .eq('merchant_id', merchant.id)
-      .eq('customer_id', customer.id);
+      .eq('merchant_id', merchantId)
+      .eq('customer_id', customerId);
 
     if (type) {
       query = query.eq('type', type);
+    }
+
+    // Reference scope (backfills): exact match so the target row is
+    // returned no matter how many newer rows of the type exist. The
+    // customer_id filter above keeps this to the caller's own rows.
+    if (reference) {
+      query = query.eq('request_reference', reference);
     }
 
     const { data: transactions, error: transactionsError } = await query
@@ -188,7 +133,7 @@ export async function GET(request: NextRequest) {
         const { data: paymentRows, error: paymentRowsError } = await supabase
           .from('transactions')
           .select('gateway, gateway_reference, status')
-          .eq('merchant_id', merchant.id)
+          .eq('merchant_id', merchantId)
           .in('gateway_reference', paymentReferenceBatch);
 
         if (paymentRowsError) {
@@ -241,11 +186,25 @@ export async function GET(request: NextRequest) {
         break;
       }
 
+      // Owned-rows-only (Muse R138): the query above already filters
+      // by customer_id, but fulfillment must never depend on a
+      // filter alone — skip any row that is not the resolved
+      // caller's, so a future query refactor cannot turn history
+      // polling into cross-customer fulfillment.
+      if (candidate.transaction.customer_id !== customerId) {
+        continue;
+      }
+
       if (
         candidate.voucherPin !== null ||
         !shouldBackfillForStatus(candidate.transaction.status) ||
         !shouldBackfillForType(candidate.transaction.type) ||
-        hasRecentBackfillSchedule(candidate.metadata)
+        hasRecentBackfillSchedule(candidate.metadata) ||
+        // Pre-filter BEFORE the 3-slot budget: reference-less rows
+        // would be rejected downstream anyway, and letting them
+        // consume slots starves eligible rows behind them forever
+        // (Codex R43 rnTRj).
+        isReferenceLessProcessingTransaction(candidate.transaction)
       ) {
         continue;
       }
@@ -254,11 +213,17 @@ export async function GET(request: NextRequest) {
     }
 
     if (tokenBackfillCandidates.length > 0) {
+      // Single after() layer (Muse R151 M1): the mark AND the provider
+      // poll both run inside this callback — schedule is asked not to
+      // register its own after (deferPoll: false), so nothing nests.
+      // Marks stay post-response (the GET never waits for them) and
+      // failures are logged here, never failing the response.
       after(async () => {
         try {
           const tokenBackfillResults = await Promise.allSettled(
             tokenBackfillCandidates.map((candidate) =>
               scheduleVoucherPinBackfill({
+                deferPoll: false,
                 metadata: candidate.metadata,
                 originalMetadata: candidate.originalMetadata,
                 supabase,
@@ -289,64 +254,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       transactions: transactionsWithVoucherPins.map(
-        ({ transaction, voucherPin }) => {
-          const {
-            metadata: transactionMetadata,
-            transaction_id: _transactionId,
-            ...publicTransaction
-          } = transaction;
-          const dataPlanCode = extractMetadataField(
-            transactionMetadata,
-            'dataPlanCode',
-            isString
-          );
-          // Delivered units (e.g. prepaid electricity kWh) and the meter/
-          // customer address, surfaced so the receipt can render them.
-          const units = extractMetadataField(
-            transactionMetadata,
-            'units',
-            isString
-          );
-          const address = extractMetadataField(
-            transactionMetadata,
-            'address',
-            isString
-          );
-          const paymentGateway = extractMetadataField(
-            transactionMetadata,
-            'gateway',
-            isPaymentGateway
-          );
-          const paymentReference = extractMetadataField(
-            transactionMetadata,
-            'paymentReference',
-            isString
-          );
-
-          return {
-            ...publicTransaction,
-            amount: parseHistoryAmount(transaction.amount, transaction.id),
-            customer_cashback:
-              transaction.customer_cashback != null
-                ? parseHistoryCashback(
-                    transaction.customer_cashback,
-                    transaction.id
-                  )
-                : null,
-            payment_gateway: paymentGateway,
-            payment_reference: paymentReference,
-            payment_status:
-              paymentGateway && paymentReference
-                ? (paymentStatusByReference.get(
-                    getPaymentStatusKey(paymentGateway, paymentReference)
-                  ) ?? null)
-                : null,
-            repeat_data_plan_code: dataPlanCode,
-            voucher_pin: voucherPin,
-            units,
-            address,
-          };
-        }
+        ({ transaction, voucherPin }) =>
+          projectHistoryTransaction({
+            paymentStatusByReference,
+            transaction,
+            voucherPin,
+          })
       ),
     });
   } catch (error) {

@@ -22,20 +22,14 @@ export function sanitizeAirtimeAmountInput(value: string): string {
 
 export function validateAirtimePurchaseInput({
   amount,
-  isWalletOnly,
   numericAmount,
   phoneNumber,
-  selectedGateway,
   selectedProvider,
-  selectedSavedCardId,
 }: {
   amount: string;
-  isWalletOnly: boolean;
   numericAmount: number;
   phoneNumber: string;
-  selectedGateway: string | null | undefined;
   selectedProvider: string | null;
-  selectedSavedCardId: string | null | undefined;
 }): { message: string; title: string } | null {
   if (!selectedProvider || !phoneNumber || !amount) {
     return {
@@ -51,13 +45,6 @@ export function validateAirtimePurchaseInput({
     return {
       title: 'Invalid Amount',
       message: 'Amount must be between ₦50 and ₦50,000.',
-    };
-  }
-
-  if (!isWalletOnly && !selectedSavedCardId && !selectedGateway) {
-    return {
-      title: 'Select Payment Method',
-      message: 'Choose a payment method before continuing.',
     };
   }
 
@@ -79,30 +66,6 @@ export function getAirtimeCustomerName(
     customer?.email ||
     'Customer'
   );
-}
-
-export function buildAirtimeGatewayParams({
-  amount,
-  authorizationUrl,
-  customerIdentifier,
-  gateway,
-  reference,
-}: {
-  amount: number;
-  authorizationUrl: string;
-  customerIdentifier: string;
-  gateway: string;
-  reference: string;
-}) {
-  return {
-    amount: String(amount),
-    authorizationUrl,
-    customerIdentifier,
-    gateway,
-    paymentKind: 'vtu',
-    reference,
-    utilityType: 'airtime' as const,
-  };
 }
 
 export function scrollToAirtimePaymentSection({

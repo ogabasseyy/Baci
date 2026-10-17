@@ -3,19 +3,21 @@
 import { useState } from 'react';
 import { useOptionalCustomerAuth } from '@/contexts/customer-auth-context';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
-import { captureClientEvent } from '@/lib/posthog/capture-client-event';
 import { WALLET_FUNDING_TELEMETRY } from '@/lib/posthog/wallet-funding-events';
 import { useWallet } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-wallet';
 import { useCustomerFormReset } from './use-customer-form-reset';
+import { useUtilityModalFormSeeding } from './use-utility-modal-seeding';
+import { useUtilityFundingPanel } from './use-utility-funding-panel';
 import { useUtilityPendingIntent } from './use-utility-pending-intent';
 import { useUtilityPurchase } from './use-utility-purchase';
+import { useUtilityRetainedSettlement } from './use-utility-retained-settlement';
 import { AirtimeDataForm } from './utility/AirtimeDataForm';
 import { BillPaymentForm } from './utility/BillPaymentForm';
 import { UtilityPaymentMethodSelector } from './UtilityPaymentMethodSelector';
+import { createSelectWalletHandler } from './utility-wallet-selection';
 import { UtilityWalletFundingPanel } from './UtilityWalletFundingPanel';
 import { UtilitySuccessView } from './UtilitySuccessView';
 import { UtilityTabs, type UtilityTabId } from './UtilityTabs';
-import type { UtilityPaymentMethod } from './utility-types';
 
 interface UtilityModalProps {
   isOpen: boolean;
@@ -39,14 +41,19 @@ export const UtilityModal = ({
   const user = auth?.user ?? null;
   const {
     fundingAccount,
-    payWithWallet,
+    getWalletBalance,
+    getWalletError,
+    isWalletRefreshPending,
+    isWalletInitialReadPending,
     refreshWallet,
     requiresFundingAccountConsent,
     setFundingAccount,
     setPayWithWallet,
     setWalletBalance,
+    payWithWallet,
     walletBalance,
     walletDvaEnabled,
+    walletError,
     walletLoading,
     walletTransactions,
   } = useWallet({
@@ -57,114 +64,90 @@ export const UtilityModal = ({
   const { clearIntent, intent, saveIntent } = useUtilityPendingIntent(
     customer?.id
   );
-  const [showFundingPanel, setShowFundingPanel] = useState(false);
   const canUseWallet = isAuthenticated && walletBalance > 0;
-  // The DVA is the customer's wallet funding account. Offer the action when
-  // the merchant supports DVAs and the wallet API says either an account
-  // exists or account creation is available; the panel collects a missing
-  // phone at the point of need instead of hiding the action.
-  const canFundByBankTransfer =
-    isAuthenticated &&
-    walletDvaEnabled &&
-    (Boolean(fundingAccount) || requiresFundingAccountConsent);
-  const selectedPaymentMethod: UtilityPaymentMethod =
-    canUseWallet && payWithWallet ? 'wallet' : 'card';
-
+  const {
+    canFundByBankTransfer,
+    closeFundingPanel,
+    fundingPanelAutoCreate,
+    openForInsufficientBalance,
+    showFundingPanel,
+    toggleFromExplicitChoice,
+  } = useUtilityFundingPanel({
+    fundingAccount,
+    isAuthenticated,
+    merchantSlug: merchant?.slug,
+    requiresFundingAccountConsent,
+    userId: user?.id,
+    walletDvaEnabled,
+  });
   const {
     handleAirtimeDataSubmit,
     handleBillSubmit,
     loading,
     setStep,
+    settleBackfilledAttempt,
     step,
+    submitting,
     successAmount,
     transactionRef,
+    transactionVoucherPin,
   } = useUtilityPurchase({
     activeTab,
+    canFundByBankTransfer,
     clearIntent,
     customer,
     isAuthLoading,
     isAuthenticated,
+    merchantId: merchant?.id,
     merchantSlug: merchant?.slug,
-    selectedPaymentMethod,
+    onInsufficientWalletBalance: openForInsufficientBalance,
+    isWalletRefreshPending,
+    isWalletInitialReadPending,
+    getWalletBalance,
+    getWalletError,
+    refreshWallet,
     setWalletBalance,
     user,
-    walletBalance,
+    walletLoading,
   });
 
-  // Stable identity of the owned resume draft; null when nothing to resume.
-  const intentKey = intent
-    ? `${intent.tab}|${intent.amount}|${intent.phoneNumber}|${intent.networkProvider ?? ''}`
-    : null;
-
-  // Render-time prev-prop comparison (no stale-frame effect round-trip) that
-  // seeds the form. `prevIsOpen` inits `false` so the seed also runs when the
-  // modal is rendered already-open (reload / backgrounded-tab eviction — the
-  // case the resume feature exists for).
-  const [prevIsOpen, setPrevIsOpen] = useState(false);
-  const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
-  // Owned intent already applied to the form; also part of the form remount key.
-  const [appliedIntentKey, setAppliedIntentKey] = useState<string | null>(null);
   // `customer.id` changes on auth hydration (undefined -> defined) AND on an
   // account switch (defined -> defined on the same shared tab). Either re-seeds
-  // from the NEW customer's owned intent (below); a switch also bumps
+  // from the NEW customer's owned intent; a switch also bumps
   // `customerEpoch`, which both forms key on so neither carries the previous
   // customer's local draft. A keystroke does NOT change `customer.id`, so
   // reseeds never remount mid-typing (which would drop input focus).
+  // Settle retained idempotency entries whose rows reached terminality
+  // after the backfill stopped polling, before the customer can repeat
+  // (Codex R57 6rseWu). No-op without retained references.
+  useUtilityRetainedSettlement({
+    enabled: isOpen,
+    merchantSlug: merchant?.slug,
+    // Same pair the idempotency scope hashed (Codex R62 6rtokd).
+    scopeMerchantId: merchant?.id,
+    scopeOwnerId: user?.id ?? customer?.id,
+    userId: user?.id,
+  });
+
   const customerId = customer?.id;
   const { customerChanged, customerEpoch } = useCustomerFormReset(customerId);
-  if (isOpen !== prevIsOpen || initialTab !== prevInitialTab) {
-    setPrevIsOpen(isOpen);
-    setPrevInitialTab(initialTab);
-    if (isOpen) {
-      // Land on the tab holding the resumed draft so a `data` draft is not
-      // stranded on the default `airtime` tab. `intentKey` may be null until
-      // auth hydrates — the customer-change branch below reseeds then.
-      setActiveTab(intent?.tab ?? initialTab);
-      setStep('details');
-      // Collapse the funding panel so reopening never re-triggers DVA
-      // auto-create without a fresh "Pay with Bank Transfer" tap.
-      setShowFundingPanel(false);
-      setAppliedIntentKey(intentKey);
-    } else {
-      // Re-arm seeding for the next open.
-      setAppliedIntentKey(null);
-    }
-  } else if (isOpen && customerChanged) {
-    // Signed-in customer changed while the modal stayed open (auth hydrating,
-    // or an account switch). Re-seed for them and remount AirtimeDataForm (its
-    // key includes `customerId`): the previous customer's typed phone/amount
-    // lives in the form's LOCAL state — which no prop clears without a remount
-    // — and must never surface to the next customer.
-    setActiveTab(intent?.tab ?? initialTab);
-    setStep('details');
-    setAppliedIntentKey(intentKey);
-  }
+  const { appliedIntentKey } = useUtilityModalFormSeeding({
+    closeFundingPanel,
+    customerChanged,
+    initialTab,
+    intent,
+    isOpen,
+    setActiveTab,
+    setStep,
+  });
 
-  // Collapse the funding panel if the signed-in customer OR the storefront
-  // merchant changes while the modal stays mounted — a previous session's
-  // open bank-transfer panel (with its DVA account number) must not carry
-  // over to a different customer or merchant.
-  const fundingIdentity = `${user?.id ?? ''}:${merchant?.slug ?? ''}`;
-  const [prevFundingIdentity, setPrevFundingIdentity] =
-    useState(fundingIdentity);
-  if (fundingIdentity !== prevFundingIdentity) {
-    setPrevFundingIdentity(fundingIdentity);
-    setShowFundingPanel(false);
-  }
-
-  const handleSelectPaymentMethod = (method: UtilityPaymentMethod) => {
-    captureClientEvent(
-      WALLET_FUNDING_TELEMETRY.events.paymentMethodSelected,
-      {
-        method,
-        wallet_balance: walletBalance,
-        can_use_wallet: canUseWallet,
-        merchant_slug: merchant?.slug,
-        customer_id: customer?.id,
-      }
-    );
-    setPayWithWallet(method === 'wallet');
-  };
+  const handleSelectWallet = createSelectWalletHandler({
+    canUseWallet,
+    customerId: customer?.id,
+    merchantSlug: merchant?.slug,
+    setPayWithWallet,
+    walletBalance,
+  });
 
   const handleClose = () => {
     // A deliberate close abandons the draft: drop the persisted resume snapshot
@@ -205,41 +188,45 @@ export const UtilityModal = ({
 
         <UtilityTabs
           activeTab={activeTab}
+          // Lock tabs in flight AND on the result views: loading flips
+          // false while step is still 'processing', and a switch there
+          // unmounts the settlement poll (key never settles, wallet never
+          // refetches, late token/refund never surfaces). `submitting`
+          // covers the pre-loading settle await, when loading is still
+          // false but the original tab's charge is already committed.
+          disabled={loading || submitting || step !== 'details'}
           onSelect={(tab) => {
+            // Belt-and-braces with `disabled` (native disabled is not
+            // enforced on programmatic/assisted activation paths): a
+            // switch off the result views must never unmount the poll.
+            if (step !== 'details' || submitting) {
+              return;
+            }
             setActiveTab(tab);
             setStep('details');
           }}
         />
 
         <div className="p-6">
-          {step === 'success' ? (
-            <UtilitySuccessView
-              activeTab={activeTab}
-              amount={successAmount}
-              onClose={handleClose}
-              reference={transactionRef}
-            />
-          ) : (
+          {step === 'details' ? (
             <>
               <UtilityPaymentMethodSelector
                 canUseWallet={canUseWallet}
                 isLoading={loading}
                 onFundWallet={
-                  canFundByBankTransfer
-                    ? () => setShowFundingPanel((visible) => !visible)
-                    : undefined
+                  canFundByBankTransfer ? toggleFromExplicitChoice : undefined
                 }
-                onSelectCard={() => handleSelectPaymentMethod('card')}
-                onSelectWallet={() => handleSelectPaymentMethod('wallet')}
-                selectedPaymentMethod={selectedPaymentMethod}
+                onSelectWallet={handleSelectWallet}
                 showWalletRow={isAuthenticated}
                 walletBalance={walletBalance}
+                walletError={walletError}
                 walletLoading={walletLoading}
+                walletSelected={payWithWallet}
               />
               {showFundingPanel && canFundByBankTransfer ? (
                 <UtilityWalletFundingPanel
                   account={fundingAccount}
-                  autoCreate
+                  autoCreate={fundingPanelAutoCreate}
                   customerId={customer?.id}
                   customerFirstName={customer?.first_name ?? null}
                   customerLastName={customer?.last_name ?? null}
@@ -250,7 +237,7 @@ export const UtilityModal = ({
                   onReturnToPurchase={() => {
                     // Prefill-only resume: collapse the funding panel and
                     // preselect the wallet. The customer still presses Pay.
-                    setShowFundingPanel(false);
+                    closeFundingPanel();
                     setPayWithWallet(true);
                   }}
                   requiresConsent={requiresFundingAccountConsent}
@@ -292,6 +279,17 @@ export const UtilityModal = ({
                 />
               )}
             </>
+          ) : (
+            <UtilitySuccessView
+              activeTab={activeTab}
+              amount={successAmount}
+              merchantSlug={merchant?.slug}
+              onClose={handleClose}
+              onSettled={settleBackfilledAttempt}
+              processing={step === 'processing'}
+              reference={transactionRef}
+              voucherPin={transactionVoucherPin}
+            />
           )}
         </div>
       </div>

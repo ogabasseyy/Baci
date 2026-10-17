@@ -1,18 +1,15 @@
 import {
   ConfirmCheckoutResponseSchema,
-  InitCheckoutResponseSchema,
+  WalletOnlyVtuResponseSchema,
 } from './vtu-checkout-response-schemas';
 
 describe('vtu checkout response schemas', () => {
-  it('parses initialize checkout success responses', () => {
+  it('parses wallet-only checkout success responses', () => {
     expect(
-      InitCheckoutResponseSchema.parse({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/abc',
-        gateway: 'paystack',
+      WalletOnlyVtuResponseSchema.parse({
+        status: 'successful',
         reference: 'VTU-123',
-        vtu_reference: 'REQ-123',
-        vtu_transaction_id: 'vtu-1',
+        amount: 1000,
       })
     ).toMatchObject({ reference: 'VTU-123' });
   });

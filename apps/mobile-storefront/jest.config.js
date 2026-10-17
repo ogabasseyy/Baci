@@ -32,7 +32,7 @@ const config = {
   // jest-expo 57.0.2 loads TypeScript sources from Expo packages nested under
   // its own pnpm node_modules tree, so that nested Expo subtree must be compiled.
   transformIgnorePatterns: [
-    'node_modules/(?!(\\.pnpm|jest-expo/node_modules/(expo(nent)?|@expo(nent)?/.*)|((jest-)?react-native|@react-native(-community)?|@react-native-vector-icons/.*)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@shopify/flash-list|@supabase/.*|react-native-worklets|zustand|nativewind))',
+    'node_modules/(?!(\\.pnpm|jest-expo/node_modules/(expo(nent)?|@expo(nent)?/.*)|((jest-)?react-native|@react-native(-community)?|@react-native-vector-icons/.*)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@shopify/flash-list|@supabase/.*|react-native-worklets|zustand|nativewind|@noble/hashes))',
   ],
   // setupFiles runs before the jest-expo preset setup (before test code scope)
   setupFiles: ['<rootDir>/__mocks__/expo-winter-setup.js'],

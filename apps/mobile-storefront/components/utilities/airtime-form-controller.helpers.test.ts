@@ -1,5 +1,4 @@
 import {
-  buildAirtimeGatewayParams,
   getAirtimeCustomerName,
   resolveAirtimeProvider,
   sanitizeAirtimeAmountInput,
@@ -23,12 +22,9 @@ describe('airtime-form-controller.helpers', () => {
     expect(
       validateAirtimePurchaseInput({
         amount: '',
-        isWalletOnly: false,
         numericAmount: 0,
         phoneNumber: '',
-        selectedGateway: null,
         selectedProvider: null,
-        selectedSavedCardId: null,
       })
     ).toEqual({
       title: 'Missing Information',
@@ -38,42 +34,22 @@ describe('airtime-form-controller.helpers', () => {
     expect(
       validateAirtimePurchaseInput({
         amount: '40',
-        isWalletOnly: false,
         numericAmount: 40,
         phoneNumber: '08031234567',
-        selectedGateway: 'paystack',
         selectedProvider: 'mtn',
-        selectedSavedCardId: null,
       })
     ).toEqual({
       title: 'Invalid Amount',
       message: 'Amount must be between ₦50 and ₦50,000.',
     });
 
+    // Wallet is the only payment method: a complete form always validates.
     expect(
       validateAirtimePurchaseInput({
         amount: '500',
-        isWalletOnly: false,
         numericAmount: 500,
         phoneNumber: '08031234567',
-        selectedGateway: null,
         selectedProvider: 'mtn',
-        selectedSavedCardId: null,
-      })
-    ).toEqual({
-      title: 'Select Payment Method',
-      message: 'Choose a payment method before continuing.',
-    });
-
-    expect(
-      validateAirtimePurchaseInput({
-        amount: '500',
-        isWalletOnly: true,
-        numericAmount: 500,
-        phoneNumber: '08031234567',
-        selectedGateway: null,
-        selectedProvider: 'mtn',
-        selectedSavedCardId: null,
       })
     ).toBeNull();
   });
@@ -90,25 +66,5 @@ describe('airtime-form-controller.helpers', () => {
       'jane@example.com'
     );
     expect(getAirtimeCustomerName(null)).toBe('Customer');
-  });
-
-  it('builds payment-gateway params for airtime checkout', () => {
-    expect(
-      buildAirtimeGatewayParams({
-        amount: 2500,
-        authorizationUrl: 'https://pay.example/authorize',
-        customerIdentifier: '08031234567',
-        gateway: 'paystack',
-        reference: 'REF123',
-      })
-    ).toEqual({
-      amount: '2500',
-      authorizationUrl: 'https://pay.example/authorize',
-      customerIdentifier: '08031234567',
-      gateway: 'paystack',
-      paymentKind: 'vtu',
-      reference: 'REF123',
-      utilityType: 'airtime',
-    });
   });
 });

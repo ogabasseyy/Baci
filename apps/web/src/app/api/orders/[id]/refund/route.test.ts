@@ -107,6 +107,10 @@ describe('order refund route', () => {
     expect(await response.json()).toEqual({
       status: 'requires_review',
       error: 'The refund ran into a problem. Support has the details.',
+      eventsTruncated: false,
+      history: [],
+      historyTruncated: false,
+      legs: [],
       needsPaystackCheck: true,
       events,
     });

@@ -50,6 +50,11 @@ describe('order refund route', () => {
     expect(await response.json()).toEqual({
       status: 'failed',
       error: 'The refund ran into a problem. Support has the details.',
+      events: [],
+      eventsTruncated: false,
+      history: [],
+      historyTruncated: false,
+      legs: [],
       needsPaystackCheck: false,
     });
   });
@@ -117,6 +122,9 @@ describe('order refund route', () => {
           status: 'completed',
         },
       ],
+      eventsTruncated: false,
+      historyTruncated: false,
+      legs: [],
       needsPaystackCheck: false,
       status: 'failed',
     });
@@ -135,6 +143,11 @@ describe('order refund route', () => {
     expect(await response.json()).toEqual({
       status: 'failed',
       error: null,
+      events: [],
+      eventsTruncated: false,
+      history: [],
+      historyTruncated: false,
+      legs: [],
       needsPaystackCheck: false,
     });
   });

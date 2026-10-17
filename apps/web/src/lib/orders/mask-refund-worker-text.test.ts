@@ -18,6 +18,8 @@ describe('maskRefundWorkerText', () => {
       status: 'failed',
       history: [],
       events: [],
+      eventsTruncated: false,
+      historyTruncated: false,
       legs: [],
     });
   });
@@ -121,6 +123,16 @@ describe('maskRefundWorkerText', () => {
       }).hasPaystackPayment
     ).toBe(true);
   });
+  it('passes truncation flags through as booleans', () => {
+    expect(
+      maskRefundWorkerText({ eventsTruncated: true, historyTruncated: true })
+    ).toMatchObject({ eventsTruncated: true, historyTruncated: true });
+    // Malformed truthy input coerces to false — only a real true
+    // renders a truncation note.
+    expect(
+      maskRefundWorkerText({ eventsTruncated: 1, historyTruncated: 'yes' })
+    ).toMatchObject({ eventsTruncated: false, historyTruncated: false });
+  });
   it('passes malformed entries through without throwing', () => {
     expect(
       maskRefundWorkerText({
@@ -131,7 +143,9 @@ describe('maskRefundWorkerText', () => {
       error: null,
       needsPaystackCheck: false,
       events: [null, 'oops', 42, { id: 'event-3', details: {} }],
+      eventsTruncated: false,
       history: [null, ['nested'], { id: 'refund-2' }],
+      historyTruncated: false,
       legs: [],
     });
   });

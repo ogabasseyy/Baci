@@ -447,6 +447,7 @@ jobs:
           --sql-check supabase/tests/order_refund_write_helper_confinement.sql
           --sql-check supabase/tests/order_refund_sweep_selection.sql
           --sql-check supabase/tests/order_refund_reconciliation_manual_coverage.sql
+          --sql-check supabase/tests/order_refund_response_truncation.sql
           --sql-check supabase/tests/order_refund_management_null_paid.sql
           --sql-check supabase/migrations/tests/search_analytics_service_role_only_insert.sql
       - name: Run migration replay regression test

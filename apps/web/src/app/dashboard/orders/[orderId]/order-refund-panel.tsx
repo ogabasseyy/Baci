@@ -247,10 +247,8 @@ export function OrderRefundPanel({
                         // Two-decimal string: a raw float conversion can
                         // carry binary artifacts (0.30000000000000004)
                         // that fail the panel's own decimal guard.
-                        // Prefill the effective cap, not the remainder:
-                        // a retained Paystack method keeps its capture
-                        // ceiling, and no leg change fires to snap an
-                        // over-cap prefill on reopen.
+                        // Prefill the effective cap: a retained Paystack
+                        // method keeps its capture ceiling on reopen.
                         setAmount(
                           (effectiveRemaining ?? summary.remaining).toFixed(2)
                         );
@@ -290,7 +288,9 @@ export function OrderRefundPanel({
             <OrderRefundTimeline
               currency={summary.currency}
               events={summary.events ?? []}
+              eventsTruncated={summary.eventsTruncated === true}
               history={summary.history}
+              historyTruncated={summary.historyTruncated === true}
             />
           </>
         )}

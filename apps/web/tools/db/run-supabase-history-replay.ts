@@ -105,7 +105,7 @@ export async function runSupabaseHistoryReplay(
       workdir,
     });
     await runtime.writeOwnership(ownership);
-    cleanup = true;
+    cleanup = process.env.BACI_REPLAY_KEEP !== '1';
     try {
       await runtime.assertPortsAvailable(ports);
     } catch {

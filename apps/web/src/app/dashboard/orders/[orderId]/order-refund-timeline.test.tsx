@@ -5,7 +5,13 @@ import { OrderRefundTimeline } from './order-refund-timeline';
 describe('OrderRefundTimeline', () => {
   it('renders nothing without events or history', () => {
     const { container } = render(
-      <OrderRefundTimeline currency="NGN" events={[]} history={[]} />
+      <OrderRefundTimeline
+        currency="NGN"
+        events={[]}
+        eventsTruncated={false}
+        history={[]}
+        historyTruncated={false}
+      />
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -13,6 +19,7 @@ describe('OrderRefundTimeline', () => {
     render(
       <OrderRefundTimeline
         currency="NGN"
+        eventsTruncated={false}
         events={[
           {
             action: 'manual_recorded',
@@ -25,6 +32,7 @@ describe('OrderRefundTimeline', () => {
           },
         ]}
         history={[]}
+        historyTruncated={false}
       />
     );
     expect(
@@ -40,6 +48,7 @@ describe('OrderRefundTimeline', () => {
     render(
       <OrderRefundTimeline
         currency="NGN"
+        eventsTruncated={false}
         events={[
           {
             action: 'something_new',
@@ -48,6 +57,7 @@ describe('OrderRefundTimeline', () => {
             id: 'event-9',
           },
         ]}
+        historyTruncated={false}
         history={[
           {
             amount: 100,
@@ -75,6 +85,7 @@ describe('OrderRefundTimeline', () => {
     render(
       <OrderRefundTimeline
         currency="NGN"
+        eventsTruncated={false}
         events={[
           {
             action: 'manual_recorded',
@@ -84,6 +95,7 @@ describe('OrderRefundTimeline', () => {
           },
         ]}
         history={[]}
+        historyTruncated={false}
       />
     );
     expect(screen.getByText(/Refund activity/)).toBeInTheDocument();
@@ -92,7 +104,9 @@ describe('OrderRefundTimeline', () => {
     render(
       <OrderRefundTimeline
         currency="NGN"
+        eventsTruncated={false}
         events={[]}
+        historyTruncated={false}
         history={[
           {
             amount: 27574.83,
@@ -121,5 +135,39 @@ describe('OrderRefundTimeline', () => {
     // render nothing (no empty annotation row).
     expect(screen.getByText('Counter payment confirmed')).toBeInTheDocument();
     expect(screen.queryByText('null')).not.toBeInTheDocument();
+  });
+  it('shows truncation notes when the server caps the lists', () => {
+    render(
+      <OrderRefundTimeline
+        currency="NGN"
+        events={[
+          {
+            action: 'manual_recorded',
+            date: '2026-09-28T12:00:00Z',
+            details: {},
+            id: 'event-t',
+          },
+        ]}
+        eventsTruncated={true}
+        history={[
+          {
+            amount: 10,
+            date: '2026-09-28T12:00:00Z',
+            id: 'refund-t',
+            method: 'bank_transfer',
+            note: null,
+            reference: 'bank-t',
+            status: 'completed',
+          },
+        ]}
+        historyTruncated={true}
+      />
+    );
+    expect(
+      screen.getByText(/older activity is in the audit log/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/older refunds are in the audit log/)
+    ).toBeInTheDocument();
   });
 });

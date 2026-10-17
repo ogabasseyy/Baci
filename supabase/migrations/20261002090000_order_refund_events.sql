@@ -29,9 +29,14 @@ REVOKE ALL ON public.order_refund_events FROM PUBLIC,anon,authenticated;
 GRANT SELECT (id, order_id, merchant_id, action, details, created_at)
   ON public.order_refund_events TO authenticated;
 GRANT ALL ON public.order_refund_events TO service_role;
+-- Guarded like the trigger below: the rollout is a manual ordered
+-- apply, and an interrupted/re-run recovery must not fail on
+-- duplicate policies.
+DROP POLICY IF EXISTS merchant_refund_events_read ON public.order_refund_events;
 CREATE POLICY merchant_refund_events_read ON public.order_refund_events FOR SELECT TO authenticated
   USING (EXISTS (SELECT 1 FROM public.merchants m WHERE m.id=merchant_id AND m.user_id=auth.uid())
     OR public.check_staff_permission(auth.uid(),merchant_id,'orders','view'));
+DROP POLICY IF EXISTS service_refund_events ON public.order_refund_events;
 CREATE POLICY service_refund_events ON public.order_refund_events FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- Fixed labels for worker/provider strings in readable surfaces.

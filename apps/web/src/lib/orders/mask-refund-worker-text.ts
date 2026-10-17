@@ -90,6 +90,8 @@ const REFUND_SUMMARY_KEYS = new Set([
   'canRecordManual',
   'canManageRefunds',
   'hasPaystackPayment',
+  'historyTruncated',
+  'eventsTruncated',
 ]);
 export function maskRefundWorkerText(data: Record<string, unknown>) {
   const masked: Record<string, unknown> = {};
@@ -130,6 +132,11 @@ export function maskRefundWorkerText(data: Record<string, unknown>) {
   for (const key of ['history', 'events', 'legs'] as const) {
     if (!Array.isArray(masked[key])) masked[key] = [];
   }
+  // Truncation signals are booleans the RPC always emits; coerce
+  // so a partial payload reads untruncated instead of crashing on
+  // a non-boolean.
+  masked.historyTruncated = masked.historyTruncated === true;
+  masked.eventsTruncated = masked.eventsTruncated === true;
   return masked;
 }
 function pickAllowedKeys(

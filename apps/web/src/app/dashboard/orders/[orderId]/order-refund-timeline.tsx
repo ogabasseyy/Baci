@@ -11,11 +11,15 @@ import { formatRefundActivityInstant } from './format-refund-activity-instant';
 export function OrderRefundTimeline({
   currency,
   events,
+  eventsTruncated,
   history,
+  historyTruncated,
 }: {
   currency: string;
   events: NonNullable<RefundSummary['events']>;
+  eventsTruncated: boolean;
   history: RefundSummary['history'];
+  historyTruncated: boolean;
 }) {
   const money = (value: number) =>
     formatDisplayCurrency(value, currency, {
@@ -58,25 +62,39 @@ export function OrderRefundTimeline({
               );
             })}
           </ul>
+          {eventsTruncated && (
+            <p className="text-sm text-muted-foreground">
+              Showing the latest 50 — older activity is in the audit log.
+            </p>
+          )}
         </details>
       )}
       {history.length > 0 && (
-        <ul className="space-y-2 text-sm" aria-label="Refund history">
-          {history.map((item) => (
-            <li key={item.id} className="border-t pt-2">
-              <p>
-                {money(item.amount)} ·{' '}
-                {orderRefundStatusLabels[item.status] ?? item.status} ·{' '}
-                {orderRefundMethodLabels[item.method] ?? item.method}
-              </p>
-              <p className="break-all">{item.reference}</p>
-              <p>{formatRefundActivityInstant(item.date)}</p>
-              {item.note ? (
-                <p className="break-words text-muted-foreground">{item.note}</p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="space-y-2 text-sm" aria-label="Refund history">
+            {history.map((item) => (
+              <li key={item.id} className="border-t pt-2">
+                <p>
+                  {money(item.amount)} ·{' '}
+                  {orderRefundStatusLabels[item.status] ?? item.status} ·{' '}
+                  {orderRefundMethodLabels[item.method] ?? item.method}
+                </p>
+                <p className="break-all">{item.reference}</p>
+                <p>{formatRefundActivityInstant(item.date)}</p>
+                {item.note ? (
+                  <p className="break-words text-muted-foreground">
+                    {item.note}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          {historyTruncated && (
+            <p className="text-sm text-muted-foreground">
+              Showing the latest 50 — older refunds are in the audit log.
+            </p>
+          )}
+        </>
       )}
     </>
   );

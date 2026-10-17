@@ -28,6 +28,9 @@ CREATE OR REPLACE FUNCTION private.refund_status_response(
 ) RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   v_history jsonb;
+  v_history_truncated boolean;
+  v_events jsonb;
+  v_events_truncated boolean;
   v_legs jsonb;
   v_has_paystack boolean;
 BEGIN
@@ -38,16 +41,21 @@ BEGIN
   PERFORM private.assert_refund_helper_membership_v1(p_merchant_id);
   -- Bound like the audit events: one row per partial manual with 30s
   -- status polling would otherwise grow every response unbounded.
+  -- LIMIT 51 probes truncation (newest 50 win ties by id) so the
+  -- timeline can say so instead of posing as the complete record.
   SELECT COALESCE(jsonb_agg(jsonb_build_object('id',h.id,'amount',h.amount,'status',h.status,
     'method',COALESCE(h.metadata->>'method',h.gateway),
     'reference',COALESCE(h.metadata->>'reference',h.gateway_reference),
     'date',COALESCE(h.metadata->>'refunded_at',to_json(h.created_at)#>>'{}'),
     'note',h.metadata->>'note')
-    ORDER BY h.created_at DESC),'[]') INTO v_history
-    FROM (SELECT id,amount,status,metadata,gateway,gateway_reference,created_at
+    ORDER BY h.created_at DESC, h.id) FILTER (WHERE h.rn <= 50),'[]'),
+    COUNT(*) FILTER (WHERE h.rn > 50) > 0
+    INTO v_history, v_history_truncated
+    FROM (SELECT id,amount,status,metadata,gateway,gateway_reference,created_at,
+      row_number() OVER (ORDER BY created_at DESC, id) AS rn
       FROM public.transactions
       WHERE order_id=p_order_id AND merchant_id=p_merchant_id AND transaction_type='refund'
-      ORDER BY created_at DESC LIMIT 50) h;
+      ORDER BY created_at DESC, id LIMIT 51) h;
   -- Pin candidates for the manual form's Paystack selector:
   -- completed Paystack captures with money still outstanding,
   -- mirroring the allocator's per-leg outstanding math, so the
@@ -83,6 +91,17 @@ BEGIN
     WHERE p.order_id=p_order_id AND p.merchant_id=p_merchant_id
       AND p.transaction_type='payment' AND p.status IN ('completed','refunded') AND p.amount>0
       AND upper(btrim(p.gateway))='PAYSTACK') INTO v_has_paystack;
+  -- Same LIMIT-51 truncation probe as the history tail above.
+  SELECT COALESCE(jsonb_agg(jsonb_build_object('id',x.id,'action',x.action,
+    'details',x.details,'date',x.created_at)
+    ORDER BY x.created_at DESC, x.id) FILTER (WHERE x.rn <= 50),'[]'),
+    COUNT(*) FILTER (WHERE x.rn > 50) > 0
+    INTO v_events, v_events_truncated
+    FROM (SELECT id,action,details,created_at,
+      row_number() OVER (ORDER BY created_at DESC, id) AS rn
+      FROM public.order_refund_events
+      WHERE order_id=p_order_id AND merchant_id=p_merchant_id
+      ORDER BY created_at DESC, id LIMIT 51) x;
   RETURN jsonb_build_object('currency',p_currency,'amountPaid',p_amount_paid,
     'refunded',p_refunded,'remaining',p_remaining,'pending',p_pending,
     'reversedInternal',p_reversed_internal,
@@ -133,11 +152,8 @@ BEGIN
     -- No actor/recorded_by: the status action serves view-only
     -- staff, and PostgREST RPC callers bypass the route mask, so
     -- peer identity is confined at the source, not the edge.
-    'events',COALESCE((SELECT jsonb_agg(jsonb_build_object('id',x.id,'action',x.action,
-      'details',x.details,'date',x.created_at) ORDER BY x.created_at DESC)
-      FROM (SELECT id,action,details,created_at FROM public.order_refund_events
-        WHERE order_id=p_order_id AND merchant_id=p_merchant_id
-        ORDER BY created_at DESC LIMIT 50) x),'[]'::jsonb),
+    'events',v_events,'eventsTruncated',v_events_truncated,
+    'historyTruncated',v_history_truncated,
     -- A failed step under full coverage is retryable: rearming
     -- reruns trusted finalization (covered legs never re-initiate),
     -- which is the only recovery when the claim rolled back. Open

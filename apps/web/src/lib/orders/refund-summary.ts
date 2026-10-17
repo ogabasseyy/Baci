@@ -63,4 +63,10 @@ export interface RefundSummary {
   // a later contradictory provider verdict can still re-open the
   // balance. The panel keeps polling on it past refunded.
   hasPaystackPayment: boolean;
+  // Truncation signals for the bounded tails: history and events
+  // cap at the newest 50 rows, and the timeline says so instead of
+  // posing as the complete record. Normalized to booleans by the
+  // mask, so partial payloads read untruncated.
+  historyTruncated: boolean;
+  eventsTruncated: boolean;
 }

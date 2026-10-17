@@ -26,6 +26,25 @@ describe('validateManualRefundInput', () => {
     );
     expect(validateManualRefundInput({ ...valid, amount: '10.29' })).toBeNull();
   });
+  it('accepts two-decimal amounts at any magnitude', () => {
+    // A float epsilon on amount*100 false-rejects past ~1e8; the
+    // shared helper counts repr decimals exactly instead.
+    for (const amount of ['100000000.01', '100000000', '27574.83'])
+      expect(
+        validateManualRefundInput({
+          ...valid,
+          amount,
+          remaining: 200000000,
+        })
+      ).toBeNull();
+    expect(
+      validateManualRefundInput({
+        ...valid,
+        amount: '100000000.011',
+        remaining: 200000000,
+      })
+    ).toContain('at most two decimals');
+  });
   it('rejects amounts above the remaining balance', () => {
     expect(validateManualRefundInput({ ...valid, amount: '101' })).toContain(
       'exceeds the remaining balance'

@@ -191,10 +191,14 @@ BEGIN
     -- label must not claim refunded first.
     UPDATE public.orders o SET payment_status='refunded',updated_at=now()
       WHERE o.id=NEW.order_id AND o.merchant_id=NEW.merchant_id
-        AND o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
+        AND o.shipping_status IN ('cancelled','canceled')
+        AND private.effective_amount_paid_v1(
+          o.id, o.merchant_id, o.currency, o.amount_paid) > 0
         AND private.refund_label_gates_clear_v1(
           o.id, o.merchant_id, o.currency)
-        AND o.amount_paid <= private.capped_refund_coverage_v1(
+        AND private.effective_amount_paid_v1(
+          o.id, o.merchant_id, o.currency, o.amount_paid)
+          <= private.capped_refund_coverage_v1(
             o.id, o.merchant_id, o.currency)
         + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
           WHERE p.order_id=o.id AND p.merchant_id=o.merchant_id
@@ -207,7 +211,8 @@ BEGIN
               'WALLET','SAVINGS','STORE_CREDIT','CASH','MANUAL','PAY_ON_DELIVERY'))
         + v_reversed_internal
         AND private.uncovered_refund_obligation_v1(o.id, o.merchant_id,
-          o.currency, v_reversed_internal, o.amount_paid) <= 0;
+          o.currency, v_reversed_internal, private.effective_amount_paid_v1(
+            o.id, o.merchant_id, o.currency, o.amount_paid)) <= 0;
   END IF;
   RETURN NEW;
 END; $$;
@@ -238,10 +243,14 @@ BEGIN
     RAISE EXCEPTION 'unauthorized' USING ERRCODE='42501';
   END IF;
   UPDATE public.orders o SET payment_status='refunded',updated_at=now()
-   WHERE o.shipping_status IN ('cancelled','canceled') AND o.amount_paid>0
+   WHERE o.shipping_status IN ('cancelled','canceled')
+     AND private.effective_amount_paid_v1(
+       o.id, o.merchant_id, o.currency, o.amount_paid) > 0
      AND o.payment_status IN ('paid','partially_paid','pending','bnpl_approved')
      AND private.refund_label_gates_clear_v1(o.id, o.merchant_id, o.currency)
-     AND o.amount_paid <= private.capped_refund_coverage_v1(
+     AND private.effective_amount_paid_v1(
+       o.id, o.merchant_id, o.currency, o.amount_paid)
+       <= private.capped_refund_coverage_v1(
            o.id, o.merchant_id, o.currency)
        + (SELECT COALESCE(sum(p.amount),0) FROM public.transactions p
             WHERE p.order_id=o.id AND p.merchant_id=o.merchant_id
@@ -267,7 +276,8 @@ BEGIN
           FROM public.customer_savings_redemptions r
          WHERE r.order_id=o.id AND r.merchant_id=o.merchant_id
            AND r.metadata ? 'reversed_at'),
-       o.amount_paid) <= 0;
+       private.effective_amount_paid_v1(
+         o.id, o.merchant_id, o.currency, o.amount_paid)) <= 0;
 END; $$;
 REVOKE ALL ON FUNCTION private.backfill_cancelled_order_refund_status()
   FROM PUBLIC,anon,authenticated;

@@ -57,7 +57,13 @@ BEGIN
     ('b5911000-0000-4000-8000-000000000096', v_merchant_id, 'FILL-096',
       100, 100, 'paid', 'cancelled', pg_catalog.now()),
     ('b5911000-0000-4000-8000-000000000097', v_merchant_id, 'FILL-097',
-      100, 100, 'paid', 'cancelled', pg_catalog.now());
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    -- Never-stamped totals beside funded legs: the trigger and
+    -- the backfill derive the paid total like the manager.
+    ('b5911000-0000-4000-8000-000000000098', v_merchant_id, 'FILL-098',
+      100, NULL, 'paid', 'cancelled', pg_catalog.now()),
+    ('b5911000-0000-4000-8000-000000000099', v_merchant_id, 'FILL-099',
+      100, 0, 'paid', 'cancelled', pg_catalog.now());
 
   -- Simulate evidence predating the migration: with the sync
   -- trigger disabled the inserts leave the labels stale.
@@ -142,7 +148,20 @@ BEGIN
       'b5911000-0000-4000-8000-000000000097', 'refund', 100, 'NGN',
       'refund_pending', 'paystack', 'fill-97-1',
       jsonb_build_object(
-        'payment_transaction_id', 'b5912000-0000-4000-8000-000000000106'));
+        'payment_transaction_id', 'b5912000-0000-4000-8000-000000000106')),
+    -- Predated NULL-paid coverage for the backfill below.
+    ('b5912000-0000-4000-8000-000000000109', v_merchant_id,
+      'b5911000-0000-4000-8000-000000000098', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-98', '{}'::jsonb),
+    ('b5912000-0000-4000-8000-000000000110', v_merchant_id,
+      'b5911000-0000-4000-8000-000000000098', 'refund', 100, 'NGN',
+      'completed', 'manual', 'fill-98-1',
+      jsonb_build_object(
+        'payment_transaction_id', 'b5912000-0000-4000-8000-000000000109')),
+    -- Zero-paid leg for the live trigger insert below.
+    ('b5912000-0000-4000-8000-000000000111', v_merchant_id,
+      'b5911000-0000-4000-8000-000000000099', 'payment', 100, 'NGN',
+      'completed', 'cash', 'cash-99', '{}'::jsonb);
   ALTER TABLE public.transactions
     ENABLE TRIGGER sync_cancelled_order_refund_status;
 END;
@@ -210,6 +229,30 @@ BEGIN
   WHERE id = 'b5911000-0000-4000-8000-000000000097';
   IF v_status IS DISTINCT FROM 'paid' THEN
     RAISE EXCEPTION 'trigger flipped gated order, got %', v_status;
+  END IF;
+
+  -- The backfill derived the NULL-paid total from the funded leg.
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = 'b5911000-0000-4000-8000-000000000098';
+  IF v_status IS DISTINCT FROM 'refunded' THEN
+    RAISE EXCEPTION 'backfill missed NULL-paid coverage, got %', v_status;
+  END IF;
+
+  -- The live trigger derives the zero-paid total the same way.
+  INSERT INTO public.transactions (
+    id, merchant_id, order_id, transaction_type, amount, currency,
+    status, gateway, gateway_reference, metadata
+  ) VALUES
+    ('b5912000-0000-4000-8000-000000000112',
+      'b5910100-0000-4000-8000-000000000001',
+      'b5911000-0000-4000-8000-000000000099', 'refund', 100, 'NGN',
+      'completed', 'manual', 'fill-99-1',
+      jsonb_build_object(
+        'payment_transaction_id', 'b5912000-0000-4000-8000-000000000111'));
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = 'b5911000-0000-4000-8000-000000000099';
+  IF v_status IS DISTINCT FROM 'refunded' THEN
+    RAISE EXCEPTION 'trigger missed zero-paid coverage, got %', v_status;
   END IF;
 END;
 $refund_round59_gates$;

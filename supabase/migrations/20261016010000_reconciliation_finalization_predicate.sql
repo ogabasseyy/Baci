@@ -17,13 +17,16 @@ BEGIN
   -- funded rows can sum below amount_paid while per-leg scans
   -- pass, and finalizing then would mark the order refunded while
   -- the manager still reports an unreturnable outstanding
-  -- balance. Same shared helper as the aggregate claim.
+  -- balance. Same shared helper as the aggregate claim — including
+  -- its NULL/zero derivation, so a never-stamped total compares
+  -- against funded legs instead of trivializing to zero.
   IF private.total_refund_returned_v1(
     p_order_id, p_merchant_id, p_currency
-  ) < COALESCE((
-    SELECT o.amount_paid FROM public.orders o
-     WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id
-  ), 0) THEN
+  ) < private.effective_amount_paid_v1(
+    p_order_id, p_merchant_id, p_currency, (
+      SELECT o.amount_paid FROM public.orders o
+       WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id
+    )) THEN
     RETURN false;
   END IF;
   -- A mixed order (manual-covered leg A, provider leg B) finishes

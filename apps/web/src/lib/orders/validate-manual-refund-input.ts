@@ -1,6 +1,7 @@
 // Client-side manual-refund validation: fail fast with the same messages
 // the server enforces, so merchants learn immediately instead of after
 // a round trip. The RPC rechecks everything; this is UX only.
+import { hasAtMostTwoDecimalPlaces } from './has-at-most-two-decimal-places';
 import { toLagosRefundInstant } from './to-lagos-refund-instant';
 
 export function validateManualRefundInput({
@@ -25,10 +26,10 @@ export function validateManualRefundInput({
   const parsedAmount = Number(amount);
   if (!Number.isFinite(parsedAmount) || parsedAmount <= 0)
     return 'Enter a valid refund amount greater than zero.';
-  // The RPC rejects amounts that are not exact to two decimals; compare
-  // in float with an epsilon so binary error on tight values (10.29)
-  // passes while a genuine third decimal (10.291) still fails.
-  if (Math.abs(parsedAmount * 100 - Math.round(parsedAmount * 100)) > 1e-6)
+  // The RPC rejects amounts past two decimals; count off the
+  // shortest round-trip text like the server schema (shared
+  // helper), since a float epsilon false-rejects past ~1e8.
+  if (!hasAtMostTwoDecimalPlaces(parsedAmount))
     return 'Enter the refund amount with at most two decimals.';
   if (remaining !== null && parsedAmount > remaining)
     return 'Refund amount exceeds the remaining balance.';

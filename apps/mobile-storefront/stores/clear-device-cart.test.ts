@@ -67,7 +67,7 @@ it('propagates a retire failure instead of reporting teardown success', async ()
   useCartStore.setState({
     clearCart: jest.fn(),
     setSharedCartRef: jest.fn(),
-  });
+  } as never);
   await expect(clearDeviceCartForAccountTeardown()).rejects.toThrow(
     'storage down'
   );

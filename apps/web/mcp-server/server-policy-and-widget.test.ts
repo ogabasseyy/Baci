@@ -45,12 +45,13 @@ describe('MCP policy and widget responses', () => {
         await postMcpJsonRpc(server.baseUrl, {
           id: 0,
           method: 'resources/read',
-          params: { uri: 'ui://widget/store-v4.html' },
+          params: { uri: 'ui://widget/store-v5.html' },
         })
       );
       expect(resource.contents).toEqual([
         expect.objectContaining({
-          uri: 'ui://widget/store-v4.html',
+          uri: 'ui://widget/store-v5.html',
+          mimeType: 'text/html;profile=mcp-app',
           _meta: expect.objectContaining({
             ui: expect.objectContaining({
               csp: {
@@ -69,8 +70,8 @@ describe('MCP policy and widget responses', () => {
         method: 'tools/list',
         params: {},
       }));
-      expect(tools.find((tool) => tool.name === 'search_products')?._meta)
-        .toMatchObject({ 'openai/outputTemplate': 'ui://widget/store-v4.html' });
+      expect(tools.find((tool) => tool.name === 'render_ogabassey_catalog')?._meta)
+        .toMatchObject({ 'openai/outputTemplate': 'ui://widget/store-v5.html' });
     } finally {
       await server.close();
     }
@@ -82,7 +83,7 @@ describe('MCP policy and widget responses', () => {
       const resource = getResultRecord(await postMcpJsonRpc(server.baseUrl, {
         id: 91,
         method: 'resources/read',
-        params: { uri: 'ui://widget/store-v4.html' },
+        params: { uri: 'ui://widget/store-v5.html' },
       }));
       const contents = resource.contents as Array<{ text: string }>;
       expect(contents[0].text).toContain('.mode-fullscreen .products-grid--single');
@@ -132,4 +133,15 @@ describe('MCP policy and widget responses', () => {
     }
   });
 
+});
+
+it('keeps the submitted-review v4 widget resource available alongside the standard v5 resource', async () => {
+  const server = await startMcpServerWithPostgrest({});
+  try {
+    const read = async (uri: string) => getResultRecord(await postMcpJsonRpc(server.baseUrl, { id: 121, method: 'resources/read', params: { uri } }));
+    const current = await read('ui://widget/store-v5.html');
+    const legacy = await read('ui://widget/store-v4.html');
+    expect(legacy.contents).toEqual([expect.objectContaining({uri: 'ui://widget/store-v4.html', mimeType: 'text/html+skybridge'})]);
+    expect((legacy.contents as Array<{text: string}>)[0].text).toEqual((current.contents as Array<{text: string}>)[0].text);
+  } finally { await server.close(); }
 });

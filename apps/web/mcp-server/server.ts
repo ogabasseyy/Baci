@@ -1,3 +1,7 @@
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { McpServer } from '@modelcontextprotocol/server';
+import type { CallToolResult } from '@modelcontextprotocol/server';
+import { registerCatalogRenderer } from './catalog-render-tool';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
 /**
@@ -33,8 +37,6 @@ import {
 import { isIP } from 'node:net';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import 'dotenv/config';
@@ -1233,41 +1235,46 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     version: '1.0.0',
   });
 
-  // Widget resource
-  server.registerResource(
-    'store-widget',
-    STORE_WIDGET_URI,
-    { description: 'Ogabassey store widget' },
-    async () => ({
-      contents: [
-        {
-          uri: STORE_WIDGET_URI,
-          mimeType: 'text/html+skybridge',
-          text: premiumWidgetHtml,
-          _meta: {
-            ui: {
-              prefersBorder: true,
-              domain: MCP_PUBLIC_ORIGIN,
-              csp: {
-                connectDomains: [],
-                resourceDomains: [MCP_PUBLIC_ORIGIN],
+  // Keep the submitted review's cached v4 URI available during migration.
+  for (const uri of [STORE_WIDGET_URI, 'ui://widget/store-v4.html']) {
+    const mimeType = uri === STORE_WIDGET_URI ? 'text/html;profile=mcp-app' : 'text/html+skybridge';
+    server.registerResource(
+      uri === STORE_WIDGET_URI ? 'store-widget' : 'store-widget-v4',
+      uri,
+      { description: 'Ogabassey store widget', mimeType },
+      async () => ({
+        contents: [
+          {
+            uri,
+            mimeType,
+            text: premiumWidgetHtml,
+            _meta: {
+              ui: {
+                prefersBorder: true,
+                domain: MCP_PUBLIC_ORIGIN,
+                csp: {
+                  connectDomains: [],
+                  resourceDomains: [MCP_PUBLIC_ORIGIN],
+                },
+              },
+              'openai/widgetDescription': 'Interactive Ogabassey products with guest-cart controls and website checkout links.',
+              'openai/widgetPrefersBorder': true,
+              'openai/widgetCSP': {
+                connect_domains: [],
+                resource_domains: [MCP_PUBLIC_ORIGIN],
+                redirect_domains: ['https://ogabassey.com'],
+              },
+              'openai/widgetDomain': MCP_PUBLIC_ORIGIN,
+              'openai/ui': {
+                availableDisplayModes: ['inline', 'fullscreen'],
               },
             },
-            'openai/widgetPrefersBorder': true,
-            'openai/widgetCSP': {
-              connect_domains: [],
-              resource_domains: [MCP_PUBLIC_ORIGIN],
-              redirect_domains: ['https://ogabassey.com'],
-            },
-            'openai/widgetDomain': MCP_PUBLIC_ORIGIN,
-            'openai/ui': {
-              availableDisplayModes: ['inline', 'fullscreen'],
-            },
           },
-        },
-      ],
-    })
-  );
+        ],
+      })
+    );
+
+  }
 
   // Tool: Search products
   server.registerTool(
@@ -1362,7 +1369,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
         },
         description:
           'Create a real Baci agentic checkout session through the signed and idempotent /api/agentic/checkout_sessions flow. Use this after the customer chooses products and quantities to get authoritative totals, fulfillment options, and the checkout session id. This does not complete payment or create an order. To safely retry requests on failure, generate a unique idempotency_key before the first request and reuse it for subsequent retries.',
-        inputSchema: createAgenticCheckoutSessionMcpInputSchema,
+        inputSchema: z.object(createAgenticCheckoutSessionMcpInputSchema),
         _meta: {
           'openai/toolInvocation/invoking': 'Creating checkout session...',
           'openai/toolInvocation/invoked': 'Checkout session created',
@@ -1474,7 +1481,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
         },
         description:
           'Update a Baci agentic checkout session through the signed and idempotent /api/agentic/checkout_sessions/{session_id} flow. Use this to change items, add or replace shipping details, or select a fulfillment option before payment confirmation. To safely retry, generate a unique idempotency_key before the first request and reuse it for retries.',
-        inputSchema: updateAgenticCheckoutSessionMcpInputSchema,
+        inputSchema: z.object(updateAgenticCheckoutSessionMcpInputSchema),
         _meta: {
           'openai/toolInvocation/invoking': 'Updating checkout session...',
           'openai/toolInvocation/invoked': 'Checkout session updated',
@@ -1639,23 +1646,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     );
   }
 
-  // Tool: Get product details
-  server.registerTool(
-    'get_product',
-    {
-      outputSchema: mcpToolOutputSchemas.get_product,
-      title: 'Get Product Details',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description:
-        `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
-      inputSchema: productLookupInputSchema,
-      _meta: {
-        'openai/outputTemplate': STORE_WIDGET_URI,
-        'openai/toolInvocation/invoking': 'Loading product...',
-        'openai/toolInvocation/invoked': 'Product loaded',
-      },
-    },
-    async (args) => {
+  const getProductDetails = async (args: { product_id?: string; product_name?: string }): Promise<CallToolResult> => {
       const merchantId = await getMerchantId();
       if (!merchantId) {
         return {
@@ -1727,8 +1718,26 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
       }
 
       return buildMcpProductDetail({ product, supabase, formatPrice, getSafeCatalogImageUrl });
-    }
+    };
+  // Tool: Get product details
+
+  server.registerTool(
+    'get_product',
+    {
+      outputSchema: mcpToolOutputSchemas.get_product,
+      title: 'Get Product Details',
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+      description:
+        `Get detailed information about a specific product including variants, conditions, specifications, and reviews. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
+      inputSchema: z.object(productLookupInputSchema),
+      _meta: {
+        'openai/toolInvocation/invoking': 'Loading product...',
+        'openai/toolInvocation/invoked': 'Product loaded',
+      },
+    },
+    getProductDetails
   );
+  registerCatalogRenderer(server, STORE_WIDGET_URI, (id) => getProductDetails({ product_id: id }));
 
   if (ORDER_PAYMENT_TOOLS_ENABLED) {
     // Tool: Check order status
@@ -1738,14 +1747,14 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
         title: 'Check Order Status',
         annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
         description: 'Look up order status by order number or phone.',
-        inputSchema: {
+        inputSchema: z.object({
           order_number: z
             .string()
             .max(20)
             .optional()
             .describe('Order number (e.g., ORD-12345)'),
           phone: z.string().max(20).optional().describe('Phone number'),
-        },
+        }),
         _meta: {
           'openai/outputTemplate': STORE_WIDGET_URI,
           'openai/toolInvocation/invoking': 'Looking up order...',
@@ -1852,6 +1861,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
   }
 
   // Tool: Get store info (read-only, no sensitive data)
+
   server.registerTool(
     'get_store_info',
     {
@@ -1859,12 +1869,12 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
       title: 'Get Store Information',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get Ogabassey public store information and current policy page links. Confirm delivery and payment details at checkout.',
-      inputSchema: {
+      inputSchema: z.object({
         topic: z
           .enum(['contact', 'shipping', 'returns', 'payment', 'general'])
           .optional()
           .describe('Topic'),
-      },
+      }),
       _meta: {
         'openai/toolInvocation/invoking': 'Loading info...',
         'openai/toolInvocation/invoked': 'Info loaded',
@@ -1891,6 +1901,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
   );
 
   // Tool: Get product variants
+
   server.registerTool(
     'get_product_variants',
     {
@@ -1899,7 +1910,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description:
         `Get listed variants (colors, storage options, conditions) for a product. Availability is confirmed only when stock is tracked. Use product_id when available; otherwise use the exact product_name returned by search_products. ${MCP_OPTION_COLOR_EVIDENCE_GUIDANCE}`,
-      inputSchema: productLookupInputSchema,
+      inputSchema: z.object(productLookupInputSchema),
       _meta: {
         'openai/toolInvocation/invoking': 'Loading variants...',
         'openai/toolInvocation/invoked': 'Variants loaded',
@@ -1919,6 +1930,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
   );
 
   // Tool: Browse categories
+
   server.registerTool(
     'browse_categories',
     {
@@ -1926,7 +1938,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
       title: 'Browse Categories',
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
       description: 'Get a list of product categories available in the store.',
-      inputSchema: {},
+      inputSchema: z.object({}),
       _meta: {
         'openai/toolInvocation/invoking': 'Loading categories...',
         'openai/toolInvocation/invoked': 'Categories loaded',
@@ -1936,48 +1948,49 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
       const merchantId = await getMerchantId();
       if (!merchantId) {
         return {
-          content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
-          structuredContent: { categories: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
-        };
-      }
-
-      const categories = await loadMcpBrowseFacetValues({
-        supabase, merchantId, facet: 'category',
-      });
-
-      if (categories === null) {
-        const message = 'Category lookup is temporarily unavailable.';
-        return { content: [{ type: 'text', text: message }], structuredContent: { categories: [], status: 'unavailable' as const, message } };
-      }
-
-      if (categories.length === 0) {
-        return { content: [{ type: 'text', text: 'No categories found.' }], structuredContent: { categories: [], status: 'empty' as const } };
-      }
-
-      const text = `**Available Categories:**\n\n${categories.map((c) => `• ${c}`).join('\n')}\n\nAsk me to search for products in any of these categories!`;
-
-      return {
-        content: [{ type: 'text', text }],
-        structuredContent: { categories },
+        content: [{ type: 'text', text: 'Store temporarily unavailable.' }],
+        structuredContent: { categories: [], status: 'unavailable' as const, message: 'Store temporarily unavailable.' },
       };
     }
-  );
 
-  // Tool: Get brands
-  server.registerTool(
-    'get_brands',
-    {
-      outputSchema: mcpToolOutputSchemas.get_brands,
-      title: 'Get Available Brands',
-      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-      description: 'Get a list of brands available in the store.',
-      inputSchema: {
+    const categories = await loadMcpBrowseFacetValues({
+      supabase, merchantId, facet: 'category',
+    });
+
+    if (categories === null) {
+      const message = 'Category lookup is temporarily unavailable.';
+      return { content: [{ type: 'text', text: message }], structuredContent: { categories: [], status: 'unavailable' as const, message } };
+    }
+
+    if (categories.length === 0) {
+      return { content: [{ type: 'text', text: 'No categories found.' }], structuredContent: { categories: [], status: 'empty' as const } };
+    }
+
+    const text = `**Available Categories:**\n\n${categories.map((c) => `• ${c}`).join('\n')}\n\nAsk me to search for products in any of these categories!`;
+
+    return {
+      content: [{ type: 'text', text }],
+      structuredContent: { categories },
+    };
+  }
+);
+
+// Tool: Get brands
+
+server.registerTool(
+  'get_brands',
+  {
+    outputSchema: mcpToolOutputSchemas.get_brands,
+    title: 'Get Available Brands',
+    annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
+    description: 'Get a list of brands available in the store.',
+      inputSchema: z.object({
         category: z
           .string()
           .max(50)
           .optional()
           .describe('Filter brands by category'),
-      },
+      }),
       _meta: {
         'openai/toolInvocation/invoking': 'Loading brands...',
         'openai/toolInvocation/invoked': 'Brands loaded',
@@ -2045,7 +2058,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
         title: 'Generate Payment Account',
         description:
           'Use this when a customer wants to pay via bank transfer. Generates a dedicated bank account (DVA) for them to transfer money to. REQUIRED: customer email, name, phone, and amount. Do NOT use if customer just wants to browse or hasn\'t decided to buy yet.',
-        inputSchema: {
+        inputSchema: z.object({
           // Zod 4 promotes string formats to top-level validators;
           // z.string().email() is deprecated in current Zod docs.
           customer_email: z.email()
@@ -2068,7 +2081,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
             .string()
             .optional()
             .describe('Order ID to link payment to (optional)'),
-        },
+        }),
         annotations: {
           readOnlyHint: false,
           destructiveHint: false, // Does not delete data
@@ -2224,7 +2237,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
         title: 'Check Payment Status',
         description:
           'Use this when a customer says they have paid, transferred money, or asks about their payment status. Trigger phrases: "I\'ve paid", "I sent it", "I transferred", "check my payment", "did you receive it", "payment done". REQUIRED: customer email. Do NOT use for generating new payment accounts.',
-        inputSchema: {
+        inputSchema: z.object({
           // Zod 4 promotes string formats to top-level validators;
           // z.string().email() is deprecated in current Zod docs.
           customer_email: z.email()
@@ -2233,7 +2246,7 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
             .string()
             .optional()
             .describe('Payment reference (CHAT-xxx format) if known'),
-        },
+        }),
         annotations: {
           readOnlyHint: true,     // Only reads payment status
           destructiveHint: false,
@@ -2552,7 +2565,7 @@ const httpServer = createServer(
     if (req.method === 'GET' && url.pathname.startsWith('/mcp/render/')) {
       // Serve widget HTML for ChatGPT to render
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Content-Type', 'text/html+skybridge; charset=utf-8');
+      res.setHeader('Content-Type', 'text/html;profile=mcp-app; charset=utf-8');
       res.setHeader('Cache-Control', 'public, max-age=3600');
       res.writeHead(200);
       res.end(premiumWidgetHtml);
@@ -2580,7 +2593,7 @@ const httpServer = createServer(
       res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
 
       const server = createOgabasseyServer({ clientIp: ip });
-      const transport = new StreamableHTTPServerTransport({
+      const transport = new NodeStreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
         enableJsonResponse: true,
       });

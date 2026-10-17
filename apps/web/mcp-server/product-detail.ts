@@ -1,10 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, TextContent } from "@modelcontextprotocol/server";
 import type { z } from 'zod';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
-import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
 import { getMcpVariantColorValue } from './variant-color-value';
@@ -140,6 +139,7 @@ export async function buildMcpProductDetail({
     stock_confidence: stockSummary.confidence,
     stock_level: stockSummary.level,
     has_variants: product.has_variants,
+    has_condition_offers: product.has_condition_offers,
   };
 
   // Build detailed text response
@@ -238,10 +238,6 @@ export async function buildMcpProductDetail({
       })),
       variant_lookup_failed: variantLookupFailed,
       offer_lookup_failed: offerLookupFailed,
-    },
-    _meta: {
-      'openai/outputTemplate': STORE_WIDGET_URI,
-      'openai/widgetPrefersBorder': true,
     },
   };
   const trackedBaseStockInvalid = product.manage_stock === true &&

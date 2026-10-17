@@ -1,3 +1,4 @@
+import { getWidgetHost } from '../widget-host';
 import { useRef, useState } from 'react';
 import {
   dropLineFromCartState,
@@ -36,6 +37,7 @@ export function useCartHandoff() {
   });
 
   const handleAddToCart = async (product: Product) => {
+    const host = getWidgetHost();
     if (busy.current) return;
     const requestId = ++handoffRequestId.current;
     setCartError(null);
@@ -52,7 +54,7 @@ export function useCartHandoff() {
       }
       return;
     }
-    if (!window.openai?.callTool) {
+    if (!host?.callTool) {
       setCartError(
         'ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.'
       );
@@ -63,7 +65,7 @@ export function useCartHandoff() {
     // Popup blockers only honor tabs opened synchronously from the click, so
     // reserve one before the async tool call; it is closed when the response
     // needs no navigation.
-    const pendingTab = window.openai?.openExternal
+    const pendingTab = host?.openExternal
       ? null
       : window.open('about:blank', '_blank');
     try {
@@ -78,7 +80,7 @@ export function useCartHandoff() {
         widgetState?.cart.find((item) => item.product.id === product.id)
           ?.quantity ?? 0;
       const quantity = Math.min(existingQuantity + 1, 10);
-      let result = await window.openai.callTool(
+      let result = await host?.callTool(
         'update_ogabassey_guest_cart',
         {
           product_id: product.id,
@@ -93,7 +95,7 @@ export function useCartHandoff() {
       // Recovery keeps the shopper's cart whole before the authoritative
       // merge: a stale token retries once without it, and a tokenless mint
       // replays pre-existing local lines into the fresh cart.
-      const callTool = window.openai.callTool.bind(window.openai);
+      const callTool = host.callTool.bind(host);
       const recovered = await recoverCartAdd(
         (args) => callTool('update_ogabassey_guest_cart', args),
         result,
@@ -204,6 +206,7 @@ export function useCartHandoff() {
   };
 
   const handleRemoveItem = async (productId: string) => {
+    const host = getWidgetHost();
     if (busy.current) return;
     // Legacy conversations restore cart state without a token; with no
     // server cart to update, the line is dropped locally instead, which
@@ -215,7 +218,7 @@ export function useCartHandoff() {
     }
     // No tool bridge: say so like the add path instead of silently
     // keeping a line the shopper asked to remove.
-    if (!window.openai?.callTool) {
+    if (!host?.callTool) {
       setCartError(
         'ChatGPT cannot open the cart here. Use Review on Ogabassey to continue.'
       );
@@ -225,7 +228,7 @@ export function useCartHandoff() {
     setIsSavingCart(true);
     setCartError(null);
     try {
-      const response = await window.openai.callTool(
+      const response = await host?.callTool(
         'update_ogabassey_guest_cart',
         {
           product_id: productId,

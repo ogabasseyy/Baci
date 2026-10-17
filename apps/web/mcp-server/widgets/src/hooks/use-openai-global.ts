@@ -1,3 +1,4 @@
+import { getWidgetHost } from '../widget-host';
 import { useSyncExternalStore } from 'react';
 
 // Event type for OpenAI global changes
@@ -8,6 +9,7 @@ type SetGlobalsEvent = CustomEvent<{
 }>;
 
 interface OpenAiGlobals {
+  hostError: string | null;
   toolOutput: unknown;
   toolInput: unknown;
   toolResponseMetadata: unknown;
@@ -22,6 +24,7 @@ interface OpenAiGlobals {
 declare global {
   interface Window {
     openai?: {
+      hostError?: string | null;
       toolOutput?: unknown;
       toolInput?: unknown;
       toolResponseMetadata?: unknown;
@@ -36,7 +39,7 @@ declare global {
         name: string,
         args: Record<string, unknown>
       ) => Promise<unknown>;
-      openExternal?: (options: { href: string }) => void;
+      openExternal?: (options: { href: string }) => void | Promise<void>;
       notifyIntrinsicHeight?: (height: number) => void;
       setOpenInAppUrl?: (options: { href: string }) => void;
       requestModal?: (options: unknown) => void;
@@ -76,7 +79,7 @@ export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
         window.removeEventListener(SET_GLOBALS_EVENT_TYPE, handleSetGlobal);
       };
     },
-    () => (window.openai?.[key] ?? null) as OpenAiGlobals[K] | null,
+    () => (getWidgetHost()?.[key] ?? null) as OpenAiGlobals[K] | null,
     () => null as OpenAiGlobals[K] | null
   );
 }

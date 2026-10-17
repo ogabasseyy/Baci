@@ -30,9 +30,23 @@ unavailable price check also stops before submission and can be retried as a
 price check. A lost response after carrier submission remains indeterminate:
 check shipment status before retrying.
 
+Legacy quotes with missing request data or trusted pricing economics also require
+explicit recovery; they are not silently rebuilt during booking. Recovery reads
+the current paid order, surviving items and optional saved service preference,
+resolves the current merchant sender, and asks the merchant for a complete
+Nigerian destination and pin. It obtains fresh quote economics and stages a
+signed preview only when its customer fee equals the fee already paid. A
+separate explicit confirmation saves that quote; booking remains a separate
+action. Missing old quote data is not itself a recovery blocker. Missing retained
+funding, pending refund reconciliation, unsupported pickup/international delivery,
+or a different fresh fee still requires the existing review process.
+
 International shipments, merchant-wallet funding, checkout quote expiry rules,
 and the explicit recovery activation/rollback controls retain their existing
-contracts. The existing mobile recovery flow supports these server responses. Updated
-mobile builds allow 30 seconds for shipping, covering the sequential tariff check
+contracts. Eligible owners receiving a reconfirmation response are taken directly
+to the mobile recovery form. Booking stays blocked until an explicit preview,
+consent and save complete; saving never submits a shipment. Switching to self
+fulfilment remains available. Updated mobile builds allow 30 seconds for shipping,
+covering the sequential tariff check
 and carrier submission; other status updates retain their 15-second deadline.
 Both deadlines include response-body reading, and neither retries booking.

@@ -67,7 +67,7 @@ export function OrderDetailsScreenModals({
         isSubmitting={controller.isShipmentSubmitting}
         onClose={controller.closeShipmentFlow}
         onContinueFromDetails={controller.proceedFromFulfillmentDetails}
-        onContinueFromMethod={() => void controller.proceedFromShipmentMethod()}
+        onContinueFromMethod={controller.proceedFromShipmentMethod}
         onConfirmSelfFulfillment={() =>
           void controller.handleSubmitSelfFulfillment()
         }

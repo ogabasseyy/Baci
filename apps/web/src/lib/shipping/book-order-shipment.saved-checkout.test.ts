@@ -125,6 +125,22 @@ describe('saved GIG checkout booking integration', () => {
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
     expect(shippingService.bookShipment).not.toHaveBeenCalled();
   });
+  it.each([
+    { pricing_version: null, provider_cost: null },
+    { quote_request: null },
+  ])('requires recovery without pricing or carrier submission for a legacy saved quote %j', async (legacy) => {
+    const client = await fixture();
+    const saved = await client.from('shipping_quotes').select().single();
+    Object.assign(saved.data, legacy);
+    await expect(
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
   it('returns a definitive pre-booking error if background checking fails', async () => {
     const client = await fixture();
     vi.mocked(shippingService.getProviderQuotes).mockRejectedValue(

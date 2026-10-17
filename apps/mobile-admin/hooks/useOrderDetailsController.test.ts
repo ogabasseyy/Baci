@@ -25,6 +25,12 @@ const authState = vi.hoisted(() => ({
   user: null as { id: string } | null,
 }));
 
+const shipmentParameters = vi.hoisted(() => ({
+  current: null as null | {
+    onProviderBookingError: (error: unknown) => Promise<unknown>;
+  },
+}));
+
 const giglShippingState = vi.hoisted(() => ({
   calls: [] as unknown[],
 }));
@@ -140,14 +146,19 @@ vi.mock('@/hooks/createOrderDetailsReceiptActions', () => ({
 }));
 
 vi.mock('@/hooks/createOrderDetailsShipmentActions', () => ({
-  createOrderDetailsShipmentActions: () => ({
-    closeShipmentFlow: vi.fn(),
-    handleShipmentFlowBack: vi.fn(),
-    handleSubmitSelfFulfillment: vi.fn(),
-    openShipmentFlow: vi.fn(),
-    proceedFromFulfillmentDetails: vi.fn(),
-    proceedFromShipmentMethod: vi.fn(),
-  }),
+  createOrderDetailsShipmentActions: (
+    params: NonNullable<typeof shipmentParameters.current>
+  ) => {
+    shipmentParameters.current = params;
+    return {
+      closeShipmentFlow: vi.fn(),
+      handleShipmentFlowBack: vi.fn(),
+      handleSubmitSelfFulfillment: vi.fn(),
+      openShipmentFlow: vi.fn(),
+      proceedFromFulfillmentDetails: vi.fn(),
+      proceedFromShipmentMethod: vi.fn(),
+    };
+  },
 }));
 
 vi.mock('@/hooks/createOrderDetailsStatusActions', () => ({
@@ -457,4 +468,46 @@ describe('useOrderDetailsController', () => {
     expect(result.current.providerBookingAvailable).toBe(true);
     expect(result.current.giglShipping).toEqual({ quote: null, wallet: null });
   });
+});
+
+// Controller wiring retains the explicit outcome consumed by ShipmentFlowSheet.
+it('routes eligible checkout quote rejection through the controller without wallet requoting', async () => {
+  orderState.current = {
+    id: 'order',
+    merchant_id: 'merchant',
+    payment_status: 'paid',
+    shipping_status: 'processing',
+    shipping_funding_source: 'customer_checkout',
+    shipping_provider: 'GIGL',
+    selected_quote_id: 'quote',
+  };
+  merchantState.current = {
+    id: 'merchant',
+    user_id: 'owner',
+    country: 'NG',
+    payout_currency: 'NGN',
+  };
+  authState.user = { id: 'owner' };
+  renderHook(() => useOrderDetailsController());
+  const { OrderStatusUpdateError } = await import(
+    './orders/order-status-update-error'
+  );
+  await expect(
+    shipmentParameters.current?.onProviderBookingError(
+      new OrderStatusUpdateError(
+        'Review quote',
+        'SHIPPING_QUOTE_RECONFIRM_REQUIRED'
+      )
+    )
+  ).resolves.toBe('review_checkout_quote');
+  authState.user = { id: 'staff' };
+  renderHook(() => useOrderDetailsController());
+  await expect(
+    shipmentParameters.current?.onProviderBookingError(
+      new OrderStatusUpdateError(
+        'Review quote',
+        'SHIPPING_QUOTE_RECONFIRM_REQUIRED'
+      )
+    )
+  ).resolves.toBeUndefined();
 });

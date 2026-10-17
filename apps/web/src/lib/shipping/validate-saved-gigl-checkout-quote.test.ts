@@ -159,6 +159,19 @@ describe('saved paid GIG quote validation', () => {
       saved
     );
   });
+  it.each([
+    { pricing_version: null },
+    { provider_cost: null },
+    { quote_request: null },
+  ])('requires explicit recovery rather than silently rebuilding untrusted legacy data %j', async (legacy) => {
+    await expect(
+      validateSavedGiglCheckoutQuote({ ...quote, ...legacy }, sender, 1100)
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+  });
   it('reports unavailable pricing without claiming that details changed', async () => {
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([]);
     await expect(

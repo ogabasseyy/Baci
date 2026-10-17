@@ -4,14 +4,19 @@ import { Pressable, Text, View } from 'react-native';
 import { useAuth } from '@/hooks/useAuth';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useTheme } from '@/hooks/useTheme';
+import { canUseCheckoutShippingRecovery } from '@/lib/checkout-shipping-recovery-eligibility';
 import { CheckoutRecoveryForm } from './CheckoutRecoveryForm';
 
 export function CheckoutShippingRecoveryPanel({
   order,
   onBlockingChange,
   onBusyChange,
+  required = false,
+  onConfirmed,
 }: {
   order: Order;
+  required?: boolean;
+  onConfirmed?: () => void;
   onBlockingChange: (value: boolean) => void;
   onBusyChange?: (value: boolean) => void;
 }) {
@@ -21,39 +26,38 @@ export function CheckoutShippingRecoveryPanel({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
+    if (required) setOpen(true);
+  }, [required]);
+  useEffect(() => {
     onBusyChange?.(busy);
     return () => onBusyChange?.(false);
   }, [busy, onBusyChange]);
-  if (
-    !user?.id ||
-    merchant?.user_id !== user.id ||
-    merchant.id !== order.merchant_id ||
-    order.payment_status !== 'paid' ||
-    order.shipping_status !== 'processing' ||
-    order.shipping_funding_source !== 'customer_checkout' ||
-    order.shipping_provider?.toUpperCase() !== 'GIGL' ||
-    order.shipment_id ||
-    order.tracking_number
-  )
-    return null;
+  if (!canUseCheckoutShippingRecovery(order, merchant, user?.id)) return null;
   return (
     <View>
-      <Pressable
-        accessibilityRole="button"
-        disabled={busy}
-        accessibilityState={{ disabled: busy }}
-        onPress={() => setOpen((value) => !value)}
-      >
-        <Text style={{ color: colors.primary, padding: 12 }}>
-          {open
-            ? 'Cancel destination recovery'
-            : 'Confirm destination and refresh paid quote'}
+      {required ? (
+        <Text style={{ color: colors.text, padding: 12 }}>
+          Review destination and shipping quote before booking.
         </Text>
-      </Pressable>
-      {open ? (
+      ) : (
+        <Pressable
+          accessibilityRole="button"
+          disabled={busy}
+          accessibilityState={{ disabled: busy }}
+          onPress={() => setOpen((value) => !value)}
+        >
+          <Text style={{ color: colors.primary, padding: 12 }}>
+            {open
+              ? 'Cancel destination recovery'
+              : 'Confirm destination and refresh paid quote'}
+          </Text>
+        </Pressable>
+      )}
+      {open || required ? (
         <CheckoutRecoveryForm
           key={order.id}
           order={order}
+          onConfirmed={onConfirmed}
           onBlockingChange={onBlockingChange}
           onBusyChange={setBusy}
         />

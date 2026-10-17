@@ -51,6 +51,7 @@ type ProbeLeg = {
 type ProbeRefund = {
   amount: number;
   currency: string | null;
+  gateway: unknown;
   metadata: {
     method?: string;
     payment_transaction_id?: string;
@@ -183,7 +184,7 @@ export async function isRefundVerificationPending(
   const { data: refunds, error: refundsError } = await abortable(
     supabase
       .from('transactions')
-      .select('amount, currency, metadata, order_id')
+      .select('amount, currency, gateway, metadata, order_id')
       .in('order_id', orderIds)
       .eq('transaction_type', 'refund')
       .in('status', ['completed', 'refunded'])
@@ -248,12 +249,15 @@ function isLegCovered(
   paystackLegs: ProbeLeg[],
   refunds: ProbeRefund[]
 ): boolean {
-  // An unverified Paystack attestation proves nothing: like the
-  // coverage scan, only method-gated rows count toward coverage.
+  // Unverified Paystack-substance rows (stored gateway OR method
+  // claim — native rows carry identity in the gateway column,
+  // stamped manuals via method) prove nothing: either signal
+  // alone demands a processed verdict, like the coverage scan.
   const covering = (row: ProbeRefund): number =>
     Number(row.amount) > 0 &&
     sameCurrency(row.currency, leg.currency) &&
-    (row.metadata?.method !== 'paystack' ||
+    ((normalizePaymentGateway(row.gateway) !== 'PAYSTACK' &&
+      row.metadata?.method !== 'paystack') ||
       row.metadata?.provider_refund_status === 'processed')
       ? Number(row.amount)
       : 0;

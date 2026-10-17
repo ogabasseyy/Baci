@@ -184,3 +184,38 @@ export function writePaidFinalizationSession(
     .select('session_id')
     .maybeSingle();
 }
+
+/**
+ * Reconciles a just-written payment_pending session after the order
+ * was cancelled in the verify/write window: without this, a later
+ * completion would serve the stored bank-transfer instructions for a
+ * cancelled order. Marks the payment setup failed (a retryable
+ * terminal for this order) under the same pending-state fence the
+ * session write installed.
+ */
+export function writeCancelledFinalizationSession(
+  input: Pick<
+    FinalizeAgenticCheckoutInput,
+    'metadata' | 'supabase' | 'sessionId' | 'merchantId'
+  > & { orderId: string }
+) {
+  return input.supabase
+    .from('checkout_sessions')
+    .update({
+      metadata: {
+        ...input.metadata,
+        agentic: {
+          ...(input.metadata.agentic ?? {}),
+          payment_state: 'payment_setup_failed',
+        },
+      },
+    })
+    .eq('session_id', input.sessionId)
+    .eq('merchant_id', input.merchantId)
+    .eq('order_id', input.orderId)
+    .contains('metadata', {
+      agentic: { payment_state: 'payment_pending' },
+    })
+    .select('session_id')
+    .maybeSingle();
+}

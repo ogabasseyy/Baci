@@ -6,6 +6,7 @@ import type {
 } from '@baci/shared/cart';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { redactPreviewSnapshot } from './handoff-preview';
 import {
   type HandoffChoice,
   type HandoffDestinationType,
@@ -181,7 +182,10 @@ export async function redeemCartHandoff(
   const code = parsed.code ?? 'temporarily_unavailable';
   const priced = parsed.state ? buildCartSnapshot(parsed.state) : null;
   return {
-    ...(priced ? { cart: priced.snapshot } : null),
+    // Failure states can be the not-yet-redeemed incoming cart: its
+    // voucher credentials never leave in an error response, matching
+    // the conflict redaction below.
+    ...(priced ? { cart: redactPreviewSnapshot(priced.snapshot) } : null),
     code,
     conflicts:
       code === 'merge_conflict' ? parseConflicts(data.conflicts) : undefined,

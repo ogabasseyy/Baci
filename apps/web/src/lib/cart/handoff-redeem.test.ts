@@ -149,7 +149,14 @@ describe('redeemCartHandoff', () => {
       ],
       ok: false,
       replayed: false,
-      state: rawState(),
+      state: rawState({
+        lines: [
+          rawLine({
+            voucherAwardId: 'award-1',
+            voucherToken: 'incoming-secret-token',
+          }),
+        ],
+      }),
     });
 
     const result = await redeemCartHandoff(client as never, {
@@ -170,6 +177,10 @@ describe('redeemCartHandoff', () => {
       expect(result.conflicts).toHaveLength(1);
       // Credential-bearing fields never reach the route response, even
       // if the RPC regresses and returns them unredacted.
+      // The failure cart is the not-yet-redeemed incoming cart: its
+      // voucher credentials must not leave in the error response.
+      expect(result.cart?.lines[0]?.voucherToken).toBeUndefined();
+      expect(result.cart?.lines[0]?.voucherAwardId).toBeUndefined();
       expect(result.conflicts?.[0]?.existing).toEqual({
         hasNegotiation: true,
         hasVoucher: true,

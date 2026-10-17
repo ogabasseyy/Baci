@@ -18,6 +18,9 @@ import { ERROR_CODES } from './repository-envelope';
 export function redactPreviewSnapshot(snapshot: CartSnapshot): CartSnapshot {
   return {
     ...snapshot,
+    // The reviewed checkout binding identity is session authority,
+    // not part of the totals disclosure the preview exists for.
+    checkoutSessionId: undefined,
     lines: snapshot.lines.map((line) => ({
       ...line,
       negotiatedUnitPriceMinor: undefined,

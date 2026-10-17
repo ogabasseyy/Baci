@@ -109,6 +109,7 @@ export function buildCartSnapshot(raw: RawCartState): PricedSnapshot {
   const warnings: CartWarning[] = [];
   let estimatedTotals = false;
   let subtotalMinor = 0;
+  let assuranceMinor = 0;
 
   for (const rawLine of raw.lines) {
     const priced = priceLine(rawLine);
@@ -116,6 +117,15 @@ export function buildCartSnapshot(raw: RawCartState): PricedSnapshot {
     warnings.push(...priced.warnings);
     estimatedTotals = estimatedTotals || priced.estimated;
     subtotalMinor += priced.line.lineTotalMinor;
+    // Mirror the order RPC's assurance premium (unit price x quantity
+    // x rate, rounded per line) so quoted totals match checkout.
+    if (priced.line.hasAssurance && priced.line.assuranceRate) {
+      assuranceMinor += Math.round(
+        priced.line.unitPriceMinor *
+          priced.line.quantity *
+          priced.line.assuranceRate
+      );
+    }
   }
 
   const snapshot: CartSnapshot = {
@@ -128,7 +138,7 @@ export function buildCartSnapshot(raw: RawCartState): PricedSnapshot {
     merchantId: raw.merchantId,
     state: raw.state,
     subtotalMinor,
-    totalMinor: subtotalMinor,
+    totalMinor: subtotalMinor + assuranceMinor,
     version: raw.version,
   };
   return { snapshot, warnings };

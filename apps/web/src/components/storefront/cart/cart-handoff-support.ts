@@ -67,7 +67,7 @@ export function loadOrCreateAttemptId(handoffId: string): string {
     attemptIds.get(key) ??
     (typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
-      : `attempt-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      : mintAttemptIdFallback());
   attemptIds.set(key, attemptId);
   try {
     window.localStorage.setItem(key, attemptId);
@@ -75,6 +75,20 @@ export function loadOrCreateAttemptId(handoffId: string): string {
     /* Use the tab cache. */
   }
   return attemptId;
+}
+
+/**
+ * CSPRNG-backed attempt id for environments without randomUUID:
+ * attempt ids are redemption idempotency keys, so they must never
+ * come from a predictable generator.
+ */
+export function mintAttemptIdFallback(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, '0')
+  ).join('');
+  return `attempt-${hex}`;
 }
 
 const attemptChoices = new Map<string, Choice>();

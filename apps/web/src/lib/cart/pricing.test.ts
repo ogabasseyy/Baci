@@ -55,6 +55,23 @@ describe('buildCartSnapshot', () => {
     expect(warnings).toEqual([]);
   });
 
+  it('includes per-line assurance premiums in the total', () => {
+    const { snapshot } = buildCartSnapshot(
+      raw([
+        line({
+          assuranceRate: 0.05,
+          hasAssurance: true,
+          quantity: 2,
+          unitPriceMinor: 2500,
+        }),
+        line({ id: 'plain', quantity: 1, unitPriceMinor: 1000 }),
+      ])
+    );
+    // Merchandise 6000 + assurance round(2500 x 2 x 0.05) = 250.
+    expect(snapshot.subtotalMinor).toBe(6000);
+    expect(snapshot.totalMinor).toBe(6250);
+  });
+
   it('excludes access credentials and buyer records from the snapshot', () => {
     const { snapshot } = buildCartSnapshot(raw());
 

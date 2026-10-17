@@ -29,6 +29,7 @@ INSERT INTO public.orders VALUES ('88888888-8888-4888-8888-888888888888', 5000);
 
 \ir ../migrations/20261012050000_commerce_cart_core.sql
 \ir ../migrations/20261012050100_commerce_cart_roles.sql
+\ir ../migrations/20261015179940_commerce_cart_bootstrap_insert_shape.sql
 
 -- Fixtures: merchants A/B, carts A1/A2/B1, guests A1/A2/B1.
 INSERT INTO public.commerce_carts (id, merchant_id, state, expires_at) VALUES
@@ -265,6 +266,27 @@ BEGIN
     INSERT INTO public.commerce_cart_creation_requests (merchant_id, principal_id, operation_id, request_digest, expires_at)
     VALUES ('11111111-1111-4111-8111-111111111111', 'guest-other', 'create-2', 'digest-2', now() + interval '1 day');
     RAISE EXCEPTION 'bootstrap foreign-principal receipt must fail';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  -- The bootstrap insert is constrained to the canonical creation
+  -- shape: non-active state, pre-bound checkout session, or an
+  -- expiry beyond the seven-day lifetime must be denied.
+  BEGIN
+    INSERT INTO public.commerce_carts (id, merchant_id, state, expires_at)
+    VALUES ('99999999-9999-4999-8999-999999999997', '11111111-1111-4111-8111-111111111111', 'expired', now() + interval '7 days');
+    RAISE EXCEPTION 'bootstrap non-active insert must fail';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.commerce_carts (id, merchant_id, expires_at)
+    VALUES ('99999999-9999-4999-8999-999999999996', '11111111-1111-4111-8111-111111111111', now() + interval '30 days');
+    RAISE EXCEPTION 'bootstrap far-future expiry insert must fail';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.commerce_carts (id, merchant_id, checkout_session_id, expires_at)
+    VALUES ('99999999-9999-4999-8999-999999999995', '11111111-1111-4111-8111-111111111111', '88888888-8888-4888-8888-888888888888', now() + interval '7 days');
+    RAISE EXCEPTION 'bootstrap pre-bound session insert must fail';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
 END

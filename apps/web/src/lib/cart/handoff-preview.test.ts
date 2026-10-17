@@ -49,6 +49,30 @@ describe('rpcPreviewHandoff', () => {
     return { rpc: vi.fn(async () => ({ data: payload, error })) };
   }
 
+  it('never returns the reviewed checkout session id in a preview', async () => {
+    const result = await rpcPreviewHandoff(
+      clientReturning({
+        code: null,
+        expiresAt: '2026-10-12T06:05:00.000Z',
+        merchant: { id: MERCHANT_ID, slug: 'ogabassey' },
+        ok: true,
+        snapshot: rawState({
+          checkoutSessionId: '99999999-9999-4999-8999-999999999999',
+        }),
+        status: 'pending',
+      }) as never,
+      'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      'ch1.fixture.token'
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.snapshot?.checkoutSessionId).toBeUndefined();
+      expect(JSON.stringify(result.snapshot)).not.toContain(
+        '99999999-9999-4999-8999-999999999999'
+      );
+    }
+  });
+
   it('never returns quiz voucher tokens in a preview', async () => {
     const result = await rpcPreviewHandoff(
       clientReturning({

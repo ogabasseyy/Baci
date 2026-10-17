@@ -1153,6 +1153,118 @@ describe('finalizeAgenticCheckoutPayment', () => {
     expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
   });
 
+  it('reconciles the session when cancellation lands between verification and the session write', async () => {
+    const chains = Array.from({ length: 5 }, () =>
+      createUpdateChain({ session_id: 'agentic_session_1' })
+    );
+    const supabase = createSupabaseWithUpdateChains(chains);
+    const originalFrom = supabase.from.getMockImplementation();
+    let orderReads = 0;
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockImplementation(async () => {
+          orderReads += 1;
+          return {
+            data: {
+              payment_status: 'pending',
+              shipping_status: orderReads === 1 ? 'pending' : 'cancelled',
+            },
+            error: null,
+          };
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    const response = await finalizeAgenticCheckoutPayment(
+      finalizeInput(supabase)
+    );
+    expect(response.status).toBe(409);
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+    const updates = (
+      supabase as unknown as {
+        update: { mock: { calls: [Record<string, unknown>][] } };
+      }
+    ).update.mock.calls.map(([payload]) => JSON.stringify(payload));
+    expect(
+      updates.some((payload) => payload.includes('payment_setup_failed'))
+    ).toBe(true);
+  });
+
+  it('fails closed when the post-write order revalidation cannot read', async () => {
+    const chains = Array.from({ length: 4 }, () =>
+      createUpdateChain({ session_id: 'agentic_session_1' })
+    );
+    const supabase = createSupabaseWithUpdateChains(chains);
+    const originalFrom = supabase.from.getMockImplementation();
+    let orderReads = 0;
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockImplementation(async () => {
+          orderReads += 1;
+          return orderReads === 1
+            ? {
+                data: { payment_status: 'pending', shipping_status: 'pending' },
+                error: null,
+              }
+            : { data: null, error: { message: 'connection reset' } };
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    const response = await finalizeAgenticCheckoutPayment(
+      finalizeInput(supabase)
+    );
+    expect(response.status).toBe(503);
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+  });
+
+  it('does not claim paid when the reconciliation write fails', async () => {
+    const chains = [
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain(null, { message: 'write failed' }),
+    ];
+    const supabase = createSupabaseWithUpdateChains(chains);
+    const originalFrom = supabase.from.getMockImplementation();
+    let orderReads = 0;
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockImplementation(async () => {
+          orderReads += 1;
+          return {
+            data: {
+              payment_status: orderReads === 1 ? 'pending' : 'paid',
+              shipping_status: 'pending',
+            },
+            error: null,
+          };
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    const response = await finalizeAgenticCheckoutPayment(
+      finalizeInput(supabase)
+    );
+    expect(response.status).toBe(500);
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['paid', 200],
     ['cancelled', 409],

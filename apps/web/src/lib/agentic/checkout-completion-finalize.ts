@@ -5,6 +5,7 @@ import {
   readFinalizationOrderState,
   recoverFinalizationOrderWriteFailure,
   verifyBoundFinalizationOrder,
+  writeCancelledFinalizationSession,
   writeFinalizedOrderSession,
   writePaidFinalizationSession,
 } from '@/lib/agentic/checkout-bound-order-recovery';
@@ -285,7 +286,7 @@ export async function finalizeAgenticCheckoutPayment({
       supabase,
     });
     if (recheck === 'paid') {
-      await writePaidFinalizationSession({
+      const paidWrite = await writePaidFinalizationSession({
         buyer,
         dvaAccount,
         merchantId,
@@ -294,9 +295,26 @@ export async function finalizeAgenticCheckoutPayment({
         sessionId,
         supabase,
       });
+      if (paidWrite.error) {
+        // Do not claim a paid response the session row does not
+        // hold: a later request could otherwise serve transfer
+        // instructions for an already-paid order.
+        return respond({ error: 'Payment session update failed' }, 500);
+      }
       orderAlreadyPaid = true;
     } else if (recheck === 'conflict') {
+      await writeCancelledFinalizationSession({
+        merchantId,
+        metadata,
+        orderId,
+        sessionId,
+        supabase,
+      });
       return respond({ error: 'Order is no longer awaiting payment' }, 409);
+    } else if (recheck === 'error') {
+      // The revalidation itself failed: never assume the order is
+      // still pending behind a transient database failure.
+      return respond({ error: 'temporarily_unavailable' }, 503);
     }
   }
   if (orderAlreadyPaid) {

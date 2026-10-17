@@ -252,6 +252,41 @@ describe('useSharedCart negotiation and totals', () => {
     expect(result.current.cartTotal).toBeCloseTo(252.5, 2);
   });
 
+  it('rounds assurance premiums per line like the server', async () => {
+    mockAdopted(
+      3,
+      [1, 2, 3, 4].map((n) =>
+        cartLine({
+          assuranceRate: 0.05,
+          hasAssurance: true,
+          id: `line-${n}`,
+          item: { productId: `prod-${n}` },
+          lineTotalMinor: 110,
+          quantity: 1,
+          unitPriceMinor: 110,
+        })
+      )
+    );
+    vi.mocked(fetchSharedCartProducts).mockResolvedValue(
+      new Map(
+        [1, 2, 3, 4].map(
+          (n) =>
+            [`prod-${n}`, product({ id: `prod-${n}`, price: 1.1 })] as const
+        )
+      )
+    );
+    const { result } = renderHook(() =>
+      useSharedCart({
+        merchantId: MERCHANT_ID,
+        merchantSlug: SLUG,
+        sessionGeneration: 1,
+      })
+    );
+    await waitFor(() => expect(result.current.cartId).toBe(CART_ID));
+    // Per line: 1.10 + round(110 x 5%)/100 = 1.16; four lines = 4.64.
+    expect(result.current.cartTotal).toBeCloseTo(4.64, 2);
+  });
+
   it('exposes a manual refresh that refetches a stale snapshot', async () => {
     vi.useFakeTimers();
     try {

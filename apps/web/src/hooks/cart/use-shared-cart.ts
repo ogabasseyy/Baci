@@ -75,13 +75,20 @@ export function useSharedCart(
       item.negotiationStatus !== 'rejected'
         ? item.negotiatedPrice
         : item.price;
-    const itemTotal =
-      unitPrice * (Number.isFinite(item.quantity) ? item.quantity : 0);
-    const assuranceMultiplier =
+    const quantity = Number.isFinite(item.quantity) ? item.quantity : 0;
+    const itemTotal = unitPrice * quantity;
+    // Mirror the server premium: rounded per line to whole cents,
+    // not a fractional multiplier over the line total.
+    const assurancePremium =
       item.hasAssurance === true
-        ? 1 + (item.assuranceRate ?? DEFAULT_ASSURANCE_RATE)
-        : 1;
-    return sum + itemTotal * assuranceMultiplier;
+        ? Math.round(
+            unitPrice *
+              100 *
+              quantity *
+              (item.assuranceRate ?? DEFAULT_ASSURANCE_RATE)
+          ) / 100
+        : 0;
+    return sum + itemTotal + assurancePremium;
   }, 0);
 
   if (!enabled) {

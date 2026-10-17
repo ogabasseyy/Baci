@@ -303,6 +303,25 @@ export async function finalizeAgenticCheckoutPayment({
       }
       orderAlreadyPaid = true;
     } else if (recheck === 'conflict') {
+      const reconciled = await writeCancelledFinalizationSession({
+        merchantId,
+        metadata,
+        orderId,
+        sessionId,
+        supabase,
+      });
+      if (reconciled.error) {
+        // The 409 must not be stored while the session can still
+        // serve transfer instructions for the cancelled order.
+        return respond({ error: 'Payment session update failed' }, 500);
+      }
+      return respond({ error: 'Order is no longer awaiting payment' }, 409);
+    } else if (recheck === 'error') {
+      // The revalidation itself failed: fence the session out of
+      // payment_pending before returning, because the failed read
+      // may have hidden a paid or cancelled order and a later
+      // request would otherwise serve the stored instructions
+      // without revalidating.
       await writeCancelledFinalizationSession({
         merchantId,
         metadata,
@@ -310,10 +329,6 @@ export async function finalizeAgenticCheckoutPayment({
         sessionId,
         supabase,
       });
-      return respond({ error: 'Order is no longer awaiting payment' }, 409);
-    } else if (recheck === 'error') {
-      // The revalidation itself failed: never assume the order is
-      // still pending behind a transient database failure.
       return respond({ error: 'temporarily_unavailable' }, 503);
     }
   }

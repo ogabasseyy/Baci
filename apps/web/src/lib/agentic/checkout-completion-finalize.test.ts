@@ -1226,6 +1226,53 @@ describe('finalizeAgenticCheckoutPayment', () => {
     );
     expect(response.status).toBe(503);
     expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+    // The session is fenced out of payment_pending before the 503
+    // so a later request cannot serve the stored instructions.
+    const updates = (
+      supabase as unknown as {
+        update: { mock: { calls: [Record<string, unknown>][] } };
+      }
+    ).update.mock.calls.map(([payload]) => JSON.stringify(payload));
+    expect(
+      updates.some((payload) => payload.includes('payment_setup_failed'))
+    ).toBe(true);
+  });
+
+  it('does not store the conflict when cancellation reconciliation fails', async () => {
+    const chains = [
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain(null, { message: 'write failed' }),
+    ];
+    const supabase = createSupabaseWithUpdateChains(chains);
+    const originalFrom = supabase.from.getMockImplementation();
+    let orderReads = 0;
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockImplementation(async () => {
+          orderReads += 1;
+          return {
+            data: {
+              payment_status: 'pending',
+              shipping_status: orderReads === 1 ? 'pending' : 'cancelled',
+            },
+            error: null,
+          };
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    const response = await finalizeAgenticCheckoutPayment(
+      finalizeInput(supabase)
+    );
+    expect(response.status).toBe(500);
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
   });
 
   it('does not claim paid when the reconciliation write fails', async () => {

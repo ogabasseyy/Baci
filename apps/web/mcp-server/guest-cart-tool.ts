@@ -1,4 +1,7 @@
-import { GuestCartBridgePendingError } from './guest-cart-errors';
+import {
+  GuestCartBridgePendingError,
+  GuestCartPersistedError,
+} from './guest-cart-errors';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import {
@@ -169,7 +172,8 @@ export function registerGuestCartTool(
             // already consumed atomically by the reserve call above.
             if (
               !args.cart_token &&
-              !(error instanceof GuestCartBridgePendingError)
+              !(error instanceof GuestCartBridgePendingError) &&
+              !(error instanceof GuestCartPersistedError)
             )
               refundGuestCartCreation(
                 options.clientIp ?? 'unknown',

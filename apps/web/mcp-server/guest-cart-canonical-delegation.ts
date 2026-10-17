@@ -3,6 +3,7 @@ import type { GuestCanonicalBridge } from './guest-cart-canonical-bridge';
 import {
   GuestCartBridgePendingError,
   GuestCartCanonicalError,
+  GuestCartPersistedError,
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 import type { GuestCartLine, GuestCartLineInput } from './guest-cart-store';
@@ -80,7 +81,7 @@ export async function updateGuestCartWithCanonical({
           error instanceof GuestCartCanonicalError &&
           !error.retryable
         )
-          throw error;
+          throw new GuestCartPersistedError(result.cart_token, error);
         throw new GuestCartBridgePendingError(result.cart_token);
       }
     }

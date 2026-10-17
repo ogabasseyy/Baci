@@ -41,6 +41,41 @@ describe('pendingCartBodySchema', () => {
     ).toBe(false);
   });
 
+  it('retains assurance flags and accepts zero-price negotiations', () => {
+    const parsed = pendingCartBodySchema.safeParse({
+      kind: 'create',
+      input: {
+        operationId: 'op-1',
+        lines: [
+          {
+            item: { productId: '11111111-1111-4111-8111-111111111111' },
+            quantity: 1,
+            hasAssurance: true,
+          },
+        ],
+      },
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success && parsed.data.kind === 'create') {
+      expect(parsed.data.input.lines?.[0].hasAssurance).toBe(true);
+    }
+    expect(
+      pendingCartBodySchema.safeParse({
+        kind: 'command',
+        cartId: '11111111-1111-4111-8111-111111111111',
+        input: {
+          operationId: 'op-1',
+          expectedVersion: 1,
+          command: {
+            type: 'set_negotiated_price',
+            lineId: 'line-1',
+            negotiatedUnitPriceMinor: 0,
+          },
+        },
+      }).success
+    ).toBe(true);
+  });
+
   it('requires the complete merge payload for handoff merges', () => {
     expect(
       pendingCartBodySchema.safeParse({

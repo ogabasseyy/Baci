@@ -19,6 +19,12 @@ describe('resolveCartApiOrigin', () => {
     );
   });
 
+  it('maps the hosted staging host to its programmatic cart surface', () => {
+    expect(resolveCartApiOrigin('https://staging.ogabassey.com')).toBe(
+      'https://api-staging.ogabassey.com'
+    );
+  });
+
   it('passes malformed origins through for the client to reject', () => {
     expect(resolveCartApiOrigin('not a url')).toBe('not a url');
   });

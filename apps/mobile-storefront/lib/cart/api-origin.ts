@@ -15,6 +15,9 @@
  */
 const PLATFORM_APEX_TO_CART_HOST: Record<string, string> = {
   'usebaci.com': 'api.usebaci.com',
+  // The hosted-staging pin is the browsable staging host; its
+  // programmatic counterpart is where body proofs are disclosed.
+  'staging.ogabassey.com': 'api-staging.ogabassey.com',
 };
 
 export function resolveCartApiOrigin(configuredOrigin: string): string {

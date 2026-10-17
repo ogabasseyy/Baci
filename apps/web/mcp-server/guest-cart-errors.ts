@@ -32,6 +32,21 @@ export class GuestCartStorageUnavailableError extends Error {
   }
 }
 
+/**
+ * The legacy creation already persisted before a definitive bridge
+ * failure: the failure surfaces unchanged (via the cause), but the
+ * creation quota must stay charged because the row now exists.
+ */
+export class GuestCartPersistedError extends Error {
+  override readonly name = 'GuestCartPersistedError';
+  constructor(
+    readonly cartToken: string,
+    readonly cause: unknown
+  ) {
+    super('Guest cart was persisted before the bridge failure');
+  }
+}
+
 /** Creation committed before broker delivery; retain this handle on retries. */
 export class GuestCartBridgePendingError extends Error {
   constructor(readonly cartToken: string) {

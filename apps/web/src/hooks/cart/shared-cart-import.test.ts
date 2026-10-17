@@ -96,6 +96,16 @@ describe('planLegacyImport', () => {
     expect(first.lines).toHaveLength(2);
     expect(first.lines[0]).toMatchObject({ quantity: 2 });
     expect(first.lines[1].negotiatedUnitPriceMinor).toBe(5000);
+    // A free (fully discounted) accepted negotiation keeps its zero
+    // attachment instead of reverting to catalog pricing.
+    const free = planLegacyImport(
+      [cartItem({ negotiatedPrice: 0, negotiationStatus: 'accepted' })],
+      null,
+      null
+    );
+    if (free.kind !== 'create') throw new Error('expected create plan');
+    expect(free.lines[0].negotiatedUnitPriceMinor).toBe(0);
+    expect(free.lines[0].negotiationStatus).toBe('accepted');
     // Derived keys converge retries instead of duplicating the import.
     expect(first.operationId).toBe(second.operationId);
     expect(first.operationId.length).toBeLessThanOrEqual(128);

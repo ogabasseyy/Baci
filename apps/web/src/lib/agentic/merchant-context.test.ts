@@ -409,9 +409,8 @@ describe('resolveAgenticMerchantContextFromRpc', () => {
           custom_domain: 'fixture.example.com',
           agentic_checkout_enabled: true,
           pay_on_delivery_enabled: true,
-          custom_settings: {
-            agentic_agent_allowlist: ['fixture-agent'],
-          },
+          agent_allowlist: ['fixture-agent'],
+          agent_denylist: [],
         },
       ],
       error: null,

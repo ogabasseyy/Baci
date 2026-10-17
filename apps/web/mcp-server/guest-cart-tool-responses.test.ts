@@ -1,5 +1,8 @@
-import { GuestCartCanonicalError } from './guest-cart-errors';
-import { GuestCartBridgePendingError } from './guest-cart-errors';
+import {
+  GuestCartBridgePendingError,
+  GuestCartCanonicalError,
+  GuestCartPersistedError,
+} from './guest-cart-errors';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   GuestCartExpiredError,
@@ -163,6 +166,20 @@ it('returns a retained capability when broker delivery follows committed legacy 
     cart_token: token,
     retryable: true,
     code: 'refresh_required',
+  });
+});
+it('surfaces the definitive failure wrapped by a persisted creation', () => {
+  const token = 'a'.repeat(64);
+  const response = mapGuestCartToolError(
+    new GuestCartPersistedError(
+      token,
+      new GuestCartCanonicalError('invalid_item', token)
+    )
+  );
+  expect(response.structuredContent).toEqual({
+    success: false,
+    code: 'invalid_item',
+    retryable: false,
   });
 });
 it('returns a canonical version refresh with the same token without claiming migration', () => {

@@ -16,20 +16,19 @@ import { clearDeviceCartForAccountTeardown } from './clear-device-cart';
 import { useComparisonStore } from './comparison-store';
 import { useQuizStore } from './quiz-store';
 import { useSavedStore } from './saved-store';
-import {
-  hasSharedCartWriter,
-  retireSharedCartWriter,
-} from './shared-cart-writer';
+import { retireSharedCartWriter } from './shared-cart-writer';
 
 const log = createLogger('AuthStore');
 
 async function clearUserStores() {
-  const shared = hasSharedCartWriter();
   try {
     await clearDeviceCartForAccountTeardown();
   } catch {
     log.error('Failed to retire cart device during account teardown');
-    if (!shared && typeof useCartStore.setState === 'function') {
+    // Blank the displayed items even when retirement failed: the
+    // merchant reference stays for a retirement retry, but the
+    // previous account's items must not greet the next identity.
+    if (typeof useCartStore.setState === 'function') {
       useCartStore.setState({
         items: [],
         lineSequence: 0,

@@ -4,6 +4,7 @@ import {
   GuestCartExpiredError,
   GuestCartFullError,
   GuestCartMigratedError,
+  GuestCartPersistedError,
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 
@@ -31,6 +32,10 @@ export class ProductUnavailable extends Error {
  * Split from the tool registration to hold the 300-line file budget.
  */
 export function mapGuestCartToolError(error: unknown) {
+  // A persisted creation wraps its definitive failure: surface the
+  // failure itself, not the persistence marker.
+  if (error instanceof GuestCartPersistedError)
+    return mapGuestCartToolError(error.cause);
   // A migrated legacy cart has a canonical shared-cart successor: the
   // typed outcome carries it so the client refreshes into the shared
   // cart instead of starting a second guest cart.

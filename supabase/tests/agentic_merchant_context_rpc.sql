@@ -68,7 +68,8 @@ BEGIN
     OR v_row.custom_domain <> 'fixture.example.com'
     OR v_row.agentic_checkout_enabled IS DISTINCT FROM true
     OR v_row.pay_on_delivery_enabled IS DISTINCT FROM true
-    OR v_row.custom_settings -> 'agentic_agent_allowlist' <> '["fixture-agent"]'::jsonb
+    OR v_row.agent_allowlist <> '["fixture-agent"]'::jsonb
+    OR v_row.agent_denylist IS NOT NULL
   THEN
     RAISE EXCEPTION 'agentic merchant context projection mismatch: %', v_row;
   END IF;

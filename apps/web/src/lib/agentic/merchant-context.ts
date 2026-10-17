@@ -87,7 +87,10 @@ export async function resolveAgenticMerchantContextFromRpc(
   if (typeof record.id !== 'string') {
     return null;
   }
-  const requestControls = readAgenticRequestControls(record.custom_settings);
+  const requestControls = readAgenticRequestControls({
+    agentic_agent_allowlist: record.agent_allowlist,
+    agentic_agent_denylist: record.agent_denylist,
+  });
   return {
     agent_user_agent_allowlist: requestControls.allowlist,
     agent_user_agent_denylist: requestControls.denylist,

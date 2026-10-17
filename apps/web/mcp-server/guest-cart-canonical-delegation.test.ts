@@ -6,6 +6,7 @@ import {
 import {
   GuestCartBridgePendingError,
   GuestCartCanonicalError,
+  GuestCartPersistedError,
 } from './guest-cart-errors';
 
 const token = 'a'.repeat(64);
@@ -70,12 +71,19 @@ describe('canonical guest-cart delegation', () => {
     );
     expect(recordStorageError).toHaveBeenLastCalledWith('bridge_unavailable');
   });
-  it('surfaces definitive canonical rejections from first migration unchanged', async () => {
+  it('marks definitive canonical rejections after first persistence as persisted', async () => {
     const failure = new GuestCartCanonicalError('invalid_item', token);
     canonical.update.mockRejectedValue(failure);
-    await expect(
-      updateGuestCartWithCanonical({ ...input, token: undefined })
-    ).rejects.toBe(failure);
+    const thrown = await updateGuestCartWithCanonical({
+      ...input,
+      token: undefined,
+    }).catch((error: unknown) => error);
+    // The legacy row already exists, so the failure is marked
+    // persisted (quota stays charged) while the cause surfaces
+    // unchanged to the response mapper.
+    expect(thrown).toBeInstanceOf(GuestCartPersistedError);
+    expect((thrown as GuestCartPersistedError).cause).toBe(failure);
+    expect((thrown as GuestCartPersistedError).cartToken).toBe(token);
     expect(updateLegacy).toHaveBeenCalledOnce();
     expect(recordStorageError).toHaveBeenLastCalledWith(null);
   });

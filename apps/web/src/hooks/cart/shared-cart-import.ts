@@ -39,7 +39,7 @@ export function displayLineToInputLine(item: CartItem): CartInputLine {
     if (
       typeof item.negotiatedPrice === 'number' &&
       Number.isFinite(item.negotiatedPrice) &&
-      item.negotiatedPrice > 0
+      item.negotiatedPrice >= 0
     ) {
       line.negotiatedUnitPriceMinor = Math.round(item.negotiatedPrice * 100);
     }

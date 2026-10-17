@@ -15,6 +15,9 @@ const attachments = {
 const line = z.object({
   item,
   quantity: z.number().int().min(1).max(10),
+  // Coverage choices ride on create/replace/merge lines: without this
+  // the parse strips paid assurance the snapshot explicitly carries.
+  hasAssurance: z.boolean().optional(),
   ...attachments,
 });
 const operationId = z.string().min(1).max(128);
@@ -39,7 +42,7 @@ const command = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('set_negotiated_price'),
     lineId: z.string().min(1),
-    negotiatedUnitPriceMinor: z.number().int().min(1).nullable(),
+    negotiatedUnitPriceMinor: z.number().int().nonnegative().nullable(),
   }),
   z.object({ type: z.literal('clear') }),
   z.object({ type: z.literal('replace'), lines: z.array(line).max(20) }),

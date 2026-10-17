@@ -71,6 +71,7 @@ import type { LegacyCheckoutKeyInput } from './build-legacy-checkout-fingerprint
 import { buildCheckoutShippingSelectionPayload } from './checkout-order-shipping-payload';
 import { clearLegacyCheckoutIdempotencyKey } from './clear-legacy-checkout-idempotency-key';
 import { handoffLegacyCreditDirectSuccess } from './credit-direct-success';
+import { recordLegacyCheckoutRedirect } from './legacy-checkout-redirect-retirement';
 import { captureLegacyCreditDirectPopup } from './legacy-credit-direct-popup';
 import { openLegacyCreditDirectPopup } from './open-legacy-credit-direct-popup';
 import { prepareLegacyCreditDirectCheckout } from './prepare-legacy-credit-direct-checkout';
@@ -503,6 +504,13 @@ async function prepareCheckout(
     }
 
     if (keySession) await keySession.completeCheckout();
+    if (keySession && input.discountCodeIsLoyalty) {
+      // The success page has no checkout session to retire the
+      // retained loyalty key after a full-page redirect; record the
+      // handoff so it can clear exactly this key once this order is
+      // confirmed there.
+      recordLegacyCheckoutRedirect(order.id, keySession.keyInput);
+    }
     return { kind: 'redirect', order, paystackAuthUrl };
   } catch (error) {
     // The claimed order was cancelled: the retained key can never

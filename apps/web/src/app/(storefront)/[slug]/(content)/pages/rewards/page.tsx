@@ -1,20 +1,15 @@
 'use client';
 
-import { Gift, History, TrendingDown, TrendingUp, Trophy } from 'lucide-react';
+import { Gift, History, Trophy } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { LoyaltyEnrollmentForm } from '@/components/storefront/loyalty/loyalty-enrollment-form';
 import { LoyaltyStatusCard } from '@/components/storefront/loyalty/loyalty-status-card';
 import { RewardsCatalog } from '@/components/storefront/loyalty/rewards-catalog';
+import { RewardsHistory } from '@/components/storefront/loyalty/rewards-history';
 import { RewardsSignInPrompt } from '@/components/storefront/loyalty/rewards-sign-in-prompt';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
@@ -220,79 +215,7 @@ export default function RewardsPage() {
             </TabsContent>
 
             <TabsContent value="history" className="mt-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Points History</CardTitle>
-                  <CardDescription>Your recent points activity</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {recentTransactions.length === 0 ? (
-                    <div className="text-center py-8">
-                      <History className="size-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">
-                        No transactions yet
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Make a purchase to start earning points
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {recentTransactions.map((transaction) => (
-                        <div
-                          key={transaction.id}
-                          className="flex items-center justify-between py-3 border-b last:border-0"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`p-2 rounded-full ${
-                                transaction.points > 0
-                                  ? 'bg-green-100'
-                                  : 'bg-red-100'
-                              }`}
-                            >
-                              {transaction.points > 0 ? (
-                                <TrendingUp className="size-4 text-green-600" />
-                              ) : (
-                                <TrendingDown className="size-4 text-red-600" />
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">
-                                {transaction.description}
-                              </p>
-                              {transaction.redemption_code ? (
-                                <p className="font-mono text-xs text-muted-foreground">
-                                  Code: {transaction.redemption_code}
-                                </p>
-                              ) : null}
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(
-                                  transaction.created_at
-                                ).toLocaleDateString(undefined, {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                          <span
-                            className={`font-semibold ${
-                              transaction.points > 0
-                                ? 'text-green-600'
-                                : 'text-red-600'
-                            }`}
-                          >
-                            {transaction.points > 0 ? '+' : ''}
-                            {transaction.points.toLocaleString()} pts
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <RewardsHistory transactions={recentTransactions} />
             </TabsContent>
           </Tabs>
         </div>

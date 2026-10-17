@@ -641,6 +641,12 @@ export async function POST(request: NextRequest) {
             'bnpl_pending',
             'bnpl_approved',
           ])
+          // A shipping-axis cancellation (either spelling) is just as
+          // terminal: its loyalty claim was released too, and neither
+          // the reopen trigger nor the clamped check recognizes the
+          // US spelling, so fence it out of the paid write here.
+          .neq('shipping_status', 'cancelled')
+          .neq('shipping_status', 'canceled')
           .select('id, payment_status, shipping_status, cancelled_at')
           .maybeSingle();
 

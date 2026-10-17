@@ -113,17 +113,19 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
       return { success: false, error: 'Missing merchant or customer ID' };
     }
 
-    // Stable per-reward key: a timeout retry reuses the failed
-    // attempt's key so the RPC replays instead of re-spending. The key
-    // clears only on success (a 4xx validation failure keeps it: fixing
-    // the cause and retrying replays nothing since failures never store).
-    const idempotencyKey = await redemptionIdempotencyKeys.forReward(
-      merchantId,
-      customerId,
-      rewardId
-    );
-
     try {
+      // Stable per-reward key: a timeout retry reuses the failed
+      // attempt's key so the RPC replays instead of re-spending. The key
+      // clears only on success (a 4xx validation failure keeps it: fixing
+      // the cause and retrying replays nothing since failures never store).
+      // Key acquisition is inside the try: it deliberately rejects when
+      // browser storage cannot durably persist the key, and callers
+      // only handle resolved failure results.
+      const idempotencyKey = await redemptionIdempotencyKeys.forReward(
+        merchantId,
+        customerId,
+        rewardId
+      );
       const response = await fetch('/api/storefront/loyalty/redeem', {
         method: 'POST',
         headers: buildCsrfHeaders({

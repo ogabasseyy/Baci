@@ -83,6 +83,21 @@ describe('loyaltySettingsPostSchema', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('normalizes legacy tier nulls instead of rejecting stored settings', () => {
+    // Tiers persisted before this schema existed can carry null
+    // multiplier/minPoints/perks; resubmitting them to save another
+    // field must succeed with SQL-shaped defaults applied.
+    const parsed = loyaltySettingsPostSchema.safeParse({
+      tiers: [{ name: 'Gold', minPoints: null, multiplier: null, perks: null }],
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.tiers).toEqual([
+        { name: 'Gold', minPoints: 0, multiplier: undefined, perks: undefined },
+      ]);
+    }
+  });
+
   it('rejects tier names that overflow the varchar(50) tier columns', () => {
     const parsed = loyaltySettingsPostSchema.safeParse({
       tiers: [{ name: 'x'.repeat(51), minPoints: 500 }],

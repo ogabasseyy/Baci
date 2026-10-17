@@ -85,6 +85,66 @@ function readStoredEntries(): StoredCheckoutEntries {
   }
 }
 
+function perFingerprintStorageKey(hash: string) {
+  return `${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hash}`;
+}
+
+function readPerFingerprint(hash: string) {
+  const raw = window.localStorage.getItem(perFingerprintStorageKey(hash));
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isValidEntry(parsed) &&
+      Number.isFinite(parsed.createdAt) &&
+      parsed.createdAt > 0
+      ? { createdAt: parsed.createdAt, key: parsed.key }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePerFingerprint(
+  hash: string,
+  entry: { createdAt: number; key: string }
+) {
+  window.localStorage.setItem(
+    perFingerprintStorageKey(hash),
+    JSON.stringify(entry)
+  );
+}
+
+function removeLegacyEntry(hash: string, entries: StoredCheckoutEntries) {
+  delete entries[hash];
+  if (Object.keys(entries).length === 0) {
+    window.localStorage.removeItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
+  } else {
+    window.localStorage.setItem(
+      CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
+      JSON.stringify(entries)
+    );
+  }
+}
+
+function pruneExpiredPerFingerprint(now: number) {
+  const prefix = `${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:`;
+  const keys: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i += 1) {
+    const storageKey = window.localStorage.key(i);
+    if (storageKey?.startsWith(prefix)) {
+      keys.push(storageKey);
+    }
+  }
+  for (const storageKey of keys) {
+    const entry = readPerFingerprint(storageKey.slice(prefix.length));
+    if (!entry || now - entry.createdAt > CHECKOUT_IDEMPOTENCY_TTL_MS) {
+      window.localStorage.removeItem(storageKey);
+    }
+  }
+}
+
 export async function getCheckoutIdempotencyKey(checkoutFingerprint: string) {
   if (checkoutFingerprint.trim().length === 0) {
     throw new Error(
@@ -100,34 +160,45 @@ export async function getCheckoutIdempotencyKey(checkoutFingerprint: string) {
     );
   }
 
+  const now = Date.now();
   let entries: StoredCheckoutEntries;
+  let perFingerprint: { createdAt: number; key: string } | null;
   try {
+    perFingerprint = readPerFingerprint(checkoutFingerprintHash);
     entries = readStoredEntries();
   } catch {
     throw new Error(
       'Unable to read checkout recovery. Please enable browser storage and try again.'
     );
   }
-  const now = Date.now();
-  const existing = entries[checkoutFingerprintHash];
-  if (existing && now - existing.createdAt <= CHECKOUT_IDEMPOTENCY_TTL_MS) {
-    return existing.key;
+  // Each fingerprint owns an independent storage slot, so concurrent
+  // tabs beginning different checkouts never rewrite one shared map:
+  // a read-modify-write of a shared value could clobber the other
+  // tab's just-saved recovery key.
+  if (
+    perFingerprint &&
+    now - perFingerprint.createdAt <= CHECKOUT_IDEMPOTENCY_TTL_MS
+  ) {
+    return perFingerprint.key;
+  }
+  const legacy = entries[checkoutFingerprintHash];
+  if (legacy && now - legacy.createdAt <= CHECKOUT_IDEMPOTENCY_TTL_MS) {
+    // Migrate the legacy shared-map entry into its own slot.
+    try {
+      writePerFingerprint(checkoutFingerprintHash, legacy);
+      removeLegacyEntry(checkoutFingerprintHash, entries);
+    } catch {
+      // Migration is best-effort; the legacy entry still resolves.
+    }
+    return legacy.key;
   }
 
   const key = crypto.randomUUID();
   try {
-    // Prune expired entries so abandoned attempts cannot grow the
-    // stored map without bound; other live attempts keep their keys.
-    const liveEntries: StoredCheckoutEntries = {};
-    for (const [hash, entry] of Object.entries(entries)) {
-      if (now - entry.createdAt <= CHECKOUT_IDEMPOTENCY_TTL_MS) {
-        liveEntries[hash] = entry;
-      }
-    }
-    liveEntries[checkoutFingerprintHash] = { createdAt: now, key };
+    pruneExpiredPerFingerprint(now);
     window.localStorage.setItem(
-      CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
-      JSON.stringify(liveEntries)
+      perFingerprintStorageKey(checkoutFingerprintHash),
+      JSON.stringify({ createdAt: now, key })
     );
   } catch {
     throw new Error(
@@ -153,6 +224,9 @@ export async function clearCheckoutIdempotencyKey(
         return;
       }
 
+      window.localStorage.removeItem(
+        perFingerprintStorageKey(checkoutFingerprintHash)
+      );
       const entries = readStoredEntries();
       if (!(checkoutFingerprintHash in entries)) {
         return;
@@ -169,6 +243,17 @@ export async function clearCheckoutIdempotencyKey(
       return;
     }
     window.localStorage.removeItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY);
+    const prefix = `${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:`;
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const storageKey = window.localStorage.key(i);
+      if (storageKey?.startsWith(prefix)) {
+        keys.push(storageKey);
+      }
+    }
+    for (const storageKey of keys) {
+      window.localStorage.removeItem(storageKey);
+    }
   } catch {
     // Storage access failed; there is nothing to clear.
   }

@@ -12,11 +12,34 @@ const integerSetting = z.number().int().min(0).max(INT32_MAX).nullish();
 // (its result and customer_loyalty.current_tier are varchar(50)) on
 // every enrollment/award for that merchant. Bound the object to the
 // shape the SQL readers and the settings form actually use.
+// Legacy stored tiers can carry null multiplier/minPoints/perks
+// (accepted as arbitrary JSON before this schema existed, and the
+// storefront status path already tolerates those shapes). Normalize
+// them on the way in — a merchant resubmitting stored settings to
+// save an unrelated field must not be locked out until the JSON is
+// hand-repaired. Null thresholds earn the SQL default (0), a null
+// multiplier/perks list simply means unset.
 const loyaltyTierSchema = z.object({
   name: z.string().trim().min(1).max(50),
-  minPoints: z.number().int().min(0).max(INT32_MAX),
-  multiplier: z.number().finite().min(0).max(100).optional(),
-  perks: z.array(z.string().max(100)).max(20).optional(),
+  minPoints: z
+    .number()
+    .int()
+    .min(0)
+    .max(INT32_MAX)
+    .nullish()
+    .transform((value) => value ?? 0),
+  multiplier: z
+    .number()
+    .finite()
+    .min(0)
+    .max(100)
+    .nullish()
+    .transform((value) => value ?? undefined),
+  perks: z
+    .array(z.string().max(100))
+    .max(20)
+    .nullish()
+    .transform((value) => value ?? undefined),
 });
 
 // Earning/redemption rates land in numeric(10,2) / numeric(10,4)

@@ -214,6 +214,7 @@ function createMockSupabaseClient() {
     update: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     ilike: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -1114,6 +1115,15 @@ describe('POST /api/payments/credit-direct/webhook', () => {
 
       expect(response.status).toBe(200);
       expect(data).toEqual({ received: true });
+
+      // The paid write fences shipping-axis cancellations in both
+      // spellings: neither the reopen trigger nor the clamped check
+      // recognizes the US spelling, so the update must exclude it.
+      expect(mockChain.neq).toHaveBeenCalledWith(
+        'shipping_status',
+        'cancelled'
+      );
+      expect(mockChain.neq).toHaveBeenCalledWith('shipping_status', 'canceled');
 
       // Verify from() was called for orders (twice) and transactions (twice)
       expect(supabaseMock.from).toHaveBeenCalledWith('orders');

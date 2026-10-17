@@ -78,21 +78,34 @@ describe('checkout idempotency key storage', () => {
     );
   });
 
-  it('stores the fingerprint hash, key, and createdAt in local storage', async () => {
+  it('stores each fingerprint in its own storage slot', async () => {
     await getCheckoutIdempotencyKey('fingerprint-a');
 
+    // Per-fingerprint slots: concurrent tabs never rewrite one shared
+    // map, so one tab cannot clobber another tab's recovery key.
+    const hash = await sha256Hex('fingerprint-a');
     const stored = JSON.parse(
-      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
+      window.localStorage.getItem(`${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hash}`) ||
+        '{}'
     );
 
     expect(stored).toEqual({
-      [await sha256Hex('fingerprint-a')]: {
-        createdAt: 1_000,
-        key: '11111111-1111-4111-8111-111111111111',
-      },
+      createdAt: 1_000,
+      key: '11111111-1111-4111-8111-111111111111',
     });
-    expect(stored).not.toHaveProperty('checkoutFingerprint');
-    expect(Object.keys(stored)).not.toContain('fingerprint-a');
+    expect(
+      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY)
+    ).toBeNull();
+  });
+
+  it('keeps one fingerprint key when another tab stores a different checkout', async () => {
+    const keyA = await getCheckoutIdempotencyKey('fingerprint-a');
+    // A second tab begins a different checkout while A is in flight.
+    const keyB = await getCheckoutIdempotencyKey('fingerprint-b');
+
+    expect(keyB).not.toBe(keyA);
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(keyA);
+    await expect(getCheckoutIdempotencyKey('fingerprint-b')).resolves.toBe(keyB);
   });
 
   it('recovers from malformed stored JSON by replacing it with a fresh key', async () => {
@@ -101,15 +114,16 @@ describe('checkout idempotency key storage', () => {
     await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
       '11111111-1111-4111-8111-111111111111'
     );
+    const hash = await sha256Hex('fingerprint-a');
     expect(
       JSON.parse(
-        window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
+        window.localStorage.getItem(
+          `${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hash}`
+        ) || '{}'
       )
     ).toEqual({
-      [await sha256Hex('fingerprint-a')]: {
-        createdAt: 1_000,
-        key: '11111111-1111-4111-8111-111111111111',
-      },
+      createdAt: 1_000,
+      key: '11111111-1111-4111-8111-111111111111',
     });
   });
 
@@ -126,17 +140,16 @@ describe('checkout idempotency key storage', () => {
     await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
       '11111111-1111-4111-8111-111111111111'
     );
+    const hash = await sha256Hex('fingerprint-a');
     const stored = JSON.parse(
-      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
+      window.localStorage.getItem(`${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hash}`) ||
+        '{}'
     );
 
     expect(stored).toEqual({
-      [await sha256Hex('fingerprint-a')]: {
-        createdAt: 1_000,
-        key: '11111111-1111-4111-8111-111111111111',
-      },
+      createdAt: 1_000,
+      key: '11111111-1111-4111-8111-111111111111',
     });
-    expect(stored).not.toHaveProperty('checkoutFingerprint');
   });
 
   it('blocks another order when storage reads fail', async () => {
@@ -188,16 +201,15 @@ describe('checkout idempotency key storage', () => {
   });
 
   it('clears only the matching stored fingerprint', async () => {
+    const hashA = await sha256Hex('fingerprint-a');
+    const slotA = `${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hashA}`;
     await getCheckoutIdempotencyKey('fingerprint-a');
+    await getCheckoutIdempotencyKey('fingerprint-b');
     await clearCheckoutIdempotencyKey('fingerprint-b');
-    expect(
-      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY)
-    ).not.toBeNull();
+    expect(window.localStorage.getItem(slotA)).not.toBeNull();
 
     await clearCheckoutIdempotencyKey('fingerprint-a');
-    expect(
-      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY)
-    ).toBeNull();
+    expect(window.localStorage.getItem(slotA)).toBeNull();
   });
 
   it('does not throw when clearing fails because storage is unavailable', async () => {

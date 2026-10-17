@@ -1,12 +1,14 @@
-import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
-import { hasPermission } from '@/lib/api-auth';
+import {
+  authenticateApiRequest,
+  hasBearerAuthScheme,
+  hasPermission,
+} from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
   getMerchantForApiRequest,
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
-import { createClient } from '@/lib/supabase/server';
 import { loyaltyRedemptionConsumeSchema } from '@/schemas/loyalty-redemption-consume';
 
 type ConsumeRpcResult = {
@@ -37,22 +39,29 @@ type ConsumeRpcResult = {
  */
 export async function POST(request: NextRequest) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
+    // Bearer [REDACTED] (mobile admin fulfillment) or cookies (dashboard):
+    // authenticateApiRequest verifies either and returns the
+    // token-scoped client the RPC must run under.
+    const auth = await authenticateApiRequest(request);
+    if (!auth.user || !auth.supabase) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const supabase = auth.supabase;
+    const user = auth.user;
 
-    const { valid, response } = await checkCsrfProtection(request);
-    if (!valid) {
-      return (
-        response ??
-        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-      );
+    // Bearer [REDACTED] are not cookie-ambient, so CSRF only applies to
+    // the cookie-authenticated dashboard path.
+    if (!hasBearerAuthScheme(request)) {
+      const { valid, response } = await checkCsrfProtection(request);
+      if (!valid) {
+        return (
+          response ??
+          NextResponse.json(
+            { error: 'CSRF validation failed' },
+            { status: 403 }
+          )
+        );
+      }
     }
 
     // Validate the payload before any merchant/staff database lookup:

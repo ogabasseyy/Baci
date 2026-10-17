@@ -35,7 +35,11 @@ export function isOrderClampedAsCancelled(
   if (!order) {
     return false;
   }
-  return order.shipping_status === 'cancelled' || Boolean(order.cancelled_at);
+  return (
+    order.shipping_status === 'cancelled' ||
+    order.shipping_status === 'canceled' ||
+    Boolean(order.cancelled_at)
+  );
 }
 
 /**

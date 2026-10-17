@@ -12,7 +12,14 @@ describe('maskRefundWorkerText', () => {
         internal_trace_id: 'trace-1',
         debug: { sql: 'SELECT 1' },
       })
-    ).toEqual({ error: null, needsPaystackCheck: false, status: 'failed' });
+    ).toEqual({
+      error: null,
+      needsPaystackCheck: false,
+      status: 'failed',
+      history: [],
+      events: [],
+      legs: [],
+    });
   });
   it('replaces raw top-level errors with the generic label', () => {
     expect(maskRefundWorkerText({ error: 'NETWORK_ERROR' }).error).toBe(
@@ -125,6 +132,7 @@ describe('maskRefundWorkerText', () => {
       needsPaystackCheck: false,
       events: [null, 'oops', 42, { id: 'event-3', details: {} }],
       history: [null, ['nested'], { id: 'refund-2' }],
+      legs: [],
     });
   });
 });

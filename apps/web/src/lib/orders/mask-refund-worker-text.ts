@@ -122,6 +122,14 @@ export function maskRefundWorkerText(data: Record<string, unknown>) {
         : entry
     );
   }
+  // The timeline dereferences history.length and the panel reads
+  // legs: a partial or legacy payload missing these keys would
+  // crash the order page with a TypeError instead of degrading.
+  // Default them here — the single choke for the server and route
+  // paths — so malformed summaries fail open like RPC errors do.
+  for (const key of ['history', 'events', 'legs'] as const) {
+    if (!Array.isArray(masked[key])) masked[key] = [];
+  }
   return masked;
 }
 function pickAllowedKeys(

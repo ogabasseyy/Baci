@@ -105,8 +105,22 @@ export function formatDisplayCurrency(
   currency = 'NGN',
   options: DisplayCurrencyOptions = {}
 ) {
+  try {
+    return formatWithDisplayCurrency(amount, currency, options);
+  } catch {
+    // A display formatter must never crash its page: legacy rows
+    // can store malformed codes Intl rejects, so fall back to NGN.
+    return formatWithDisplayCurrency(amount, 'NGN', options);
+  }
+}
+
+function formatWithDisplayCurrency(
+  amount: number,
+  currency: string,
+  options: DisplayCurrencyOptions
+) {
   // Legacy rows can store padded codes (' NGN '); Intl rejects them,
-  // so trim before uppercasing. Truly invalid codes still throw.
+  // so trim before uppercasing.
   const normalizedCurrency = currency.trim().toUpperCase();
   const locale = getDisplayCurrencyLocale(normalizedCurrency);
   const defaultMaximumFractionDigits = getDefaultMaximumFractionDigits(

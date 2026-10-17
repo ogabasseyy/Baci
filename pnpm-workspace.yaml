@@ -23,7 +23,7 @@ minimumReleaseAgeExclude:
   - postcss@8.5.23
   - dompurify@3.4.11
   # Security hotfixes released within the cooldown window; Dependabot alerts opened 2026-08-08.
-  - nanoid@3.3.17 || 5.1.16
+  - nanoid@3.3.18 || 5.1.16
   - dompurify@3.4.13
   - js-yaml@4.3.1
   # Security hotfixes released within the cooldown window; Dependabot alerts opened 2026-10-08.
@@ -327,7 +327,7 @@ overrides:
   # and prior js-yaml advisories.
   js-yaml: "4.3.2"
   # Nano ID: keep CJS 3.x for legacy consumers; pin other lines to advisory floors.
-  "nanoid@<3.3.17": "3.3.17"
+  "nanoid@<3.3.18": "3.3.18"
   "nanoid@>=4 <5.1.16": "5.1.16"
   # OpenTelemetry 2.8 line (core advisory; @vercel/otel >=2 peer).
   "@opentelemetry/core": "2.8.0"

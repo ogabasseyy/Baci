@@ -109,3 +109,78 @@ export function readFinalizationOrderId(
   const id = metadata.agentic?.finalization_order_id;
   return typeof id === 'string' && id.trim().length > 0 ? id.trim() : null;
 }
+
+/**
+ * Side-effect-free order-state read used to revalidate the order
+ * after the session write and before the order-created webhook: a
+ * payment (or cancellation) landing between the pre-write
+ * verification and the session write must not be answered with
+ * fresh payment instructions and a duplicate webhook.
+ */
+export async function readFinalizationOrderState(input: {
+  merchantId: string;
+  orderId: string;
+  supabase: FinalizeAgenticCheckoutInput['supabase'];
+}): Promise<'paid' | 'conflict' | 'pending' | 'error'> {
+  let data: { payment_status?: unknown; shipping_status?: unknown } | null;
+  try {
+    const result = await input.supabase
+      .from('orders')
+      .select('payment_status, shipping_status')
+      .eq('merchant_id', input.merchantId)
+      .eq('id', input.orderId)
+      .maybeSingle();
+    if (result.error) return 'error';
+    data = result.data;
+  } catch {
+    return 'error';
+  }
+  if (!data) return 'error';
+  if (data.payment_status === 'paid') return 'paid';
+  if (data.shipping_status === 'cancelled') return 'conflict';
+  if (!['pending', 'unpaid'].includes(data.payment_status as string))
+    return 'conflict';
+  return 'pending';
+}
+
+/**
+ * Rewrites a just-written payment_pending session as completed once
+ * the post-write recheck finds the order already paid. Fenced by the
+ * order id and the pending payment state the write installed; when
+ * the payment webhook already completed the session, zero rows match
+ * and the already-paid answer below is still correct.
+ */
+export function writePaidFinalizationSession(
+  input: Pick<
+    FinalizeAgenticCheckoutInput,
+    | 'buyer'
+    | 'dvaAccount'
+    | 'metadata'
+    | 'supabase'
+    | 'sessionId'
+    | 'merchantId'
+  > & { orderId: string }
+) {
+  const payload = buildPaymentPendingSessionUpdate(input);
+  return input.supabase
+    .from('checkout_sessions')
+    .update({
+      ...payload,
+      status: 'completed',
+      metadata: {
+        ...payload.metadata,
+        agentic: {
+          ...(payload.metadata.agentic ?? {}),
+          payment_state: 'paid',
+        },
+      },
+    })
+    .eq('session_id', input.sessionId)
+    .eq('merchant_id', input.merchantId)
+    .eq('order_id', input.orderId)
+    .contains('metadata', {
+      agentic: { payment_state: 'payment_pending' },
+    })
+    .select('session_id')
+    .maybeSingle();
+}

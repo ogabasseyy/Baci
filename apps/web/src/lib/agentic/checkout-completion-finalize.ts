@@ -2,9 +2,11 @@ import type { GPTTotal } from '@/lib/agentic/checkout';
 import {
   buildAlreadyPaidFinalizationResponse,
   readFinalizationOrderId,
+  readFinalizationOrderState,
   recoverFinalizationOrderWriteFailure,
   verifyBoundFinalizationOrder,
   writeFinalizedOrderSession,
+  writePaidFinalizationSession,
 } from '@/lib/agentic/checkout-bound-order-recovery';
 import {
   buildAgenticCheckoutOrderPayload,
@@ -273,6 +275,30 @@ export async function finalizeAgenticCheckoutPayment({
     return respond({ error: 'Database error' }, 500);
   }
 
+  // Revalidate after the session write: a payment or cancellation
+  // landing between verification and the write must not receive
+  // payment instructions or a duplicate order-created webhook.
+  if (!orderAlreadyPaid) {
+    const recheck = await readFinalizationOrderState({
+      merchantId,
+      orderId,
+      supabase,
+    });
+    if (recheck === 'paid') {
+      await writePaidFinalizationSession({
+        buyer,
+        dvaAccount,
+        merchantId,
+        metadata,
+        orderId,
+        sessionId,
+        supabase,
+      });
+      orderAlreadyPaid = true;
+    } else if (recheck === 'conflict') {
+      return respond({ error: 'Order is no longer awaiting payment' }, 409);
+    }
+  }
   if (orderAlreadyPaid) {
     return respond(
       buildAlreadyPaidFinalizationResponse(sessionId, orderId),

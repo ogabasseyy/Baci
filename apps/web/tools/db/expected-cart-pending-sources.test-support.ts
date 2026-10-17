@@ -344,4 +344,19 @@ export const EXPECTED_CART_PENDING_SOURCES = [
       'supabase/migrations/20261015179900_agentic_merchant_context_no_subaccount.sql',
     sha256: '3a042e18d70fab10c27157d3e1a76fd1e9f1cc040b1d590f41a40b44a23aa724',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015179910_commerce_cart_zero_negotiation.sql',
+    sha256: '7a1978c15a6b950f0523be6af8b7b1b585263bf5b9caed9c5b0fa3255240d456',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015179920_commerce_cart_handoff_union_award_lanes.sql',
+    sha256: '8720d2fcb212cecae8251149c742f26037be3be6026b064a99dbfa244afc44cc',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261015179930_storefront_replay_snapshot_uuid_key.sql',
+    sha256: '3eda97b1b86ad5c115ba59369ced9adbb0ed860eb370fe3dc66911d2babdcdbb',
+  },
 ] as const;

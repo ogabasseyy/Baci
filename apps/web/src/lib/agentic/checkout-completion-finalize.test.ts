@@ -1113,6 +1113,46 @@ describe('finalizeAgenticCheckoutPayment', () => {
     }
   });
 
+  it('answers already-paid when payment lands between verification and the session write', async () => {
+    const chains = Array.from({ length: 5 }, () =>
+      createUpdateChain({ session_id: 'agentic_session_1' })
+    );
+    const supabase = createSupabaseWithUpdateChains(chains);
+    const originalFrom = supabase.from.getMockImplementation();
+    let orderReads = 0;
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockImplementation(async () => {
+          orderReads += 1;
+          return {
+            data: {
+              payment_status: orderReads === 1 ? 'pending' : 'paid',
+              shipping_status: 'pending',
+            },
+            error: null,
+          };
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    const response = await finalizeAgenticCheckoutPayment(
+      finalizeInput(supabase)
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: 'agentic_session_1',
+      status: 'completed',
+      order_id: 'canceled-order',
+      order: { id: 'canceled-order', status: 'paid' },
+    });
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['paid', 200],
     ['cancelled', 409],

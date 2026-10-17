@@ -16,8 +16,9 @@
 #
 # The full run needs the full replayed schema: locally that is the
 # baci-refund-pg scratch container (PGPORT 55433); in CI it is the
-# database the replay step in this same job started (supabase start
-# defaults, PGPORT 54322), which stays up with the schema applied.
+# database the replay step in this same job left running with the
+# schema applied (the CI step discovers its random loopback port
+# from the live supabase_db_ container and exports PGPORT).
 # It refreshes the functions under test from the working tree
 # first, so the proof tracks current code rather than schema age.
 # MINIMAL_PHASE1=1 instead self-provisions a throwaway postgres

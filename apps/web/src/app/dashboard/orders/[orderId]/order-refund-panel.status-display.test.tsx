@@ -128,12 +128,14 @@ describe('OrderRefundPanel status display', () => {
     });
     expect(await screen.findByText(/Date unavailable/)).toBeInTheDocument();
   });
-  it('keeps polling a Paystack-backed refund past refunded', async () => {
+  it('watches a Paystack-backed refund past refunded, then stops', async () => {
     // A later contradictory provider verdict can re-open the
     // balance after completion, so provider-backed pages never
-    // treat refunded as terminal. RPC-true shape: at full refund
-    // the outstanding-leg list is empty and only the durable flag
-    // carries the provider-backed signal.
+    // treat refunded as terminal — but the server sweep owns
+    // long-term detection, so the page watches slowly for an hour
+    // instead of polling every 30s forever. RPC-true shape: at
+    // full refund the outstanding-leg list is empty and only the
+    // durable flag carries the provider-backed signal.
     vi.useFakeTimers();
     try {
       loadWith({
@@ -144,10 +146,24 @@ describe('OrderRefundPanel status display', () => {
       });
       await act(async () => {});
       expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      // No 30s polls: the slow watch fires at five minutes.
       await act(async () => {
         await vi.advanceTimersByTimeAsync(60_000);
       });
-      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(3);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(240_000);
+      });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+      // The hour-long watch exhausts, then the page goes quiet.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(12 * 300_000);
+      });
+      const watched = vi.mocked(fetch).mock.calls.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600_000);
+      });
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(watched);
     } finally {
       vi.useRealTimers();
     }

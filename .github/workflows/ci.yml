@@ -458,9 +458,21 @@ jobs:
           MINIMAL_PHASE1: 1
         run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
       - name: Test order-refund claim/manual concurrency (Phase 2 on replayed schema)
-        env:
-          PGPORT: 54322
-        run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
+        run: |
+          set -euo pipefail
+          # The replay step allocates random loopback ports for its
+          # database, so discover the live container it left running
+          # rather than assuming supabase start defaults.
+          db_container="$(docker ps -q --filter 'name=supabase_db_')"
+          if [ -z "$db_container" ] || [ "$(echo "$db_container" | wc -l)" -ne 1 ]; then
+            echo 'expected exactly one supabase db container from the replay step' >&2
+            docker ps >&2 || true
+            exit 1
+          fi
+          db_port="$(docker port "$db_container" 5432 | head -n 1 | cut -d: -f2)"
+          if [ -z "$db_port" ]; then echo 'no mapped db port' >&2; exit 1; fi
+          export PGPORT="$db_port"
+          bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
 
   quality-misc:
     name: Quality Gate - Misc

@@ -22,6 +22,10 @@ import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-b
 import { isValidMerchantIdentifier } from '@/lib/validation';
 import { isOgabasseyHomeIdentifier } from './is-ogabassey-home-identifier';
 import { OgabasseyHomeCommittedLcp } from './ogabassey-home-committed-lcp';
+// Statically imported alongside OgabasseyHomeCommittedLcp so
+// renderOgabasseyStaticHomePage returns a synchronous RSC element during
+// RenderStage.Static; GenericStorefrontHomePage remains dynamically imported.
+import { OgabasseyStaticHomePage } from './ogabassey-static-home-page';
 
 const OGABASSEY_DOMAIN_IDENTIFIER = new URL(OGABASSEY_URL).hostname;
 
@@ -35,8 +39,12 @@ export function generateStaticParams(): Array<{ slug: string }> {
   }));
 }
 
+function isOgabasseyCanonicalDomainSlug(slug: string): boolean {
+  return slug.toLowerCase() === OGABASSEY_DOMAIN_IDENTIFIER;
+}
+
 function getOgabasseyHomePathPrefix(slug: string): string {
-  return slug.toLowerCase() === OGABASSEY_DOMAIN_IDENTIFIER
+  return isOgabasseyCanonicalDomainSlug(slug)
     ? ''
     : `/${OGABASSEY_TEMPLATE_ID}`;
 }
@@ -51,11 +59,8 @@ async function renderGenericStorefrontHomePage(
   return <GenericStorefrontHomePage params={params} />;
 }
 
-async function renderOgabasseyStaticHomePage(slug: string) {
+function renderOgabasseyStaticHomePage(slug: string) {
   warmOgabasseyHomeHeroShell();
-  const { OgabasseyStaticHomePage } = await import(
-    './ogabassey-static-home-page'
-  );
 
   return (
     <OgabasseyStaticHomePage pathPrefix={getOgabasseyHomePathPrefix(slug)} />
@@ -149,12 +154,23 @@ export async function generateMetadata({
   const { slug } = await params;
 
   if (isOgabasseyHomeIdentifier(slug)) {
-    // Warm the request-memoized hero shell alongside the merchant lookup so
-    // metadata-blocking renders (Lighthouse/PSI and bots) resolve both
-    // OgabasseyHomeCommittedSlideZeroPreload and OgabasseyStaticHomePageContent
-    // synchronously in the first body microtask before RSC Flight scripts flush.
-    warmOgabasseyHomeHeroShell();
-    const merchant = await getRequestScopedMerchant(slug);
+    // On the canonical custom-domain route (ogabassey.com), await the
+    // request-memoized hero shell alongside the merchant lookup so
+    // metadata-blocking renders (Lighthouse/PSI and bots) and static-stage
+    // renders settle both promises before the initial HTML chunk flushes.
+    // resolveOgabasseyHomeHeroShell() already catches ordinary errors and
+    // returns null while rethrowing Next.js interrupts via unstable_rethrow().
+    // On the /ogabassey path route, warm the shell without delaying head tags.
+    let merchant: Awaited<ReturnType<typeof getRequestScopedMerchant>>;
+    if (isOgabasseyCanonicalDomainSlug(slug)) {
+      [merchant] = await Promise.all([
+        getRequestScopedMerchant(slug),
+        resolveOgabasseyHomeHeroShell(),
+      ]);
+    } else {
+      warmOgabasseyHomeHeroShell();
+      merchant = await getRequestScopedMerchant(slug);
+    }
     const robots = toNextRobotsMetadata(
       buildHomeSeoDecision({
         isPublished: merchant?.is_published === true,

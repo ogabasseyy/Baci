@@ -1,8 +1,14 @@
 -- Behavioral regressions for the round-68 SQL hardening:
--- zero-price negotiations parse, and the replay snapshot only
--- answers for UUID-shaped checkout credentials.
+-- zero-price negotiations parse and survive checkout snapshot review,
+-- and the replay snapshot only answers for UUID-shaped checkout credentials.
 DO $$
-DECLARE v record;
+DECLARE
+  v record;
+  v_merchant uuid := '11111111-1111-4111-8111-111111111111';
+  v_product uuid := '44444444-4444-4444-8444-444444444444';
+  v_cart uuid := 'cccccccc-9970-4000-8000-000000000000';
+  v_line uuid := 'dddddddd-9970-4000-8000-000000000000';
+  v_snapshot jsonb;
 BEGIN
   SELECT * INTO v
   FROM public.commerce_cart_parse_input_line(
@@ -11,6 +17,37 @@ BEGIN
   IF v.pi_product IS NULL OR v.pi_negotiated <> 0 THEN
     RAISE EXCEPTION 'zero negotiated price must parse: %', v;
   END IF;
+
+  INSERT INTO public.commerce_carts (id, merchant_id, currency, version, state, expires_at)
+  VALUES (v_cart, v_merchant, 'NGN', 1, 'active', now() + interval '1 day');
+  INSERT INTO public.commerce_cart_lines (
+    id, merchant_id, cart_id, product_id, quantity,
+    negotiated_unit_price_minor, negotiation_status, last_unit_price_minor
+  ) VALUES (
+    v_line, v_merchant, v_cart, v_product, 2, 0, 'accepted', 1500
+  );
+
+  v_snapshot := public.commerce_cart_build_checkout_snapshot(v_merchant, v_cart);
+  IF coalesce((v_snapshot -> 'lines' -> 0 ->> 'negotiationInvalidated')::boolean, true)
+    OR (v_snapshot -> 'lines' -> 0 ->> 'effectiveUnitPriceMinor')::bigint IS DISTINCT FROM 0
+    OR (v_snapshot -> 'estimates' ->> 'subtotalMinor')::bigint IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'accepted zero negotiated price must price at zero in checkout snapshot: %', v_snapshot;
+  END IF;
+
+  UPDATE public.commerce_cart_lines
+  SET negotiation_status = 'pending'
+  WHERE id = v_line;
+
+  v_snapshot := public.commerce_cart_build_checkout_snapshot(v_merchant, v_cart);
+  IF coalesce((v_snapshot -> 'lines' -> 0 ->> 'negotiationInvalidated')::boolean, true)
+    OR (v_snapshot -> 'lines' -> 0 ->> 'effectiveUnitPriceMinor')::bigint IS NULL
+    OR (v_snapshot -> 'lines' -> 0 ->> 'effectiveUnitPriceMinor')::bigint
+      IS DISTINCT FROM (v_snapshot -> 'lines' -> 0 ->> 'validatedUnitPriceMinor')::bigint
+    OR coalesce((v_snapshot -> 'lines' -> 0 ->> 'effectiveUnitPriceMinor')::bigint, 0) <= 0 THEN
+    RAISE EXCEPTION 'pending zero negotiated price must remain at catalog in checkout snapshot: %', v_snapshot;
+  END IF;
+
+  DELETE FROM public.commerce_carts WHERE id = v_cart;
 
   IF strpos(
     pg_get_functiondef(

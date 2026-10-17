@@ -1,5 +1,5 @@
-import { resolveDefaultVariantSelection } from '@baci/shared/lib';
 import type { Product } from '@/lib/products';
+import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
 import { generateCartItemId } from './cart-storage';
 import type { AddToCartOptions, CartItem } from './cart-types';
 

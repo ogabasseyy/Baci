@@ -1,9 +1,9 @@
 import {
   canonicalizeCommerceVariantAxis,
   getCommerceVariantAxes,
-  normalizeCanonicalProductCondition,
   normalizeCommerceVariantOption,
-} from '@baci/shared/lib';
+} from '../../../../../packages/shared/src/lib/commerce-variant-axis';
+import { normalizeCanonicalProductCondition } from '../../../../../packages/shared/src/lib/product-condition';
 import { isRenderableVariantAxis } from './non-renderable-variant-axes';
 
 interface VariantAttributeDefinition {

@@ -1,8 +1,8 @@
 import {
   canonicalizeCommerceVariantAxis,
-  normalizeCanonicalProductCondition,
   normalizeCommerceVariantOption,
-} from '@baci/shared/lib';
+} from '../../../../../../packages/shared/src/lib/commerce-variant-axis';
+import { normalizeCanonicalProductCondition } from '../../../../../../packages/shared/src/lib/product-condition';
 import type { NormalizedProductDetails } from '@/components/storefront/ogabassey/pages/product-details-page/product-normalization';
 
 type VariantList = NormalizedProductDetails['variants'];

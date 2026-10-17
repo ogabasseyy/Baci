@@ -1,5 +1,5 @@
 import type { Route } from 'next';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getProductUrl } from '@/lib/product-url';
 
 interface StorefrontProductHrefInput {
   id: string | number;

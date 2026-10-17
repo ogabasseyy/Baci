@@ -1,4 +1,4 @@
-import { generateSlug } from './seo-utils';
+import { generateStorefrontSlug as generateSlug } from './generate-storefront-slug';
 import { isUnsupportedSpecValue } from './storefront-specs/is-unsupported-spec-value';
 
 type StorefrontProductNamedCategory = {

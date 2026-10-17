@@ -5,7 +5,7 @@ import type { ProductImageAltPayload } from '@baci/shared';
 /**
  * Product condition enum - shared across the application
  */
-import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { normalizeCanonicalProductCondition } from '../../../../../../packages/shared/src/lib/product-condition';
 
 export type ProductCondition = 'new' | 'used' | 'open_box' | 'refurbished';
 

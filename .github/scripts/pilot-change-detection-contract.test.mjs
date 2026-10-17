@@ -62,7 +62,7 @@ test('lab render closure (depth<=2) matches the pattern', async () => {
   assert.ok(
     closure.includes('apps/web/src/components/optimized-image.tsx')
   );
-  assert.ok(closure.includes('apps/web/src/lib/product-url.ts'));
+  assert.ok(closure.includes('apps/web/src/lib/seo-utils.ts'));
   // Bare side-effect imports count: the lab's real storefront
   // stylesheets reach the closure without a `from` edge, so a
   // CSS-only PR trips the suites.

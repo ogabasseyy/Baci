@@ -113,3 +113,4 @@ export * from './string-values';
 export * from './supabase-error-log';
 export * from './to-ascii-lower-case';
 export * from './vtu-loyalty-points';
+export * from './with-timeout';

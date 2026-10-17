@@ -7,21 +7,18 @@ import {
   jest,
 } from '@jest/globals';
 import {
+  DEFAULT_TIMEOUT,
   HttpError,
   NetworkError,
   TimeoutError,
 } from '@/lib/fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from '@/lib/network-utils';
 import {
-  chargeSavedVtuCard,
   chargeWalletForVtu,
-  computeVtuWalletAmount,
   confirmVtuCheckout,
-  initializeVtuCheckout,
   listSavedVtuCards,
   normalizeVtuCheckoutPayload,
   shouldRotateWalletIdempotencyKeyForError,
-  VTU_CHECKOUT_INITIALIZE_URL,
   VTU_CHECKOUT_WALLET_ONLY_URL,
   VtuPaymentStillProcessingError,
   waitForVtuConfirmation,
@@ -43,16 +40,26 @@ type MockUserResult = {
 };
 
 type MockSessionResult = {
-  data: { session: { access_token: string } | null };
+  data: {
+    session: { access_token: string; user?: { id: string } | null } | null;
+  };
 };
 
 const mockFetchWithTimeout =
   jest.fn<(...args: unknown[]) => Promise<MockFetchResponse>>();
+
+type MockDeadlineResult = {
+  data: Record<string, unknown>;
+  response: { ok: boolean; status?: number };
+};
+
+const mockFetchJsonWithDeadline =
+  jest.fn<(...args: unknown[]) => Promise<MockDeadlineResult>>();
 const mockGetUser = jest.fn<() => Promise<MockUserResult>>();
 const mockGetSession = jest.fn<() => Promise<MockSessionResult>>();
 
 function getMockRequestInit(callIndex = 0): JsonRequestInit {
-  const requestInit = mockFetchWithTimeout.mock.calls[callIndex]?.[1];
+  const requestInit = mockFetchJsonWithDeadline.mock.calls[callIndex]?.[1];
   expect(requestInit).toHaveProperty('body');
   if (!requestInit || typeof (requestInit as RequestInit).body !== 'string') {
     throw new Error('Expected request body to be a JSON string');
@@ -84,6 +91,16 @@ jest.mock('@/lib/fetch-with-timeout', () => {
   };
 });
 
+jest.mock('@baci/shared', () => {
+  const actual =
+    jest.requireActual<typeof import('@baci/shared')>('@baci/shared');
+  return {
+    ...actual,
+    fetchJsonWithDeadline: (...args: unknown[]) =>
+      mockFetchJsonWithDeadline(...args),
+  };
+});
+
 jest.mock('@/lib/supabase', () => ({
   supabase: {
     auth: {
@@ -100,7 +117,9 @@ beforeEach(() => {
     error: null,
   });
   mockGetSession.mockResolvedValue({
-    data: { session: { access_token: 'token-123' } },
+    data: {
+      session: { access_token: 'token-123', user: { id: 'user-1' } },
+    },
   });
 });
 
@@ -145,77 +164,15 @@ describe('vtu-checkout service', () => {
     ).toMatchObject({ networkProvider: 'unknown' });
   });
 
-  it('initializes VTU checkout with the authenticated token', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/abc',
-        gateway: 'paystack',
-        reference: 'VTU-123',
-        vtu_reference: 'REQ-123',
-        vtu_transaction_id: 'vtu-1',
-      }),
-    });
-
-    const result = await initializeVtuCheckout({
-      amount: 1000,
-      gateway: 'paystack',
-      phoneNumber: '08012345678',
-      networkProvider: 'mtn',
-      type: 'airtime',
-    });
-
-    expect(result.reference).toBe('VTU-123');
-    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
-      VTU_CHECKOUT_INITIALIZE_URL,
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer token-123',
-        }),
-      })
-    );
-    expect(parseMockRequestBody()).toMatchObject({
-      networkProvider: MOBILE_TO_KUDA_PROVIDER.mtn,
-    });
-  });
-
-  it('sends bank transfer as a utility checkout gateway while using Paystack for confirmation', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/bank-transfer',
-        gateway: 'paystack',
-        reference: 'VTU-BANK-123',
-        vtu_reference: 'REQ-BANK-123',
-        vtu_transaction_id: 'vtu-bank-1',
-      }),
-    });
-
-    const result = await initializeVtuCheckout({
-      amount: 1000,
-      gateway: 'bank_transfer',
-      phoneNumber: '08012345678',
-      networkProvider: 'mtn',
-      type: 'airtime',
-    });
-
-    expect(result.gateway).toBe('paystack');
-    expect(parseMockRequestBody()).toMatchObject({
-      gateway: 'bank_transfer',
-    });
-  });
-
   it('confirms a successful VTU checkout', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         success: true,
         status: 'SUCCESSFUL',
         reference: 'VTU-123',
         amount: 1000,
-      }),
+      },
+      response: { ok: true },
     });
 
     const result = await confirmVtuCheckout({
@@ -227,12 +184,12 @@ describe('vtu-checkout service', () => {
   });
 
   it('throws a clear error for non-string confirmation status', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         reference: 'VTU-123',
         status: 123,
-      }),
+      },
+      response: { ok: true },
     });
 
     await expect(
@@ -244,12 +201,12 @@ describe('vtu-checkout service', () => {
   });
 
   it('throws a clear error for unexpected checkout statuses', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         reference: 'VTU-123',
         status: 'failed',
-      }),
+      },
+      response: { ok: true },
     });
 
     await expect(
@@ -261,13 +218,12 @@ describe('vtu-checkout service', () => {
   });
 
   it('treats a not-yet-successful gateway confirmation as processing', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: false,
-      status: 409,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         error: 'Payment is not yet successful',
         status: 'pending',
-      }),
+      },
+      response: { ok: false, status: 409 },
     });
 
     const result = await confirmVtuCheckout({
@@ -282,12 +238,12 @@ describe('vtu-checkout service', () => {
   });
 
   it('throws a typed processing error instead of a payment failure after polling', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         reference: 'VTU-123',
         status: 'processing',
-      }),
+      },
+      response: { ok: true },
     });
 
     await expect(
@@ -302,12 +258,12 @@ describe('vtu-checkout service', () => {
   it('does not wait after the final polling attempt', async () => {
     jest.useFakeTimers();
     const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         reference: 'VTU-123',
         status: 'processing',
-      }),
+      },
+      response: { ok: true },
     });
 
     try {
@@ -322,7 +278,12 @@ describe('vtu-checkout service', () => {
       await jest.runOnlyPendingTimersAsync();
 
       await confirmation;
-      expect(setTimeoutSpy).not.toHaveBeenCalled();
+      // Only the 30s auth-acquisition bound (Codex R96 P2) may arm a
+      // timer — no inter-attempt poll delay after the final attempt.
+      const pollDelays = setTimeoutSpy.mock.calls.filter(
+        ([, timeoutMs]) => timeoutMs !== 30_000
+      );
+      expect(pollDelays).toEqual([]);
     } finally {
       setTimeoutSpy.mockRestore();
     }
@@ -353,101 +314,14 @@ describe('vtu-checkout service', () => {
     expect(result[0]?.label).toBe('Access Bank ending 1234');
   });
 
-  it('handles saved-card charges that require extra authorization', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        requires_authorization: true,
-        authorization_url: 'https://paystack.com/pay/auth',
-        gateway: 'paystack',
-        reference: 'VTU-123',
-      }),
-    });
-
-    const result = await chargeSavedVtuCard({
-      amount: 1000,
-      phoneNumber: '08012345678',
-      networkProvider: 'mtn',
-      savedPaymentMethodId: '550e8400-e29b-41d4-a716-446655440000',
-      type: 'airtime',
-    });
-
-    expect(result).toMatchObject({
-      authorization_url: 'https://paystack.com/pay/auth',
-      requires_authorization: true,
-    });
-  });
-
-  // Phase B.8 — wallet-payment threading. Three behaviours pinned at
-  // the network layer:
-  //   1. Hybrid initialize forwards walletAmount to the server.
-  //   2. Card-only initialize strips walletAmount entirely (no
-  //      `walletAmount: 0` noise; mirrors orders' guard).
-  //   3. Wallet-only POSTs to the dedicated route with a fresh
-  //      Idempotency-Key header.
-
-  it('initializeVtuCheckout: forwards walletAmount when positive (hybrid)', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/abc',
-        gateway: 'paystack',
-        reference: 'VTU-123',
-        vtu_reference: 'REQ-123',
-        vtu_transaction_id: 'vtu-1',
-      }),
-    });
-
-    await initializeVtuCheckout({
-      amount: 1000,
-      gateway: 'paystack',
-      networkProvider: 'mtn',
-      phoneNumber: '08012345678',
-      type: 'airtime',
-      walletAmount: 300,
-    });
-
-    expect(parseMockRequestBody()).toMatchObject({
-      walletAmount: 300,
-      amount: 1000,
-    });
-  });
-
-  it('initializeVtuCheckout: strips walletAmount when 0 (card-only)', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        success: true,
-        authorization_url: 'https://paystack.com/pay/abc',
-        gateway: 'paystack',
-        reference: 'VTU-123',
-        vtu_reference: 'REQ-123',
-        vtu_transaction_id: 'vtu-1',
-      }),
-    });
-
-    await initializeVtuCheckout({
-      amount: 1000,
-      gateway: 'paystack',
-      networkProvider: 'mtn',
-      phoneNumber: '08012345678',
-      type: 'airtime',
-      walletAmount: 0,
-    });
-
-    expect(parseMockRequestBody()).not.toHaveProperty('walletAmount');
-  });
-
   it('chargeWalletForVtu: posts to wallet-only with the caller-supplied Idempotency-Key header', async () => {
-    mockFetchWithTimeout.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
         status: 'successful',
         reference: 'VTU-456',
         amount: 1000,
-      }),
+      },
+      response: { ok: true },
     });
 
     // Caller-supplied UUID — the contract change. The form
@@ -461,13 +335,14 @@ describe('vtu-checkout service', () => {
       type: 'airtime',
       walletAmount: 1000,
       idempotencyKey,
+      expectedUserId: 'user-1',
     });
 
     expect(result).toMatchObject({
       status: 'successful',
       reference: 'VTU-456',
     });
-    const [url, init] = mockFetchWithTimeout.mock.calls[0] ?? [];
+    const [url, init] = mockFetchJsonWithDeadline.mock.calls[0] ?? [];
     expect(url).toBe(VTU_CHECKOUT_WALLET_ONLY_URL);
     const headers = (init as RequestInit).headers as Record<string, string>;
     expect(headers['Idempotency-Key']).toBe(idempotencyKey);
@@ -481,53 +356,136 @@ describe('vtu-checkout service', () => {
     // schema's parsed shape and could expose the key in logs.
     expect(body).not.toHaveProperty('idempotencyKey');
   });
-});
 
-describe('computeVtuWalletAmount', () => {
-  it('clamps a stale selection amount down to the current bill total', () => {
-    // User enabled wallet for ₦1000 plan, then switched to a ₦500
-    // plan — the captured selection.amount is now larger than the
-    // bill. Without clamping the server would 400 on
-    // walletAmount > amount.
-    expect(computeVtuWalletAmount(1000, 500)).toBe(500);
+  it('chargeWalletForVtu: reads headers and body under one shared deadline', async () => {
+    // Codex R77 6sNGOy: a stalled body must abort like stalled
+    // headers instead of hanging the submitting guard forever.
+    // (Expiry behavior itself is proven in @baci/shared's
+    // fetch-with-timeout suite; this pins the charge path onto it.)
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
+        status: 'successful',
+        reference: 'VTU-456',
+        amount: 1000,
+      },
+      response: { ok: true },
+    });
+
+    const before = Date.now();
+    await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: '11111111-2222-3333-4444-555555555555',
+      expectedUserId: 'user-1',
+    });
+
+    const [, init] = mockFetchJsonWithDeadline.mock.calls[0] ?? [];
+    const deadlineMs = (init as { deadlineMs: number }).deadlineMs;
+    expect(deadlineMs).toBeGreaterThanOrEqual(before + DEFAULT_TIMEOUT);
+    expect(deadlineMs).toBeLessThanOrEqual(Date.now() + DEFAULT_TIMEOUT);
   });
 
-  it('passes through a selection amount within the bill total', () => {
-    expect(computeVtuWalletAmount(300, 1000)).toBe(300);
+  it('chargeWalletForVtu: proceeds when the token belongs to the captured user', async () => {
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: {
+        status: 'successful',
+        reference: 'VTU-456',
+        amount: 1000,
+      },
+      response: { ok: true },
+    });
+
+    const result = await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: '11111111-2222-3333-4444-555555555555',
+      expectedUserId: 'user-1',
+    });
+
+    expect(result).toMatchObject({ status: 'successful' });
+    expect(parseMockRequestBody()).toMatchObject({ expectedUserId: 'user-1' });
   });
 
-  it('treats wallet-toggle-off (selection 0 or undefined) as no wallet contribution', () => {
-    expect(computeVtuWalletAmount(0, 1000)).toBe(0);
-    expect(computeVtuWalletAmount(undefined, 1000)).toBe(0);
+  it('chargeWalletForVtu: aborts pre-POST when the binding is uncaptured (hydration gap)', async () => {
+    // Session user exists but the store hadn't hydrated the id at
+    // submit: posting unbound would skip the server-side
+    // account-change guard. Abort instead (key untouched — no HTTP
+    // status — so the retry replays once hydration lands).
+    await expect(
+      chargeWalletForVtu({
+        amount: 1000,
+        networkProvider: 'mtn',
+        phoneNumber: '08012345678',
+        type: 'airtime',
+        walletAmount: 1000,
+        idempotencyKey: '11111111-2222-3333-4444-555555555555',
+      })
+    ).rejects.toThrow('Account still loading. Please try again.');
+    expect(mockFetchJsonWithDeadline).not.toHaveBeenCalled();
   });
 
-  it('rejects negative or non-finite inputs by returning 0', () => {
-    expect(computeVtuWalletAmount(-1, 1000)).toBe(0);
-    expect(computeVtuWalletAmount(Number.NaN, 1000)).toBe(0);
-    expect(computeVtuWalletAmount(500, Number.NaN)).toBe(0);
-    expect(computeVtuWalletAmount(500, 0)).toBe(0);
+  it('chargeWalletForVtu: aborts before any POST when the token belongs to another user', async () => {
+    // getUser validated user-1, but the account switched before
+    // getSession: the token in hand is user-2's. Debit would land on
+    // the wrong wallet, so fail closed without dispatching.
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: { access_token: 'token-user-2', user: { id: 'user-2' } },
+      },
+    });
+
+    await expect(
+      chargeWalletForVtu({
+        amount: 1000,
+        networkProvider: 'mtn',
+        phoneNumber: '08012345678',
+        type: 'airtime',
+        walletAmount: 1000,
+        idempotencyKey: '11111111-2222-3333-4444-555555555555',
+        expectedUserId: 'user-1',
+      })
+    ).rejects.toThrow('Account changed during checkout. Please try again.');
+    expect(mockFetchJsonWithDeadline).not.toHaveBeenCalled();
   });
 });
 
 describe('shouldRotateWalletIdempotencyKeyForError', () => {
   // The contract: keep the key (return false) for any failure that
   // could leave server state in flight; only rotate (return true) on
-  // 4xx HTTP responses where the request was rejected before any
-  // state was created.
+  // definitive route 4xx responses whose outcome the server recorded
+  // under this key.
 
-  it('returns true for HTTP 400-499 (request rejected, no server state)', () => {
+  it('returns true for definitive route 4xx (outcome recorded, key is dead)', () => {
     expect(
       shouldRotateWalletIdempotencyKeyForError(new HttpError(400, 'bad'))
     ).toBe(true);
     expect(
-      shouldRotateWalletIdempotencyKeyForError(new HttpError(401, 'auth'))
+      shouldRotateWalletIdempotencyKeyForError(new HttpError(404, 'missing'))
+    ).toBe(true);
+    expect(
+      shouldRotateWalletIdempotencyKeyForError(new HttpError(409, 'collision'))
     ).toBe(true);
     expect(
       shouldRotateWalletIdempotencyKeyForError(new HttpError(422, 'invalid'))
     ).toBe(true);
-    expect(
-      shouldRotateWalletIdempotencyKeyForError(new HttpError(499, 'closed'))
-    ).toBe(true);
+  });
+
+  it('returns false for pre-route 401/403/413/415/429 — handler never ran', () => {
+    // A 429 retry of an already-committed attempt must keep the key:
+    // rotating would mint a fresh key and debit a second transaction.
+    for (const status of [401, 403, 413, 415, 429]) {
+      expect(
+        shouldRotateWalletIdempotencyKeyForError(
+          new HttpError(status, 'pre-route')
+        )
+      ).toBe(false);
+    }
   });
 
   it('returns false for HTTP 5xx — server may have persisted partial state', () => {

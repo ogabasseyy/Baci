@@ -30,7 +30,6 @@ const baseProps = {
   amount: 1000,
   canFundByBankTransfer: true,
   colors: Colors.light,
-  hasWalletToggle: true,
   walletBalance: 200,
   walletError: null,
   walletIsLoading: false,
@@ -166,14 +165,6 @@ describe('UtilityWalletTransferNudge', () => {
         amount={1000}
         walletBalance={5000}
       />
-    );
-
-    expect(screen.queryByText(/Pay with Bank Transfer/i)).toBeNull();
-  });
-
-  it('is hidden when the screen has not opted into wallet payments', () => {
-    render(
-      <UtilityWalletTransferNudge {...baseProps} hasWalletToggle={false} />
     );
 
     expect(screen.queryByText(/Pay with Bank Transfer/i)).toBeNull();

@@ -1,6 +1,6 @@
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useWallet } from './use-wallet';
+import { useWallet, WALLET_BALANCE_FETCH_TIMEOUT_MS } from './use-wallet';
 
 describe('useWallet', () => {
   const mockFetch = vi.fn();
@@ -18,9 +18,47 @@ describe('useWallet', () => {
 
     expect(result.current.walletBalance).toBe(0);
     expect(result.current.walletLoading).toBe(false);
+    expect(result.current.isWalletInitialReadPending()).toBe(false);
     expect(result.current.payWithWallet).toBe(false);
     expect(typeof result.current.setPayWithWallet).toBe('function');
     expect(typeof result.current.setWalletBalance).toBe('function');
+  });
+
+  it('marks the initial read pending from the identity reset until the first fetch settles', async () => {
+    // Codex R103 P2: the render-phase identity reset zeroes the
+    // balance a full commit before the fetch effect flips
+    // walletLoading — submits in that window must block on this
+    // flag instead of reading the placeholder zero as insufficient
+    // funds.
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ balance: 1000 }),
+    });
+    const { result, rerender } = renderHook(
+      ({ userId }) => useWallet({ userId, merchantSlug: 'test-merchant' }),
+      { initialProps: { userId: 'user-1' } }
+    );
+    await waitFor(() => expect(result.current.walletBalance).toBe(1000));
+    expect(result.current.isWalletInitialReadPending()).toBe(false);
+
+    let resolveFetch: (value: unknown) => void = () => {};
+    mockFetch.mockImplementationOnce(
+      () =>
+        new Promise<unknown>((resolve) => {
+          resolveFetch = resolve;
+        })
+    );
+    rerender({ userId: 'user-2' });
+    // New identity: balance reset to zero, first fetch still in
+    // flight — the flag must already read true.
+    expect(result.current.walletBalance).toBe(0);
+    expect(result.current.isWalletInitialReadPending()).toBe(true);
+
+    await act(async () => {
+      resolveFetch({ ok: true, json: async () => ({ balance: 2500 }) });
+    });
+    await waitFor(() => expect(result.current.walletBalance).toBe(2500));
+    expect(result.current.isWalletInitialReadPending()).toBe(false);
   });
 
   it('should not fetch when userId is undefined', () => {
@@ -168,6 +206,81 @@ describe('useWallet', () => {
 
     await waitFor(() => {
       expect(console.error).not.toHaveBeenCalled();
+    });
+  });
+
+  it('flags a failed fetch as an error instead of a zero balance', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.walletError).toBe(true);
+      expect(result.current.walletLoading).toBe(false);
+      expect(result.current.walletBalance).toBe(0);
+    });
+  });
+
+  it('flags a non-OK wallet response as an error instead of a zero balance', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.walletError).toBe(true);
+      expect(result.current.walletLoading).toBe(false);
+    });
+  });
+
+  it('clears the error flag when a later fetch succeeds', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ balance: 700 }),
+    });
+
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.walletError).toBe(true);
+    });
+
+    result.current.refreshWallet();
+
+    await waitFor(() => {
+      expect(result.current.walletError).toBe(false);
+      expect(result.current.walletBalance).toBe(700);
+    });
+  });
+
+  it('exposes the error flag live for post-await gate reads', async () => {
+    // Codex R81 P2: the readiness gate invokes this AFTER the
+    // settlement-gate await, when the render-time snapshot is stale.
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ balance: 700 }),
+    });
+
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+    );
+    expect(result.current.getWalletError()).toBe(false);
+
+    await waitFor(() => {
+      expect(result.current.getWalletError()).toBe(true);
+    });
+
+    result.current.refreshWallet();
+
+    await waitFor(() => {
+      expect(result.current.getWalletError()).toBe(false);
     });
   });
 
@@ -332,6 +445,116 @@ describe('useWallet', () => {
     await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
   });
 
+  it('sets the refresh gate synchronously and clears it on settle', async () => {
+    let resolveFetch!: (response: unknown) => void;
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' })
+    );
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+    expect(result.current.isWalletRefreshPending()).toBe(false);
+
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      })
+    );
+    // The gate is a synchronous ref write: true immediately, before
+    // the fetch effect flips walletLoading — no commit/effect gap
+    // for a submit click to slip through on a stale balance.
+    act(() => {
+      result.current.refreshWallet();
+    });
+    expect(result.current.isWalletRefreshPending()).toBe(true);
+
+    resolveFetch({ ok: true, json: async () => ({ balance: 500 }) });
+    await waitFor(() => {
+      expect(result.current.isWalletRefreshPending()).toBe(false);
+    });
+  });
+
+  it('keeps the refresh gate set when the superseded fetch settles first', async () => {
+    // Codex R76 6r51Px: refreshWallet() while a balance request is in
+    // flight. The older request may settle before React commits the
+    // update (cleanup/abort not yet run); its finally must not clear
+    // the gate or loading for the replacement fetch. refreshWallet is
+    // called outside act on purpose: act() would flush the commit
+    // synchronously and close the very window under test.
+    let resolveFirst!: (response: unknown) => void;
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveFirst = resolve;
+      })
+    );
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' })
+    );
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+    let resolveSecond!: (response: unknown) => void;
+    mockFetch.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSecond = resolve;
+      })
+    );
+    // Queue the stale settle BEFORE the refresh update so the whole
+    // promise chain drains ahead of React's scheduled commit.
+    resolveFirst({ ok: true, json: async () => ({ balance: 111 }) });
+    result.current.refreshWallet();
+    expect(result.current.isWalletRefreshPending()).toBe(true);
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
+    // The superseded settle must neither clear the gate nor apply
+    // its stale balance; the replacement fetch still owns both.
+    expect(result.current.isWalletRefreshPending()).toBe(true);
+    expect(result.current.walletLoading).toBe(true);
+    expect(result.current.walletBalance).not.toBe(111);
+
+    resolveSecond({ ok: true, json: async () => ({ balance: 500 }) });
+    await waitFor(() => {
+      expect(result.current.isWalletRefreshPending()).toBe(false);
+    });
+    expect(result.current.walletBalance).toBe(500);
+    expect(result.current.walletLoading).toBe(false);
+  });
+
+  it('mirrors the latest balance through getWalletBalance without a remount', async () => {
+    // Codex R78 6sN80p: readiness invokes this after the
+    // settlement-gate await through a stale closure — it must
+    // return the latest rendered balance, whether the update came
+    // from a fetch or a direct setWalletBalance call (post-purchase
+    // optimistic updates bypass the fetch path entirely).
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ balance: 500 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ balance: 3200 }),
+      });
+    const { result } = renderHook(() =>
+      useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' })
+    );
+    await waitFor(() => expect(result.current.walletBalance).toBe(500));
+    expect(result.current.getWalletBalance()).toBe(500);
+
+    act(() => {
+      result.current.refreshWallet();
+    });
+    await waitFor(() => expect(result.current.walletBalance).toBe(3200));
+    expect(result.current.getWalletBalance()).toBe(3200);
+
+    act(() => {
+      result.current.setWalletBalance(100);
+    });
+    expect(result.current.getWalletBalance()).toBe(100);
+  });
+
   it('should refetch when merchantSlug changes', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
@@ -352,5 +575,160 @@ describe('useWallet', () => {
       '/api/storefront/customer/wallet?merchant=merchant-2',
       expect.any(Object),
     );
+  });
+
+  it('times out a stalled wallet fetch so the gate can recover via the error path', async () => {
+    // Codex R87 P2: a response that never returns headers (or a
+    // stalled body) left walletLoading true forever, and the
+    // mandatory wallet-only gate rejects every purchase while
+    // loading — closing the modal does not unmount the hook, so the
+    // customer stayed blocked until reload. Expiry aborts into the
+    // wallet-error state instead, whose gate retries the fetch.
+    vi.useFakeTimers();
+    try {
+      mockFetch.mockImplementationOnce(
+        (_url: string, init?: { signal?: AbortSignal }) =>
+          new Promise<never>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => {
+              reject(
+                new DOMException(
+                  'The operation was aborted.',
+                  'AbortError',
+                ),
+              );
+            });
+          }),
+      );
+      const { result } = renderHook(() =>
+        useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+      );
+      expect(result.current.walletLoading).toBe(true);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(WALLET_BALANCE_FETCH_TIMEOUT_MS);
+      });
+
+      expect(result.current.walletLoading).toBe(false);
+      expect(result.current.walletError).toBe(true);
+      expect(result.current.getWalletError()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers with a refresh after a fetch timeout', async () => {
+    // The error gate calls refreshWallet(): the retry must clear the
+    // timeout error and load the balance.
+    vi.useFakeTimers();
+    try {
+      mockFetch
+        .mockImplementationOnce(
+          (_url: string, init?: { signal?: AbortSignal }) =>
+            new Promise<never>((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(
+                  new DOMException(
+                    'The operation was aborted.',
+                    'AbortError',
+                  ),
+                );
+              });
+            }),
+        )
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ balance: 750 }),
+        });
+      const { result } = renderHook(() =>
+        useWallet({ userId: 'user-123', merchantSlug: 'test-merchant' }),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(WALLET_BALANCE_FETCH_TIMEOUT_MS);
+      });
+      expect(result.current.walletError).toBe(true);
+
+      await act(async () => {
+        result.current.refreshWallet();
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(result.current.walletBalance).toBe(750);
+      expect(result.current.walletError).toBe(false);
+      expect(result.current.walletLoading).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops a previous-account body that resolves after an identity switch', async () => {
+    // Codex R95 P1: the old effect's cleanup runs only after the new
+    // render commits, so a body resolving in between must be gated by
+    // the render-phase generation bump — not by the abort signal.
+    // Abort is stubbed to a no-op to isolate the gate (a real abort
+    // drops it too, but only after cleanup runs — the window under
+    // test is before that).
+    let resolveOldBody!: (data: unknown) => void;
+    let resolveNewBody!: (data: unknown) => void;
+    mockFetch
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            new Promise((resolve) => {
+              resolveOldBody = resolve;
+            }),
+        }),
+      )
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            new Promise((resolve) => {
+              resolveNewBody = resolve;
+            }),
+        }),
+      );
+    const abortSpy = vi
+      .spyOn(AbortController.prototype, 'abort')
+      .mockImplementation(() => {});
+    try {
+      const { result, rerender } = renderHook(
+        ({ userId }: { userId: string }) =>
+          useWallet({ userId, merchantSlug: 'test-merchant' }),
+        { initialProps: { userId: 'user-a' } },
+      );
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledTimes(1);
+      });
+      // Park the old fetch at the body await (headers resolved).
+      await act(async () => {});
+      await waitFor(() => {
+        expect(resolveOldBody).toBeDefined();
+      });
+
+      rerender({ userId: 'user-b' });
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      });
+
+      // The old body resolves after the switch render committed: the
+      // new session must never show the previous balance.
+      await act(async () => {
+        resolveOldBody({ balance: 9999 });
+      });
+      expect(result.current.walletBalance).toBe(0);
+
+      await act(async () => {
+        resolveNewBody({ balance: 50 });
+      });
+      await waitFor(() => {
+        expect(result.current.walletBalance).toBe(50);
+      });
+      expect(result.current.walletLoading).toBe(false);
+    } finally {
+      abortSpy.mockRestore();
+    }
   });
 });

@@ -32,9 +32,15 @@ export function useCopyToClipboard({
   // it would resubscribe (and run the unmount branch) on every render.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useEffect(() => {
+    // Unmount cleanup inlined (Codex R125 P1): the repo delegates
+    // memoization to React Compiler, so no useCallback wrapper —
+    // the effect touches refs only and runs exactly once.
     return () => {
       isMountedRef.current = false;
-      clearFeedbackTimer();
+      if (feedbackTimeoutRef.current) {
+        clearTimeout(feedbackTimeoutRef.current);
+        feedbackTimeoutRef.current = null;
+      }
     };
   }, []);
 

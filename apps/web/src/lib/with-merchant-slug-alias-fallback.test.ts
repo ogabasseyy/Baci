@@ -1,15 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
+import {
+  getCurrentSlugForAlias,
+  getCurrentSlugForAliasStrict,
+} from '@/lib/slug-alias-cache';
 import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
 
 vi.mock('@/lib/slug-alias-cache', () => ({
   getCurrentSlugForAlias: vi.fn(),
+  getCurrentSlugForAliasStrict: vi.fn(),
 }));
 
 describe('withMerchantSlugAliasFallback', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getCurrentSlugForAlias).mockResolvedValue(null);
+    vi.mocked(getCurrentSlugForAliasStrict).mockResolvedValue(null);
   });
 
   it('returns the direct hit without consulting the alias table', async () => {
@@ -62,6 +67,39 @@ describe('withMerchantSlugAliasFallback', () => {
 
     expect(result.error).toBe(dbError);
     expect(getCurrentSlugForAlias).not.toHaveBeenCalled();
+    expect(lookup).toHaveBeenCalledTimes(1);
+  });
+
+  it('strict mode resolves via the strict resolver', async () => {
+    vi.mocked(getCurrentSlugForAliasStrict).mockResolvedValue('new-slug');
+    const lookup = vi
+      .fn()
+      .mockImplementation((slug: string) =>
+        Promise.resolve(
+          slug === 'new-slug'
+            ? { data: { id: 'm1' }, error: null }
+            : { data: null, error: null }
+        )
+      );
+
+    const result = await withMerchantSlugAliasFallback('old-slug', lookup, {
+      strict: true,
+    });
+
+    expect(result.data).toEqual({ id: 'm1' });
+    expect(getCurrentSlugForAliasStrict).toHaveBeenCalledWith('old-slug');
+    expect(getCurrentSlugForAlias).not.toHaveBeenCalled();
+  });
+
+  it('strict mode propagates alias-lookup failures instead of 404ing', async () => {
+    vi.mocked(getCurrentSlugForAliasStrict).mockRejectedValue(
+      new Error('[Slug Alias Cache] alias lookup failed for slug: old-slug')
+    );
+    const lookup = vi.fn().mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      withMerchantSlugAliasFallback('old-slug', lookup, { strict: true })
+    ).rejects.toThrow(/alias lookup failed/);
     expect(lookup).toHaveBeenCalledTimes(1);
   });
 });

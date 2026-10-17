@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -22,6 +23,12 @@ const mockReplace = jest.fn();
 const mockBack = jest.fn();
 const mockCanGoBack = jest.fn();
 const mockInvalidateQueries = jest.fn();
+const mockAuthState = {
+  customer: { id: 'customer-1' } as { id: string } | null,
+  merchantId: TEST_MERCHANT_ID as string | null,
+  session: { access_token: 'token' } as { access_token: string } | null,
+  user: null as { id: string } | null,
+};
 type UtilityRouteParams = {
   amount?: string;
   cashbackAmount?: string;
@@ -235,11 +242,16 @@ jest.mock('@/components/utilities/PurchaseSuccess', () => {
     PurchaseSuccess: ({
       customerIdentifier,
       status,
+      type,
     }: {
       customerIdentifier?: string;
       status?: string;
+      type?: string;
     }) => (
-      <Text>{`Purchase success ${status ?? 'successful'} ${customerIdentifier ?? ''}`}</Text>
+      <>
+        <Text>{`Purchase success ${status ?? 'successful'} ${customerIdentifier ?? ''}`}</Text>
+        <Text>{`Purchase type ${type ?? 'none'}`}</Text>
+      </>
     ),
   };
 });
@@ -250,13 +262,9 @@ jest.mock('@/stores/auth-store', () => ({
       customer: { id: string } | null;
       merchantId: string | null;
       session: { access_token: string } | null;
+      user: { id: string } | null;
     }) => unknown
-  ) =>
-    selector({
-      customer: { id: 'customer-1' },
-      merchantId: TEST_MERCHANT_ID,
-      session: { access_token: 'token' },
-    }),
+  ) => selector(mockAuthState),
 }));
 
 jest.mock('@/hooks/use-vtu-history', () => ({
@@ -265,12 +273,22 @@ jest.mock('@/hooks/use-vtu-history', () => ({
 }));
 
 jest.mock('@/hooks/use-vtu-voucher-pin-backfill', () => ({
-  useVtuVoucherPinBackfill: () => null,
+  // The hook never returns null (VtuVoucherPinBackfill); a null mock
+  // crashes the success view destructure.
+  useVtuVoucherPinBackfill: () => ({
+    pin: null,
+    refundConfirmed: false,
+    status: null,
+  }),
 }));
 
 describe('UtilityPurchaseScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthState.customer = { id: 'customer-1' };
+    mockAuthState.merchantId = TEST_MERCHANT_ID;
+    mockAuthState.session = { access_token: 'token' };
+    mockAuthState.user = null;
     mockCanGoBack.mockReturnValue(true);
     mockUseLocalSearchParams.mockReturnValue({ type: 'power' });
     mockUseVTUHistory.mockReturnValue(createHistoryResult());
@@ -434,6 +452,36 @@ describe('UtilityPurchaseScreen', () => {
     ).toBeOnTheScreen();
   });
 
+  it('renders the submitted type when the pager swipes mid-flight', () => {
+    mockUseLocalSearchParams.mockReturnValue({ type: 'airtime' });
+    const { rerender } = render(<UtilityPurchaseScreen />);
+
+    // Airtime purchase completes in-session; the pager stamps its type.
+    const airtimeProps = mockAirtimeForm.mock.calls[0][0] as unknown as {
+      onSuccess: (result: {
+        amount: number;
+        customerIdentifier: string;
+        reference: string;
+        status: 'processing';
+      }) => void;
+    };
+    act(() => {
+      airtimeProps.onSuccess({
+        amount: 500,
+        customerIdentifier: '08031234567',
+        reference: 'ref-swipe',
+        status: 'processing',
+      });
+    });
+
+    // Pager swipes to data before settlement: the result + history
+    // poll must stay on airtime, not follow the live selection.
+    mockUseLocalSearchParams.mockReturnValue({ type: 'data' });
+    rerender(<UtilityPurchaseScreen />);
+
+    expect(screen.getByText('Purchase type airtime')).toBeOnTheScreen();
+  });
+
   it('refreshes the wallet cache when a utility success includes cashback', async () => {
     mockUseLocalSearchParams.mockReturnValue({
       amount: '1000',
@@ -453,11 +501,12 @@ describe('UtilityPurchaseScreen', () => {
           merchantId: TEST_MERCHANT_ID,
           ownerId: 'customer-1',
         }),
+        exact: false,
       });
     });
   });
 
-  it('does not refresh the wallet cache when a utility success has no cashback', async () => {
+  it('refreshes the wallet cache when a utility success has no cashback', async () => {
     mockUseLocalSearchParams.mockReturnValue({
       amount: '1000',
       cashbackAmount: '0',
@@ -470,13 +519,38 @@ describe('UtilityPurchaseScreen', () => {
 
     render(<UtilityPurchaseScreen />);
 
-    await screen.findByText('Purchase success successful 08031234567');
+    await waitFor(() => {
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({
+        queryKey: walletKeys.data({
+          merchantId: TEST_MERCHANT_ID,
+          ownerId: 'customer-1',
+        }),
+        exact: false,
+      });
+    });
+  });
 
-    expect(mockInvalidateQueries).not.toHaveBeenCalledWith({
-      queryKey: walletKeys.data({
-        merchantId: TEST_MERCHANT_ID,
-        ownerId: 'customer-1',
-      }),
+  it('invalidates the user-keyed wallet when customer hydration is still pending', async () => {
+    mockAuthState.customer = null;
+    mockAuthState.user = { id: 'user-9' };
+    mockUseLocalSearchParams.mockReturnValue({
+      amount: '1000',
+      customerIdentifier: '08031234567',
+      paymentStatus: 'successful',
+      reference: 'ref-pending-customer',
+      type: 'airtime',
+    });
+
+    render(<UtilityPurchaseScreen />);
+
+    await waitFor(() => {
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({
+        queryKey: walletKeys.data({
+          merchantId: TEST_MERCHANT_ID,
+          ownerId: 'user-9',
+        }),
+        exact: false,
+      });
     });
   });
 

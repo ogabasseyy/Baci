@@ -221,9 +221,7 @@ export function usePiggyvestPrimaryCapability(
   // would keep routing through legacy) until remount even after the
   // merchant is server-enabled mid-session.
   const [revision, setRevision] = useState(0);
-  // `revision` is an intentional retrigger: never read, but bumping it is
-  // what reprobes an expired negative verdict on a mounted screen.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+  // biome-ignore lint/correctness/useExhaustiveDependencies(revision): `revision` is an intentional retrigger — the refresh timers bump it to force a mid-session reprobe when a cached negative verdict expires.
   useEffect(() => {
     if (!merchantId) {
       setAvailable(false);

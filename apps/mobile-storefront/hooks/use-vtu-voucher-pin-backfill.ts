@@ -1,27 +1,85 @@
 import { useQuery } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ValidUtilityType } from '@/components/utilities/utility-purchase.types';
-import { EXPO_PUBLIC_API_URL } from '@/env';
-import { CONFIG } from '@/lib/config';
-import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
-import { supabase } from '@/lib/supabase';
-import { VtuHistoryResponseSchema } from '@/schemas/vtu-history';
 import { useAuthStore } from '@/stores/auth-store';
+import type {
+  BackfillApiType,
+  BackfillObservation,
+} from './use-vtu-voucher-pin-backfill-fetch';
+import { fetchVoucherPin } from './use-vtu-voucher-pin-backfill-fetch';
 
 // Bill-style purchases (electricity, TV, betting) may receive their voucher /
 // token after the initial confirm response returns, once the upstream provider
 // reports back. Poll the history endpoint until the pin is persisted so the
 // success screen can surface it without forcing the user to re-open history.
+// Airtime/data ride the same loop for SETTLEMENT (no voucher expected):
+// a terminal observation settles the retained idempotency entry, without
+// which an identical later purchase would recall the key and present the
+// old vend as new — forever, since the stale guard only fires past an
+// OBSERVED completion.
 export const POLL_INTERVAL_MS = 3000;
-export const MAX_POLL_ATTEMPTS = 10;
+export const POLL_SLOW_INTERVAL_MS = 10_000;
+export const POLL_PATIENT_INTERVAL_MS = 60_000;
+export const FAST_POLL_ATTEMPTS = 10;
+export const SLOW_POLL_ATTEMPTS = 43;
+export const MAX_POLL_ATTEMPTS = 73;
 
 const UTILITY_TYPE_TO_API_TYPE: Partial<
-  Record<ValidUtilityType, 'electricity' | 'cable_tv' | 'betting'>
+  Record<ValidUtilityType, BackfillApiType>
 > = {
   power: 'electricity',
   tv: 'cable_tv',
   gaming: 'betting',
+  airtime: 'airtime',
+  data: 'data',
 };
+
+/** History types whose success may still gain a late token. */
+const TOKEN_BACKFILL_API_TYPES: ReadonlySet<BackfillApiType> = new Set([
+  'electricity',
+  'cable_tv',
+  'betting',
+]);
+
+export type VtuBackfillTerminalStatus = 'successful' | 'failed';
+
+export interface VtuVoucherPinBackfill {
+  pin: string | null;
+  /** Last terminal status observed; null while non-terminal. */
+  status: VtuBackfillTerminalStatus | null;
+  /**
+   * Refund proof for the failure copy: true only when history shows
+   * failed with refund_pending === false AND refund_skipped ===
+   * false (Codex R110 P2). Skipped rows were never charged —
+   * confirming them would print "refunded" copy for a refund that
+   * never ran. Downstream copy must gate on this — never on
+   * `failed` alone, which future callers could pass without proof.
+   */
+  refundConfirmed: boolean;
+  /**
+   * Refund deliberately skipped (nothing taken). Terminal like a
+   * confirmation (toTerminalStatus settles on pending === false),
+   * but the copy differs.
+   */
+  refundSkipped: boolean;
+}
+
+function toTerminalStatus(
+  observed: BackfillObservation | null | undefined
+): VtuBackfillTerminalStatus | null {
+  if (!observed) {
+    return null;
+  }
+  if (observed.status === 'successful') {
+    return 'successful';
+  }
+  // Fail-closed (explicit false only): an unconfirmed failure keeps
+  // the purchase non-terminal until the refund lands, like web.
+  if (observed.status === 'failed' && observed.refundPending === false) {
+    return 'failed';
+  }
+  return null;
+}
 
 interface UseVtuVoucherPinBackfillInput {
   enabled: boolean;
@@ -29,104 +87,106 @@ interface UseVtuVoucherPinBackfillInput {
   utilityType: ValidUtilityType;
 }
 
-// Module-scope queryFn body: the throw-inside-try control flow lives outside
-// component scope so React Compiler can still memoize the hook.
-async function fetchVoucherPin({
-  apiType,
-  reference,
-}: {
-  apiType: 'electricity' | 'cable_tv' | 'betting' | null;
-  reference: string | null | undefined;
-}): Promise<string | null> {
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.getSession();
-  if (sessionError || !sessionData.session) {
-    return null;
-  }
-
-  const params = new URLSearchParams({
-    merchantSlug: CONFIG.MERCHANT_SLUG,
-    limit: '20',
-  });
-  if (apiType) {
-    params.set('type', apiType);
-  }
-
-  let response: Response;
-  let body: unknown;
-  try {
-    response = await fetchWithTimeout(
-      `${EXPO_PUBLIC_API_URL}/api/vtu/history?${params.toString()}`,
-      {
-        method: 'GET',
-        timeout: SHORT_TIMEOUT,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionData.session.access_token}`,
-        },
-      }
-    );
-    if (!response.ok) {
-      // Throw so React Query sets status='error', halting refetchInterval
-      // immediately instead of wasting attempts on a non-retriable error.
-      throw new Error(`VTU history fetch failed: ${response.status}`);
-    }
-    body = await response.json();
-  } catch (error) {
-    // Re-throw HTTP errors; wrap network/timeout/parse failures so the
-    // error state is set and polling stops.
-    throw error instanceof Error
-      ? error
-      : new Error('VTU history fetch failed');
-  }
-
-  const parsed = VtuHistoryResponseSchema.safeParse(body);
-  if (!parsed.success) {
-    // Broken contract — throw so polling halts instead of burning remaining
-    // attempts returning null that React Query treats as successful empty data.
-    throw new Error('VTU history response schema mismatch');
-  }
-
-  const match = parsed.data.transactions.find(
-    (transaction) => transaction.request_reference === reference
-  );
-  const pin =
-    typeof match?.voucher_pin === 'string' ? match.voucher_pin.trim() : '';
-  return pin || null;
-}
-
 export function useVtuVoucherPinBackfill({
   enabled,
   reference,
   utilityType,
-}: UseVtuVoucherPinBackfillInput) {
+}: UseVtuVoucherPinBackfillInput): VtuVoucherPinBackfill {
   const userId = useAuthStore((state) => state.user?.id ?? null);
   const apiType = UTILITY_TYPE_TO_API_TYPE[utilityType] ?? null;
   const queryEnabled = Boolean(enabled && reference && apiType && userId);
   // dataUpdateCount only increments on referential change; null === null keeps
   // it at 1 forever. Track fetch attempts independently so the cap is reliable.
   const fetchCountRef = useRef(0);
+  // The budget is per query identity, not per mount: an account/type/
+  // reference switch starts a fresh query that deserves a fresh budget.
+  // Without the reset, the old query's spent count would starve the new
+  // one (e.g. switch away and back leaves one fetch before the cap).
+  const lastIdentityRef = useRef<string | null>(null);
+  // The success screen owns this hook, so mounted means shown: an
+  // unmount before resolution must skip the forget (Codex R31 fQGT).
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
-  const { data } = useQuery<string | null>({
+  const { data } = useQuery<BackfillObservation | null>({
     queryKey: ['vtu', 'voucher-pin-backfill', userId, apiType, reference],
     enabled: queryEnabled,
     staleTime: 0,
     gcTime: 0,
     retry: 0,
     refetchInterval: (q) => {
-      if (q.state.data || q.state.status === 'error') {
+      const observed = q.state.data;
+      const terminal = toTerminalStatus(observed);
+      // A pin always stops the hunt. A successful row keeps polling
+      // while a token may still arrive (the server schedules late
+      // token backfills for pin-less successes of these types);
+      // tokenless successes and confirmed failures settle.
+      const tokenHunt =
+        terminal === 'successful' &&
+        !observed?.pin &&
+        apiType !== null &&
+        TOKEN_BACKFILL_API_TYPES.has(apiType);
+      if (
+        observed?.pin ||
+        (terminal !== null && !tokenHunt) ||
+        q.state.status === 'error'
+      ) {
         return false;
       }
       if (fetchCountRef.current >= MAX_POLL_ATTEMPTS) {
         return false;
       }
-      return POLL_INTERVAL_MS;
+      // Backoff mirrors web: 3s for the first 10 attempts, 10s to
+      // attempt 43 (~6 minutes), then a 60s patient lane to attempt
+      // 73 (~36 minutes). The reconciler rotates one 25-row page per
+      // 5-minute window, so a backlog row settles after a 6-minute
+      // loop gives up — and the retained entry would then replay the
+      // old vend as a later identical purchase (Codex R55 6rrU6M).
+      if (fetchCountRef.current <= FAST_POLL_ATTEMPTS) {
+        return POLL_INTERVAL_MS;
+      }
+      if (fetchCountRef.current <= SLOW_POLL_ATTEMPTS) {
+        return POLL_SLOW_INTERVAL_MS;
+      }
+      return POLL_PATIENT_INTERVAL_MS;
     },
-    queryFn: () => {
+    queryFn: (context) => {
+      // Key layout: ['vtu', 'voucher-pin-backfill', userId, apiType,
+      // reference]. A new identity resets the attempt budget; the
+      // polling account doubles as the side-effect guard below.
+      const identity = JSON.stringify([
+        context.queryKey[2],
+        context.queryKey[3],
+        context.queryKey[4],
+      ]);
+      if (lastIdentityRef.current !== identity) {
+        lastIdentityRef.current = identity;
+        fetchCountRef.current = 0;
+      }
       fetchCountRef.current += 1;
-      return fetchVoucherPin({ apiType, reference });
+      const rawUserId = context.queryKey[2];
+      const capturedUserId = typeof rawUserId === 'string' ? rawUserId : null;
+      return fetchVoucherPin({
+        apiType,
+        capturedUserId,
+        reference,
+        isViewActive: () => mountedRef.current,
+      });
     },
   });
 
-  return data ?? null;
+  return {
+    pin: data?.pin ?? null,
+    status: toTerminalStatus(data),
+    refundConfirmed:
+      data?.status === 'failed' &&
+      data?.refundPending === false &&
+      data?.refundSkipped === false,
+    refundSkipped: data?.status === 'failed' && data?.refundSkipped === true,
+  };
 }

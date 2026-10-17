@@ -16,6 +16,12 @@ import { useThemeStore } from '@/stores/theme-store';
 import { getSnowflakeShadowStyle } from './SnowEffect.shadows';
 
 const NUM_SNOWFLAKES = 40; // Optimized for performance
+// Static decorative list: positional ids are stable keys because the
+// flakes never reorder (module scope — allocated once, not per render).
+const SNOWFLAKE_IDS: number[] = Array.from(
+  { length: NUM_SNOWFLAKES },
+  (_, position) => position
+);
 const snowflakeShadowStyle = getSnowflakeShadowStyle(
   Platform.OS === 'web' ? 'web' : 'native'
 );
@@ -119,11 +125,10 @@ export function SnowEffect() {
 
   return (
     <View style={styles.container}>
-      {Array.from({ length: NUM_SNOWFLAKES }).map((_, i) => (
+      {SNOWFLAKE_IDS.map((id) => (
         <Snowflake
-          // biome-ignore lint/suspicious/noArrayIndexKey: fixed-count decorative flakes positioned by index
-          key={i}
-          index={i}
+          key={id}
+          index={id}
           color={tokens.snowColor ?? palette.white}
           screenWidth={screenWidth}
           screenHeight={screenHeight}

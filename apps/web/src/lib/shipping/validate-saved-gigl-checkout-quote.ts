@@ -1,6 +1,7 @@
 import { normalizePhoneToE164 } from '@baci/shared/lib';
 import { shippingService } from '@/lib/shipping';
 import { normalizeReceiverMatchText } from './international-quote-receiver-match';
+import { isVerifiedGiglProviderRateId } from './is-verified-gigl-provider-rate-id';
 import { matchesGiglProviderRate } from './matches-gigl-provider-rate';
 import { domesticSendersDiffer } from './merchant-sender-comparison';
 import {
@@ -38,7 +39,11 @@ function matchesSavedRate(
   saved: string | null,
   candidate: string | undefined
 ): boolean {
-  if (!saved || !candidate) return false;
+  if (
+    !isVerifiedGiglProviderRateId(saved) ||
+    !isVerifiedGiglProviderRateId(candidate)
+  )
+    return false;
   if (saved === candidate) return true;
   if (!matchesGiglProviderRate(saved, candidate)) return false;
   const origin = parseGiglProviderRateId(saved).senderStationId;
@@ -57,6 +62,7 @@ export async function validateSavedGiglCheckoutQuote(
   const request = parseStoredQuoteRequest(quote.quote_request);
   if (
     quote.provider !== 'GIGL' ||
+    !isVerifiedGiglProviderRateId(quote.provider_rate_id) ||
     request?.shipmentType !== 'domestic' ||
     !request.sender ||
     !sender ||
@@ -101,8 +107,6 @@ export async function validateSavedGiglCheckoutQuote(
     (candidate) =>
       candidate.provider === 'GIGL' &&
       candidate.currency === quote.currency &&
-      candidate.serviceTier === quote.service_tier &&
-      candidate.carrierName === quote.carrier_name &&
       matchesSavedRate(quote.provider_rate_id, candidate.providerRateId) &&
       sameAmount(candidate.price, quote.price) &&
       sameAmount(candidate.providerCost, quote.provider_cost) &&

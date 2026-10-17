@@ -157,6 +157,47 @@ describe('saved GIG checkout booking integration', () => {
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
     expect(shippingService.bookShipment).not.toHaveBeenCalled();
   });
+  it('books the original quote without persisting replacement labels when the carrier renamed the same service', async () => {
+    const client = await fixture();
+    const saved = await client.from('shipping_quotes').select().single();
+    Object.assign(saved.data, {
+      service_tier: 'standard',
+      carrier_name: 'GIGL',
+    });
+    await expect(
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).resolves.toMatchObject({ quoteId: 'quote-1' });
+    expect(shippingService.bookShipment).toHaveBeenCalledWith(
+      'GIGL',
+      expect.objectContaining({
+        quoteId: 'quote-1',
+        providerRateId: 'GIGL_4_0_1_0_0_4',
+      })
+    );
+    expect(saved.data).toMatchObject({
+      service_tier: 'standard',
+      carrier_name: 'GIGL',
+      price: 2500,
+      provider_cost: 2000,
+    });
+    expect(client.rpc).not.toHaveBeenCalledWith(
+      'persist_refreshed_order_shipping_quote',
+      expect.anything()
+    );
+  });
+  it('does not price or submit a booking from a saved rate with a defaulted invalid enum', async () => {
+    const client = await fixture();
+    const saved = await client.from('shipping_quotes').select().single();
+    saved.data.provider_rate_id = 'GIGL_4_9_1_0_0_4';
+    await expect(
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
   it('returns a definitive pre-booking error if background checking fails', async () => {
     const client = await fixture();
     vi.mocked(shippingService.getProviderQuotes).mockRejectedValue(

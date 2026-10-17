@@ -42,7 +42,7 @@ const quote: OrderShipmentQuoteRecord = {
   price: 1100,
   currency: 'NGN',
   estimated_days: 3,
-  provider_rate_id: 'GIGL_4_0',
+  provider_rate_id: 'GIGL_4_0_1_0_0_4',
   expires_at: '2020-01-01T00:00:00Z',
   quote_request: request,
   provider_metadata: null,
@@ -66,7 +66,7 @@ const fresh = {
   estimatedDays: 3,
   pickupIncluded: true,
   insuranceIncluded: false,
-  providerRateId: 'GIGL_4_0',
+  providerRateId: 'GIGL_4_0_1_0_0_4',
   expiresAt: new Date('2099-01-01'),
   rawResponse: {},
 };
@@ -88,8 +88,8 @@ describe('saved paid GIG quote validation', () => {
   it.each([
     { price: 1101 },
     { providerCost: 999 },
-    { serviceTier: 'GoFaster' },
-    { providerRateId: 'GIGL_5_0' },
+    { serviceTier: 'GoFaster', providerRateId: 'GIGL_4_0_1_0_1_4' },
+    { providerRateId: 'GIGL_5_0_1_0_0_4' },
     { currency: 'USD' },
   ])('requires confirmation before changing tariff or service %j', async (change) => {
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
@@ -101,6 +101,29 @@ describe('saved paid GIG quote validation', () => {
       code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
       status: 409,
     });
+  });
+  it.each([
+    { service_tier: 'standard' },
+    { carrier_name: 'GIGL' },
+    {
+      service_tier: 'Legacy standard delivery',
+      carrier_name: 'Old carrier label',
+    },
+  ])('preserves the saved quote when full rate identity is unchanged despite labels %j', async (labels) => {
+    const providerRateId = buildGiglProviderRateId({
+      senderStationId: 4,
+      receiverStationId: 30,
+      pickupOption: PickupOptions.HomeDelivery,
+      vehicleType: VehicleType.Bike,
+      deliveryType: GiglDeliveryType.GoStandard,
+    });
+    const saved = { ...quote, ...labels, provider_rate_id: providerRateId };
+    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+      { ...fresh, providerRateId },
+    ]);
+    expect(await validateSavedGiglCheckoutQuote(saved, sender, 1100)).toBe(
+      saved
+    );
   });
   it.each([
     5,
@@ -166,6 +189,25 @@ describe('saved paid GIG quote validation', () => {
   ])('requires explicit recovery rather than silently rebuilding untrusted legacy data %j', async (legacy) => {
     await expect(
       validateSavedGiglCheckoutQuote({ ...quote, ...legacy }, sender, 1100)
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+  });
+  it.each([
+    'GIGL_4_9_1_0_0_4',
+    'GIGL_4_0_1_0_9_4',
+    'GIGL_9007199254740993_0_1_0_0_4',
+    ' GIGL_4_0_1_0_0_4',
+    'GIGL_4_0_1_0_0_4 ',
+  ])('requires recovery before fetching prices for unverified raw saved rate %s', async (provider_rate_id) => {
+    await expect(
+      validateSavedGiglCheckoutQuote(
+        { ...quote, provider_rate_id },
+        sender,
+        1100
+      )
     ).rejects.toMatchObject({
       code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
       status: 409,

@@ -73,7 +73,7 @@ function createSupabase() {
     price: 2500,
     currency: 'NGN',
     estimated_days: 3,
-    provider_rate_id: 'GIGL_4_0',
+    provider_rate_id: 'GIGL_4_0_1_0_0_4',
     expires_at: new Date(Date.now() + 86_400_000).toISOString(),
     quote_request: {
       sessionId: 'session-1',
@@ -184,7 +184,7 @@ describe('bugfix: PATCH fulfillment rejects refreshed price changes', () => {
         estimatedDays: 3,
         pickupIncluded: true,
         insuranceIncluded: false,
-        providerRateId: 'GIGL_4_0',
+        providerRateId: 'GIGL_4_0_1_0_0_4',
         expiresAt: new Date(Date.now() + 86_400_000),
         rawResponse: {},
       },

@@ -72,11 +72,13 @@ BEGIN
     END IF;
     IF p_amount>v_remaining THEN RAISE EXCEPTION 'refund_exceeds_remaining' USING ERRCODE='P0001'; END IF;
     IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id
+      AND merchant_id=p_merchant_id
       AND transaction_type='refund' AND status IN ('completed','refunded')
       AND metadata->>'payment_transaction_id' IS NULL) THEN
       RAISE EXCEPTION 'unallocated_refund_requires_review' USING ERRCODE='P0001';
     END IF;
     IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id
+      AND merchant_id=p_merchant_id
       AND transaction_type='payment'
       AND (status='completed'
         OR (status='refunded'
@@ -212,7 +214,8 @@ BEGIN
       ORDER BY CASE WHEN id=v_pinned_leg THEN 0 ELSE 1 END,created_at,id
     LOOP
       SELECT GREATEST(v_payment.amount-COALESCE(sum(amount),0),0) INTO v_leg_remaining
-        FROM public.transactions WHERE order_id=p_order_id AND transaction_type='refund'
+        FROM public.transactions WHERE order_id=p_order_id AND merchant_id=p_merchant_id
+        AND transaction_type='refund'
         AND status IN ('completed','refunded')
         AND upper(btrim(currency))=upper(btrim(v_payment.currency))
         AND metadata->>'payment_transaction_id'=v_payment.id::text;

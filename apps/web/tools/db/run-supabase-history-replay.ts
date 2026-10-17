@@ -78,6 +78,7 @@ export async function runSupabaseHistoryReplay(
   await run('docker', ['info']);
   const workdir = await runtime.makeWorkdir();
   const projectId = createSupabaseReplayProjectId();
+  const keepReplay = process.env.BACI_REPLAY_KEEP === '1';
   let cleanup = false;
   let ownership: ownershipTools.ReplayProjectOwnership | undefined;
   let expected: resourceTools.ExpectedSupabaseReplayResources | undefined;
@@ -105,7 +106,7 @@ export async function runSupabaseHistoryReplay(
       workdir,
     });
     await runtime.writeOwnership(ownership);
-    cleanup = process.env.BACI_REPLAY_KEEP !== '1';
+    cleanup = !keepReplay;
     try {
       await runtime.assertPortsAvailable(ports);
     } catch {
@@ -255,7 +256,7 @@ export async function runSupabaseHistoryReplay(
   }
   let cleanupFailed = false;
   let cleanupResult: ownershipTools.ReplayProjectCleanupResult | undefined;
-  let canRemoveWorkdir = false;
+  let canRemoveWorkdir = !cleanup && !keepReplay;
   if (cleanup && ownership) {
     try {
       cleanupResult = await runtime.stopOwnedProject({
@@ -278,7 +279,7 @@ export async function runSupabaseHistoryReplay(
     } catch {
       cleanupFailed = true;
     }
-  } else if (!cleanup) process.stderr.write(`replay kept: ${workdir}\n`);
+  } else if (keepReplay && ownership) process.stderr.write(`kept:${workdir}\n`);
   if (cleanupFailed) throw new Error('Supabase replay cleanup failed');
   if (failure) throw withCleanupDiagnostics(failure, cleanupResult);
   if (!receipt) throw new Error('Supabase replay did not produce a receipt');

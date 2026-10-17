@@ -182,10 +182,16 @@ async function handle(
       { status }
     );
   }
+  // Fail closed on null/non-object data (e.g. web deployed before
+  // the migration set): a bare 200 null would park the polling hook
+  // on 'Loading refund…' with no error and no retry signal.
+  if (!data || typeof data !== 'object')
+    return NextResponse.json(
+      { error: 'Unable to manage refund', code: 'internal_error' },
+      { status: 500 }
+    );
   return NextResponse.json(
-    data && typeof data === 'object'
-      ? maskRefundWorkerText(data as Record<string, unknown>)
-      : data
+    maskRefundWorkerText(data as Record<string, unknown>)
   );
 }
 

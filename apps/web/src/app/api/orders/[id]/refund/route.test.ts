@@ -129,6 +129,17 @@ describe('order refund route', () => {
       expect.objectContaining({ needsPaystackCheck: false })
     );
   });
+  it('fails closed when the RPC yields null data', async () => {
+    // Web-before-migrations (or a stale overload) must surface a
+    // 500, not park the polling hook on a 200 null with no retry.
+    mocks.rpc.mockResolvedValue({ data: null, error: null });
+    const response = await GET(request(), context);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: 'Unable to manage refund',
+      code: 'internal_error',
+    });
+  });
   it('passes the pin-candidate legs through to the panel', async () => {
     const legs = [
       {

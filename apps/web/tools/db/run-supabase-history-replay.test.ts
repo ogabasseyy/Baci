@@ -280,6 +280,44 @@ describe('runSupabaseHistoryReplay', () => {
     expect(fixture.removed).toEqual([]);
   });
 
+  it('removes the workdir on pre-ownership failure without keep mode', async () => {
+    const fixture = createSupabaseReplayRuntimeFixture();
+    fixture.deps.writeOwnership = vi.fn(async () => {
+      throw new Error('ownership write failed');
+    });
+    const stderrWrite = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+
+    await expect(
+      runSupabaseHistoryReplay(fixture.replayOptions(), fixture.deps)
+    ).rejects.toThrow(/^ownership write failed$/);
+    expect(fixture.removed).toEqual([fixture.workdir]);
+    expect(stderrWrite).not.toHaveBeenCalled();
+    stderrWrite.mockRestore();
+  });
+
+  it('retains the workdir and prints its path on pre-ownership failure with keep mode', async () => {
+    const fixture = createSupabaseReplayRuntimeFixture();
+    fixture.deps.writeOwnership = vi.fn(async () => {
+      throw new Error('ownership write failed');
+    });
+    const stderrWrite = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    vi.stubEnv('BACI_REPLAY_KEEP', '1');
+    try {
+      await expect(
+        runSupabaseHistoryReplay(fixture.replayOptions(), fixture.deps)
+      ).rejects.toThrow(/^ownership write failed$/);
+      expect(fixture.removed).toEqual([]);
+      expect(stderrWrite).toHaveBeenCalledWith(`kept:${fixture.workdir}\n`);
+    } finally {
+      vi.unstubAllEnvs();
+      stderrWrite.mockRestore();
+    }
+  });
+
   it('rejects oversized secret-bearing status output without retaining it', async () => {
     const fixture = createSupabaseReplayRuntimeFixture();
     const secret = `postgresql://postgres:secret@127.0.0.1:41001/${'x'.repeat(70_000)}`;

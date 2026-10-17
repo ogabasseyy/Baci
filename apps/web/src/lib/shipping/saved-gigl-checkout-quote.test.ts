@@ -2,6 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { shippingService } from '@/lib/shipping';
 import {
+  buildGiglProviderRateId,
+  GiglDeliveryType,
+  PickupOptions,
+  VehicleType,
+} from './providers/gigl.constants';
+import {
   type OrderShipmentQuoteRecord,
   refreshOrderShipmentQuote,
 } from './refresh-order-shipment-quote';
@@ -115,6 +121,64 @@ describe('saved paid GIG quote validation', () => {
       status: 409,
     });
     expect(persistRefreshedShippingQuote).not.toHaveBeenCalled();
+  });
+  it.each([
+    5,
+    undefined,
+  ])('requires consent when explicit saved origin station4 changes to %s', async (senderStationId) => {
+    const service = {
+      receiverStationId: 30,
+      pickupOption: PickupOptions.HomeDelivery,
+      vehicleType: VehicleType.Bike,
+      deliveryType: GiglDeliveryType.GoStandard,
+    };
+    const saved = {
+      ...quote,
+      provider_rate_id: buildGiglProviderRateId({
+        ...service,
+        senderStationId: 4,
+      }),
+    };
+    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+      {
+        ...fresh,
+        providerRateId: buildGiglProviderRateId({
+          ...service,
+          senderStationId,
+        }),
+      },
+    ]);
+    await expect(
+      refreshOrderShipmentQuote(client, saved, 'GIGL', sender, options)
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
+    });
+    expect(persistRefreshedShippingQuote).not.toHaveBeenCalled();
+  });
+  it('accepts a legacy saved rate without an origin station when current effective service matches', async () => {
+    const service = {
+      receiverStationId: 30,
+      pickupOption: PickupOptions.HomeDelivery,
+      vehicleType: VehicleType.Bike,
+      deliveryType: GiglDeliveryType.GoStandard,
+    };
+    const saved = {
+      ...quote,
+      provider_rate_id: buildGiglProviderRateId(service),
+    };
+    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+      {
+        ...fresh,
+        providerRateId: buildGiglProviderRateId({
+          ...service,
+          senderStationId: 4,
+        }),
+      },
+    ]);
+    expect(
+      await refreshOrderShipmentQuote(client, saved, 'GIGL', sender, options)
+    ).toBe(saved);
   });
   it('reports unavailable pricing without claiming that details changed', async () => {
     vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([]);

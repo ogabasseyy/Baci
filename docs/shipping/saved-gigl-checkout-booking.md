@@ -10,6 +10,11 @@ When the destination, parcel, origin, service and shipping economics still
 match, booking keeps the existing quote binding and paid fee. The price check
 alone does not save a replacement quote or change the order.
 
+The service comparison uses the booking authority encoded in the GIG rate ID:
+pickup mode, origin/destination stations, service centre, vehicle and delivery
+class. Station display labels and estimated delivery windows are guidance, not
+a different booked service; they are not treated as a customer price guarantee.
+
 A complete pin on the order-bound saved quote can supply coordinates missing
 from an otherwise matching order destination for that booking. Both coordinates
 must be valid. A changed address, conflicting or partial order pin, or missing

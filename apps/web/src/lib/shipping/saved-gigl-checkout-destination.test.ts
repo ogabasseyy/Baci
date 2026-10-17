@@ -34,6 +34,40 @@ describe('bound saved GIG checkout destination', () => {
     });
     expect(order.shipping_address).not.toHaveProperty('latitude');
   });
+  it('rejects a changed street suffix even when explicit pins still match', () => {
+    expect(() =>
+      resolveSavedGiglCheckoutDestination(
+        {
+          shipping_address: {
+            ...address,
+            latitude: 6.5,
+            longitude: 3.3,
+            address: '2 Buyer Road, Other building',
+          },
+        },
+        request
+      )
+    ).toThrow(
+      expect.objectContaining({ code: 'SHIPPING_QUOTE_RECEIVER_MISMATCH' })
+    );
+  });
+  it.each([
+    {},
+    { latitude: 6.5, longitude: 3.3 },
+  ])('accepts the benign locality suffix with coordinates %j', (coordinates) => {
+    expect(
+      resolveSavedGiglCheckoutDestination(
+        {
+          shipping_address: {
+            ...address,
+            ...coordinates,
+            address: '2 Buyer Road, Ikeja, Lagos',
+          },
+        },
+        request
+      ).shipping_address
+    ).toMatchObject({ latitude: 6.5, longitude: 3.3 });
+  });
   it.each([
     { address: 'Other Road' },
     { address: '2 Buyer Road, Other building' },

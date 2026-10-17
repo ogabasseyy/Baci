@@ -27,25 +27,25 @@ export function resolveSavedGiglCheckoutDestination<
   const address = order.shipping_address;
   const hasNoPin =
     address && address.latitude == null && address.longitude == null;
+  if (
+    normalizeAddressForQuoteMatch(
+      address?.address,
+      address?.city,
+      address?.state
+    ) !==
+    normalizeAddressForQuoteMatch(
+      request.receiver.address,
+      request.receiver.city,
+      request.receiver.state
+    )
+  ) {
+    throw new OrderShipmentBookingError(
+      'Review and confirm the shipping destination before booking.',
+      400,
+      'SHIPPING_QUOTE_RECEIVER_MISMATCH'
+    );
+  }
   if (hasNoPin) {
-    if (
-      normalizeAddressForQuoteMatch(
-        address.address,
-        address.city,
-        address.state
-      ) !==
-      normalizeAddressForQuoteMatch(
-        request.receiver.address,
-        request.receiver.city,
-        request.receiver.state
-      )
-    ) {
-      throw new OrderShipmentBookingError(
-        'Review and confirm the shipping destination before booking.',
-        400,
-        'SHIPPING_QUOTE_RECEIVER_MISMATCH'
-      );
-    }
     assertQuoteReceiverMatchesOrder(
       {
         ...request,

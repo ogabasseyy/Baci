@@ -6,6 +6,7 @@ import {
   OrderShipmentBookingError,
   parseStoredQuoteRequest,
 } from './order-shipment-booking-utils';
+import { parseGiglProviderRateId } from './providers/gigl.constants';
 import type { OrderShipmentQuoteRecord } from './refresh-order-shipment-quote';
 import type { ShippingAddress, ShippingQuote } from './types';
 
@@ -28,6 +29,21 @@ function sameAmount(
     Number.isFinite(a) &&
     Number.isFinite(b) &&
     Math.round(a * 100) === Math.round(b * 100)
+  );
+}
+
+/** Legacy rates may omit origin; explicit saved origins must remain identical. */
+function matchesSavedRate(
+  saved: string | null,
+  candidate: string | undefined
+): boolean {
+  if (!saved || !candidate) return false;
+  if (saved === candidate) return true;
+  if (!matchesGiglProviderRate(saved, candidate)) return false;
+  const origin = parseGiglProviderRateId(saved).senderStationId;
+  return (
+    origin === undefined ||
+    origin === parseGiglProviderRateId(candidate).senderStationId
   );
 }
 
@@ -81,14 +97,7 @@ export async function validateSavedGiglCheckoutQuote(
       candidate.currency === quote.currency &&
       candidate.serviceTier === quote.service_tier &&
       candidate.carrierName === quote.carrier_name &&
-      Boolean(
-        quote.provider_rate_id &&
-          (candidate.providerRateId === quote.provider_rate_id ||
-            matchesGiglProviderRate(
-              quote.provider_rate_id,
-              candidate.providerRateId
-            ))
-      ) &&
+      matchesSavedRate(quote.provider_rate_id, candidate.providerRateId) &&
       sameAmount(candidate.price, quote.price) &&
       sameAmount(candidate.providerCost, quote.provider_cost) &&
       sameAmount(candidate.platformMargin, quote.platform_margin) &&

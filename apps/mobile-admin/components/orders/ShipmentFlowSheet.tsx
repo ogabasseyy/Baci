@@ -1,22 +1,16 @@
-import type { Order } from '@baci/shared';
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareModalContainer } from '@/components/ui/KeyboardAwareModalContainer';
 import { isRuntimePlatform } from '@/config/runtime-platform';
-import type { useOrderGiglShipping } from '@/hooks/orders/useOrderGiglShipping';
 import { useTheme } from '@/hooks/useTheme';
-import type {
-  ShipmentCompletionMode,
-  ShipmentFlowStep,
-  ShipmentFulfillmentDetails,
-} from '@/lib/order-shipment';
 import { CheckoutShippingRecoveryPanel } from './CheckoutShippingRecoveryPanel';
 import { ShipmentFlowFooter } from './ShipmentFlowFooter';
 import { ShipmentFlowGiglPanel } from './ShipmentFlowGiglPanel';
 import { ShipmentFlowHeader } from './ShipmentFlowHeader';
 import { ShipmentFlowProgress } from './ShipmentFlowProgress';
 import { styles } from './ShipmentFlowSheet.styles';
+import type { ShipmentFlowSheetProps } from './ShipmentFlowSheet.types';
 import {
   ShipmentFlowDetailsStep,
   ShipmentFlowMethodStep,
@@ -26,35 +20,6 @@ import { ShipmentIdentifierScanner } from './ShipmentIdentifierScanner';
 
 const IOS_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 0;
 const DEFAULT_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 24;
-interface ShipmentFlowSheetProps {
-  recoveryOrder?: Order;
-  canUseProvider: boolean;
-  fulfillmentDetails: ShipmentFulfillmentDetails;
-  fulfillmentItemIndex: number;
-  giglShipping?: ReturnType<typeof useOrderGiglShipping>;
-  hasExistingFulfillment: boolean;
-  isSubmitting: boolean;
-  onClose: () => void;
-  onContinueFromDetails: () => void;
-  onContinueFromMethod: () => void;
-  onConfirmSelfFulfillment: () => void;
-  onFulfillmentDetailsChange: (
-    field: 'imei' | 'serialNumber',
-    value: string
-  ) => void;
-  onModeChange: (mode: ShipmentCompletionMode) => void;
-  onRiderPhoneChange: (value: string) => void;
-  onSelectSavedRider: (phone: string) => void;
-  onStepBack: () => void;
-  orderNumber: string;
-  providerLabel: string | null;
-  requiresFulfillment: boolean;
-  riderPhone: string;
-  savedRiders: string[];
-  selectedMode: ShipmentCompletionMode;
-  step: ShipmentFlowStep;
-  visible: boolean;
-}
 export function ShipmentFlowSheet({
   recoveryOrder,
   canUseProvider,
@@ -83,7 +48,17 @@ export function ShipmentFlowSheet({
 }: ShipmentFlowSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const [recoveryRequiredOrderId, setRecoveryRequiredOrderId] = useState<
+    string | null
+  >(null);
+  const recoveryRequired = Boolean(
+    recoveryOrder && recoveryRequiredOrderId === recoveryOrder.id
+  );
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   const [recoveryBlocking, setRecoveryBlocking] = useState(false);
+  const isRecoveryBlocking =
+    step === 'method' &&
+    (recoveryRequired ? selectedMode === 'provider' : recoveryBlocking);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [activeScanField, setActiveScanField] = useState<
     'imei' | 'serialNumber' | null
@@ -134,7 +109,7 @@ export function ShipmentFlowSheet({
     onStepBack();
   };
   const handlePrimaryAction = async () => {
-    if (recoveryBlocking) return;
+    if (isRecoveryBlocking) return;
     if (step === 'details') return onContinueFromDetails();
     if (step === 'rider') return onConfirmSelfFulfillment();
     if (
@@ -144,7 +119,11 @@ export function ShipmentFlowSheet({
     ) {
       return;
     }
-    onContinueFromMethod();
+    const outcome = await onContinueFromMethod();
+    if (outcome === 'review_checkout_quote' && recoveryOrder) {
+      setRecoveryAttempt((attempt) => attempt + 1);
+      setRecoveryRequiredOrderId(recoveryOrder.id);
+    }
   };
   return (
     <Modal
@@ -239,10 +218,15 @@ export function ShipmentFlowSheet({
                   selectedMode={selectedMode}
                 />
               ) : null}
-              {step === 'method' && !isSubmitting && recoveryOrder ? (
+              {step === 'method' &&
+              !isSubmitting &&
+              recoveryOrder &&
+              (!recoveryRequired || selectedMode === 'provider') ? (
                 <CheckoutShippingRecoveryPanel
-                  key={recoveryOrder.id}
+                  key={`${recoveryOrder.id}:${recoveryAttempt}`}
                   order={recoveryOrder}
+                  required={recoveryRequired}
+                  onConfirmed={() => setRecoveryRequiredOrderId(null)}
                   onBlockingChange={setRecoveryBlocking}
                   onBusyChange={setRecoveryBusy}
                 />
@@ -260,7 +244,7 @@ export function ShipmentFlowSheet({
               colors={colors}
               isSubmitting={isSubmitting || recoveryBusy}
               isPrimaryDisabled={
-                recoveryBlocking ||
+                isRecoveryBlocking ||
                 (step === 'method' &&
                   selectedMode === 'provider' &&
                   (giglShipping

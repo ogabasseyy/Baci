@@ -121,6 +121,7 @@ describe('provider booking result through the real status mutation and shipment 
   });
   it.each([
     [400, 'SHIPPING_QUOTE_RECEIVER_MISMATCH'],
+    [409, 'SHIPPING_QUOTE_RECONFIRM_REQUIRED'],
     [401, 'UNAUTHORIZED'],
     [504, 'GIGL_AUTHENTICATION_FAILED'],
     [502, 'GIGL_INTERNATIONAL_COUNTRY_LOOKUP_FAILED'],

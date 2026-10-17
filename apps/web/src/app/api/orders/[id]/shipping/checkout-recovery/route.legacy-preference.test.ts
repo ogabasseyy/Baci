@@ -3,6 +3,7 @@ import {
   recoveryContext as context,
   primeRecoveryMocks,
   recoveryQuote as quote,
+  recoveryReceiver as receiver,
   postRecovery as request,
 } from './route.test-support';
 
@@ -35,6 +36,50 @@ describe('legacy paid checkout shipping recovery preferences', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     primeRecoveryMocks(mocks);
+  });
+  it('reconstructs a preview from a pinless order with no old quote metadata using an explicit destination', async () => {
+    mocks.rpc.mockResolvedValueOnce({
+      data: { ...context, quote_preference: null },
+      error: null,
+    });
+    const response = await request();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      canConfirm: true,
+      paidShippingFee: 110,
+      quote: { price: 110 },
+    });
+    const staged = mocks.rpc.mock.calls.find(
+      ([name]) => name === 'prepare_customer_checkout_shipping_recovery'
+    );
+    expect(staged?.[1].p_quote).toMatchObject({
+      price: 110,
+      provider_cost: 100,
+      platform_margin: 10,
+      pricing_version: 'gigl_platform_margin_v1',
+      quote_request: {
+        receiver: expect.objectContaining({
+          latitude: receiver.latitude,
+          longitude: receiver.longitude,
+        }),
+        items: [expect.objectContaining({ quantity: 1 })],
+      },
+    });
+    expect(staged?.[1].p_route_proof).toBeTruthy();
+    expect(mocks.rpc.mock.calls.map(([name]) => name)).not.toContain(
+      'confirm_customer_checkout_shipping_recovery'
+    );
+  });
+  it('requires an explicit pin before previewing a legacy pinless order', async () => {
+    const {
+      latitude: _latitude,
+      longitude: _longitude,
+      ...withoutPin
+    } = receiver;
+    const response = await request({ action: 'preview', receiver: withoutPin });
+    expect(response.status).toBe(400);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.quotes).not.toHaveBeenCalled();
   });
   it('accepts a current GoStandard quote for a legacy standard label without changing the paid fee', async () => {
     mocks.quotes.mockResolvedValue([

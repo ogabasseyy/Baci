@@ -13,6 +13,7 @@ import {
   shouldPersistFulfillmentDetails,
 } from '@/lib/order-shipment';
 import { completeOrderShipment } from './completeOrderShipment';
+import type { ProviderBookingErrorOutcome } from './handleOrderDetailsProviderBookingError';
 import { OrderStatusUpdateError } from './orders/order-status-update-error';
 
 interface SuccessModalState {
@@ -53,7 +54,11 @@ interface CreateOrderDetailsShipmentActionsParams {
     orderId: string;
     status: 'shipped';
   }) => Promise<unknown>;
-  onProviderBookingError?: (error: unknown) => void | Promise<void>;
+  onProviderBookingError?:
+    | ((error: unknown) => void)
+    | ((
+        error: unknown
+      ) => ProviderBookingErrorOutcome | Promise<ProviderBookingErrorOutcome>);
 }
 
 export function createOrderDetailsShipmentActions({
@@ -216,7 +221,8 @@ export function createOrderDetailsShipmentActions({
       await finalizeShipmentCompletion('provider');
     } catch (error: unknown) {
       try {
-        await onProviderBookingError?.(error);
+        const outcome = await onProviderBookingError?.(error);
+        if (outcome === 'review_checkout_quote') return outcome;
       } catch {
         // Recovery refresh failures must not hide the original booking error.
       }

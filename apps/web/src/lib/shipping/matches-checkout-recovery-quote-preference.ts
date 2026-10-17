@@ -1,3 +1,4 @@
+import { isVerifiedGiglProviderRateId } from './is-verified-gigl-provider-rate-id';
 import { matchesGiglProviderRate } from './matches-gigl-provider-rate';
 import type { ShippingQuote } from './types';
 
@@ -19,22 +20,6 @@ function carrier(value: string | null): string {
     : normalized;
 }
 
-// Recognized legacy IDs omit centre/delivery/sender suffixes; current IDs
-// include them. Reject malformed enum values before the shared permissive
-// parser can default them to standard delivery and manufacture a match.
-function verifiedRateId(value: string | undefined): value is string {
-  return Boolean(
-    value &&
-      /^GIGL_[1-9]\d*_[01]_[0-3](?:_(?:0|[1-9]\d*)(?:_[01](?:_[1-9]\d*)?)?)?$/.test(
-        value
-      ) &&
-      value
-        .split('_')
-        .slice(1)
-        .every((part) => Number.isSafeInteger(Number(part)))
-  );
-}
-
 /** Preserve purchased service: accept known labels or verified stable GIGL
  * rate identity, never an arbitrary selector fallback to a different tier.
  * Provider/currency/address-delivery eligibility is enforced by the caller. */
@@ -45,8 +30,8 @@ export function matchesCheckoutRecoveryQuotePreference(
   if (!preference) return true;
   const rateId = preference.provider_rate_id?.trim();
   if (
-    verifiedRateId(rateId) &&
-    verifiedRateId(quote.providerRateId) &&
+    isVerifiedGiglProviderRateId(rateId) &&
+    isVerifiedGiglProviderRateId(quote.providerRateId) &&
     matchesGiglProviderRate(rateId, quote.providerRateId)
   )
     return true;

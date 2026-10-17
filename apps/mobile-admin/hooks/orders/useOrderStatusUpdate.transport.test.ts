@@ -64,6 +64,57 @@ describe('order shipping transport failures', () => {
     vi.useRealTimers();
   });
 
+  it('allows the automatic price check and booking to finish after the old 15-second deadline', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    mocks.fetch.mockImplementation((_url, options: RequestInit) => {
+      signal = options.signal ?? undefined;
+      return new Promise((resolve) => {
+        setTimeout(
+          () =>
+            resolve(
+              new Response(
+                JSON.stringify({
+                  order: { id: 'order-1', shipping_status: 'shipped' },
+                }),
+                { status: 200 }
+              )
+            ),
+          20000
+        );
+      });
+    });
+    const result = useOrderStatusMutation()
+      .mutate({ orderId: 'order-1', status: 'shipped' })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(await result).toMatchObject({
+      id: 'order-1',
+      shipping_status: 'shipped',
+    });
+    expect(signal?.aborted).toBe(false);
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('retains the 15-second deadline for non-shipping status updates', async () => {
+    vi.useFakeTimers();
+    mocks.fetch.mockReturnValue(new Promise(() => {}));
+    let outcome: unknown;
+    const result = useOrderStatusMutation()
+      .mutate({ orderId: 'order-1', status: 'processing' })
+      .catch((error: unknown) => {
+        outcome = error;
+        return error;
+      });
+    await vi.advanceTimersByTimeAsync(14999);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await result).toMatchObject({
+      message: 'Request timed out. Please check your connection and try again.',
+    });
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+  });
+
   it('treats Expo native cancellation at the local deadline as unconfirmed, refreshes the order and never retries the booking', async () => {
     vi.useFakeTimers();
     mocks.fetch.mockImplementation(
@@ -82,7 +133,7 @@ describe('order shipping transport failures', () => {
       .mutate({ orderId: 'order-1', status: 'shipped' })
       .catch((error: unknown) => error);
 
-    await vi.advanceTimersByTimeAsync(15000);
+    await vi.advanceTimersByTimeAsync(30000);
     expect(await result).toMatchObject(unconfirmedOutcome);
 
     expect(mocks.fetch).toHaveBeenCalledOnce();
@@ -111,7 +162,7 @@ describe('order shipping transport failures', () => {
 
     await vi.advanceTimersByTimeAsync(10000);
     expect(text).toHaveBeenCalledOnce();
-    await vi.advanceTimersByTimeAsync(4999);
+    await vi.advanceTimersByTimeAsync(19999);
     expect(outcome).toBeUndefined();
     await vi.advanceTimersByTimeAsync(1);
     expect(outcome).toMatchObject(unconfirmedOutcome);

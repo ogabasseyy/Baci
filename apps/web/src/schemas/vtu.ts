@@ -9,7 +9,7 @@ export const billTypeEnum = z.enum([
 ]);
 export type BillType = z.infer<typeof billTypeEnum>;
 
-const purchaseSchemaBase = z.object({
+export const purchaseSchemaBase = z.object({
   merchantSlug: z.string().min(1),
   amount: z.number().min(50).max(500000),
   type: billTypeEnum,
@@ -47,9 +47,9 @@ const purchaseSchemaBase = z.object({
   requireValidationRef: z.boolean().optional(),
 });
 
-type PurchaseRequirementValues = z.infer<typeof purchaseSchemaBase>;
+export type PurchaseRequirementValues = z.infer<typeof purchaseSchemaBase>;
 
-function applyPurchaseRequirements(
+export function applyPurchaseRequirements(
   data: PurchaseRequirementValues,
   ctx: z.RefinementCtx
 ) {
@@ -265,6 +265,9 @@ export const historyQuerySchema = z.object({
   merchantSlug: z.string().min(1, 'Merchant slug is required'),
   type: billTypeEnum.optional(),
   limit: z.coerce.number().int().min(1).max(50).prefault(20),
+  // Exact request_reference scope for voucher backfills: without it a
+  // customer with 20+ newer rows of the type never sees the target.
+  reference: z.string().min(1).optional(),
 });
 
 const vtuCheckoutGatewayEnum = z.enum(['paystack', 'korapay', 'bank_transfer']);
@@ -292,25 +295,4 @@ export const vtuSavedCardChargeSchema = purchaseSchemaBase
   })
   .superRefine(applyPurchaseRequirements);
 
-// Wallet-only VTU checkout. Requires walletAmount > 0; the route
-// additionally enforces walletAmount === amount (full coverage).
-export const vtuWalletOnlyChargeSchema = purchaseSchemaBase
-  .extend({
-    walletAmount: z
-      .number()
-      .positive('walletAmount is required for wallet-only checkout'),
-  })
-  .superRefine(applyPurchaseRequirements);
-
-export type VtuWalletOnlyChargeInput = z.infer<
-  typeof vtuWalletOnlyChargeSchema
->;
-
-/** Maps our bill type enum to commission calculation categories */
-export const COMMISSION_CATEGORY_MAP: Record<BillType, string> = {
-  airtime: 'AIRTIME',
-  data: 'DATA',
-  electricity: 'ELECTRICITY',
-  cable_tv: 'CABLE',
-  betting: 'BETTING',
-};
+export { COMMISSION_CATEGORY_MAP } from './vtu-commission';

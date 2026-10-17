@@ -1,9 +1,19 @@
 'use client';
 
-import { createContext, type ReactNode, use, useEffect, useState } from 'react';
-import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
-import { clearCartStorage } from '@/hooks/use-cart';
+import {
+  createContext,
+  type ReactNode,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from 'react';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
+import {
+  loadCustomerSession,
+  performCustomerLogout,
+} from './customer-auth-session';
+import { publishCustomerIdentity } from './customer-live-identity';
 
 export interface CustomerUser {
   id: string;
@@ -40,7 +50,7 @@ export interface SavedAddress {
   is_default?: boolean;
 }
 
-interface OtpState {
+export interface OtpState {
   email: string;
   codeSent: boolean;
   expiresAt?: number;
@@ -77,88 +87,6 @@ interface CustomerAuthProviderProps {
   merchantSlug: string;
 }
 
-interface CustomerSession {
-  customer: Customer;
-  user: CustomerUser;
-}
-
-async function fetchCustomerSession(
-  merchantSlug: string
-): Promise<CustomerSession | null> {
-  const response = await fetch(
-    `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
-  );
-  const data = (await response.json()) as {
-    authenticated?: boolean;
-    customer?: Customer;
-    user?: CustomerUser;
-  };
-
-  if (!data.authenticated || !data.user || !data.customer) {
-    return null;
-  }
-
-  return {
-    customer: data.customer,
-    user: data.user,
-  };
-}
-
-interface SessionSetters {
-  setUser: (user: CustomerUser | null) => void;
-  setCustomer: (customer: Customer | null) => void;
-  setIsLoading: (loading: boolean) => void;
-}
-
-// Module-scope helper so the try/catch/finally control flow lives outside the
-// component body, keeping the provider compilable by the React Compiler.
-async function loadCustomerSession(
-  merchantSlug: string,
-  { setUser, setCustomer, setIsLoading }: SessionSetters,
-  isCancelled: () => boolean = () => false
-): Promise<void> {
-  try {
-    const session = await fetchCustomerSession(merchantSlug);
-    if (isCancelled()) return;
-
-    if (session) {
-      setUser(session.user);
-      setCustomer(session.customer);
-    } else {
-      setUser(null);
-      setCustomer(null);
-    }
-  } catch (error) {
-    if (isCancelled()) return;
-    console.error('Session check error:', error);
-    setUser(null);
-    setCustomer(null);
-  } finally {
-    if (!isCancelled()) setIsLoading(false);
-  }
-}
-
-// Module-scope helper for logout so its try/catch/finally stays outside render.
-async function performCustomerLogout(
-  merchantSlug: string,
-  setUser: (user: CustomerUser | null) => void,
-  setCustomer: (customer: Customer | null) => void,
-  setOtpState: (otp: OtpState | null) => void
-): Promise<void> {
-  // Do not clear Auth or report success until this device's cart authority is retired.
-  const revoked = await revokeCartDeviceSession(merchantSlug);
-  if (!revoked.ok)
-    throw new Error('Could not safely sign out. Please retry when connected.');
-  const response = await fetch('/api/storefront/auth/logout', {
-    method: 'POST',
-  });
-  if (!response.ok) throw new Error('Could not sign out. Please retry.');
-  setUser(null);
-  setCustomer(null);
-  setOtpState(null);
-  clearCartStorage(merchantSlug);
-}
-
 export function CustomerAuthProvider({
   children,
   merchantSlug,
@@ -178,6 +106,13 @@ export function CustomerAuthProvider({
   // See react.dev "Adjusting some state when a prop changes".
   const [prevMerchantSlug, setPrevMerchantSlug] = useState(merchantSlug);
   if (merchantSlug !== prevMerchantSlug) {
+    // Render-phase state reset ONLY (react.dev "Adjusting some state
+    // when a prop changes"): React discards these setStates if it
+    // abandons the render. The live-identity publish MUST NOT live
+    // here — the module mutation cannot roll back, so a speculative
+    // render would report a merchant switch that never committed and
+    // discard a healthy in-flight checkout (Codex R129 P2). It runs
+    // in the committed layout effect below instead.
     setPrevMerchantSlug(merchantSlug);
     setIsLoading(true);
     setUser(null);
@@ -188,6 +123,17 @@ export function CustomerAuthProvider({
   // Check session on demand (e.g. refreshCustomer).
   const checkSession = () =>
     loadCustomerSession(merchantSlug, { setUser, setCustomer, setIsLoading });
+
+  // Publish the storefront reset commit-synchronously (Codex R129
+  // P2, R133 P2): a layout effect leaves no post-commit window in
+  // which a settling promise continuation could read the previous
+  // storefront's identity and publish the old store's result into
+  // the newly committed view. Runs on mount and every committed
+  // merchantSlug change. The async session load stays in the
+  // passive effect below.
+  useLayoutEffect(() => {
+    publishCustomerIdentity(null, null, merchantSlug);
+  }, [merchantSlug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -262,6 +208,7 @@ export function CustomerAuthProvider({
       // Set user and customer from response
       setUser(data.user);
       setCustomer(data.customer);
+      publishCustomerIdentity(data.user, data.customer, merchantSlug);
       setOtpState(null);
 
       return { success: true };

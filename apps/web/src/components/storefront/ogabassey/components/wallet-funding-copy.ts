@@ -47,4 +47,8 @@ export const WALLET_FUNDING_COPY = {
   walletRecommendedBadge: 'Recommended',
   phoneSaveFailed: 'Could not save your phone number. Please try again.',
   zeroBalanceHint: 'Fund your wallet to pay without card fees',
+  // Balance-fetch failure (Codex R143 P2): the balance is UNKNOWN,
+  // not zero — never show the funding hint here.
+  walletBalanceUnavailable:
+    'Could not load your wallet balance. Check your connection and try again.',
 } as const;

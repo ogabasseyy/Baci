@@ -23,6 +23,7 @@ import {
   eventPipelineExpenseCleanupAdjacentFunctions,
   eventPipelineVpsRuntimeCallers,
 } from '@/lib/events/event-pipeline-vps-runtime-callers';
+import { eventPipelineVtuReplayAdminPaths } from '@/lib/events/event-pipeline-vtu-replay-admin-paths';
 import type { Database, Json } from '@/types/supabase';
 
 export { EVENT_PIPELINE_FUNCTION_NAMES };
@@ -132,7 +133,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
   ],
   authority: {
     adminImporters: eventPipelineAdminImporters,
-    adminPaths: eventPipelineGatewayCronAdminPaths,
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths],
     bareClientImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',

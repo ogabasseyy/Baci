@@ -61,6 +61,18 @@ describe('EXPECTED_PENDING_TAIL_SOURCES', () => {
         },
         {
           repositoryPath:
+            'supabase/migrations/20261014210000_lease_vtu_customer_email_notification_attempt.sql',
+          sha256:
+            'e4090f77f17032a4a0adc7e639f74e3e89794bb4f4792e717ac554791899de14',
+        },
+        {
+          repositoryPath:
+            'supabase/migrations/20261015010000_fence_vtu_customer_email_notification_clear_by_lease.sql',
+          sha256:
+            '2112c1db75c246c7030a570434efdecfb7bbd2b95ce1b35b8a3ad37dba811a17',
+        },
+        {
+          repositoryPath:
             'supabase/migrations/20261015115210_customer_checkout_shipping_recovery_acl_and_redaction_index.sql',
           sha256:
             'c447cf6614df344591430a14df91201ae5404b1c6413e59d307205ec66641225',
@@ -88,6 +100,30 @@ describe('EXPECTED_PENDING_TAIL_SOURCES', () => {
             'supabase/migrations/20261015215000_customer_checkout_shipping_recovery_activation_gate.sql',
           sha256:
             '3131a8c8f65cc8d2a892d0e020cd67dfaaa425fa8dce6a2b8f7b605b1eddb0cc',
+        },
+        {
+          repositoryPath:
+            'supabase/migrations/20261015232000_pair_vtu_customer_email_notification_keys.sql',
+          sha256:
+            '91c1c8b4d8934b33b39e6c61c27e0e948ad8f1dac925a8a689b30f2d7b09d597',
+        },
+        {
+          repositoryPath:
+            'supabase/migrations/20261016120000_finalize_vtu_customer_email_notification_attempt.sql',
+          sha256:
+            '300563b107439d9d998a06681a1f22c9d619b62cc651133c4d5e3f2903ee90f4',
+        },
+        {
+          repositoryPath:
+            'supabase/migrations/20261016123000_finalize_vtu_customer_email_notification_success.sql',
+          sha256:
+            'd55343f9a7c3079f09ace5e32778917e994ceef097b24773a3194d5f5bd78bc9',
+        },
+        {
+          repositoryPath:
+            'supabase/migrations/20261016130000_guard_vtu_customer_email_claim_against_unknown.sql',
+          sha256:
+            'e304307c90cb3e52c3c1e4dfa8b1cbec46edaea6eca1b67fde5b164743681fd3',
         },
       ],
       identity: [

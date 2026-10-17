@@ -1,8 +1,10 @@
+import { fetchJsonWithDeadline } from '@baci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
-import { fetchWithTimeout, SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
+import { SHORT_TIMEOUT } from '@/lib/fetch-with-timeout';
+import { markSettledPendingVtuByReference } from '@/lib/pending-vtu-idempotency';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -94,6 +96,18 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
     enabled: Boolean(userId),
     staleTime: 30_000,
     queryFn: async () => {
+      // Query-key owner (Codex R98 P1): every identity observed
+      // below must equal the owner the key was created for. A
+      // switch between keying and fetching would otherwise return
+      // and cache the replacement account's rows — recipient and
+      // voucher data — under the previous account's key, and
+      // switching back within staleTime would display cross-account
+      // history.
+      const queryOwnerId = userId;
+      if (!queryOwnerId) {
+        throw new Error('Authentication required. Please sign in again.');
+      }
+
       const {
         data: { user },
         error: userError,
@@ -102,10 +116,25 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
       if (userError || !user) {
         throw new Error('Authentication required. Please sign in again.');
       }
+      if (user.id !== queryOwnerId) {
+        throw new Error(
+          'Account changed during history load. Please try again.'
+        );
+      }
 
       const {
         data: { session },
       } = await supabase.auth.getSession();
+
+      // Bind the token to the key owner (same session.user pattern
+      // as getAccessToken's submitter binding): the session object
+      // is atomic with its token, while getUser above can already
+      // be stale after a mid-flight switch.
+      if (session && session.user?.id !== queryOwnerId) {
+        throw new Error(
+          'Account changed during history load. Please try again.'
+        );
+      }
 
       const query = new URLSearchParams({
         merchantSlug: CONFIG.MERCHANT_SLUG,
@@ -116,20 +145,22 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
         query.set('type', apiType);
       }
 
-      const response = await fetchWithTimeout(
-        `${EXPO_PUBLIC_API_URL}/api/vtu/history?${query.toString()}`,
-        {
-          method: 'GET',
-          timeout: SHORT_TIMEOUT,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(session?.access_token && {
-              Authorization: `Bearer ${session.access_token}`,
-            }),
-          },
-        }
-      );
-      const data = await response.json();
+      // One deadline for headers + body; stalls abort the fetch
+      // pre-retry (R70 6ryArL, R72 6rzq3y). Reads always: failures
+      // surface data.error below.
+      const deadlineMs = Date.now() + SHORT_TIMEOUT;
+      const { data, response } = await fetchJsonWithDeadline<{
+        error?: string;
+      }>(`${EXPO_PUBLIC_API_URL}/api/vtu/history?${query.toString()}`, {
+        method: 'GET',
+        deadlineMs,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token && {
+            Authorization: `Bearer ${session.access_token}`,
+          }),
+        },
+      });
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load utility history.');
@@ -138,6 +169,32 @@ export function useVTUHistory(filter: UtilityHistoryFilter, limit = 20) {
       const parsed = VTUHistoryResponseSchema.safeParse(data);
       if (!parsed.success) {
         throw new Error('Invalid utility history response from server.');
+      }
+
+      // Background terminal update (R57 6rseWu, R69 6rxZFO): the
+      // voucher backfill stops polling after ~36 minutes, but
+      // reconciliation pages are unbounded — a row settling later
+      // would leave its retained entry replaying the old vend as new.
+      // History is also mounted hidden (quick-repeat defaults,
+      // receipts pager), so a read never proves display: successes
+      // mark stale (suppressed completions skipped) instead of
+      // forgetting. Same account guard as the backfill. Successes
+      // only — this projection carries no refund proof, so failed
+      // rows keep backfill-era behavior.
+      // Discard after a post-fetch switch (Codex R98 P1): the rows
+      // above belong to whoever the token named, so a live identity
+      // that no longer equals the key owner must not be returned
+      // (cached under the owner's key) or settled.
+      const currentUserId = useAuthStore.getState().user?.id ?? null;
+      if (currentUserId !== queryOwnerId) {
+        throw new Error(
+          'Account changed during history load. Please try again.'
+        );
+      }
+      for (const transaction of parsed.data.transactions) {
+        if (transaction.status === 'successful') {
+          markSettledPendingVtuByReference(transaction.request_reference);
+        }
       }
 
       return parsed.data.transactions;

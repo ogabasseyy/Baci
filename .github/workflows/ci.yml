@@ -446,6 +446,7 @@ jobs:
           --sql-check supabase/tests/order_refund_coverage_helper_confinement.sql
           --sql-check supabase/tests/order_refund_write_helper_confinement.sql
           --sql-check supabase/tests/order_refund_sweep_selection.sql
+          --sql-check supabase/tests/order_refund_quarantine_error_preserved.sql
           --sql-check supabase/tests/order_refund_reconciliation_manual_coverage.sql
           --sql-check supabase/tests/order_refund_record_merchant_scope.sql
           --sql-check supabase/tests/order_refund_response_truncation.sql

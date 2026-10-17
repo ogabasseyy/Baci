@@ -243,7 +243,7 @@ BEGIN
        AND NOT EXISTS (
          SELECT 1 FROM public.reconciliation_review rr
           WHERE rr.order_id = v_order.id
-            AND rr.merchant_id = v_order.merchant_id
+            AND (rr.merchant_id = v_order.merchant_id OR rr.merchant_id IS NULL)
             AND rr.resolved_at IS NULL);
   END IF;
   RETURN 'processed';

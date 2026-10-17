@@ -269,20 +269,20 @@ BEGIN
       VALUES (p_order_id,p_merchant_id,'refund','failed',gen_random_uuid(),0,NULL,
         jsonb_build_object('manual',true,'recorded_by',p_actor))
       -- A completed row means the worker finished while an internal
-      -- leg still awaited its manual: requeue it so the drain
-      -- reclaims the row and the claim runs trusted finalization
-      -- (settlement reversal, notifications, review close) instead
-      -- of stranding them behind a completed status no drain
-      -- reselects. Every other status is preserved: claimed rows
-      -- have a worker running, deferred rows reselect already, and
-      -- delivery_uncertain rows are under ops review.
+      -- leg still awaited its manual: requeue it so the drain runs
+      -- trusted finalization instead of stranding it. Every other
+      -- status is preserved: claimed (worker running), deferred
+      -- (reselects already), delivery_uncertain (ops review).
       ON CONFLICT (order_id,step) DO UPDATE SET attempts=0,
         status=CASE WHEN s.status='completed' THEN 'failed' ELSE s.status END,
         -- A reopened row finalizes anew: retaining the old
         -- completion time would backdate the real finalization,
         -- because the claim stamps COALESCE(completed_at, now()).
         completed_at=CASE WHEN s.status='completed' THEN NULL ELSE s.completed_at END,
-        error=NULL,result=jsonb_build_object('manual',true,'recorded_by',p_actor)
+        -- Preserved statuses keep their diagnostic (a wiped
+        -- delivery_uncertain error would report review with no cause).
+        error=CASE WHEN s.status='completed' THEN NULL ELSE s.error END,
+        result=jsonb_build_object('manual',true,'recorded_by',p_actor)
         RETURNING s.status,s.error,s.attempts,s.retry_requests INTO v_step_status,v_step_error,v_step_attempts,v_step_retry_requests;
     END IF;
   RETURN jsonb_build_object('refunded',v_refunded,'remaining',v_remaining,

@@ -76,3 +76,45 @@ other cron path inherits this exception.
 This approval does not authorize merging, deployment, or a broader renewal.
 At expiry, replace the privileged delivery edge or obtain a new explicit owner
 decision with exact scope and expiry recorded here.
+
+## Shipping quote booking economics only
+
+<!-- exception: shipping-quote-booking-economics status=approved expires=2026-10-24T00:00:00.000Z -->
+
+The owner's explicit approval of this exact renewal in the Codex release
+conversation for PR #3710 on 2026-10-17 authorizes only the existing server-side
+booking-economics read boundary. This renewal takes effect only after that
+explicit approval; general merge or deployment authorization does not renew it.
+It expires at **2026-10-24T00:00:00.000Z**, or verified replacement by a restricted
+worker capability, whichever occurs first. The historical exception is unchanged.
+
+The permitted chain is `shipping-quote-booking-economics.ts#getShippingQuoteBookingEconomics`
+through `server-shipping-quote-booking-economics-client.ts` to the branded
+`createServiceClient('shipping-quote-booking-economics')`. It is restricted to the
+four existing callers:
+
+- `apps/web/src/lib/shipping/book-order-shipment.ts`
+- `apps/web/src/lib/shipping/run-claimed-order-wallet-or-checkout-booking.ts`
+- `apps/web/src/lib/shipping/refresh-wallet-order-shipment-quote.ts`
+- `apps/web/src/app/api/shipping/book/load-direct-booking-context.ts`
+
+Normal request authentication, trusted merchant resolution and the existing
+owner/staff permissions must complete before constructing the privileged client.
+Merchant identity must come from that authorization; request-body tenant IDs do
+not grant authority. Preserve the existing order/merchant/selected-quote or
+attestation checks in the database projection.
+
+The sole privileged operation is `public.get_shipping_quote_booking_economics`
+with the existing merchant/order/quote arguments. Its exact read projection is
+`provider_cost, platform_margin, platform_margin_bps, pricing_version,
+shipping_provider_cost, shipping_platform_margin, shipping_pricing_version,
+shipping_platform_retained_amount`. No table query, write, new RPC, new caller or
+sibling call graph inherits this approval.
+
+The backend key inherently bypasses RLS; these constraints govern approved use,
+not the key's capability. Internal tariff/margin values, credentials and provider
+bodies must not enter client bundles, responses, logs or event payloads. This
+renewal permits no credential, firewall, authentication-setting or database-grant
+change, and renews no other exception. Required review, CI, coordinated deployment,
+rollback and recovery-activation checks remain enforced. At expiry, replace this
+boundary or obtain a new explicit owner decision; never silently extend it.

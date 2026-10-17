@@ -11,8 +11,10 @@ export function CheckoutRecoveryForm({
   order,
   onBlockingChange,
   onBusyChange,
+  onConfirmed,
 }: {
   order: Order;
+  onConfirmed?: () => void;
   onBlockingChange: (value: boolean) => void;
   onBusyChange: (value: boolean) => void;
 }) {
@@ -28,6 +30,9 @@ export function CheckoutRecoveryForm({
     longitude: '',
   });
   const [accepted, setAccepted] = useState(false);
+  useEffect(() => {
+    if (recovery.confirmed) onConfirmed?.();
+  }, [recovery.confirmed, onConfirmed]);
   useEffect(() => {
     onBusyChange(recovery.busy);
     return () => onBusyChange(false);

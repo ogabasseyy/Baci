@@ -38,13 +38,15 @@ export function RewardsHistory({
                 <div className="flex items-center gap-3">
                   <div
                     className={`p-2 rounded-full ${
-                      transaction.points > 0 ? 'bg-green-100' : 'bg-red-100'
+                      transaction.points > 0
+                        ? 'bg-store-primary/10'
+                        : 'bg-destructive/10'
                     }`}
                   >
                     {transaction.points > 0 ? (
-                      <TrendingUp className="size-4 text-green-600" />
+                      <TrendingUp className="size-4 text-store-primary" />
                     ) : (
-                      <TrendingDown className="size-4 text-red-600" />
+                      <TrendingDown className="size-4 text-destructive" />
                     )}
                   </div>
                   <div>
@@ -70,7 +72,9 @@ export function RewardsHistory({
                 </div>
                 <span
                   className={`font-semibold ${
-                    transaction.points > 0 ? 'text-green-600' : 'text-red-600'
+                    transaction.points > 0
+                      ? 'text-store-primary'
+                      : 'text-destructive'
                   }`}
                 >
                   {transaction.points > 0 ? '+' : ''}

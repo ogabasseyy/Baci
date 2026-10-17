@@ -38,4 +38,17 @@ describe('RewardsHistory', () => {
     expect(screen.getByText('-500 pts')).toBeTruthy();
     expect(screen.getByText('Code: RDM-ABC123')).toBeTruthy();
   });
+
+  it('uses storefront theme tokens instead of fixed status colors', () => {
+    render(<RewardsHistory transactions={[earn, spend]} />);
+
+    // Earn = merchant brand token; spend = theme destructive token.
+    // Fixed green/red utilities would bypass merchant palettes.
+    expect(screen.getByText('+250 pts').className).toContain(
+      'text-store-primary'
+    );
+    expect(screen.getByText('-500 pts').className).toContain(
+      'text-destructive'
+    );
+  });
 });

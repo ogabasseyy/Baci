@@ -669,7 +669,7 @@ export async function POST(request: NextRequest) {
           const { data: currentOrder, error: currentOrderError } =
             await supabase
               .from('orders')
-              .select('payment_status, notes')
+              .select('payment_status, notes, shipping_status, cancelled_at')
               .eq('id', order.id)
               .maybeSingle();
           if (currentOrderError || !currentOrder) {
@@ -762,7 +762,12 @@ export async function POST(request: NextRequest) {
 
           if (
             currentOrder.payment_status === 'cancelled' ||
-            currentOrder.payment_status === 'canceled'
+            currentOrder.payment_status === 'canceled' ||
+            // The paid update's shipping fences also exclude a
+            // shipping-only cancellation (either spelling): route it
+            // through the same captured-payment reconciliation instead
+            // of acking with no durable transaction trail.
+            isOrderClampedAsCancelled(currentOrder)
           ) {
             // Record the disbursed money and file it for ops review,
             // mirroring the refunded branch: the loyalty claim was

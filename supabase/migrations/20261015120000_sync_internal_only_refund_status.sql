@@ -191,6 +191,10 @@ BEGIN
     AND auth.role() IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'unauthorized' USING ERRCODE='42501';
   END IF;
+  -- Bound lock waits like the sibling backfill: fail loudly on a
+  -- wedged row instead of hanging the migration; the predicate
+  -- gate keeps the call re-runnable.
+  SET LOCAL lock_timeout = '10s';
   FOR r IN
     SELECT o.id, o.merchant_id
       FROM public.orders o

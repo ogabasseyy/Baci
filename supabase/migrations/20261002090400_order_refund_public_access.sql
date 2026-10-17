@@ -242,6 +242,11 @@ BEGIN
     AND auth.role() IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'unauthorized' USING ERRCODE='42501';
   END IF;
+  -- Bound lock waits: worker transactions are short, so a longer
+  -- wait means a wedged row — fail the statement loudly instead of
+  -- hanging the migration behind it. The label-gated WHERE makes
+  -- the call re-runnable, so a re-run completes the skipped rows.
+  SET LOCAL lock_timeout = '10s';
   UPDATE public.orders o SET payment_status='refunded',updated_at=now()
    WHERE o.shipping_status IN ('cancelled','canceled')
      AND private.effective_amount_paid_v1(

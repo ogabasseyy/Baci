@@ -153,9 +153,25 @@ export function planCartMerge(
       seenBases.add(base);
     }
   }
+  // Two snapshots can each hold a single, different award for one
+  // product without either registering a within-snapshot sibling;
+  // those are distinct entitlements and must not collapse into one
+  // conflicted lane. A lone award meeting a regular lane keeps the
+  // legacy conflict choice.
+  const awardIdsByBase = new Map<string, Set<string>>();
+  for (const snapshot of [existing, incoming]) {
+    for (const line of snapshot.lines) {
+      if (!line.voucherAwardId) continue;
+      const base = cartLineIdentity(line.item);
+      const awards = awardIdsByBase.get(base) ?? new Set<string>();
+      awards.add(line.voucherAwardId);
+      awardIdsByBase.set(base, awards);
+    }
+  }
   const keyOf = (line: CartLine): string => {
     const base = cartLineIdentity(line.item);
-    if (!siblingBases.has(base)) return base;
+    const distinctAwards = (awardIdsByBase.get(base)?.size ?? 0) > 1;
+    if (!siblingBases.has(base) && !distinctAwards) return base;
     return JSON.stringify([
       base,
       line.voucherToken ?? null,

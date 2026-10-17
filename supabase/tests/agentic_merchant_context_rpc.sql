@@ -64,7 +64,7 @@ BEGIN
   IF v_row.id <> '77777777-7777-4777-8777-777777777777'
     OR v_row.slug <> 'agentic-context-fixture'
     OR v_row.business_name <> 'Fixture Store'
-    OR v_row.paystack_subaccount_code <> 'ACCT_fixture'
+    OR v_row.paystack_subaccount_code IS NOT NULL
     OR v_row.custom_domain <> 'fixture.example.com'
     OR v_row.agentic_checkout_enabled IS DISTINCT FROM true
     OR v_row.pay_on_delivery_enabled IS DISTINCT FROM true

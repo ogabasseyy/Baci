@@ -226,20 +226,20 @@ export async function finalizeAgenticCheckoutPayment({
     }
   }
 
+  // Live order-state verification is not binding-specific: an
+  // unbound retry reusing a recorded order id must not resurrect a
+  // paid or cancelled order as payment_pending either.
   let orderAlreadyPaid = false;
-  if (sharedCartBinding) {
-    const verified = await verifyBoundFinalizationOrder({
-      finalizationClaim,
-      merchantId,
-      metadata,
-      orderId,
-      sessionId,
-      supabase,
-    });
-    if (!verified.ok)
-      return respond({ error: verified.error }, verified.status);
-    orderAlreadyPaid = verified.paid;
-  }
+  const verified = await verifyBoundFinalizationOrder({
+    finalizationClaim,
+    merchantId,
+    metadata,
+    orderId,
+    sessionId,
+    supabase,
+  });
+  if (!verified.ok) return respond({ error: verified.error }, verified.status);
+  orderAlreadyPaid = verified.paid;
   const { data: updatedSession, error: updateError } =
     await writeFinalizedOrderSession({
       buyer,

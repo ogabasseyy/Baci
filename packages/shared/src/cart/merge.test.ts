@@ -260,6 +260,19 @@ it('preserves attachment-distinct voucher identities already present in one cart
     ]);
 });
 
+it('preserves distinct award lanes held singly across both carts', () => {
+  const result = planCartMerge(
+    snapshot([line(TECNO, 1, { voucherAwardId: 'award-a' })]),
+    snapshot([line(TECNO, 1, { voucherAwardId: 'award-b' })])
+  );
+  expect(result.ok).toBe(true);
+  if (result.ok)
+    expect(result.lines.map((line) => line.voucherAwardId)).toEqual([
+      'award-a',
+      'award-b',
+    ]);
+});
+
 it('preserves regular and voucher siblings across both carts with max quantities', () => {
   const result = planCartMerge(
     snapshot([line(TECNO, 2), line(TECNO, 1, { voucherAwardId: 'award-a' })]),

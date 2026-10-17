@@ -1112,4 +1112,44 @@ describe('finalizeAgenticCheckoutPayment', () => {
       );
     }
   });
+
+  it.each([
+    ['paid', 200],
+    ['cancelled', 409],
+  ] as const)('checks live %s order state before resuming a saved unbound marker', async (paymentStatus, status) => {
+    const row = () => createUpdateChain({ session_id: 'agentic_session_1' });
+    const supabase = createSupabaseWithUpdateChains([row(), row()]);
+    const originalFrom = supabase.from.getMockImplementation();
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: { payment_status: paymentStatus, shipping_status: 'pending' },
+          error: null,
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    const response = await finalizeAgenticCheckoutPayment({
+      ...finalizeInput(supabase),
+      metadata: {
+        agentic: { finalization_order_id: 'unbound-order' },
+      },
+    });
+    expect(response.status).toBe(status);
+    expect(createAgenticCheckoutOrder).not.toHaveBeenCalled();
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+    if (paymentStatus === 'paid') {
+      expect(await response.json()).toEqual({
+        id: 'agentic_session_1',
+        status: 'completed',
+        order_id: 'unbound-order',
+        order: { id: 'unbound-order', status: 'paid' },
+      });
+    }
+  });
 });

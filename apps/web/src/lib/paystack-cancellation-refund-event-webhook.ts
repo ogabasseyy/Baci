@@ -30,7 +30,19 @@ export async function handlePaystackCancellationRefundEvent(
   // audit row, including unlinked legacy rows the payment-reference path
   // cannot reach and held rows polling skips.
   const refundId = data?.id;
-  let unknownRefundId: number | undefined;
+  // The id path takes validated decimal text end to end: a >2^53
+  // provider id would not survive a number round-trip, and a
+  // stamped-manual contradiction arrives under its stored text id.
+  // Anything else falls through to the reference path below.
+  const refundIdText =
+    typeof refundId === 'string' && /^[1-9][0-9]*$/.test(refundId)
+      ? refundId
+      : typeof refundId === 'number' &&
+          Number.isSafeInteger(refundId) &&
+          refundId > 0
+        ? String(refundId)
+        : null;
+  let unknownRefundId: string | undefined;
   // Fallback: the original payment reference, nested per the refund
   // resource shape with the flat field retained for compatibility. The
   // nested value wins only when the reconciler can consume it; an
@@ -47,11 +59,7 @@ export async function handlePaystackCancellationRefundEvent(
   );
   // Nonpositive IDs can never match a provider refund: fall through to the
   // reference path instead of 503ing on a validation failure every delivery.
-  if (
-    typeof refundId === 'number' &&
-    Number.isSafeInteger(refundId) &&
-    refundId > 0
-  ) {
+  if (refundIdText !== null) {
     // The shared lookup keyset-scans past corrupt prefilter matches
     // and legacy gateway variants; it returns at most two genuine
     // rows so this branch still detects duplicate audit rows.
@@ -59,7 +67,7 @@ export async function handlePaystackCancellationRefundEvent(
     try {
       refunds = await findPaystackRefundRowsByProviderId<WebhookRefundRow>(
         supabase,
-        refundId,
+        refundIdText,
         'id, order_id, merchant_id, gateway, gateway_reference, amount, currency, metadata, status, cancel_order:orders!transactions_order_id_fkey(cancelled_at,shipping_status)'
       );
     } catch (lookupError) {
@@ -77,7 +85,7 @@ export async function handlePaystackCancellationRefundEvent(
       // 503 for redelivery like the old maybeSingle multi-row error.
       logger.error({
         message: 'Paystack refund lookup ambiguous',
-        refundId,
+        refundId: refundIdText,
       });
       return NextResponse.json(
         { error: 'Refund reconciliation unavailable' },
@@ -114,7 +122,7 @@ export async function handlePaystackCancellationRefundEvent(
         try {
           await recoverUnknownPaystackRefund(
             supabase,
-            refundId,
+            refundIdText,
             paymentReference
           );
         } catch (error) {
@@ -175,7 +183,7 @@ export async function handlePaystackCancellationRefundEvent(
     // merchant-created replacement, or an event that beat the audit
     // insert. Recover it via provider reads below instead of dropping
     // the ID and rechecking only stale local rows.
-    unknownRefundId = refundId;
+    unknownRefundId = refundIdText;
   }
   if (unknownRefundId !== undefined) {
     try {

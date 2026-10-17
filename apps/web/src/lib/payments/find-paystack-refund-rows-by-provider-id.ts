@@ -19,11 +19,27 @@ const MAX_PROVIDER_REFUND_MATCHES = 2;
  * `processed` after a contradiction would never observe the manual
  * row and the order would stay falsely reopened. A native row and
  * a stamped manual sharing one provider id is a genuine
- * double-record, so both scans feed the same ambiguity cap.
+ * double-record, so both scans feed the same ambiguity cap. The id
+ * travels as validated decimal text end to end: a >2^53 provider id
+ * would not survive a number round-trip, and stamped manual ids are
+ * stored text — both compare exactly against the text predicates.
  */
 export async function findPaystackRefundRowsByProviderId<
   T extends { gateway?: unknown; id: string },
->(supabase: SupabaseClient, refundId: number, columns: string): Promise<T[]> {
+>(
+  supabase: SupabaseClient,
+  refundId: number | string,
+  columns: string
+): Promise<T[]> {
+  const idText =
+    typeof refundId === 'string' && /^[1-9][0-9]*$/.test(refundId)
+      ? refundId
+      : typeof refundId === 'number' &&
+          Number.isSafeInteger(refundId) &&
+          refundId > 0
+        ? String(refundId)
+        : null;
+  if (idText === null) throw new Error('refund_event_lookup_failed');
   const matches: T[] = [];
   const scan = async (
     gatewayPrefilter: string,
@@ -61,7 +77,7 @@ export async function findPaystackRefundRowsByProviderId<
     '%paystack%',
     {
       column: 'gateway_reference',
-      value: String(refundId),
+      value: idText,
     },
     'PAYSTACK'
   );
@@ -72,7 +88,7 @@ export async function findPaystackRefundRowsByProviderId<
       '%manual%',
       {
         column: 'metadata->>provider_refund_id',
-        value: String(refundId),
+        value: idText,
       },
       'MANUAL'
     );

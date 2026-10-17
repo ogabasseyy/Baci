@@ -213,9 +213,11 @@ describe('handlePaystackCancellationRefundEvent', () => {
     // the active-order review instead.
     expect(mocks.reconcilePaystackCancellationRefund).not.toHaveBeenCalled();
     expect(mocks.reconcilePaystackRefundEvent).not.toHaveBeenCalled();
+    // Recovery takes the canonical decimal text even when the event
+    // carried a JSON number: exact-text matching past 2^53.
     expect(mocks.recoverUnknownPaystackRefund).toHaveBeenCalledWith(
       db,
-      42,
+      '42',
       'PSK-1'
     );
     expect(response.status).toBe(200);

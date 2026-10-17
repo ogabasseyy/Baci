@@ -26,7 +26,7 @@ export interface VerifiedUnknownRefundProvider {
  * Paystack can redeliver.
  */
 export async function verifyUnknownPaystackRefundProvider(
-  refundId: number,
+  refundId: number | string,
   paymentReference?: string
 ): Promise<VerifiedUnknownRefundProvider> {
   const providerRefund = await fetchRefund(

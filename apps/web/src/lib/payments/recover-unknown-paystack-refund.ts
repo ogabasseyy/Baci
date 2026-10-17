@@ -28,7 +28,7 @@ import { verifyUnknownPaystackRefundProvider } from './verify-unknown-paystack-r
  */
 export async function recoverUnknownPaystackRefund(
   supabase: SupabaseClient,
-  refundId: number,
+  refundId: number | string,
   paymentReference?: string
 ): Promise<void> {
   let verified: Awaited<ReturnType<typeof verifyUnknownPaystackRefundProvider>>;

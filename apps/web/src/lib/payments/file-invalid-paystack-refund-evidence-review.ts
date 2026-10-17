@@ -21,13 +21,13 @@ export async function fileInvalidPaystackRefundEvidenceReview(
   }: {
     evidence: {
       providerPaymentTransactionId: unknown;
-      providerRefundId: number;
+      providerRefundId: number | string;
       providerRefundStatus: string;
       reference: string;
     };
     reason: string;
     reference: string;
-    refundId: number;
+    refundId: number | string;
   }
 ): Promise<void> {
   const evidenceKey = `refund:${refundId}`;
@@ -101,14 +101,14 @@ export async function fileUnclaimedPaystackRefundCandidateReview(
     candidates: Array<{ id: string }>;
     evidence: {
       providerPaymentTransactionId: unknown;
-      providerRefundId: number;
+      providerRefundId: number | string;
       providerRefundStatus: string;
       reference: string;
     };
     filed: string[][];
     reason: string;
     reference: string;
-    refundId: number;
+    refundId: number | string;
   }
 ): Promise<void> {
   const claimed = new Set(filed.flat());

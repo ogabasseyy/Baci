@@ -1,10 +1,11 @@
 -- REGRESSION TEST: merchant cancellation-refund core.
 --
 -- Covers retry/requeue, partial-manual gating, replay/idempotency,
--- claimed-step blocking, and the bounded audit/history tails.
+-- and the bounded audit/history tails.
 -- Attestation scenarios split to order_refund_management_attestation.sql
--- per the 300-line boundary; self-contained fixtures use the 9ef1
--- namespace and roll back.
+-- and claimed-step blocking to
+-- order_refund_management_claimed_blocking.sql per the 300-line
+-- boundary; self-contained fixtures use the 9ef1 namespace and roll back.
 --
 -- USAGE:
 --   supabase test db supabase/tests/order_refund_management.sql
@@ -86,8 +87,6 @@ BEGIN
   ) VALUES
     ('9ef11000-0000-4000-8000-000000000001', v_merchant_id, 'REFUND-001',
       100, 100, 'paid', 'cancelled'),
-    ('9ef11000-0000-4000-8000-000000000008', v_merchant_id, 'REFUND-008',
-      100, 100, 'paid', 'cancelled'),
     -- Full coverage beside an anomalous foreign-currency leg.
     ('9ef11000-0000-4000-8000-000000000011', v_merchant_id, 'REFUND-011',
       100, 100, 'paid', 'cancelled');
@@ -95,7 +94,6 @@ BEGIN
   UPDATE public.orders SET cancelled_at = pg_catalog.now()
   WHERE id IN (
       '9ef11000-0000-4000-8000-000000000001',
-      '9ef11000-0000-4000-8000-000000000008',
       '9ef11000-0000-4000-8000-000000000011');
 
   INSERT INTO public.transactions (
@@ -105,9 +103,6 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000001', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000001', 'payment', 100, 'NGN',
       'completed', 'paystack', 'cap-1', '{}'::jsonb),
-    ('9ef12000-0000-4000-8000-000000000012', v_merchant_id,
-      '9ef11000-0000-4000-8000-000000000008', 'payment', 100, 'NGN',
-      'completed', 'paystack', 'cap-8', '{}'::jsonb),
     ('9ef12000-0000-4000-8000-000000000013', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000011', 'payment', 100, 'NGN',
       'completed', 'paystack', 'cap-11', '{}'::jsonb),
@@ -127,8 +122,6 @@ BEGIN
     ('9ef11000-0000-4000-8000-000000000001', v_merchant_id, 'refund',
       'failed', '9ef13000-0000-4000-8000-000000000001', 5,
       'Insufficient balance'),
-    ('9ef11000-0000-4000-8000-000000000008', v_merchant_id, 'refund',
-      'claimed', '9ef13000-0000-4000-8000-000000000008', 1, NULL),
     ('9ef11000-0000-4000-8000-000000000011', v_merchant_id, 'refund',
       'failed', '9ef13000-0000-4000-8000-000000000011', 5,
       'Settlement reversal pending');
@@ -255,21 +248,8 @@ BEGIN
   END;
 
   -- Attestation scenarios live in order_refund_management_attestation.sql.
-  -- Claimed refunds block manual writes and management.
-  SELECT public.manage_order_refund(
-    '9ef11000-0000-4000-8000-000000000008'
-  ) INTO v_result;
-  IF (v_result->>'canManageRefunds')::boolean THEN
-    RAISE EXCEPTION 'claimed refund still manageable';
-  END IF;
-  BEGIN
-    PERFORM public.manage_order_refund(
-      '9ef11000-0000-4000-8000-000000000008', 'manual', 10,
-      v_refunded_at, 'bank_transfer', 'claimed-1',NULL,true);
-    RAISE EXCEPTION 'manual write accepted during claimed refund';
-  EXCEPTION WHEN SQLSTATE 'P0001' THEN
-    IF SQLERRM <> 'refund_processing_or_requires_review' THEN RAISE; END IF;
-  END;
+  -- Claimed-step blocking lives in
+  -- order_refund_management_claimed_blocking.sql.
 
   -- Missing-order indistinguishability lives in the tenancy suite.
 

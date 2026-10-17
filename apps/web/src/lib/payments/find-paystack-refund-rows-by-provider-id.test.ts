@@ -119,4 +119,43 @@ describe('findPaystackRefundRowsByProviderId', () => {
 
     expect(matches).toEqual([manual]);
   });
+
+  it('preserves decimal-text ids past the safe-integer range', async () => {
+    const huge = '9007199254740993';
+    const nativeScan = page([]);
+    const manual = { gateway: 'manual', id: 'row-manual' };
+    const manualScan = page([manual]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(nativeScan)
+      .mockReturnValueOnce(manualScan);
+    const supabase = { from } as unknown as SupabaseClient;
+
+    const matches = await findPaystackRefundRowsByProviderId(
+      supabase,
+      huge,
+      'id, gateway'
+    );
+
+    // The exact decimal text reaches both predicates: a Number()
+    // round-trip would collapse the id to 9007199254740992.
+    expect(nativeScan.eq).toHaveBeenCalledWith('gateway_reference', huge);
+    expect(manualScan.eq).toHaveBeenCalledWith(
+      'metadata->>provider_refund_id',
+      huge
+    );
+    expect(matches).toEqual([manual]);
+  });
+
+  it('rejects malformed ids without querying', async () => {
+    const from = vi.fn().mockReturnValue(page([]));
+    const supabase = { from } as unknown as SupabaseClient;
+
+    for (const bad of ['0', '-7', '12x', '', 0, -3, 1.5]) {
+      await expect(
+        findPaystackRefundRowsByProviderId(supabase, bad, 'id, gateway')
+      ).rejects.toThrow('refund_event_lookup_failed');
+    }
+    expect(from).not.toHaveBeenCalled();
+  });
 });

@@ -406,6 +406,7 @@ jobs:
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
           --sql-check supabase/tests/order_refund_management.sql
           --sql-check supabase/tests/order_refund_management_attestation.sql
+          --sql-check supabase/tests/order_refund_management_claimed_blocking.sql
           --sql-check supabase/tests/order_refund_management_tenancy.sql
           --sql-check supabase/tests/order_refund_management_owner.sql
           --sql-check supabase/tests/order_refund_management_split_records.sql

@@ -26,7 +26,7 @@ export async function openPaystackRefundRecoveryWatch(
     reference,
   }: {
     evidence: RefundRecoveryWatchEvidence;
-    providerRefundId: number;
+    providerRefundId: number | string;
     reference: string;
   }
 ): Promise<CompletedPaymentMatch[]> {

@@ -3,7 +3,7 @@ import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recover
 
 export interface RefundRecoveryEvidence {
   providerPaymentTransactionId: number;
-  providerRefundId: number;
+  providerRefundId: number | string;
   providerRefundStatus: string;
   reference: string;
 }

@@ -17,7 +17,7 @@ export interface ActiveOrderPaystackRefundReview {
     id: string;
   }>;
   providerPaymentTransactionId: number;
-  providerRefundId: number;
+  providerRefundId: number | string;
   providerRefundStatus: string;
   /** Ambiguous matches name every candidate payment in one reason. */
   reason?: string;
@@ -142,7 +142,7 @@ export async function fileActiveOrderPaystackRefundCandidateReviews(
   candidates: RefundCandidate[],
   evidence: {
     providerPaymentTransactionId: number;
-    providerRefundId: number;
+    providerRefundId: number | string;
     reference: string;
   },
   reason: string,

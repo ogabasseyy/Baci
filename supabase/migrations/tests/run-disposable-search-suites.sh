@@ -91,6 +91,10 @@ EXCLUDED=(
   20261011230000_search_mobile_admin_transaction_review_item_condition.sql
   # Search analytics ingest policy: DDL-only, not a suite function.
   20261010000000_search_analytics_service_role_only_insert.sql
+  # Merchant visibility RPC: new function, not a redefinition, and not
+  # called by any disposable suite; covered by the replay --sql-check
+  # storefront_refined_reread_anon_visibility suite instead.
+  20261016170000_storefront_search_merchant_visibility_rpc.sql
 )
 
 check_chain_registration() {

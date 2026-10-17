@@ -27,19 +27,29 @@ describe('refined native pages', () => {
     mockHydrate.mockImplementation((rows: unknown) => rows);
     mockTransform.mockImplementation((row: unknown) => row);
   });
+  // Route RPC mocks by name: the search RPC returns match rows while the
+  // merchant visibility gate returns its bit.
+  function mockSearchRpc(matchData: unknown, visible = true) {
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'storefront_search_merchant_is_visible'
+        ? { data: visible, error: null }
+        : { data: matchData, error: null }
+    );
+  }
   it.each([
     false,
     true,
   ])('advances when an entire hydrated page disappears (malformed=%s)', async (malformed) => {
-    mockRpc
-      .mockResolvedValueOnce({
-        data: [{ product_id: 'gone', total_count: 2 }],
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        data: [{ product_id: 'visible', total_count: 2 }],
-        error: null,
-      });
+    const searchPages = [
+      [{ product_id: 'gone', total_count: 2 }],
+      [{ product_id: 'visible', total_count: 2 }],
+    ];
+    let searchPageIndex = 0;
+    mockRpc.mockImplementation(async (name: string) => {
+      if (name === 'storefront_search_merchant_is_visible')
+        return { data: true, error: null };
+      return { data: searchPages[searchPageIndex++] ?? [], error: null };
+    });
     mockRead
       .mockResolvedValueOnce({
         data: malformed ? [{ id: 'gone' }] : [],
@@ -60,16 +70,16 @@ describe('refined native pages', () => {
     expect(result.products.map((product) => product.id)).toEqual(['visible']);
     expect(result.nextOffset).toBeNull();
     expect(result.total).toBe(1);
-    expect(mockRpc).toHaveBeenLastCalledWith(
-      'search_storefront_products_refined',
-      expect.objectContaining({ result_offset: 1 })
+    const searchCalls = mockRpc.mock.calls.filter(
+      ([name]) => name === 'search_storefront_products_refined'
     );
+    expect(searchCalls.at(-1)).toEqual([
+      'search_storefront_products_refined',
+      expect.objectContaining({ result_offset: 1 }),
+    ]);
   });
   it('caps skip-ahead fetches and keeps pagination advancing', async () => {
-    mockRpc.mockResolvedValue({
-      data: [{ product_id: 'gone', total_count: 100 }],
-      error: null,
-    });
+    mockSearchRpc([{ product_id: 'gone', total_count: 100 }]);
     mockRead.mockResolvedValue({ data: [], error: null });
     const result = await fetchRefinedProductsPage(
       'm',
@@ -80,13 +90,11 @@ describe('refined native pages', () => {
     );
     expect(result.products).toEqual([]);
     expect(result.nextOffset).toBe(4);
-    expect(mockRpc).toHaveBeenCalledTimes(4);
+    // Four pages × (search RPC + visibility gate).
+    expect(mockRpc).toHaveBeenCalledTimes(8);
   });
   it('stops after an empty final page', async () => {
-    mockRpc.mockResolvedValue({
-      data: [{ product_id: 'gone', total_count: 1 }],
-      error: null,
-    });
+    mockSearchRpc([{ product_id: 'gone', total_count: 1 }]);
     mockRead.mockResolvedValue({ data: [], error: null });
     const result = await fetchRefinedProductsPage(
       'm',
@@ -96,13 +104,11 @@ describe('refined native pages', () => {
       0
     );
     expect(result).toEqual({ products: [], total: 0, nextOffset: null });
-    expect(mockRpc).toHaveBeenCalledTimes(1);
+    // One search RPC plus one visibility gate.
+    expect(mockRpc).toHaveBeenCalledTimes(2);
   });
   it('stops pagination at the supported RPC offset ceiling', async () => {
-    mockRpc.mockResolvedValue({
-      data: [{ product_id: 'p1', total_count: 3000 }],
-      error: null,
-    });
+    mockSearchRpc([{ product_id: 'p1', total_count: 3000 }]);
     mockRead.mockResolvedValue({
       data: [{ id: 'p1', price: 100 }],
       error: null,
@@ -118,19 +124,16 @@ describe('refined native pages', () => {
     expect(result.nextOffset).toBeNull();
   });
   it('uses the matching option price and keeps ranked ordering and offset', async () => {
-    mockRpc.mockResolvedValue({
-      data: [
-        {
-          product_id: 'p2',
-          total_count: 42,
-          effective_price: 100,
-          matched_variant_id: 'v2',
-          matched_condition: 'used',
-        },
-        { product_id: 'p1', total_count: 42, effective_price: 200 },
-      ],
-      error: null,
-    });
+    mockSearchRpc([
+      {
+        product_id: 'p2',
+        total_count: 42,
+        effective_price: 100,
+        matched_variant_id: 'v2',
+        matched_condition: 'used',
+      },
+      { product_id: 'p1', total_count: 42, effective_price: 200 },
+    ]);
     mockRead.mockResolvedValue({
       data: [
         { id: 'p1', price: 500 },
@@ -155,17 +158,14 @@ describe('refined native pages', () => {
     expect(result.nextOffset).toBe(40);
   });
   it('renders variant-bearing cards without waiting for detail hydration', async () => {
-    mockRpc.mockResolvedValue({
-      data: [
-        {
-          product_id: 'p1',
-          total_count: 1,
-          effective_price: 200,
-          matched_variant_id: 'v1',
-        },
-      ],
-      error: null,
-    });
+    mockSearchRpc([
+      {
+        product_id: 'p1',
+        total_count: 1,
+        effective_price: 200,
+        matched_variant_id: 'v1',
+      },
+    ]);
     mockRead.mockResolvedValue({
       data: [{ id: 'p1', name: 'iPhone', price: 500, has_variants: true }],
       error: null,
@@ -185,13 +185,10 @@ describe('refined native pages', () => {
     });
   });
   it('skips matches whose rows vanished instead of failing the page', async () => {
-    mockRpc.mockResolvedValue({
-      data: [
-        { product_id: 'p1', total_count: 2 },
-        { product_id: 'p2', total_count: 2 },
-      ],
-      error: null,
-    });
+    mockSearchRpc([
+      { product_id: 'p1', total_count: 2 },
+      { product_id: 'p2', total_count: 2 },
+    ]);
     mockRead.mockResolvedValue({
       data: [{ id: 'p1', price: 500 }],
       error: null,
@@ -208,13 +205,10 @@ describe('refined native pages', () => {
     expect(result.nextOffset).toBeNull();
   });
   it('skips rows that fail validation instead of failing the page', async () => {
-    mockRpc.mockResolvedValue({
-      data: [
-        { product_id: 'p1', total_count: 2 },
-        { product_id: 'p2', total_count: 2 },
-      ],
-      error: null,
-    });
+    mockSearchRpc([
+      { product_id: 'p1', total_count: 2 },
+      { product_id: 'p2', total_count: 2 },
+    ]);
     mockRead.mockResolvedValue({
       data: [
         { id: 'p1', price: 500 },
@@ -238,7 +232,7 @@ describe('refined native pages', () => {
       product_id: `p${index}`,
       total_count: 21,
     }));
-    mockRpc.mockResolvedValue({ data: matches, error: null });
+    mockSearchRpc(matches);
     mockRead.mockResolvedValue({
       data: Array.from({ length: 20 }, (_, index) => ({
         id: `p${index}`,
@@ -270,6 +264,22 @@ describe('refined native pages', () => {
     ).rejects.toThrow('Search results unavailable');
     expect(mockRpc).toHaveBeenCalledTimes(1);
     expect(mockRead).not.toHaveBeenCalled();
+  });
+  it('returns an empty page when the merchant unpublished mid-request', async () => {
+    mockSearchRpc([{ product_id: 'p1', total_count: 1 }], false);
+    const result = await fetchRefinedProductsPage(
+      'm',
+      'phone',
+      { brands: [], sort: 'relevance' },
+      20,
+      0
+    );
+    expect(mockRpc).toHaveBeenLastCalledWith(
+      'storefront_search_merchant_is_visible',
+      { p_merchant_id: 'm' }
+    );
+    expect(mockRead).not.toHaveBeenCalled();
+    expect(result).toEqual({ products: [], total: 0, nextOffset: null });
   });
 });
 

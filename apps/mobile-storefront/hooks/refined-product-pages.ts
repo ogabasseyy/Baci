@@ -30,6 +30,20 @@ async function fetchSingleRefinedProductsPage(
   if (error) throw new Error('Search results unavailable');
   const matches = readRefinedSearchRows(data);
   if (!matches.length) return { products: [], total: 0, nextOffset: null };
+  // Defense in depth, mirroring web: product RLS admits any active row
+  // regardless of merchant publication, so re-check visibility through
+  // the SECURITY DEFINER RPC just before the re-read (the merchant may
+  // have unpublished mid-request). Only an explicit true keeps matches.
+  const { data: merchantVisible, error: visibilityError } =
+    await withSupabaseRetry(
+      async () =>
+        await supabase.rpc('storefront_search_merchant_is_visible', {
+          p_merchant_id: merchantId,
+        })
+    );
+  if (visibilityError) throw new Error('Search results unavailable');
+  if (merchantVisible !== true)
+    return { products: [], total: 0, nextOffset: null };
   const { data: raw, error: readError } = await withSupabaseRetry(
     async () =>
       await supabase

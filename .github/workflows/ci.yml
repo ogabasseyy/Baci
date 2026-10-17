@@ -661,12 +661,27 @@ jobs:
           WEB_TEST_RESULT: ${{ needs['quality-test-web'].result }}
           MOBILE_QUALITY_RESULT: ${{ needs['mobile-quality'].result }}
           SILENT_REVERT_GUARD_RESULT: ${{ needs['silent-revert-guard'].result }}
+          QUIZ_DB_CHANGED: ${{ needs.changes.outputs.quiz_db }}
+          TEST_PLAN_MODE: ${{ needs.changes.outputs.test_plan_mode }}
         run: |
           set -euo pipefail
 
           if [[ "$CHANGES_RESULT" != "success" ]]; then
             echo "changes job result: $CHANGES_RESULT"
             exit 1
+          fi
+
+          # A skipped DB gate is success only when no DB paths changed: if
+          # the detector flagged DB changes, replay and the disposable
+          # suites must have actually run (skipped would silently waive
+          # them). Config-smoke mode skips by design and stays exempt.
+          if [[ "$QUIZ_DB_CHANGED" == "true" && "$TEST_PLAN_MODE" != "config-smoke" ]]; then
+            for db_result in "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT"; do
+              if [[ "$db_result" == "skipped" ]]; then
+                echo "DB paths changed but a DB gate was skipped: $db_result"
+                exit 1
+              fi
+            done
           fi
 
           for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do

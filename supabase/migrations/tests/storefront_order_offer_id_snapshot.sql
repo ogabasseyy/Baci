@@ -47,9 +47,11 @@ BEGIN
   VALUES (v_offer_id, v_product_id, v_merchant_id, 'used', 400000, 5,
     'active', 'A', 'Light scratches');
 
+  -- Second offer carries a different condition: product_offers enforces
+  -- UNIQUE(product_id, condition), so a same-condition sibling 23505s.
   INSERT INTO public.product_offers (id, product_id, merchant_id, condition,
     price, stock_quantity, status, grade, condition_notes)
-  VALUES (v_offer_id_b, v_product_id, v_merchant_id, 'used', 390000, 5,
+  VALUES (v_offer_id_b, v_product_id, v_merchant_id, 'open_box', 390000, 5,
     'active', 'B', 'Moderate wear');
 
   BEGIN

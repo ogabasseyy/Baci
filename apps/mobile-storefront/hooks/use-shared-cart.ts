@@ -99,7 +99,13 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       void retireEnrollmentSession(
         enrollmentTransition.current,
         options.merchantId,
-        (merchantId) => cartSessionStorage.remove(merchantId)
+        // Tombstone rather than delete: the retained proof lets the
+        // next establishment flush the server revocation; deleting
+        // it would strand the live grant until expiry.
+        (merchantId) =>
+          cartSessionStorage.retire
+            ? cartSessionStorage.retire(merchantId)
+            : cartSessionStorage.remove(merchantId)
       );
       if (!wasEnabled) return;
       retireLegacySharedCart({

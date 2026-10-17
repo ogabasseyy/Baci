@@ -106,8 +106,12 @@ it('discards canonical ownership when enrollment turns off', async () => {
   };
   const SecureStore = jest.requireMock('expo-secure-store') as {
     deleteItemAsync: jest.Mock;
+    getItemAsync: jest.Mock;
+    setItemAsync: jest.Mock;
   };
   SecureStore.deleteItemAsync.mockClear();
+  SecureStore.setItemAsync.mockClear();
+  SecureStore.getItemAsync.mockResolvedValue('cp1.fixture.proof');
   const { rerender } = renderHook(
     (p: typeof options) => useSharedCart(p, deps),
     { initialProps: { ...options, enabled: false } }
@@ -126,10 +130,17 @@ it('discards canonical ownership when enrollment turns off', async () => {
   // the secure record so a later no-writer sign-out cannot strand it.
   await act(async () => rerender(options));
   await act(async () => rerender({ ...options, enabled: false }));
+  // Enrollment-off retires (tombstones) the secure record instead of
+  // deleting it, so the proof survives for the next establishment's
+  // server revocation flush.
   await waitFor(() =>
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith(
-      `baci.cart.session.${options.merchantId}`
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      `baci.cart.session.${options.merchantId}`,
+      expect.stringContaining('"retired":true')
     )
+  );
+  expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith(
+    `baci.cart.session.${options.merchantId}`
   );
   // The committed disable retires the canonical reference and rotates
   // its checkout generation.

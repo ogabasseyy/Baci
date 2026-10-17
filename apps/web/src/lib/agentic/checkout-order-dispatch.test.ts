@@ -645,7 +645,7 @@ describe('agentic checkout order dispatch — shared cart binding', () => {
 
   it('replays a bound order when the condition offer is now inactive', async () => {
     const rpc = vi.fn(async (name: string) => {
-      if (name === 'get_order_variant_overrides') {
+      if (name === 'get_order_condition_prices') {
         return {
           data: [
             {
@@ -660,15 +660,39 @@ describe('agentic checkout order dispatch — shared cart binding', () => {
       }
       return { data: BOUND_ENVELOPE, error: null };
     });
+    const products = {
+      select: () => products,
+      eq: () => products,
+      in: () => products,
+      returns: async () => ({
+        data: [
+          {
+            id: 'product-1',
+            price: 100,
+            vat_rate: 7.5,
+            vat_category_code: 'S',
+          },
+        ],
+        error: null,
+      }),
+    };
+    const from = (table: string) =>
+      table === 'products'
+        ? products
+        : makeFromStub({ vatStatus: 'registered' })(table);
     const payload = boundPayload();
     const result = await createAgenticCheckoutOrder(
       {
         ...payload,
         items: payload.items.map((item) => ({ ...item, condition: 'used' })),
       },
-      dispatchClient(rpc)
+      { rpc, from } as unknown as SupabaseClient
     );
     expect(result).toMatchObject({ ok: true, orderId: 'order-1' });
+    expect(rpc).toHaveBeenCalledWith(
+      'get_order_condition_prices',
+      expect.anything()
+    );
     expect(rpc).toHaveBeenCalledWith(
       'create_storefront_order_with_cart_binding',
       expect.anything()

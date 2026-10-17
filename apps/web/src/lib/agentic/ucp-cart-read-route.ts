@@ -90,6 +90,84 @@ function canonicalHasLanes(
   );
 }
 
+/**
+ * True when canonical lanes are still the generic create-time
+ * projection of the stored lanes (same products and quantities, no
+ * variant/condition identity yet). Anything else means a legitimate
+ * update has landed since create, so the stored lanes must never be
+ * replayed over it.
+ */
+function canonicalIsGenericProjection(
+  canonical: CanonicalResult,
+  lanes: {
+    productId: string;
+    quantity: number;
+  }[]
+): boolean {
+  const lineItems = (canonical.body as { line_items?: unknown }).line_items;
+  if (!Array.isArray(lineItems) || lineItems.length !== lanes.length)
+    return false;
+  const expected = new Map(
+    lanes.map((lane) => [lane.productId, lane.quantity])
+  );
+  return lineItems.every((line) => {
+    const item = (line as { item?: Record<string, unknown> }).item ?? {};
+    const productId = item.id;
+    if (typeof productId !== 'string') return false;
+    if (item.variant_id || item.condition) return false;
+    return expected.get(productId) === item.quantity;
+  });
+}
+
+/** Clears the one-shot create-recovery marker; false when it stays set. */
+async function clearRecoveryMarker(
+  input: {
+    cartId: string;
+    merchant: AgenticMerchantContext;
+    supabase: SupabaseClient;
+  },
+  cart: unknown
+): Promise<boolean> {
+  const metadata = (cart as { metadata?: unknown }).metadata;
+  const loadedUpdatedAt = (cart as { updated_at?: unknown }).updated_at;
+  let clearQuery = input.supabase
+    .from('agentic_cart_sessions')
+    .update({
+      metadata: {
+        ...(metadata && typeof metadata === 'object'
+          ? (metadata as Record<string, unknown>)
+          : {}),
+        create_recovery_pending: false,
+      },
+      updated_at: new Date().toISOString(),
+    })
+    .eq('cart_id', input.cartId)
+    .eq('merchant_id', input.merchant.id);
+  if (typeof loadedUpdatedAt === 'string') {
+    clearQuery = clearQuery.eq('updated_at', loadedUpdatedAt);
+  }
+  const { data: clearedRows, error: clearError } =
+    await clearQuery.select('cart_id');
+  if (clearError) {
+    logger.error({
+      error: sanitizeForLog(clearError),
+      merchantId: input.merchant.id,
+      message: 'Failed to clear UCP create recovery marker',
+      route: 'ucp-cart-read',
+    });
+    return false;
+  }
+  if (clearedRows.length === 0) {
+    logger.error({
+      merchantId: input.merchant.id,
+      message: 'UCP create recovery marker clear lost a concurrent write race',
+      route: 'ucp-cart-read',
+    });
+    return false;
+  }
+  return true;
+}
+
 /** Reads through the authority supplied by the authenticated route. */
 export async function readUcpCart(
   input: {
@@ -135,6 +213,16 @@ export async function readUcpCart(
       // marker must be retried here: if the create-time clear failed,
       // this read is the only place that can retire it before a later
       // legitimate lane update makes the stale lanes replayable.
+      if (lanes && !canonicalHasLanes(canonical, lanes)) {
+        if (!canonicalIsGenericProjection(canonical, lanes)) {
+          // A legitimate update has landed since create: the stored
+          // lanes are stale. Retire the marker and answer canonical.
+          await clearRecoveryMarker(input, cartResult.cart);
+          return NextResponse.json(canonical.body, {
+            status: canonical.status,
+          });
+        }
+      }
       if (lanes) {
         const recovered = canonicalHasLanes(canonical, lanes)
           ? canonical
@@ -157,64 +245,32 @@ export async function readUcpCart(
               operationId: `ucp-create-recovery:${input.cartId}`,
             });
         if (recovered && recovered.status === 200) {
-          // One-shot repair complete: clear the marker so later
-          // legitimate updates are never reverted to these lanes.
-          const metadata = (cartResult.cart as { metadata?: unknown }).metadata;
-          // Optimistic concurrency: only clear against the row version
-          // we loaded, so a concurrent metadata write is never silently
-          // overwritten by this stale spread.
-          const loadedUpdatedAt = (cartResult.cart as { updated_at?: unknown })
-            .updated_at;
-          let clearQuery = input.supabase
-            .from('agentic_cart_sessions')
-            .update({
-              metadata: {
-                ...(metadata && typeof metadata === 'object'
-                  ? (metadata as Record<string, unknown>)
-                  : {}),
-                create_recovery_pending: false,
-              },
-              updated_at: new Date().toISOString(),
-            })
-            .eq('cart_id', input.cartId)
-            .eq('merchant_id', input.merchant.id);
-          if (typeof loadedUpdatedAt === 'string') {
-            clearQuery = clearQuery.eq('updated_at', loadedUpdatedAt);
+          // One-shot repair completes only when the marker actually
+          // clears; completing with it still set would leave the
+          // stored lanes replayable over a later legitimate update.
+          const markerCleared = await clearRecoveryMarker(
+            input,
+            cartResult.cart
+          );
+          if (!markerCleared) {
+            return NextResponse.json(
+              { code: 'temporarily_unavailable' },
+              { status: 503 }
+            );
           }
-          const { data: clearedRows, error: clearError } =
-            await clearQuery.select('cart_id');
-          if (!clearError && clearedRows.length === 0) {
-            logger.error({
-              merchantId: input.merchant.id,
-              message:
-                'UCP create recovery marker clear lost a concurrent write race',
-              route: 'ucp-cart-read',
-            });
-          }
-          if (clearError) {
-            logger.error({
-              error: sanitizeForLog(clearError),
-              merchantId: input.merchant.id,
-              message: 'Failed to clear UCP create recovery marker',
-              route: 'ucp-cart-read',
-            });
-          }
-          // Never answer from the recovery replay itself: a
-          // concurrent legitimate update may have landed between
-          // the first read and the replay (and an idempotent replay
-          // returns its recorded state without mutating). Re-read
-          // canonical state and answer from that, so a stale lane
-          // set can never be presented — or built upon — as current.
           const fresh = await deps.canonical({
             merchant: input.merchant,
             cartId: input.cartId,
             agentId: input.agentId,
             action: 'read',
           });
-          const answer = fresh && fresh.status === 200 ? fresh : recovered;
-          return NextResponse.json(answer.body, {
-            status: answer.status,
-          });
+          if (!fresh) {
+            return NextResponse.json(
+              { code: 'temporarily_unavailable' },
+              { status: 503 }
+            );
+          }
+          return NextResponse.json(fresh.body, { status: fresh.status });
         }
       }
     }

@@ -282,6 +282,97 @@ it('recovers an option-only lane the canonical cart configured differently', asy
   });
 });
 
+it('propagates a fresh-read failure instead of answering from the replay', async () => {
+  const cart = {
+    agent_id: 'agent-a',
+    status: 'active',
+    metadata: { source: 'ucp', create_recovery_pending: true },
+    cart_items: [{ id: 'prod-1', quantity: 1, variant_id: 'variant-1' }],
+  };
+  const canonical = vi
+    .fn()
+    .mockResolvedValueOnce({
+      status: 200,
+      body: {
+        id: 'cart-a',
+        line_items: [{ item: { id: 'prod-1', quantity: 1 } }],
+      },
+    })
+    .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } })
+    .mockResolvedValueOnce({
+      status: 409,
+      body: { code: 'version_conflict' },
+    });
+  const supabase = {
+    from: vi.fn(() => ({
+      update: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            select: vi.fn(async () => ({
+              data: [{ cart_id: 'cart-a' }],
+              error: null,
+            })),
+          })),
+        })),
+      })),
+    })),
+  };
+  const deps = {
+    canonical,
+    load: vi.fn().mockResolvedValue({ cart, error: null }),
+    respond: vi.fn(),
+  };
+  const response = await readUcpCart(
+    { ...input, supabase: supabase as never },
+    deps
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ code: 'version_conflict' });
+});
+
+it('fails closed when the recovery marker cannot be cleared', async () => {
+  const cart = {
+    agent_id: 'agent-a',
+    status: 'active',
+    metadata: { source: 'ucp', create_recovery_pending: true },
+    cart_items: [{ id: 'prod-1', quantity: 1, variant_id: 'variant-1' }],
+  };
+  const canonical = vi
+    .fn()
+    .mockResolvedValueOnce({
+      status: 200,
+      body: {
+        id: 'cart-a',
+        line_items: [{ item: { id: 'prod-1', quantity: 1 } }],
+      },
+    })
+    .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } });
+  const supabase = {
+    from: vi.fn(() => ({
+      update: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            select: vi.fn(async () => ({
+              data: null,
+              error: { message: 'db down' },
+            })),
+          })),
+        })),
+      })),
+    })),
+  };
+  const deps = {
+    canonical,
+    load: vi.fn().mockResolvedValue({ cart, error: null }),
+    respond: vi.fn(),
+  };
+  const response = await readUcpCart(
+    { ...input, supabase: supabase as never },
+    deps
+  );
+  expect(response.status).toBe(503);
+});
+
 it('scopes the recovery marker clear to the loaded row version', async () => {
   const cart = {
     agent_id: 'agent-a',
@@ -299,6 +390,7 @@ it('scopes the recovery marker clear to the loaded row version', async () => {
         line_items: [{ item: { id: 'prod-1', quantity: 1 } }],
       },
     })
+    .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } })
     .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } });
   const eqCalls: unknown[][] = [];
   const recordEq =
@@ -307,7 +399,10 @@ it('scopes the recovery marker clear to the loaded row version', async () => {
       eqCalls.push(args);
       return next;
     };
-  const select = vi.fn(async () => ({ data: [], error: null }));
+  const select = vi.fn(async () => ({
+    data: [{ cart_id: 'cart-a' }],
+    error: null,
+  }));
   const supabase = {
     from: vi.fn(() => ({
       update: vi.fn(() => ({

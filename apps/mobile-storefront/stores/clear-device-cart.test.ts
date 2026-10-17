@@ -56,3 +56,19 @@ it('clears private local state even offline without sending a shared-cart clear 
   );
   release();
 });
+
+it('propagates a retire failure instead of reporting teardown success', async () => {
+  const { cartSessionStorage } = jest.requireMock(
+    '@/lib/cart/session-storage'
+  ) as {
+    cartSessionStorage: { retire: jest.Mock };
+  };
+  cartSessionStorage.retire.mockRejectedValueOnce(new Error('storage down'));
+  useCartStore.setState({
+    clearCart: jest.fn(),
+    setSharedCartRef: jest.fn(),
+  });
+  await expect(clearDeviceCartForAccountTeardown()).rejects.toThrow(
+    'storage down'
+  );
+});

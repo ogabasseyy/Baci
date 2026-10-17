@@ -767,7 +767,11 @@ export async function POST(request: NextRequest) {
             // shipping-only cancellation (either spelling): route it
             // through the same captured-payment reconciliation instead
             // of acking with no durable transaction trail.
-            isOrderClampedAsCancelled(currentOrder)
+            isOrderClampedAsCancelled({
+              id: order.id,
+              cancelled_at: currentOrder.cancelled_at,
+              shipping_status: currentOrder.shipping_status,
+            })
           ) {
             // Record the disbursed money and file it for ops review,
             // mirroring the refunded branch: the loyalty claim was

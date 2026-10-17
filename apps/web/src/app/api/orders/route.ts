@@ -7,6 +7,12 @@ import {
 } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import { buildOrderTrackingLink } from '@/lib/build-order-tracking-link';
+import {
+  ORDER_BINDING_RPC_NAMES,
+  selectOrderBindingVariant,
+} from '@/lib/cart/order-binding';
+import { dispatchOrderCreation } from '@/lib/cart/order-creation-dispatch';
+import { getSharedCartOrderAuthority } from '@/lib/cart/order-route-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -23,9 +29,12 @@ import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-c
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
+import { loadCheckoutReplaySnapshot } from '@/lib/checkout/has-existing-checkout-order';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
+import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
+import { conditionOfferUnavailableResponse } from '@/lib/checkout/order-condition-response';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
@@ -519,6 +528,8 @@ export async function POST(request: NextRequest) {
       savings_goal_id,
       // User ID
       user_id,
+      // Shared server cart binding (optional; absent for legacy checkouts)
+      shared_cart,
     } = body;
 
     if (user && user_id && user_id !== user.id) {
@@ -528,6 +539,14 @@ export async function POST(request: NextRequest) {
     // SECURITY: Only use user_id from authenticated session.
     // Do NOT trust user_id from body if user is unauthenticated (guest).
     const resolvedUserId = user?.id || null;
+
+    const cartAuthority = getSharedCartOrderAuthority(
+      request,
+      shared_cart,
+      merchant_id
+    );
+    if (!cartAuthority.ok) return cartAuthority.response;
+    const sharedCartPrincipalId = cartAuthority.principalId;
 
     const hasVoucherItem = hasQuizVoucherItem(items);
     const requestIdempotencyKey = hasVoucherItem
@@ -549,6 +568,7 @@ export async function POST(request: NextRequest) {
       const rejection = validateRedvaultRequest({
         merchantId: merchant_id,
         hasVoucherItem,
+        hasSharedCart: Boolean(shared_cart),
         discountCode: body.discount_code,
         useWallet: use_wallet_credit,
         useSavings: use_savings_credit,
@@ -709,13 +729,19 @@ export async function POST(request: NextRequest) {
       const voucherAwardRowById = new Map(
         (voucherAwardRows ?? []).map((row) => [row.id, row] as const)
       );
-      // A redeemable award is approved AND store-credit-typed — the same gate
-      // create_storefront_order_with_quiz_voucher enforces in the DB. Anything
-      // else (claimed, void, wrong type, or missing) is a bad line, not a
+      // Bound claimed awards must reach the binding RPC, which alone may
+      // replay this cart generation. It rejects a fresh claim transaction.
+      // Unbound redeemable awards remain approved AND store-credit-typed.
+      // Fresh claims are still enforced in the voucher RPC. Void, wrong-type
+      // or missing awards remain a bad line, not a
       // "too many prizes" conflict.
       const validVoucherAwardIds = voucherAwardIds.filter((awardId) => {
         const row = voucherAwardRowById.get(awardId);
-        return row?.status === 'approved' && row.award_type === 'store_credit';
+        return (
+          (row?.status === 'approved' ||
+            (Boolean(shared_cart) && row?.status === 'claimed')) &&
+          row.award_type === 'store_credit'
+        );
       });
 
       // Validate award status BEFORE reporting a multi-voucher conflict: prune
@@ -772,7 +798,7 @@ export async function POST(request: NextRequest) {
               claimedOrderId = claimedItem?.order_id ?? null;
             }
             if (claimedOrderId) {
-              const { data: claimedOrder, error: claimedOrderError } =
+              let { data: claimedOrder, error: claimedOrderError } =
                 await supabase
                   .from('orders')
                   .select(
@@ -829,6 +855,40 @@ export async function POST(request: NextRequest) {
                       { status: 503 }
                     );
                   }
+                  // A successful RPC call is not proof of transition:
+                  // re-read the stored row and only report paid when
+                  // the finalizer actually marked it paid.
+                  const { data: refreshedOrder, error: refreshError } =
+                    await supabase
+                      .from('orders')
+                      .select(
+                        'id, order_number, tracking_token, subtotal, shipping_fee, discount_amount, tax_amount, total, customer_id, customer_email, customer_name, customer_phone, payment_status, shipping_status, payment_method, shipping_address, merchant_id'
+                      )
+                      .eq('id', claimedOrder.id)
+                      .eq('customer_id', soleRow.customer_id)
+                      .maybeSingle();
+                  if (
+                    refreshError ||
+                    !refreshedOrder ||
+                    refreshedOrder.payment_status !== 'paid'
+                  ) {
+                    logger.error({
+                      message:
+                        'Quiz voucher replay finalize did not transition the order',
+                      error: refreshError,
+                      orderId: claimedOrder.id,
+                      awardId: soleAwardId,
+                    });
+                    return NextResponse.json(
+                      {
+                        code: 'QUIZ_VOUCHER_LOOKUP_FAILED',
+                        error:
+                          'Could not verify your quiz prize right now. Please try again.',
+                      },
+                      { status: 503 }
+                    );
+                  }
+                  claimedOrder = refreshedOrder;
                 }
                 return NextResponse.json(
                   {
@@ -948,6 +1008,9 @@ export async function POST(request: NextRequest) {
 
       return {
         product_id: getOrderItemProductId(item),
+        // Shared-cart line provenance for bound orders (traceability;
+        // the binding RPC revalidates the cart version itself).
+        ...(item.cart_line_id ? { cart_line_id: item.cart_line_id } : {}),
         condition: item.condition,
         image_url: item.imageUrl ?? item.image_url ?? null,
         variant_id: item.variantId || item.variant_id,
@@ -1128,12 +1191,29 @@ export async function POST(request: NextRequest) {
     // The helper uses the caller's standard scoped client. The
     // single RLS-bypassing path (variant override lookup) goes
     // through the `get_order_variant_overrides` SECURITY DEFINER
-    // RPC, granted to anon/authenticated/service_role — the trust
-    // boundary lives in the database, not the Next.js layer
-    // (CodeRabbit High on PR #1622 round 7).
+    // RPC returns only the committed order id and line composition
+    // for the (merchant, idempotency key) pair on the route's normal
+    // client; the key is a random UUID, so the scoped function is
+    // the boundary — no service-role client on this guest path.
+    // A response-loss retry of an already-created order must replay
+    // it even if the merchant has since deactivated a condition
+    // offer: resolve the existing order first and let the condition
+    // pricing recompute price that offer at its stored price instead
+    // of failing closed before the RPC's replay path can run.
+    const replaySnapshot = requestIdempotencyKey
+      ? await loadCheckoutReplaySnapshot({
+          client: supabase,
+          merchantId: merchant_id,
+          requestIdempotencyKey,
+        })
+      : null;
+    const isConditionReplay = replaySnapshot !== null;
+    const conditionPriceOverrides = replaySnapshot?.conditionPriceOverrides;
     let serverComputedTaxAmount: number;
     try {
       serverComputedTaxAmount = await computeAgenticOrderTax({
+        allowUnavailableConditionPrices: isConditionReplay,
+        conditionPriceOverrides,
         items: items.map((item) => ({
           product_id: item.product_id || item.productId || item.id,
           quantity: item.quantity,
@@ -1143,6 +1223,8 @@ export async function POST(request: NextRequest) {
         supabase,
       });
     } catch (taxError) {
+      if (taxError instanceof OrderConditionUnavailableError)
+        return conditionOfferUnavailableResponse();
       // Codex P2 (PR #1622 round 7): malformed item ids (Zod only
       // validates as `string`) cascade into Postgres's UUID parser
       // as code 22P02. Pre-route-side-recompute, the RPC's own
@@ -1203,12 +1285,16 @@ export async function POST(request: NextRequest) {
     >;
     try {
       negotiationDiscount = await computeOrderNegotiationDiscount({
+        allowUnavailableConditionPrices: isConditionReplay,
+        conditionPriceOverrides,
         items: orderItemsPayload,
         merchantId: merchant_id,
         supabase,
         vatRegistered,
       });
     } catch (negotiationDiscountError) {
+      if (negotiationDiscountError instanceof OrderConditionUnavailableError)
+        return conditionOfferUnavailableResponse();
       if (isCanonicalOrderSubtotalUuidError(negotiationDiscountError)) {
         logger.warn({
           error: negotiationDiscountError,
@@ -1522,13 +1608,15 @@ export async function POST(request: NextRequest) {
         use_savings_credit ||
         use_wallet_credit ||
         hasVoucherItem ||
+        shared_cart ||
         (negotiationDiscount?.totalDiscount ?? 0) > 0
       ) {
         return NextResponse.json(
           {
             code: 'REDVAULT_COMBINATION_UNSUPPORTED',
-            error:
-              'REDVAULT cannot be combined with another discount or redemption',
+            error: shared_cart
+              ? 'Choose a different payment method for this shared cart.'
+              : 'REDVAULT cannot be combined with another discount or redemption',
           },
           { status: 400 }
         );
@@ -1655,11 +1743,15 @@ export async function POST(request: NextRequest) {
 
       try {
         canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
+          allowUnavailableConditionPrices: isConditionReplay,
+          conditionPriceOverrides,
           items: orderItemsPayload,
           merchantId: merchant_id,
           supabase,
         });
       } catch (subtotalError) {
+        if (subtotalError instanceof OrderConditionUnavailableError)
+          return conditionOfferUnavailableResponse();
         if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
           return NextResponse.json(
             { error: 'Failed to create order', details: 'invalid_items' },
@@ -1748,11 +1840,15 @@ export async function POST(request: NextRequest) {
       if (canonicalOrderSubtotal == null) {
         try {
           canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
+            allowUnavailableConditionPrices: isConditionReplay,
+            conditionPriceOverrides,
             items: orderItemsPayload,
             merchantId: merchant_id,
             supabase,
           });
         } catch (subtotalError) {
+          if (subtotalError instanceof OrderConditionUnavailableError)
+            return conditionOfferUnavailableResponse();
           if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
             return NextResponse.json(
               { error: 'Failed to create order', details: 'invalid_items' },
@@ -2083,13 +2179,14 @@ export async function POST(request: NextRequest) {
         : {}),
     };
 
-    const orderCreateRpcName = requestedSavingsRedemption
-      ? 'create_storefront_order_with_savings'
-      : hasVoucherItem
-        ? 'create_storefront_order_with_quiz_voucher'
-        : discountCodeId
-          ? 'create_storefront_order_with_discount_code'
-          : 'create_storefront_order';
+    // One variant rule for both paths: legacy checkouts call the variant
+    // RPC directly, bound checkouts route it through the cart binding.
+    const orderVariant = selectOrderBindingVariant({
+      discountCodeId,
+      hasVoucherItem,
+      requestedSavingsRedemption: Boolean(requestedSavingsRedemption),
+    });
+    const orderCreateRpcName = ORDER_BINDING_RPC_NAMES[orderVariant];
 
     const orderCreateRpcArgs = requestedSavingsRedemption
       ? {
@@ -2201,10 +2298,21 @@ export async function POST(request: NextRequest) {
       }
       return redvaultCheckoutResponse;
     }
-    const { data: orderRows, error: orderError } = await orderRpcClient.rpc(
-      orderCreateRpcName,
-      orderCreateRpcArgs
-    );
+    // Shared-cart checkouts submit through the binding RPC, which runs
+    // the same variant RPC inside the final transaction and closes the
+    // reviewed cart generation atomically. Binding-level failures return
+    // early; inner order rejections keep their message and fall through
+    // to the existing mapper below.
+    const dispatched = await dispatchOrderCreation({
+      args: orderCreateRpcArgs as Record<string, unknown>,
+      binding: shared_cart,
+      client: orderRpcClient,
+      principalId: sharedCartPrincipalId,
+      rpcName: orderCreateRpcName,
+      variant: orderVariant,
+    });
+    if (dispatched.failure) return dispatched.failure;
+    const { orderRows, orderError } = dispatched;
 
     const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;
 
@@ -2284,6 +2392,9 @@ export async function POST(request: NextRequest) {
         'invalid_items',
         'invalid_quantity',
         'invalid_variant',
+        'invalid_condition_offer',
+        'condition_offer_price_changed',
+        'insufficient_condition_offer_stock',
         'insufficient_stock',
         'insufficient_variant_stock',
         'merchant_not_found',

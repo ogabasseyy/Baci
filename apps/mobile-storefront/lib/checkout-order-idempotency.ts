@@ -81,6 +81,8 @@ export interface MobileCheckoutOrderItemPayload {
   assurance_fee: number;
   voucher_token?: string;
   voucher_award_id?: string;
+  /** Stable canonical cart line id, present only for shared-cart orders. */
+  cart_line_id?: string;
 }
 
 function normalizeString(value: string | null | undefined) {

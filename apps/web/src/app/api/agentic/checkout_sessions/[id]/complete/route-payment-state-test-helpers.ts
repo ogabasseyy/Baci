@@ -76,6 +76,22 @@ function mockSession(session: Record<string, unknown>) {
           update: updateSpy,
         };
       }
+      if (table === 'orders') {
+        // Finalization verifies the live order state for every
+        // session, bound or not: freshly created orders in these
+        // fixtures are still awaiting payment.
+        const chain = {
+          select: vi.fn(),
+          eq: vi.fn(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { payment_status: 'unpaid', shipping_status: 'pending' },
+            error: null,
+          }),
+        };
+        chain.select.mockReturnValue(chain);
+        chain.eq.mockReturnValue(chain);
+        return chain;
+      }
 
       throw new Error(`Unexpected table ${table}`);
     }),
@@ -212,6 +228,22 @@ function mockSuccessfulPaymentSessionSupabase(
           select: vi.fn(() => readChain),
           update: updateSpy,
         };
+      }
+      if (table === 'orders') {
+        // Finalization verifies the live order state for every
+        // session, bound or not: freshly created orders in these
+        // fixtures are still awaiting payment.
+        const chain = {
+          select: vi.fn(),
+          eq: vi.fn(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { payment_status: 'unpaid', shipping_status: 'pending' },
+            error: null,
+          }),
+        };
+        chain.select.mockReturnValue(chain);
+        chain.eq.mockReturnValue(chain);
+        return chain;
       }
 
       throw new Error(`Unexpected table ${table}`);

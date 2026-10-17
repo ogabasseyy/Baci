@@ -2,17 +2,58 @@ import { renderHook } from '@testing-library/react-native';
 import { useCheckoutDisplayCart } from './use-checkout-display-cart';
 
 const mockClearCart = jest.fn();
+let mockItems: Record<string, unknown>[] = [];
+jest.mock('@/stores/native-shared-cart-store', () => ({
+  useNativeSharedCartStore: (selector: (state: unknown) => unknown) =>
+    selector({ enabled: false }),
+}));
 
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: (selector: (state: unknown) => unknown) =>
     selector({
       clearCart: mockClearCart,
-      items: [{ id: 'real-cart-item', name: 'Cart phone' }],
+      items: mockItems,
       subtotal: () => 500_000,
     }),
 }));
 
 describe('useCheckoutDisplayCart', () => {
+  beforeEach(() => {
+    mockItems = [{ id: 'real-cart-item', name: 'Cart phone' }];
+  });
+  it.each([
+    'pending',
+    'rejected',
+    undefined,
+  ])('does not display an unaccepted %s negotiation as the checkout price', (negotiationStatus) => {
+    mockItems = [
+      {
+        id: 'phone',
+        name: 'Phone',
+        price: 500_000,
+        negotiatedPrice: 400_000,
+        negotiationStatus,
+      },
+    ];
+    const { result } = renderHook(() => useCheckoutDisplayCart());
+    expect(result.current.items[0].negotiatedPrice).toBeUndefined();
+    expect(result.current.items[0].price).toBe(500_000);
+    expect(result.current.subtotal).toBe(500_000);
+    expect(mockItems[0].negotiatedPrice).toBe(400_000);
+  });
+  it('preserves the accepted negotiated checkout price', () => {
+    mockItems = [
+      {
+        id: 'phone',
+        name: 'Phone',
+        price: 500_000,
+        negotiatedPrice: 400_000,
+        negotiationStatus: 'accepted',
+      },
+    ];
+    const { result } = renderHook(() => useCheckoutDisplayCart());
+    expect(result.current.items[0].negotiatedPrice).toBe(400_000);
+  });
   it('uses the persisted cart outside simulation mode', () => {
     const { result } = renderHook(() => useCheckoutDisplayCart());
 

@@ -1,21 +1,20 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type {
-  calculateCheckoutSession,
-  GPTTotal,
-} from '@/lib/agentic/checkout';
+import type { GPTTotal } from '@/lib/agentic/checkout';
+import {
+  buildAlreadyPaidFinalizationResponse,
+  readFinalizationOrderId,
+  readFinalizationOrderState,
+  recoverFinalizationOrderWriteFailure,
+  verifyBoundFinalizationOrder,
+  writeCancelledFinalizationSession,
+  writeFinalizedOrderSession,
+  writePaidFinalizationSession,
+} from '@/lib/agentic/checkout-bound-order-recovery';
 import {
   buildAgenticCheckoutOrderPayload,
-  buildPaymentPendingSessionUpdate,
+  readAgenticSharedCartBinding,
 } from '@/lib/agentic/checkout-completion-payloads';
-import {
-  type AgenticCheckoutBuyer,
-  buildPaymentPendingCheckoutResponse,
-  type StoredDvaAccount,
-} from '@/lib/agentic/checkout-completion-response';
-import {
-  compensateCreatedOrderAfterFinalizationFailure,
-  releaseFinalizationClaimSafely,
-} from '@/lib/agentic/checkout-finalization-compensation';
+import { buildPaymentPendingCheckoutResponse } from '@/lib/agentic/checkout-completion-response';
+import { releaseFinalizationClaimSafely } from '@/lib/agentic/checkout-finalization-compensation';
 import {
   createAgenticCheckoutOrder,
   sendAgenticOrderCreatedWebhook,
@@ -26,15 +25,14 @@ import {
   recordAgenticOrderFinalizationOrderCreated,
 } from '@/lib/agentic/checkout-order-finalization-claim';
 import { isValidOrderFinalizationClaim } from '@/lib/agentic/checkout-order-finalization-claim-reference';
-import type { AgenticMetadata } from '@/lib/agentic/checkout-storage';
 import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency-response-storage';
 import { revalidateAgenticOrderProductCaches } from '@/lib/agentic/revalidate-agentic-order-product-caches';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
-
-type CheckoutCalculation = Awaited<ReturnType<typeof calculateCheckoutSession>>;
+import type { FinalizeAgenticCheckoutInput } from './checkout-completion-finalize.types';
 
 export async function finalizeAgenticCheckoutPayment({
+  agentId,
   buyer,
   dvaAccount,
   expectedSessionUpdatedAt,
@@ -47,29 +45,12 @@ export async function finalizeAgenticCheckoutPayment({
   requestId,
   route,
   sessionId,
+  sharedCartPrincipalId,
   supabase,
-}: {
-  buyer: AgenticCheckoutBuyer;
-  dvaAccount: StoredDvaAccount;
-  expectedSessionUpdatedAt?: string;
-  finalizationClaimOverride?: string;
-  idempotencyKey: string;
-  merchantId: string;
-  metadata: AgenticMetadata;
-  orderSession: {
-    currency: string;
-    merchant_id: string;
-    session_id: string;
-    shipping_address?: unknown;
-  };
-  orderSessionCalc: CheckoutCalculation;
-  requestId: string;
-  route: string;
-  sessionId: string;
-  supabase: SupabaseClient;
-}) {
+}: FinalizeAgenticCheckoutInput) {
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId,
       idempotencyKey,
       merchantId,
       requestId,
@@ -129,21 +110,23 @@ export async function finalizeAgenticCheckoutPayment({
       409
     );
   }
-  const markedOrderId = metadata.agentic?.finalization_order_id;
-  let orderId =
-    typeof markedOrderId === 'string' && markedOrderId.trim().length > 0
-      ? markedOrderId.trim()
-      : null;
+  const sharedCartBinding = readAgenticSharedCartBinding(metadata);
+  let orderId = readFinalizationOrderId(metadata);
   if (!orderId) {
-    const orderPayload = buildAgenticCheckoutOrderPayload({
-      buyer,
-      dvaAccount,
-      session: orderSession,
-      sessionCalc: orderSessionCalc,
-    });
+    const orderPayload = {
+      ...buildAgenticCheckoutOrderPayload({
+        buyer,
+        dvaAccount,
+        session: orderSession,
+        sessionCalc: orderSessionCalc,
+      }),
+      ...(sharedCartBinding ? { shared_cart: sharedCartBinding } : {}),
+    };
     let orderResult: Awaited<ReturnType<typeof createAgenticCheckoutOrder>>;
     try {
-      orderResult = await createAgenticCheckoutOrder(orderPayload, supabase);
+      orderResult = await createAgenticCheckoutOrder(orderPayload, supabase, {
+        boundPrincipalId: sharedCartPrincipalId ?? null,
+      });
     } catch (error) {
       await releaseFinalizationClaimSafely({
         finalizationClaim,
@@ -176,6 +159,14 @@ export async function finalizeAgenticCheckoutPayment({
         status: orderResult.status,
         statusText: orderResult.statusText,
       });
+      // Binding conflicts (stale/expired/forbidden) are actionable: the
+      // agent refreshes the cart and retries. Everything else stays masked.
+      if (orderResult.status === 409 || orderResult.status === 403) {
+        return respond(
+          { error: orderResult.error || 'Shared cart binding conflict' },
+          orderResult.status as 409 | 403
+        );
+      }
       return respond({ error: 'Order creation failed' }, 500);
     }
     const createdOrderId = orderResult.orderId;
@@ -224,7 +215,8 @@ export async function finalizeAgenticCheckoutPayment({
         orderId: sanitizeForLog(orderId),
         sessionId: sanitizeForLog(sessionId),
       });
-      await compensateCreatedOrderAfterFinalizationFailure({
+      await recoverFinalizationOrderWriteFailure({
+        sharedCartBound: !!sharedCartBinding,
         finalizationClaim,
         merchantId,
         metadata,
@@ -237,28 +229,32 @@ export async function finalizeAgenticCheckoutPayment({
     }
   }
 
-  const updatePayload = buildPaymentPendingSessionUpdate({
-    buyer,
-    dvaAccount,
+  // Live order-state verification is not binding-specific: an
+  // unbound retry reusing a recorded order id must not resurrect a
+  // paid or cancelled order as payment_pending either.
+  let orderAlreadyPaid = false;
+  const verified = await verifyBoundFinalizationOrder({
+    finalizationClaim,
+    merchantId,
     metadata,
     orderId,
+    sessionId,
+    supabase,
   });
-  const { data: updatedSession, error: updateError } = await supabase
-    .from('checkout_sessions')
-    .update(updatePayload)
-    .eq('session_id', sessionId)
-    .eq('merchant_id', merchantId)
-    .eq('payment_reference', dvaAccount.account_number)
-    .is('order_id', null)
-    .in('status', ['pending', 'processing'])
-    .contains('metadata', {
-      agentic: {
-        finalization_claim: finalizationClaim,
-        payment_state: 'order_finalizing',
-      },
-    })
-    .select('session_id')
-    .maybeSingle();
+  if (!verified.ok) return respond({ error: verified.error }, verified.status);
+  orderAlreadyPaid = verified.paid;
+  const { data: updatedSession, error: updateError } =
+    await writeFinalizedOrderSession({
+      buyer,
+      dvaAccount,
+      metadata,
+      orderId,
+      orderAlreadyPaid,
+      supabase,
+      sessionId,
+      merchantId,
+      finalizationClaim,
+    });
 
   if (updateError || !updatedSession) {
     logger.error({
@@ -267,7 +263,8 @@ export async function finalizeAgenticCheckoutPayment({
       orderId: sanitizeForLog(orderId),
       sessionId: sanitizeForLog(sessionId),
     });
-    await compensateCreatedOrderAfterFinalizationFailure({
+    await recoverFinalizationOrderWriteFailure({
+      sharedCartBound: !!sharedCartBinding,
       finalizationClaim,
       merchantId,
       metadata,
@@ -279,6 +276,73 @@ export async function finalizeAgenticCheckoutPayment({
     return respond({ error: 'Database error' }, 500);
   }
 
+  // Revalidate after the session write: a payment or cancellation
+  // landing between verification and the write must not receive
+  // payment instructions or a duplicate order-created webhook.
+  if (!orderAlreadyPaid) {
+    const recheck = await readFinalizationOrderState({
+      merchantId,
+      orderId,
+      supabase,
+    });
+    if (recheck === 'paid') {
+      const paidWrite = await writePaidFinalizationSession({
+        buyer,
+        dvaAccount,
+        merchantId,
+        metadata,
+        orderId,
+        sessionId,
+        supabase,
+      });
+      if (paidWrite.error) {
+        // Do not claim a paid response the session row does not
+        // hold: a later request could otherwise serve transfer
+        // instructions for an already-paid order.
+        return respond({ error: 'Payment session update failed' }, 500);
+      }
+      orderAlreadyPaid = true;
+    } else if (recheck === 'conflict') {
+      const reconciled = await writeCancelledFinalizationSession({
+        merchantId,
+        metadata,
+        orderId,
+        sessionId,
+        supabase,
+      });
+      if (reconciled.error) {
+        // The 409 must not be stored while the session can still
+        // serve transfer instructions for the cancelled order.
+        return respond({ error: 'Payment session update failed' }, 500);
+      }
+      return respond({ error: 'Order is no longer awaiting payment' }, 409);
+    } else if (recheck === 'error') {
+      // The revalidation itself failed: fence the session out of
+      // payment_pending before returning, because the failed read
+      // may have hidden a paid or cancelled order and a later
+      // request would otherwise serve the stored instructions
+      // without revalidating. The fence result is verified just
+      // like the paid branch: a failed fence write must not return
+      // 503 while the session can still serve the instructions.
+      const fenced = await writeCancelledFinalizationSession({
+        merchantId,
+        metadata,
+        orderId,
+        sessionId,
+        supabase,
+      });
+      if (fenced.error || !fenced.data) {
+        return respond({ error: 'Payment session update failed' }, 500);
+      }
+      return respond({ error: 'temporarily_unavailable' }, 503);
+    }
+  }
+  if (orderAlreadyPaid) {
+    return respond(
+      buildAlreadyPaidFinalizationResponse(sessionId, orderId),
+      200
+    );
+  }
   sendAgenticOrderCreatedWebhook({
     buyer,
     currency: orderSession.currency,

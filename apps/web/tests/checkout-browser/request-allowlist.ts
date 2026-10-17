@@ -18,6 +18,7 @@ export function isFixtureAssetRequest(request: FixtureRequest): boolean {
     '/cart',
     '/cart-navigation-start',
     '/checkout',
+    '/checkout-shared',
     '/crypto-payment-modal',
     '/dva-modal',
     '/payment-handoff',

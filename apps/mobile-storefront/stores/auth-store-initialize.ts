@@ -14,6 +14,7 @@ import type { AuthStoreGet, AuthStoreSet } from './auth-store.types';
 import { clearLocalAndDeactivatePushToken } from './auth-store-push';
 import { syncAuthenticatedState } from './auth-store-sync';
 import { useCartStore } from './cart-store';
+import { clearDeviceCartForAccountTeardown } from './clear-device-cart';
 import { useComparisonStore } from './comparison-store';
 import { useQuizStore } from './quiz-store';
 import { useSavedStore } from './saved-store';
@@ -151,6 +152,10 @@ export function createInitializeAction({
           const { merchantId, user: previousUser } = get();
           deferAuthStateChange(async () => {
             if (event === 'SIGNED_IN' && session?.user) {
+              if (previousUser?.id && previousUser.id !== session.user.id)
+                await clearDeviceCartForAccountTeardown().catch(
+                  () => undefined
+                );
               // Only wipe quiz state on an actual account SWITCH. SIGNED_IN also
               // fires on same-user session re-establishment / token refresh —
               // resetting then would kick a shopper out of an in-progress quiz.
@@ -170,9 +175,10 @@ export function createInitializeAction({
                 );
               }
             } else if (event === 'SIGNED_OUT') {
+              // Teardown invalidates callbacks synchronously; offline retirement stays in secure storage.
+              await clearDeviceCartForAccountTeardown().catch(() => undefined);
               const storedToken = await getStoredPushToken();
               await clearLocalAndDeactivatePushToken(storedToken);
-              await useCartStore.getState().clearCart();
               useSavedStore.getState().clearSaved();
               useComparisonStore.getState().clearComparison();
               useQuizStore.getState().reset();

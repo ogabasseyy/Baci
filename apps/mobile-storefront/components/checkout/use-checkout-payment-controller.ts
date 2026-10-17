@@ -20,6 +20,7 @@ import {
 import { isStoreCreditCompatiblePayment } from '@/lib/store-credit-compatible-payment';
 import type { WalletSelection } from '@/lib/wallet-payment-helpers';
 import type { useCartStore } from '@/stores/cart-store';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { useRedvaultAvailability } from './use-redvault-availability';
 
 type CartItems = ReturnType<typeof useCartStore.getState>['items'];
@@ -58,7 +59,7 @@ export function useCheckoutPaymentController({
       paymentSettings.wallet_paystack_dva_enabled &&
       paymentSettings.wallet_order_auto_debit_enabled
   );
-  const redvaultAvailable = useRedvaultAvailability({
+  const redvaultAvailability = useRedvaultAvailability({
     assuranceFee,
     customerId,
     deliveryFee,
@@ -67,6 +68,10 @@ export function useCheckoutPaymentController({
     merchantId,
     userId,
   });
+  // Bound shared-cart orders have no REDVAULT path; offering it only
+  // defers a deterministic server rejection to submit time.
+  const sharedCartEnabled = useNativeSharedCartStore((state) => state.enabled);
+  const redvaultAvailable = redvaultAvailability && !sharedCartEnabled;
   const availablePaymentMethods: PaymentMethodType[] = Array.from(
     new Set<PaymentMethodType>([
       ...enabledPaymentMethods,

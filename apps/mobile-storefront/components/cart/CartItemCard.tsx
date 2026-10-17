@@ -6,6 +6,7 @@ import { DEFAULT_ASSURANCE_RATE } from '@/constants/assurance';
 import type Colors from '@/constants/Colors';
 import { BRAND } from '@/constants/Colors';
 import { PLACEHOLDER_IMAGE_URL } from '@/constants/Images';
+import { isQuizVoucherLine } from '@/lib/cart/quiz-voucher-line';
 import { resolveColorSwatchValue } from '@/lib/cart-display';
 import {
   getCartItemEffectivePrice,
@@ -14,7 +15,7 @@ import {
 import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import type { CartItem } from '@/stores/cart-store';
 import AssuranceToggle from './AssuranceToggle';
-import CartQuantityInput from './CartQuantityInput';
+import CartItemQuantityControls from './CartItemQuantityControls';
 import NegotiationButton from './NegotiationButton';
 import styles from './styles';
 
@@ -47,6 +48,9 @@ export default function CartItemCard({
   negotiateSurface,
   negotiateBorder,
 }: CartItemCardProps) {
+  // Voucher-backed lines are pinned to one by the server; their
+  // quantity controls are display-only.
+  const isVoucherLine = isQuizVoucherLine(item);
   const conditionText = item.condition ?? 'NEW';
   const isNew = conditionText.toLowerCase() === 'new';
   const priceToUse = getCartItemEffectivePrice(item);
@@ -196,46 +200,17 @@ export default function CartItemCard({
       <View style={[styles.dashedSeparator, { borderColor: colors.border }]} />
 
       <View style={styles.controlsRow}>
-        <View
-          style={[
-            styles.quantityControls,
-            {
-              backgroundColor: surfaceInset,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Pressable
-            style={styles.quantityButton}
-            onPress={() => handleQuantityChange(item, -1)}
-            disabled={item.quantity <= 1}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: item.quantity <= 1 }}
-            accessibilityLabel={`Decrease quantity for ${item.name}`}
-          >
-            <Ionicons
-              name="remove"
-              size={16}
-              color={
-                item.quantity <= 1 ? disabledIconColor : colors.textSecondary
-              }
-            />
-          </Pressable>
-          <CartQuantityInput
-            style={[styles.quantityText, { color: colors.text }]}
-            value={item.quantity}
-            onChange={(newQuantity) => updateQuantity(item.id, newQuantity)}
-          />
-          <Pressable
-            style={styles.quantityButton}
-            onPress={() => handleQuantityChange(item, 1)}
-            accessibilityRole="button"
-            accessibilityLabel={`Increase quantity for ${item.name}`}
-          >
-            <Ionicons name="add" size={16} color={colors.textSecondary} />
-          </Pressable>
-        </View>
-
+        <CartItemQuantityControls
+          item={item}
+          isVoucherLine={isVoucherLine}
+          handleQuantityChange={handleQuantityChange}
+          updateQuantity={updateQuantity}
+          textColor={colors.text}
+          textSecondaryColor={colors.textSecondary}
+          borderColor={colors.border}
+          surfaceInset={surfaceInset}
+          disabledIconColor={disabledIconColor}
+        />
         <View style={styles.priceContainer}>
           {hasActiveNegotiatedPrice(item) ? (
             <>

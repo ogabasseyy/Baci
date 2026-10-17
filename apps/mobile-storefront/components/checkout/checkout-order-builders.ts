@@ -11,6 +11,7 @@ import type {
 import { getCartItemEffectivePrice } from '@/lib/cart-pricing';
 import type { MobileCheckoutOrderItemPayload } from '@/lib/checkout-order-idempotency';
 import type { ShippingAddressInput } from '@/lib/validation';
+import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
 import type { CreateOrderRequest } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 
@@ -34,6 +35,7 @@ interface BuildOrderRequestParams {
   selectedQuote: ShippingQuote | undefined;
   shippingProvider: string | undefined;
   snapshot: CheckoutSnapshot;
+  sharedCartBinding?: CartCheckoutBinding;
 }
 
 type CheckoutOrderRequest = Omit<CreateOrderRequest, 'items'> & {
@@ -107,12 +109,15 @@ export function buildOrderShippingAddress(
 }
 
 export function mapCartItemsToOrderItems(
-  itemsSnapshot: CartItem[]
+  itemsSnapshot: CartItem[],
+  sharedCartBinding?: CartCheckoutBinding
 ): MobileCheckoutOrderItemPayload[] {
   return itemsSnapshot.map((item) => {
     const effectivePrice = getCartItemEffectivePrice(item);
     return {
       id: item.product_id,
+      // Canonical line identity: display items carry the server line id.
+      ...(sharedCartBinding ? { cart_line_id: item.id } : {}),
       product_id: item.product_id,
       name: item.name,
       quantity: item.quantity,
@@ -153,6 +158,7 @@ export function buildCheckoutOrderRequest({
   selectedQuote,
   shippingProvider,
   snapshot,
+  sharedCartBinding,
 }: BuildOrderRequestParams): CheckoutOrderRequest {
   const isMerchantRateQuote = selectedQuote?.provider === 'MERCHANT';
   const merchantRateId = getMerchantRateId(selectedQuote);
@@ -174,7 +180,8 @@ export function buildCheckoutOrderRequest({
     customer_email: customerEmail,
     customer_name: customerName,
     customer_phone: customerPhone,
-    items: mapCartItemsToOrderItems(itemsSnapshot),
+    items: mapCartItemsToOrderItems(itemsSnapshot, sharedCartBinding),
+    ...(sharedCartBinding ? { shared_cart: sharedCartBinding } : {}),
     subtotal: snapshot.subtotal,
     shipping_fee: snapshot.deliveryFee,
     tax_amount: snapshot.taxAmount,

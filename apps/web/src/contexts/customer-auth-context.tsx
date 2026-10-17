@@ -220,7 +220,13 @@ export function CustomerAuthProvider({
 
   // Logout
   const logout = () =>
-    performCustomerLogout(merchantSlug, setUser, setCustomer, setOtpState);
+    performCustomerLogout(
+      merchantSlug,
+      setUser,
+      setCustomer,
+      setOtpState,
+      user?.id
+    );
 
   // Shared OAuth sign-in helper
   const signInWithOAuth = async (

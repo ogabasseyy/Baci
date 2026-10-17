@@ -7,6 +7,7 @@
 //
 // The type imports below are type-only (erased at compile time); there is no
 // runtime cycle back into the context module.
+import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
 import { clearCartStorage } from '@/hooks/use-cart';
 import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
 import { publishCustomerIdentity } from './customer-live-identity';
@@ -80,8 +81,14 @@ export async function performCustomerLogout(
   merchantSlug: string,
   setUser: (user: CustomerUser | null) => void,
   setCustomer: (customer: Customer | null) => void,
-  setOtpState: (otp: OtpState | null) => void
+  setOtpState: (otp: OtpState | null) => void,
+  userId?: string | null
 ): Promise<void> {
+  // Do not clear Auth or report success until this device's cart
+  // authority is retired.
+  const revoked = await revokeCartDeviceSession(merchantSlug);
+  if (!revoked.ok)
+    throw new Error('Could not safely sign out. Please retry when connected.');
   try {
     await fetch('/api/storefront/auth/logout', { method: 'POST' });
   } catch (error) {
@@ -92,6 +99,6 @@ export async function performCustomerLogout(
     publishCustomerIdentity(null, null, merchantSlug);
     setOtpState(null);
     // Clear cart on logout to prevent cart data leakage between users
-    clearCartStorage(merchantSlug);
+    clearCartStorage(merchantSlug, userId);
   }
 }

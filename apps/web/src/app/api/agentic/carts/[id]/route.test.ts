@@ -11,6 +11,7 @@ import {
 } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
+import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
 
 const mockVerifyAgenticApiKey = vi.hoisted(() => vi.fn(() => true));
 const mockResolveAgenticMerchantContext = vi.hoisted(() =>
@@ -26,6 +27,10 @@ const mockResolveAgenticMerchantContext = vi.hoisted(() =>
     slug: 'ogabassey',
   }))
 );
+
+vi.mock('@/lib/agentic/ucp-canonical-cart', () => ({
+  handleCanonicalUcpCart: vi.fn().mockResolvedValue(null),
+}));
 
 vi.mock('@/lib/agentic/auth', () => ({
   verifyAgenticApiKey: mockVerifyAgenticApiKey,
@@ -45,7 +50,7 @@ vi.mock('@/lib/agentic/idempotency', () => ({
 }));
 
 vi.mock('@/lib/agentic/merchant-context', () => ({
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 
 vi.mock('@/lib/agentic/mutation-request', () => ({
@@ -61,8 +66,8 @@ vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: vi.fn(() => ({})),
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(() => ({})),
 }));
 
 function createChain(result: { data: unknown; error: unknown }) {
@@ -85,6 +90,15 @@ function createSupabaseMock({
   const selectChain = createChain(cartResult);
   const updateChain = createChain(updateResult);
   const from = vi.fn((table: string) => {
+    if (table === 'product_variants') {
+      return {
+        select: vi.fn(() => ({
+          in: vi.fn(() => ({
+            eq: vi.fn(async () => ({ data: [], error: null })),
+          })),
+        })),
+      };
+    }
     if (table !== 'agentic_cart_sessions') {
       throw new Error(`Unexpected table ${table}`);
     }
@@ -157,6 +171,7 @@ function mockCalculation(quantity = 1, productId = 'product-1') {
 describe('/api/agentic/carts/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue(null);
     mockVerifyAgenticApiKey.mockReturnValue(true);
     vi.mocked(reserveAgenticIdempotencyKey).mockResolvedValue({
       ok: true,
@@ -201,6 +216,7 @@ describe('/api/agentic/carts/[id]', () => {
     createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           buyer: {},
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
@@ -231,15 +247,103 @@ describe('/api/agentic/carts/[id]', () => {
     });
   });
 
-  it('updates line items and preserves buyer context', async () => {
+  it('forwards variant identity to the canonical cart on update', async () => {
+    mockMutation({
+      line_items: [
+        {
+          item: {
+            id: 'product-1',
+            variant_id: 'variant-9',
+            variant_attributes: { Color: 'Black' },
+            condition: 'used',
+          },
+          quantity: 2,
+        },
+      ],
+    });
+    createSupabaseMock({ cartResult: { data: null, error: null } });
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue({
+      body: { id: 'cart_123', status: 'active' },
+      status: 200,
+    });
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts/cart_123', {
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ id: 'cart_123' }) }
+    );
+    expect(response.status).toBe(200);
+    expect(handleCanonicalUcpCart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lines: [
+          {
+            item: {
+              productId: 'product-1',
+              variantId: 'variant-9',
+              condition: 'used',
+              options: { Color: 'Black' },
+            },
+            quantity: 2,
+          },
+        ],
+      })
+    );
+  });
+
+  it('rejects updates to a migrated cart with a canonical refresh outcome', async () => {
     mockMutation({
       line_items: [{ item: { id: 'product-2' }, quantity: 2 }],
     });
-    mockCalculation(2, 'product-2');
+    const { updateChain } = createSupabaseMock({
+      cartResult: {
+        data: {
+          agent_id: 'openai-agent',
+          buyer: {},
+          cart_id: 'cart_123',
+          cart_items: [{ id: 'product-1', quantity: 1 }],
+          checkout_session_id: null,
+          currency: 'NGN',
+          id: 'row-1',
+          merchant_id: 'merchant-1',
+          metadata: {},
+          migrated_to_cart_id: 'canonical-1',
+          shipping_address: null,
+          status: 'active',
+        },
+        error: null,
+      },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts/cart_123', {
+        body: JSON.stringify({
+          line_items: [{ item: { id: 'product-2' }, quantity: 2 }],
+        }),
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ id: 'cart_123' }) }
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({
+      cart_id: 'canonical-1',
+      code: 'refresh_required',
+    });
+    expect(updateChain.update).not.toHaveBeenCalled();
+  });
+
+  it('hides carts owned by a different platform caller', async () => {
+    mockMutation({
+      line_items: [{ item: { id: 'product-2' }, quantity: 2 }],
+    });
     createSupabaseMock({
       cartResult: {
         data: {
-          buyer: { email: 'buyer@example.com' },
+          agent_id: 'other-agent',
+          buyer: {},
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
           checkout_session_id: null,
@@ -264,11 +368,50 @@ describe('/api/agentic/carts/[id]', () => {
       }),
       { params: Promise.resolve({ id: 'cart_123' }) }
     );
+
+    expect(response.status).toBe(404);
+  });
+
+  it('answers a version conflict when a concurrent replacement wins', async () => {
+    mockMutation({
+      line_items: [{ item: { id: 'product-2' }, quantity: 2 }],
+    });
+    mockCalculation(2, 'product-2');
+    createSupabaseMock({
+      cartResult: {
+        data: {
+          agent_id: 'openai-agent',
+          buyer: {},
+          cart_id: 'cart_123',
+          cart_items: [{ id: 'product-1', quantity: 1 }],
+          checkout_session_id: null,
+          currency: 'NGN',
+          id: 'row-1',
+          merchant_id: 'merchant-1',
+          metadata: {},
+          shipping_address: null,
+          status: 'active',
+          updated_at: '2026-10-14T00:00:00.000Z',
+        },
+        error: null,
+      },
+      updateResult: { data: null, error: null },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts/cart_123', {
+        body: JSON.stringify({
+          line_items: [{ item: { id: 'product-2' }, quantity: 2 }],
+        }),
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ id: 'cart_123' }) }
+    );
     const body = await response.json();
 
-    expect(response.status).toBe(200);
-    expect(body.line_items[0].item.id).toBe('product-2');
-    expect(body.line_items[0].quantity).toBe(2);
+    expect(response.status).toBe(409);
+    expect(body).toMatchObject({ code: 'version_conflict' });
   });
 
   it('rejects updates after a cart is converted', async () => {
@@ -278,6 +421,7 @@ describe('/api/agentic/carts/[id]', () => {
     createSupabaseMock({
       cartResult: {
         data: {
+          agent_id: 'openai-agent',
           cart_id: 'cart_123',
           cart_items: [{ id: 'product-1', quantity: 1 }],
           currency: 'NGN',
@@ -299,5 +443,108 @@ describe('/api/agentic/carts/[id]', () => {
     );
 
     expect(response.status).toBe(409);
+  });
+  it('reloads canonical identity after migration fences a racing update', async () => {
+    mockMutation({ line_items: [{ item: { id: 'product-1' }, quantity: 1 }] });
+    mockCalculation();
+    const row = {
+      agent_id: 'openai-agent',
+      cart_id: 'cart_123',
+      cart_items: [{ id: 'product-1', quantity: 1 }],
+      currency: 'NGN',
+      status: 'active',
+      buyer: {},
+    };
+    const { selectChain } = createSupabaseMock({
+      cartResult: { data: row, error: null },
+      updateResult: {
+        data: null,
+        error: { code: 'P0001', message: 'migrated cart is read-only' },
+      },
+    });
+    selectChain.maybeSingle
+      .mockResolvedValueOnce({ data: row, error: null })
+      .mockResolvedValueOnce({
+        data: { ...row, migrated_to_cart_id: 'canonical-race' },
+        error: null,
+      });
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts/cart_123', {
+        method: 'POST',
+        body: '{}',
+      }),
+      { params: Promise.resolve({ id: 'cart_123' }) }
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      code: 'refresh_required',
+      cart_id: 'canonical-race',
+    });
+    expect(storeAgenticIdempotencyResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 409 })
+    );
+  });
+  it.each([
+    'read',
+    'update',
+  ] as const)('delegates canonical %s before touching a retired or deleted legacy row', async (action) => {
+    mockQuery();
+    mockMutation({
+      line_items: [{ item: { id: 'product-1' }, quantity: 2 }],
+      expectedVersion: 4,
+    });
+    // Canonical state stays authoritative: the legacy row is never
+    // used as a fallback. A read may still load the session row for
+    // the one-shot create-recovery check, which finds no pending
+    // marker here and leaves the canonical response untouched.
+    const from = vi.fn((table: string) => {
+      // Catalog lane normalization may read product_variants; the
+      // legacy session row itself must stay untouched.
+      if (table === 'product_variants') {
+        const query = {
+          select: vi.fn(() => query),
+          in: vi.fn(() => query),
+          eq: vi.fn(async () => ({ data: [], error: null })),
+        };
+        return query;
+      }
+      if (action === 'read') {
+        const query = {
+          select: vi.fn(() => query),
+          eq: vi.fn(() => query),
+          maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+        };
+        return query;
+      }
+      throw new Error('legacy must not be read');
+    });
+    vi.mocked(createAgenticScopedSupabaseClient).mockReturnValue({
+      from,
+    } as never);
+    vi.mocked(handleCanonicalUcpCart).mockResolvedValue({
+      status: 200,
+      body: {
+        cart_id: 'canonical',
+        continue_url: 'https://shop/cart#handoff=valid',
+      },
+    });
+    const route = await import('./route');
+    const response = await route[action === 'read' ? 'GET' : 'POST'](
+      new NextRequest('http://localhost/api/agentic/carts/cart_123', {
+        method: action === 'read' ? 'GET' : 'POST',
+      }),
+      { params: Promise.resolve({ id: 'cart_123' }) }
+    );
+    expect(response.status).toBe(200);
+    expect(handleCanonicalUcpCart).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: 'openai-agent',
+        action,
+        cartId: 'cart_123',
+      })
+    );
+    if (action === 'update')
+      expect(from).not.toHaveBeenCalledWith('agentic_cart_sessions');
   });
 });

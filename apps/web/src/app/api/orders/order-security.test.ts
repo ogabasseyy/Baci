@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeAgenticOrderTax } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
 import { createQuizVoucherToken } from '@/lib/quiz-voucher-token';
 import { POST } from './route';
@@ -460,6 +461,40 @@ describe('Order API Security', () => {
 
     expect(response.status).toBe(400);
     expect(data.details).toBe('invalid_payment_status');
+  });
+
+  it('maps an inactive condition lookup to 400 before order creation', async () => {
+    vi.mocked(computeAgenticOrderTax).mockRejectedValueOnce(
+      new OrderConditionUnavailableError()
+    );
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(validOrderPayload),
+      })
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).details).toBe('invalid_condition_offer');
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'invalid_condition_offer',
+    'condition_offer_price_changed',
+    'insufficient_condition_offer_stock',
+  ])('returns 400 for condition validation failure %s', async (code) => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'P0001', message: code },
+    });
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(validOrderPayload),
+      })
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).details).toBe(code);
   });
 
   it('returns 400 when create_storefront_order rejects an unsupported payment_status via error code', async () => {

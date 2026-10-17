@@ -4,7 +4,7 @@ import { verifyAgenticRequestAccess } from '@/lib/agentic/agent-request-controls
 import { calculateCheckoutSession } from '@/lib/agentic/checkout';
 import {
   type AgenticMerchantContext,
-  resolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc,
 } from '@/lib/agentic/merchant-context';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { buildUcpCartResponse } from '@/lib/agentic/ucp-cart-response';
@@ -13,7 +13,7 @@ import {
   type UcpCartSessionRecord,
 } from '@/lib/agentic/ucp-cart-storage';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAnonClient } from '@/lib/supabase/anon';
 
 export async function resolveUcpCartContext(request: NextRequest): Promise<
   | {
@@ -23,7 +23,9 @@ export async function resolveUcpCartContext(request: NextRequest): Promise<
     }
   | { ok: false; response: NextResponse }
 > {
-  const merchant = await resolveAgenticMerchantContext(createAdminClient());
+  const merchant = await resolveAgenticMerchantContextFromRpc(
+    createAnonClient()
+  );
   if (!merchant) {
     return {
       ok: false,
@@ -60,26 +62,7 @@ export async function resolveUcpCartContext(request: NextRequest): Promise<
   };
 }
 
-export async function loadUcpCartSession({
-  cartId,
-  merchantId,
-  supabase,
-}: {
-  cartId: string;
-  merchantId: string;
-  supabase: SupabaseClient;
-}): Promise<{ cart: UcpCartSessionRecord | null; error: unknown }> {
-  const { data, error } = await supabase
-    .from('agentic_cart_sessions')
-    .select(
-      'id, agent_id, buyer, cart_id, cart_items, checkout_session_id, created_at, currency, expires_at, merchant_id, metadata, shipping_address, status, updated_at'
-    )
-    .eq('cart_id', cartId)
-    .eq('merchant_id', merchantId)
-    .maybeSingle();
-
-  return { cart: data as UcpCartSessionRecord | null, error };
-}
+export { loadUcpCartSession } from './ucp-cart-session-read';
 
 export async function buildUcpCartStateResponse({
   cart,

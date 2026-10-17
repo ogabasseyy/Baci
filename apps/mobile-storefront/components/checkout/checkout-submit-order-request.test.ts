@@ -42,6 +42,35 @@ function baseInput() {
 }
 
 describe('buildCheckoutSubmitOrderRequest', () => {
+  it('binds a canonical cart review into the order request with stable line ids', () => {
+    const binding = {
+      cart_id: '22222222-2222-4222-8222-222222222222',
+      checkout_session_id: '66666666-6666-4666-8666-666666666666',
+      checkout_generation: 1,
+      cart_version: 3,
+    };
+    const { orderRequest } = buildCheckoutSubmitOrderRequest({
+      ...baseInput(),
+      itemsSnapshot: [
+        { ...itemsSnapshot[0], id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001' },
+      ],
+      sharedCartBinding: binding,
+    });
+    expect(orderRequest).toEqual(
+      expect.objectContaining({ shared_cart: binding })
+    );
+    expect(orderRequest.items[0]).toEqual(
+      expect.objectContaining({
+        cart_line_id: 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001',
+      })
+    );
+  });
+
+  it('leaves legacy requests unbound', () => {
+    const { orderRequest } = buildCheckoutSubmitOrderRequest(baseInput());
+    expect(orderRequest).not.toHaveProperty('shared_cart');
+    expect(orderRequest.items[0]).not.toHaveProperty('cart_line_id');
+  });
   it('merges store-credit fields into the order request', () => {
     const { creditFields, orderRequest } = buildCheckoutSubmitOrderRequest({
       ...baseInput(),

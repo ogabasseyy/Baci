@@ -2,6 +2,7 @@
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
 import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
+import { CART_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-cart-pending-sources';
 import { CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-checkout-recovery-pending-sources';
 import { CONNECTOR_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-connector-pending-sources';
 import { DISCOVERY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-discovery-pending-sources';
@@ -208,6 +209,7 @@ f2b640bac8c3f3d41158313bc910aec6de0058cf652c47f0595c635bd98ecee1 20260803120000_
 54feed9b89d28855d7d6f4bb83ea04d708f2d1e75c9cff814d6f49845d26e5bc 20260804120000_restore_storefront_order_private_schema_usage.sql
 ${PENDING_SOURCES_HEAD_TAIL}`; // biome-ignore format: keep the manifest at the 300-line modularity limit
 const PENDING_SOURCES = [
+  CART_PENDING_REPLAY_SOURCE_ROWS,
   CONNECTOR_PENDING_REPLAY_SOURCE_ROWS,
   '2676132ef759384de03f6ad7eeed2f7e1e38abac02013aaca634bfb957106482 20260907111036_repair_sales_exclusion_wallet_version_collision.sql',
   '27140ce538838e4a31f6fbc2f9871eaa3697d02888aed5d3b360c5f68ccd2245 20260922120000_normalize_product_key_specs_gpu.sql',

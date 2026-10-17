@@ -1,5 +1,7 @@
 import { render, screen } from '@testing-library/react';
+import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
@@ -42,8 +44,8 @@ vi.mock('./ogabassey-home-launch-products', () => ({
 vi.mock('@/lib/cached-data', () => ({
   getRequestScopedMerchant: vi.fn(async () => merchant),
 }));
-vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
-vi.mock('next/server', () => ({ connection: async () => undefined }));
+vi.mock('next/headers', () => ({ headers: vi.fn(async () => new Headers()) }));
+vi.mock('next/server', () => ({ connection: vi.fn(async () => undefined) }));
 vi.mock('next/navigation', () => ({
   notFound: vi.fn(() => {
     throw new Error('not-found');
@@ -104,4 +106,19 @@ it('forwards omitMobileCarousel to recovery when shell slides are unavailable', 
   expect(
     screen.getByRole('region', { name: 'Recovered hero' })
   ).toHaveAttribute('data-omit-mobile-carousel', 'true');
+});
+
+it('resolves the canonical custom-domain shell without awaiting connection() or headers()', async () => {
+  render(
+    await OgabasseyHomePageContent({
+      omitDocumentHeading: true,
+      pathPrefix: '',
+      shellMerchantId: null,
+      shellSlides: null,
+    })
+  );
+
+  expect(getRequestScopedMerchant).toHaveBeenCalledWith('ogabassey.com');
+  expect(connection).not.toHaveBeenCalled();
+  expect(headers).not.toHaveBeenCalled();
 });

@@ -163,19 +163,31 @@ describe('storefront homepage metadata', () => {
     expect(mockResolveOgabasseyHomeHeroShell).not.toHaveBeenCalled();
   });
 
-  it('warms the OgaBassey home hero shell before merchant resolution completes', async () => {
+  it('warms and awaits the OgaBassey home hero shell alongside merchant resolution', async () => {
     let resolveMerchant!: (
       value: Awaited<ReturnType<typeof getRequestScopedMerchant>>
     ) => void;
+    let resolveHeroShell!: (value: null) => void;
+    let settled = false;
+
     vi.mocked(getRequestScopedMerchant).mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           resolveMerchant = resolve;
         })
     );
+    mockResolveOgabasseyHomeHeroShell.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveHeroShell = resolve;
+        })
+    );
 
     const metadataPromise = generateMetadata({
       params: Promise.resolve({ slug: 'ogabassey.com' }),
+    }).then((result) => {
+      settled = true;
+      return result;
     });
 
     await Promise.resolve();
@@ -183,6 +195,23 @@ describe('storefront homepage metadata', () => {
     expect(mockResolveOgabasseyHomeHeroShell).toHaveBeenCalledOnce();
 
     resolveMerchant(null);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    resolveHeroShell(null);
     await metadataPromise;
+    expect(settled).toBe(true);
+  });
+
+  it('still resolves OgaBassey metadata when the hero shell warm promise rejects', async () => {
+    mockResolveOgabasseyHomeHeroShell.mockRejectedValueOnce(
+      new Error('shell failed')
+    );
+
+    const metadata = await generateMetadata({
+      params: Promise.resolve({ slug: 'ogabassey.com' }),
+    });
+
+    expect(metadata.title).toEqual({ absolute: OGABASSEY_TITLE });
   });
 });

@@ -5,7 +5,7 @@ import { Suspense } from 'react';
 import { Hero } from '@/components/storefront/ogabassey/components/Hero';
 import type { LaunchProductSlide } from '@/components/storefront/ogabassey/components/LaunchCarousel';
 import { loadUnpublishedStorefront } from '@/components/storefront/unpublished-storefront';
-import { OGABASSEY_TITLE } from '@/config/ogabassey';
+import { OGABASSEY_TITLE, OGABASSEY_URL } from '@/config/ogabassey';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { getRequestScopedMerchant } from '@/lib/cached-data';
 import { resolveMerchantCurrencyConfig } from '@/lib/resolve-merchant-currency';
@@ -14,6 +14,8 @@ import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
+
+const OGABASSEY_DOMAIN_IDENTIFIER = new URL(OGABASSEY_URL).hostname;
 
 interface OgabasseyHomePageContentProps {
   /** Skip Hero's H1 when a parent already committed the document title. */
@@ -52,16 +54,32 @@ export async function OgabasseyHomePageContent({
   shellMerchantId,
   shellSlides,
 }: OgabasseyHomePageContentProps) {
-  await connection();
+  let merchant: Awaited<ReturnType<typeof getRequestScopedMerchant>>;
+  let resolvedPathPrefix: string;
 
-  const headersList = await headers();
-  const merchant = await getRequestScopedMerchant(
-    resolveOgabasseyHomeMerchantIdentifier(headersList)
-  );
-  const resolvedPathPrefix = resolveOgabasseyHomePathPrefix(
-    headersList,
-    pathPrefix
-  );
+  // On the canonical custom-domain route (`pathPrefix === ''` beneath
+  // `OgabasseyStaticHomePage`, which sets `omitDocumentHeading`), the merchant
+  // identifier is unambiguously `ogabassey.com` and the link prefix is always
+  // root-relative (`''`). Resolving the cached merchant record directly here
+  // avoids `connection()` and `headers()`, which Next.js 16 delays until
+  // `RenderStage.Dynamic` (after ~146 KB of `<script>self.__next_f.push(...)`
+  // chunks). That allows `<Hero>` to flush in `RenderStage.Static` in the
+  // initial HTML chunk while preserving the publication and tenant-id guards.
+  if (omitDocumentHeading && pathPrefix === '') {
+    merchant = await getRequestScopedMerchant(OGABASSEY_DOMAIN_IDENTIFIER);
+    resolvedPathPrefix = '';
+  } else {
+    await connection();
+
+    const headersList = await headers();
+    merchant = await getRequestScopedMerchant(
+      resolveOgabasseyHomeMerchantIdentifier(headersList)
+    );
+    resolvedPathPrefix = resolveOgabasseyHomePathPrefix(
+      headersList,
+      pathPrefix
+    );
+  }
 
   if (!merchant) {
     notFound();

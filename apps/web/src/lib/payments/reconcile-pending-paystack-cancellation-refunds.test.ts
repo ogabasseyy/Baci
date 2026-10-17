@@ -19,7 +19,7 @@ describe('pending Paystack cancellation refund reconciliation', () => {
     provider.fetchRefund.mockResolvedValue({
       success: true,
       data: {
-        id: 42,
+        id: '42',
         transaction: 123,
         amount: 10000,
         currency: 'NGN',

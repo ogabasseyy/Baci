@@ -380,7 +380,7 @@ describe('Paystack reference-only refund events', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 42,
+        id: '42',
         status: 'processed',
         transaction: 123,
       },
@@ -430,7 +430,7 @@ describe('Paystack reference-only refund events', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 42,
+        id: '42',
         status: 'processed',
         transaction: 123,
       },

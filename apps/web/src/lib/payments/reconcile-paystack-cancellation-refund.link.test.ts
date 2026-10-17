@@ -87,7 +87,7 @@ describe('Paystack cancellation refund link validation', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 42,
+        id: '42',
         status: 'processed',
         transaction: 123,
       },
@@ -124,7 +124,7 @@ describe('Paystack cancellation refund link validation', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 7,
+        id: '7',
         status: 'processed',
         transaction: 123,
       },
@@ -144,7 +144,7 @@ describe('Paystack cancellation refund link validation', () => {
         gateway_reference: 'merchant-ref-1',
         metadata: {
           ...refund.metadata,
-          provider_refund_id: 7,
+          provider_refund_id: '7',
           provider_refund_status: 'processed',
         },
       })
@@ -153,8 +153,9 @@ describe('Paystack cancellation refund link validation', () => {
   });
 
   it('rechecks a decimal-text stamp without numeric rounding', async () => {
-    // A >2^53 provider id persists as exact decimal text; the recheck
-    // must fetch it verbatim, not round it and reject the link.
+    // A >2^53 provider id persists as exact decimal text and the
+    // fetch quotes response ids off the wire text, so the recheck
+    // compares exact text end to end instead of rounding.
     const big = '9007199254740993';
     const db = database();
     db.query.maybeSingle.mockResolvedValue({
@@ -174,10 +175,7 @@ describe('Paystack cancellation refund link validation', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        // The shared reader rounds; the text comparison still sees
-        // the fetched row only when the id survives, so this pins
-        // the request path, not the rounded comparison.
-        id: 9007199254740992,
+        id: big,
         status: 'processed',
         transaction: 123,
       },
@@ -199,9 +197,8 @@ describe('Paystack cancellation refund link validation', () => {
           provider_refund_status: 'processed',
         },
       })
-    ).rejects.toThrow('paystack_refund_evidence_mismatch');
-    // The link guard passed (no invalid_local_refund_link) and the
-    // provider was asked for the exact decimal id.
+    ).resolves.toBe('updated');
+    // The provider was asked for the exact decimal id.
     expect(provider.fetchRefund).toHaveBeenCalledWith(big, expect.anything());
   });
 });

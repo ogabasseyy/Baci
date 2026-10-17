@@ -41,7 +41,7 @@ const payment = {
 const current = {
   amount: 10000,
   currency: 'NGN',
-  id: 202,
+  id: '202',
   status: 'processed',
   transaction: 555,
 };

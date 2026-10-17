@@ -9,7 +9,7 @@ export interface VerifiedUnknownRefundProvider {
   current: {
     amount: number;
     currency: string;
-    id: number;
+    id: string;
     status: string;
     transaction: number;
   };

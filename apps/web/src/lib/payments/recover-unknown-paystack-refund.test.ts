@@ -41,7 +41,7 @@ describe('recoverUnknownPaystackRefund', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'processed',
         transaction: 555,
       },
@@ -94,7 +94,7 @@ describe('recoverUnknownPaystackRefund', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'failed',
         transaction: 555,
       },
@@ -270,7 +270,7 @@ describe('recoverUnknownPaystackRefund', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'processed',
         transaction: 999,
       },
@@ -308,7 +308,7 @@ describe('recoverUnknownPaystackRefund', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'processed',
         transaction,
       },
@@ -372,7 +372,7 @@ describe('recoverUnknownPaystackRefund', () => {
       data: {
         amount: 10000,
         currency: 'NGN',
-        id: 202,
+        id: '202',
         status: 'processed',
         transaction: undefined,
       },

@@ -32,9 +32,13 @@ describe('fetchRefund', () => {
 
     await fetchRefund(42, signal);
 
-    expect(mocks.paystackRequest).toHaveBeenCalledWith('/refund/42', {
-      signal,
-    });
+    expect(mocks.paystackRequest).toHaveBeenCalledWith(
+      '/refund/42',
+      expect.objectContaining({
+        signal,
+        preprocessResponseText: expect.any(Function),
+      })
+    );
   });
 
   it('passes decimal-text ids through without numeric rounding', async () => {
@@ -43,9 +47,12 @@ describe('fetchRefund', () => {
 
     await fetchRefund(big);
 
-    expect(mocks.paystackRequest).toHaveBeenCalledWith(`/refund/${big}`, {
-      signal: undefined,
-    });
+    expect(mocks.paystackRequest).toHaveBeenCalledWith(
+      `/refund/${big}`,
+      expect.objectContaining({
+        preprocessResponseText: expect.any(Function),
+      })
+    );
     await expect(fetchRefund('not-an-id')).resolves.toMatchObject({
       success: false,
       code: 'VALIDATION_ERROR',

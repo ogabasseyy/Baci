@@ -69,7 +69,7 @@ export async function recoverUnknownPaystackRefund(
     provider_refund_status: current.status,
   };
   if (
-    current.id !== refundId ||
+    current.id !== String(refundId) ||
     !Number.isSafeInteger(current.amount) ||
     current.amount <= 0 ||
     typeof current.currency !== 'string' ||

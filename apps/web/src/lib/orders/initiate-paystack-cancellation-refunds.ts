@@ -118,9 +118,29 @@ export async function initiatePaystackCancellationRefunds({
       throw new Error('cancellation_refund_deadline_exceeded');
     }
     const transactionAmount = Number(transaction.amount);
+    // A positive leg below half a kobo rounds to 0, and the provider
+    // call treats a non-positive amount as "refund the whole
+    // transaction": quarantine the leg for operations instead of
+    // over-refunding a multi-leg order.
+    const koboAmount = Math.round(transactionAmount * 100);
+    if (transactionAmount > 0 && koboAmount <= 0) {
+      await quarantineRefund({
+        metadata: {
+          failed_payment_transaction_id: transaction.id,
+          ambiguous_initiation: false,
+          leg_amount: transaction.amount,
+        },
+        order,
+        reason:
+          'Payment leg amount rounds to zero kobo and needs review before refund',
+        supabase,
+        transactions: [transaction],
+      });
+      continue;
+    }
     const paystackRefund = await initiatePaystackRefund(
       transaction.gateway_reference as string,
-      Math.round(transactionAmount * 100),
+      koboAmount,
       reason || 'Order cancelled',
       providerTimeoutMs
     );

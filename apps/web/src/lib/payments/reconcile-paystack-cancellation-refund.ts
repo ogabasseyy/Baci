@@ -147,10 +147,10 @@ export async function reconcilePaystackCancellationRefund(
   }
   const current = providerRefund.data;
   const original = providerPayment.data;
-  // Text comparison: the local id is exact decimal text while the
-  // response id parses through the shared JSON reader.
+  // The refund id compares as exact decimal text; the payment id
+  // keeps the shared reader like the verify path.
   if (
-    String(current.id) !== refundId ||
+    current.id !== refundId ||
     current.transaction !== original.id ||
     original.reference !== payment.gateway_reference ||
     original.amount !== Math.round(Number(payment.amount) * 100) ||

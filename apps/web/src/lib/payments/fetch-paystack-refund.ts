@@ -3,17 +3,18 @@ import { paystackRequest } from '@/lib/paystack-request';
 
 /**
  * Read back the current provider state before changing a local refund.
- * The id travels as validated decimal text: stamps persist text (a
- * >2^53 id would not survive a number round-trip), while older
- * callers pass safe numbers. The response itself still parses
- * through the shared JSON reader, so callers compare ids as text.
+ * The refund id travels as validated decimal text both ways: stamps
+ * persist text (a >2^53 id would not survive a number round-trip),
+ * while older callers pass safe numbers, and the response id quotes
+ * off the wire text before parsing like the list path. The payment
+ * transaction id keeps the shared reader like the verify path.
  */
 export function fetchRefund(
   id: number | string,
   signal?: AbortSignal
 ): Promise<
   PaystackResult<{
-    id: number;
+    id: string;
     transaction: number;
     amount: number;
     currency: string;
@@ -33,5 +34,10 @@ export function fetchRefund(
       code: 'VALIDATION_ERROR',
     });
   }
-  return paystackRequest(`/refund/${idText}`, { signal });
+  const quoteWireRefundIds = (raw: string): string =>
+    raw.replace(/"id"\s*:\s*(\d+)/g, '"id":"$1"');
+  return paystackRequest(`/refund/${idText}`, {
+    signal,
+    preprocessResponseText: quoteWireRefundIds,
+  });
 }

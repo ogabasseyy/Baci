@@ -3,7 +3,7 @@
 import { CheckCircle, Star } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -11,6 +11,7 @@ import { MerchantProvider, useMerchant } from '@/hooks/use-merchant-client';
 import { getCountryByCode } from '@/lib/countries';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
+import { retireLegacyCheckoutRedirectForOrder } from '../legacy-checkout-redirect-retirement';
 import {
   getLastOrderSnapshot,
   getServerLastOrderSnapshot,
@@ -32,6 +33,16 @@ export function SuccessPageContent() {
     getServerLastOrderSnapshot
   );
   const order = parseOrderSnapshot(orderSnapshot);
+  const confirmedOrderId = order?.order_id;
+
+  // Reaching this page means the redirect gateway confirmed payment:
+  // retire the loyalty checkout key retained for this order so a
+  // repeated identical purchase creates a fresh order.
+  useEffect(() => {
+    if (confirmedOrderId) {
+      void retireLegacyCheckoutRedirectForOrder(confirmedOrderId);
+    }
+  }, [confirmedOrderId]);
   const { merchant } = useMerchant();
 
   const formatCurrency = (amount: number) => {

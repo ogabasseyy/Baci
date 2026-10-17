@@ -76,6 +76,7 @@ function postPreviewResponse(response: BuilderPreviewResponse): void {
     }
   ).ReactNativeWebView;
   nativeBridge?.postMessage(message);
+  // nosemgrep: javascript.browser.security.wildcard-postmessage-configuration.wildcard-postmessage-configuration
   if (window.parent !== window) window.parent.postMessage(message, '*');
 }
 

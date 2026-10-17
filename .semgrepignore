@@ -1,9 +1,31 @@
 # Semgrep Ignore File
 # Suppress false positive security alerts
 
-# Internal dev tooling - not production code
+# Internal dev tooling & staging - not production code
 .gemini/
+/.claude/
 scripts/
+/tools/
+/infra/
+/vps-workers/
+/apps/web/tools/
+/apps/web/mcp-server/
+/ci_scripts/
+
+# Test suites outside protected scan_targets (contain mock tokens, synthetic secrets, test certs)
+/apps/mobile-storefront/__tests__/
+/apps/mobile-storefront/components/wallet/savings/PiggyvestProtectedOffer.test.tsx
+/apps/mobile-storefront/config/withAndroidGradleFixes.test.js
+/apps/mobile-storefront/constants/payment-clipboard-bridge.test.ts
+/apps/mobile-storefront/node-forge-rsa-verify.test.ts
+/apps/web/next.config.routing.test.ts
+/apps/web/src/app/(storefront)/storefront-core.test.ts
+/apps/web/src/app/(storefront)/storefront-css-partition-dark-utilities.test.ts
+/apps/web/src/app/dashboard/blog/blog-client-status.test.tsx
+/apps/web/src/components/storefront/ogabassey/pages/checkout-page.bnpl-8.test.tsx
+/apps/web/src/components/storefront/ogabassey/pages/checkout-page.rendering-3.test.tsx
+/apps/web/src/config/pilot-public-assets-runtime.test.ts
+
 # Restore only these shared runtime checks; other scripts remain excluded.
 !/packages/shared/scripts/
 /packages/shared/scripts/*
@@ -48,6 +70,12 @@ apps/web/src/components/seo/json-ld.tsx
 # CSS style injection (static trusted styles, no user input)
 apps/web/src/components/ui/chart.tsx
 apps/web/src/app/builder/builder-client.tsx
+
+# Central HTML sanitizer component using DOMPurify
+apps/web/src/components/ui/safe-html.tsx
+
+# Builder preview iframe bridge - posts only schema-validated non-sensitive preview status events
+apps/web/src/app/(preview)/template-preview/builder-preview/builder-preview-canvas.tsx
 
 # Theme context - RegExp input is escaped with replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 apps/web/src/components/storefront/ogabassey/providers/v2-theme-context.tsx

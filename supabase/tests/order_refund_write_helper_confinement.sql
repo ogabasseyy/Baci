@@ -1,13 +1,15 @@
--- REGRESSION TEST: refund record/response helper confinement.
+-- REGRESSION TEST: refund record/response/replay helper confinement.
 --
--- private.record_manual_order_refund and private.refund_status_response
--- keep EXECUTE granted to authenticated so denial lands on the clean
--- schema-USAGE check (revoking segfaults, see the migration note).
+-- private.record_manual_order_refund, private.refund_status_response,
+-- and private.apply_manual_refund_replay_v1 keep EXECUTE granted to
+-- authenticated so denial lands on the clean schema-USAGE check
+-- (revoking segfaults, see the migration note).
 -- This suite proves their in-function gates confine them anyway: with
 -- private-schema USAGE granted (rolled back), the owner's calls
 -- succeed, a foreign merchant's calls fail closed with 42501, a
--- view-only staffer reads status but never records, an actor-spoofing
--- member is rejected, and uid-less service_role contexts bypass.
+-- view-only staffer reads status but never records or replays, an
+-- actor-spoofing member is rejected, and uid-less service_role
+-- contexts bypass.
 -- Without the gates a direct call would bypass every manager check
 -- (cancelled/paid, permission, pending-evidence, processing) and
 -- insert ledger rows, or read another tenant's refund history.
@@ -147,6 +149,16 @@ BEGIN
     GET STACKED DIAGNOSTICS v_message = MESSAGE_TEXT;
     IF v_message <> 'refund_forbidden' THEN RAISE; END IF;
   END;
+  -- The owner's replay check succeeds: no rows match, so the
+  -- transfer is new (gate passed, no 42501).
+  SELECT private.apply_manual_refund_replay_v1(
+    '9ef51000-0000-4000-8000-000000000050', 10, pg_catalog.now(),
+    'bank_transfer', 'replay-probe-1', NULL,
+    '9ef50100-0000-4000-8000-000000000001', false
+  ) INTO v_message;
+  IF v_message <> 'manual' THEN
+    RAISE EXCEPTION 'owner replay probe returned %', v_message;
+  END IF;
 END;
 $confinement_owner$;
 
@@ -186,6 +198,20 @@ BEGIN
   IF NOT v_rejected THEN
     RAISE EXCEPTION 'viewer record probe was not rejected';
   END IF;
+  -- The replay helper is manage-level too: the viewer is rejected
+  -- before any replay identity is read.
+  v_rejected := false;
+  BEGIN
+    PERFORM private.apply_manual_refund_replay_v1(
+      '9ef51000-0000-4000-8000-000000000050', 10, pg_catalog.now(),
+      'bank_transfer', 'replay-probe-2', NULL,
+      '9ef50100-0000-4000-8000-000000000001', false);
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_rejected := true;
+  END;
+  IF NOT v_rejected THEN
+    RAISE EXCEPTION 'viewer replay probe was not rejected';
+  END IF;
 END;
 $confinement_viewer$;
 
@@ -220,8 +246,16 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN
     v_rejected := v_rejected + 1;
   END;
-  IF v_rejected <> 2 THEN
-    RAISE EXCEPTION 'only % of 2 foreign probes rejected', v_rejected;
+  BEGIN
+    PERFORM private.apply_manual_refund_replay_v1(
+      '9ef51000-0000-4000-8000-000000000050', 10, pg_catalog.now(),
+      'bank_transfer', 'replay-probe-3', NULL,
+      '9ef50100-0000-4000-8000-000000000001', false);
+  EXCEPTION WHEN insufficient_privilege THEN
+    v_rejected := v_rejected + 1;
+  END;
+  IF v_rejected <> 3 THEN
+    RAISE EXCEPTION 'only % of 3 foreign probes rejected', v_rejected;
   END IF;
 END;
 $confinement_foreign$;

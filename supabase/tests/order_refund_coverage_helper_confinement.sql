@@ -166,6 +166,7 @@ DECLARE
   v_movement boolean;
   v_partial boolean;
   v_label boolean;
+  v_legs boolean;
 BEGIN
   -- The membership gates must not break legitimate owner calls.
   -- The fixture refund is processed, linked, and currency/gateway
@@ -178,6 +179,11 @@ BEGIN
   IF NOT v_label THEN
     RAISE EXCEPTION 'owner label-gates call returned false on clean fixture';
   END IF;
+  -- The legs helper covers the processed, linked fixture refund.
+  SELECT private.cancellation_refund_legs_covered_v1(
+    '9ef41000-0000-4000-8000-000000000040',
+    '9ef40100-0000-4000-8000-000000000001', 'NGN') INTO v_legs;
+  IF NOT v_legs THEN RAISE EXCEPTION 'owner legs probe false'; END IF;
   SELECT private.pending_refund_evidence_v1(
     '9ef41000-0000-4000-8000-000000000040',
     '9ef40100-0000-4000-8000-000000000001',
@@ -245,8 +251,14 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN
     v_rejected := v_rejected + 1;
   END;
-  IF v_rejected <> 4 THEN
-    RAISE EXCEPTION 'only % of 4 helper probes rejected', v_rejected;
+  BEGIN
+    PERFORM private.cancellation_refund_legs_covered_v1(
+      '9ef41000-0000-4000-8000-000000000040',
+      '9ef40100-0000-4000-8000-000000000001', 'NGN');
+  EXCEPTION WHEN insufficient_privilege THEN v_rejected := v_rejected + 1;
+  END;
+  IF v_rejected <> 5 THEN
+    RAISE EXCEPTION 'only % of 5 helper probes rejected', v_rejected;
   END IF;
 END;
 $confinement_evidence_helpers_foreign$;

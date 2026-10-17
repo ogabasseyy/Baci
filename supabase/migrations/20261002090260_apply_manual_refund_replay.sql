@@ -31,6 +31,13 @@ CREATE OR REPLACE FUNCTION private.apply_manual_refund_replay_v1(
 DECLARE
   v_replay jsonb;
 BEGIN
+  -- Confinement first, mirroring the record helper: EXECUTE is
+  -- granted to authenticated (denial-path rationale below), so without
+  -- an in-function gate a direct call would bypass the manager's
+  -- orders:refund check and rewrite another tenant's audit notes.
+  -- Manage-level: replay rewrites rows. Uid-less service_role
+  -- manager calls bypass.
+  PERFORM private.assert_refund_helper_membership_v1(p_merchant_id, true);
   -- Replay identity normalizes like the coverage paths: a legacy
   -- 'Manual' spelling or padded reference is the same transfer.
   SELECT jsonb_build_object('amount',sum(amount),'method',min(metadata->>'method'),

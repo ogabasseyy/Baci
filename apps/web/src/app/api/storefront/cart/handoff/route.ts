@@ -151,11 +151,10 @@ export async function GET(request: NextRequest) {
     const preQuota = await checkCartQuota({
       merchantId: 'handoff-preview',
       operation: 'handoff_preview',
-      // Key the pre-merchant budget on the handoff as well as the
-      // client: one abusive caller must not exhaust a single global
-      // bucket and deny previews for every merchant, and rotating
-      // handoff ids does not help without a valid pairing token.
-      subject: `${getTrustedClientIdentifier(request)}:${handoffId}`,
+      // Key the pre-merchant budget on the client alone: the handoff
+      // id is attacker-controlled before token validation, so keying
+      // on it would let one caller mint a fresh bucket per rotated id.
+      subject: getTrustedClientIdentifier(request),
     });
     if (!preQuota.allowed) {
       return cartErrorResponse('quota_exceeded');

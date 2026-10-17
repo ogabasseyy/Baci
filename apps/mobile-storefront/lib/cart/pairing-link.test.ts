@@ -10,6 +10,7 @@ const config = {
   merchantId: merchant,
   merchantSlug: 'alpha',
   merchantDomain: 'shop.example.com',
+  platformRootDomain: 'usebaci.com',
 };
 const token = (changes: Record<string, unknown> = {}) =>
   `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'native', app: 'storefront' }, ...changes })).toString('base64url')}.signature`;
@@ -83,6 +84,23 @@ it('fails closed with an explicitly empty platform root', () => {
     captureCartPairingLink(
       `https://shop.example.com/cart#handoff=${token()}&hid=${hid}`,
       staging
+    )
+  ).toBe('/cart');
+  expect(peekCartPairingLink()).not.toBeNull();
+});
+it('fails closed when the platform root is omitted', () => {
+  const omitted = { ...config, platformRootDomain: undefined };
+  expect(
+    captureCartPairingLink(
+      `https://alpha.usebaci.com/cart#handoff=${token()}&hid=${hid}`,
+      omitted
+    )
+  ).toBe('/cart');
+  expect(peekCartPairingLink()).toBeNull();
+  expect(
+    captureCartPairingLink(
+      `https://shop.example.com/cart#handoff=${token()}&hid=${hid}`,
+      omitted
     )
   ).toBe('/cart');
   expect(peekCartPairingLink()).not.toBeNull();

@@ -90,8 +90,9 @@ export function captureCartPairingLink(path: string, config: Config): string {
     // root, or staging handoff links would silently fail (or worse,
     // be validated against the wrong tenant root).
     const configuredRoot = config.platformRootDomain?.trim().toLowerCase();
-    const platformRoot =
-      configuredRoot === undefined ? 'usebaci.com' : configuredRoot;
+    // An omitted root is fail-closed too: only an explicitly
+    // configured platform root may authorize slug subdomains.
+    const platformRoot = configuredRoot ?? '';
     const allowed = new Set([config.merchantDomain.toLowerCase()]);
     if (platformRoot) {
       allowed.add(`${config.merchantSlug}.${platformRoot}`.toLowerCase());

@@ -303,12 +303,13 @@ describe('GET /api/storefront/cart/handoff', () => {
       await checkCartQuota({
         merchantId: 'handoff-preview',
         operation: 'handoff_preview',
-        subject: `${subject}:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa`,
+        subject,
       });
     }
     const previewCallsBefore = mocks.previewCalls;
 
-    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    // A rotated handoff id must not mint a fresh per-client bucket.
+    const response = await getPreview('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
 
     expect(response.status).toBe(429);
     expect((await response.json()).code).toBe('quota_exceeded');
@@ -339,7 +340,8 @@ describe('GET /api/storefront/cart/handoff', () => {
     }
     const previewCallsBefore = mocks.previewCalls;
 
-    const response = await getPreview('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    // A rotated handoff id must not mint a fresh per-client bucket.
+    const response = await getPreview('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
 
     expect(response.status).toBe(429);
     expect((await response.json()).code).toBe('quota_exceeded');

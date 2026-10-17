@@ -163,6 +163,19 @@ BEGIN
     RAISE EXCEPTION 'zero-paid full reversal left status %, want refunded',
       v_status;
   END IF;
+  -- The in-function role check rejects non-service JWT roles: call
+  -- as service_role (which keeps EXECUTE) with an authenticated
+  -- JWT claim, isolating the body check from the ACL denial.
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role', 'authenticated', true);
+  SET LOCAL ROLE service_role;
+  BEGIN
+    PERFORM private.backfill_internal_only_refund_status();
+    RAISE EXCEPTION 'authenticated-JWT backfill call was allowed';
+  EXCEPTION WHEN SQLSTATE '42501' THEN
+    IF SQLERRM <> 'unauthorized' THEN RAISE; END IF;
+  END;
+  RESET ROLE;
 END;
 $refund_reversal_null_paid$;
 

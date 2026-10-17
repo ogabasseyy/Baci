@@ -181,6 +181,16 @@ RETURNS void LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE
   r record;
 BEGIN
+  -- Service-role only, enforced in-function like the sibling
+  -- backfill: EXECUTE is withheld from authenticated (ACL below),
+  -- but ACL denial alone proved environment-sensitive in DB Replay
+  -- while in-function 42501s held, so the body re-checks the JWT
+  -- role. NULL role (migration-time and superuser connections
+  -- carry no JWT) stays allowed for the call below.
+  IF auth.role() IS NOT NULL
+    AND auth.role() IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'unauthorized' USING ERRCODE='42501';
+  END IF;
   FOR r IN
     SELECT o.id, o.merchant_id
       FROM public.orders o
@@ -209,4 +219,10 @@ BEGIN
 END; $$;
 REVOKE ALL ON FUNCTION private.backfill_internal_only_refund_status()
   FROM PUBLIC, anon, authenticated;
+-- service_role keeps EXECUTE for the migration-time call below and
+-- for re-running the backfill if a deploy is interrupted, like the
+-- sibling; the in-function role check above still rejects every
+-- other JWT role.
+GRANT EXECUTE ON FUNCTION private.backfill_internal_only_refund_status()
+  TO service_role;
 SELECT private.backfill_internal_only_refund_status();

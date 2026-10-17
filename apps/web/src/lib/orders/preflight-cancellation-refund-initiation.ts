@@ -129,15 +129,16 @@ export async function preflightCancellationRefundInitiation({
       transactions: mismatchedCurrencyLegs,
     });
   }
-  // A null paid total (legacy rows) derives from funded legs,
-  // mirroring effective_amount_paid_v1: a zero cap would quarantine
-  // every retry for reconciliation instead of initiating it. A
-  // recorded zero stays zero — paid nothing with money outstanding
-  // is the overfunded anomaly this cap exists to catch.
+  // A null or never-stamped zero paid total (legacy rows)
+  // derives from funded legs, mirroring effective_amount_paid_v1:
+  // a zero cap would quarantine every retry for reconciliation
+  // instead of initiating it. Zero with no funded legs still
+  // derives zero, preserving the overfunded-anomaly quarantine.
+  const recordedPaid = Number(order.amount_paid ?? 0);
   const refundAmount =
-    Number(
-      order.amount_paid ?? derivedFundedPaid(transactions, orderCurrency)
-    ) || 0;
+    (recordedPaid === 0
+      ? Number(derivedFundedPaid(transactions, orderCurrency))
+      : recordedPaid) || 0;
   // Captures may legitimately exceed the recorded amount paid when
   // superseded legs exist (their completed refunds already cover them),
   // but the outstanding initiation itself must never exceed it. An

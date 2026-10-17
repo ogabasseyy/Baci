@@ -105,6 +105,23 @@ describe('preflightCancellationRefundInitiation provider guards', () => {
     expect(checkCancellationRefundProvider).toHaveBeenCalled();
   });
 
+  it('derives the cap from funded legs when amount paid is zero', async () => {
+    const client = preflightSupabase();
+    // A never-stamped zero reconstructs like null (SQL derives on
+    // NULLIF-0): the worker and the manager must agree, or the
+    // dashboard shows a refundable balance the worker never spends.
+    await expect(
+      preflightCancellationRefundInitiation(
+        preflightInput({
+          order: { ...order, amount_paid: 0 } as never,
+          supabase: client as never,
+        })
+      )
+    ).resolves.toBeDefined();
+    expect(client.insert).not.toHaveBeenCalled();
+    expect(checkCancellationRefundProvider).toHaveBeenCalled();
+  });
+
   it('quarantines overfunded ledgers instead of retrying them', async () => {
     const client = preflightSupabase();
     await expect(

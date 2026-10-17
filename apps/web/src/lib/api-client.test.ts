@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiGet, fetchWithCsrf } from '@/lib/api-client';
-import * as csrf from '@/lib/csrf';
+import * as csrf from '@/lib/csrf-client';
 
 describe('fetchWithCsrf', () => {
   afterEach(() => {

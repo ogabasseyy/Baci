@@ -1,11 +1,11 @@
 import {
   canonicalizeCommerceVariantAxis,
   normalizeCommerceVariantOption,
-} from '../../../../../../../packages/shared/src/lib/commerce-variant-axis';
+} from '@baci/shared/lib/commerce-variant-axis';
 import {
   formatCanonicalProductConditionLabel,
   normalizeCanonicalProductCondition,
-} from '../../../../../../../packages/shared/src/lib/product-condition';
+} from '@baci/shared/lib/product-condition';
 import type { Product as CartProduct } from '@/lib/products';
 import { getAvailableOptionsForAxis } from '@/components/storefront/ogabassey/variant-attributes';
 import { isRenderableVariantAxis } from '@/lib/storefront-specs/non-renderable-variant-axes';

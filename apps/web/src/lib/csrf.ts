@@ -1,13 +1,19 @@
 // CSRF Protection Utilities
 // Implements Double Submit Cookie pattern for CSRF protection
 
-import type { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
+import {
+  buildCsrfHeaders,
+  CSRF_HEADER_NAME,
+  CSRF_TOKEN_NAMES,
+  FALLBACK_CSRF_TOKEN_NAME,
+  getClientCsrfToken,
+  PRIMARY_CSRF_TOKEN_NAME,
+} from './csrf-client';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
-const PRIMARY_CSRF_TOKEN_NAME = IS_PROD ? '__Host-csrf-token' : 'csrf-token';
-const FALLBACK_CSRF_TOKEN_NAME = IS_PROD ? 'csrf-token' : '__Host-csrf-token';
-export const CSRF_HEADER_NAME = 'x-csrf-token';
-const CSRF_TOKEN_NAMES = [PRIMARY_CSRF_TOKEN_NAME, FALLBACK_CSRF_TOKEN_NAME];
+
+export { buildCsrfHeaders, CSRF_HEADER_NAME, getClientCsrfToken };
 
 /**
  * Generate a cryptographically secure CSRF token using Web Crypto API
@@ -168,7 +174,6 @@ export async function checkCsrfProtection(request: NextRequest): Promise<{
   const isValid = await verifyCsrfToken(request);
 
   if (!isValid) {
-    const { NextResponse } = await import('next/server');
     const response = NextResponse.json(
       {
         error: 'Invalid CSRF token',
@@ -182,61 +187,4 @@ export async function checkCsrfProtection(request: NextRequest): Promise<{
   }
 
   return { valid: true };
-}
-
-/**
- * Client-side helper to get CSRF token from cookie
- */
-export function getClientCsrfToken(): string | null {
-  if (typeof document === 'undefined') return null;
-
-  const cookies = document.cookie.split(';');
-  for (const name of CSRF_TOKEN_NAMES) {
-    const csrfCookie = cookies.find((c) => c.trim().startsWith(`${name}=`));
-    if (csrfCookie) {
-      return csrfCookie.split('=').slice(1).join('=');
-    }
-  }
-  return null;
-}
-
-/**
- * Build headers with CSRF token for client-side fetch calls.
- * Merges provided extra headers with the x-csrf-token header.
- */
-export function buildCsrfHeaders(
-  extraHeaders?: HeadersInit
-): Record<string, string> {
-  const headers: Record<string, string> = {};
-
-  // Merge extra headers
-  if (extraHeaders) {
-    if (extraHeaders instanceof Headers) {
-      extraHeaders.forEach((value, key) => {
-        headers[key] = value;
-      });
-    } else if (Array.isArray(extraHeaders)) {
-      for (const [key, value] of extraHeaders) {
-        headers[key] = value;
-      }
-    } else {
-      Object.assign(headers, extraHeaders);
-    }
-  }
-
-  // Add CSRF token if available
-  const csrfToken = getClientCsrfToken();
-  const hasCsrfHeader = Object.keys(headers).some(
-    (key) => key.toLowerCase() === CSRF_HEADER_NAME
-  );
-
-  if (csrfToken && !hasCsrfHeader) {
-    headers[CSRF_HEADER_NAME] = csrfToken;
-  } else if (!hasCsrfHeader && typeof document !== 'undefined') {
-    console.warn(
-      `[CSRF] Missing ${CSRF_HEADER_NAME} cookie. State-changing requests may be rejected with 403. Refresh the page to obtain a new token.`
-    );
-  }
-
-  return headers;
 }

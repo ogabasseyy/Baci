@@ -1,3 +1,8 @@
+import { toSchemaItemConditionUri } from '@baci/shared/lib/product-condition';
+import {
+  getEffectiveProductStock,
+  getProductStockBucket,
+} from '@baci/shared/lib/product-inventory';
 import type { Metadata, Route } from 'next';
 import type {
   BreadcrumbList,
@@ -10,11 +15,6 @@ import type {
 } from 'schema-dts';
 import { filterBrandMatchedSocialProfiles } from '@/lib/brand-matched-social-profiles';
 import type { JsonLdStructuredData } from '@/lib/json-ld-types';
-import { toSchemaItemConditionUri } from '../../../../packages/shared/src/lib/product-condition';
-import {
-  getEffectiveProductStock,
-  getProductStockBucket,
-} from '../../../../packages/shared/src/lib/product-inventory';
 import { buildStorefrontProductPath } from './build-storefront-product-path';
 import {
   type CheckoutPaymentMerchant,

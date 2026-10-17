@@ -1,7 +1,7 @@
 // Client-side API helper with CSRF protection
 // Use this for all API calls that modify data
 
-import { CSRF_HEADER_NAME, getClientCsrfToken } from '@/lib/csrf';
+import { CSRF_HEADER_NAME, getClientCsrfToken } from '@/lib/csrf-client';
 
 async function initializeCsrfToken(
   signal?: AbortSignal

@@ -1,8 +1,8 @@
 import {
   canonicalizeCommerceVariantAxis,
   normalizeCommerceVariantOption,
-} from '../../../../../../../packages/shared/src/lib/commerce-variant-axis';
-import { normalizeCanonicalProductCondition } from '../../../../../../../packages/shared/src/lib/product-condition';
+} from '@baci/shared/lib/commerce-variant-axis';
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
 import { normalizeCriticalVariantAttributes } from './critical-commerce-selection';
 
 interface BuildCriticalInitialVariantIntentInput {

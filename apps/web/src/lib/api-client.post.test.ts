@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiPost } from '@/lib/api-client';
-import * as csrf from '@/lib/csrf';
+import * as csrf from '@/lib/csrf-client';
 
 describe('apiPost request options', () => {
   afterEach(() => {

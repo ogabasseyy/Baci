@@ -40,6 +40,8 @@ import {
   getShippingQuoteBookingEconomics,
 } from '@/lib/shipping/shipping-quote-booking-economics';
 import type { ShippingAddress } from '@/lib/shipping/types';
+import { assertSavedGiglCheckoutParcel } from './assert-saved-gigl-checkout-parcel';
+import { resolveSavedGiglCheckoutDestination } from './saved-gigl-checkout-destination';
 
 export type BookOrderShipmentResult = ReusableOrderShipmentResult;
 
@@ -169,6 +171,23 @@ export async function bookOrderShipment(
       'INTERNATIONAL_QUOTE_REQUEST_MISSING'
     );
   }
+  const preserveSavedGiglCheckoutQuote =
+    shippingProvider === 'GIGL' &&
+    !isInternationalQuote &&
+    orderWithEconomics.shipping_funding_source === 'customer_checkout';
+  const bookingOrder =
+    preserveSavedGiglCheckoutQuote && storedQuoteRequest
+      ? resolveSavedGiglCheckoutDestination(
+          orderWithEconomics,
+          storedQuoteRequest
+        )
+      : orderWithEconomics;
+  if (preserveSavedGiglCheckoutQuote && storedQuoteRequest) {
+    assertSavedGiglCheckoutParcel(
+      storedQuoteRequest,
+      orderWithEconomics.order_items
+    );
+  }
   let merchantSender: ShippingAddress | undefined;
   if (!isInternationalQuote) {
     const merchantSenderResult = await resolveBookingMerchantSender(
@@ -201,6 +220,7 @@ export async function bookOrderShipment(
     merchantSender,
     {
       orderId: orderWithEconomics.id,
+      preserveSavedGiglCheckoutQuote,
       ...(orderWithEconomics.shipping_funding_source === 'merchant_wallet'
         ? { allowRefresh: false }
         : { expectedShippingFee: orderWithEconomics.shipping_fee }),
@@ -218,7 +238,7 @@ export async function bookOrderShipment(
   const effectiveQuoteRequest = resolvedQuoteRequest ?? storedQuoteRequest;
   const bookingContext = resolveAdminGiglBookingContext(
     shippingProvider,
-    orderWithEconomics,
+    bookingOrder,
     effectiveQuoteRequest
   );
   if (isInternationalQuote && effectiveQuoteRequest) {
@@ -227,7 +247,7 @@ export async function bookOrderShipment(
       orderWithEconomics
     );
   } else if (effectiveQuoteRequest) {
-    assertQuoteReceiverMatchesOrder(effectiveQuoteRequest, orderWithEconomics);
+    assertQuoteReceiverMatchesOrder(effectiveQuoteRequest, bookingOrder);
     assertDomesticQuoteItemsMatchOrder(
       effectiveQuoteRequest,
       orderWithEconomics.order_items,

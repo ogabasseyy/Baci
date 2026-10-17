@@ -86,6 +86,10 @@ export function stubShippingService() {
       insuranceIncluded: false,
       providerRateId: 'GIGL_4_0',
       expiresAt: new Date(Date.now() + 86_400_000),
+      providerCost: 2000,
+      platformMargin: 500,
+      marginBasisPoints: 2000,
+      pricingVersion: 'gigl_platform_margin_v1',
       rawResponse: {},
     },
   ]);
@@ -121,6 +125,8 @@ export function createSupabase({
     ...prepaidGiglCustomerCheckoutPayment,
     shipping_funding_source: fundingSource ?? 'customer_checkout',
     shipping_address: {
+      latitude: 6.5,
+      longitude: 3.3,
       address: 'Receiver Road',
       city: 'Abuja',
       state: 'Abuja',
@@ -145,6 +151,8 @@ export function createSupabase({
       sender: storedSender,
       receiver: {
         ...order.shipping_address,
+        latitude: 6.5,
+        longitude: 3.3,
         name: order.customer_name,
         phone: order.customer_phone,
         country: 'Nigeria',

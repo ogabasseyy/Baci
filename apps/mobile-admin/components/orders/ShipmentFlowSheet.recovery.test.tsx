@@ -128,6 +128,23 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
     state.busy = false;
     state.confirmed = false;
   });
+  it('books with a saved checkout selection without opening destination recovery', () => {
+    render(
+      <ShipmentFlowSheet
+        {...props}
+        recoveryOrder={{ ...order, selected_quote_id: 'saved-quote' }}
+        canUseProvider
+        selectedMode="provider"
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Book with GIG Logistics' })
+    );
+    expect(actions.onContinueFromMethod).toHaveBeenCalledOnce();
+    expect(state.preview).not.toHaveBeenCalled();
+    expect(state.confirm).not.toHaveBeenCalled();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+  });
   it('allows recovery when the old quote is deleted and the eligibility wallet panel is absent', () => {
     render(<ShipmentFlowSheet {...props} giglShipping={undefined} />);
     expect(props.canUseProvider).toBe(false);

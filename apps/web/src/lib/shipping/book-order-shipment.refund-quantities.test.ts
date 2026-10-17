@@ -56,6 +56,8 @@ type AssertGiglCustomerCheckoutPrepaidModule =
   typeof import('./assert-gigl-customer-checkout-prepaid');
 
 const receiver = {
+  latitude: 6.5,
+  longitude: 3.3,
   name: 'Customer',
   phone: '08012345678',
   address: '2 Buyer Road',
@@ -147,7 +149,14 @@ describe('domestic booking accepts complete pre-refund or surviving quote snapsh
   it.each([
     ['original', legacyQuoteItems],
     ['surviving', [{ ...legacyQuoteItems[0], quantity: 1 }]],
-  ])('books only surviving units from a complete %s quote snapshot', async (_label, quoteItems) => {
+  ])('requires confirmation for original parcels and books complete %s snapshots safely', async (_label, quoteItems) => {
+    if (_label === 'original') {
+      await expect(
+        bookOrderShipment(client(quoteItems), 'merchant', 'order')
+      ).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' });
+      expect(mocks.book).not.toHaveBeenCalled();
+      return;
+    }
     await expect(
       bookOrderShipment(client(quoteItems), 'merchant', 'order')
     ).resolves.toMatchObject({ shipmentId: 'shipment' });
@@ -189,7 +198,7 @@ describe('domestic booking accepts complete pre-refund or surviving quote snapsh
     'weight',
     'dimensions',
     'fallback weight',
-  ])('retains the surviving package when reversed duplicate rows differ by %s', async (identity) => {
+  ])('requires consent when refund changes a package with duplicate rows differing by %s', async (identity) => {
     const small = { length: 10, width: 5, height: 3 };
     const large =
       identity === 'dimensions' ? { length: 20, width: 10, height: 6 } : small;
@@ -224,11 +233,8 @@ describe('domestic booking accepts complete pre-refund or surviving quote snapsh
     ];
     await expect(
       bookOrderShipment(client(quotes, orders), 'merchant', 'order')
-    ).resolves.toMatchObject({ shipmentId: 'shipment' });
-    expect(mocks.book).toHaveBeenCalledWith(
-      'GIGL',
-      expect.objectContaining({ items: [expect.objectContaining(quotes[0])] })
-    );
+    ).rejects.toMatchObject({ code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' });
+    expect(mocks.book).not.toHaveBeenCalled();
   });
 
   it('rejects zero survivors even if the whole original quote still matches', async () => {

@@ -88,6 +88,8 @@ function createSupabase() {
         countryCode: 'NG',
       },
       receiver: {
+        latitude: 6.5,
+        longitude: 3.3,
         name: 'Customer',
         phone: '08000000001',
         address: 'Receiver Road',
@@ -193,8 +195,8 @@ describe('bugfix: PATCH fulfillment rejects refreshed price changes', () => {
     await expect(
       bookOrderShipment(createSupabase(), 'merchant-1', 'order-1')
     ).rejects.toMatchObject({
-      code: 'QUOTE_PRICE_CHANGED',
-      status: 400,
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
     });
 
     expect(shippingService.bookShipment).not.toHaveBeenCalled();

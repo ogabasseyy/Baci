@@ -47,6 +47,7 @@ const quoteSender = {
   state: 'Lagos',
   country: 'Nigeria',
   countryCode: 'NG',
+  postalCode: '100001',
 };
 
 function createSupabase(
@@ -71,6 +72,7 @@ function createSupabase(
     customer_name: 'Customer',
     customer_email: 'customer@example.com',
     customer_phone: '08000000001',
+    shipping_fee: 2500,
     selected_quote_id: 'quote-1',
     shipping_provider: 'GIGL',
     ...prepaidGiglCustomerCheckoutPayment,
@@ -99,6 +101,8 @@ function createSupabase(
       sender: quoteSender,
       receiver: {
         ...order.shipping_address,
+        latitude: 6.5,
+        longitude: 3.3,
         name: order.customer_name,
         phone: order.customer_phone,
         country: 'Nigeria',
@@ -167,6 +171,25 @@ function createSupabase(
 describe('bookOrderShipment sender selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+      {
+        id: 'current',
+        provider: 'GIGL',
+        serviceTier: 'GoStandard',
+        carrierName: 'GIG Logistics',
+        displayName: 'GIG Logistics',
+        price: 2500,
+        currency: 'NGN',
+        providerCost: 2000,
+        platformMargin: 500,
+        pricingVersion: 'gigl_platform_margin_v1',
+        estimatedDays: 3,
+        pickupIncluded: true,
+        insuranceIncluded: false,
+        providerRateId: 'GIGL_4_0',
+        expiresAt: new Date('2099-01-01'),
+      },
+    ]);
     vi.mocked(shippingService.bookShipment).mockResolvedValue({
       provider: 'GIGL',
       providerShipmentId: 'waybill-1',

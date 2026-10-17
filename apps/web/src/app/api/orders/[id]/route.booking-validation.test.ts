@@ -232,7 +232,21 @@ describe('PATCH /api/orders/[id] booking validation failures', () => {
       'GIGL_BOOKING_VALIDATION_FAILED',
       'GIGL rejected the shipment booking request. Please correct the order details and try again.',
     ],
+    [
+      'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      'Shipping details, service or cost changed. Review and confirm before booking.',
+    ],
+    [
+      'QUOTE_REFRESH_FAILED',
+      'Could not verify the current shipping price. No booking was submitted.',
+    ],
   ])('releases the booking lock for %s', async (code, message) => {
+    const status = [
+      'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      'QUOTE_REFRESH_FAILED',
+    ].includes(code)
+      ? 409
+      : 400;
     const existingOrder: ExistingOrder = {
       id: 'order-1',
       order_number: 'BACI-001',
@@ -261,7 +275,7 @@ describe('PATCH /api/orders/[id] booking validation failures', () => {
       supabase,
     });
     vi.mocked(runClaimedOrderWalletOrCheckoutBooking).mockRejectedValue(
-      new OrderShipmentBookingError(message, 400, code)
+      new OrderShipmentBookingError(message, status, code)
     );
 
     const response = await PATCH(
@@ -270,7 +284,7 @@ describe('PATCH /api/orders/[id] booking validation failures', () => {
     );
     const payload = await response.json();
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(status);
     expect(payload).toEqual({ error: message, code });
     expect(clearOrderShipmentBookingLock).toHaveBeenCalledWith(
       supabase,

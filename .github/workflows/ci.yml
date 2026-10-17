@@ -412,6 +412,9 @@ jobs:
           --sql-check supabase/migrations/tests/storefront_product_base_inventory_anon_bounds.sql
           --sql-check supabase/migrations/tests/search_analytics_service_role_only_insert.sql
           --sql-check supabase/migrations/tests/search_condition_match_normalization.sql
+          --sql-check supabase/migrations/tests/storefront_order_offer_id_snapshot.sql
+          --sql-check supabase/migrations/tests/storefront_order_offer_tenant_bind.sql
+          --sql-check supabase/migrations/tests/storefront_refined_reread_anon_visibility.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

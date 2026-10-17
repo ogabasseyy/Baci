@@ -85,11 +85,30 @@ export async function getStorefrontRefinedSearchProducts(args: {
         refinements: args.refinements,
       }),
     };
+  // Defense in depth: product RLS admits any active row regardless of
+  // merchant publication, so re-check visibility just before the re-read
+  // (the merchant may have unpublished mid-request). The check runs
+  // through the SECURITY DEFINER visibility RPC — merchants.is_platform_admin
+  // is revoked from anon, so embedding it would 42501 anonymous shoppers,
+  // and an RLS-hidden parent is ambiguous (unpublished ordinary vs exempt
+  // platform-admin). Only an explicit true keeps the matches.
+  const { data: merchantVisible, error: visibilityError } = await supabase.rpc(
+    'storefront_search_merchant_is_visible',
+    { p_merchant_id: args.merchantId }
+  );
+  if (visibilityError) throw new Error('Search results unavailable');
+  if (merchantVisible !== true)
+    return {
+      count: 0,
+      totalCount: 0,
+      products: [],
+      productIds: [],
+      query: args.query,
+      didYouMean: null,
+    };
   const { data: raw, error: readError } = await supabase
     .from('products')
-    .select(
-      `${STOREFRONT_PRODUCTS_COMPACT_SELECT},merchants(is_published,is_platform_admin)`
-    )
+    .select(STOREFRONT_PRODUCTS_COMPACT_SELECT)
     .eq('merchant_id', args.merchantId)
     .eq('status', 'active')
     .in(
@@ -97,31 +116,7 @@ export async function getStorefrontRefinedSearchProducts(args: {
       matches.map((r) => r.productId)
     );
   if (readError) throw new Error('Search results unavailable');
-  const rows = new Map<string, (typeof raw)[number]>();
-  for (const row of raw ?? []) {
-    // Defense in depth: product RLS admits any active row regardless of
-    // merchant publication, so re-apply the published-or-platform-admin
-    // predicate the search RPCs hand-enforce. An unreadable parent means
-    // RLS hid a platform-admin merchant from this caller (authenticated
-    // non-staff), which is exempt anyway, so only a readable unpublished
-    // non-admin parent filters the row.
-    const merchant = (
-      row as {
-        merchants?: {
-          is_published?: boolean;
-          is_platform_admin?: boolean;
-        } | null;
-      }
-    ).merchants;
-    if (
-      merchant &&
-      merchant.is_published !== true &&
-      merchant.is_platform_admin !== true
-    ) {
-      continue;
-    }
-    rows.set(row.id, row);
-  }
+  const rows = new Map((raw ?? []).map((row) => [row.id, row]));
   // A matched row can vanish between the RPC snapshot and this read
   // (deactivated, unpublished, or RLS-filtered mid-request). Skip it and
   // render the surviving matches: failing the whole page over one stale

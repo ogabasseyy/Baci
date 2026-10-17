@@ -68,6 +68,7 @@ describe('search pending replay sources', () => {
       '20261010000000_search_analytics_service_role_only_insert.sql',
       '20261010110000_search_category_facets_scoped_precise.sql',
       '20261011230000_search_mobile_admin_transaction_review_item_condition.sql',
+      '20261016170000_storefront_search_merchant_visibility_rpc.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

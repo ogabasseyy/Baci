@@ -118,17 +118,17 @@ describe('resolveAddedLineAssurance', () => {
       })
     ).toBe(true);
   });
-  it.each([undefined, false])(
-    'fails new lines to opt-out when insurance is unknown or disabled: %s',
-    (shippingInsuranceEnabled) => {
-      expect(
-        resolveAddedLineAssurance(undefined, undefined, {
-          ...policy,
-          shippingInsuranceEnabled,
-        })
-      ).toBe(false);
-    }
-  );
+  it.each([
+    undefined,
+    false,
+  ])('fails new lines to opt-out when insurance is unknown or disabled: %s', (shippingInsuranceEnabled) => {
+    expect(
+      resolveAddedLineAssurance(undefined, undefined, {
+        ...policy,
+        shippingInsuranceEnabled,
+      })
+    ).toBe(false);
+  });
 });
 
 describe('resolveAssuranceDefault', () => {
@@ -199,6 +199,15 @@ describe('resolveAssuranceMerchantSetting', () => {
         cartSlug: 'ogabassey',
       },
       expected: false,
+    },
+    {
+      label: 'casing-only slug differences pass the setting through',
+      input: {
+        contextSlug: 'ogabassey',
+        contextSetting: true,
+        cartSlug: 'Ogabassey',
+      },
+      expected: true,
     },
     {
       label: 'an unknown context setting stays unknown',

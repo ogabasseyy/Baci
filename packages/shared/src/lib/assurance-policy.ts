@@ -88,12 +88,16 @@ export function resolveAssuranceMerchantSetting(input: {
   contextSetting: boolean | undefined;
   cartSlug: string | null | undefined;
 }): boolean | undefined {
-  if (
-    input.contextSlug != null &&
-    input.cartSlug != null &&
-    input.contextSlug !== input.cartSlug
-  ) {
-    return false;
+  if (input.contextSlug != null && input.cartSlug != null) {
+    // Slugs arrive from URL route params and the merchant record with
+    // possibly different casing; compare case-insensitively like the
+    // rest of the policy so a casing-only difference never reads as a
+    // cross-merchant mismatch that silently drops the default.
+    const context = input.contextSlug.trim().toLowerCase();
+    const cart = input.cartSlug.trim().toLowerCase();
+    if (context !== cart) {
+      return false;
+    }
   }
   return input.contextSetting;
 }

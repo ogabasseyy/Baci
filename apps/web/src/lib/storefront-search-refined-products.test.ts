@@ -113,18 +113,20 @@ describe('refined product hydration', () => {
     expect(rpc.mock.calls[1]?.[0]).toBe('search_storefront_products_refined');
   });
   it('displays the matching variant price in ranked order', async () => {
-    rpc.mockResolvedValue({
-      data: [
-        {
-          product_id: 'p1',
-          total_count: 1,
-          effective_price: 200000,
-          matched_variant_id: 'v1',
-          matched_condition: 'used',
-        },
-      ],
-      error: null,
-    });
+    rpc
+      .mockResolvedValueOnce({
+        data: [
+          {
+            product_id: 'p1',
+            total_count: 1,
+            effective_price: 200000,
+            matched_variant_id: 'v1',
+            matched_condition: 'used',
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValue({ data: true, error: null });
     read.mockResolvedValue({
       data: [
         {
@@ -156,13 +158,15 @@ describe('refined product hydration', () => {
     expect(result.count).toBe(1);
   });
   it('skips matches whose rows vanished instead of failing the page', async () => {
-    rpc.mockResolvedValue({
-      data: [
-        { product_id: 'p1', total_count: 2 },
-        { product_id: 'p2', total_count: 2 },
-      ],
-      error: null,
-    });
+    rpc
+      .mockResolvedValueOnce({
+        data: [
+          { product_id: 'p1', total_count: 2 },
+          { product_id: 'p2', total_count: 2 },
+        ],
+        error: null,
+      })
+      .mockResolvedValue({ data: true, error: null });
     read.mockResolvedValue({
       data: [{ id: 'p1', price: 100 }],
       error: null,
@@ -180,56 +184,65 @@ describe('refined product hydration', () => {
     // Page arithmetic uses the raw RPC total: the skipped row stays ranked.
     expect(result.totalCount).toBe(2);
   });
-  it('skips matches from an unpublished non-admin merchant', async () => {
-    rpc.mockResolvedValue({
-      data: [
-        { product_id: 'p1', total_count: 3 },
-        { product_id: 'p2', total_count: 3 },
-        { product_id: 'p3', total_count: 3 },
-      ],
-      error: null,
-    });
-    read.mockResolvedValue({
-      data: [
-        {
-          id: 'p1',
-          price: 100,
-          merchants: { is_published: true, is_platform_admin: false },
-        },
-        // Readable but unpublished and non-admin: filtered.
-        {
-          id: 'p2',
-          price: 200,
-          merchants: { is_published: false, is_platform_admin: false },
-        },
-        // RLS-hidden parent (authenticated non-staff on a platform-admin
-        // merchant, which is exempt): kept.
-        { id: 'p3', price: 300, merchants: null },
-      ],
-      error: null,
-    });
+  it('returns an empty page when the merchant unpublished mid-request', async () => {
+    rpc
+      .mockResolvedValueOnce({
+        data: [{ product_id: 'p1', total_count: 1 }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: false, error: null });
     const result = await getStorefrontRefinedSearchProducts({
       merchantId: 'm1',
       query: 'phone',
       limit: 20,
       refinements: { brands: [], sort: 'relevance' },
     });
-    expect(result.productIds).toEqual(['p1', 'p3']);
-    expect(result.totalCount).toBe(3);
+    expect(rpc).toHaveBeenLastCalledWith(
+      'storefront_search_merchant_is_visible',
+      { p_merchant_id: 'm1' }
+    );
+    // The stale snapshot total is discarded; the re-read never runs.
+    expect(read).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      count: 0,
+      totalCount: 0,
+      products: [],
+      productIds: [],
+      didYouMean: null,
+    });
+  });
+  it('fails closed when the visibility check errors', async () => {
+    rpc
+      .mockResolvedValueOnce({
+        data: [{ product_id: 'p1', total_count: 1 }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: null, error: { code: 'boom' } });
+    await expect(
+      getStorefrontRefinedSearchProducts({
+        merchantId: 'm1',
+        query: 'phone',
+        limit: 20,
+        refinements: { brands: [], sort: 'relevance' },
+      })
+    ).rejects.toThrow('Search results unavailable');
+    expect(read).not.toHaveBeenCalled();
   });
   it('preserves all condition metadata when sorting an unrefined search', async () => {
-    rpc.mockResolvedValue({
-      data: [
-        {
-          product_id: 'p1',
-          total_count: 1,
-          effective_price: 200000,
-          matched_variant_id: 'v1',
-          matched_condition: 'used',
-        },
-      ],
-      error: null,
-    });
+    rpc
+      .mockResolvedValueOnce({
+        data: [
+          {
+            product_id: 'p1',
+            total_count: 1,
+            effective_price: 200000,
+            matched_variant_id: 'v1',
+            matched_condition: 'used',
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValue({ data: true, error: null });
     read.mockResolvedValue({
       data: [
         {
@@ -251,18 +264,20 @@ describe('refined product hydration', () => {
     expect(result.products[0].price).toBe(200000);
   });
   it('keeps every available condition for a price-only refinement', async () => {
-    rpc.mockResolvedValue({
-      data: [
-        {
-          product_id: 'p1',
-          total_count: 1,
-          effective_price: 200000,
-          matched_variant_id: 'v1',
-          matched_condition: 'used',
-        },
-      ],
-      error: null,
-    });
+    rpc
+      .mockResolvedValueOnce({
+        data: [
+          {
+            product_id: 'p1',
+            total_count: 1,
+            effective_price: 200000,
+            matched_variant_id: 'v1',
+            matched_condition: 'used',
+          },
+        ],
+        error: null,
+      })
+      .mockResolvedValue({ data: true, error: null });
     read.mockResolvedValue({
       data: [
         {

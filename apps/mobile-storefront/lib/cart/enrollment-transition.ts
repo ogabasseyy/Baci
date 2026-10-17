@@ -47,14 +47,25 @@ export async function retireEnrollmentSession(
     state.wasEnabled = false;
     state.pendingMerchantId = merchantId;
   }
-  try {
-    await remove(merchantId);
-    state.pendingMerchantId = null;
-  } catch {
-    // Keep the pending merchant so the next disabled pass (or the
-    // sign-out teardown, whichever runs first) retries the deletion
-    // instead of stranding an account-owned proof for the next owner.
+  // Retry transient storage failures in-process before giving up:
+  // a single failed SecureStore delete must not strand the proof
+  // until some later lifecycle event happens to retry it.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await remove(merchantId);
+      state.pendingMerchantId = null;
+      return;
+    } catch {
+      if (attempt < 2) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 250 * (attempt + 1))
+        );
+      }
+    }
   }
+  // Keep the pending merchant so the next disabled pass (or the
+  // sign-out teardown, whichever runs first) retries the deletion
+  // instead of stranding an account-owned proof for the next owner.
 }
 
 /**

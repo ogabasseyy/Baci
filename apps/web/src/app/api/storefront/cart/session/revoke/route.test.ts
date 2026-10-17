@@ -126,6 +126,33 @@ it('expires presented cart cookies when the proof is definitively invalid', asyn
   expect(setCookie).not.toContain('other=');
   expect(revokeCartDeviceGrants).not.toHaveBeenCalled();
 });
+it('expires presented cart cookies when the proof expired beyond grace', async () => {
+  vi.mocked(resolveCartRequestContext).mockResolvedValue({
+    ok: false,
+    error: 'expired_proof',
+    merchant: {
+      id: '11111111-1111-4111-8111-111111111111',
+      slug: 'shop',
+      customDomain: null,
+    },
+  });
+  const response = await POST(
+    new Request('http://localhost/api/storefront/cart/session/revoke', {
+      method: 'POST',
+      headers: {
+        cookie:
+          'baci-cart-11111111-1111-4111-8111-111111111111=cp1.dead.dead; other=1',
+      },
+      body: '{}',
+    }) as never
+  );
+  const setCookie = response.headers.get('set-cookie') ?? '';
+  expect(setCookie).toContain(
+    'baci-cart-11111111-1111-4111-8111-111111111111=;'
+  );
+  expect(setCookie).toContain('Max-Age=0');
+  expect(revokeCartDeviceGrants).not.toHaveBeenCalled();
+});
 it('preserves another merchant cookie on a shared host during invalid-proof expiry', async () => {
   vi.mocked(resolveCartRequestContext).mockResolvedValue({
     ok: false,

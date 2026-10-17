@@ -43,7 +43,11 @@ export async function POST(request: NextRequest): Promise<Response> {
     });
     if (!context.ok) {
       const response = cartErrorResponse(context.error);
-      if (context.error === 'invalid_proof' && context.merchant) {
+      if (
+        (context.error === 'invalid_proof' ||
+          context.error === 'expired_proof') &&
+        context.merchant
+      ) {
         // The presented proof can never verify again (for example
         // after a signing-key rotation): expire only this merchant's
         // cookie so the dead credential does not keep blocking legacy

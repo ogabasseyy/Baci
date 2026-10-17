@@ -32,7 +32,9 @@ export async function createPayOnDeliveryOrder(input: {
   sessionId: string;
   sharedCartPrincipalId?: string | null;
   supabase: SupabaseClient;
-}): Promise<{ ok: true; orderId: string } | { ok: false }> {
+}): Promise<
+  { ok: true; orderId: string } | { ok: false; status?: number; error?: string }
+> {
   const {
     buyer,
     finalizationClaim,
@@ -94,7 +96,16 @@ export async function createPayOnDeliveryOrder(input: {
       message: 'Pay-on-delivery order creation failed',
       sessionId: sanitizeForLog(sessionId),
     });
-    return { ok: false };
+    // Preserve actionable bound-checkout failures (stale review 409,
+    // deauthorized principal 403) so clients refresh or re-authorize
+    // instead of retrying the same stale checkout against a 500.
+    return orderResult.status < 500
+      ? {
+          ok: false,
+          status: orderResult.status,
+          error: orderResult.error ?? orderResult.statusText,
+        }
+      : { ok: false };
   }
 
   const createdOrderId = orderResult.orderId;

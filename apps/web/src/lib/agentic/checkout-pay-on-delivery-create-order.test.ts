@@ -116,6 +116,23 @@ describe('createPayOnDeliveryOrder', () => {
     );
   });
 
+  it('preserves an actionable bound-checkout conflict', async () => {
+    mocks.createAgenticCheckoutOrder.mockResolvedValue({
+      ok: false,
+      error: 'Checkout review is stale',
+      status: 409,
+      statusText: 'Conflict',
+    });
+
+    const result = await createPayOnDeliveryOrder(input);
+
+    expect(result).toEqual({
+      ok: false,
+      status: 409,
+      error: 'Checkout review is stale',
+    });
+  });
+
   it('releases the claim when order creation throws', async () => {
     mocks.createAgenticCheckoutOrder.mockRejectedValue(new Error('boom'));
 

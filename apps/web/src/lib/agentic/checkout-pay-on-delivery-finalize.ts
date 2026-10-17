@@ -119,7 +119,10 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
       supabase,
     });
     if (!created.ok) {
-      return respond({ error: 'Order creation failed' }, 500);
+      return respond(
+        { error: created.error ?? 'Order creation failed' },
+        created.status ?? 500
+      );
     }
     orderId = created.orderId;
     const marker = await recordPayOnDeliveryOrderCreated({

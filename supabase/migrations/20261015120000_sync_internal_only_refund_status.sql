@@ -30,6 +30,36 @@ CREATE OR REPLACE FUNCTION private.internal_reversal_coverage_v1(
 $$;
 REVOKE ALL ON FUNCTION private.internal_reversal_coverage_v1(uuid, uuid)
   FROM PUBLIC, anon, authenticated;
+-- Effective paid total for legacy NULL-paid internal-only orders:
+-- amount_paid is nullable since baseline, and a NULL total beside
+-- funded internal legs is real customer money the flip must measure
+-- against reversal coverage. Unlike the manager's
+-- effective_amount_paid_v1 (which excludes wallet/savings because
+-- they reverse through their own ledgers), the internal set counts
+-- here: wallet/savings legs ARE the funded evidence for these
+-- orders. Missing currency or no funded legs derives zero, which
+-- fails the flip's positive-paid gate like before.
+CREATE OR REPLACE FUNCTION private.internal_only_effective_paid_v1(
+  p_order_id uuid, p_merchant_id uuid
+) RETURNS numeric LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
+  SELECT COALESCE(
+    (SELECT o.amount_paid FROM public.orders o
+      WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id),
+    COALESCE((SELECT SUM(leg.amount)
+      FROM public.transactions leg
+      JOIN public.orders o
+        ON o.id = leg.order_id AND o.merchant_id = leg.merchant_id
+     WHERE leg.order_id = p_order_id AND leg.merchant_id = p_merchant_id
+       AND leg.transaction_type = 'payment'
+       AND leg.status IN ('completed', 'refund_pending', 'refunded')
+       AND leg.amount > 0
+       AND UPPER(BTRIM(leg.currency)) = UPPER(BTRIM(o.currency))
+       AND COALESCE(public.normalized_gateway_name_v1(leg.gateway), '')
+           IN ('WALLET', 'SAVINGS', 'STORE_CREDIT', 'CASH', 'MANUAL',
+               'PAY_ON_DELIVERY')), 0));
+$$;
+REVOKE ALL ON FUNCTION private.internal_only_effective_paid_v1(uuid, uuid)
+  FROM PUBLIC, anon, authenticated;
 -- Single flip predicate shared by the trigger and the backfill so
 -- the two can never disagree about which orders qualify.
 CREATE OR REPLACE FUNCTION private.flip_internal_only_order_refunded(
@@ -41,9 +71,12 @@ BEGIN
    WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id
      AND o.shipping_status IN ('cancelled', 'canceled')
      AND o.payment_status IN ('paid', 'partially_paid', 'pending')
-     AND o.amount_paid > 0
-     AND o.amount_paid <= private.internal_reversal_coverage_v1(
+     AND private.internal_only_effective_paid_v1(
+       p_order_id, p_merchant_id) > 0
+     AND private.internal_only_effective_paid_v1(
        p_order_id, p_merchant_id)
+       <= private.internal_reversal_coverage_v1(
+         p_order_id, p_merchant_id)
      -- Mirror the cancel-time side-effect gate negated: any external
      -- funded leg keeps the label with the normal (transaction or
      -- manager) flow, which also requires per-leg coverage.
@@ -153,7 +186,8 @@ BEGIN
       FROM public.orders o
      WHERE o.shipping_status IN ('cancelled', 'canceled')
        AND o.payment_status IN ('paid', 'partially_paid', 'pending')
-       AND o.amount_paid > 0
+       AND private.internal_only_effective_paid_v1(
+         o.id, o.merchant_id) > 0
        -- The flip needs reversal coverage above zero, so only orders
        -- with reversal ledger evidence can qualify: skip the flip's
        -- EXISTS/subquery chain for every other cancelled order. A

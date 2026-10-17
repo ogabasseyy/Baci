@@ -178,22 +178,8 @@ describe('listPaystackRefunds', () => {
       { id: big, amount: 100, currency: 'NGN', status: 'processed' },
     ]);
   });
-  it('rejects a verify payload with a reordered data object', async () => {
-    // The wire-ID anchor requires the ID as the data object's first
-    // key; a nested ID in first position must fail closed rather
-    // than resolve the wrong transaction.
-    const raw =
-      '{"status":true,"data":{"customer":{"id":9},"id":5,"reference":"capture-1"}}';
-    const fetcher = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      json: async () => JSON.parse(raw),
-      text: async () => raw,
-    });
-    vi.stubGlobal('fetch', fetcher);
-    await expect(listPaystackRefunds('capture-1')).rejects.toThrow(
-      'Unverified refund transaction'
-    );
-  });
+  // Reordered data objects resolve (see wire-id suite): member
+  // order is not contractual, only nested-only ids fail closed.
   it('rejects failed transport and missing configuration', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(null, false)));
     await expect(listPaystackRefunds('capture-1')).rejects.toThrow('failed');

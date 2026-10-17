@@ -24,6 +24,119 @@ function identityTexts(value: unknown): string[] {
   return [];
 }
 
+// Top-level data.id off the wire text, without assuming member
+// order and without matching nested ids (expanded transaction or
+// customer objects). Iterative cursor scan: strings are skipped
+// with escape handling, values with a bracket stack, so no input
+// shape recurses or misreads a quoted brace. Returns the raw
+// digits (bare or quoted) or null when absent or malformed.
+function readWireDataId(raw: string): string | null {
+  let i = 0;
+  const ws = (): void => {
+    while (i < raw.length && /\s/.test(raw[i] ?? '')) i++;
+  };
+  // Decoded string contents, advancing past the closing quote;
+  // null when unterminated or on a bad unicode escape.
+  const str = (): string | null => {
+    let out = '';
+    i++;
+    while (i < raw.length) {
+      const c = raw[i] ?? '';
+      if (c === '"') {
+        i++;
+        return out;
+      }
+      if (c === '\\' && i + 1 < raw.length) {
+        const e = raw[i + 1] ?? '';
+        if (e === 'u') {
+          const code = Number.parseInt(raw.slice(i + 2, i + 6), 16);
+          if (Number.isNaN(code)) return null;
+          out += String.fromCharCode(code);
+          i += 6;
+        } else {
+          out +=
+            (
+              {
+                '"': '"',
+                '\\': '\\',
+                '/': '/',
+                b: '\b',
+                f: '\f',
+                n: '\n',
+                r: '\r',
+                t: '\t',
+              } as Record<string, string>
+            )[e] ?? e;
+          i += 2;
+        }
+        continue;
+      }
+      out += c;
+      i++;
+    }
+    return null;
+  };
+  // Skip any JSON value starting at i; false when malformed.
+  const skip = (): boolean => {
+    ws();
+    const c = raw[i] ?? '';
+    if (c === '"') return str() !== null;
+    if (c === '{' || c === '[') {
+      const stack = [c];
+      i++;
+      while (i < raw.length && stack.length > 0) {
+        const d = raw[i] ?? '';
+        if (d === '"') {
+          if (str() === null) return false;
+          continue;
+        }
+        if (d === '{' || d === '[') stack.push(d);
+        else if (d === '}' || d === ']') {
+          const open = stack.pop();
+          if ((d === '}' && open !== '{') || (d === ']' && open !== '['))
+            return false;
+        }
+        i++;
+      }
+      return stack.length === 0;
+    }
+    if (c === '') return false;
+    while (i < raw.length && !/[,}\]:\s]/.test(raw[i] ?? '')) i++;
+    return true;
+  };
+  // Value start of a direct member of the object raw[i] opens;
+  // -1 when absent or malformed.
+  const member = (name: string): number => {
+    if ((raw[i] ?? '') !== '{') return -1;
+    i++;
+    for (;;) {
+      ws();
+      if ((raw[i] ?? '') !== '"') return -1;
+      const key = str();
+      if (key === null) return -1;
+      ws();
+      if ((raw[i] ?? '') !== ':') return -1;
+      i++;
+      ws();
+      if (key === name) return i;
+      if (!skip()) return -1;
+      ws();
+      if ((raw[i] ?? '') !== ',') return -1;
+      i++;
+    }
+  };
+  ws();
+  const dataAt = member('data');
+  if (dataAt < 0) return null;
+  i = dataAt;
+  const idAt = member('id');
+  if (idAt < 0) return null;
+  // Bare digits or a quoted decimal string; a nested value, null,
+  // or boolean fails closed.
+  const m = /^(?:"(\d+)"|(\d+))/.exec(raw.slice(idAt));
+  return m?.[1] ?? m?.[2] ?? null;
+}
+
 export async function listPaystackRefunds(
   reference: string,
   options: { deadlineMs?: number } = {}
@@ -90,13 +203,11 @@ export async function listPaystackRefunds(
   );
   // Read the ID off the wire text, not the parsed payload: JSON.parse
   // rounds integers past 2^53, so parsing first would corrupt a large
-  // ID and then reject it as unsafe. Anchor on the data object with
-  // the ID as its first key (Paystack's documented shape); anything
+  // ID and then reject it as unsafe. Member order is not
+  // contractual, so scan structurally for the top-level data object
+  // and its direct id member; nested ids never match, and anything
   // else fails closed like before.
-  const wireId = /"data"\s*:\s*\{\s*"id"\s*:\s*(?:"(\d+)"|(\d+))/.exec(
-    verified.raw
-  );
-  const wireText = wireId?.[1] ?? wireId?.[2] ?? null;
+  const wireText = readWireDataId(verified.raw);
   const transactionId =
     wireText !== null && /^[1-9][0-9]*$/.test(wireText) ? wireText : null;
   if (transactionId === null) throw new Error('Unverified refund transaction');

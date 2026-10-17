@@ -20,12 +20,12 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "88a780b111664712604b5ddd4f60a1671f80fa0c",
+  "originMainSha": "871d95f2fd1b4b11a83d64b0d6daafa6a87fb2dd",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "8d72659504ba23f89913d8d0b4d547747cc74e7aa7e05b64bea250aa3b8db4b2",
+  "routeTreeSha256": "6cd09cfdcf1e67eb507c58d24340d9a7f8cf6ae82e5834b34c84510427b8bde2",
   "routingProxyInputSha256": "c98620a98a9e9e62a4901a6a6b8f8da385695ff4844cb8f41f5d115ebb6f5b8f",
   "rows": [
     {
@@ -8507,5 +8507,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "72cc963df2cd72a40cacd6ddde538b1b080754b586e13d8d88410b8d74c0f615"
+  "inventorySha256": "3b227799bb27c5f3a39fefc28455accc90071ae6195632609e5937b3fdcdb6bc"
 }

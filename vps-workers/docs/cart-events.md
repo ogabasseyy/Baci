@@ -10,8 +10,10 @@ and anon key, `COMMERCE_CART_WORKER_JWT` for the `commerce_cart_worker` role,
 and explicit `COMMERCE_CART_EVENTS_ENABLED=true`. The default is disabled.
 Do not supply a service-role key or copy the general workers environment.
 
-The JWT must have more than five minutes remaining at startup; rotation and
-restart are operational steps. Never print its claims or value in operator
+The client accepts the JWT until its actual `exp` (no early cutoff) and
+re-reads the token file on every pass, so rotation must complete before
+`exp` with margin for an in-flight batch; rotation and restart are
+operational steps. Never print its claims or value in operator
 logs. The database, not the script, verifies signatures and checks the role.
 
 The enabled worker runs `cleanup_commerce_carts` on startup, including

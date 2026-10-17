@@ -142,19 +142,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts',
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
-    credentialPaths: [
-      ...eventPipelineCartCredentialPaths,
-      ...eventPipelineCredentialPaths,
-      ...eventPipelineImmediateOrderCredentialPaths,
-      ...eventPipelineJumiaCredentialPaths,
-      ...eventPipelinePiggyvestCredentialPaths,
-      ...eventPipelineRepairPickupCredentialPaths,
-      ...eventPipelineRedvaultCredentialPaths,
-      ...eventPipelineShippingCredentialPaths,
-      ...eventPipelineChatCredentialPaths,
-      ...eventPipelinePaystackRefundCredentialPaths,
-      ...eventPipelineGatewayCronCredentialPaths,
-    ],
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
       'apps/web/src/lib/supabase/server.ts',

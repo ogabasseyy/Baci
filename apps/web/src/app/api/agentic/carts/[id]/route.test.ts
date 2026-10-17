@@ -414,6 +414,53 @@ describe('/api/agentic/carts/[id]', () => {
     expect(body).toMatchObject({ code: 'version_conflict' });
   });
 
+  it('rejects a replacement when any submitted line fails to resolve', async () => {
+    mockMutation({
+      line_items: [
+        { item: { id: 'product-2' }, quantity: 2 },
+        { item: { id: 'product-gone' }, quantity: 1 },
+      ],
+    });
+    // The calculator resolves only one of the two submitted lines.
+    mockCalculation(2, 'product-2');
+    const { updateChain } = createSupabaseMock({
+      cartResult: {
+        data: {
+          agent_id: 'openai-agent',
+          buyer: {},
+          cart_id: 'cart_123',
+          cart_items: [{ id: 'product-1', quantity: 1 }],
+          checkout_session_id: null,
+          currency: 'NGN',
+          id: 'row-1',
+          merchant_id: 'merchant-1',
+          metadata: {},
+          shipping_address: null,
+          status: 'active',
+          updated_at: '2026-10-14T00:00:00.000Z',
+        },
+        error: null,
+      },
+    });
+
+    const { POST } = await import('./route');
+    const response = await POST(
+      new NextRequest('http://localhost/api/agentic/carts/cart_123', {
+        body: JSON.stringify({
+          line_items: [
+            { item: { id: 'product-2' }, quantity: 2 },
+            { item: { id: 'product-gone' }, quantity: 1 },
+          ],
+        }),
+        method: 'POST',
+      }),
+      { params: Promise.resolve({ id: 'cart_123' }) }
+    );
+
+    expect(response.status).toBe(400);
+    expect(updateChain.update).not.toHaveBeenCalled();
+  });
+
   it('rejects updates after a cart is converted', async () => {
     mockMutation({
       line_items: [{ item: { id: 'product-2' }, quantity: 2 }],

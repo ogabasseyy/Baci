@@ -1238,12 +1238,15 @@ describe('finalizeAgenticCheckoutPayment', () => {
     ).toBe(true);
   });
 
-  it('does not store the conflict when cancellation reconciliation fails', async () => {
+  it.each([
+    ['write error', { message: 'write failed' }],
+    ['zero-row match', null],
+  ] as const)('does not store the conflict when cancellation reconciliation fails (%s)', async (_label, error) => {
     const chains = [
       createUpdateChain({ session_id: 'agentic_session_1' }),
       createUpdateChain({ session_id: 'agentic_session_1' }),
       createUpdateChain({ session_id: 'agentic_session_1' }),
-      createUpdateChain(null, { message: 'write failed' }),
+      createUpdateChain(null, error),
     ];
     const supabase = createSupabaseWithUpdateChains(chains);
     const originalFrom = supabase.from.getMockImplementation();
@@ -1281,6 +1284,43 @@ describe('finalizeAgenticCheckoutPayment', () => {
       createUpdateChain({ session_id: 'agentic_session_1' }),
       createUpdateChain({ session_id: 'agentic_session_1' }),
       createUpdateChain(null, { message: 'write failed' }),
+    ];
+    const supabase = createSupabaseWithUpdateChains(chains);
+    const originalFrom = supabase.from.getMockImplementation();
+    let orderReads = 0;
+    supabase.from.mockImplementation((table) => {
+      if (table !== 'orders') return originalFrom?.(table) as never;
+      const chain = {
+        select: vi.fn(),
+        eq: vi.fn(),
+        maybeSingle: vi.fn().mockImplementation(async () => {
+          orderReads += 1;
+          return {
+            data: {
+              payment_status: orderReads === 1 ? 'pending' : 'paid',
+              shipping_status: 'pending',
+            },
+            error: null,
+          };
+        }),
+      };
+      chain.select.mockReturnValue(chain);
+      chain.eq.mockReturnValue(chain);
+      return chain as never;
+    });
+    const response = await finalizeAgenticCheckoutPayment(
+      finalizeInput(supabase)
+    );
+    expect(response.status).toBe(500);
+    expect(sendAgenticOrderCreatedWebhook).not.toHaveBeenCalled();
+  });
+
+  it('does not claim paid when the reconciliation write matches no row', async () => {
+    const chains = [
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain({ session_id: 'agentic_session_1' }),
+      createUpdateChain(null),
     ];
     const supabase = createSupabaseWithUpdateChains(chains);
     const originalFrom = supabase.from.getMockImplementation();

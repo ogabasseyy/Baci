@@ -146,9 +146,9 @@ export async function readFinalizationOrderState(input: {
 /**
  * Rewrites a just-written payment_pending session as completed once
  * the post-write recheck finds the order already paid. Fenced by the
- * order id and the pending payment state the write installed; when
- * the payment webhook already completed the session, zero rows match
- * and the already-paid answer below is still correct.
+ * order id and the pending payment state the write installed; callers
+ * require a matched row so a lost conditional update never claims a
+ * paid response while the session remains payment_pending.
  */
 export function writePaidFinalizationSession(
   input: Pick<

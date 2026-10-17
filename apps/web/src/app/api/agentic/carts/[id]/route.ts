@@ -231,6 +231,24 @@ export async function POST(request: NextRequest, props: RouteProps) {
   if (calculation.lineItems.length === 0) {
     return respond({ error: 'No valid cart items' }, 400);
   }
+  // A platform cart update is an atomic full replacement: when the
+  // caller submitted lines, every one must resolve. Persisting only
+  // the calculator's surviving lines would silently delete the
+  // rejected items from the stored cart.
+  if (
+    parsed.data.line_items !== undefined &&
+    calculation.lineItems.length !== items.length
+  ) {
+    return respond(
+      {
+        error: 'Invalid cart items',
+        messages: calculation.messages.filter(
+          (message) => message.type === 'error'
+        ),
+      },
+      400
+    );
+  }
 
   const updatePayload = buildUcpCartUpdate({
     buyer: parsed.data.buyer,

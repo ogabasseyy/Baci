@@ -3,26 +3,10 @@ import { vi } from 'vitest';
 import { calculateCheckoutSession } from '@/lib/agentic/checkout';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { validHumanConfirmation } from './route-complete-test-helpers';
-
-function makeReadySession() {
-  return {
-    id: 'row-1',
-    session_id: 'agentic_session_1',
-    merchant_id: 'merchant-1',
-    cart_items: [{ id: 'product-1', quantity: 1 }],
-    shipping_method: 'pickup_store_1',
-    shipping_address: { city: 'Lagos' },
-    currency: 'NGN',
-    status: 'processing',
-    order_id: null,
-    payment_reference: null,
-    virtual_account_bank: null,
-    virtual_account_name: null,
-    virtual_account_number: null,
-    metadata: { agentic: { existing: true } },
-  };
-}
+import {
+  makeReadySession,
+  validHumanConfirmation,
+} from './route-complete-test-helpers';
 
 function buildCompleteRequest({
   confirmationAmount = 500000,

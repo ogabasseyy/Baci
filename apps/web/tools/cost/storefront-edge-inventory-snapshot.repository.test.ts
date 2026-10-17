@@ -18,7 +18,7 @@ it('binds the checked-in inventory snapshot to current committed source content'
   expect(result).toEqual({
     validationKind: 'repository_snapshot',
     snapshotSha256:
-      'd63c5a0c53f943759f3f24376126e00cc86943879c1623bef0cd427a5405e4c1',
+      '41bca9f65c0b9f7bc69465db6e35a35da1cb5eee1f500bbca4332518c5b68fd6',
     validatedSourceSha: expect.stringMatching(/^[a-f0-9]{40}$/),
     rowCount: 583,
   });

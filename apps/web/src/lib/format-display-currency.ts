@@ -108,9 +108,11 @@ export function formatDisplayCurrency(
   try {
     return formatWithDisplayCurrency(amount, currency, options);
   } catch {
-    // A display formatter must never crash its page: legacy rows
-    // can store malformed codes Intl rejects, so fall back to NGN.
-    return formatWithDisplayCurrency(amount, 'NGN', options);
+    // A display formatter must never crash its page — but it must
+    // never mislabel money either. Legacy rows can store codes Intl
+    // rejects, so preserve the stored code instead of rendering NGN.
+    const code = currency.trim() === '' ? 'NGN' : currency;
+    return `${code} ${amount.toFixed(2)}`;
   }
 }
 

@@ -80,15 +80,12 @@ describe('formatDisplayCurrency', () => {
     ).toContain('1,500.000');
   });
 
-  it('falls back to NGN for malformed currency codes', () => {
-    // A display formatter must never crash its page: legacy rows
-    // can store codes Intl rejects, so render as NGN instead.
-    expect(formatDisplayCurrency(250, 'NOT_REAL')).toBe(
-      formatDisplayCurrency(250, 'NGN')
-    );
-    expect(formatDisplayCurrency(250, 'ZZ')).toBe(
-      formatDisplayCurrency(250, 'NGN')
-    );
+  it('preserves the stored code for malformed currency codes', () => {
+    // A display formatter must never crash its page — but it must
+    // never mislabel money either: no NGN symbol for unknown codes.
+    expect(formatDisplayCurrency(250, 'NOT_REAL')).toBe('NOT_REAL 250.00');
+    expect(formatDisplayCurrency(250, 'ZZ')).toBe('ZZ 250.00');
+    expect(formatDisplayCurrency(250, 'NOT_REAL')).not.toMatch(/₦/);
   });
 
   it('trims padded legacy currency codes instead of crashing', () => {

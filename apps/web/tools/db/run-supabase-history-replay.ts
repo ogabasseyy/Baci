@@ -255,7 +255,7 @@ export async function runSupabaseHistoryReplay(
   }
   let cleanupFailed = false;
   let cleanupResult: ownershipTools.ReplayProjectCleanupResult | undefined;
-  let canRemoveWorkdir = !cleanup;
+  let canRemoveWorkdir = false;
   if (cleanup && ownership) {
     try {
       cleanupResult = await runtime.stopOwnedProject({
@@ -278,7 +278,7 @@ export async function runSupabaseHistoryReplay(
     } catch {
       cleanupFailed = true;
     }
-  }
+  } else if (!cleanup) process.stderr.write(`replay kept: ${workdir}\n`);
   if (cleanupFailed) throw new Error('Supabase replay cleanup failed');
   if (failure) throw withCleanupDiagnostics(failure, cleanupResult);
   if (!receipt) throw new Error('Supabase replay did not produce a receipt');

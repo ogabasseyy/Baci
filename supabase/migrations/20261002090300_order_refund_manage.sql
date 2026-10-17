@@ -20,15 +20,13 @@ DECLARE
   v_order record;
   v_step_status text;
   v_step_error text;
-  v_step_attempts integer;
-  v_step_retry_requests integer;
+  v_step_attempts integer; v_step_retry_requests integer;
   v_step_last_retry_at timestamptz;
   v_manual jsonb;
   v_manual_partial boolean;
   v_payment_refunded numeric;
   v_payment_pending numeric;
-  v_refunded numeric;
-  v_pending numeric;
+  v_refunded numeric; v_pending numeric;
   v_has_movement_evidence boolean;
   v_remaining numeric;
   v_reversed_internal numeric;
@@ -233,9 +231,11 @@ BEGIN
       AND v_step_last_retry_at > now() - interval '60 seconds' THEN
       RAISE EXCEPTION 'retry_too_soon' USING ERRCODE='P0001';
     END IF;
+    -- Retry re-arms without claiming: claimed_at stays put so the
+    -- drain's claimed_at-ASC failed fetch keeps the retried row first.
     UPDATE public.order_cancellation_side_effects SET attempts=0,
       retry_requests=retry_requests+1,last_retry_by=v_actor,last_retry_at=now(),
-      claimed_at=now(),error=NULL WHERE order_id=p_order_id AND step='refund'
+      error=NULL WHERE order_id=p_order_id AND step='refund'
       RETURNING status,error,attempts,retry_requests INTO v_step_status,v_step_error,v_step_attempts,v_step_retry_requests;
   ELSIF p_action='manual' THEN
     -- Allocation and zero-balance finalization live in the record

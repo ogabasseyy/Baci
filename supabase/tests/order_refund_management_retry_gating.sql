@@ -117,19 +117,22 @@ BEGIN
       'Insufficient balance');
 
   -- Retry-throttle fixtures: one row re-armed seconds ago, one
-  -- whose last retry aged past the minimum interval.
+  -- whose last retry aged past the minimum interval. The aged row
+  -- carries an hour-old claimed_at: the retry pin below proves the
+  -- requeue leaves queue position untouched.
   INSERT INTO public.order_cancellation_side_effects (
     order_id, merchant_id, step, status, claim_token, attempts, error,
-    last_retry_at
+    last_retry_at, claimed_at
   ) VALUES
     ('9ef11000-0000-4000-8000-000000000060',
       '9ef10100-0000-4000-8000-000000000001', 'refund',
       'failed', '9ef13000-0000-4000-8000-000000000060', 5,
-      'Insufficient balance', pg_catalog.now()),
+      'Insufficient balance', pg_catalog.now(), pg_catalog.now()),
     ('9ef11000-0000-4000-8000-000000000061',
       '9ef10100-0000-4000-8000-000000000001', 'refund',
       'failed', '9ef13000-0000-4000-8000-000000000061', 5,
-      'Insufficient balance', pg_catalog.now() - interval '70 seconds');
+      'Insufficient balance', pg_catalog.now() - interval '70 seconds',
+      pg_catalog.now() - interval '1 hour');
 END;
 $fixtures$;
 
@@ -199,4 +202,30 @@ BEGIN
   END IF;
 END;
 $refund_retry_gating$;
+
+SET LOCAL ROLE service_role;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'service_role', true);
+
+DO $refund_retry_queue_position$
+DECLARE
+  v_claimed_at timestamptz;
+  v_last_retry_at timestamptz;
+BEGIN
+  -- The aged retry above re-armed without claiming: claimed_at
+  -- keeps its hour-old value so the drain's failed-fetch order
+  -- (claimed_at ASC) keeps the human-retried row near the front,
+  -- while last_retry_at stamps fresh as the retry's audit trail.
+  SELECT claimed_at, last_retry_at
+    INTO v_claimed_at, v_last_retry_at
+    FROM public.order_cancellation_side_effects
+   WHERE order_id = '9ef11000-0000-4000-8000-000000000061'
+     AND step = 'refund';
+  IF v_claimed_at > pg_catalog.now() - interval '50 minutes' THEN
+    RAISE EXCEPTION 'retry restamped claimed_at, %', v_claimed_at;
+  END IF;
+  IF v_last_retry_at < pg_catalog.now() - interval '60 seconds' THEN
+    RAISE EXCEPTION 'retry did not stamp last_retry_at';
+  END IF;
+END;
+$refund_retry_queue_position$;
 ROLLBACK;

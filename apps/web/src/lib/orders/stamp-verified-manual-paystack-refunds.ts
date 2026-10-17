@@ -80,7 +80,12 @@ export async function stampVerifiedManualPaystackRefunds({
     }
     const providerRefundId = remainingPairs.splice(pairIndex, 1)[0]
       ?.providerRefundId;
-    const { error } = await supabase
+    // Guard the stale snapshot: a concurrent verdict (failed/pending
+    // stamp, demote) landing between the preflight read and this write
+    // must not be silently overwritten back to processed, after which
+    // coverage would count contradicted money. Zero rows fail loud so
+    // the retry re-verifies instead of quarantining on a lost stamp.
+    const { data: stamped, error } = await supabase
       .from('transactions')
       .update({
         metadata: {
@@ -90,8 +95,11 @@ export async function stampVerifiedManualPaystackRefunds({
         },
         status: row.status,
       })
-      .eq('id', row.id);
-    if (error) {
+      .eq('id', row.id)
+      .eq('status', row.status)
+      .is('metadata->>provider_refund_status', null)
+      .select('id');
+    if (error || (stamped ?? []).length === 0) {
       throw new Error('verified_manual_paystack_stamp_failed');
     }
   }

@@ -7,10 +7,19 @@ const linkedPaymentId = (row: { metadata: unknown }): string | null => {
   return typeof claimed === 'string' ? claimed : null;
 };
 
-function supabase(error: unknown = null) {
-  const eq = vi.fn().mockResolvedValue({ error });
-  const update = vi.fn().mockReturnValue({ eq });
-  return { eq, from: vi.fn().mockReturnValue({ update }), update };
+function supabase(error: unknown = null, data: unknown = [{ id: 'refund-1' }]) {
+  const select = vi.fn().mockResolvedValue({ data, error });
+  const chain: Record<string, ReturnType<typeof vi.fn>> = {};
+  chain.eq = vi.fn().mockReturnValue(chain);
+  chain.is = vi.fn().mockReturnValue(chain);
+  chain.select = select;
+  const update = vi.fn().mockReturnValue(chain);
+  return {
+    chain,
+    from: vi.fn().mockReturnValue({ update }),
+    select,
+    update,
+  };
 }
 
 function row(overrides: Record<string, unknown> = {}) {
@@ -88,8 +97,17 @@ describe('stampVerifiedManualPaystackRefunds', () => {
     expect(client.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'refunded' })
     );
-    expect(client.eq).toHaveBeenCalledWith('id', 'refund-1');
-    expect(client.eq).toHaveBeenCalledWith('id', 'refund-2');
+    expect(client.chain.eq).toHaveBeenCalledWith('id', 'refund-1');
+    expect(client.chain.eq).toHaveBeenCalledWith('id', 'refund-2');
+    // The stale snapshot is guarded: a concurrent verdict between the
+    // preflight read and the stamp must zero-row instead of being
+    // overwritten back to processed.
+    expect(client.chain.eq).toHaveBeenCalledWith('status', 'completed');
+    expect(client.chain.is).toHaveBeenCalledWith(
+      'metadata->>provider_refund_status',
+      null
+    );
+    expect(client.select).toHaveBeenCalledWith('id');
   });
 
   it('skips rows whose metadata carries no Paystack claim', async () => {
@@ -157,6 +175,23 @@ describe('stampVerifiedManualPaystackRefunds', () => {
 
   it('throws when the stamp write fails', async () => {
     const client = supabase(new Error('write failed'));
+    await expect(
+      stampVerifiedManualPaystackRefunds({
+        currency: 'NGN',
+        linkedPaymentId,
+        pairedProviderRefunds: [{ kobo: 100, providerRefundId: '7' }],
+        refundRows: [row()],
+        supabase: client as never,
+        transactionId: 'payment-1',
+      })
+    ).rejects.toThrow('verified_manual_paystack_stamp_failed');
+  });
+
+  it('throws when a concurrent verdict lands between preflight read and stamp', async () => {
+    // The guard matches nothing after the concurrent write: zero rows
+    // fail loud so the retry re-verifies instead of stamping over the
+    // verdict the other worker just persisted.
+    const client = supabase(null, []);
     await expect(
       stampVerifiedManualPaystackRefunds({
         currency: 'NGN',

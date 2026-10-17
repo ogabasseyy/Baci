@@ -102,19 +102,17 @@ export async function checkCancellationRefundProvider({
       'Unable to verify existing Paystack refunds; review required'
     );
   }
-  // Completed manual Paystack refunds carry the merchant reference, not the
-  // numeric provider ID, so they never match by gateway_reference. A fungible
-  // amount pool cannot attribute which provider refund a manual row refers
-  // to, so coverage requires an exact single-row correspondence: each
-  // unmatched processed row must pair with exactly one same-currency manual
-  // row of the identical amount. Anything else quarantines for review.
-  // Rows already matched to a processed provider row by reference stay out
-  // of the candidate set so one manual row cannot account twice.
-  const processedIds = new Set(
-    rows
-      .filter((row) => row.status === 'processed')
-      .map((row) => String(row.id))
-  );
+  // A fungible amount pool cannot attribute which provider refund a
+  // manual row refers to, so coverage requires an exact single-row
+  // correspondence: each unmatched processed row must pair with exactly
+  // one same-currency manual row of the identical amount. Anything else
+  // quarantines for review. Manual rows always pair from the pool —
+  // even when the merchant entered the numeric provider ID as the
+  // reference (legacy rows carry it bare in gateway_reference): only
+  // the persisted stamp proves verification, so excluding
+  // reference-matching manuals would leave them permanently pending
+  // with no pair and no quarantine. Native ledger rows match by
+  // reference in the rows loop instead and never enter the pool.
   // IDs already persisted onto stamped rows are reserved before
   // pairing: the proof stamp skips stamped rows, so pairing their
   // ids to unstamped claims would cross-assign the old id to a new
@@ -162,11 +160,6 @@ export async function checkCancellationRefundProvider({
       normalizeRefundMoneyField(currency)
     )
       continue;
-    if (
-      item.gateway_reference != null &&
-      processedIds.has(item.gateway_reference.trim())
-    )
-      continue;
     // Already stamped: its proof is persisted, so it must neither
     // consume a fresh pair nor demand one from the listing.
     if (
@@ -201,8 +194,14 @@ export async function checkCancellationRefundProvider({
       return quarantine('Paystack refund amount or currency mismatch', {
         provider_refund_id: row.id,
       });
+    // Native ledger rows match by reference: their ledger presence is
+    // the proof, so the provider row needs no pair. Manual rows never
+    // shortcut here even on a reference match (legacy rows can carry
+    // the bare provider ID): only a persisted stamp proves a manual
+    // claim, so they fall through to pairing below.
     if (
       (known?.status === 'completed' || known?.status === 'refunded') &&
+      known?.metadata?.method == null &&
       row.status === 'processed'
     )
       continue;

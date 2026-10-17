@@ -230,4 +230,28 @@ describe('checkCancellationRefundProvider manual pairing', () => {
       })
     ).rejects.toThrow('exceed provider-confirmed amounts');
   });
+
+  it('pairs a manual whose reference is the provider refund id', async () => {
+    // Legacy rows carry the bare merchant reference: when the merchant
+    // entered the numeric provider ID, the manual still needs its
+    // stamp pair — shortcutting it as verified would leave the row
+    // permanently pending with no pair and no quarantine.
+    vi.mocked(listPaystackRefunds).mockResolvedValue([
+      { id: '7', amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
+    await expect(
+      checkCancellationRefundProvider({
+        ...input,
+        knownRefunds: [
+          {
+            gateway_reference: '7',
+            amount: 1,
+            status: 'completed',
+            currency: 'NGN',
+            metadata: { method: 'paystack' },
+          },
+        ],
+      })
+    ).resolves.toEqual([{ kobo: 100, providerRefundId: '7' }]);
+  });
 });

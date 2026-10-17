@@ -14,6 +14,13 @@
 -- manager: a cross-merchant row must never produce a false replay
 -- or conflict, failed rows are not recorded transfers (retrying one
 -- records fresh), and the note rewrite touches only matched rows.
+-- The leg pin is deliberately NOT part of replay identity: the
+-- reference names the transfer (one transfer may span legs), while
+-- the pin is a record-time allocation hint consumed when rows are
+-- written. A retry naming a different leg is the same transfer, so
+-- it resucceeds idempotently without moving rows; conflicting on
+-- the pin would strand a mistyped retry with no way to converge,
+-- since rows can never be deleted or relinked.
 DROP FUNCTION IF EXISTS private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text);
 DROP FUNCTION IF EXISTS private.apply_manual_refund_replay_v1(uuid,numeric,timestamptz,text,text,text,boolean);
 CREATE OR REPLACE FUNCTION private.apply_manual_refund_replay_v1(

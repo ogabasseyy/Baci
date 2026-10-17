@@ -118,6 +118,9 @@ DECLARE
   v_result jsonb;
   v_label text;
   v_attempts integer;
+  -- Replay identity includes the refund instant: the pin-divergent
+  -- retry below must present the same instant as the record call.
+  v_pin_replay_at timestamptz := pg_catalog.now();
 BEGIN
   -- A Paystack attestation without a leg pin routes to review when
   -- several external legs still need money: FIFO would link the
@@ -201,6 +204,25 @@ BEGIN
   IF (v_result->>'remaining')::numeric <> 50 THEN
     RAISE EXCEPTION 'spillover record left remaining %', v_result->>'remaining';
   END IF;
+  -- Replay ignores the leg pin: the same reference re-presented
+  -- pinned to a different leg resucceeds idempotently (no new rows,
+  -- no conflict) instead of moving the transfer.
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000044', 'manual', 50,
+    v_pin_replay_at, 'bank_transfer', 'replay-pin-1', NULL, true,
+    p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000059'
+  ) INTO v_result;
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000044', 'manual', 50,
+    v_pin_replay_at, 'bank_transfer', 'replay-pin-1', NULL, true,
+    p_payment_transaction_id => '9ef12000-0000-4000-8000-000000000060'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 0 THEN
+    RAISE EXCEPTION 'pin-divergent replay left remaining %', v_result->>'remaining';
+  END IF;
+  IF pg_catalog.jsonb_array_length(v_result->'history') <> 3 THEN
+    RAISE EXCEPTION 'pin-divergent replay duplicated rows';
+  END IF;
 END;
 $refund_round33_pins$;
 
@@ -233,6 +255,13 @@ BEGIN
   AND metadata->>'payment_transaction_id' = '9ef12000-0000-4000-8000-000000000059'
   AND amount = 50;
   IF v_count <> 1 THEN RAISE EXCEPTION 'spillover second slice mislinked'; END IF;
+  -- The pin-divergent retry recorded nothing new and moved nothing:
+  -- one row, still on the originally pinned leg.
+  SELECT COUNT(*) INTO v_count FROM public.transactions
+  WHERE order_id = '9ef11000-0000-4000-8000-000000000044'
+  AND metadata->>'reference' = 'replay-pin-1'
+  AND metadata->>'payment_transaction_id' = '9ef12000-0000-4000-8000-000000000059';
+  IF v_count <> 1 THEN RAISE EXCEPTION 'pin-divergent replay moved rows'; END IF;
 END;
 $refund_round36_pins$;
 ROLLBACK;

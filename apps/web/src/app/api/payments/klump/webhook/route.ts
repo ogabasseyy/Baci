@@ -127,6 +127,11 @@ function updateKlumpOrder({
       // cancelled-order handler below files such payments for review.
       .neq('payment_status', 'cancelled')
       .neq('payment_status', 'canceled')
+      // Same fence on the shipping axis: either axis releasing the
+      // loyalty claim (migration 20261010000014) makes the order
+      // terminal for payment finalization.
+      .neq('shipping_status', 'cancelled')
+      .neq('shipping_status', 'canceled')
       .select(
         'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
       )
@@ -381,14 +386,15 @@ export async function POST(request: NextRequest) {
       order = existingOrder;
     }
 
-    // The update predicates exclude payment-cancelled orders, so a
-    // late capture for one lands here with updatedOrder null: file it
-    // for review instead of confirming inventory on an unpaid order
-    // (which rejects and would retry the webhook into a loop).
+    // The update predicates exclude cancelled orders (either axis),
+    // so a late capture for one lands here with updatedOrder null:
+    // file it for review instead of confirming inventory on an unpaid
+    // order (which rejects and would retry the webhook into a loop).
     if (
       order &&
       (order.payment_status === 'cancelled' ||
-        order.payment_status === 'canceled')
+        order.payment_status === 'canceled' ||
+        isOrderClampedAsCancelled(order))
     ) {
       const reviewFiled = await handlePaymentForCancelledOrder({
         gatewayReference: referenceResult.data,

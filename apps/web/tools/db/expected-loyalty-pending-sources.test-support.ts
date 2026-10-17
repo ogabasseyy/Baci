@@ -123,4 +123,9 @@ export const EXPECTED_LOYALTY_PENDING_SOURCES = [
       'supabase/migrations/20261010000024_consume_known_minimum.sql',
     sha256: 'e8fd9c67db3370deba45d5cb8ecbf453238ddd24d5fb03a8466a282fb4ee8fbc',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010000025_reconcile_rdm_collisions.sql',
+    sha256: '77774b69bf5277f396822770fbc8552e44a6556f063211705124fa9e15a74899',
+  },
 ] as const;

@@ -560,6 +560,41 @@ describe('POST /api/payments/klump/webhook', () => {
     );
   });
 
+  it('files reconciliation when the paid update was filtered out by a shipping-only cancellation', async () => {
+    mocks.createAdminClient.mockReturnValue(
+      createSupabaseMock({
+        orderUpdateResult: { data: null, error: null },
+        preUpdateOrderStatusResult: {
+          data: { payment_status: 'unpaid', shipping_status: 'cancelled' },
+          error: null,
+        },
+      })
+    );
+
+    const rawBody = JSON.stringify(successfulPayload);
+    const response = await POST(
+      createRequest(successfulPayload, signPayload(rawBody, 'klump-secret'))
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      message: 'Klump payment recorded; order was cancelled, filed for review',
+      success: true,
+    });
+    expect(mocks.recordMerchantSettlement).not.toHaveBeenCalled();
+    expect(mocks.reconciliationInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'payment_received_after_cancellation',
+      })
+    );
+    // The paid write fences the shipping axis as well as payment.
+    expect(mocks.orderUpdateNeq).toHaveBeenCalledWith(
+      'shipping_status',
+      'cancelled'
+    );
+  });
+
   it('validates rounded Klump payments against merchant_amount when the stored order total is fractional', async () => {
     const payload = {
       ...successfulPayload,

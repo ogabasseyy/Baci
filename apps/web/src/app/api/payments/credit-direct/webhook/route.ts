@@ -627,17 +627,19 @@ export async function POST(request: NextRequest) {
           // BNPL states. 'partially_paid' is a legitimate source state: a
           // Credit Direct RESIDUAL settles the remainder after a manual or
           // deposit payment (amount_paid above completes the total).
-          // 'cancelled' stays allowed so the prevent_cancelled_order_reopen
-          // trigger can still clamp the reopen attempt (handled below);
-          // 'refunded' is intentionally excluded — nothing clamps a refunded
-          // order back, so without this guard a late webhook could stomp it
-          // back to 'paid'.
+          // 'cancelled' is excluded: a payment-only cancellation does
+          // not trip prevent_cancelled_order_reopen (it clamps only
+          // shipping-cancelled rows), and migration 20261010000014
+          // already released the order's loyalty claim, so letting
+          // this update flip it to paid could reopen an order whose
+          // code another order has claimed. Cancelled captures are
+          // recorded and filed for review in the re-read branch below.
+          // 'refunded' is intentionally excluded for the same reason.
           .in('payment_status', [
             'pending',
             'partially_paid',
             'bnpl_pending',
             'bnpl_approved',
-            'cancelled',
           ])
           .select('id, payment_status, shipping_status, cancelled_at')
           .maybeSingle();
@@ -749,6 +751,60 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({
               received: true,
               message: 'Order was refunded; payment filed for review',
+            });
+          }
+
+          if (
+            currentOrder.payment_status === 'cancelled' ||
+            currentOrder.payment_status === 'canceled'
+          ) {
+            // Record the disbursed money and file it for ops review,
+            // mirroring the refunded branch: the loyalty claim was
+            // already released, so this order must not reopen.
+            const cancelledTxResult = await recordCreditDirectTransaction({
+              amount: totalAmount,
+              gatewayReference: payload.checkoutTransactionId,
+              gatewayResponse: payload,
+              merchantId: order.merchant_id,
+              merchantAmount,
+              orderId: order.id,
+              platformFee,
+              supabase,
+            });
+            if (cancelledTxResult.kind === 'error') {
+              return NextResponse.json(
+                { error: 'Failed to record transaction' },
+                { status: 500 }
+              );
+            }
+            const cancelReviewFiled = await handlePaymentForCancelledOrder({
+              gatewayReference: payload.checkoutTransactionId,
+              order: { id: order.id },
+              reason:
+                'Credit Direct merchant payout captured for an order already cancelled',
+              transactionId: cancelledTxResult.transactionId,
+            });
+            if (!cancelReviewFiled) {
+              return NextResponse.json(
+                { error: 'Payment reconciliation review unavailable' },
+                { status: 500 }
+              );
+            }
+            if (
+              !(await resolveCreditDirectConfirmationReview({
+                orderId: order.id,
+                providerReference: payload.checkoutTransactionId,
+                supabase,
+              }))
+            ) {
+              return NextResponse.json(
+                { error: 'Payment reconciliation review unavailable' },
+                { status: 500 }
+              );
+            }
+            return NextResponse.json({
+              received: true,
+              message: 'Order was cancelled; payment filed for review',
             });
           }
 

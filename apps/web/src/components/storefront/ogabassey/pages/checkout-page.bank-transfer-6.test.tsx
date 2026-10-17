@@ -160,6 +160,8 @@ it('keeps another checkout recovery key when a DVA transfer confirms', async () 
   const stored = JSON.parse(
     window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
   );
-  expect(stored.key).toBe(otherTabKey);
+  expect(
+    Object.values(stored).map((entry) => (entry as { key: string }).key)
+  ).toContain(otherTabKey);
   fetchMock.mockRestore();
 });

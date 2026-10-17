@@ -205,6 +205,25 @@ describe('POST /api/storefront/loyalty/enroll', () => {
     });
   });
 
+  it('fails retryably when the replay status envelope reports failure', async () => {
+    // get_loyalty_status answers failures as success:false envelopes,
+    // not PostgREST errors: defaults must not become a receipt.
+    mocks.mockRpc.mockImplementation(async (fn: string) =>
+      fn === 'get_loyalty_status'
+        ? {
+            data: { success: false, error: 'customer_not_found' },
+            error: null,
+          }
+        : { data: { success: false, error: 'already_enrolled' }, error: null }
+    );
+
+    const response = await POST(
+      createRequest({ merchant_id: MERCHANT_ID, customer_id: CUSTOMER_ID })
+    );
+
+    expect(response.status).toBe(500);
+  });
+
   it('fails retryably when the replay status lookup errors', async () => {
     // Fabricating zero/bronze defaults would misreport a committed
     // enrollment; a failed status read must surface as a failure.

@@ -145,10 +145,24 @@ export async function POST(request: NextRequest) {
         );
       }
       const status = (statusData ?? {}) as {
+        success?: unknown;
         points_balance?: unknown;
         current_tier?: unknown;
         referral_code?: unknown;
       };
+      if (status.success === false) {
+        // The status RPC answers failures as success:false envelopes,
+        // not PostgREST errors: replaying defaults here would still
+        // fabricate the receipt, so fail retryably instead.
+        logger.error({
+          message: 'Failed to load enrollment for replay',
+          error: { status: 'enrollment_status_unavailable' },
+        });
+        return NextResponse.json(
+          { error: 'Failed to enroll in loyalty program' },
+          { status: 500 }
+        );
+      }
       return NextResponse.json({
         success: true,
         message: 'Already enrolled in loyalty program',

@@ -54,5 +54,6 @@
 \ir enroll_customer_loyalty_consume_minimum.sql
 \ir enroll_customer_loyalty_status_receipts.sql
 \ir enroll_customer_loyalty_cancel_reuse.sql
+\ir enroll_customer_loyalty_rdm_collisions.sql
 
 ROLLBACK;

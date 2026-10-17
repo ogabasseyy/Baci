@@ -44,7 +44,7 @@ describe('checkCancellationRefundProvider', () => {
   });
   it('blocks a refund made directly in Paystack', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '1', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
       'reconciliation'
@@ -72,7 +72,7 @@ describe('checkCancellationRefundProvider', () => {
   });
   it('allows accounted processed refunds but blocks pending ones', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '1', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -83,7 +83,7 @@ describe('checkCancellationRefundProvider', () => {
       })
     ).resolves.toEqual([]);
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 1, amount: 100, currency: 'NGN', status: 'pending' },
+      { id: '1', amount: 100, currency: 'NGN', status: 'pending' },
     ]);
     await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
       'reconciliation'
@@ -100,7 +100,7 @@ describe('checkCancellationRefundProvider', () => {
   });
   it('treats legacy refunded rows as reconciled like completed ones', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '1', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -113,13 +113,13 @@ describe('checkCancellationRefundProvider', () => {
   });
   it('ignores failed provider rows before the amount gate', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 1, amount: 999, currency: 'USD', status: 'failed' },
+      { id: '1', amount: 999, currency: 'USD', status: 'failed' },
     ]);
     await expect(checkCancellationRefundProvider(input)).resolves.toEqual([]);
   });
   it('matches padded ledger references to provider rows', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '1', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -137,7 +137,7 @@ describe('checkCancellationRefundProvider', () => {
   });
   it('compares currencies case-insensitively like the claim gate', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 1, amount: 100, currency: 'ngn', status: 'processed' },
+      { id: '1', amount: 100, currency: 'ngn', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -174,7 +174,7 @@ describe('checkCancellationRefundProvider', () => {
   });
   it('files a review carrying the leg and provider evidence', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 9, amount: 100, currency: 'NGN', status: 'pending' },
+      { id: '9', amount: 100, currency: 'NGN', status: 'pending' },
     ]);
     await expect(checkCancellationRefundProvider(input)).rejects.toThrow(
       'reconciliation'
@@ -188,7 +188,7 @@ describe('checkCancellationRefundProvider', () => {
           provider_reference: 'capture-1',
           failed_payment_transaction_id: 'leg-1',
           payment_transaction_id: 'leg-1',
-          provider_refund_id: 9,
+          provider_refund_id: '9',
         }),
       })
     );

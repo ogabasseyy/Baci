@@ -57,6 +57,16 @@ export async function reconcileCompletedPaystackCancellationRefunds(
         refundId: refund.id,
         reason: reason instanceof Error ? reason.message : 'unknown',
       });
+      // Rotation matches the row's own terminal state: the sweep also
+      // selects failed stamped manuals and legacy refunded rows, and a
+      // completed-only guard would zero-row succeed on them — never
+      // rotating updated_at, refiling the same review every run, and
+      // starving later contradiction checks behind the oldest row.
+      // Anything unexpected falls back to completed (zero rows, safe).
+      const rotationStatus =
+        refund.status === 'failed' || refund.status === 'refunded'
+          ? refund.status
+          : 'completed';
       if (isDeterministicRefundError(reason)) {
         // Evidence that can never verify: file the mismatch for operations,
         // then demote so the pending worker re-tracks the row instead of
@@ -64,14 +74,6 @@ export async function reconcileCompletedPaystackCancellationRefunds(
         // review write fails, the row must stay completed so this worker
         // retries it.
         await fileRefundEvidenceReview(supabase, refund, reason.message);
-        // Rotation matches the row's own terminal state: the sweep also
-        // selects failed stamped manuals for recovery polling, and a
-        // completed-only guard would zero-row succeed on them — never
-        // rotating updated_at, refiling the same review every run, and
-        // starving later contradiction checks behind the oldest row.
-        // Anything unexpected falls back to completed (zero rows, safe).
-        const rotationStatus =
-          refund.status === 'failed' ? 'failed' : 'completed';
         if (
           refund.status === 'failed' ||
           !refund.description?.startsWith('Refund for cancelled order #')
@@ -107,7 +109,7 @@ export async function reconcileCompletedPaystackCancellationRefunds(
         .from('transactions')
         .update({ updated_at: new Date().toISOString() })
         .eq('id', refund.id)
-        .eq('status', refund.status === 'failed' ? 'failed' : 'completed');
+        .eq('status', rotationStatus);
       if (rotationError) throw new Error('completed_refund_rotation_failed');
     }
   }

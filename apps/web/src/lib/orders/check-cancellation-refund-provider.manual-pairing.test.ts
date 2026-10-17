@@ -36,7 +36,7 @@ describe('checkCancellationRefundProvider manual pairing', () => {
   });
   it('accounts unmatched processed refunds against completed manual Paystack rows', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '7', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -51,7 +51,7 @@ describe('checkCancellationRefundProvider manual pairing', () => {
           },
         ],
       })
-    ).resolves.toEqual([{ kobo: 100, providerRefundId: 7 }]);
+    ).resolves.toEqual([{ kobo: 100, providerRefundId: '7' }]);
   });
   it('reserves stamped ids before pairing unstamped claims', async () => {
     // A stamped partial and a newer same-sized partial: the old id is
@@ -60,8 +60,8 @@ describe('checkCancellationRefundProvider manual pairing', () => {
     // skips stamped rows — would persist the old id onto the new row
     // while the new provider refund stays unlinked.
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
-      { id: 8, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '7', amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '8', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -87,12 +87,12 @@ describe('checkCancellationRefundProvider manual pairing', () => {
           },
         ],
       })
-    ).resolves.toEqual([{ kobo: 100, providerRefundId: 8 }]);
+    ).resolves.toEqual([{ kobo: 100, providerRefundId: '8' }]);
   });
 
   it('still blocks when manual Paystack rows cannot cover the provider refund', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 7, amount: 200, currency: 'NGN', status: 'processed' },
+      { id: '7', amount: 200, currency: 'NGN', status: 'processed' },
     ]);
     const manual = {
       gateway_reference: 'merchant-ref-1',
@@ -113,8 +113,8 @@ describe('checkCancellationRefundProvider manual pairing', () => {
     ).rejects.toThrow('reconciliation');
     // A manual row already matched by reference cannot account twice.
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
-      { id: 8, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '7', amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '8', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -125,7 +125,7 @@ describe('checkCancellationRefundProvider manual pairing', () => {
   });
   it('quarantines leftover manual pool the provider does not confirm', async () => {
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 7, amount: 60, currency: 'NGN', status: 'processed' },
+      { id: '7', amount: 60, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -168,8 +168,8 @@ describe('checkCancellationRefundProvider manual pairing', () => {
     });
     // A+B same-amount case: one manual row cannot cover two provider rows.
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
-      { id: 8, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '7', amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '8', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -187,13 +187,13 @@ describe('checkCancellationRefundProvider manual pairing', () => {
         ],
       })
     ).resolves.toEqual([
-      { kobo: 100, providerRefundId: 7 },
-      { kobo: 100, providerRefundId: 8 },
+      { kobo: 100, providerRefundId: '7' },
+      { kobo: 100, providerRefundId: '8' },
     ]);
     // A combined manual cannot cover two smaller provider rows.
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 7, amount: 60, currency: 'NGN', status: 'processed' },
-      { id: 8, amount: 40, currency: 'NGN', status: 'processed' },
+      { id: '7', amount: 60, currency: 'NGN', status: 'processed' },
+      { id: '8', amount: 40, currency: 'NGN', status: 'processed' },
     ]);
     await expect(
       checkCancellationRefundProvider({
@@ -205,7 +205,7 @@ describe('checkCancellationRefundProvider manual pairing', () => {
   it('pairs legacy refunded-status manual rows like completed ones', async () => {
     // An exact processed pair passes for the refunded status too.
     vi.mocked(listPaystackRefunds).mockResolvedValue([
-      { id: 7, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '7', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     const refundedManual = {
       gateway_reference: 'merchant-ref-1',
@@ -219,7 +219,7 @@ describe('checkCancellationRefundProvider manual pairing', () => {
         ...input,
         knownRefunds: [refundedManual],
       })
-    ).resolves.toEqual([{ kobo: 100, providerRefundId: 7 }]);
+    ).resolves.toEqual([{ kobo: 100, providerRefundId: '7' }]);
     // And an empty provider listing leaves it unpaired: without this
     // the caller would stamp proof no provider row confirms.
     vi.mocked(listPaystackRefunds).mockResolvedValue([]);

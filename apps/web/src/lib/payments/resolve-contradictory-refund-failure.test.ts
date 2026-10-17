@@ -48,6 +48,7 @@ describe('resolveContradictoryRefundFailure', () => {
             currency: 'NGN',
             gateway: 'paystack',
             id: 'refund-2',
+            status: 'completed',
             metadata: {
               payment_transaction_id: 'payment-1',
               provider_refund_status: 'processed',
@@ -116,6 +117,7 @@ describe('resolveContradictoryRefundFailure', () => {
             currency: 'NGN',
             gateway: 'paystack',
             id: 'refund-4',
+            status: 'completed',
             metadata: {
               payment_transaction_id: 'payment-1',
               provider_refund_status: 'processed',
@@ -127,6 +129,7 @@ describe('resolveContradictoryRefundFailure', () => {
             currency: 'NGN',
             gateway: 'paystack',
             id: 'refund-2',
+            status: 'completed',
             metadata: {
               payment_transaction_id: 'payment-1',
               provider_refund_status: 'processed',
@@ -235,6 +238,7 @@ describe('resolveContradictoryRefundFailure', () => {
             currency: 'NGN',
             gateway: ' Paystack ',
             id: 'refund-2',
+            status: 'completed',
             metadata: {
               payment_transaction_id: 'payment-1',
               provider_refund_status: 'processed',
@@ -338,6 +342,7 @@ describe('resolveContradictoryRefundFailure', () => {
                 currency: 'NGN',
                 gateway: 'paystack',
                 id: 'refund-2',
+                status: 'completed',
                 metadata: {
                   payment_transaction_id: 'payment-2',
                   provider_refund_status: 'processed',
@@ -421,6 +426,7 @@ describe('resolveContradictoryRefundFailure', () => {
                 currency: 'NGN',
                 gateway: 'paystack',
                 id: 'refund-2',
+                status: 'completed',
                 metadata: {
                   payment_transaction_id: 'payment-1',
                   provider_refund_status: 'processed',
@@ -670,6 +676,7 @@ describe('resolveContradictoryRefundFailure', () => {
                 currency: 'NGN',
                 gateway: 'manual',
                 id: 'refund-2',
+                status: 'completed',
                 metadata: {
                   method: 'paystack',
                   payment_transaction_id: 'payment-1',
@@ -723,6 +730,7 @@ describe('resolveContradictoryRefundFailure', () => {
                 currency: 'NGN',
                 gateway: 'paystack',
                 id: 'refund-2',
+                status: 'completed',
                 metadata: {
                   payment_transaction_id: 'payment-1',
                   provider_refund_status: 'processed',
@@ -812,6 +820,7 @@ describe('resolveContradictoryRefundFailure', () => {
       gateway: 'paystack',
       gateway_reference: `RFD-P1-${index}`,
       id: `refund-p1-${String(index).padStart(2, '0')}`,
+      status: 'completed',
       metadata: {
         payment_transaction_id: 'payment-9',
         provider_refund_status: 'processed',

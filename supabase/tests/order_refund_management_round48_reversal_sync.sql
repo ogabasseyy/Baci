@@ -258,6 +258,13 @@ BEGIN
   IF v_status IS DISTINCT FROM 'refunded' THEN
     RAISE EXCEPTION 'backfill missed predated reversal, got %', v_status;
   END IF;
+  -- The candidate scan prefilters on reversal ledger evidence so
+  -- the flip's EXISTS chain runs only where coverage can exist.
+  IF pg_catalog.pg_get_functiondef(
+    'private.backfill_internal_only_refund_status()'::regprocedure
+  ) NOT LIKE '%customer_wallet_transactions w%' THEN
+    RAISE EXCEPTION 'backfill lost its reversal-evidence prefilter';
+  END IF;
 END;
 $refund_round48_status$;
 

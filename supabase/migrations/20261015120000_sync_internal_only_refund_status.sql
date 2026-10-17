@@ -154,6 +154,21 @@ BEGIN
      WHERE o.shipping_status IN ('cancelled', 'canceled')
        AND o.payment_status IN ('paid', 'partially_paid', 'pending')
        AND o.amount_paid > 0
+       -- The flip needs reversal coverage above zero, so only orders
+       -- with reversal ledger evidence can qualify: skip the flip's
+       -- EXISTS/subquery chain for every other cancelled order. A
+       -- strict superset of flippable rows (coverage > 0 implies a
+       -- reversal row), so the flipped set is unchanged.
+       AND (EXISTS (
+         SELECT 1 FROM public.customer_wallet_transactions w
+          WHERE w.source_id = o.id AND w.merchant_id = o.merchant_id
+            AND w.source_type = 'order_reversal')
+         -- Alias red, not r: r is the loop's record variable and
+         -- plpgsql binds unqualified alias references to it first.
+         OR EXISTS (
+           SELECT 1 FROM public.customer_savings_redemptions red
+          WHERE red.order_id = o.id AND red.merchant_id = o.merchant_id
+            AND red.metadata ? 'reversed_at'))
   LOOP
     PERFORM private.flip_internal_only_order_refunded(r.id, r.merchant_id);
   END LOOP;

@@ -69,6 +69,25 @@ describe('OrderRefundTimeline', () => {
     expect(screen.getByText(/mystery_rail/)).toBeInTheDocument();
     expect(screen.getByText('odd-1')).toBeInTheDocument();
   });
+  it('renders a null-details legacy event without crashing', () => {
+    // The mask passes null details through for legacy rows; the
+    // timeline must degrade to no error line, not throw.
+    render(
+      <OrderRefundTimeline
+        currency="NGN"
+        events={[
+          {
+            action: 'manual_recorded',
+            date: '2026-09-28T12:00:00Z',
+            details: null as unknown as Record<string, never>,
+            id: 'event-legacy',
+          },
+        ]}
+        history={[]}
+      />
+    );
+    expect(screen.getByText(/Refund activity/)).toBeInTheDocument();
+  });
   it('formats history money with the order currency', () => {
     render(
       <OrderRefundTimeline

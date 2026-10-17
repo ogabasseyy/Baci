@@ -40,6 +40,9 @@ export interface ReplacementRefundRow {
   currency: string | null;
   gateway: string | null;
   id: string;
+  // The resolver filters both terminal statuses in code; the matcher
+  // itself never sees a non-terminal row.
+  status: string;
   metadata: {
     method?: unknown;
     payment_transaction_id?: unknown;

@@ -239,6 +239,40 @@ describe('legacy completed Paystack cancellation refunds', () => {
     expect(chain.eq).toHaveBeenCalledWith('status', 'completed');
   });
 
+  it('rotates a legacy refunded row with its actual status', async () => {
+    // Both rotation paths guard on the row's own terminal state: a
+    // completed-only guard would zero-row succeed on a legacy refunded
+    // row, leaving it oldest in the recheck slice forever.
+    for (const deterministic of [true, false]) {
+      vi.clearAllMocks();
+      fileReview.mockResolvedValue(undefined);
+      reconcile.mockRejectedValue(
+        deterministic
+          ? new Error('paystack_refund_evidence_mismatch')
+          : new Error('paystack_refund_verification_unavailable')
+      );
+      isDeterministic.mockReturnValue(deterministic);
+      const chain = updateChain();
+      const update = vi.fn().mockReturnValue(chain);
+      const rpc = vi.fn().mockResolvedValue({
+        data: [{ ...legacyRefund, status: 'refunded' }],
+        error: null,
+      });
+      const from = vi.fn().mockReturnValueOnce({ update });
+      const supabase = { from, rpc } as never;
+
+      await expect(
+        reconcileCompletedPaystackCancellationRefunds(supabase)
+      ).resolves.toEqual({ checked: 1, failed: 1 });
+
+      expect(update).toHaveBeenCalledWith({
+        updated_at: expect.any(String),
+      });
+      expect(chain.eq).toHaveBeenCalledWith('id', 'refund-1');
+      expect(chain.eq).toHaveBeenCalledWith('status', 'refunded');
+    }
+  });
+
   it('rotates a transient failure without filing a review', async () => {
     reconcile.mockRejectedValue(
       new Error('paystack_refund_verification_unavailable')

@@ -35,8 +35,8 @@ describe('stampVerifiedManualPaystackRefunds', () => {
       currency: 'NGN',
       linkedPaymentId,
       pairedProviderRefunds: [
-        { kobo: 100, providerRefundId: 7 },
-        { kobo: 100, providerRefundId: 8 },
+        { kobo: 100, providerRefundId: '7' },
+        { kobo: 100, providerRefundId: '8' },
       ],
       refundRows: [
         row(),
@@ -79,7 +79,7 @@ describe('stampVerifiedManualPaystackRefunds', () => {
         method: 'paystack',
         payment_transaction_id: 'payment-1',
         provider_refund_status: 'processed',
-        provider_refund_id: 7,
+        provider_refund_id: '7',
       },
       // Status renames its current value so the sync trigger
       // re-evaluates coverage; metadata alone would not fire it.
@@ -113,8 +113,8 @@ describe('stampVerifiedManualPaystackRefunds', () => {
         // Provider order need not match ledger order: the stamp
         // assigns by amount, so the 60 row takes id 7 even though
         // id 8 lists first.
-        { kobo: 40, providerRefundId: 8 },
-        { kobo: 60, providerRefundId: 7 },
+        { kobo: 40, providerRefundId: '8' },
+        { kobo: 60, providerRefundId: '7' },
       ],
       refundRows: [
         row({ amount: 0.6 }),
@@ -128,12 +128,12 @@ describe('stampVerifiedManualPaystackRefunds', () => {
     expect(client.update).toHaveBeenCalledTimes(2);
     expect(client.update.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
-        metadata: expect.objectContaining({ provider_refund_id: 7 }),
+        metadata: expect.objectContaining({ provider_refund_id: '7' }),
       })
     );
     expect(client.update.mock.calls[1]?.[0]).toEqual(
       expect.objectContaining({
-        metadata: expect.objectContaining({ provider_refund_id: 8 }),
+        metadata: expect.objectContaining({ provider_refund_id: '8' }),
       })
     );
   });
@@ -147,7 +147,7 @@ describe('stampVerifiedManualPaystackRefunds', () => {
     await stampVerifiedManualPaystackRefunds({
       currency: 'NGN',
       linkedPaymentId,
-      pairedProviderRefunds: [{ kobo: 100, providerRefundId: 7 }],
+      pairedProviderRefunds: [{ kobo: 100, providerRefundId: '7' }],
       refundRows: [row({ currency: 'USD', id: 'refund-3' })],
       supabase: client as never,
       transactionId: 'payment-1',
@@ -161,7 +161,7 @@ describe('stampVerifiedManualPaystackRefunds', () => {
       stampVerifiedManualPaystackRefunds({
         currency: 'NGN',
         linkedPaymentId,
-        pairedProviderRefunds: [{ kobo: 100, providerRefundId: 7 }],
+        pairedProviderRefunds: [{ kobo: 100, providerRefundId: '7' }],
         refundRows: [row()],
         supabase: client as never,
         transactionId: 'payment-1',

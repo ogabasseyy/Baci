@@ -1,7 +1,9 @@
 import 'server-only';
 
 interface ProviderRefund {
-  id: number;
+  // Decimal text, never a number: Paystack IDs are unsigned 64-bit
+  // and a refund ID above 2^53 would not survive JSON.parse.
+  id: string;
   amount: number;
   currency: string;
   status: string;
@@ -37,13 +39,16 @@ export async function listPaystackRefunds(
     throw new Error('Invalid payment reference');
   const secret = process.env.PAYSTACK_SECRET_KEY;
   if (!secret) throw new Error('Paystack refund verification unavailable');
-  // Bare numeric transaction IDs above 2^53 would not survive
-  // JSON.parse: quote them on the wire text before parsing so the
-  // identity check below compares exact decimal text. Only the
-  // transaction key is rewritten, so row id/amount validation keeps
-  // its fail-closed unsafe-number behavior.
-  const quoteWireTransactionIds = (raw: string): string =>
-    raw.replace(/"transaction"\s*:\s*(\d+)/g, '"transaction":"$1"');
+  // Bare numeric IDs above 2^53 would not survive JSON.parse:
+  // quote the transaction and row-id keys on the wire text before
+  // parsing so the identity check below compares exact decimal text.
+  // Nested IDs (expanded transaction/customer objects) quote too;
+  // the identity collector accepts decimal text either way. Amount
+  // stays numeric: kobo values cannot approach 2^53.
+  const quoteWireRefundIds = (raw: string): string =>
+    raw
+      .replace(/"transaction"\s*:\s*(\d+)/g, '"transaction":"$1"')
+      .replace(/"id"\s*:\s*(\d+)/g, '"id":"$1"');
   async function request(
     path: string,
     preprocess: (raw: string) => string = (raw) => raw
@@ -100,17 +105,20 @@ export async function listPaystackRefunds(
     const envelope = (
       await request(
         `/refund?transaction=${transactionId}&perPage=100&page=${page}`,
-        quoteWireTransactionIds
+        quoteWireRefundIds
       )
     ).payload;
     if (!Array.isArray(envelope.data))
       throw new Error('Unverified refund list');
     const rows = envelope.data;
     for (const candidate of rows) {
+      // The row ID arrives quoted off the wire text, so a numeric
+      // ID here means the rewrite missed it: reject rather than
+      // trust possibly rounded digits.
       if (
         !candidate ||
-        !Number.isSafeInteger(candidate.id) ||
-        candidate.id <= 0 ||
+        typeof candidate.id !== 'string' ||
+        !/^[1-9][0-9]*$/.test(candidate.id) ||
         !Number.isSafeInteger(candidate.amount) ||
         candidate.amount <= 0 ||
         typeof candidate.currency !== 'string' ||

@@ -15,8 +15,20 @@ import { DeferredError } from './run-order-cancellation-side-effect';
  * cross-assign ids when amounts differ per row.
  */
 export interface PairedProviderRefund {
-  providerRefundId: number;
+  // Decimal text, matching the lister: a numeric id above 2^53
+  // would already be rounded.
+  providerRefundId: string;
   kobo: number;
+}
+
+// Provider IDs persist as decimal text, but stamps written before
+// the text migration hold JSON numbers: normalize both to exact
+// decimal text so old stamps keep reserving their rows.
+function providerRefundIdText(value: unknown): string | null {
+  if (typeof value === 'string' && /^[1-9][0-9]*$/.test(value)) return value;
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0)
+    return String(value);
+  return null;
 }
 
 export async function checkCancellationRefundProvider({
@@ -111,7 +123,7 @@ export async function checkCancellationRefundProvider({
   // unstamped claims consume fresh pairs. A stamp whose id the
   // listing no longer carries is the sweep's contradiction recheck,
   // not this preflight's, so absence quarantines nothing here.
-  const reservedProviderIds = new Set<number>();
+  const reservedProviderIds = new Set<string>();
   for (const item of knownRefunds) {
     // Same filters as the candidate loop below: a corrupt stamp on a
     // foreign-currency or non-Paystack row reserves nothing, so its id
@@ -123,8 +135,8 @@ export async function checkCancellationRefundProvider({
         normalizeRefundMoneyField(currency) &&
       item.metadata?.provider_refund_status === 'processed'
     ) {
-      const stored = Number(item.metadata?.provider_refund_id);
-      if (Number.isSafeInteger(stored) && stored > 0) {
+      const stored = providerRefundIdText(item.metadata?.provider_refund_id);
+      if (stored !== null) {
         reservedProviderIds.add(stored);
       }
     }
@@ -159,7 +171,9 @@ export async function checkCancellationRefundProvider({
     // consume a fresh pair nor demand one from the listing.
     if (
       item.metadata?.provider_refund_status === 'processed' &&
-      reservedProviderIds.has(Number(item.metadata?.provider_refund_id))
+      reservedProviderIds.has(
+        providerRefundIdText(item.metadata?.provider_refund_id) ?? ''
+      )
     )
       continue;
     const kobo = Math.round(Number(item.amount) * 100);

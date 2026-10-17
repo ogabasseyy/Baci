@@ -114,6 +114,41 @@ describe('order refund route error mapping', () => {
       code: expectedCode,
     });
   });
+  it.each([
+    [
+      '42501',
+      403,
+      'new row violates row-level security policy',
+      'refund_forbidden',
+      'You do not have permission to manage this refund',
+    ],
+    [
+      '28000',
+      401,
+      'connection refused',
+      'not_authenticated',
+      'Authentication required',
+    ],
+    ['P0002', 404, 'no_data_found', 'order_not_found', 'Order not found'],
+    [
+      '22023',
+      400,
+      'invalid input syntax',
+      'invalid_refund_action',
+      'Invalid refund request',
+    ],
+  ])('maps unmatched %s (%s) to its semantic code, not internal_error', async (code, status, message, expectedCode, expectedError) => {
+    mocks.rpc.mockResolvedValue({
+      data: null,
+      error: { code, message },
+    });
+    const response = await POST(request({ action: 'retry' }), context);
+    expect(response.status).toBe(status);
+    expect(await response.json()).toEqual({
+      error: expectedError,
+      code: expectedCode,
+    });
+  });
   it('keeps the code when drivers wrap a known failure message', async () => {
     mocks.rpc.mockResolvedValue({
       data: null,

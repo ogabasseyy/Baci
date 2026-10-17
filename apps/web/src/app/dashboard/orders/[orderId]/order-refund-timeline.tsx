@@ -34,12 +34,15 @@ export function OrderRefundTimeline({
               // worker text. When both are present and differ, the
               // previous error keeps its own line instead of being
               // silently dropped.
+              // The mask passes a null details value through for legacy
+              // rows, so guard the dereference: one null-details event
+              // must degrade to no error line, not crash the card.
               const eventError =
-                event.details.error || event.details.previousError;
+                event.details?.error || event.details?.previousError;
               const eventPreviousError =
-                event.details.error &&
-                event.details.previousError !== event.details.error
-                  ? event.details.previousError
+                event.details?.error &&
+                event.details?.previousError !== event.details?.error
+                  ? event.details?.previousError
                   : undefined;
               return (
                 <li key={event.id}>

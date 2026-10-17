@@ -55,13 +55,17 @@ export async function resolveContradictoryRefundFailure(
   );
   // No shared timestamp floor: coverage timing is evaluated per failed
   // leg in code, since the shared notification row's timestamp resets
-  // when any leg fails.
-  const replacementsList = (await fetchAllOrderRefundRows(supabase, {
-    columns: 'id, amount, currency, gateway, metadata, created_at',
-    completedOnly: true,
-    merchantId: row.merchant_id,
-    orderId: row.order_id,
-  })) as unknown as ReplacementRefundRow[];
+  // when any leg fails. Both terminal statuses count: a replacement
+  // stored with the legacy refunded label is completed money, and a
+  // completed-only scan would file a false contradiction for it.
+  const replacementsList = (
+    (await fetchAllOrderRefundRows(supabase, {
+      columns: 'id, amount, currency, gateway, metadata, created_at, status',
+      completedOnly: false,
+      merchantId: row.merchant_id,
+      orderId: row.order_id,
+    })) as unknown as ReplacementRefundRow[]
+  ).filter((refund) => ['completed', 'refunded'].includes(refund.status));
   // Every failed leg needs its own later coverage, and each
   // replacement is spent once: suppressing on any single match — or
   // reusing one replacement across two failed rows — would mark the

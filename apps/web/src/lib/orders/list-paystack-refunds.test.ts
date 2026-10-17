@@ -35,7 +35,7 @@ describe('listPaystackRefunds', () => {
       .mockResolvedValueOnce(response([refund]));
     vi.stubGlobal('fetch', fetcher);
     expect(await listPaystackRefunds('capture-1')).toEqual([
-      { id: 1, amount: 100, currency: 'NGN', status: 'processed' },
+      { id: '1', amount: 100, currency: 'NGN', status: 'processed' },
     ]);
     expect(fetcher).toHaveBeenNthCalledWith(
       1,
@@ -153,6 +153,30 @@ describe('listPaystackRefunds', () => {
       });
     vi.stubGlobal('fetch', fetcher);
     expect(await listPaystackRefunds('capture-1')).toHaveLength(1);
+  });
+  it('preserves an oversized refund row ID off the list wire text', async () => {
+    // A 2^53+1 refund row ID cannot survive JSON.parse either: the
+    // list rewrite quotes it first, so the row keeps its exact
+    // decimal text instead of quarantining as an unverified record.
+    const big = '9007199254740993';
+    const verifyRaw = `{"status":true,"data":{"id":5,"reference":"capture-1"}}`;
+    const listRaw = `{"status":true,"data":[{"id":${big},"amount":100,"currency":"NGN","status":"processed","transaction":5}]}`;
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => JSON.parse(verifyRaw),
+        text: async () => verifyRaw,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => JSON.parse(listRaw),
+        text: async () => listRaw,
+      });
+    vi.stubGlobal('fetch', fetcher);
+    expect(await listPaystackRefunds('capture-1')).toEqual([
+      { id: big, amount: 100, currency: 'NGN', status: 'processed' },
+    ]);
   });
   it('rejects a verify payload with a reordered data object', async () => {
     // The wire-ID anchor requires the ID as the data object's first

@@ -142,13 +142,25 @@ async function handle(
     )
       ? messageTokens.find((token) => KNOWN_REFUND_ERROR_KEYS.has(token))
       : undefined;
-    const code = matchedError ?? 'internal_error';
+    // An unmatched auth/permission/not-found/input class still
+    // carries SQLSTATE semantics (e.g. an RLS policy raise names no
+    // known token): map the class to its code so callers branching
+    // on code see the real category, not internal_error with a 4xx
+    // status. Unmatched P0001 stays internal: every legitimate raise
+    // from this RPC is a known token, so anything else in that class
+    // is an unlisted raise (500), never a client state the caller
+    // could resolve with a retry.
+    const FALLBACK_SQLSTATE_CODE: Record<string, string> = {
+      42501: 'refund_forbidden',
+      28000: 'not_authenticated',
+      P0002: 'order_not_found',
+      22023: 'invalid_refund_action',
+    };
+    const semanticError =
+      matchedError ?? FALLBACK_SQLSTATE_CODE[error.code ?? ''];
+    const code = semanticError ?? 'internal_error';
     // A matched application error carries its own semantic status;
     // unmatched errors keep the SQLSTATE-derived transport status.
-    // An unmatched P0001 is a server bug, not a conflict: every
-    // legitimate raise from this RPC is a known token, so anything
-    // else in that class is an unlisted raise (500), never a client
-    // state the caller could resolve with a retry.
     const status =
       (matchedError ? KNOWN_REFUND_STATUS[matchedError] : undefined) ??
       (error.code === '42501'
@@ -163,7 +175,7 @@ async function handle(
     return NextResponse.json(
       {
         error:
-          (matchedError ? KNOWN_REFUND_ERRORS[matchedError] : undefined) ??
+          (semanticError ? KNOWN_REFUND_ERRORS[semanticError] : undefined) ??
           'Unable to manage refund',
         code,
       },

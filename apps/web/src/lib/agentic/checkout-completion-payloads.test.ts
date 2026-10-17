@@ -81,6 +81,37 @@ describe('agentic checkout completion payloads', () => {
     expect(payload.notes).not.toContain('1234567890');
   });
 
+  it('sends unit prices and the purchased condition for multi-quantity lines', () => {
+    const payload = buildAgenticCheckoutOrderPayload({
+      buyer,
+      dvaAccount,
+      session: {
+        merchant_id: 'merchant-1',
+        session_id: 'agentic_session_1',
+        shipping_address: { city: 'Lagos' },
+      },
+      sessionCalc: {
+        ...sessionCalc,
+        lineItems: [
+          {
+            ...sessionCalc.lineItems[0],
+            item: {
+              ...sessionCalc.lineItems[0].item,
+              condition: 'used',
+              quantity: 3,
+            },
+            base_amount: 900000,
+          },
+        ],
+      } as never,
+    });
+    expect(payload.items[0]).toMatchObject({
+      condition: 'used',
+      price: 300000,
+      quantity: 3,
+    });
+  });
+
   it('builds a checkout_sessions update using real payment columns', () => {
     const payload = buildPaymentPendingSessionUpdate({
       buyer,

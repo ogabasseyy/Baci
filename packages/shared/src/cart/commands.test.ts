@@ -125,6 +125,20 @@ describe('validateCartCommand', () => {
     ).toBeNull();
   });
 
+  it('rejects sourceLineId on ordinary replacement lines', () => {
+    const issue = validateCartCommand({
+      lines: [
+        {
+          item: { productId: '11111111-1111-4111-8111-111111111111' },
+          quantity: 1,
+          sourceLineId: 'line-9',
+        },
+      ],
+      type: 'replace',
+    });
+    expect(issue?.code).toBe('invalid_item');
+  });
+
   it('rejects blank vouchers and non-positive negotiated prices', () => {
     const blank = validateCartCommand({
       item: { productId: '11111111-1111-4111-8111-111111111111' },

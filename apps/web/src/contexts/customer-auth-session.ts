@@ -81,7 +81,8 @@ export async function performCustomerLogout(
   merchantSlug: string,
   setUser: (user: CustomerUser | null) => void,
   setCustomer: (customer: Customer | null) => void,
-  setOtpState: (otp: OtpState | null) => void
+  setOtpState: (otp: OtpState | null) => void,
+  userId?: string | null
 ): Promise<void> {
   // Do not clear Auth or report success until this device's cart
   // authority is retired.
@@ -98,6 +99,6 @@ export async function performCustomerLogout(
     publishCustomerIdentity(null, null, merchantSlug);
     setOtpState(null);
     // Clear cart on logout to prevent cart data leakage between users
-    clearCartStorage(merchantSlug);
+    clearCartStorage(merchantSlug, userId);
   }
 }

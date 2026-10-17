@@ -5,17 +5,16 @@ export function partializeCartStore(state: CartState) {
     ...(state.sharedCartRef ? { sharedCartRef: state.sharedCartRef } : {}),
     cartWideNegotiationActive: state.cartWideNegotiationActive,
     checkoutGeneration: state.checkoutGeneration,
-    // Shared-cart voucher credentials live only in memory: the
-    // authoritative snapshot rehydrates them after restart, and the
+    // Voucher credentials live only in memory on every path: the
     // persisted store (MMKV/AsyncStorage) is not encrypted storage.
-    items: state.sharedCartRef
-      ? state.items.map((item) => {
-          const { voucher_token, voucher_award_id, ...rest } = item;
-          void voucher_token;
-          void voucher_award_id;
-          return rest;
-        })
-      : state.items,
+    // Shared carts rehydrate them from the authoritative snapshot
+    // after restart; legacy lines simply reprice without the award.
+    items: state.items.map((item) => {
+      const { voucher_token, voucher_award_id, ...rest } = item;
+      void voucher_token;
+      void voucher_award_id;
+      return rest;
+    }),
     lineSequence: state.lineSequence,
   };
 }

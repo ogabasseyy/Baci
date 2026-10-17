@@ -27,6 +27,7 @@ import {
   issueCartSessionProof,
   verifyCartSessionProof,
 } from '@/lib/cart/session-proof';
+import { voucherAttachmentsValid } from '@/lib/cart/voucher-attachments';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 import { createAnonClient } from '@/lib/supabase/anon';
@@ -80,6 +81,11 @@ export async function POST(request: NextRequest) {
     }
     const body = parsedBody.data;
 
+    // Merged lines zero-price on a complete voucher pair in every
+    // snapshot, so verify pairs here exactly like cart creation.
+    if (!voucherAttachmentsValid(body.lines ?? [])) {
+      return cartErrorResponse('invalid_request');
+    }
     if (body.choice === 'merge' && principal.scope !== 'session') {
       return cartErrorResponse('invalid_request');
     }

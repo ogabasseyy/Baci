@@ -108,7 +108,13 @@ describe('customer-auth-session', () => {
     const setCustomer = vi.fn();
     const setOtpState = vi.fn();
 
-    await performCustomerLogout('ogabassey', setUser, setCustomer, setOtpState);
+    await performCustomerLogout(
+      'ogabassey',
+      setUser,
+      setCustomer,
+      setOtpState,
+      'user-1'
+    );
 
     expect(setUser).toHaveBeenCalledWith(null);
     expect(setCustomer).toHaveBeenCalledWith(null);
@@ -118,6 +124,7 @@ describe('customer-auth-session', () => {
       null,
       'ogabassey'
     );
-    expect(clearCartStorage).toHaveBeenCalledWith('ogabassey');
+    // The user-scoped cart key must be cleared too, not just guest.
+    expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
   });
 });

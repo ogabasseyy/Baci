@@ -49,7 +49,11 @@ export function buildAgenticCheckoutOrderPayload({
         ? { variant_attributes: li.item.variant_attributes }
         : {}),
       quantity: li.item.quantity,
-      price: li.base_amount,
+      // The orders API prices each item as a unit price multiplied
+      // by quantity; base_amount is the line total, so divide it
+      // back out and forward the purchased condition lane.
+      price: li.base_amount / li.item.quantity,
+      ...(li.item.condition ? { condition: li.item.condition } : {}),
     })),
     subtotal: getSubtotalAmount(sessionCalc.totals),
     shipping_fee: getFulfillmentAmount(sessionCalc.totals),

@@ -321,14 +321,19 @@ export async function finalizeAgenticCheckoutPayment({
       // payment_pending before returning, because the failed read
       // may have hidden a paid or cancelled order and a later
       // request would otherwise serve the stored instructions
-      // without revalidating.
-      await writeCancelledFinalizationSession({
+      // without revalidating. The fence result is verified just
+      // like the paid branch: a failed fence write must not return
+      // 503 while the session can still serve the instructions.
+      const fenced = await writeCancelledFinalizationSession({
         merchantId,
         metadata,
         orderId,
         sessionId,
         supabase,
       });
+      if (fenced.error || !fenced.data) {
+        return respond({ error: 'Payment session update failed' }, 500);
+      }
       return respond({ error: 'temporarily_unavailable' }, 503);
     }
   }

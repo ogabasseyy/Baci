@@ -42,6 +42,15 @@ function attachmentsOf(line: CartLine): CartLineAttachments {
   };
 }
 
+// Conflict payloads cross persistence/telemetry boundaries: the raw
+// voucher token is a spendable credential and never belongs there.
+// Resolutions re-read the chosen snapshot lane, so redaction here
+// does not affect which line a resolution applies.
+function conflictAttachmentsOf(line: CartLine): CartLineAttachments {
+  const { voucherToken: _redacted, ...rest } = attachmentsOf(line);
+  return rest;
+}
+
 function attachmentsEqual(
   left: CartLineAttachments,
   right: CartLineAttachments
@@ -119,11 +128,11 @@ export function planCartMerge(
               {
                 item: line.item,
                 existing: {
-                  ...attachmentsOf(previous),
+                  ...conflictAttachmentsOf(previous),
                   quantity: previous.quantity,
                 },
                 incoming: {
-                  ...attachmentsOf(line),
+                  ...conflictAttachmentsOf(line),
                   quantity: line.quantity,
                 },
               },
@@ -194,10 +203,13 @@ export function planCartMerge(
             {
               item: line.item,
               existing: {
-                ...attachmentsOf(previous),
+                ...conflictAttachmentsOf(previous),
                 quantity: previous.quantity,
               },
-              incoming: { ...attachmentsOf(line), quantity: line.quantity },
+              incoming: {
+                ...conflictAttachmentsOf(line),
+                quantity: line.quantity,
+              },
             },
           ],
         };
@@ -262,11 +274,11 @@ export function planCartMerge(
     if (!keep) {
       conflicts.push({
         existing: {
-          ...existingAttachments,
+          ...conflictAttachmentsOf(existingLine),
           quantity: existingLine.quantity,
         },
         incoming: {
-          ...incomingAttachments,
+          ...conflictAttachmentsOf(incomingLine),
           quantity: incomingLine.quantity,
         },
         item: existingLine.item,

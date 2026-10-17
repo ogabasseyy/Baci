@@ -24,6 +24,24 @@ it('strips voucher credentials from shared-cart items before persisting', () => 
   });
 });
 
+it('strips voucher credentials from legacy items before persisting', () => {
+  const persisted = partializeCartStore({
+    cartWideNegotiationActive: false,
+    checkoutGeneration: 'cart-one',
+    items: [
+      {
+        id: 'line-1',
+        voucher_award_id: 'award-secret',
+        voucher_token: 'token-secret',
+      },
+    ],
+    lineSequence: 1,
+  } as CartState);
+  expect(JSON.stringify(persisted)).not.toContain('token-secret');
+  expect(JSON.stringify(persisted)).not.toContain('award-secret');
+  expect(persisted.items).toEqual([{ id: 'line-1' }]);
+});
+
 it('persists checkout identity fields with the cart', () => {
   expect(
     partializeCartStore({

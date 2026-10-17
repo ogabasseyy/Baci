@@ -245,4 +245,26 @@ describe('reviewedCheckoutItems', () => {
   it('returns null when a reviewed line has no display shell', () => {
     expect(reviewedCheckoutItems([], review)).toBeNull();
   });
+
+  it('never restores voucher credentials from the display shell', () => {
+    const voucherShell = Object.assign({}, shell, {
+      quizAwardId: 'award-shell',
+      quizVoucherToken: 'token-shell',
+    }) as never;
+    const cleared = reviewedCheckoutItems([voucherShell], review);
+    expect(cleared?.[0].quizAwardId).toBeUndefined();
+    expect(cleared?.[0].quizVoucherToken).toBeUndefined();
+    const reviewedPair = reviewedCheckoutItems([voucherShell], {
+      ...review,
+      lines: [{ ...line, voucherAwardId: 'award-1', voucherToken: 'token-1' }],
+    });
+    expect(reviewedPair?.[0].quizAwardId).toBe('award-1');
+    expect(reviewedPair?.[0].quizVoucherToken).toBe('token-1');
+    const partialPair = reviewedCheckoutItems([voucherShell], {
+      ...review,
+      lines: [{ ...line, voucherAwardId: 'award-1', voucherToken: null }],
+    });
+    expect(partialPair?.[0].quizAwardId).toBeUndefined();
+    expect(partialPair?.[0].quizVoucherToken).toBeUndefined();
+  });
 });

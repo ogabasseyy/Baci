@@ -30,6 +30,7 @@ INSERT INTO public.orders VALUES ('88888888-8888-4888-8888-888888888888', 5000);
 \ir ../migrations/20261012050000_commerce_cart_core.sql
 \ir ../migrations/20261012050100_commerce_cart_roles.sql
 \ir ../migrations/20261015179940_commerce_cart_bootstrap_insert_shape.sql
+\ir ../migrations/20261015179960_commerce_cart_creation_receipt_insert_revoke.sql
 
 -- Fixtures: merchants A/B, carts A1/A2/B1, guests A1/A2/B1.
 INSERT INTO public.commerce_carts (id, merchant_id, state, expires_at) VALUES
@@ -254,8 +255,14 @@ BEGIN
   -- creation RPC returns the new ID from inside its transaction.
   INSERT INTO public.commerce_carts (id, merchant_id, expires_at)
   VALUES ('99999999-9999-4999-8999-999999999998', '11111111-1111-4111-8111-111111111111', now() + interval '7 days');
-  INSERT INTO public.commerce_cart_creation_requests (merchant_id, principal_id, operation_id, request_digest, cart_id, expires_at)
-  VALUES ('11111111-1111-4111-8111-111111111111', 'guest-new', 'create-1', 'digest-1', '99999999-9999-4999-8999-999999999998', now() + interval '1 day');
+  -- Creation receipts are written only by the SECURITY DEFINER
+  -- writers; a bootstrap principal must not forge one directly.
+  BEGIN
+    INSERT INTO public.commerce_cart_creation_requests (merchant_id, principal_id, operation_id, request_digest, cart_id, expires_at)
+    VALUES ('11111111-1111-4111-8111-111111111111', 'guest-new', 'create-1', 'digest-1', '99999999-9999-4999-8999-999999999998', now() + interval '1 day');
+    RAISE EXCEPTION 'bootstrap direct receipt insert must fail';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
   BEGIN
     INSERT INTO public.commerce_carts (merchant_id, expires_at)
     VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', now() + interval '7 days');
@@ -379,6 +386,9 @@ $$;
 RESET ROLE;
 
 -- 15. Deleting a cart nulls only the receipt's cart reference.
+-- (Receipt seeded as superuser: shopper roles can no longer insert.)
+INSERT INTO public.commerce_cart_creation_requests (merchant_id, principal_id, operation_id, request_digest, cart_id, expires_at)
+VALUES ('11111111-1111-4111-8111-111111111111', 'guest-new', 'create-1', 'digest-1', '99999999-9999-4999-8999-999999999998', now() + interval '1 day');
 DO $$
 DECLARE
   v_receipt public.commerce_cart_creation_requests%ROWTYPE;

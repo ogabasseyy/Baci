@@ -80,6 +80,12 @@ function validateAttachments(
 }
 
 function validateInputLine(line: CartInputLine): CartCommandIssue | null {
+  // sourceLineId is a handoff-only stored-line selector minted by
+  // planCartMerge; ordinary client writes must never carry one, or
+  // a caller could aim a write at another principal's stored line.
+  if (line.sourceLineId != null) {
+    return issue('sourceLineId is not allowed on ordinary cart writes.');
+  }
   const identityIssue = validateIdentity(line.item);
   if (identityIssue) return identityIssue;
   if (!isValidQuantity(line.quantity)) {

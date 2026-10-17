@@ -53,8 +53,17 @@ export function reviewedCheckoutItems(
           : undefined,
       price: line.validatedUnitPriceMinor / 100,
       quantity: line.quantity,
-      quizAwardId: line.voucherAwardId ?? shell.quizAwardId,
-      quizVoucherToken: line.voucherToken ?? shell.quizVoucherToken,
+      // Voucher credentials come exclusively from the reviewed pair:
+      // restoring a stale shell credential after the server dropped
+      // the award would submit an unverified voucher.
+      quizAwardId:
+        line.voucherToken && line.voucherAwardId
+          ? line.voucherAwardId
+          : undefined,
+      quizVoucherToken:
+        line.voucherToken && line.voucherAwardId
+          ? line.voucherToken
+          : undefined,
       variantAttributes: { ...line.options },
       variantId: line.variantId ?? shell.variantId,
     });

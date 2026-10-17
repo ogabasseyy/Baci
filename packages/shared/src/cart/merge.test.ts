@@ -170,6 +170,9 @@ describe('planCartMerge', () => {
     const conflicted = planCartMerge(existing, incoming);
     expect(conflicted.ok).toBe(false);
     expect(conflicted).toMatchObject({ code: 'merge_conflict' });
+    // Conflict payloads must never carry the spendable voucher token.
+    expect(JSON.stringify(conflicted)).not.toContain('tok-A');
+    expect(JSON.stringify(conflicted)).not.toContain('tok-B');
 
     const resolved = planCartMerge(existing, incoming, [
       { item: { productId: TECNO }, keep: 'existing' },

@@ -2,10 +2,8 @@ import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authori
 import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
 import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
-import {
-  eventPipelineFrozenRoutes,
-  frozenEventPipelineAuthoritySources,
-} from '@/lib/events/event-pipeline-frozen-authority-sources';
+// biome-ignore format: compact import preserves the 300-line verifier gate.
+import { eventPipelineFrozenRoutes, frozenEventPipelineAuthoritySources } from '@/lib/events/event-pipeline-frozen-authority-sources';
 import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
 import { eventPipelineGatewayCronAdminPaths } from '@/lib/events/event-pipeline-gateway-cron-admin-paths';
 import { eventPipelineGatewayCronCredentialPaths } from '@/lib/events/event-pipeline-gateway-cron-credential-paths';

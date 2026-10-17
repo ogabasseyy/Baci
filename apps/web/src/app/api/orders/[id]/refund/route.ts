@@ -67,14 +67,20 @@ async function handle(
 ) {
   const auth = await authenticateApiRequest(request);
   if (auth.error || !auth.user || !auth.supabase) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Unauthorized', code: 'not_authenticated' },
+      { status: 401 }
+    );
   }
   if (mutate) {
     const csrf = await checkCsrfProtection(request);
     if (!csrf.valid)
       return (
         csrf.response ??
-        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+        NextResponse.json(
+          { error: 'CSRF validation failed', code: 'csrf_validation_failed' },
+          { status: 403 }
+        )
       );
   }
   const { id } = await params;

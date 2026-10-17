@@ -38,6 +38,12 @@ DECLARE
   v_sole_external_leg boolean;
   v_sole_leg_gateway text;
 BEGIN
+  -- Confinement first, like the sibling coverage helpers: EXECUTE is
+  -- granted to authenticated (denial-path rationale below), so without
+  -- an in-function gate a direct call probes another tenant's refund
+  -- evidence. View-level, mirroring the manager; uid-less
+  -- service_role trigger and backfill contexts bypass.
+  PERFORM private.assert_refund_helper_membership_v1(p_merchant_id);
   -- Sole-leg attribution mirrors the manager verbatim: an unlinked
   -- refund attributes only to the single completed external leg.
   SELECT count(*)=1,

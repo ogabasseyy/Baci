@@ -114,6 +114,7 @@ export async function readUcpCart(
         }
       }
       if (lanes) {
+        const observedVersion = canonical.body.cart_version;
         const recovered = canonicalHasLanes(canonical, lanes)
           ? canonical
           : await deps.canonical({
@@ -133,6 +134,14 @@ export async function readUcpCart(
                 quantity: lane.quantity,
               })),
               operationId: `ucp-create-recovery:${input.cartId}`,
+              // Fence the replay with the version observed on the
+              // initial read: a legitimate update that landed since
+              // must conflict, never be overwritten by stale lanes.
+              ...(typeof observedVersion === 'number' &&
+              Number.isSafeInteger(observedVersion) &&
+              observedVersion >= 0
+                ? { expectedVersion: observedVersion }
+                : {}),
             });
         if (recovered && recovered.status === 200) {
           // One-shot repair completes only when the marker actually
@@ -161,6 +170,21 @@ export async function readUcpCart(
             );
           }
           return NextResponse.json(fresh.body, { status: fresh.status });
+        }
+        if (recovered !== canonical) {
+          // The recovery update failed (conflict, transient error, or
+          // the canonical path closed): the generic projection is
+          // known to be missing the requested lane, so propagate the
+          // failure instead of reporting it as a successful read.
+          if (!recovered) {
+            return NextResponse.json(
+              { code: 'temporarily_unavailable' },
+              { status: 503 }
+            );
+          }
+          return NextResponse.json(recovered.body, {
+            status: recovered.status,
+          });
         }
       }
     }

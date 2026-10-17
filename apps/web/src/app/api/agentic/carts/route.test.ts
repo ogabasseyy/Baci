@@ -51,7 +51,7 @@ vi.mock('@/lib/agentic/merchant-context', () => ({
   isAgenticMerchantCheckoutEnabled: (merchant: {
     agentic_checkout_enabled?: boolean;
   }) => merchant.agentic_checkout_enabled !== false,
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 
 vi.mock('@/lib/agentic/mutation-request', () => ({
@@ -66,8 +66,8 @@ vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: vi.fn(() => ({})),
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(() => ({})),
 }));
 
 function mockMutation(body: unknown) {

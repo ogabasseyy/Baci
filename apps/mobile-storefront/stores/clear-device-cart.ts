@@ -38,6 +38,11 @@ export async function clearDeviceCartForAccountTeardown(): Promise<void> {
     Crypto.randomUUID()
   );
   persistCheckoutGenerationDetached(checkoutGeneration);
+  // Complete the proof tombstone before erasing the merchant
+  // reference: when retirement fails the rejection propagates with
+  // sharedCartRef intact, so the still-active proof keeps the retry
+  // owner instead of being stranded until grant expiry.
+  await retirement;
   useCartStore.setState({
     items: [],
     lineSequence: 0,
@@ -52,5 +57,4 @@ export async function clearDeviceCartForAccountTeardown(): Promise<void> {
     status: 'error',
     code: 'reconnect_required',
   });
-  await retirement;
 }

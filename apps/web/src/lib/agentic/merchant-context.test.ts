@@ -5,6 +5,7 @@ import {
   getConfiguredAgenticMerchantSlug,
   isAgenticCheckoutRuntimeConfigured,
   resolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc,
 } from '@/lib/agentic/merchant-context';
 
 // server-only has no runtime exports; mock it so Vitest can import server modules.
@@ -391,5 +392,58 @@ describe('isAgenticCheckoutRuntimeConfigured', () => {
     delete process.env.SUPABASE_JWT_SECRET;
 
     expect(isAgenticCheckoutRuntimeConfigured()).toBe(false);
+  });
+});
+
+describe('resolveAgenticMerchantContextFromRpc', () => {
+  it('maps the scoped RPC projection to the merchant context', async () => {
+    stubBaseEnv();
+    vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+    const rpc = vi.fn(async () => ({
+      data: [
+        {
+          id: 'merchant-1',
+          slug: 'fixture-store',
+          business_name: 'Fixture Store',
+          paystack_subaccount_code: 'ACCT_fixture',
+          custom_domain: 'fixture.example.com',
+          agentic_checkout_enabled: true,
+          pay_on_delivery_enabled: true,
+          custom_settings: {
+            agentic_agent_allowlist: ['fixture-agent'],
+          },
+        },
+      ],
+      error: null,
+    }));
+    const context = await resolveAgenticMerchantContextFromRpc({ rpc });
+    expect(rpc).toHaveBeenCalledWith('resolve_agentic_merchant_context', {
+      p_slug: 'demo-store',
+    });
+    expect(context).toMatchObject({
+      id: 'merchant-1',
+      slug: 'fixture-store',
+      business_name: 'Fixture Store',
+      paystack_subaccount_code: 'ACCT_fixture',
+      custom_domain: 'fixture.example.com',
+      agentic_checkout_enabled: true,
+      pay_on_delivery_enabled: true,
+      agent_user_agent_allowlist: ['fixture-agent'],
+    });
+  });
+
+  it('returns null when the RPC errors or resolves no merchant', async () => {
+    stubBaseEnv();
+    vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+    await expect(
+      resolveAgenticMerchantContextFromRpc({
+        rpc: vi.fn(async () => ({ data: null, error: { message: 'down' } })),
+      })
+    ).resolves.toBeNull();
+    await expect(
+      resolveAgenticMerchantContextFromRpc({
+        rpc: vi.fn(async () => ({ data: [], error: null })),
+      })
+    ).resolves.toBeNull();
   });
 });

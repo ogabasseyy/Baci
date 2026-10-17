@@ -113,6 +113,24 @@ it('uses line commands for negotiation and replaces only for group negotiation',
     lineId: 'line-1',
     negotiatedUnitPriceMinor: null,
   });
+  // A free or fully discounted line negotiates to zero, which the
+  // shared command contract accepts as a non-negative price.
+  expect(
+    nativeWriteCommand(
+      { type: 'negotiate', id: 'line-1', price: 0 },
+      snapshot()
+    )
+  ).toEqual({
+    type: 'set_negotiated_price',
+    lineId: 'line-1',
+    negotiatedUnitPriceMinor: 0,
+  });
+  expect(() =>
+    nativeWriteCommand(
+      { type: 'negotiate', id: 'line-1', price: -1 },
+      snapshot()
+    )
+  ).toThrow(expect.objectContaining({ code: 'invalid_request' }));
   expect(
     nativeWriteCommand({ type: 'negotiate_group', total: 10 }, snapshot())
   ).toEqual({

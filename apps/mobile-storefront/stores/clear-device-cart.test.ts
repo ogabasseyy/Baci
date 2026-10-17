@@ -41,7 +41,8 @@ it('retires the shared reference and stored proof when no writer is mounted', as
   );
   expect(cartSessionStorage.remove).not.toHaveBeenCalled();
 });
-it('clears private local state even offline without sending a shared-cart clear command', async () => {
+it('propagates a writer retire failure without erasing the merchant reference', async () => {
+  jest.mocked(useCartStore.setState).mockClear();
   const write = jest.fn();
   const retire = jest.fn().mockRejectedValue(new Error('offline'));
   const release = installSharedCartWriter({
@@ -49,12 +50,18 @@ it('clears private local state even offline without sending a shared-cart clear 
     retire,
     onError: jest.fn(),
   });
-  await expect(clearDeviceCartForAccountTeardown()).rejects.toThrow('offline');
-  expect(write).not.toHaveBeenCalled();
-  expect(useCartStore.setState).toHaveBeenCalledWith(
-    expect.objectContaining({ items: [], sharedCartRef: undefined })
-  );
-  release();
+  try {
+    await expect(clearDeviceCartForAccountTeardown()).rejects.toThrow(
+      'offline'
+    );
+    expect(write).not.toHaveBeenCalled();
+    // The merchant reference survives so a retry can find the proof.
+    expect(useCartStore.setState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ sharedCartRef: undefined })
+    );
+  } finally {
+    release();
+  }
 });
 
 it('propagates a retire failure instead of reporting teardown success', async () => {

@@ -50,7 +50,7 @@ export function nativeWriteCommand(
     if (index < 0) return null;
     const price =
       action.type === 'negotiate' ? Math.round(action.price * 100) : null;
-    if (price !== null && (!Number.isSafeInteger(price) || price <= 0))
+    if (price !== null && (!Number.isSafeInteger(price) || price < 0))
       throw new NativeCartError('invalid_request');
     return {
       type: 'set_negotiated_price',

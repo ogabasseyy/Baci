@@ -50,7 +50,7 @@ vi.mock('@/lib/agentic/idempotency', () => ({
 }));
 
 vi.mock('@/lib/agentic/merchant-context', () => ({
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 
 vi.mock('@/lib/agentic/mutation-request', () => ({
@@ -66,8 +66,8 @@ vi.mock('@/lib/agentic/scoped-supabase', () => ({
   createAgenticScopedSupabaseClient: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: vi.fn(() => ({})),
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(() => ({})),
 }));
 
 function createChain(result: { data: unknown; error: unknown }) {

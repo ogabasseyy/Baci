@@ -38,12 +38,15 @@ try:
   # merge, preview-token, guard, legacy-bridge lanes, marker fence).
   sql+='\n\\i '+str(root/'supabase/migrations/20260430142500_add_agentic_scoped_access_policies.sql')
   sql+='\nCREATE SCHEMA IF NOT EXISTS realtime; CREATE TABLE realtime.messages(extension text, private boolean, topic text); ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY; CREATE FUNCTION realtime.topic() RETURNS text LANGUAGE sql STABLE AS $$ SELECT NULL::text $$;'
+  # Baseline tables the agentic merchant-context RPC joins (present in
+  # the real baseline; stubbed here before the final cart chain runs).
+  sql+="\nALTER TABLE public.merchants ADD COLUMN IF NOT EXISTS business_name text, ADD COLUMN IF NOT EXISTS paystack_subaccount_code text; CREATE TABLE IF NOT EXISTS public.domains(id uuid PRIMARY KEY,merchant_id uuid NOT NULL,domain text,is_primary boolean NOT NULL DEFAULT false,status text,updated_at timestamptz,created_at timestamptz); CREATE TABLE IF NOT EXISTS public.merchant_feature_settings(merchant_id uuid PRIMARY KEY,agentic_checkout_enabled boolean,pay_on_delivery_enabled boolean,custom_settings jsonb);"
   for f in sorted((root/'supabase/migrations').glob('202610151[67]*.sql')):
    sql+='\n\\i '+str(f)
  tests=(root/'supabase/tests/commerce_cart_verified_legacy_bridge.sql').read_text()
  if '--baseline' in sys.argv:
   tests=tests.split('-- Negotiation accepted')[0]+tests[tests.index('DO $$ DECLARE failures text;'):]
- sql+='\n'+tests+'\n'+(root/'supabase/tests/commerce_cart_final_legacy_composition.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_variant_predicates.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_replay_privileges_feature_shapes.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_shared_clear_guard.sql').read_text()+'\nROLLBACK;'
+ sql+='\n'+tests+'\n'+(root/'supabase/tests/commerce_cart_final_legacy_composition.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_variant_predicates.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_replay_privileges_feature_shapes.sql').read_text()+'\n'+(root/'supabase/tests/commerce_cart_shared_clear_guard.sql').read_text()+'\n'+(root/'supabase/tests/agentic_merchant_context_rpc.sql').read_text()+'\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55491','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-bridge-sql.log','w'),stderr=subprocess.STDOUT,cwd=root)
  print('PASS' if r.returncode==0 else 'FAIL')
  if r.returncode: print(pathlib.Path('/tmp/cart-bridge-sql.log').read_text()[-2800:])

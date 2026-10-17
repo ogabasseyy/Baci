@@ -105,6 +105,91 @@ it('replays stored lane identity when the canonical cart lost it at create', asy
   });
   expect(canonical.mock.calls[2][0]).toMatchObject({ action: 'read' });
 });
+
+it('fences the recovery replay with the observed cart version', async () => {
+  const cart = {
+    agent_id: 'agent-a',
+    status: 'active',
+    metadata: { source: 'ucp', create_recovery_pending: true },
+    cart_items: [{ id: 'prod-1', quantity: 1, variant_id: 'variant-1' }],
+  };
+  const canonical = vi
+    .fn()
+    .mockResolvedValueOnce({
+      status: 200,
+      body: {
+        id: 'cart-a',
+        cart_version: 7,
+        line_items: [{ item: { id: 'prod-1', quantity: 1 } }],
+      },
+    })
+    .mockResolvedValueOnce({
+      status: 200,
+      body: { id: 'cart-a', cart_version: 8 },
+    })
+    .mockResolvedValueOnce({
+      status: 200,
+      body: { id: 'cart-a', cart_version: 8, marker: 'fresh-read' },
+    });
+  const supabase = {
+    from: vi.fn(() => ({
+      update: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            select: vi.fn(async () => ({
+              data: [{ cart_id: 'cart-a' }],
+              error: null,
+            })),
+          })),
+        })),
+      })),
+    })),
+  };
+  const response = await readUcpCart(
+    { ...input, supabase: supabase as never },
+    {
+      canonical,
+      load: vi.fn().mockResolvedValue({ cart, error: null }),
+      respond: vi.fn(),
+    }
+  );
+  expect(response.status).toBe(200);
+  expect(canonical.mock.calls[1][0]).toMatchObject({
+    action: 'update',
+    expectedVersion: 7,
+  });
+});
+
+it('propagates a failed recovery update instead of answering the stale projection', async () => {
+  const cart = {
+    agent_id: 'agent-a',
+    status: 'active',
+    metadata: { source: 'ucp', create_recovery_pending: true },
+    cart_items: [{ id: 'prod-1', quantity: 1, variant_id: 'variant-1' }],
+  };
+  const canonical = vi
+    .fn()
+    .mockResolvedValueOnce({
+      status: 200,
+      body: {
+        id: 'cart-a',
+        cart_version: 7,
+        line_items: [{ item: { id: 'prod-1', quantity: 1 } }],
+      },
+    })
+    .mockResolvedValueOnce({
+      status: 409,
+      body: { code: 'refresh_required', error: 'Refresh your cart' },
+    });
+  const response = await readUcpCart(input, {
+    canonical,
+    load: vi.fn().mockResolvedValue({ cart, error: null }),
+    respond: vi.fn(),
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ code: 'refresh_required' });
+  expect(canonical).toHaveBeenCalledTimes(2);
+});
 it('hides a missing legacy cart after a canonical bypass', async () => {
   const deps = {
     canonical: vi.fn().mockResolvedValue(null),

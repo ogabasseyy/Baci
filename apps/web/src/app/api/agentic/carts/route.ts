@@ -6,7 +6,7 @@ import { calculateCheckoutSession } from '@/lib/agentic/checkout';
 import { reserveAgenticIdempotencyKey } from '@/lib/agentic/idempotency';
 import { getAgenticIdempotencyErrorStatus } from '@/lib/agentic/idempotency-response';
 import { buildStoredAgenticIdempotencyResponse } from '@/lib/agentic/idempotency-response-storage';
-import { resolveAgenticMerchantContext } from '@/lib/agentic/merchant-context';
+import { resolveAgenticMerchantContextFromRpc } from '@/lib/agentic/merchant-context';
 import { readAgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
@@ -23,7 +23,7 @@ import { adaptUcpShippingAddressToAgentic } from '@/lib/agentic/ucp-request-adap
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
-import { createAdminClient } from '@/lib/supabase/admin';
+import { createAnonClient } from '@/lib/supabase/anon';
 import { ucpCartCreateRequestSchema } from '@/schemas/ucp-cart-request';
 
 const CREATE_CART_ROUTE = 'carts.create';
@@ -56,7 +56,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const merchant = await resolveAgenticMerchantContext(createAdminClient());
+  const merchant = await resolveAgenticMerchantContextFromRpc(
+    createAnonClient()
+  );
   if (!merchant) {
     return NextResponse.json(
       { error: 'Agentic merchant not found' },

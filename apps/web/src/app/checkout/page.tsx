@@ -509,7 +509,7 @@ async function prepareCheckout(
       // retained loyalty key after a full-page redirect; record the
       // handoff so it can clear exactly this key once this order is
       // confirmed there.
-      recordLegacyCheckoutRedirect(order.id, keySession.keyInput);
+      recordLegacyCheckoutRedirect(order.id as string, keySession.keyInput);
     }
     return { kind: 'redirect', order, paystackAuthUrl };
   } catch (error) {

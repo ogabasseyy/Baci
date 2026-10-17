@@ -92,6 +92,7 @@ export async function OgabasseyStaticHomePageContent({
           */}
           {omitCommittedHero ? (
             <OgabasseyHomePageContent
+              canonicalDomain={pathPrefix === ''}
               omitDocumentHeading
               pathPrefix={pathPrefix}
               shellMerchantId={shellMerchantId}

@@ -219,11 +219,19 @@ test('configured process value wins over an opaque pulled JWK and is not logged'
 
 test('workflow generates the JWK internally and keeps runtime injection Vercel-owned', () => {
   const workflow = fs.readFileSync(DEPLOY_WORKFLOW, 'utf8');
+  const normalizeStart = workflow.indexOf(
+    'node .github/scripts/normalize-vercel-sensitive-placeholders.mjs .vercel/.env.production.local',
+  );
+  const legacyStandinStart = workflow.indexOf(
+    "node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_JWT_SECRET .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'",
+  );
   const stepStart = workflow.indexOf(
     '      - name: Ensure build-time presence of runtime-only scoped Supabase JWT key',
   );
   const buildStart = workflow.indexOf('      - name: Build for Vercel', stepStart);
-  assert.ok(stepStart >= 0);
+  assert.ok(normalizeStart >= 0);
+  assert.ok(legacyStandinStart > normalizeStart);
+  assert.ok(stepStart > legacyStandinStart);
   assert.ok(buildStart > stepStart);
 
   const step = workflow.slice(stepStart, buildStart);

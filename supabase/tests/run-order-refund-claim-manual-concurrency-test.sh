@@ -14,21 +14,21 @@
 # Phase 2 (end-to-end): after a full manual commits, the claim must see
 # full coverage and finalize instead of claiming the worker branch.
 #
-# The full run needs the full replayed schema: locally that is the
-# baci-refund-pg scratch container (PGPORT 55433); in CI it is the
-# database the replay step in this same job left running with the
-# schema applied (the CI step discovers its random loopback port
-# from the live supabase_db_ container and exports PGPORT).
-# It refreshes the functions under test from the working tree
-# first, so the proof tracks current code rather than schema age.
-# MINIMAL_PHASE1=1 instead self-provisions a throwaway postgres
-# with a minimal fixture (roles, jwt-reading auth.role stub, bare
-# orders table) plus the working-tree claim, and runs Phase 1
-# only: the blocking proof needs nothing past the lock point,
-# since unreached PL/pgSQL statements never compile. CI runs both
-# modes — the lock cannot be removed unnoticed, and the
-# finalize-after-manual sequence executes end to end — while
-# round62 keeps covering finalize-after-manual replay-natively
+# The full run is local-only: it needs the full replayed schema in the
+# baci-refund-pg scratch container. A follow-up CI step cannot reuse
+# the replay job's database — the replay always tears its owned
+# project down (stopOwnedProject) before returning, on random
+# loopback ports, with no retain flag — so running the full script
+# in CI would need harness changes or a second full schema apply.
+# It refreshes the functions under test from the working tree first,
+# so the proof tracks current code rather than scratch age.
+# MINIMAL_PHASE1=1 instead self-provisions a throwaway postgres with
+# a minimal fixture (roles, jwt-reading auth.role stub, bare orders
+# table) plus the working-tree claim, and runs Phase 1 only: the
+# blocking proof needs nothing past the lock point, since unreached
+# PL/pgSQL statements never compile. That is the mode CI runs — the
+# lock cannot be removed unnoticed — while Phase 2's
+# finalize-after-manual stays covered replay-natively by round62
 # (RPC-record then claim must finalize), and both locks are pinned
 # by source assertion in claim_anomalies.
 #

@@ -180,6 +180,43 @@ describe('refined product hydration', () => {
     // Page arithmetic uses the raw RPC total: the skipped row stays ranked.
     expect(result.totalCount).toBe(2);
   });
+  it('skips matches from an unpublished non-admin merchant', async () => {
+    rpc.mockResolvedValue({
+      data: [
+        { product_id: 'p1', total_count: 3 },
+        { product_id: 'p2', total_count: 3 },
+        { product_id: 'p3', total_count: 3 },
+      ],
+      error: null,
+    });
+    read.mockResolvedValue({
+      data: [
+        {
+          id: 'p1',
+          price: 100,
+          merchants: { is_published: true, is_platform_admin: false },
+        },
+        // Readable but unpublished and non-admin: filtered.
+        {
+          id: 'p2',
+          price: 200,
+          merchants: { is_published: false, is_platform_admin: false },
+        },
+        // RLS-hidden parent (authenticated non-staff on a platform-admin
+        // merchant, which is exempt): kept.
+        { id: 'p3', price: 300, merchants: null },
+      ],
+      error: null,
+    });
+    const result = await getStorefrontRefinedSearchProducts({
+      merchantId: 'm1',
+      query: 'phone',
+      limit: 20,
+      refinements: { brands: [], sort: 'relevance' },
+    });
+    expect(result.productIds).toEqual(['p1', 'p3']);
+    expect(result.totalCount).toBe(3);
+  });
   it('preserves all condition metadata when sorting an unrefined search', async () => {
     rpc.mockResolvedValue({
       data: [

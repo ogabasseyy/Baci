@@ -70,8 +70,11 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned an eleventh time: F1 replay call, failure mapping, and
   // result destructure extracted to resolveOfferReplayForOrderRoute
   // (Boy Scout Rule); replay semantics and responses are unchanged.
+  // Re-pinned for the 16..128-byte idempotency-key floor at the route
+  // gate (400 for short/low-entropy keys); notification, payment
+  // authority, and database operations are unchanged.
   'apps/web/src/app/api/orders/route.ts':
-    '057ef3400731c43b9ac869aeebf0e1d6a487cb8330d36a14ff2026caeaa5ddb4',
+    '318e7f5c0abc51365361847bc68577fb2b114735a7b6ff44861d25dfa5ea27e4',
   // Re-pinned for reviewed new-order-only attested shipping coordinates.
   // Existing-order replay, notification and payment authority are unchanged.
   // Merge re-pin: branch extraction plus main's attested shipping

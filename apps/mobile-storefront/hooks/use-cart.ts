@@ -127,31 +127,40 @@ export function useCart() {
         .items.find((line) => isSameCartLine(line, item));
 
       // Store rollback function (L11 fix: uses trackRollback to enforce size limit).
-      // Line-scoped: a failed add removes only what it wrote — never a
-      // whole-cart snapshot — so a concurrent successful add survives a
-      // sibling's stock failure, and an untouched check skips the
-      // rollback when a newer edit already moved the line.
+      // Contribution-scoped: a failed add subtracts exactly the units
+      // it wrote — never a whole-cart snapshot — so a concurrent
+      // successful add to the same line survives a sibling's stock
+      // failure, and a clamped later add is never rolled back with it.
+      // Measured post-write so max_quantity clamping is honored.
+      const previousQuantity = previousLine?.quantity ?? 0;
+      const contributedQuantity = addedLine
+        ? Math.max(0, addedLine.quantity - previousQuantity)
+        : 0;
       trackRollback(rollbackId, () => {
         if (!addedLine) {
           return;
         }
         useCartStore.setState((state) => {
           const current = state.items.find((i) => i.id === addedLine.id);
-          // Concurrently removed, or touched since our write: leave
-          // alone — never resurrect, never clobber the newer state.
-          if (!current || current.quantity !== addedLine.quantity) {
+          // Concurrently removed: leave alone, never resurrect.
+          if (!current) {
             return state;
           }
-          if (previousLine == null) {
+          const rolledBackQuantity = current.quantity - contributedQuantity;
+          // The line now holds less than we wrote: another writer
+          // (removal, explicit quantity set) already consumed our
+          // contribution, so there is nothing left to remove.
+          if (rolledBackQuantity < 0) {
+            return state;
+          }
+          if (rolledBackQuantity === 0) {
             return {
               items: state.items.filter((i) => i.id !== addedLine.id),
             };
           }
           return {
             items: state.items.map((i) =>
-              i.id === addedLine.id
-                ? { ...i, quantity: previousLine.quantity }
-                : i
+              i.id === addedLine.id ? { ...i, quantity: rolledBackQuantity } : i
             ),
           };
         });

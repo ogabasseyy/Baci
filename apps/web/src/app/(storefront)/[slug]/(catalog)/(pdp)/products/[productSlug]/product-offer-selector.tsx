@@ -44,8 +44,13 @@ export function ProductOfferSelector({
           }
           className={cn(
             'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
-            selectedCondition ===
-              normalizeCanonicalProductCondition(product.condition || 'new')
+            // An exact offer can share the parent's canonical condition:
+            // the base button must not light up alongside the resolved
+            // offer button, or two mutually exclusive choices look
+            // selected at once.
+            selectedOffer == null &&
+              selectedCondition ===
+                normalizeCanonicalProductCondition(product.condition || 'new')
               ? 'border-store-primary text-store-primary bg-store-primary/5'
               : 'border-gray-200 text-gray-500 hover:border-gray-300'
           )}
@@ -56,12 +61,13 @@ export function ProductOfferSelector({
           // Two offers can share one displayed condition: the
           // selected style must follow the resolved offer id
           // (like the cart-item match below), or every
-          // same-condition button lights up at once.
+          // same-condition button lights up at once. A null
+          // selection means the base row will be added, so a
+          // condition-only match must not light an offer whose
+          // price will not be added.
           const isOfferSelected =
-            selectedOffer != null
-              ? String(selectedOffer.id) === String(offer.id)
-              : selectedCondition ===
-                normalizeCanonicalProductCondition(offer.condition);
+            selectedOffer != null &&
+            String(selectedOffer.id) === String(offer.id);
           // Same-condition offers render identical labels, so
           // the shopper could not tell which one is selected:
           // disambiguate with the offer price when they collide.

@@ -26,7 +26,11 @@ CHAIN=(
   20261002090046_storefront_search_refinements.sql
   20261003180000_storefront_available_search_facets.sql
   20261003193000_storefront_processor_filters.sql
+  20261003194500_storefront_category_facets.sql
   20261003230000_storefront_search_refinement_fixes.sql
+  20261004060000_search_inventory_option_guards.sql
+  20261004131000_search_price_options_offer_base_rows.sql
+  20261004151000_search_price_options_offer_scope_null_stock.sql
   20261004193000_private_purchasable_search_candidates.sql
   20261004210000_bounded_refined_search_offsets.sql
   20261004230000_storefront_search_brand_case_insensitive.sql
@@ -34,14 +38,77 @@ CHAIN=(
   20261008100000_search_candidate_query_length_first.sql
   20261008110000_search_processor_refined_drop_redundant_exists.sql
   20261008120001_search_processor_filter_case_insensitive.sql
+  20261008130001_search_price_options_null_stock_managed.sql
+  20261008140000_search_price_options_sku_matrix_drift.sql
   20261008150000_search_platform_admin_visibility.sql
+  20261008160000_search_price_options_offer_parent_stock.sql
   20261008180000_search_price_options_same_condition_offers.sql
   20261008190000_search_price_options_offer_pdp_window.sql
+  20261008200000_search_price_options_variant_population_guard.sql
   20261008240000_search_candidate_admin_visibility_predicate.sql
+  20261008340000_storefront_search_offer_serialized_unit_gate.sql
+  20261008360000_storefront_search_offer_unlimited_scalar_gate.sql
   20261008370000_search_processor_filter_before_precise_prune.sql
+  20261008430000_storefront_search_offer_unmanaged_scalar.sql
   20261010110000_search_category_facets_scoped_precise.sql
   20261016090000_search_condition_match_hyphen.sql
 )
+
+# Registration guard: every storefront-search function migration must be
+# classified below — CHAIN when a disposable suite calls (transitively
+# or directly) a function it defines, EXCLUDED with a reason otherwise.
+# A new search migration fails this gate until its author classifies it,
+# so the suites cannot silently pass against stale shipped definitions.
+SEARCH_FILE_PATTERN='search|facet|storefront_processor|storefront_category'
+EXCLUDED=(
+  # Legacy product-search v2 family: not called by disposable suites.
+  20260617120000_product_search_locale_normalization.sql
+  20260621130000_search_products_v2_two_tier.sql
+  20260628130000_search_products_v2_admin_effective_stock.sql
+  20260702024830_fix_search_products_condition_filter.sql
+  20260713212000_optimize_product_search_suggestion_v2.sql
+  20260827100000_fix_search_products_not_archived_nulls.sql
+  # Admin notification/merchant health repairs: admin RPCs, not suites.
+  20260809184000_repair_admin_notification_dashboard_literal_search.sql
+  20260811100001_repair_admin_merchant_search_and_push_health.sql
+  # Discovery/MCP/research search: separate RPC families, not suites.
+  20260930210000_product_discovery_fact_search.sql
+  20261001002000_combined_product_discovery_search.sql
+  20261001080000_correlated_text_attribute_search.sql
+  20261001140000_bounded_mcp_search_options.sql
+  20261001190000_ascii_mcp_search_browse.sql
+  20261002090724_bounded_search_option_projection.sql
+  20261002222000_guard_discovery_research_source.sql
+  20261002233000_lossless_discovery_research_revision.sql
+  20261003021500_authorize_discovery_research_reader.sql
+  # Category slug-state RPC: not called by any disposable suite.
+  20260531173100_add_storefront_category_slug_state_rpc.sql
+  20260602090000_fix_storefront_category_slug_state_missing_row.sql
+  # Admin transaction-review RPCs: covered by the replay gate's
+  # --sql-check suites; not called by disposable suites.
+  20261008174300_search_mobile_admin_transaction_review_orders.sql
+  20261009340000_search_mobile_admin_transaction_review_offer_labels.sql
+  20261011230000_search_mobile_admin_transaction_review_item_condition.sql
+  # Search analytics ingest policy: DDL-only, not a suite function.
+  20261010000000_search_analytics_service_role_only_insert.sql
+)
+
+check_chain_registration() {
+  local file entry classified
+  while IFS= read -r file; do
+    classified=false
+    for entry in "${CHAIN[@]}" "${EXCLUDED[@]}"; do
+      if [ "$file" = "$entry" ]; then
+        classified=true
+        break
+      fi
+    done
+    if [ "$classified" = false ]; then
+      echo "UNREGISTERED search migration: $file (classify it in CHAIN or EXCLUDED above)" >&2
+      exit 1
+    fi
+  done < <(ls "$MIGRATIONS" | grep -E "$SEARCH_FILE_PATTERN" | sort)
+}
 
 fresh_db() {
   local db="$1"
@@ -78,6 +145,8 @@ run_chain() {
   psql -v ON_ERROR_STOP=1 -q -d "$db" "${args[@]}" >/dev/null
   echo "PASS $suite"
 }
+
+check_chain_registration
 
 run_standalone suite_private_candidates private_search_candidates.sql
 run_standalone suite_bounded_offsets bounded_refined_search_offsets.sql

@@ -1,6 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { type CartItem, useCartStore } from '@/stores/cart-store';
 import { showCartToast } from './cart-notifications';
+import {
+  advanceQuantityValidationBaseline,
+  beginQuantityValidationFlight,
+  endQuantityValidationFlight,
+  readQuantityValidationBaseline,
+} from './cart-quantity-validation-flights';
 import { getCachedOptionStock } from './cart-query-cache';
 import { checkStock, getExistingProductQuantityForStock } from './cart-stock';
 
@@ -110,6 +116,11 @@ export function createUpdateQuantityMutation({
       const previousItems = preState.items;
       const previousNegotiationActive = preState.cartWideNegotiationActive;
 
+      // The pre-write quantity is stock-validated (initial store state
+      // or a settled success), so it seeds the shared baseline when
+      // this edit is the first in flight for the line.
+      beginQuantityValidationFlight(id, previousQuantity);
+
       // Optimistically update quantity
       updateQuantityInStore(id, quantity);
 
@@ -140,10 +151,21 @@ export function createUpdateQuantityMutation({
       // clamp-aware applied quantity, not the requested one). A missing
       // line (removed concurrently, or our own optimistic removal) is
       // left alone, never resurrected from a whole-cart snapshot.
+      // onSettled runs after this handler and ends the flight, so
+      // the entry (and its baseline) is still present here, even for
+      // the last settler.
+      const validatedBaseline =
+        context?.id != null
+          ? readQuantityValidationBaseline(context.id)
+          : undefined;
       if (context?.id != null && context?.previousQuantity != null) {
         const state = useCartStore.getState();
         const current = state.items.find((i) => i.id === context.id);
-        const previousQuantity = context.previousQuantity;
+        // Restore the last validated baseline, not this edit's own
+        // predecessor: with overlapping edits the predecessor was
+        // written optimistically and may never have passed stock
+        // validation itself.
+        const previousQuantity = validatedBaseline ?? context.previousQuantity;
         if (current && current.quantity === context.appliedQuantity) {
           const previousById = new Map(
             context.previousItems.map((item) => [item.id, item])
@@ -208,6 +230,9 @@ export function createUpdateQuantityMutation({
     },
 
     onSuccess: (data: UpdateQuantityResult) => {
+      // This quantity passed stock validation: it becomes the
+      // rollback baseline for any still-pending overlapping edit.
+      advanceQuantityValidationBaseline(data.id, data.quantity);
       // Bug #96 fix: Read fresh items from store instead of stale closure
       const freshItems = useCartStore.getState().items;
       const item = freshItems.find((i) => i.id === data.id);
@@ -216,6 +241,17 @@ export function createUpdateQuantityMutation({
           queryKey: ['product', item.product_id],
         });
       }
+    },
+
+    onSettled: (
+      _data: UpdateQuantityResult | undefined,
+      _error: Error | null,
+      variables: UpdateQuantityVariables
+    ) => {
+      // Exactly-once flight accounting: react-query runs onSettled
+      // after onSuccess/onError for every mutation, so successes and
+      // failures both decrement here and only here.
+      endQuantityValidationFlight(variables.id);
     },
   };
 }

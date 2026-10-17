@@ -420,4 +420,69 @@ describe('useCart stock validation', () => {
       queryClient.clear();
     }
   });
+
+  it('removes only the failed add when same-line adds overlap', async () => {
+    type StockResult = { available: boolean; currentStock: number };
+    let releaseFirst!: (result: StockResult) => void;
+    const firstGate = new Promise<StockResult>((resolve) => {
+      releaseFirst = resolve;
+    });
+    mockCheckStock
+      .mockImplementationOnce(() => firstGate)
+      .mockImplementationOnce(async () => ({
+        available: true,
+        currentStock: 9,
+      }));
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+        queries: { gcTime: Number.POSITIVE_INFINITY, retry: false },
+      },
+    });
+    const wrapper = ({ children }: PropsWithChildren) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(() => useCart(), { wrapper });
+
+    try {
+      // Both adds merge into one line (optimistic 1, then 3); the
+      // later validation succeeds and the earlier one fails after.
+      act(() => {
+        result.current.addToCart({
+          product_id: 'product-1',
+          slug: 'redmi-note-14',
+          name: 'Redmi Note 14',
+          price: 220000,
+          quantity: 1,
+        });
+      });
+      act(() => {
+        result.current.addToCart({
+          product_id: 'product-1',
+          slug: 'redmi-note-14',
+          name: 'Redmi Note 14',
+          price: 220000,
+          quantity: 2,
+        });
+      });
+      await waitFor(() => {
+        expect(mockCheckStock).toHaveBeenCalledTimes(2);
+      });
+      await act(async () => {});
+      await act(async () => {
+        releaseFirst({ available: false, currentStock: 2 });
+      });
+
+      // Only the failed add's unit is removed; the validated later
+      // add's 2 units stay (an untouched-check rollback would leave 3).
+      await waitFor(() => {
+        expect(useCartStore.getState().items).toHaveLength(1);
+        expect(useCartStore.getState().items[0].quantity).toBe(2);
+      });
+    } finally {
+      unmount();
+      queryClient.clear();
+    }
+  });
 });

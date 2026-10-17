@@ -327,6 +327,11 @@ export const EXPECTED_PENDING_SOURCES = [
       'supabase/migrations/20261016150000_storefront_order_idempotency_key_entropy.sql',
     sha256: 'fb28c5d4994866dae1e83003b49d3ecfcd4d332b6f0d7a26b8b418c3f130fd21',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016160000_storefront_order_item_offer_tenant_bind.sql',
+    sha256: '8b78693d6a9d1a9ab76c23d667795f435d2f6eaf1fda34fecd2620d05014262d',
+  },
   ...EXPECTED_PENDING_TAIL_SOURCES.recent,
   ...EXPECTED_PRIMARY_PENDING_SOURCES,
 ]

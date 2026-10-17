@@ -60,10 +60,10 @@ function seed(items: CartItem[], cartWideNegotiationActive = false) {
   });
 }
 
-function mutation() {
+function mutation(queryClient = {} as QueryClient) {
   const { updateQuantity, restoreItems } = useCartStore.getState();
   return createUpdateQuantityMutation({
-    queryClient: {} as QueryClient,
+    queryClient,
     updateQuantityInStore: updateQuantity,
     restoreItemsInStore: restoreItems,
   });
@@ -81,17 +81,15 @@ describe('cart quantity mutation rollback', () => {
 
   it('restores the previous quantity after a clamped optimistic write', () => {
     seed([line({ id: 'a', quantity: 1, max_quantity: 5 })]);
-    const { onMutate, onError } = mutation();
+    const { onMutate, onError, onSettled } = mutation();
 
     const context = onMutate({ id: 'a', quantity: 10 });
     // The store clamps the optimistic write to max_quantity.
     expect(useCartStore.getState().items[0]?.quantity).toBe(5);
 
-    onError(
-      new Error('Only 2 items available in stock'),
-      { id: 'a', quantity: 10 },
-      context
-    );
+    const error = new Error('Only 2 items available in stock');
+    onError(error, { id: 'a', quantity: 10 }, context);
+    onSettled(undefined, error, { id: 'a', quantity: 10 });
 
     expect(useCartStore.getState().items[0]?.quantity).toBe(1);
   });
@@ -114,17 +112,15 @@ describe('cart quantity mutation rollback', () => {
       ],
       true
     );
-    const { onMutate, onError } = mutation();
+    const { onMutate, onError, onSettled } = mutation();
 
     const context = onMutate({ id: 'a', quantity: 3 });
     expect(useCartStore.getState().cartWideNegotiationActive).toBe(false);
     expect(useCartStore.getState().items[0]?.negotiatedPrice).toBeUndefined();
 
-    onError(
-      new Error('Only 1 items available in stock'),
-      { id: 'a', quantity: 3 },
-      context
-    );
+    const error = new Error('Only 1 items available in stock');
+    onError(error, { id: 'a', quantity: 3 }, context);
+    onSettled(undefined, error, { id: 'a', quantity: 3 });
 
     const state = useCartStore.getState();
     expect(state.cartWideNegotiationActive).toBe(true);
@@ -142,24 +138,22 @@ describe('cart quantity mutation rollback', () => {
 
   it('leaves a newer concurrent edit alone', () => {
     seed([line({ id: 'a', quantity: 1 })]);
-    const { onMutate, onError } = mutation();
+    const { onMutate, onError, onSettled } = mutation();
 
     const context = onMutate({ id: 'a', quantity: 4 });
     // A newer keystroke edit lands before the stale failure arrives.
     useCartStore.getState().updateQuantity('a', 2);
 
-    onError(
-      new Error('Only 1 items available in stock'),
-      { id: 'a', quantity: 4 },
-      context
-    );
+    const error = new Error('Only 1 items available in stock');
+    onError(error, { id: 'a', quantity: 4 }, context);
+    onSettled(undefined, error, { id: 'a', quantity: 4 });
 
     expect(useCartStore.getState().items[0]?.quantity).toBe(2);
   });
 
   it('preserves a concurrently added line on rollback', () => {
     seed([line({ id: 'a', quantity: 1 })]);
-    const { onMutate, onError } = mutation();
+    const { onMutate, onError, onSettled } = mutation();
 
     const context = onMutate({ id: 'a', quantity: 4 });
     useCartStore.getState().addItem({
@@ -170,11 +164,9 @@ describe('cart quantity mutation rollback', () => {
       quantity: 1,
     });
 
-    onError(
-      new Error('Only 1 items available in stock'),
-      { id: 'a', quantity: 4 },
-      context
-    );
+    const error = new Error('Only 1 items available in stock');
+    onError(error, { id: 'a', quantity: 4 }, context);
+    onSettled(undefined, error, { id: 'a', quantity: 4 });
 
     const items = useCartStore.getState().items;
     expect(items).toHaveLength(2);
@@ -184,20 +176,66 @@ describe('cart quantity mutation rollback', () => {
 
   it('leaves a concurrently removed line alone', () => {
     seed([line({ id: 'a', quantity: 1 }), line({ id: 'b', quantity: 1 })]);
-    const { onMutate, onError } = mutation();
+    const { onMutate, onError, onSettled } = mutation();
 
     const context = onMutate({ id: 'a', quantity: 4 });
     useCartStore.setState({
       items: useCartStore.getState().items.filter((i) => i.id !== 'a'),
     });
 
-    onError(
-      new Error('Only 1 items available in stock'),
-      { id: 'a', quantity: 4 },
-      context
-    );
+    const error = new Error('Only 1 items available in stock');
+    onError(error, { id: 'a', quantity: 4 }, context);
+    onSettled(undefined, error, { id: 'a', quantity: 4 });
 
     expect(useCartStore.getState().items.map((i) => i.id)).toEqual(['b']);
+  });
+
+  it('rolls overlapping invalid edits back to the validated quantity', () => {
+    seed([line({ id: 'a', quantity: 1 })]);
+    const { onMutate, onError, onSettled } = mutation();
+
+    // Stock holds 1 unit; two invalid edits overlap (1->2, then 2->3).
+    const first = onMutate({ id: 'a', quantity: 2 });
+    const second = onMutate({ id: 'a', quantity: 3 });
+
+    // The first rejection settles first and is skipped (the line moved
+    // on); the second must restore 1 — never its own unvalidated
+    // predecessor 2.
+    const firstError = new Error('Only 1 items available in stock');
+    onError(firstError, { id: 'a', quantity: 2 }, first);
+    onSettled(undefined, firstError, { id: 'a', quantity: 2 });
+    const secondError = new Error('Only 1 items available in stock');
+    onError(secondError, { id: 'a', quantity: 3 }, second);
+    onSettled(undefined, secondError, { id: 'a', quantity: 3 });
+
+    expect(useCartStore.getState().items[0]?.quantity).toBe(1);
+  });
+
+  it('advances the rollback baseline when an overlapping edit succeeds', () => {
+    seed([line({ id: 'a', quantity: 1, product_id: 'p1' })]);
+    const invalidateQueries = jest.fn();
+    const { onMutate, onError, onSettled, onSuccess } = mutation({
+      invalidateQueries,
+    } as unknown as QueryClient);
+
+    onMutate({ id: 'a', quantity: 2 });
+    const second = onMutate({ id: 'a', quantity: 3 });
+
+    // The first edit validates 2 units; the overlapping second edit
+    // then fails and must restore the validated 2, not the stale 1.
+    const success = {
+      id: 'a',
+      quantity: 2,
+      stockCheck: { available: true, currentStock: 2 },
+    };
+    onSuccess(success as never);
+    onSettled(success as never, null, { id: 'a', quantity: 2 });
+
+    const error = new Error('Only 2 items available in stock');
+    onError(error, { id: 'a', quantity: 3 }, second);
+    onSettled(undefined, error, { id: 'a', quantity: 3 });
+
+    expect(useCartStore.getState().items[0]?.quantity).toBe(2);
   });
 });
 

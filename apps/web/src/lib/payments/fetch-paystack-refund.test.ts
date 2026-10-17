@@ -36,4 +36,19 @@ describe('fetchRefund', () => {
       signal,
     });
   });
+
+  it('passes decimal-text ids through without numeric rounding', async () => {
+    mocks.paystackRequest.mockResolvedValue({ success: true });
+    const big = '9007199254740993';
+
+    await fetchRefund(big);
+
+    expect(mocks.paystackRequest).toHaveBeenCalledWith(`/refund/${big}`, {
+      signal: undefined,
+    });
+    await expect(fetchRefund('not-an-id')).resolves.toMatchObject({
+      success: false,
+      code: 'VALIDATION_ERROR',
+    });
+  });
 });

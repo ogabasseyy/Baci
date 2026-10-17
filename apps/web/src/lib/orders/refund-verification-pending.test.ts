@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const loggerWarn = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/logger', () => ({ logger: { warn: loggerWarn } }));
+
 import {
   CANCELLATION_DRAIN_FETCH_LIMIT,
   CANCELLATION_DRAIN_MAX_ATTEMPTS,
@@ -267,6 +271,23 @@ describe('isRefundVerificationPending', () => {
     const supabase = { from } as never;
 
     await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
+  });
+
+  it('warns with a reason on every failed-closed probe so outages surface', async () => {
+    loggerWarn.mockClear();
+    const from = vi
+      .fn()
+      .mockReturnValue(chain({ data: null, error: new Error('boom') }));
+    const supabase = { from } as never;
+
+    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
+    await expect(isRefundVerificationPending(supabase)).resolves.toBe(true);
+    // Genuine pending stays silent; every error-driven cap warns, so
+    // a persistent probe outage is distinguishable in ops telemetry.
+    expect(loggerWarn).toHaveBeenCalledTimes(2);
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'side_effects_failed_read' })
+    );
   });
 });
 

@@ -1,9 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 import {
   CANCELLATION_DRAIN_FETCH_LIMIT,
   CANCELLATION_DRAIN_MAX_ATTEMPTS,
 } from '@/lib/orders/drain-failed-order-cancellation-side-effects';
 import { normalizePaymentGateway } from '@/lib/payments/normalize-payment-gateway';
+
+// Fail closed with an ops signal: without the warn a persistent probe
+// outage would silently pin every cron run to the capped phase.
+function failClosed(reason: string): true {
+  logger.warn({
+    message: 'Refund verification probe failed closed; reconcile capped',
+    reason,
+  });
+  return true;
+}
 
 type ProbeClient = Pick<SupabaseClient, 'from'>;
 
@@ -99,7 +110,7 @@ export async function isRefundVerificationPending(
     options?.signal
   ).limit(CANCELLATION_DRAIN_FETCH_LIMIT);
   if (failed.error || !failed.data) {
-    return true;
+    return failClosed('side_effects_failed_read');
   }
   const deferred = await abortable(
     supabase
@@ -111,7 +122,7 @@ export async function isRefundVerificationPending(
     options?.signal
   ).limit(CANCELLATION_DRAIN_FETCH_LIMIT);
   if (deferred.error || !deferred.data) {
-    return true;
+    return failClosed('side_effects_deferred_read');
   }
   const orderIds = [
     ...new Set(
@@ -148,7 +159,7 @@ export async function isRefundVerificationPending(
       ? page.limit(PROBE_LEG_LIMIT)
       : page.gt('id', cursor).limit(PROBE_LEG_LIMIT));
     if (error || !data) {
-      return true;
+      return failClosed('transactions_leg_read');
     }
     const rows = data as ProbeLeg[];
     legs.push(...rows);
@@ -156,7 +167,7 @@ export async function isRefundVerificationPending(
       break;
     }
     if (pages + 1 >= PROBE_MAX_LEG_PAGES) {
-      return true;
+      return failClosed('leg_page_ceiling');
     }
     cursor = rows[rows.length - 1]?.id ?? null;
     if (cursor === null) {
@@ -180,7 +191,7 @@ export async function isRefundVerificationPending(
     options?.signal
   ).limit(PROBE_REFUND_LIMIT);
   if (refundsError || !refunds) {
-    return true;
+    return failClosed('transactions_refund_read');
   }
   return paystackLegs.some(
     (leg) => !isLegCovered(leg, paystackLegs, refunds as ProbeRefund[])
@@ -201,7 +212,7 @@ export async function isRefundVerificationPendingBefore(
 ): Promise<boolean> {
   const remainingMs = deadlineMs - Date.now();
   if (remainingMs <= 0) {
-    return true;
+    return failClosed('probe_budget_exhausted');
   }
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -209,11 +220,11 @@ export async function isRefundVerificationPendingBefore(
     return await Promise.race([
       isRefundVerificationPending(supabase, {
         signal: controller.signal,
-      }).catch(() => true),
+      }).catch(() => failClosed('probe_threw')),
       new Promise<true>((resolve) => {
         timer = setTimeout(() => {
           controller.abort();
-          resolve(true);
+          resolve(failClosed('probe_deadline'));
         }, remainingMs);
       }),
     ]);

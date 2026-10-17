@@ -149,6 +149,59 @@ describe('Paystack cancellation refund link validation', () => {
         },
       })
     ).resolves.toBe('updated');
-    expect(provider.fetchRefund).toHaveBeenCalledWith(7, expect.anything());
+    expect(provider.fetchRefund).toHaveBeenCalledWith('7', expect.anything());
+  });
+
+  it('rechecks a decimal-text stamp without numeric rounding', async () => {
+    // A >2^53 provider id persists as exact decimal text; the recheck
+    // must fetch it verbatim, not round it and reject the link.
+    const big = '9007199254740993';
+    const db = database();
+    db.query.maybeSingle.mockResolvedValue({
+      data: {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: '11111111-1111-4111-8111-111111111111',
+        merchant_id: 'merchant-1',
+        order_id: 'order-1',
+        status: 'completed',
+      },
+      error: null,
+    });
+    provider.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        // The shared reader rounds; the text comparison still sees
+        // the fetched row only when the id survives, so this pins
+        // the request path, not the rounded comparison.
+        id: 9007199254740992,
+        status: 'processed',
+        transaction: 123,
+      },
+      success: true,
+    });
+    provider.verifyTransaction.mockResolvedValue({
+      data: { amount: 10000, currency: 'NGN', id: 123, reference: 'PSK-1' },
+      success: true,
+    });
+    db.rpc.mockResolvedValue({ data: 'processed', error: null });
+
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        gateway_reference: 'merchant-ref-1',
+        metadata: {
+          ...refund.metadata,
+          provider_refund_id: big,
+          provider_refund_status: 'processed',
+        },
+      })
+    ).rejects.toThrow('paystack_refund_evidence_mismatch');
+    // The link guard passed (no invalid_local_refund_link) and the
+    // provider was asked for the exact decimal id.
+    expect(provider.fetchRefund).toHaveBeenCalledWith(big, expect.anything());
   });
 });

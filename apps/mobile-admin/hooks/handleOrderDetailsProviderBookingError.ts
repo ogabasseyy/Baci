@@ -1,5 +1,7 @@
 import { OrderStatusUpdateError } from './orders/order-status-update-error';
 
+export type ProviderBookingErrorOutcome = 'review_checkout_quote' | undefined;
+
 type OrderDetailsGiglShipping = {
   refreshBalance: () => Promise<unknown>;
   requestQuote: () => Promise<unknown>;
@@ -7,9 +9,18 @@ type OrderDetailsGiglShipping = {
 
 export async function handleOrderDetailsProviderBookingError(
   error: unknown,
-  giglShipping?: OrderDetailsGiglShipping | null
-) {
+  giglShipping?: OrderDetailsGiglShipping | null,
+  checkoutRecoveryEligible = false
+): Promise<ProviderBookingErrorOutcome> {
   const code = error instanceof OrderStatusUpdateError ? error.code : undefined;
+  if (
+    (code === 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' ||
+      code === 'SHIPPING_QUOTE_RECEIVER_MISMATCH' ||
+      code === 'SHIPPING_QUOTE_ITEMS_MISMATCH') &&
+    checkoutRecoveryEligible
+  ) {
+    return 'review_checkout_quote';
+  }
   if (code === 'MERCHANT_WALLET_INSUFFICIENT') {
     try {
       await giglShipping?.refreshBalance();

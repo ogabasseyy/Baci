@@ -4,7 +4,7 @@ import { loadFacebookTrackingModules } from './load-facebook-tracking-modules';
 import type { TikTokEventData } from './tiktok-event-data';
 
 export interface FBSettingsLike {
-  initializeSDK: () => void | Promise<boolean>;
+  initializeSDK: (() => void) | (() => Promise<boolean>);
   setAdvertiserTrackingEnabled: (enabled: boolean) => void;
 }
 

@@ -1,4 +1,5 @@
 import { giglTrackingCredentialPaths } from './event-pipeline-credential-paths.gigl-tracking';
+import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
 
 export const eventPipelineCredentialPaths = [
   ...['lookup', 'product', 'search'].map(
@@ -239,4 +240,8 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/supabase/admin.ts',
     'apps/web/src/env.ts',
   ],
+  // Wallet-only VTU replay helper (PR #3655, AGENTS.md checkout
+  // exception): spread here — not in event-pipeline-database.ts —
+  // to keep the aggregator at the 300-line runtime ceiling.
+  ...eventPipelineVtuReplayCredentialPaths,
 ] as const;

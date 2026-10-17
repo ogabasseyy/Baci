@@ -1,9 +1,7 @@
-import * as Crypto from 'expo-crypto';
-import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type Colors from '@/constants/Colors';
 import { BRAND, SPACING } from '@/constants/Colors';
-import { WALLET_FUNDING_CHECKING_STATE_ENABLED } from '@/constants/wallet-funding';
+import { navigateToWalletFunding } from '@/lib/navigate-to-wallet-funding';
 import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
 
 type WalletColors = (typeof Colors)['light'];
@@ -21,7 +19,6 @@ interface UtilityWalletTransferNudgeProps {
    */
   canFundByBankTransfer: boolean;
   colors: WalletColors;
-  hasWalletToggle: boolean;
   /**
    * Prefilled `/utilities/<type>?repeat…` deep-link the wallet returns the
    * customer to after topping up. When present (and the dark-launch flag is
@@ -32,44 +29,32 @@ interface UtilityWalletTransferNudgeProps {
   walletBalance?: number;
   walletError?: Error | null;
   walletIsLoading?: boolean;
+  /**
+   * False while the wallet query is disabled with no data: the
+   * funding nudge must stay hidden (a missing balance is not a zero
+   * balance — Codex R130 P2).
+   */
+  walletIsSettled?: boolean;
 }
 
 export function UtilityWalletTransferNudge({
   amount,
   canFundByBankTransfer,
   colors,
-  hasWalletToggle,
   returnToHref,
   walletBalance,
   walletError,
   walletIsLoading,
+  walletIsSettled,
 }: UtilityWalletTransferNudgeProps) {
   const handlePress = () => {
-    if (WALLET_FUNDING_CHECKING_STATE_ENABLED && returnToHref) {
-      // A nonce minted HERE, in the press handler (never during render — it must
-      // be stable across re-renders), is what gives the funding session an
-      // identity: it changes on every genuine "start another transfer" tap, and
-      // is replayed unchanged when the same route remounts. Without it a second
-      // attempt inside the session TTL would inherit the first attempt's anchor
-      // and could announce the first attempt's credit as this one's.
-      //
-      // Deliberately NO requiredAmount here: it would seed the fund panel's
-      // prefill heuristic and, for a no-phone customer, suppress DVA
-      // auto-creation after the phone prompt — stranding a bank-transfer
-      // intent in the card path. The prefilled returnTo form knows the amount.
-      const intentId = Crypto.randomUUID();
-      router.push(
-        `/wallet?action=bank-transfer&intent=${intentId}&returnTo=${encodeURIComponent(returnToHref)}`
-      );
-      return;
-    }
-    router.push({ pathname: '/wallet', params: { action: 'bank-transfer' } });
+    navigateToWalletFunding(returnToHref);
   };
 
   const visible =
     canFundByBankTransfer &&
-    hasWalletToggle &&
     walletIsLoading !== true &&
+    walletIsSettled !== false &&
     !walletError &&
     amount > 0 &&
     (walletBalance ?? 0) < amount;

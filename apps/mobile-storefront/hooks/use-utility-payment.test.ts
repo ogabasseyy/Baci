@@ -1,409 +1,105 @@
-import { notifyManager } from '@tanstack/query-core';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { createElement, type PropsWithChildren } from 'react';
+import { renderHook } from '@testing-library/react-native';
 import { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { walletKeys } from '@/hooks/wallet-query';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
+import { clearPendingVtuKeys } from '@/lib/pending-vtu-idempotency';
+import * as vtuStore from '@/lib/pending-vtu-idempotency-store';
 
 const mockUseMerchantPaymentSettings = jest.fn();
-const mockListSavedVtuCards = jest.fn();
 let mockWalletQuery: {
   data?: {
     wallet: {
       balance: number;
-      funding_account?: {
-        account_name?: string | null;
-        account_number?: string | null;
-        bank_name?: string | null;
-      } | null;
     };
   };
   error?: Error | null;
-  isError?: boolean;
+  getWalletBalance?: () => number;
+  isFetchingNow?: () => boolean;
   isLoading?: boolean;
+  refetch: jest.Mock;
 };
 
 jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
   useMerchantPaymentSettings: () => mockUseMerchantPaymentSettings(),
-  getEnabledPaymentMethods: jest.fn((settings) => {
-    if (!settings) return ['paystack'];
-    const methods = [];
-    if (settings.paystack_enabled) methods.push('paystack');
-    if (settings.korapay_enabled) methods.push('korapay');
-    if (settings.paystack_enabled && settings.wallet_paystack_dva_enabled) {
-      methods.push('bank_transfer');
-    }
-    return methods;
-  }),
-}));
-
-jest.mock('@/lib/vtu-checkout', () => ({
-  listSavedVtuCards: () => mockListSavedVtuCards(),
 }));
 
 jest.mock('@/hooks/use-wallet', () => ({
   useWallet: () => mockWalletQuery,
 }));
 
-const mockAuthState: {
-  session: { access_token: string } | null;
-  customer: { phone?: string | null } | null;
-} = {
-  session: { access_token: 'token-123' },
-  customer: { phone: '08012345678' },
-};
-
-jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: (selector: (state: typeof mockAuthState) => unknown) =>
-    selector(mockAuthState),
+const mockInvalidateQueries = jest.fn();
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: mockInvalidateQueries }),
 }));
 
-function createTestQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-        gcTime: Number.POSITIVE_INFINITY,
-        refetchOnMount: false,
-        staleTime: Number.POSITIVE_INFINITY,
-      },
-    },
-  });
-}
+const mockAuthState: {
+  customer: { id: string } | null;
+  merchantId: string | null;
+  session: { access_token: string } | null;
+  user: { id: string } | null;
+} = {
+  customer: { id: 'customer-a' },
+  merchantId: 'merchant-1',
+  session: { access_token: 'token-123' },
+  user: { id: 'user-a' },
+};
 
-function createWrapper() {
-  return createWrapperWithClient(createTestQueryClient());
-}
-
-function createWrapperWithClient(client: QueryClient) {
-  return function Wrapper({ children }: PropsWithChildren) {
-    return createElement(QueryClientProvider, { client }, children);
-  };
-}
-
-beforeAll(() => {
-  notifyManager.setNotifyFunction((callback) => {
-    act(() => {
-      callback();
-    });
-  });
+jest.mock('@/stores/auth-store', () => {
+  const useAuthStore = (selector: (state: typeof mockAuthState) => unknown) =>
+    selector(mockAuthState);
+  (useAuthStore as unknown as Record<string, unknown>).getState = () =>
+    mockAuthState;
+  return { useAuthStore };
 });
 
-afterAll(() => {
-  notifyManager.setNotifyFunction((callback) => {
-    callback();
-  });
-});
+let mockNextUuid = 0;
+jest.mock('expo-crypto', () => ({
+  randomUUID: () => `uuid-${++mockNextUuid}`,
+}));
 
 describe('useUtilityPayment', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Suite-level isolation (Muse R128 low): this suite exercises
+    // the real pending-key module, whose MMKV mock buckets persist
+    // across tests in a file — clear the registry + snapshot so a
+    // future descriptor reuse cannot inherit leaked state.
+    clearPendingVtuKeys();
+    mockNextUuid = 0;
     mockAuthState.session = { access_token: 'token-123' };
-    mockAuthState.customer = { phone: '08012345678' };
+    mockAuthState.customer = { id: 'customer-a' };
+    mockAuthState.merchantId = 'merchant-1';
+    mockAuthState.user = { id: 'user-a' };
     mockUseMerchantPaymentSettings.mockReturnValue({
-      data: { paystack_enabled: true, korapay_enabled: true },
+      data: { wallet_paystack_dva_enabled: true },
     });
     mockWalletQuery = {
       data: { wallet: { balance: 0 } },
       error: null,
-      isError: false,
       isLoading: false,
+      refetch: jest.fn(() => Promise.resolve({})),
     };
-    mockListSavedVtuCards.mockResolvedValue([
-      {
-        id: 'card-1',
-        provider: 'paystack',
-        label: 'Access Bank ending 1234',
-        brand: 'visa',
-        bank: 'Access Bank',
-        last4: '1234',
-        exp_month: '08',
-        exp_year: '2030',
-        is_default: true,
-      },
-    ]);
   });
 
-  it('defaults to enabled gateways and selects the default saved card', async () => {
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.selectedSavedCardId).toBe('card-1');
-    });
-
-    expect(result.current.supportedGateways).toEqual(['paystack', 'korapay']);
-  });
-
-  it('exposes canFundByBankTransfer when authed and the merchant DVA is enabled', async () => {
-    mockUseMerchantPaymentSettings.mockReturnValue({
-      data: {
-        paystack_enabled: true,
-        korapay_enabled: true,
-        wallet_paystack_dva_enabled: true,
-      },
-    });
-
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoadingCards).toBe(false);
-    });
-
-    expect(result.current.canFundByBankTransfer).toBe(true);
-  });
-
-  it('does not expose canFundByBankTransfer when the merchant DVA is disabled', async () => {
-    // beforeEach mocks paystack/korapay enabled without wallet DVA.
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoadingCards).toBe(false);
-    });
-
-    expect(result.current.canFundByBankTransfer).toBe(false);
-  });
-
-  it('exposes canFundByBankTransfer for a signed-in customer with no phone and no DVA', async () => {
-    // The funding flow now collects the phone at the point of need, so a
-    // phoneless customer with no account number is nudge-eligible.
-    mockAuthState.customer = { phone: null };
-    mockUseMerchantPaymentSettings.mockReturnValue({
-      data: {
-        paystack_enabled: true,
-        korapay_enabled: true,
-        wallet_paystack_dva_enabled: true,
-      },
-    });
-
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoadingCards).toBe(false);
-    });
-
-    expect(result.current.canFundByBankTransfer).toBe(true);
-  });
-
-  it('does not expose canFundByBankTransfer when the customer is signed out', async () => {
-    mockAuthState.session = null;
-    mockAuthState.customer = null;
-    mockUseMerchantPaymentSettings.mockReturnValue({
-      data: {
-        paystack_enabled: true,
-        korapay_enabled: true,
-        wallet_paystack_dva_enabled: true,
-      },
-    });
-
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoadingCards).toBe(false);
-    });
-
-    expect(result.current.canFundByBankTransfer).toBe(false);
-  });
-
-  it('never offers bank_transfer as a VTU gateway even when the merchant enables it', async () => {
-    mockUseMerchantPaymentSettings.mockReturnValue({
-      data: {
-        paystack_enabled: true,
-        korapay_enabled: true,
-        wallet_paystack_dva_enabled: true,
-      },
-    });
-
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isLoadingCards).toBe(false);
-    });
-
-    // Bank transfers are wallet-DVA only: VTU must never route through
-    // Paystack's hosted pay-with-transfer channel.
-    expect(result.current.supportedGateways).toEqual(['paystack', 'korapay']);
-  });
-
-  it('keeps saved card cleared when the user chooses another Paystack card', async () => {
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.selectedSavedCardId).toBe('card-1');
-    });
-
-    act(() => {
-      result.current.selectGateway('paystack');
-    });
-
-    await waitFor(() => {
-      expect(result.current.selectedSavedCardId).toBeNull();
-    });
-    await act(async () => undefined);
-    expect(result.current.selectedGateway).toBe('paystack');
-    expect(result.current.selectedSavedCardId).toBeNull();
-  });
-
-  it('refetches saved cards when the payment form remounts', async () => {
-    const client = createTestQueryClient();
-    mockListSavedVtuCards.mockResolvedValueOnce([]).mockResolvedValueOnce([
-      {
-        id: 'card-1',
-        provider: 'paystack',
-        label: 'Access Bank ending 1234',
-        brand: 'visa',
-        bank: 'Access Bank',
-        last4: '1234',
-        exp_month: '08',
-        exp_year: '2030',
-        is_default: true,
-      },
-    ]);
-
-    const first = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapperWithClient(client),
-    });
-
-    await waitFor(
-      () => {
-        expect(mockListSavedVtuCards).toHaveBeenCalledTimes(1);
-        expect(first.result.current.isLoadingCards).toBe(false);
-      },
-      { timeout: 5000 }
-    );
-    expect(first.result.current.cards).toEqual([]);
-
-    first.unmount();
-
-    const second = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapperWithClient(client),
-    });
-
-    await waitFor(() => {
-      expect(mockListSavedVtuCards).toHaveBeenCalledTimes(2);
-    });
-    await waitFor(() => {
-      expect(second.result.current.selectedSavedCardId).toBe('card-1');
-    });
-  });
-
-  it('clears the saved card when a different gateway is selected', async () => {
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.selectedSavedCardId).toBe('card-1');
-    });
-
-    act(() => {
-      result.current.selectGateway('korapay');
-    });
-
-    expect(result.current.selectedGateway).toBe('korapay');
-    expect(result.current.selectedSavedCardId).toBeNull();
-  });
-
-  // Phase B.8 — wallet state is owned by useUtilityPayment so all
-  // three VTU controllers (bill / airtime / data) read & write the
-  // same selection. Pin the public shape so a future refactor that
-  // moves the state elsewhere can't silently break the controllers.
-  it('auto-selects wallet payment when a usable balance exists (wallet-first)', async () => {
+  it('exposes a live wallet-balance reader plus loading and error state', () => {
+    // Codex R78 6sN80p: a refetch completing during the
+    // settlement-gate await must be visible through the same hook
+    // result — the gate reads the refreshed cache, not the snapshot.
+    let balance = 1500;
     mockWalletQuery = {
-      data: { wallet: { balance: 1_500 } },
+      data: { wallet: { balance: 1500 } },
       error: null,
-      isError: false,
+      getWalletBalance: () => balance,
       isLoading: false,
+      refetch: jest.fn(() => Promise.resolve({})),
     };
-    const { result } = renderHook(() => useUtilityPayment(500), {
-      wrapper: createWrapper(),
-    });
+    const { result } = renderHook(() => useUtilityPayment());
 
-    expect(result.current.walletBalance).toBe(1500);
-    expect(result.current.walletSelection).toEqual({
-      use: true,
-      amount: 500,
-    });
-
-    act(() => {
-      result.current.setWalletSelection({ use: false, amount: 0 });
-    });
-
-    expect(result.current.walletSelection).toBeUndefined();
-  });
-
-  it('does not auto-select wallet payment when the balance is zero', () => {
-    mockWalletQuery = {
-      data: { wallet: { balance: 0 } },
-      error: null,
-      isError: false,
-      isLoading: false,
-    };
-    const { result } = renderHook(() => useUtilityPayment(500), {
-      wrapper: createWrapper(),
-    });
-
-    expect(result.current.walletSelection).toBeUndefined();
-  });
-
-  it('caps the auto-selected wallet amount at the available balance for partial cover', () => {
-    mockWalletQuery = {
-      data: { wallet: { balance: 300 } },
-      error: null,
-      isError: false,
-      isLoading: false,
-    };
-    const { result } = renderHook(() => useUtilityPayment(1_000), {
-      wrapper: createWrapper(),
-    });
-
-    expect(result.current.walletSelection).toEqual({
-      use: true,
-      amount: 300,
-    });
-  });
-
-  it('recalculates walletSelection from the latest amount after the wallet is toggled on', async () => {
-    mockWalletQuery = {
-      data: { wallet: { balance: 1_500 } },
-      error: null,
-      isError: false,
-      isLoading: false,
-    };
-    let amount = 500;
-
-    const { result, rerender } = renderHook(() => useUtilityPayment(amount), {
-      wrapper: createWrapper(),
-    });
-
-    act(() => {
-      result.current.setWalletSelection({ use: true, amount: 500 });
-    });
-
-    expect(result.current.walletSelection).toEqual({
-      use: true,
-      amount: 500,
-    });
-
-    amount = 1_000;
-    rerender(undefined);
-
-    expect(result.current.walletSelection).toEqual({
-      use: true,
-      amount: 1_000,
-    });
+    expect(result.current.getWalletBalance()).toBe(1500);
+    expect(result.current.walletError).toBeNull();
+    expect(result.current.walletIsLoading).toBe(false);
+    balance = 3200;
+    expect(result.current.getWalletBalance()).toBe(3200);
   });
 
   it('exposes wallet query loading and error state separately from a zero balance', () => {
@@ -411,17 +107,357 @@ describe('useUtilityPayment', () => {
     mockWalletQuery = {
       data: undefined,
       error: walletError,
-      isError: true,
+      getWalletBalance: () => 0,
       isLoading: false,
+      refetch: jest.fn(() => Promise.resolve({})),
     };
 
-    const { result } = renderHook(() => useUtilityPayment(), {
-      wrapper: createWrapper(),
-    });
+    const { result } = renderHook(() => useUtilityPayment());
 
-    expect(result.current.walletBalance).toBe(0);
+    expect(result.current.getWalletBalance()).toBe(0);
     expect(result.current.walletError).toBe(walletError);
     expect(result.current.walletIsLoading).toBe(false);
-    expect(result.current.walletCanRender).toBe(false);
+  });
+
+  it('exposes a live wallet-refetch reader instead of a snapshot boolean', () => {
+    // Codex R75 6r486a: a refetch starting after the snapshot —
+    // during the settlement-gate await — must still read true at
+    // readiness time through the same hook result.
+    let refetching = false;
+    mockWalletQuery = {
+      data: { wallet: { balance: 1500 } },
+      error: null,
+      isFetchingNow: () => refetching,
+      isLoading: false,
+      refetch: jest.fn(() => Promise.resolve({})),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.isWalletRefetching()).toBe(false);
+    refetching = true;
+    expect(result.current.isWalletRefetching()).toBe(true);
+  });
+
+  it('exposes canFundByBankTransfer when authed and the merchant DVA is enabled', () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.canFundByBankTransfer).toBe(true);
+  });
+
+  it('does not expose canFundByBankTransfer when the merchant DVA is disabled', () => {
+    mockUseMerchantPaymentSettings.mockReturnValue({
+      data: { wallet_paystack_dva_enabled: false },
+    });
+
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.canFundByBankTransfer).toBe(false);
+  });
+
+  it('does not expose canFundByBankTransfer when the customer is signed out', () => {
+    mockAuthState.session = null;
+
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.canFundByBankTransfer).toBe(false);
+  });
+
+  it('exposes session auth state and a wallet refetch for the readiness gate', () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current.isAuthenticated).toBe(true);
+    result.current.refetchWallet();
+    expect(mockWalletQuery.refetch).toHaveBeenCalledTimes(1);
+
+    mockAuthState.session = null;
+    const { result: signedOut } = renderHook(() => useUtilityPayment());
+    expect(signedOut.current.isAuthenticated).toBe(false);
+  });
+
+  it('refetchWallet never rejects so rejection paths can safely await it', async () => {
+    mockWalletQuery = {
+      ...mockWalletQuery,
+      refetch: jest.fn(() => Promise.reject(new Error('network down'))),
+    };
+    const { result } = renderHook(() => useUtilityPayment());
+
+    await expect(result.current.refetchWallet()).resolves.toBeUndefined();
+  });
+
+  it('offers no gateway or saved-card state: wallet is the only payment method', () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    expect(result.current).not.toHaveProperty('selectedGateway');
+    expect(result.current).not.toHaveProperty('selectedSavedCardId');
+    expect(result.current).not.toHaveProperty('cards');
+    expect(result.current).not.toHaveProperty('supportedGateways');
+  });
+
+  it('invalidates every cached wallet query when invalidateWallets is called', () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    result.current.invalidateWallets();
+
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({
+      queryKey: walletKeys.all,
+      exact: false,
+    });
+  });
+
+  it('returns a stable wallet idempotency key until it is reset', async () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    const first =
+      await result.current.getWalletIdempotencyKey('stable-descriptor');
+    const second =
+      await result.current.getWalletIdempotencyKey('stable-descriptor');
+    expect(first).toBe(second);
+
+    result.current.resetWalletIdempotencyKey('stable-descriptor');
+    expect(
+      await result.current.getWalletIdempotencyKey('stable-descriptor')
+    ).not.toBe(first);
+  });
+
+  it('refuses to mint a key the store cannot durably persist', async () => {
+    // Codex R96 P1 (web mirror): a failed MMKV write must abort
+    // before the POST — the throw surfaces through the handler
+    // (whose finally releases the checkout guard) and the retry
+    // re-mints once storage works.
+    const persistSpy = jest
+      .spyOn(vtuStore, 'persistPendingVtuEntries')
+      .mockReturnValue(false);
+    // Pins the fallback: this jsdom's LockManager never releases a
+    // lock whose callback throws, so a throw through the real
+    // manager would wedge every later mint in this file (real
+    // browsers release per spec; throw-through-locks is covered
+    // with a mock in the sync suite instead).
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = {};
+    try {
+      const { result } = renderHook(() => useUtilityPayment());
+      await expect(
+        result.current.getWalletIdempotencyKey('nopersist-descriptor')
+      ).rejects.toThrow('Could not save this purchase for retry');
+    } finally {
+      persistSpy.mockRestore();
+      g.navigator = priorNavigator;
+    }
+  });
+
+  it('recalls the pending key across hook instances for the same purchase', async () => {
+    // Remount regression: Back to Home + reopen Utilities creates a
+    // fresh hook instance; retrying the same purchase MUST reuse the
+    // pending key or the server debits a second transaction.
+    const firstMount = renderHook(() => useUtilityPayment());
+    const key =
+      await firstMount.result.current.getWalletIdempotencyKey(
+        'remount-descriptor'
+      );
+    firstMount.unmount();
+
+    const secondMount = renderHook(() => useUtilityPayment());
+    expect(
+      await secondMount.result.current.getWalletIdempotencyKey(
+        'remount-descriptor'
+      )
+    ).toBe(key);
+  });
+
+  it('peeks retained attempts without minting keys', async () => {
+    // Codex R65 6ru4mK: readiness needs the registry WITHOUT
+    // creating fresh intent; a minting peek would permanently
+    // mark every abandoned form as "retained" and let later
+    // fresh purchases dodge the insufficient-funds gate. Uses the
+    // handlers' real flow: scope-once, then capture by scoped key.
+    const { result } = renderHook(() => useUtilityPayment());
+    const submitted = { phoneNumber: '08010000001', amount: 1000 };
+    const untouched = { phoneNumber: '08010000002', amount: 1000 };
+
+    expect(result.current.hasRetainedVtuAttempt(submitted)).toBe(false);
+    await result.current.getWalletIdempotencyKey(
+      result.current.scopePendingVtuDescriptor(
+        buildVtuPurchaseDescriptor(submitted)
+      )
+    );
+    expect(result.current.hasRetainedVtuAttempt(submitted)).toBe(true);
+    expect(result.current.hasRetainedVtuAttempt(untouched)).toBe(false);
+    // Second peek still false: the first peek minted nothing.
+    expect(result.current.hasRetainedVtuAttempt(untouched)).toBe(false);
+  });
+
+  it('mints distinct keys for distinct purchases', async () => {
+    const { result } = renderHook(() => useUtilityPayment());
+
+    const airtime =
+      await result.current.getWalletIdempotencyKey('airtime-0801');
+    const data = await result.current.getWalletIdempotencyKey('data-0801');
+    expect(airtime).not.toBe(data);
+  });
+
+  it('keeps recalling the pending key when customer hydration lands', async () => {
+    // Hydration regression: at startup only the Supabase user ID is
+    // known; customers.id arrives later and is a DIFFERENT id. Scope
+    // must not flip, or the retry orphans the key and double-debits.
+    mockAuthState.customer = null;
+    mockAuthState.user = { id: 'user-a' };
+    const beforeHydration = renderHook(() => useUtilityPayment());
+    const scopedBefore =
+      beforeHydration.result.current.scopePendingVtuDescriptor('hydration-key');
+    const key =
+      await beforeHydration.result.current.getWalletIdempotencyKey(
+        scopedBefore
+      );
+    beforeHydration.unmount();
+
+    mockAuthState.customer = { id: 'customer-a' };
+    const afterHydration = renderHook(() => useUtilityPayment());
+    const scopedAfter =
+      afterHydration.result.current.scopePendingVtuDescriptor('hydration-key');
+    expect(scopedAfter).toBe(scopedBefore);
+    expect(
+      await afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)
+    ).toBe(key);
+  });
+
+  it('keeps the scope stable when merchantId hydrates mid-session', async () => {
+    // The scope uses the build CONFIG merchant id unconditionally: a
+    // merchantId || CONFIG fallback would split a pre-hydration
+    // attempt from its post-hydration retry whenever the hydrated id
+    // differs, missing recall and double-debiting with a fresh key.
+    mockAuthState.merchantId = null;
+    const beforeHydration = renderHook(() => useUtilityPayment());
+    const scopedBefore =
+      beforeHydration.result.current.scopePendingVtuDescriptor(
+        'merchant-hydration-key'
+      );
+    const key =
+      await beforeHydration.result.current.getWalletIdempotencyKey(
+        scopedBefore
+      );
+    beforeHydration.unmount();
+
+    mockAuthState.merchantId = 'merchant-1';
+    const afterHydration = renderHook(() => useUtilityPayment());
+    const scopedAfter = afterHydration.result.current.scopePendingVtuDescriptor(
+      'merchant-hydration-key'
+    );
+    expect(scopedAfter).toBe(scopedBefore);
+    expect(
+      await afterHydration.result.current.getWalletIdempotencyKey(scopedAfter)
+    ).toBe(key);
+  });
+
+  it('does not recall another owner’s pending key for the same purchase', async () => {
+    // Sign-out regression: customer A’s remembered key must be
+    // unreachable once customer B signs in, or the route rejects B’s
+    // first purchase as belonging to another customer.
+    const firstOwner = renderHook(() => useUtilityPayment());
+    const scopedA = firstOwner.result.current.scopePendingVtuDescriptor(
+      'owner-scoped-descriptor'
+    );
+    const keyA =
+      await firstOwner.result.current.getWalletIdempotencyKey(scopedA);
+    firstOwner.unmount();
+
+    mockAuthState.customer = { id: 'customer-b' };
+    mockAuthState.user = { id: 'user-b' };
+    const secondOwner = renderHook(() => useUtilityPayment());
+    const scopedB = secondOwner.result.current.scopePendingVtuDescriptor(
+      'owner-scoped-descriptor'
+    );
+    expect(scopedB).not.toBe(scopedA);
+    const keyB =
+      await secondOwner.result.current.getWalletIdempotencyKey(scopedB);
+
+    expect(keyB).not.toBe(keyA);
+    expect(
+      await secondOwner.result.current.getWalletIdempotencyKey(scopedB)
+    ).toBe(keyB);
+  });
+
+  it('captures the submitting owner so a mid-flight switch cannot redirect completion', async () => {
+    // The scoped descriptor is computed once per submission from the
+    // submitting account: even if the auth store switches to customer
+    // B before A’s request settles, A’s already-scoped key still
+    // addresses A’s entry (completion mutates the captured scope).
+    const scopedA = renderHook(() =>
+      useUtilityPayment()
+    ).result.current.scopePendingVtuDescriptor('mid-flight-key');
+    const keyA = await renderHook(() =>
+      useUtilityPayment()
+    ).result.current.getWalletIdempotencyKey(scopedA);
+
+    mockAuthState.customer = { id: 'customer-b' };
+    mockAuthState.user = { id: 'user-b' };
+
+    const afterSwitch = renderHook(() => useUtilityPayment());
+    // A’s captured scope still recalls A’s key after the switch…
+    expect(
+      await afterSwitch.result.current.getWalletIdempotencyKey(scopedA)
+    ).toBe(keyA);
+    // …while B’s own scoping addresses a different entry.
+    expect(
+      afterSwitch.result.current.scopePendingVtuDescriptor('mid-flight-key')
+    ).not.toBe(scopedA);
+  });
+
+  it('detects an account switch between capture and settle', () => {
+    const { result, rerender } = renderHook(() => useUtilityPayment());
+    const submittingOwner = result.current.captureSubmittingOwner();
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(true);
+
+    mockAuthState.user = { id: 'user-b' };
+    mockAuthState.customer = { id: 'customer-b' };
+    rerender(() => useUtilityPayment());
+
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(
+      false
+    );
+  });
+
+  it('captures the raw auth user id for token binding (no customer fallback)', () => {
+    // The checkout token belongs to the auth user, so the binding
+    // capture must not use the scope owner's customer fallback: with
+    // no auth user but customer-a still present, it is undefined.
+    const { result } = renderHook(() => useUtilityPayment());
+    expect(result.current.captureSubmittingUserId()).toBe('user-a');
+
+    mockAuthState.session = null;
+    mockAuthState.user = null;
+    const { result: signedOut } = renderHook(() => useUtilityPayment());
+    expect(signedOut.current.captureSubmittingUserId()).toBeUndefined();
+  });
+
+  it('detects a sign-out between capture and settle', () => {
+    const { result, rerender } = renderHook(() => useUtilityPayment());
+    const submittingOwner = result.current.captureSubmittingOwner();
+
+    mockAuthState.session = null;
+    mockAuthState.user = null;
+    mockAuthState.customer = null;
+    rerender(() => useUtilityPayment());
+
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(
+      false
+    );
+  });
+
+  it('detects an account switch even before React commits the rerender', () => {
+    // Codex R94 P1: a render-backed ref still holds the submitting
+    // owner when the switch lands after dispatch but before the
+    // next commit — the previous session's reference/voucher would
+    // render in the new session. The live-store read discards it.
+    const { result } = renderHook(() => useUtilityPayment());
+    const submittingOwner = result.current.captureSubmittingOwner();
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(true);
+
+    mockAuthState.user = { id: 'user-b' };
+    mockAuthState.customer = { id: 'customer-b' };
+
+    expect(result.current.isSubmittingOwnerCurrent(submittingOwner)).toBe(
+      false
+    );
   });
 });

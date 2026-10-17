@@ -40,6 +40,7 @@ import {
   getShippingQuoteBookingEconomics,
 } from '@/lib/shipping/shipping-quote-booking-economics';
 import type { ShippingAddress } from '@/lib/shipping/types';
+import { prepareSavedGiglCheckoutBooking } from './prepare-saved-gigl-checkout-booking';
 
 export type BookOrderShipmentResult = ReusableOrderShipmentResult;
 
@@ -169,6 +170,13 @@ export async function bookOrderShipment(
       'INTERNATIONAL_QUOTE_REQUEST_MISSING'
     );
   }
+  const { preserveSavedGiglCheckoutQuote, bookingOrder } =
+    prepareSavedGiglCheckoutBooking(
+      shippingProvider,
+      isInternationalQuote,
+      orderWithEconomics,
+      storedQuoteRequest
+    );
   let merchantSender: ShippingAddress | undefined;
   if (!isInternationalQuote) {
     const merchantSenderResult = await resolveBookingMerchantSender(
@@ -201,6 +209,7 @@ export async function bookOrderShipment(
     merchantSender,
     {
       orderId: orderWithEconomics.id,
+      preserveSavedGiglCheckoutQuote,
       ...(orderWithEconomics.shipping_funding_source === 'merchant_wallet'
         ? { allowRefresh: false }
         : { expectedShippingFee: orderWithEconomics.shipping_fee }),
@@ -218,7 +227,7 @@ export async function bookOrderShipment(
   const effectiveQuoteRequest = resolvedQuoteRequest ?? storedQuoteRequest;
   const bookingContext = resolveAdminGiglBookingContext(
     shippingProvider,
-    orderWithEconomics,
+    bookingOrder,
     effectiveQuoteRequest
   );
   if (isInternationalQuote && effectiveQuoteRequest) {
@@ -227,7 +236,7 @@ export async function bookOrderShipment(
       orderWithEconomics
     );
   } else if (effectiveQuoteRequest) {
-    assertQuoteReceiverMatchesOrder(effectiveQuoteRequest, orderWithEconomics);
+    assertQuoteReceiverMatchesOrder(effectiveQuoteRequest, bookingOrder);
     assertDomesticQuoteItemsMatchOrder(
       effectiveQuoteRequest,
       orderWithEconomics.order_items,

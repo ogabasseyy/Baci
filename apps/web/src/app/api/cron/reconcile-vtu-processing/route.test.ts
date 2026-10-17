@@ -83,6 +83,7 @@ describe('GET /api/cron/reconcile-vtu-processing', () => {
     });
     expect(createAdminClient).toHaveBeenCalledTimes(1);
     expect(reconcileProcessingVtuTransactions).toHaveBeenCalledWith({
+      deadlineMs: expect.any(Number),
       supabase: { admin: true },
     });
   });

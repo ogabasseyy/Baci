@@ -2,12 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   billersQuerySchema,
   billTypeEnum,
-  COMMISSION_CATEGORY_MAP,
   purchaseSchema,
   verifySchema,
   vtuCheckoutInitializeSchema,
   vtuSavedCardChargeSchema,
-  vtuWalletOnlyChargeSchema,
 } from './vtu';
 
 describe('billTypeEnum', () => {
@@ -645,51 +643,6 @@ describe('billersQuerySchema', () => {
   });
 });
 
-describe('COMMISSION_CATEGORY_MAP', () => {
-  it('has all 5 bill type keys', () => {
-    const expectedKeys = [
-      'airtime',
-      'data',
-      'electricity',
-      'cable_tv',
-      'betting',
-    ];
-    const actualKeys = Object.keys(COMMISSION_CATEGORY_MAP);
-
-    expect(actualKeys).toHaveLength(5);
-    for (const key of expectedKeys) {
-      expect(actualKeys).toContain(key);
-    }
-  });
-
-  it('maps airtime to AIRTIME', () => {
-    expect(COMMISSION_CATEGORY_MAP.airtime).toBe('AIRTIME');
-  });
-
-  it('maps data to DATA', () => {
-    expect(COMMISSION_CATEGORY_MAP.data).toBe('DATA');
-  });
-
-  it('maps electricity to ELECTRICITY', () => {
-    expect(COMMISSION_CATEGORY_MAP.electricity).toBe('ELECTRICITY');
-  });
-
-  it('maps cable_tv to CABLE', () => {
-    expect(COMMISSION_CATEGORY_MAP.cable_tv).toBe('CABLE');
-  });
-
-  it('maps betting to BETTING', () => {
-    expect(COMMISSION_CATEGORY_MAP.betting).toBe('BETTING');
-  });
-
-  it('returns uppercase commission categories', () => {
-    const values = Object.values(COMMISSION_CATEGORY_MAP);
-    for (const value of values) {
-      expect(value).toBe(value.toUpperCase());
-    }
-  });
-});
-
 describe('walletAmount on the shared base', () => {
   // Pin: walletAmount lives on `purchaseSchemaBase` so every derived schema
   // (purchaseSchema / vtuCheckoutInitializeSchema / vtuSavedCardChargeSchema)
@@ -820,57 +773,5 @@ describe('walletAmount on the shared base', () => {
       source: 'loyalty_reward',
     });
     expect(omitted.success).toBe(true);
-  });
-});
-
-// vtuWalletOnlyChargeSchema is the validation surface for the
-// /api/vtu/checkout/wallet-only route. It tightens the base schema by
-// REQUIRING walletAmount > 0 (unlike the optional walletAmount on the
-// other derived schemas) — a wallet-only request without a positive
-// walletAmount is structurally a card-only request that took the
-// wrong path. The route additionally enforces walletAmount === amount
-// (full-coverage); the schema accepts any positive walletAmount <=
-// amount and lets the route reject partial coverage with a clear
-// "use the regular initialize endpoint" 4xx.
-describe('vtuWalletOnlyChargeSchema', () => {
-  // The wallet-only ROUTE injects `source: 'checkout'` into the body
-  // before parsing. Mirror that here so these tests reflect what the
-  // schema actually sees in production.
-  const baseAirtime = {
-    merchantSlug: 'ogabassey',
-    amount: 1000,
-    type: 'airtime' as const,
-    phoneNumber: '08012345678',
-    networkProvider: 'MTN',
-    source: 'checkout' as const,
-  };
-
-  it('accepts walletAmount === amount (the full-coverage happy path)', () => {
-    const result = vtuWalletOnlyChargeSchema.safeParse({
-      ...baseAirtime,
-      walletAmount: 1000,
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects walletAmount === 0 (the route requires a positive amount)', () => {
-    const result = vtuWalletOnlyChargeSchema.safeParse({
-      ...baseAirtime,
-      walletAmount: 0,
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects walletAmount > amount via the cross-field rule', () => {
-    const result = vtuWalletOnlyChargeSchema.safeParse({
-      ...baseAirtime,
-      walletAmount: 1500,
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects missing walletAmount (the field is required here)', () => {
-    const result = vtuWalletOnlyChargeSchema.safeParse({ ...baseAirtime });
-    expect(result.success).toBe(false);
   });
 });

@@ -170,11 +170,10 @@ let pendingVtuFlushQueued = false;
 let pendingVtuFlushChain: Promise<unknown> = Promise.resolve();
 
 /**
- * Coalesced background persist for registry mutations (web
- * mirror): memory updates synchronously, one chained microtask
- * flush drains under the mutex. Failures log and drop — memory
- * retains state for the next flush; the mint path persists inline
- * and throws instead. Exported flush lets tests drain.
+ * Coalesced background persist (web mirror): memory updates sync, one
+ * chained flush drains under the mutex. Contention drops retry here
+ * (Codex R153 P2) — with no further writes nothing else lands them.
+ * Terminal failures log and drop; mint persists inline and throws.
  */
 export function schedulePendingVtuFlush(): void {
   if (pendingVtuFlushQueued) {
@@ -183,12 +182,36 @@ export function schedulePendingVtuFlush(): void {
   pendingVtuFlushQueued = true;
   pendingVtuFlushChain = pendingVtuFlushChain.then(async () => {
     pendingVtuFlushQueued = false;
-    try {
-      await flushPendingVtuPurchases();
-    } catch (error) {
-      console.error('VTU registry background flush failed:', error);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      try {
+        if (await flushPendingVtuPurchases()) return;
+      } catch (error) {
+        console.error('VTU registry background flush failed:', error);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
+    console.error('VTU registry background flush dropped after retries.');
   });
+}
+
+/**
+ * Terminal-success forget (Codex R153 P2, web mirror): memory drops sync,
+ * then one locked flush is awaited. False = scheduled retry.
+ */
+export async function forgetPendingVtuPurchaseDurable(
+  descriptor: string
+): Promise<boolean> {
+  const live = pendingPurchases.get(descriptor);
+  pendingPurchases.delete(descriptor);
+  noteForgottenVtuScopes([descriptor], Date.now(), live?.key);
+  try {
+    if (await flushPendingVtuPurchases()) return true;
+  } catch {
+    /* Locks unavailable: fall through to the scheduled retry. */
+  }
+  schedulePendingVtuFlush();
+  return false;
 }
 
 // Restart recovery: rehydrate before any submit runs in this launch.

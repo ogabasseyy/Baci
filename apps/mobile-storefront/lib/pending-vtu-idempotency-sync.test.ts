@@ -10,14 +10,18 @@ jest.mock('expo-crypto', () => ({
 
 import {
   clearPendingVtuKeys,
+  forgetPendingVtuPurchase,
+  forgetPendingVtuPurchaseDurable,
   getPendingVtuKey,
   hasNotedPendingVtuReference,
+  notePendingVtuReference,
   recallPendingVtuKey,
   rememberPendingVtuPurchase,
 } from './pending-vtu-idempotency';
 import * as vtuCodec from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
 import {
+  flushPendingVtuPurchases,
   runPendingVtuMintLocked,
   syncPendingVtuPurchasesFromSnapshot,
 } from './pending-vtu-idempotency-sync';
@@ -312,4 +316,62 @@ describe('pending-vtu-idempotency-sync', () => {
     expect(order).toEqual(['timer', 'acquired']);
     vtuStore.clearPendingVtuMintLock();
   }, 10000);
+
+  it('retries a background flush dropped to contention (Codex R153 P2, web mirror)', async () => {
+    // Pin the fallback: the RN jest env ships its own navigator
+    // shape, and the locks path never reports contention.
+    const g = globalThis as { navigator?: unknown };
+    const priorNavigator = g.navigator;
+    g.navigator = {};
+    try {
+      const descriptor = scopedDescriptor('cret');
+      await getPendingVtuKey(descriptor);
+      await flushPendingVtuPurchases();
+      // Sibling holds the lock: the chain's first microtask attempt
+      // deterministically fails; the macrotask release lands before
+      // the second attempt, proving the retry (pre-fix the single
+      // attempt dropped it here and no new mutation would reland it).
+      vtuStore.savePendingVtuMintLock('tab-other', Date.now());
+      notePendingVtuReference(descriptor, 'REF-CRET');
+      setTimeout(() => vtuStore.clearPendingVtuMintLock(), 0);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const snapshot = vtuCodec.parsePendingVtuSnapshot(
+        vtuStore.loadPendingVtuSnapshot()
+      );
+      expect(snapshot.entries).toHaveLength(1);
+      expect(snapshot.entries[0][1].reference).toBe('REF-CRET');
+    } finally {
+      g.navigator = priorNavigator;
+      vtuStore.clearPendingVtuMintLock();
+    }
+  });
+
+  it('lands terminal deletions before returning (Codex R153 P2, web mirror)', async () => {
+    const scheduled = scopedDescriptor('sched');
+    const durable = scopedDescriptor('dur');
+    await getPendingVtuKey(scheduled);
+    await getPendingVtuKey(durable);
+    await flushPendingVtuPurchases();
+
+    // Scheduled forget is NOT durable on return (the P2 window).
+    forgetPendingVtuPurchase(scheduled);
+    expect(
+      vtuCodec
+        .parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot())
+        .entries.map(([scoped]) => scoped)
+    ).toContain(scheduled);
+
+    // Durable forget is: memory drops AND the locked flush lands
+    // before the result finalizes.
+    await expect(forgetPendingVtuPurchaseDurable(durable)).resolves.toBe(true);
+    const snapshot = vtuCodec.parsePendingVtuSnapshot(
+      vtuStore.loadPendingVtuSnapshot()
+    );
+    expect(snapshot.entries.map(([scoped]) => scoped)).not.toContain(durable);
+    expect(snapshot.forgotten.map((tombstone) => tombstone.scoped)).toContain(
+      durable
+    );
+    expect(recallPendingVtuKey(durable)).toBeNull();
+  });
 });

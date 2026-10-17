@@ -74,10 +74,10 @@ describe('settleUtilityPurchaseResult', () => {
     vi.mocked(hasUtilityPurchaseIdentityMoved).mockReturnValue(false);
   });
 
-  it('preserves the attempt when the view closed mid-flight', () => {
+  it('preserves the attempt when the view closed mid-flight', async () => {
     const input = baseInput({ isResultViewActive: () => false });
 
-    settleUtilityPurchaseResult(input);
+    await settleUtilityPurchaseResult(input);
 
     expect(finalizeSuppressedAttempt).toHaveBeenCalledWith(
       input.attempt,
@@ -87,11 +87,11 @@ describe('settleUtilityPurchaseResult', () => {
     expect(input.setLoading).not.toHaveBeenCalled();
   });
 
-  it('discards the result when identity moved mid-flight', () => {
+  it('discards the result when identity moved mid-flight', async () => {
     vi.mocked(hasUtilityPurchaseIdentityMoved).mockReturnValue(true);
     const input = baseInput();
 
-    settleUtilityPurchaseResult(input);
+    await settleUtilityPurchaseResult(input);
 
     expect(hasUtilityPurchaseIdentityMoved).toHaveBeenCalledWith(submitter);
     expect(finalizeSuppressedAttempt).toHaveBeenCalledWith(
@@ -107,11 +107,11 @@ describe('settleUtilityPurchaseResult', () => {
     expect(input.setLoading).toHaveBeenCalledWith(false);
   });
 
-  it('delegates wallet-success to the outcome helper', () => {
-    vi.mocked(applyUtilityWalletSuccessOutcome).mockReturnValue(false);
+  it('delegates wallet-success to the outcome helper', async () => {
+    vi.mocked(applyUtilityWalletSuccessOutcome).mockResolvedValue(false);
     const input = baseInput();
 
-    settleUtilityPurchaseResult(input);
+    await settleUtilityPurchaseResult(input);
 
     expect(applyUtilityWalletSuccessOutcome).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -120,16 +120,21 @@ describe('settleUtilityPurchaseResult', () => {
         submitBalance: 5000,
       })
     );
+    // R153 P2: terminal forgets go through the durable barrel import,
+    // not the scheduled hook callback.
+    expect(applyUtilityWalletSuccessOutcome).toHaveBeenCalledWith(
+      expect.not.objectContaining({ forgetScopedKey: expect.anything() })
+    );
     expect(input.setLoading).toHaveBeenCalledWith(false);
   });
 
-  it('rotates the key and toasts on errors per status', () => {
+  it('rotates the key and toasts on errors per status', async () => {
     vi.mocked(shouldRotateVtuKeyForStatus).mockReturnValue(true);
     const input = baseInput({
       result: { kind: 'error', message: 'Bad', status: 400 },
     });
 
-    settleUtilityPurchaseResult(input);
+    await settleUtilityPurchaseResult(input);
 
     expect(input.forgetScopedKey).toHaveBeenCalledWith('scoped-1');
     expect(input.refreshWallet).toHaveBeenCalled();

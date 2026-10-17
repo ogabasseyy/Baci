@@ -2,6 +2,7 @@ import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
+  forgetPendingVtuPurchaseDurable,
   isStalePendingVtuSuccess,
   markPendingVtuCompleted,
   notePendingVtuReference,
@@ -215,7 +216,7 @@ export function createDataFormPurchaseHandler({
         ) {
           // Old replay answering a NEW intent: forget so the next tap
           // mints fresh, and say so instead of presenting it as new.
-          payment.resetWalletIdempotencyKey(descriptor);
+          await forgetPendingVtuPurchaseDurable(descriptor);
           Alert.alert(
             'Purchase Already Completed',
             `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
@@ -223,7 +224,8 @@ export function createDataFormPurchaseHandler({
           return;
         }
         if (result.status === 'successful') {
-          payment.resetWalletIdempotencyKey(descriptor);
+          // Durable (Codex R153 P2): lands before onSuccess finalizes.
+          await forgetPendingVtuPurchaseDurable(descriptor);
         }
         const cashback = creditedVtuCashback(result.cashback);
         onSuccess({

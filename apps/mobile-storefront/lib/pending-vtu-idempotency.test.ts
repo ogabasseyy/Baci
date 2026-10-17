@@ -204,6 +204,28 @@ describe('pending-vtu-idempotency', () => {
     expect(isStalePendingVtuSuccess(descriptor, 'REF-MARK-SKIP')).toBe(false);
   });
 
+  it('routes completion durability through the locked flush (Codex R153 P1, web mirror)', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('mob-routed', 'key-routed');
+    notePendingVtuReference('mob-routed', 'REF-ROUTED');
+    await flushPendingVtuPurchases();
+    markPendingVtuCompleted('mob-routed');
+
+    // Memory updates synchronously (completed entries leave the list).
+    expect(listNotedPendingVtuReferences()).toEqual([]);
+    // But nothing is written synchronously — the old direct persist
+    // ran its merge + write outside the mutex, clobbering a sibling.
+    const before = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
+    expect(before.entries).toHaveLength(1);
+    expect(before.entries[0][1].completedAt).toBeNull();
+
+    await flushPendingVtuPurchases();
+
+    const after = parsePendingVtuSnapshot(vtuStore.loadPendingVtuSnapshot());
+    expect(after.entries).toHaveLength(1);
+    expect(after.entries[0][1].completedAt).not.toBeNull();
+  });
+
   it('recognizes a noted reference independently of completion', () => {
     const descriptor = buildVtuPurchaseDescriptor({
       type: 'airtime',

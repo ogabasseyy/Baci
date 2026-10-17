@@ -30,7 +30,9 @@ describe('UtilityPaymentOptions', () => {
     expect(screen.queryByText(/korapay/i)).toBeNull();
   });
 
-  it('marks the wallet selected when it covers the bill', () => {
+  it('presents the wallet as informational text when it covers the bill', () => {
+    // Jules R153: the wallet is the only payment option (not a
+    // choice), so a radio role would mislead screen readers.
     render(
       <UtilityPaymentOptions
         amount={1000}
@@ -41,9 +43,8 @@ describe('UtilityPaymentOptions', () => {
     );
 
     const walletRow = screen.getByLabelText(/pay with wallet/i);
-    expect(walletRow.props.accessibilityState).toMatchObject({
-      checked: true,
-    });
+    expect(walletRow.props.accessibilityRole).toBe('text');
+    expect(walletRow.props.accessibilityState).toBeUndefined();
     expect(screen.getByText(/covers this purchase/i)).toBeTruthy();
   });
 
@@ -58,9 +59,8 @@ describe('UtilityPaymentOptions', () => {
     );
 
     const walletRow = screen.getByLabelText(/pay with wallet/i);
-    expect(walletRow.props.accessibilityState).toMatchObject({
-      checked: false,
-    });
+    expect(walletRow.props.accessibilityRole).toBe('text');
+    expect(walletRow.props.accessibilityState).toBeUndefined();
     expect(screen.getByText(/₦800 more needed/i)).toBeTruthy();
   });
 

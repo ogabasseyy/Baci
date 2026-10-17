@@ -13,6 +13,7 @@ export {
   listNotedPendingVtuReferences,
   notePendingVtuReference,
 } from './utility-pending-vtu-reference-registry';
+export { forgetPendingVtuPurchaseDurable } from './utility-pending-vtu-sync';
 import {
   forgottenScopedKeys,
   noteForgottenVtuScope,
@@ -123,9 +124,11 @@ export function markPendingVtuCompleted(
   payloadSignature: string,
   now: number = Date.now()
 ): void {
+  // Locked flush (Codex R153 P1): a direct persist here could
+  // clobber a sibling tab's just-minted key outside the mutex.
   markPendingVtuCompletedIn(
     pendingVtuPurchases,
-    persistPendingVtuPurchases,
+    schedulePendingVtuFlush,
     payloadSignature,
     now
   );

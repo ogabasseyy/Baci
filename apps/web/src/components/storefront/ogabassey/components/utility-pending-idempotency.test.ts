@@ -346,6 +346,34 @@ describe('utility-pending-idempotency', () => {
     ).toBe(true);
   });
 
+  it('routes completion durability through the locked flush (Codex R153 P1)', async () => {
+    // Scoped (digest) signature: a raw colon-bearing fixture would
+    // migrate-on-read into a second map entry on the mid-test flush.
+    const signature = scopePendingVtuSignature(
+      'user-1',
+      'merchant-1',
+      '{"routed":true}'
+    );
+    await getPendingVtuKey(signature);
+    notePendingVtuReference(signature, 'REF-ROUTED');
+    await flushPendingVtuPurchases();
+    markPendingVtuCompleted(signature);
+
+    // Memory updates synchronously (completed entries leave the list).
+    expect(listNotedPendingVtuReferences()).toEqual([]);
+    // But nothing is written synchronously — the old direct persist
+    // ran its merge + write outside the mutex, clobbering a sibling.
+    const before = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(before.entries).toHaveLength(1);
+    expect(before.entries[0]?.[1].completedAt).toBeNull();
+
+    await flushPendingVtuPurchases();
+
+    const after = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(after.entries).toHaveLength(1);
+    expect(after.entries[0]?.[1].completedAt).not.toBeNull();
+  });
+
   it('forgets retained entries by noted reference on terminal history', async () => {
     const signature = '{"settle":true}';
     const key = await getPendingVtuKey(signature);

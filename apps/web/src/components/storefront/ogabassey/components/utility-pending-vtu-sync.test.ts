@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearPendingVtuKeys,
   forgetPendingVtuPurchase,
+  forgetPendingVtuPurchaseDurable,
   getPendingVtuKey,
   hasNotedPendingVtuReference,
   isStalePendingVtuSuccess,
@@ -714,4 +715,78 @@ describe('keyed tombstones (6rrMIj)', () => {
     expect(order).toEqual(['timer', 'acquired']);
     clearPendingVtuMintLock();
   }, 10000);
+
+  it('retries a background flush dropped to contention (Codex R153 P2)', async () => {
+    // This nested block pins no locks: install them (the mint and
+    // the flush both fail closed in a lockless jsdom browser).
+    clearPendingVtuKeys();
+    mockNavigatorLocks();
+    const signature = scopePendingVtuSignature(
+      'user-1',
+      'merchant-1',
+      '{"retry":true}'
+    );
+    await getPendingVtuKey(signature);
+    await flushPendingVtuPurchases();
+    // Drain the scheduled chain: only the noted mutation below may
+    // consume the one-shot storage failure.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    setItem.mockImplementationOnce(() => {
+      throw new Error('QuotaExceededError');
+    });
+    try {
+      notePendingVtuReference(signature, 'REF-RETRY');
+      // No further mutations: the chain's own retry must land it
+      // (pre-fix the single attempt dropped it here).
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    } finally {
+      setItem.mockRestore();
+    }
+
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries).toHaveLength(1);
+    expect(snapshot.entries[0]?.[1].reference).toBe('REF-RETRY');
+  });
+
+  it('lands terminal deletions before returning (Codex R153 P2)', async () => {
+    clearPendingVtuKeys();
+    mockNavigatorLocks();
+    const sigScheduled = scopePendingVtuSignature(
+      'user-1',
+      'merchant-1',
+      '{"d":1}'
+    );
+    const sigDurable = scopePendingVtuSignature(
+      'user-1',
+      'merchant-1',
+      '{"d":2}'
+    );
+    await getPendingVtuKey(sigScheduled);
+    await getPendingVtuKey(sigDurable);
+    await flushPendingVtuPurchases();
+
+    // Scheduled forget is NOT durable on return (the P2 window: a
+    // pre-drain exit resurrects the active key for the next buyer).
+    forgetPendingVtuPurchase(sigScheduled);
+    expect(
+      parsePendingVtuSnapshot(loadPendingVtuSnapshot()).entries.map(
+        ([scoped]) => scoped
+      )
+    ).toContain(sigScheduled);
+
+    // Durable forget is: memory drops AND the locked flush lands
+    // before the result finalizes.
+    await expect(
+      forgetPendingVtuPurchaseDurable(sigDurable)
+    ).resolves.toBe(true);
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries.map(([scoped]) => scoped)).not.toContain(
+      sigDurable
+    );
+    expect(snapshot.forgotten.map((tombstone) => tombstone.scoped)).toContain(
+      sigDurable
+    );
+    expect(recallPendingVtuKey(sigDurable)).toBeUndefined();
+  });
 });

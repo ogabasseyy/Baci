@@ -50,7 +50,7 @@ export interface SettleUtilityPurchaseResultInput {
  * outcome, or failure handling. Extracted from
  * `use-utility-purchase` per the 300-line boundary (Codex R101 P2).
  */
-export function settleUtilityPurchaseResult({
+export async function settleUtilityPurchaseResult({
   activeTab,
   appliedReferences,
   attempt,
@@ -73,7 +73,7 @@ export function settleUtilityPurchaseResult({
   submitAmount,
   submitBalance,
   submitter,
-}: SettleUtilityPurchaseResultInput): void {
+}: SettleUtilityPurchaseResultInput): Promise<void> {
   if (!isResultViewActive()) {
     // Modal closed mid-flight: preserve, don't forget (reopen replays).
     finalizeSuppressedAttempt(attempt, result);
@@ -101,11 +101,10 @@ export function settleUtilityPurchaseResult({
   }
 
   if (result.kind === 'wallet-success') {
-    const stale = applyUtilityWalletSuccessOutcome({
+    const stale = await applyUtilityWalletSuccessOutcome({
       activeTab,
       appliedReferences,
       attempt,
-      forgetScopedKey,
       isScopedReplay,
       isScopedStale,
       markAttemptShown,

@@ -219,7 +219,7 @@ export function useUtilityPurchase({
       },
     });
 
-    settleUtilityPurchaseResult({
+    await settleUtilityPurchaseResult({
       activeTab,
       appliedReferences: appliedBalanceRefs.current,
       attempt: captured.attempt,

@@ -6,6 +6,7 @@ import type { UtilityCheckoutResult } from './utility-checkout-submit';
 import type { UtilityIdempotencyAttempt } from './use-utility-idempotency-key';
 import type { UtilityPurchaseStep } from './use-utility-purchase';
 import type { UtilityTabId } from './UtilityTabs';
+import { forgetPendingVtuPurchaseDurable } from './utility-pending-idempotency';
 import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
 
 type WalletSuccess = Extract<
@@ -17,7 +18,6 @@ interface UtilityWalletSuccessOutcomeInput {
   activeTab: UtilityTabId;
   appliedReferences: Set<string>;
   attempt: UtilityIdempotencyAttempt | null;
-  forgetScopedKey: (scoped: string) => void;
   isScopedReplay: (scoped: string, reference: string) => boolean;
   isScopedStale: (scoped: string, reference: string) => boolean;
   markAttemptShown: (scoped: string | null, key?: string) => void;
@@ -43,13 +43,14 @@ interface UtilityWalletSuccessOutcomeInput {
  * Terminal forgets (fresh buy-again); processing keeps (a fresh
  * resubmit would bypass the dedupe row and debit twice). Returns
  * true when the result was a STALE replay (caller stops — the toast
- * already explains buy-again); false otherwise.
+ * already explains buy-again); false otherwise. Async: terminal
+ * forgets are durable-awaited (Codex R153 P2) so the deletion lands
+ * before the success view finalizes.
  */
-export function applyUtilityWalletSuccessOutcome({
+export async function applyUtilityWalletSuccessOutcome({
   activeTab,
   appliedReferences,
   attempt,
-  forgetScopedKey,
   isScopedReplay,
   isScopedStale,
   markAttemptShown,
@@ -66,7 +67,7 @@ export function applyUtilityWalletSuccessOutcome({
   setWalletBalance,
   submitAmount,
   submitBalance,
-}: UtilityWalletSuccessOutcomeInput): boolean {
+}: UtilityWalletSuccessOutcomeInput): Promise<boolean> {
   // Terminal forgets (fresh buy-again); processing keeps (a fresh
   // resubmit would bypass the dedupe row and debit twice). Refresh
   // instead of decrementing: a stale HIGH balance would pass the
@@ -80,7 +81,7 @@ export function applyUtilityWalletSuccessOutcome({
     if (scoped !== undefined && isScopedStale(scoped, result.reference)) {
       // Stale replay answers a NEW intent with the old vend: forget so
       // the next tap mints fresh, and say so.
-      forgetScopedKey(scoped);
+      await forgetPendingVtuPurchaseDurable(scoped);
       toast({
         title: 'Purchase Already Completed',
         description: `This purchase already completed (${result.reference}). Submit again to make a new purchase.`,
@@ -90,7 +91,7 @@ export function applyUtilityWalletSuccessOutcome({
       return true;
     }
     if (scoped !== undefined) {
-      forgetScopedKey(scoped);
+      await forgetPendingVtuPurchaseDurable(scoped);
     }
   } else {
     if (scoped !== undefined) {

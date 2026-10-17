@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
+  forgetPendingVtuPurchaseDurable,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
 } from '@/lib/pending-vtu-idempotency';
@@ -125,14 +126,15 @@ async function executeAirtimePurchase({
       if (isStalePendingVtuSuccess(descriptor, result.reference)) {
         // Old replay answering a NEW intent: forget so the next tap
         // mints fresh, and say so instead of presenting it as new.
-        payment.resetWalletIdempotencyKey(descriptor);
+        await forgetPendingVtuPurchaseDurable(descriptor);
         Alert.alert(
           'Purchase Already Completed',
           `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
         );
         return;
       }
-      payment.resetWalletIdempotencyKey(descriptor);
+      // Durable (Codex R153 P2): lands before onSuccess finalizes.
+      await forgetPendingVtuPurchaseDurable(descriptor);
       onSuccess({
         amount: result.amount ?? numericAmount,
         cashback: creditedVtuCashback(result.cashback),

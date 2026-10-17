@@ -36,6 +36,7 @@ import {
 } from './pending-vtu-reference-queries';
 
 export {
+  forgetPendingVtuPurchaseDurable,
   hydratePendingVtuPurchases,
   serializePendingVtuPurchases,
   syncPendingVtuPurchasesFromSnapshot,
@@ -186,9 +187,11 @@ export function markPendingVtuCompleted(
   descriptor: string,
   now: number = Date.now()
 ): void {
+  // Locked flush (Codex R153 P1, web mirror): direct persist here
+  // could clobber a sibling tab's just-minted key outside the mutex.
   markPendingVtuCompletedIn(
     pendingPurchases,
-    persistPendingVtuPurchases,
+    schedulePendingVtuFlush,
     descriptor,
     now
   );

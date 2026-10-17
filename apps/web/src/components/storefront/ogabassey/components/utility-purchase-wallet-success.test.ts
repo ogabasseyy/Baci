@@ -5,8 +5,12 @@ vi.mock('@/hooks/use-toast', () => ({ toast: (...args: unknown[]) => mockToast(.
 vi.mock('./utility-purchase-balance', () => ({
   applyUtilityPurchaseBalanceEffect: vi.fn(),
 }));
+vi.mock('./utility-pending-idempotency', () => ({
+  forgetPendingVtuPurchaseDurable: vi.fn(),
+}));
 
 import { applyUtilityPurchaseBalanceEffect } from './utility-purchase-balance';
+import { forgetPendingVtuPurchaseDurable } from './utility-pending-idempotency';
 import { applyUtilityWalletSuccessOutcome } from './utility-purchase-wallet-success';
 
 function baseInput(overrides: Record<string, unknown> = {}) {
@@ -14,7 +18,6 @@ function baseInput(overrides: Record<string, unknown> = {}) {
     activeTab: 'airtime',
     appliedReferences: new Set<string>(),
     attempt: { key: 'k', scoped: 'scoped-1', recalled: false },
-    forgetScopedKey: vi.fn(),
     isScopedReplay: vi.fn().mockReturnValue(false),
     isScopedStale: vi.fn().mockReturnValue(false),
     markAttemptShown: vi.fn(),
@@ -43,14 +46,15 @@ function baseInput(overrides: Record<string, unknown> = {}) {
 describe('applyUtilityWalletSuccessOutcome', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(forgetPendingVtuPurchaseDurable).mockResolvedValue(true);
   });
 
-  it('settles + presents a terminal success', () => {
+  it('settles + presents a terminal success', async () => {
     const input = baseInput();
 
-    expect(applyUtilityWalletSuccessOutcome(input)).toBe(false);
+    await expect(applyUtilityWalletSuccessOutcome(input)).resolves.toBe(false);
 
-    expect(input.forgetScopedKey).toHaveBeenCalledWith('scoped-1');
+    expect(forgetPendingVtuPurchaseDurable).toHaveBeenCalledWith('scoped-1');
     expect(applyUtilityPurchaseBalanceEffect).toHaveBeenCalledOnce();
     expect(applyUtilityPurchaseBalanceEffect).toHaveBeenCalledWith(
       expect.objectContaining({ submitAmount: 500, submitBalance: 5000 })
@@ -65,7 +69,7 @@ describe('applyUtilityWalletSuccessOutcome', () => {
     );
   });
 
-  it('keeps the key and shows processing for a 202', () => {
+  it('keeps the key and shows processing for a 202', async () => {
     const input = baseInput({
       result: {
         kind: 'wallet-success',
@@ -75,9 +79,9 @@ describe('applyUtilityWalletSuccessOutcome', () => {
       },
     });
 
-    expect(applyUtilityWalletSuccessOutcome(input)).toBe(false);
+    await expect(applyUtilityWalletSuccessOutcome(input)).resolves.toBe(false);
 
-    expect(input.forgetScopedKey).not.toHaveBeenCalled();
+    expect(forgetPendingVtuPurchaseDurable).not.toHaveBeenCalled();
     expect(input.noteScopedReference).toHaveBeenCalledWith(
       'scoped-1',
       'REF-2'
@@ -85,13 +89,13 @@ describe('applyUtilityWalletSuccessOutcome', () => {
     expect(input.setStep).toHaveBeenCalledWith('processing');
   });
 
-  it('stops on a stale replay after forgetting + explaining', () => {
+  it('stops on a stale replay after forgetting + explaining', async () => {
     const input = baseInput();
     vi.mocked(input.isScopedStale).mockReturnValue(true);
 
-    expect(applyUtilityWalletSuccessOutcome(input)).toBe(true);
+    await expect(applyUtilityWalletSuccessOutcome(input)).resolves.toBe(true);
 
-    expect(input.forgetScopedKey).toHaveBeenCalledWith('scoped-1');
+    expect(forgetPendingVtuPurchaseDurable).toHaveBeenCalledWith('scoped-1');
     expect(input.setLoading).toHaveBeenCalledWith(false);
     expect(mockToast).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Purchase Already Completed' })

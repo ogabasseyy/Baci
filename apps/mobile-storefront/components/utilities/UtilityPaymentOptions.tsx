@@ -132,8 +132,7 @@ export function UtilityPaymentOptions({
               borderColor: coversBill ? BRAND.primary : colors.border,
             },
           ]}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: coversBill }}
+          accessibilityRole="text"
           accessibilityLabel={`Pay with wallet. ₦${balance.toLocaleString()} available${coversBill ? '. Covers this purchase' : ''}`}
         >
           <View

@@ -205,7 +205,13 @@ describe('airtime stale success replay', () => {
       expect.stringContaining('WAL-STALE-AIR')
     );
     expect(onSuccess).toHaveBeenCalledTimes(1);
-    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    // Durable terminal forget (Codex R153 P2): the stale-success path
+    // awaits the barrel's durable forget directly — not the hook's
+    // scheduled reset — so the deletion lands before the Alert.
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    expect(
+      recallPendingVtuKey(buildVtuPurchaseDescriptor(submitted))
+    ).toBeNull();
   });
 
   it('applies a fresh success normally', async () => {

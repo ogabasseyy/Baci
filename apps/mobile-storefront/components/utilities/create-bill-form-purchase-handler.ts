@@ -2,6 +2,7 @@ import { Alert } from 'react-native';
 import { HttpError } from '@/lib/fetch-with-timeout';
 import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
+  forgetPendingVtuPurchaseDurable,
   isStalePendingVtuSuccess,
   notePendingVtuReference,
 } from '@/lib/pending-vtu-idempotency';
@@ -219,7 +220,7 @@ export function createBillFormPurchaseHandler({
         if (isStalePendingVtuSuccess(descriptor, result.reference)) {
           // Old replay answering a NEW intent: forget so the next tap
           // mints fresh, and say so instead of presenting it as new.
-          payment.resetWalletIdempotencyKey(descriptor);
+          await forgetPendingVtuPurchaseDurable(descriptor);
           Alert.alert(
             'Purchase Already Completed',
             `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
@@ -227,8 +228,8 @@ export function createBillFormPurchaseHandler({
           return;
         }
         // Terminal success — rotate the key so the next user-initiated
-        // submit gets a fresh dedupe slot.
-        payment.resetWalletIdempotencyKey(descriptor);
+        // submit gets a fresh dedupe slot (durable: lands pre-finalize).
+        await forgetPendingVtuPurchaseDurable(descriptor);
         emitSuccess({
           amount: result.amount ?? numericAmount,
           cashback: creditedVtuCashback(result.cashback),

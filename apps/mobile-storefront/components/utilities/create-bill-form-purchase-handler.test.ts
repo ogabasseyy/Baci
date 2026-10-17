@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
 import { HttpError } from '@/lib/fetch-with-timeout';
+import * as vtuSync from '@/lib/pending-vtu-idempotency-sync';
 import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
 import { createBillFormPurchaseHandler } from './create-bill-form-purchase-handler';
 
@@ -138,6 +139,11 @@ describe('createBillFormPurchaseHandler', () => {
       }),
     });
 
+    // Durable terminal forget (Codex R153 P2): the success path
+    // awaits the barrel's durable forget (spy calls through to the
+    // real fallback flush) instead of the hook's scheduled reset.
+    const durableSpy = jest.spyOn(vtuSync, 'forgetPendingVtuPurchaseDurable');
+
     await handlePurchase();
 
     expect(mockChargeWalletForVtu).toHaveBeenCalledTimes(1);
@@ -147,7 +153,9 @@ describe('createBillFormPurchaseHandler', () => {
       walletAmount: 1000,
       idempotencyKey: 'idem-key-1',
     });
-    expect(resetWalletIdempotencyKey).toHaveBeenCalledTimes(1);
+    expect(resetWalletIdempotencyKey).not.toHaveBeenCalled();
+    expect(durableSpy).toHaveBeenCalledTimes(1);
+    await expect(durableSpy.mock.results[0]?.value).resolves.toBe(true);
     expect(onSuccess).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'successful', reference: 'WAL-1' })
     );

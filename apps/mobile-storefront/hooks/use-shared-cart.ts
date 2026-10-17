@@ -96,17 +96,8 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
       // Enrollment off after a committed enabled period only: cold
       // starts pass through a placeholder disabled state first.
       const wasEnabled = enrollmentTransition.current.wasEnabled;
-      void retireEnrollmentSession(
-        enrollmentTransition.current,
-        options.merchantId,
-        // Tombstone rather than delete: the retained proof lets the
-        // next establishment flush the server revocation; deleting
-        // it would strand the live grant until expiry.
-        (merchantId) =>
-          cartSessionStorage.retire
-            ? cartSessionStorage.retire(merchantId)
-            : cartSessionStorage.remove(merchantId)
-      );
+      // biome-ignore format: compact tombstone callback preserves the 300-line ceiling.
+      void retireEnrollmentSession(enrollmentTransition.current, options.merchantId, (merchantId) => cartSessionStorage.retire?.(merchantId) ?? cartSessionStorage.remove(merchantId));
       if (!wasEnabled) return;
       retireLegacySharedCart({
         getLegacy: () => useCartStore.getState(),

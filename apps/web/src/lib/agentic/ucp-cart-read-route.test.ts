@@ -207,7 +207,7 @@ it('does not replay stored lanes after the create-recovery marker clears', async
   expect(canonical).toHaveBeenCalledTimes(1);
 });
 
-it('recovers an option-only lane the canonical cart configured differently', async () => {
+it('does not replay stored options over a changed canonical option lane', async () => {
   const cart = {
     agent_id: 'agent-a',
     status: 'active',
@@ -237,11 +237,7 @@ it('recovers an option-only lane the canonical cart configured differently', asy
         ],
       },
     })
-    .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } })
-    .mockResolvedValueOnce({
-      status: 200,
-      body: { id: 'cart-a', marker: 'fresh-read' },
-    });
+    .mockResolvedValueOnce({ status: 200, body: { id: 'cart-a' } });
   const supabase = {
     from: vi.fn(() => ({
       update: vi.fn(() => ({
@@ -266,20 +262,11 @@ it('recovers an option-only lane the canonical cart configured differently', asy
     deps
   );
   expect(response.status).toBe(200);
-  // The answer comes from a fresh canonical read after the replay,
-  // never from the replay's recorded state.
-  expect(await response.json()).toMatchObject({ marker: 'fresh-read' });
-  expect(canonical).toHaveBeenCalledTimes(3);
-  expect(canonical.mock.calls[2][0]).toMatchObject({ action: 'read' });
-  expect(canonical.mock.calls[1][0]).toMatchObject({
-    action: 'update',
-    lines: [
-      {
-        item: { productId: 'prod-1', options: { color: 'red' } },
-        quantity: 1,
-      },
-    ],
-  });
+  // Canonical (blue) wins: the stored red lanes are not replayed, and
+  // the marker is retired by the moved-on path.
+  expect(await response.json()).toMatchObject({ id: 'cart-a' });
+  expect(canonical).toHaveBeenCalledTimes(1);
+  expect(canonical.mock.calls[0][0]).toMatchObject({ action: 'read' });
 });
 
 it('propagates a fresh-read failure instead of answering from the replay', async () => {

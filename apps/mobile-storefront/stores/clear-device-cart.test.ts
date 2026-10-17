@@ -66,9 +66,17 @@ it('propagates a retire failure instead of reporting teardown success', async ()
   cartSessionStorage.retire.mockRejectedValueOnce(new Error('storage down'));
   useCartStore.setState({
     clearCart: jest.fn(),
-    setSharedCartRef: jest.fn(),
+    sharedCartRef: {
+      merchantId: '11111111-1111-4111-8111-111111111111',
+      cartId: '22222222-2222-4222-8222-222222222222',
+    },
   } as never);
   await expect(clearDeviceCartForAccountTeardown()).rejects.toThrow(
     'storage down'
   );
+  // The merchant reference survives so a retry can find it.
+  expect(useCartStore.getState().sharedCartRef).toMatchObject({
+    merchantId: '11111111-1111-4111-8111-111111111111',
+    cartId: '22222222-2222-4222-8222-222222222222',
+  });
 });

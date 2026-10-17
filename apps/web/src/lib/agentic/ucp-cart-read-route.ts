@@ -4,11 +4,14 @@ import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import type { AgenticMerchantContext } from './merchant-context';
 import type { handleCanonicalUcpCart } from './ucp-canonical-cart';
+import {
+  canonicalHasLanes,
+  canonicalIsGenericProjection,
+  clearRecoveryMarker,
+} from './ucp-cart-recovery';
 import type { buildUcpCartStateResponse } from './ucp-cart-route-support';
 import type { loadUcpCartSession } from './ucp-cart-session-read';
 import { coerceUcpCartItems, ucpCartCallerMismatch } from './ucp-cart-storage';
-
-type CanonicalResult = { body: Record<string, unknown>; status: number };
 
 function storedLaneLines(cart: { cart_items: unknown } | null):
   | {
@@ -45,127 +48,6 @@ function storedLaneLines(cart: { cart_items: unknown } | null):
     ...(item.variant_attributes ? { options: item.variant_attributes } : {}),
     quantity: item.quantity,
   }));
-}
-
-function normalizeOptions(value: unknown): string {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
-  return JSON.stringify(
-    Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
-      a.localeCompare(b)
-    )
-  );
-}
-
-function canonicalHasLanes(
-  canonical: CanonicalResult,
-  lanes: {
-    productId: string;
-    variantId?: string;
-    condition?: string;
-    options?: Record<string, string>;
-  }[]
-): boolean {
-  const lineItems = (canonical.body as { line_items?: unknown }).line_items;
-  if (!Array.isArray(lineItems)) return false;
-  const seen = new Set(
-    lineItems.map((line) => {
-      const item = (line as { item?: Record<string, unknown> }).item ?? {};
-      return JSON.stringify([
-        item.id ?? item.product_id ?? null,
-        item.variant_id ?? null,
-        item.condition ?? null,
-        normalizeOptions(item.variant_attributes),
-      ]);
-    })
-  );
-  return lanes.every((lane) =>
-    seen.has(
-      JSON.stringify([
-        lane.productId,
-        lane.variantId ?? null,
-        lane.condition ?? null,
-        normalizeOptions(lane.options),
-      ])
-    )
-  );
-}
-
-/**
- * True when canonical lanes are still the generic create-time
- * projection of the stored lanes (same products and quantities, no
- * variant/condition identity yet). Anything else means a legitimate
- * update has landed since create, so the stored lanes must never be
- * replayed over it.
- */
-function canonicalIsGenericProjection(
-  canonical: CanonicalResult,
-  lanes: {
-    productId: string;
-    quantity: number;
-  }[]
-): boolean {
-  const lineItems = (canonical.body as { line_items?: unknown }).line_items;
-  if (!Array.isArray(lineItems) || lineItems.length !== lanes.length)
-    return false;
-  const expected = new Map(
-    lanes.map((lane) => [lane.productId, lane.quantity])
-  );
-  return lineItems.every((line) => {
-    const item = (line as { item?: Record<string, unknown> }).item ?? {};
-    const productId = item.id;
-    if (typeof productId !== 'string') return false;
-    if (item.variant_id || item.condition) return false;
-    return expected.get(productId) === item.quantity;
-  });
-}
-
-/** Clears the one-shot create-recovery marker; false when it stays set. */
-async function clearRecoveryMarker(
-  input: {
-    cartId: string;
-    merchant: AgenticMerchantContext;
-    supabase: SupabaseClient;
-  },
-  cart: unknown
-): Promise<boolean> {
-  const metadata = (cart as { metadata?: unknown }).metadata;
-  const loadedUpdatedAt = (cart as { updated_at?: unknown }).updated_at;
-  let clearQuery = input.supabase
-    .from('agentic_cart_sessions')
-    .update({
-      metadata: {
-        ...(metadata && typeof metadata === 'object'
-          ? (metadata as Record<string, unknown>)
-          : {}),
-        create_recovery_pending: false,
-      },
-      updated_at: new Date().toISOString(),
-    })
-    .eq('cart_id', input.cartId)
-    .eq('merchant_id', input.merchant.id);
-  if (typeof loadedUpdatedAt === 'string') {
-    clearQuery = clearQuery.eq('updated_at', loadedUpdatedAt);
-  }
-  const { data: clearedRows, error: clearError } =
-    await clearQuery.select('cart_id');
-  if (clearError) {
-    logger.error({
-      error: sanitizeForLog(clearError),
-      merchantId: input.merchant.id,
-      message: 'Failed to clear UCP create recovery marker',
-      route: 'ucp-cart-read',
-    });
-    return false;
-  }
-  if (clearedRows.length === 0) {
-    logger.error({
-      merchantId: input.merchant.id,
-      message: 'UCP create recovery marker clear lost a concurrent write race',
-      route: 'ucp-cart-read',
-    });
-    return false;
-  }
-  return true;
 }
 
 /** Reads through the authority supplied by the authenticated route. */
@@ -216,8 +98,16 @@ export async function readUcpCart(
       if (lanes && !canonicalHasLanes(canonical, lanes)) {
         if (!canonicalIsGenericProjection(canonical, lanes)) {
           // A legitimate update has landed since create: the stored
-          // lanes are stale. Retire the marker and answer canonical.
-          await clearRecoveryMarker(input, cartResult.cart);
+          // lanes are stale. Retire the marker and answer canonical;
+          // if retirement fails the marker stays armed, so fail
+          // closed instead of reporting success.
+          const retired = await clearRecoveryMarker(input, cartResult.cart);
+          if (!retired) {
+            return NextResponse.json(
+              { code: 'temporarily_unavailable' },
+              { status: 503 }
+            );
+          }
           return NextResponse.json(canonical.body, {
             status: canonical.status,
           });

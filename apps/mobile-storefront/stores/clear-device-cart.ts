@@ -18,21 +18,19 @@ export async function clearDeviceCartForAccountTeardown(): Promise<void> {
     // so retire both explicitly for the next device owner.
     const state = useCartStore.getState();
     const merchantId = state.sharedCartRef?.merchantId;
-    await state.clearCart();
-    useCartStore.setState({ sharedCartRef: undefined });
     if (merchantId) {
-      // Retire rather than delete: the retained proof stays
-      // available for the later server revocation flush on the
-      // next session establishment, instead of stranding live
-      // grant authority when no writer is mounted to revoke it.
-      // A storage failure propagates: reporting success here would
-      // strand the previous account's proof with no retry owner.
+      // Retire BEFORE erasing the only merchant reference, and let a
+      // storage failure propagate with the reference intact: callers
+      // catch and continue sign-out, so erasing first would leave
+      // the still-active proof with no retry owner.
       if (cartSessionStorage.retire) {
         await cartSessionStorage.retire(merchantId);
       } else {
         await cartSessionStorage.remove(merchantId);
       }
     }
+    await state.clearCart();
+    useCartStore.setState({ sharedCartRef: undefined });
     return;
   }
   const retirement = retireSharedCartWriter();

@@ -22,9 +22,11 @@ const summary = {
 
 function Harness({
   hasInitialSummary = false,
+  settledWatch = false,
   terminal,
 }: {
   hasInitialSummary?: boolean;
+  settledWatch?: boolean;
   terminal: boolean;
 }) {
   const [current, setCurrent] = useState<RefundSummary | null>(null);
@@ -36,6 +38,7 @@ function Harness({
     onSummary: setCurrent,
     orderId: 'order-1',
     revision,
+    settledWatch,
     terminal,
   });
   return React.createElement(
@@ -139,6 +142,46 @@ describe('useRefundStatusPolling', () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 
+  it('watches settled orders slowly, then stops and relies on tab return', async () => {
+    render(
+      React.createElement(Harness, {
+        settledWatch: true,
+        terminal: false,
+      })
+    );
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    // The 30s cadence does not apply: four minutes stay quiet.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(240_000);
+    });
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    // The first slow poll lands at five minutes.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
+    // Eleven more slow polls exhaust the hour-long watch; the
+    // thirteenth tick stops the timer instead of billing the RPC.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11 * 300_000);
+    });
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(13);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600_000);
+    });
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(13);
+    // Returning to the tab still refreshes after the watch ends.
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(14);
+  });
   it('pauses while the tab is hidden and refreshes on return', async () => {
     render(React.createElement(Harness, { terminal: false }));
     await act(async () => {});

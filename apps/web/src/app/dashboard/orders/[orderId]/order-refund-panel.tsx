@@ -81,19 +81,23 @@ export function OrderRefundPanel({
   // Only a refunded order without a Paystack payment is terminal:
   // other rows can still transition asynchronously (drain retries,
   // provider reconciliation), and the ledger-derived balance would
-  // go stale without the poll. A Paystack-backed refund can even
-  // flip after completion when a later contradictory provider
-  // verdict re-opens the balance, so those pages keep polling past
-  // refunded. The flag (not the outstanding-leg list, which empties
-  // exactly at full refund) carries the provider-backed signal.
+  // go stale without the poll. A refunded Paystack-backed order is
+  // settled but still watched: a later contradictory provider
+  // verdict can re-open the balance, so those pages keep a slow
+  // bounded watch past refunded instead of the 30s poll. The flag
+  // (not the outstanding-leg list, which empties exactly at full
+  // refund) carries the provider-backed signal.
   const terminal =
     summary?.status === 'refunded' && !summary?.hasPaystackPayment;
+  const settledWatch =
+    summary?.status === 'refunded' && summary?.hasPaystackPayment === true;
   useRefundStatusPolling({
     hasInitialSummary: initialSummary !== undefined,
     onError: setError,
     onSummary: setSummary,
     orderId,
     revision,
+    settledWatch,
     terminal,
   });
 

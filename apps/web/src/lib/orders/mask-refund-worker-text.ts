@@ -17,10 +17,14 @@ const REFUND_WORKER_ERROR_LABELS = new Set([
 ]);
 const REFUND_GENERIC_LABEL =
   'The refund ran into a problem. Support has the details.';
-// Event detail keys the audit trigger writes. Anything else in a
+// Event detail keys the audit triggers write. Anything else in a
 // details object comes from a legacy, backfilled, or future writer
 // that bypassed the write-time mapper, so it is dropped rather
-// than trusted.
+// than trusted. amount/reference come from the terminal-row sync
+// trigger (manual_recorded/provider_confirmed): they are the
+// merchant's own order data, already visible to the same actors
+// via history and direct transactions reads, so the route serves
+// them exactly like direct REST instead of masking them.
 const REFUND_EVENT_DETAIL_KEYS = new Set([
   'status',
   'attempts',
@@ -28,6 +32,8 @@ const REFUND_EVENT_DETAIL_KEYS = new Set([
   'retryRequests',
   'previousAttempts',
   'previousError',
+  'amount',
+  'reference',
 ]);
 // Event keys the timeline reads. actor is confined at the SQL
 // source (this allow-list is the backstop): the status action

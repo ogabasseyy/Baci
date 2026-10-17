@@ -457,6 +457,10 @@ jobs:
         env:
           MINIMAL_PHASE1: 1
         run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
+      - name: Test order-refund claim/manual concurrency (Phase 2 on replayed schema)
+        env:
+          PGPORT: 54322
+        run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
 
   quality-misc:
     name: Quality Gate - Misc

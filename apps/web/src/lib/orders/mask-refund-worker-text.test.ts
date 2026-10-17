@@ -46,6 +46,30 @@ describe('maskRefundWorkerText', () => {
       },
     ]);
   });
+  it('passes terminal-row sync details through like direct REST', () => {
+    const masked = maskRefundWorkerText({
+      events: [
+        {
+          id: 'event-9',
+          action: 'manual_recorded',
+          date: '2026-09-28T12:00:00Z',
+          details: {
+            amount: 100,
+            reference: 'bank-1',
+            provider_secret: 'sk_live',
+          },
+        },
+      ],
+    });
+    expect(masked.events).toEqual([
+      {
+        id: 'event-9',
+        action: 'manual_recorded',
+        date: '2026-09-28T12:00:00Z',
+        details: { amount: 100, reference: 'bank-1' },
+      },
+    ]);
+  });
   it('keeps allow-listed event error labels verbatim', () => {
     const masked = maskRefundWorkerText({
       events: [{ id: 'event-2', details: { error: QUEUED } }],

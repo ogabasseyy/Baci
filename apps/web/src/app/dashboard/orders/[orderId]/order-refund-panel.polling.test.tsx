@@ -56,11 +56,13 @@ describe('OrderRefundPanel polling', () => {
       vi.useRealTimers();
     }
   });
-  it('keeps polling a refunded Paystack-backed order', async () => {
+  it('watches a refunded Paystack-backed order slowly, then stops', async () => {
     // The durable flag (not legs, which empty exactly at full
     // refund) carries the provider-backed signal: a later
     // contradictory provider verdict can still re-open the
-    // balance, including behind self-terminalized legs.
+    // balance, including behind self-terminalized legs — but the
+    // server sweep owns long-term detection, so the page watches
+    // slowly for an hour instead of polling every 30s forever.
     vi.useFakeTimers();
     try {
       vi.stubGlobal(
@@ -79,8 +81,16 @@ describe('OrderRefundPanel polling', () => {
         expect(screen.getAllByText('Refunded').length).toBeGreaterThan(0)
       );
       const settled = vi.mocked(fetch).mock.calls.length;
+      // No 30s poll: the slow watch fires at five minutes.
       await vi.advanceTimersByTimeAsync(61_000);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(settled);
+      await vi.advanceTimersByTimeAsync(240_000);
       expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(settled);
+      // The hour-long watch exhausts, then the page goes quiet.
+      await vi.advanceTimersByTimeAsync(12 * 300_000);
+      const watched = vi.mocked(fetch).mock.calls.length;
+      await vi.advanceTimersByTimeAsync(600_000);
+      expect(vi.mocked(fetch)).toHaveBeenCalledTimes(watched);
     } finally {
       vi.useRealTimers();
     }

@@ -6,18 +6,25 @@ import type { RefundSummary } from '@/lib/orders/refund-summary';
 // Loads the refund status on mount and re-polls every 30s until the
 // refund reaches a terminal state: terminal summaries never change
 // without a new submission, which reloads inline, so polling past
-// them only loads a payments-adjacent RPC. Hidden tabs pause:
-// refunded Paystack orders poll indefinitely by design (a later
-// contradictory verdict can re-open the balance), so without the
-// pause every background order tab would bill the refund RPC every
-// 30s forever. Returning to the tab refreshes immediately instead
-// of waiting out the interval on stale balances.
+// them only loads a payments-adjacent RPC. Hidden tabs pause, and
+// returning to the tab refreshes immediately instead of waiting
+// out the interval on stale balances.
+//
+// A settled (refunded Paystack-backed) order keeps a slow bounded
+// contradiction watch instead of the 30s poll: a later provider
+// verdict can re-open the balance, but the server-side
+// completed-refund sweep owns long-term detection, so one order
+// view watches for an hour, then stops and relies on the sweep
+// plus refresh-on-tab-return.
+const SETTLED_WATCH_INTERVAL_MS = 300_000;
+const SETTLED_WATCH_MAX_POLLS = 12;
 export function useRefundStatusPolling({
   hasInitialSummary,
   onError,
   onSummary,
   orderId,
   revision,
+  settledWatch,
   terminal,
 }: {
   hasInitialSummary: boolean;
@@ -25,6 +32,7 @@ export function useRefundStatusPolling({
   onSummary: (summary: RefundSummary) => void;
   orderId: string;
   revision: { current: number };
+  settledWatch: boolean;
   terminal: boolean;
 }) {
   const loadedOrder = useRef<string | null>(null);
@@ -87,12 +95,25 @@ export function useRefundStatusPolling({
         controller.abort();
       };
     }
-    const timer = setInterval(() => {
-      if (document.hidden) {
-        return;
-      }
-      void load();
-    }, 30_000);
+    // Hidden ticks never consume the settled cap: only polls that
+    // actually bill the RPC count toward the hour.
+    let settledPolls = 0;
+    const timer = setInterval(
+      () => {
+        if (document.hidden) {
+          return;
+        }
+        if (settledWatch) {
+          settledPolls += 1;
+          if (settledPolls > SETTLED_WATCH_MAX_POLLS) {
+            clearInterval(timer);
+            return;
+          }
+        }
+        void load();
+      },
+      settledWatch ? SETTLED_WATCH_INTERVAL_MS : 30_000
+    );
     const onVisibility = () => {
       if (!document.hidden) {
         void load();
@@ -105,7 +126,16 @@ export function useRefundStatusPolling({
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-    // The setters are stable: this reloads on route and terminal
-    // transitions only (hasInitialSummary is mount-only).
-  }, [hasInitialSummary, onError, onSummary, orderId, revision, terminal]);
+    // The setters are stable: this reloads on route, terminal,
+    // and settled-watch transitions only (hasInitialSummary is
+    // mount-only).
+  }, [
+    hasInitialSummary,
+    onError,
+    onSummary,
+    orderId,
+    revision,
+    settledWatch,
+    terminal,
+  ]);
 }

@@ -89,12 +89,12 @@ describe('Paystack cancellation refund link validation', () => {
         currency: 'NGN',
         id: '42',
         status: 'processed',
-        transaction: 123,
+        transaction: '123',
       },
       success: true,
     });
     provider.verifyTransaction.mockResolvedValue({
-      data: { amount: 10000, currency: 'NGN', id: 123, reference: 'PSK-1' },
+      data: { amount: 10000, currency: 'NGN', id: '123', reference: 'PSK-1' },
       success: true,
     });
     db.rpc.mockResolvedValue({ data: 'processed', error: null });
@@ -126,12 +126,12 @@ describe('Paystack cancellation refund link validation', () => {
         currency: 'NGN',
         id: '7',
         status: 'processed',
-        transaction: 123,
+        transaction: '123',
       },
       success: true,
     });
     provider.verifyTransaction.mockResolvedValue({
-      data: { amount: 10000, currency: 'NGN', id: 123, reference: 'PSK-1' },
+      data: { amount: 10000, currency: 'NGN', id: '123', reference: 'PSK-1' },
       success: true,
     });
     db.rpc.mockResolvedValue({ data: 'processed', error: null });
@@ -177,12 +177,12 @@ describe('Paystack cancellation refund link validation', () => {
         currency: 'NGN',
         id: big,
         status: 'processed',
-        transaction: 123,
+        transaction: '123',
       },
       success: true,
     });
     provider.verifyTransaction.mockResolvedValue({
-      data: { amount: 10000, currency: 'NGN', id: 123, reference: 'PSK-1' },
+      data: { amount: 10000, currency: 'NGN', id: '123', reference: 'PSK-1' },
       success: true,
     });
     db.rpc.mockResolvedValue({ data: 'processed', error: null });
@@ -200,5 +200,82 @@ describe('Paystack cancellation refund link validation', () => {
     ).resolves.toBe('updated');
     // The provider was asked for the exact decimal id.
     expect(provider.fetchRefund).toHaveBeenCalledWith(big, expect.anything());
+  });
+
+  it('compares >2^53 transaction ids as exact decimal text', async () => {
+    // 9007199254740993 rounds to 9007199254740992 as a double: a
+    // numeric compare would call the adjacent pair equal and record
+    // evidence against the wrong transaction.
+    const big = '9007199254740993';
+    const db = database();
+    db.query.maybeSingle.mockResolvedValue({
+      data: {
+        amount: 100,
+        currency: 'NGN',
+        gateway: 'paystack',
+        gateway_reference: 'PSK-1',
+        id: '11111111-1111-4111-8111-111111111111',
+        merchant_id: 'merchant-1',
+        order_id: 'order-1',
+        status: 'completed',
+      },
+      error: null,
+    });
+    provider.fetchRefund.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: '42',
+        status: 'processed',
+        transaction: big,
+      },
+      success: true,
+    });
+    provider.verifyTransaction.mockResolvedValue({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: big,
+        reference: 'PSK-1',
+      },
+      success: true,
+    });
+    db.rpc.mockResolvedValue({ data: 'processed', error: null });
+
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        metadata: {
+          ...refund.metadata,
+          provider_payment_transaction_id: big,
+        },
+      })
+    ).resolves.toBe('updated');
+    expect(db.rpc).toHaveBeenCalledWith(
+      'record_verified_paystack_cancellation_refund_v1',
+      expect.objectContaining({ p_provider_transaction_id: big })
+    );
+
+    // Adjacent rounded-equal pair must mismatch, not match. The
+    // metadata stamp tracks the verify side so only the transaction
+    // comparison throws, proving it is exact.
+    provider.verifyTransaction.mockResolvedValueOnce({
+      data: {
+        amount: 10000,
+        currency: 'NGN',
+        id: '9007199254740992',
+        reference: 'PSK-1',
+      },
+      success: true,
+    });
+    await expect(
+      reconcilePaystackCancellationRefund(db as never, {
+        ...refund,
+        metadata: {
+          ...refund.metadata,
+          provider_payment_transaction_id: '9007199254740992',
+        },
+      })
+    ).rejects.toThrow('paystack_refund_evidence_mismatch');
   });
 });

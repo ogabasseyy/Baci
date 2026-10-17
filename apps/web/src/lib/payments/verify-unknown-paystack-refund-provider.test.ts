@@ -22,7 +22,7 @@ const providerRefund = {
   currency: 'NGN',
   id: '202',
   status: 'processed',
-  transaction: 555,
+  transaction: '555',
 };
 
 describe('verifyUnknownPaystackRefundProvider', () => {
@@ -33,7 +33,7 @@ describe('verifyUnknownPaystackRefundProvider', () => {
       success: true,
     });
     mocks.fetchPaystackPaymentById.mockResolvedValue({
-      data: { id: 555, reference: 'PSK-1' },
+      data: { id: '555', reference: 'PSK-1' },
       success: true,
     });
   });
@@ -46,7 +46,7 @@ describe('verifyUnknownPaystackRefundProvider', () => {
       expect.any(AbortSignal)
     );
     expect(mocks.fetchPaystackPaymentById).toHaveBeenCalledWith(
-      555,
+      '555',
       expect.any(AbortSignal)
     );
     expect(result).toEqual({
@@ -98,7 +98,7 @@ describe('verifyUnknownPaystackRefundProvider', () => {
     );
 
     mocks.fetchPaystackPaymentById.mockResolvedValueOnce({
-      data: { id: 999, reference: 'PSK-1' },
+      data: { id: '999', reference: 'PSK-1' },
       success: true,
     });
 
@@ -109,7 +109,7 @@ describe('verifyUnknownPaystackRefundProvider', () => {
 
   it('throws when the resolved reference is unusable downstream', async () => {
     mocks.fetchPaystackPaymentById.mockResolvedValue({
-      data: { id: 555, reference: 'not a valid ref!' },
+      data: { id: '555', reference: 'not a valid ref!' },
       success: true,
     });
 

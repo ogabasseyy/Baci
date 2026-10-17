@@ -6,7 +6,7 @@ describe('openPaystackRefundRecoveryWatch', () => {
     evidence: {
       amount_minor: 5829060,
       currency: 'NGN',
-      provider_payment_transaction_id: 123456789,
+      provider_payment_transaction_id: '123456789',
       provider_refund_status: 'processed',
     },
     providerRefundId: 987654321,

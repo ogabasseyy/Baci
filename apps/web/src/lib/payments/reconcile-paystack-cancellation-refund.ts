@@ -124,7 +124,9 @@ export async function reconcilePaystackCancellationRefund(
 
   const [providerRefund, providerPayment] = await Promise.all([
     fetchRefund(refundId, AbortSignal.timeout(8_000)),
-    verifyTransaction(payment.gateway_reference, AbortSignal.timeout(8_000)),
+    verifyTransaction(payment.gateway_reference, AbortSignal.timeout(8_000), {
+      textIds: true,
+    }),
   ]);
   if (!providerRefund.success || !providerPayment.success) {
     // A definitive provider rejection (unknown refund or payment ID)
@@ -147,8 +149,11 @@ export async function reconcilePaystackCancellationRefund(
   }
   const current = providerRefund.data;
   const original = providerPayment.data;
-  // The refund id compares as exact decimal text; the payment id
-  // keeps the shared reader like the verify path.
+  // Both provider identities compare as exact decimal text:
+  // Paystack IDs are unsigned 64-bit, so numeric compares would round
+  // adjacent large IDs equal. Legacy metadata stamps hold numbers;
+  // String() keeps safe small IDs matching while a rounded large
+  // stamp fails closed into evidence review instead of matching.
   if (
     current.id !== refundId ||
     current.transaction !== original.id ||
@@ -159,8 +164,9 @@ export async function reconcilePaystackCancellationRefund(
       normalizeCurrencyCode(refund.currency) ||
     normalizeCurrencyCode(original.currency) !==
       normalizeCurrencyCode(refund.currency) ||
-    (typeof refund.metadata?.provider_payment_transaction_id === 'number' &&
-      refund.metadata.provider_payment_transaction_id !== original.id)
+    (refund.metadata?.provider_payment_transaction_id !== undefined &&
+      refund.metadata.provider_payment_transaction_id !== null &&
+      String(refund.metadata.provider_payment_transaction_id) !== original.id)
   )
     throw new Error('paystack_refund_evidence_mismatch');
 
@@ -186,6 +192,8 @@ export async function reconcilePaystackCancellationRefund(
   ) {
     throw new Error('unknown_paystack_refund_status');
   }
+  // Decimal text into the bigint RPC arg: PostgREST coerces exact
+  // digit strings, while a number here would already be rounded.
   const { error } = await supabase.rpc(
     'record_verified_paystack_cancellation_refund_v1',
     {

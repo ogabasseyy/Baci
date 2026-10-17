@@ -7,7 +7,9 @@ import { paystackRequest } from '@/lib/paystack-request';
  * persist text (a >2^53 id would not survive a number round-trip),
  * while older callers pass safe numbers, and the response id quotes
  * off the wire text before parsing like the list path. The payment
- * transaction id keeps the shared reader like the verify path.
+ * transaction id quotes the same way: Paystack IDs are unsigned
+ * 64-bit, so a numeric parse would round adjacent large IDs equal
+ * before the reconcile identity check compares them.
  */
 export function fetchRefund(
   id: number | string,
@@ -15,7 +17,7 @@ export function fetchRefund(
 ): Promise<
   PaystackResult<{
     id: string;
-    transaction: number;
+    transaction: string;
     amount: number;
     currency: string;
     status: string;
@@ -34,8 +36,12 @@ export function fetchRefund(
       code: 'VALIDATION_ERROR',
     });
   }
+  // Mirror the list path: quote both the row id and the payment
+  // transaction pointer, since both are unsigned 64-bit identities.
   const quoteWireRefundIds = (raw: string): string =>
-    raw.replace(/"id"\s*:\s*(\d+)/g, '"id":"$1"');
+    raw
+      .replace(/"transaction"\s*:\s*(\d+)/g, '"transaction":"$1"')
+      .replace(/"id"\s*:\s*(\d+)/g, '"id":"$1"');
   return paystackRequest(`/refund/${idText}`, {
     signal,
     preprocessResponseText: quoteWireRefundIds,

@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { filePaystackRefundRecoveryReview } from './file-paystack-refund-recovery-review';
 
 export interface RefundRecoveryEvidence {
-  providerPaymentTransactionId: number;
+  providerPaymentTransactionId: string;
   providerRefundId: number | string;
   providerRefundStatus: string;
   reference: string;

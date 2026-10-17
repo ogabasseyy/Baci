@@ -20,7 +20,7 @@ describe('pending Paystack cancellation refund reconciliation', () => {
       success: true,
       data: {
         id: '42',
-        transaction: 123,
+        transaction: '123',
         amount: 10000,
         currency: 'NGN',
         status: 'processing',
@@ -28,7 +28,7 @@ describe('pending Paystack cancellation refund reconciliation', () => {
     });
     provider.verifyTransaction.mockResolvedValue({
       success: true,
-      data: { id: 123, reference: 'PSK-1', amount: 10000, currency: 'NGN' },
+      data: { id: '123', reference: 'PSK-1', amount: 10000, currency: 'NGN' },
     });
   });
 

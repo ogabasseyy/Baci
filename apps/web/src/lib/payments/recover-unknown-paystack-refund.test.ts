@@ -43,12 +43,12 @@ describe('recoverUnknownPaystackRefund', () => {
         currency: 'NGN',
         id: '202',
         status: 'processed',
-        transaction: 555,
+        transaction: '555',
       },
       success: true,
     });
     mocks.fetchPaystackPaymentById.mockResolvedValue({
-      data: { id: 555, reference: 'PSK-1' },
+      data: { id: '555', reference: 'PSK-1' },
       success: true,
     });
     mocks.reconcilePaystackCancellationRefund.mockResolvedValue('updated');
@@ -69,7 +69,7 @@ describe('recoverUnknownPaystackRefund', () => {
         merchant_id: 'merchant-1',
         metadata: {
           payment_transaction_id: 'pay-1',
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           provider_refund_status: 'processed',
           recovered_from_provider_event: true,
         },
@@ -96,7 +96,7 @@ describe('recoverUnknownPaystackRefund', () => {
         currency: 'NGN',
         id: '202',
         status: 'failed',
-        transaction: 555,
+        transaction: '555',
       },
       success: true,
     });
@@ -112,7 +112,7 @@ describe('recoverUnknownPaystackRefund', () => {
       expect.objectContaining({
         metadata: {
           payment_transaction_id: 'pay-1',
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           recovered_from_provider_event: true,
         },
         status: 'refund_pending',
@@ -130,7 +130,7 @@ describe('recoverUnknownPaystackRefund', () => {
     await recoverUnknownPaystackRefund(supabase, 202);
 
     expect(mocks.fetchPaystackPaymentById).toHaveBeenCalledWith(
-      555,
+      '555',
       expect.any(AbortSignal)
     );
     expect(insert).toHaveBeenCalledOnce();
@@ -142,7 +142,7 @@ describe('recoverUnknownPaystackRefund', () => {
     await recoverUnknownPaystackRefund(supabase, 202, 'STALE-REF');
 
     expect(mocks.fetchPaystackPaymentById).toHaveBeenCalledWith(
-      555,
+      '555',
       expect.any(AbortSignal)
     );
     expect(insert).toHaveBeenCalledWith(
@@ -150,7 +150,7 @@ describe('recoverUnknownPaystackRefund', () => {
         gateway_reference: '202',
         metadata: expect.objectContaining({
           payment_transaction_id: 'pay-1',
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
         }),
       })
     );
@@ -172,7 +172,7 @@ describe('recoverUnknownPaystackRefund', () => {
 
   it('never links a refund to a different numeric provider payment', async () => {
     mocks.fetchPaystackPaymentById.mockResolvedValue({
-      data: { id: 999, reference: 'PSK-1' },
+      data: { id: '999', reference: 'PSK-1' },
       success: true,
     });
     const { insert, supabase } = database();
@@ -223,7 +223,7 @@ describe('recoverUnknownPaystackRefund', () => {
         paystack_ref: null,
         metadata: expect.objectContaining({
           payment_transaction_id: 'pay-1',
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           provider_refund_id: 202,
           refund_evidence: expect.objectContaining({
             'provider:202': expect.objectContaining({
@@ -272,7 +272,7 @@ describe('recoverUnknownPaystackRefund', () => {
         currency: 'NGN',
         id: '202',
         status: 'processed',
-        transaction: 999,
+        transaction: '999',
       },
       success: true,
     });
@@ -340,7 +340,7 @@ describe('recoverUnknownPaystackRefund', () => {
 
   it('files invalid evidence before rejecting an unusable payment reference', async () => {
     mocks.fetchPaystackPaymentById.mockResolvedValue({
-      data: { id: 555, reference: 'not a valid ref!' },
+      data: { id: '555', reference: 'not a valid ref!' },
       success: true,
     });
     const insert = vi.fn().mockResolvedValue({ error: null });

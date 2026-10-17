@@ -4,7 +4,7 @@ import type { CompletedPaymentMatch } from './fetch-completed-payments-by-refere
 export interface RefundRecoveryWatchEvidence {
   amount_minor: number;
   currency: string;
-  provider_payment_transaction_id: number;
+  provider_payment_transaction_id: string;
   provider_refund_status: string;
 }
 

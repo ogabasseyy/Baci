@@ -43,10 +43,10 @@ const current = {
   currency: 'NGN',
   id: '202',
   status: 'processed',
-  transaction: 555,
+  transaction: '555',
 };
 const evidence = {
-  providerPaymentTransactionId: 555,
+  providerPaymentTransactionId: '555',
   providerRefundId: 202,
   providerRefundStatus: 'failed',
   reference: 'PSK-1',
@@ -118,7 +118,7 @@ describe('recordRecoveredPaystackRefund', () => {
         merchant_id: 'merchant-1',
         metadata: {
           payment_transaction_id: 'pay-1',
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           provider_refund_status: 'processed',
           recovered_from_provider_event: true,
         },
@@ -152,7 +152,7 @@ describe('recordRecoveredPaystackRefund', () => {
       expect.objectContaining({
         metadata: {
           payment_transaction_id: 'pay-1',
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           recovered_from_provider_event: true,
         },
       })

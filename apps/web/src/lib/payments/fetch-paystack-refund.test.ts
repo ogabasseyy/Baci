@@ -58,4 +58,22 @@ describe('fetchRefund', () => {
       code: 'VALIDATION_ERROR',
     });
   });
+
+  it('quotes wire transaction ids above 2^53 as decimal text', async () => {
+    mocks.paystackRequest.mockResolvedValue({ success: true });
+
+    await fetchRefund(42);
+
+    const preprocess = mocks.paystackRequest.mock.calls[0][1]
+      .preprocessResponseText as (raw: string) => string;
+    const big = '9007199254740993';
+    const parsed = JSON.parse(
+      preprocess(
+        `{"status":true,"data":{"id":${big},"transaction":${big},` +
+          `"amount":10000,"currency":"NGN","status":"processed"}}`
+      )
+    ).data;
+    expect(parsed.id).toBe(big);
+    expect(parsed.transaction).toBe(big);
+  });
 });

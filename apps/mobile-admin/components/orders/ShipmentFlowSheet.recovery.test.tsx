@@ -2,12 +2,15 @@ import '@testing-library/jest-dom/vitest';
 import type { Order } from '@baci/shared';
 import type { QueryClient } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, type ReactNode, useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createOrderDetailsShipmentActions } from '@/hooks/createOrderDetailsShipmentActions';
 import { handleOrderDetailsProviderBookingError } from '@/hooks/handleOrderDetailsProviderBookingError';
 import { OrderStatusUpdateError } from '@/hooks/orders/order-status-update-error';
-import { canUseSelectedShippingProvider } from '@/lib/order-shipment';
+import {
+  canUseSelectedShippingProvider,
+  type ShipmentFlowStep,
+} from '@/lib/order-shipment';
 import { ShipmentFlowSheet } from './ShipmentFlowSheet';
 
 const state = vi.hoisted(() => ({
@@ -249,6 +252,88 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
       ).toBeEnabled()
     );
     expect(booking).toHaveBeenCalledOnce();
+  });
+  it('can navigate required fulfillment details after closing and reopening required review', async () => {
+    const booking = vi.fn(async () => 'review_checkout_quote' as const);
+    function Flow() {
+      const [visible, setVisible] = useState(true);
+      const [step, setStep] = useState<ShipmentFlowStep>('method');
+      const details = { imei: 'synthetic-imei', serialNumber: '', items: [] };
+      const shipmentActions = createOrderDetailsShipmentActions({
+        fulfillmentDetails: details,
+        fulfillmentItemIndex: 0,
+        fulfillmentItems: [],
+        handleSaveRider: vi.fn(),
+        merchantId: 'merchant',
+        order: { ...order, fulfillment_details: details } as never,
+        pendingShipmentMode: 'provider',
+        providerBookingAvailable: true,
+        providerLabel: 'GIG Logistics',
+        queryClient: { invalidateQueries: vi.fn() } as unknown as QueryClient,
+        requiresShipmentDetails: true,
+        riderPhone: '',
+        setFulfillmentDetails: vi.fn(),
+        setFulfillmentItemIndex: vi.fn(),
+        setIsShipmentSubmitting: vi.fn(),
+        setPendingShipmentMode: vi.fn(),
+        setRiderPhone: vi.fn(),
+        setShipmentFlowStep: setStep,
+        setShowShipmentFlow: setVisible,
+        setShowStatusModal: vi.fn(),
+        setSuccessModal: vi.fn(),
+        shipmentFlowStep: step,
+        showShipmentFlow: visible,
+        updateStatus: vi.fn(),
+      });
+      return (
+        <>
+          <button type="button" onClick={shipmentActions.openShipmentFlow}>
+            Reopen shipment
+          </button>
+          <ShipmentFlowSheet
+            {...props}
+            canUseProvider
+            selectedMode="provider"
+            visible={visible}
+            step={step}
+            fulfillmentDetails={details}
+            onClose={shipmentActions.closeShipmentFlow}
+            onContinueFromDetails={
+              shipmentActions.proceedFromFulfillmentDetails
+            }
+            onContinueFromMethod={booking}
+          />
+        </>
+      );
+    }
+    render(<Flow />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Book with GIG Logistics' })
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Book with GIG Logistics' })
+      ).toBeDisabled()
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Close shipment flow' })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen shipment' }));
+    expect(
+      screen.queryByRole('button', { name: 'Preview new shipping quote' })
+    ).not.toBeInTheDocument();
+    const next = screen.getByRole('button', { name: 'Continue' });
+    expect(next).toBeEnabled();
+    fireEvent.click(next);
+    expect(
+      screen.getByRole('button', { name: 'Preview new shipping quote' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Book with GIG Logistics' })
+    ).toBeDisabled();
+    expect(booking).toHaveBeenCalledOnce();
+    expect(state.preview).not.toHaveBeenCalled();
+    expect(state.confirm).not.toHaveBeenCalled();
   });
   it('allows recovery when the old quote is deleted and the eligibility wallet panel is absent', () => {
     render(<ShipmentFlowSheet {...props} giglShipping={undefined} />);

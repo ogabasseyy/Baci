@@ -56,9 +56,9 @@ export function ShipmentFlowSheet({
   );
   const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   const [recoveryBlocking, setRecoveryBlocking] = useState(false);
-  const isRecoveryBlocking = recoveryRequired
-    ? selectedMode === 'provider'
-    : recoveryBlocking;
+  const isRecoveryBlocking =
+    step === 'method' &&
+    (recoveryRequired ? selectedMode === 'provider' : recoveryBlocking);
   const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [activeScanField, setActiveScanField] = useState<
     'imei' | 'serialNumber' | null

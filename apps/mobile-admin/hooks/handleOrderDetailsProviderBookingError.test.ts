@@ -35,11 +35,12 @@ describe('handleOrderDetailsProviderBookingError', () => {
     expect(refreshBalance).not.toHaveBeenCalled();
   });
 
-  it('requests explicit checkout review only for eligible saved-quote rejections', async () => {
-    const error = new OrderStatusUpdateError(
-      'Review shipping',
-      'SHIPPING_QUOTE_RECONFIRM_REQUIRED'
-    );
+  it.each([
+    'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+    'SHIPPING_QUOTE_RECEIVER_MISMATCH',
+    'SHIPPING_QUOTE_ITEMS_MISMATCH',
+  ])('requests explicit checkout review only for eligible saved-quote rejection %s', async (code) => {
+    const error = new OrderStatusUpdateError('Review shipping', code);
     await expect(
       handleOrderDetailsProviderBookingError(error, undefined, true)
     ).resolves.toBe('review_checkout_quote');

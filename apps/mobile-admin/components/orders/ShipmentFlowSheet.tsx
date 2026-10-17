@@ -54,6 +54,7 @@ export function ShipmentFlowSheet({
   const recoveryRequired = Boolean(
     recoveryOrder && recoveryRequiredOrderId === recoveryOrder.id
   );
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
   const [recoveryBlocking, setRecoveryBlocking] = useState(false);
   const isRecoveryBlocking = recoveryRequired
     ? selectedMode === 'provider'
@@ -119,8 +120,10 @@ export function ShipmentFlowSheet({
       return;
     }
     const outcome = await onContinueFromMethod();
-    if (outcome === 'review_checkout_quote' && recoveryOrder)
+    if (outcome === 'review_checkout_quote' && recoveryOrder) {
+      setRecoveryAttempt((attempt) => attempt + 1);
       setRecoveryRequiredOrderId(recoveryOrder.id);
+    }
   };
   return (
     <Modal
@@ -220,7 +223,7 @@ export function ShipmentFlowSheet({
               recoveryOrder &&
               (!recoveryRequired || selectedMode === 'provider') ? (
                 <CheckoutShippingRecoveryPanel
-                  key={recoveryOrder.id}
+                  key={`${recoveryOrder.id}:${recoveryAttempt}`}
                   order={recoveryOrder}
                   required={recoveryRequired}
                   onConfirmed={() => setRecoveryRequiredOrderId(null)}

@@ -153,14 +153,15 @@ describe('ShipmentFlowSheet prepaid recovery reachability', () => {
     expect(state.confirm).not.toHaveBeenCalled();
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
-  it('opens required recovery after booking rejects the saved quote and keeps Book blocked through cancel/reopen', async () => {
+  it.each([
+    'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+    'SHIPPING_QUOTE_RECEIVER_MISMATCH',
+    'SHIPPING_QUOTE_ITEMS_MISMATCH',
+  ])('opens required recovery after %s and keeps Book blocked through cancel/reopen', async (code) => {
     const updateStatus = vi
       .fn()
       .mockRejectedValue(
-        new OrderStatusUpdateError(
-          'Review saved shipping quote',
-          'SHIPPING_QUOTE_RECONFIRM_REQUIRED'
-        )
+        new OrderStatusUpdateError('Review saved shipping quote', code)
       );
     const shipmentActions = createOrderDetailsShipmentActions({
       fulfillmentDetails: props.fulfillmentDetails,

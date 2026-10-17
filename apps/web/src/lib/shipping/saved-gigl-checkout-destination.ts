@@ -1,5 +1,6 @@
 import type { OrderForShipmentReceiver } from './build-order-shipment-receiver';
 import { assertQuoteReceiverMatchesOrder } from './international-quote-order-guard';
+import { isNigeriaRecoveryPin } from './is-nigeria-recovery-pin';
 import { normalizeAddressForQuoteMatch } from './order-quote-destination-address';
 import { OrderShipmentBookingError } from './order-shipment-booking-error';
 import type { QuoteRequest } from './types';
@@ -9,14 +10,15 @@ export function resolveSavedGiglCheckoutDestination<
   T extends Pick<OrderForShipmentReceiver, 'shipping_address'>,
 >(order: T, request: QuoteRequest): T {
   const { latitude, longitude } = request.receiver;
-  // Never turn missing or malformed saved pins into carrier station defaults.
+  // Never turn missing, malformed or foreign saved pins into station defaults.
   if (
     typeof latitude !== 'number' ||
     !Number.isFinite(latitude) ||
     Math.abs(latitude) > 90 ||
     typeof longitude !== 'number' ||
     !Number.isFinite(longitude) ||
-    Math.abs(longitude) > 180
+    Math.abs(longitude) > 180 ||
+    !isNigeriaRecoveryPin(latitude, longitude)
   ) {
     throw new OrderShipmentBookingError(
       'Review and confirm the shipping destination before booking.',

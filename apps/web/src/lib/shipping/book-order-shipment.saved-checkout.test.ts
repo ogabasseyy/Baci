@@ -141,6 +141,22 @@ describe('saved GIG checkout booking integration', () => {
     expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
     expect(shippingService.bookShipment).not.toHaveBeenCalled();
   });
+  it.each([
+    [0, 0],
+    [9.3, 13.4],
+  ])('rejects a foreign saved destination %s,%s before tariff lookup or booking', async (latitude, longitude) => {
+    const client = await fixture();
+    const saved = await client.from('shipping_quotes').select().single();
+    Object.assign(saved.data.quote_request.receiver, { latitude, longitude });
+    await expect(
+      bookOrderShipment(client, 'merchant-1', 'order-1')
+    ).rejects.toMatchObject({
+      code: 'SHIPPING_QUOTE_RECEIVER_MISMATCH',
+      status: 400,
+    });
+    expect(shippingService.getProviderQuotes).not.toHaveBeenCalled();
+    expect(shippingService.bookShipment).not.toHaveBeenCalled();
+  });
   it('returns a definitive pre-booking error if background checking fails', async () => {
     const client = await fixture();
     vi.mocked(shippingService.getProviderQuotes).mockRejectedValue(

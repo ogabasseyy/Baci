@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import boundary from './data/nigeria-adm0-boundary.json';
 import { resolveSavedGiglCheckoutDestination } from './saved-gigl-checkout-destination';
 import type { QuoteRequest } from './types';
 
@@ -86,6 +87,28 @@ describe('bound saved GIG checkout destination', () => {
     ).toThrow(
       expect.objectContaining({ code: 'SHIPPING_QUOTE_RECEIVER_MISMATCH' })
     );
+  });
+  it.each([
+    [0, 0],
+    [9.3, 13.4],
+  ])('rejects a globally valid but foreign saved Nigerian pin %s,%s', (latitude, longitude) => {
+    const invalid = {
+      ...request,
+      receiver: { ...request.receiver, latitude, longitude },
+    };
+    expect(() => resolveSavedGiglCheckoutDestination(order, invalid)).toThrow(
+      expect.objectContaining({ code: 'SHIPPING_QUOTE_RECEIVER_MISMATCH' })
+    );
+  });
+  it('accepts a saved pin exactly on the existing Nigeria boundary', () => {
+    const [longitude, latitude] = boundary.coordinates[0][0];
+    const quoted = {
+      ...request,
+      receiver: { ...request.receiver, latitude, longitude },
+    };
+    expect(
+      resolveSavedGiglCheckoutDestination(order, quoted).shipping_address
+    ).toMatchObject({ latitude, longitude });
   });
   it.each([
     { latitude: undefined, longitude: undefined },

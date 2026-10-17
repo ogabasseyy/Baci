@@ -14,7 +14,9 @@ export async function handleOrderDetailsProviderBookingError(
 ): Promise<ProviderBookingErrorOutcome> {
   const code = error instanceof OrderStatusUpdateError ? error.code : undefined;
   if (
-    code === 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' &&
+    (code === 'SHIPPING_QUOTE_RECONFIRM_REQUIRED' ||
+      code === 'SHIPPING_QUOTE_RECEIVER_MISMATCH' ||
+      code === 'SHIPPING_QUOTE_ITEMS_MISMATCH') &&
     checkoutRecoveryEligible
   ) {
     return 'review_checkout_quote';

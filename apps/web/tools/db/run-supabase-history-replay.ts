@@ -279,7 +279,7 @@ export async function runSupabaseHistoryReplay(
     } catch {
       cleanupFailed = true;
     }
-  } else if (keepReplay && ownership) process.stderr.write(`kept:${workdir}\n`);
+  } else if (keepReplay) process.stderr.write(`kept:${workdir}\n`);
   if (cleanupFailed) throw new Error('Supabase replay cleanup failed');
   if (failure) throw withCleanupDiagnostics(failure, cleanupResult);
   if (!receipt) throw new Error('Supabase replay did not produce a receipt');

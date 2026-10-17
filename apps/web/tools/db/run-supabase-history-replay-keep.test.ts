@@ -42,4 +42,25 @@ describe('runSupabaseHistoryReplay keep mode', () => {
       stderrWrite.mockRestore();
     }
   });
+
+  it('prints the retained path when keep mode fails before ownership exists', async () => {
+    const fixture = createSupabaseReplayRuntimeFixture();
+    fixture.deps.createOwnership = vi.fn(async () => {
+      throw new Error('ownership creation failed');
+    });
+    const stderrWrite = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    vi.stubEnv('BACI_REPLAY_KEEP', '1');
+    try {
+      await expect(
+        runSupabaseHistoryReplay(fixture.replayOptions(), fixture.deps)
+      ).rejects.toThrow(/^ownership creation failed$/);
+      expect(fixture.removed).toEqual([]);
+      expect(stderrWrite).toHaveBeenCalledWith(`kept:${fixture.workdir}\n`);
+    } finally {
+      vi.unstubAllEnvs();
+      stderrWrite.mockRestore();
+    }
+  });
 });

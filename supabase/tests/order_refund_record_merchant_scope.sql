@@ -24,6 +24,8 @@ DECLARE
   v_merchant_b uuid := '9ef80100-0000-4000-8000-000000000002';
   v_order_id uuid := '9ef81000-0000-4000-8000-000000000001';
   v_leg_id uuid := '9ef82000-0000-4000-8000-000000000001';
+  v_ps_order_id uuid := '9ef81000-0000-4000-8000-000000000002';
+  v_ps_leg_id uuid := '9ef82000-0000-4000-8000-000000000005';
 BEGIN
   INSERT INTO auth.users (
     id, instance_id, aud, role, email, encrypted_password,
@@ -51,15 +53,21 @@ BEGIN
     payment_status, shipping_status, cancelled_at
   ) VALUES
     (v_order_id, v_merchant_a, 'SCOPE-001', 100, 100,
+      'paid', 'cancelled', pg_catalog.now()),
+    (v_ps_order_id, v_merchant_a, 'SCOPE-002', 100, 100,
       'paid', 'cancelled', pg_catalog.now());
 
-  -- Legitimate cash capture for merchant A.
+  -- Legitimate cash capture for merchant A, plus a lone Paystack
+  -- capture on the second order (the self-pin case: exactly one
+  -- outstanding external leg).
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
     status, gateway, gateway_reference, metadata
   ) VALUES
     (v_leg_id, v_merchant_a, v_order_id, 'payment', 100, 'NGN',
-      'completed', 'cash', 'scope-leg-a', '{}'::jsonb);
+      'completed', 'cash', 'scope-leg-a', '{}'::jsonb),
+    (v_ps_leg_id, v_merchant_a, v_ps_order_id, 'payment', 100, 'NGN',
+      'completed', 'paystack', 'scope-leg-ps', '{}'::jsonb);
 
   -- Rogue cross-merchant rows sharing the order id. Each trips one
   -- unscoped scan: the unallocated refund, the USD payment, and the
@@ -76,7 +84,13 @@ BEGIN
       '{}'::jsonb),
     ('9ef82000-0000-4000-8000-000000000004', v_merchant_b, v_order_id,
       'refund', 100, 'NGN', 'completed', 'manual', 'scope-rogue-drain',
-      jsonb_build_object('payment_transaction_id', v_leg_id::text));
+      jsonb_build_object('payment_transaction_id', v_leg_id::text)),
+    -- Rogue drain pinned to the Paystack capture: unscoped
+    -- pin-candidate/outstanding aggregates would read the leg as
+    -- fully drained and route the attestation to review.
+    ('9ef82000-0000-4000-8000-000000000006', v_merchant_b, v_ps_order_id,
+      'refund', 100, 'NGN', 'completed', 'manual', 'scope-rogue-ps',
+      jsonb_build_object('payment_transaction_id', v_ps_leg_id::text));
 
 END;
 $scope_fixtures$;
@@ -102,6 +116,16 @@ BEGIN
   ) INTO v_result;
   IF v_result IS NULL THEN
     RAISE EXCEPTION 'scoped record returned null';
+  END IF;
+  -- Unpinned Paystack attestation beside the rogue drain: the lone
+  -- capture self-pins (candidate/outstanding aggregates ignore the
+  -- merchant-B row) and the record proceeds to verification.
+  SELECT public.manage_order_refund(
+    '9ef81000-0000-4000-8000-000000000002', 'manual', 100,
+    pg_catalog.now(), 'paystack', 'scope-rec-ps', NULL, true
+  ) INTO v_result;
+  IF v_result IS NULL THEN
+    RAISE EXCEPTION 'scoped paystack record returned null';
   END IF;
 END;
 $scope_assert$;

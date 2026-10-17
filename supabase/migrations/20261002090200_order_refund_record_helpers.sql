@@ -71,14 +71,12 @@ BEGIN
       RAISE EXCEPTION 'payment_ledger_requires_review' USING ERRCODE='P0001';
     END IF;
     IF p_amount>v_remaining THEN RAISE EXCEPTION 'refund_exceeds_remaining' USING ERRCODE='P0001'; END IF;
-    IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id
-      AND merchant_id=p_merchant_id
+    IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id AND merchant_id=p_merchant_id
       AND transaction_type='refund' AND status IN ('completed','refunded')
       AND metadata->>'payment_transaction_id' IS NULL) THEN
       RAISE EXCEPTION 'unallocated_refund_requires_review' USING ERRCODE='P0001';
     END IF;
-    IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id
-      AND merchant_id=p_merchant_id
+    IF EXISTS (SELECT 1 FROM public.transactions WHERE order_id=p_order_id AND merchant_id=p_merchant_id
       AND transaction_type='payment'
       AND (status='completed'
         OR (status='refunded'
@@ -130,7 +128,7 @@ BEGIN
         AND leg.transaction_type='payment' AND leg.status='completed' AND leg.amount>0
         AND upper(btrim(leg.gateway))='PAYSTACK'
         AND leg.amount>(SELECT COALESCE(SUM(r.amount),0) FROM public.transactions r
-          WHERE r.order_id=p_order_id AND r.transaction_type='refund'
+          WHERE r.order_id=p_order_id AND r.merchant_id=p_merchant_id AND r.transaction_type='refund'
           AND r.status IN ('completed','refunded')
           AND upper(btrim(r.currency))=upper(btrim(leg.currency))
           AND r.metadata->>'payment_transaction_id'=leg.id::text);
@@ -145,7 +143,7 @@ BEGIN
       SELECT GREATEST(leg.amount-COALESCE(sum(r.amount),0),0)
         INTO v_pin_outstanding FROM public.transactions leg
         LEFT JOIN public.transactions r
-          ON r.order_id=p_order_id AND r.transaction_type='refund'
+          ON r.order_id=p_order_id AND r.merchant_id=p_merchant_id AND r.transaction_type='refund'
           AND r.status IN ('completed','refunded')
           AND upper(btrim(r.currency))=upper(btrim(leg.currency))
           AND r.metadata->>'payment_transaction_id'=leg.id::text
@@ -164,7 +162,7 @@ BEGIN
     -- route to review before allocating against these legs.
     SELECT COALESCE(SUM(GREATEST(leg.amount-COALESCE((
       SELECT SUM(r.amount) FROM public.transactions r
-      WHERE r.order_id=p_order_id AND r.transaction_type='refund'
+      WHERE r.order_id=p_order_id AND r.merchant_id=p_merchant_id AND r.transaction_type='refund'
       AND r.status IN ('completed','refunded')
       AND upper(btrim(r.currency))=upper(btrim(leg.currency))
       AND r.metadata->>'payment_transaction_id'=leg.id::text),0),0)),0)

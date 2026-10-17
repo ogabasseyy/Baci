@@ -15,9 +15,19 @@ describe('orderRefundSchema', () => {
     expect(orderRefundSchema.safeParse(manual).success).toBe(true);
   });
   it.each([
+    { amount: 27574.83 },
+    { amount: 100000000.01 },
+    { amount: 1e21 },
+  ])('accepts valid two-decimal amounts at any magnitude %j', (override) =>
+    expect(
+      orderRefundSchema.safeParse({ ...manual, ...override }).success
+    ).toBe(true));
+  it.each([
     { amount: -1 },
     { amount: 0 },
     { amount: 1.123 },
+    { amount: 100000000.011 },
+    { amount: 1.5e-7 },
     { confirmed: false },
     { reference: ' ' },
     { method: 'unknown' },

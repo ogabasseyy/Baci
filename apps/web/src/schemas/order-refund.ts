@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+// Exact decimal-place count off the shortest round-trip text: a
+// float epsilon on value*100 breaks past ~1e8 (the product's ULP
+// exceeds 1e-6), while the repr preserves the JSON author's
+// intended decimals at any magnitude. Exponent forms expand to
+// their true places, so whole-naira magnitudes stay valid.
+function hasAtMostTwoDecimalPlaces(value: number): boolean {
+  const m = /^(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/.exec(String(value));
+  if (!m) return false;
+  const fracLen = m[2]?.length ?? 0;
+  const exp = m[3] === undefined ? 0 : Number.parseInt(m[3], 10);
+  return fracLen - exp <= 2;
+}
+
 export const orderRefundSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('retry') }).strict(),
   z
@@ -9,10 +22,7 @@ export const orderRefundSchema = z.discriminatedUnion('action', [
         .number()
         .finite()
         .positive()
-        .refine(
-          (value) => Math.abs(value * 100 - Math.round(value * 100)) < 0.000001,
-          'Use at most two decimal places'
-        ),
+        .refine(hasAtMostTwoDecimalPlaces, 'Use at most two decimal places'),
       refundedAt: z.iso
         .datetime({ offset: true })
         .refine(

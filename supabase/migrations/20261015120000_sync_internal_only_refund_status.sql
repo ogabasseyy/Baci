@@ -30,20 +30,20 @@ CREATE OR REPLACE FUNCTION private.internal_reversal_coverage_v1(
 $$;
 REVOKE ALL ON FUNCTION private.internal_reversal_coverage_v1(uuid, uuid)
   FROM PUBLIC, anon, authenticated;
--- Effective paid total for legacy NULL-paid internal-only orders:
--- amount_paid is nullable since baseline, and a NULL total beside
--- funded internal legs is real customer money the flip must measure
--- against reversal coverage. Unlike the manager's
--- effective_amount_paid_v1 (which excludes wallet/savings because
--- they reverse through their own ledgers), the internal set counts
--- here: wallet/savings legs ARE the funded evidence for these
--- orders. Missing currency or no funded legs derives zero, which
--- fails the flip's positive-paid gate like before.
+-- Effective paid total for legacy NULL- or zero-paid internal-only
+-- orders: amount_paid is nullable since baseline, and a NULL or
+-- never-stamped 0 total beside funded internal legs is real
+-- customer money the flip must measure against reversal coverage.
+-- Unlike the manager's effective_amount_paid_v1 (which excludes
+-- wallet/savings because they reverse through their own ledgers),
+-- the internal set counts here: wallet/savings legs ARE the funded
+-- evidence for these orders. Missing currency or no funded legs
+-- derives zero, which fails the flip's positive-paid gate.
 CREATE OR REPLACE FUNCTION private.internal_only_effective_paid_v1(
   p_order_id uuid, p_merchant_id uuid
 ) RETURNS numeric LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
   SELECT COALESCE(
-    (SELECT o.amount_paid FROM public.orders o
+    (SELECT NULLIF(o.amount_paid, 0) FROM public.orders o
       WHERE o.id = p_order_id AND o.merchant_id = p_merchant_id),
     COALESCE((SELECT SUM(leg.amount)
       FROM public.transactions leg

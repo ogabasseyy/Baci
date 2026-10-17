@@ -226,20 +226,20 @@ GRANT EXECUTE ON FUNCTION private.refund_coverage_per_leg_v1(uuid,uuid,text)
   TO service_role, authenticated;
 GRANT EXECUTE ON FUNCTION private.uncovered_refund_obligation_v1(uuid,uuid,text,numeric,numeric)
   TO service_role, authenticated;
--- Effective paid total for legacy NULL-paid orders: amount_paid is
--- defaulted but nullable since baseline, and completed funded legs
--- beside a NULL total are real customer money. Treating NULL as
--- zero strands the payment (zero remainder, already_refunded on
--- every mutation). Derive from authoritative funded legs in the
--- order currency when NULL, excluding only wallet/savings (those
--- reverse through their own ledgers); cash-like internal legs
--- refund through the manual allocator, so they count. Membership
--- gates inside the per-leg listing, like
--- uncovered_refund_obligation_v1.
+-- Effective paid total for legacy NULL- or zero-paid orders:
+-- amount_paid is defaulted but nullable since baseline, and
+-- completed funded legs beside a NULL or never-stamped 0 total are
+-- real customer money. Treating either as zero strands the payment
+-- (zero remainder, already_refunded on every mutation). Derive from
+-- authoritative funded legs in the order currency when NULL or 0,
+-- excluding only wallet/savings (those reverse through their own
+-- ledgers); cash-like internal legs refund through the manual
+-- allocator, so they count. Membership gates inside the per-leg
+-- listing, like uncovered_refund_obligation_v1.
 CREATE OR REPLACE FUNCTION private.effective_amount_paid_v1(
   p_order_id uuid, p_merchant_id uuid, p_currency text, p_amount_paid numeric
 ) RETURNS numeric LANGUAGE sql SECURITY INVOKER SET search_path='' AS $$
-  SELECT COALESCE(p_amount_paid, COALESCE((SELECT SUM(l.leg_amount)
+  SELECT COALESCE(NULLIF(p_amount_paid, 0), COALESCE((SELECT SUM(l.leg_amount)
     FROM private.refund_coverage_per_leg_v1(
       p_order_id, p_merchant_id, p_currency) l
     WHERE l.is_funded AND NOT l.is_wallet_savings), 0));

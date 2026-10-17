@@ -168,7 +168,7 @@ BEGIN
     p_order_id, v_remaining);
 
   IF p_action <> 'status' THEN
-    IF v_order.shipping_status NOT IN ('cancelled','canceled') OR v_order.amount_paid <= 0 THEN
+    IF v_order.shipping_status NOT IN ('cancelled','canceled') OR v_paid <= 0 THEN
       RAISE EXCEPTION 'cancelled_paid_order_required' USING ERRCODE='P0001';
     END IF;
     IF p_action='manual' THEN

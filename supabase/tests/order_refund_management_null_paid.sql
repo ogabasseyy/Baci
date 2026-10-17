@@ -55,7 +55,11 @@ BEGIN
     -- Self-terminalized provider leg: the flag stays on so the
     -- panel keeps polling behind it.
     ('9ef51000-0000-4000-8000-000000000005', v_merchant_id, 'NULLPAID-005',
-      100, 100, 'paid', 'cancelled', pg_catalog.now());
+      100, 100, 'paid', 'cancelled', pg_catalog.now()),
+    -- Never-stamped zero total beside a funded leg: derives like
+    -- NULL instead of stranding behind the mutation gate.
+    ('9ef51000-0000-4000-8000-000000000006', v_merchant_id, 'NULLPAID-006',
+      100, 0, 'paid', 'cancelled', pg_catalog.now());
 
   INSERT INTO public.transactions (
     id, merchant_id, order_id, transaction_type, amount, currency,
@@ -79,7 +83,10 @@ BEGIN
         'confirmed', 'true')),
     ('9ef52000-0000-4000-8000-000000000007', v_merchant_id,
       '9ef51000-0000-4000-8000-000000000005', 'payment', 100, 'NGN',
-      'refunded', 'paystack', 'np-5', '{}'::jsonb);
+      'refunded', 'paystack', 'np-5', '{}'::jsonb),
+    ('9ef52000-0000-4000-8000-000000000008', v_merchant_id,
+      '9ef51000-0000-4000-8000-000000000006', 'payment', 100, 'NGN',
+      'completed', 'paystack', 'np-6', '{}'::jsonb);
 END;
 $null_paid_fixtures$;
 
@@ -133,6 +140,26 @@ BEGIN
   ) INTO v_result;
   IF (v_result->>'hasPaystackPayment')::boolean IS NOT TRUE THEN
     RAISE EXCEPTION 'self-terminalized leg dropped the provider flag';
+  END IF;
+  -- Zero-stamped total beside a funded leg: status derives the
+  -- balance and the mutation gate opens like the NULL case.
+  SELECT public.manage_order_refund(
+    '9ef51000-0000-4000-8000-000000000006'
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 100 THEN
+    RAISE EXCEPTION 'zero-paid remaining = %, want 100',
+      v_result->>'remaining';
+  END IF;
+  IF (v_result->>'canRecordManual')::boolean IS NOT TRUE THEN
+    RAISE EXCEPTION 'zero-paid order not manually recordable';
+  END IF;
+  SELECT public.manage_order_refund(
+    '9ef51000-0000-4000-8000-000000000006', 'manual', 100,
+    pg_catalog.now(), 'bank_transfer', 'zero-6', NULL, true
+  ) INTO v_result;
+  IF (v_result->>'remaining')::numeric <> 0 THEN
+    RAISE EXCEPTION 'zero-paid record left remaining %, want 0',
+      v_result->>'remaining';
   END IF;
 END;
 $null_paid_derivation$;

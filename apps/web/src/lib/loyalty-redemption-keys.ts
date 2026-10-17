@@ -17,78 +17,18 @@
 // record and adopts the winning claim after a bounded wait, so two
 // tabs still converge on one key; only if storage itself is broken
 // does the sequence fall back to a lone synchronous mint.
-const STORAGE_PREFIX = 'loyalty-redeem-key:';
-
-// Fallback cross-tab claim (used when Web Locks is unavailable): a tab
-// stakes a random claim token, then polls briefly; the lowest live
-// token wins and losers adopt the winner's minted key from storage.
-// Claims expire so a crashed claimant cannot block the intent.
-function storageIsUsable(): boolean {
-  // Private-mode / storage-disabled browsers throw or drop writes:
-  // probing once up front keeps the claim protocol from sleeping
-  // through its whole wait window on storage that can never answer.
-  try {
-    if (typeof localStorage === 'undefined') return false;
-    const probe = `${STORAGE_PREFIX}probe`;
-    localStorage.setItem(probe, '1');
-    localStorage.removeItem(probe);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const CLAIM_POLL_INTERVAL_MS = 25;
-const CLAIM_TTL_MS = 10_000;
-// Safety valve only: a live claim always expires within CLAIM_TTL_MS of
-// its last refresh and its owner mints promptly, so waiting out a live
-// claim terminates on its own. The deadline guards against pathological
-// re-staking loops, not against a single suspended winner.
-const CLAIM_MAX_WAIT_MS = 30_000;
-
-const keysByIntent = new Map<string, string>();
-
-// Intents whose key reached durable storage. Only those are subject to
-// storage reconciliation on read: when storage later reads empty, the
-// key was cleared (here or in another tab after its success), so the
-// cached copy must not be reused.
-const persistedIntents = new Set<string>();
+import {
+  keysByIntent,
+  mintKey,
+  persistedIntents,
+  readStored,
+  removeStored,
+  storageKey,
+} from './loyalty-redemption-key-store';
+import { coordinatedMint } from './loyalty-redemption-keys-coordinated';
 
 interface LockManagerLike {
   request(name: string, callback: () => Promise<string>): Promise<string>;
-}
-
-function storageKey(
-  merchantId: string,
-  customerId: string,
-  rewardId: string
-): string {
-  return `${STORAGE_PREFIX}${merchantId}:${customerId}:${rewardId}`;
-}
-
-function readStored(key: string): string | null {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function writeStored(key: string, value: string): void {
-  try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(key, value);
-  } catch {
-    // Durability is best-effort; the Map still dedupes this session.
-  }
-}
-
-function removeStored(key: string): void {
-  try {
-    if (typeof localStorage !== 'undefined') localStorage.removeItem(key);
-  } catch {
-    // The cleared Map entry already ends this intent's retries.
-  }
 }
 
 function lockManager(): LockManagerLike | null {
@@ -96,148 +36,6 @@ function lockManager(): LockManagerLike | null {
   const locks = (navigator as { locks?: LockManagerLike }).locks;
   return locks && typeof locks.request === 'function' ? locks : null;
 }
-
-interface MintClaim {
-  token: string;
-  expiresAt: number;
-}
-
-function readClaim(intent: string): MintClaim | null {
-  const raw = readStored(`${intent}:claim`);
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as Partial<MintClaim>;
-    if (
-      typeof parsed.token === 'string' &&
-      typeof parsed.expiresAt === 'number' &&
-      parsed.expiresAt > Date.now()
-    ) {
-      return { token: parsed.token, expiresAt: parsed.expiresAt };
-    }
-  } catch {
-    // A malformed claim is treated as expired and overwritten.
-  }
-  return null;
-}
-
-function writeClaim(intent: string, claim: MintClaim): void {
-  writeStored(`${intent}:claim`, JSON.stringify(claim));
-}
-
-function clearClaim(intent: string, token: string): void {
-  // Token-checked: never remove a newer claimant's record.
-  if (readClaim(intent)?.token === token) removeStored(`${intent}:claim`);
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Web Locks is unavailable or threw: coordinate the first mint through
-// a storage claim so concurrent tabs still converge on one key. Every
-// claimant stakes a token; the lowest live token owns the mint, and
-// once the key lands in storage every tab adopts it. A tab that loses
-// keeps waiting while the winner's claim is live — minting earlier
-// would let a winner suspended after claiming (but before storing its
-// key) resume and mint a second key. Claims expire, so a crashed
-// claimant bounds the wait.
-async function coordinatedMint(intent: string): Promise<string> {
-  // Without usable storage there is nothing to coordinate through and
-  // nothing durable to mint into: mintKey fails closed there.
-  if (!storageIsUsable()) return mintKey(intent);
-  const existing = readStored(intent);
-  if (existing) return existing;
-  const token = crypto.randomUUID();
-  const prior = readClaim(intent);
-  if (!prior || token < prior.token) {
-    writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });
-  }
-  const deadline = Date.now() + CLAIM_MAX_WAIT_MS;
-  for (;;) {
-    const stored = readStored(intent);
-    if (stored) {
-      clearClaim(intent, token);
-      return stored;
-    }
-    const claim = readClaim(intent);
-    if (!claim) {
-      // No live claim: stake ours and confirm ownership on the next
-      // poll before minting — a simultaneous claimant's write may
-      // have landed after this read, and only the token still in the
-      // record may mint.
-      writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });
-      await delay(CLAIM_POLL_INTERVAL_MS);
-      continue;
-    }
-    if (claim.token === token) {
-      // Settle before minting: a simultaneous claimant can overwrite
-      // this claim between our write and this read, and both tabs
-      // would then observe their own token and mint competing keys.
-      // Only the token still recorded after a poll interval may mint.
-      await delay(CLAIM_POLL_INTERVAL_MS);
-      const settledStored = readStored(intent);
-      if (settledStored) {
-        clearClaim(intent, token);
-        return settledStored;
-      }
-      if (readClaim(intent)?.token !== token) continue;
-      const minted = mintKey(intent);
-      clearClaim(intent, token);
-      // Settle before returning: a simultaneous claimant whose token
-      // overwrote ours between the ownership read and this mint may
-      // have stored its own key in the same window. Adopt whichever
-      // key survived in storage rather than our local one.
-      await delay(CLAIM_POLL_INTERVAL_MS);
-      return readStored(intent) ?? minted;
-    }
-    if (token < claim.token) {
-      writeClaim(intent, { token, expiresAt: Date.now() + CLAIM_TTL_MS });
-    }
-    if (Date.now() >= deadline) break;
-    await delay(CLAIM_POLL_INTERVAL_MS);
-  }
-  // Deadline reached with a claim still live (endless re-staking or a
-  // winner suspended past the safety valve): resolve locally rather
-  // than block redemption forever.
-  const stored = readStored(intent);
-  if (stored) return stored;
-  const minted = mintKey(intent);
-  clearClaim(intent, token);
-  return minted;
-}
-
-function mintKey(intent: string): string {
-  const cached = keysByIntent.get(intent);
-  if (cached && !persistedIntents.has(intent)) return cached;
-  // No stored key: either never minted, or a persisted key was cleared
-  // after success (possibly by another tab — its Map clear cannot reach
-  // this tab, so reconcile here instead of replaying a spent key).
-  keysByIntent.delete(intent);
-  persistedIntents.delete(intent);
-  const fresh = crypto.randomUUID();
-  keysByIntent.set(intent, fresh);
-  writeStored(intent, fresh);
-  const persisted = readStored(intent);
-  if (persisted === fresh) {
-    persistedIntents.add(intent);
-    return fresh;
-  }
-  if (persisted) {
-    // A simultaneous tab's key landed instead of ours: adopt the
-    // durable winner rather than compete with it.
-    keysByIntent.set(intent, persisted);
-    persistedIntents.add(intent);
-    return persisted;
-  }
-  // Fail closed: a key that exists only in this tab's memory dies on
-  // reload, and a shopper retrying after a lost redemption response
-  // would mint a second key and spend their points twice.
-  keysByIntent.delete(intent);
-  throw new Error(
-    'Unable to save redemption recovery. Please enable browser storage and try again.'
-  );
-}
-
 async function keyForReward(
   merchantId: string,
   customerId: string,

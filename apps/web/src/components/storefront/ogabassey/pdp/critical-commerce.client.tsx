@@ -1,9 +1,5 @@
 'use client';
 
-import {
-  formatCanonicalProductConditionLabel,
-  sortCanonicalProductConditionsByPreference,
-} from '@baci/shared/lib';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { useState } from 'react';
@@ -17,20 +13,27 @@ import {
   formatCriticalPrice,
   type InitialCriticalVariantSelection,
 } from './critical-commerce-selection';
+import { RouteOfferMissingNotice } from '../pages/product-details-page/route-offer-missing-notice';
+import { AssuranceDefaultNote } from '../pages/product-details-page/assurance-default-note';
 import {
   OgabasseyPdpCriticalCommerceProvider,
-  useOptionalOgabasseyPdpCriticalCommerce,
   useOgabasseyPdpCriticalCommerce,
+  useOptionalOgabasseyPdpCriticalCommerce,
 } from './critical-commerce-state.client';
-import { getVariantAxisOptions } from './critical-variant-selector-options';
 import { OgabasseyPdpCriticalVariantSelectors } from './critical-variant-selectors.client';
 
+export {
+  OgabasseyPdpCriticalCommerceConditionFact,
+  OgabasseyPdpCriticalConditionBadge,
+} from './critical-commerce-condition.client';
 export { OgabasseyPdpCriticalCommerceProvider } from './critical-commerce-state.client';
 
 interface OgabasseyPdpCriticalCommerceClientProps {
   cartHref: Route;
   cartProduct: CartProduct;
   initialVariantSelection?: InitialCriticalVariantSelection;
+  initialOfferId?: string | null;
+  routeOfferMissing?: boolean;
   productName: string;
   variantAxes?: string[];
   variantAxisOptions?: Record<string, string[]>;
@@ -40,73 +43,6 @@ interface OgabasseyPdpCriticalCommerceClientProps {
 interface OgabasseyPdpCriticalCommerceControlsProps {
   cartHref: Route;
   productName: string;
-}
-
-function formatCriticalCondition(condition: string | null | undefined) {
-  return formatCanonicalProductConditionLabel(condition) || null;
-}
-
-function getCriticalMixedConditionLabel(conditions: string[]) {
-  const sortedConditions =
-    sortCanonicalProductConditionsByPreference(conditions);
-
-  if (sortedConditions.length <= 1) {
-    return null;
-  }
-
-  return sortedConditions.length === 2 &&
-    sortedConditions.includes('new') &&
-    sortedConditions.includes('used')
-    ? 'New & Used'
-    : 'Multiple Conditions';
-}
-
-export function OgabasseyPdpCriticalConditionBadge({
-  fallbackCondition,
-}: {
-  fallbackCondition?: string | null;
-}) {
-  const commerceState = useOptionalOgabasseyPdpCriticalCommerce();
-  const conditionOptions = commerceState
-    ? getVariantAxisOptions(
-        commerceState.variants,
-        'condition',
-        commerceState.variantAxisOptions
-      )
-    : [];
-  const condition =
-    getCriticalMixedConditionLabel(conditionOptions) ||
-    formatCriticalCondition(
-      commerceState?.productForCart.condition ?? fallbackCondition
-    );
-
-  if (!condition) {
-    return null;
-  }
-
-  return <span data-ogabassey-pdp-condition>{condition}</span>;
-}
-
-export function OgabasseyPdpCriticalCommerceConditionFact({
-  fallbackCondition,
-}: {
-  fallbackCondition?: string | null;
-}) {
-  const commerceState = useOptionalOgabasseyPdpCriticalCommerce();
-  const condition = formatCriticalCondition(
-    commerceState?.productForCart.condition ?? fallbackCondition
-  );
-
-  if (!condition) {
-    return null;
-  }
-
-  return (
-    <p data-ogabassey-pdp-commerce-fact>
-      <span>Condition</span>
-      <strong>{condition}</strong>
-    </p>
-  );
 }
 
 export function OgabasseyPdpCriticalProductImage({
@@ -167,6 +103,7 @@ export function OgabasseyPdpCriticalCommerceSummary() {
     handleAttributeSelection,
     productForCart,
     renderableVariantAxes,
+    routeOfferMissingActive,
     selectedAttributes,
     variantAxisOptions,
     variantCount,
@@ -175,6 +112,7 @@ export function OgabasseyPdpCriticalCommerceSummary() {
 
   return (
     <>
+      {routeOfferMissingActive ? <RouteOfferMissingNotice /> : null}
       <div data-ogabassey-pdp-price>
         <span data-ogabassey-pdp-price-live>
           {formatCriticalPrice(productForCart.price, currency)}
@@ -204,6 +142,7 @@ export function OgabasseyPdpCriticalCommerceControls({
     isAtMaxQuantity,
     maxQuantity,
     quantity,
+    quantityInCart,
     setQuantity,
   } = useOgabasseyPdpCriticalCommerce();
 
@@ -249,6 +188,10 @@ export function OgabasseyPdpCriticalCommerceControls({
       >
         Add to cart
       </button>
+      <AssuranceDefaultNote
+        canPurchase={canAddToCart}
+        quantityInCart={quantityInCart}
+      />
       <Link
         data-ogabassey-pdp-commerce-secondary-action
         href={cartHref}
@@ -264,6 +207,8 @@ export function OgabasseyPdpCriticalCommerceClient({
   cartHref,
   cartProduct,
   initialVariantSelection,
+  initialOfferId,
+  routeOfferMissing,
   productName,
   variantAxes = [],
   variantAxisOptions = {},
@@ -273,6 +218,8 @@ export function OgabasseyPdpCriticalCommerceClient({
     <OgabasseyPdpCriticalCommerceProvider
       cartProduct={cartProduct}
       initialVariantSelection={initialVariantSelection}
+      initialOfferId={initialOfferId}
+      routeOfferMissing={routeOfferMissing}
       variantAxes={variantAxes}
       variantAxisOptions={variantAxisOptions}
       variantCount={variantCount}

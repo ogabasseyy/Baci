@@ -9,6 +9,13 @@ export interface ProductDetailsCurrentOffer {
   price: string;
   rawPrice: number;
   stock: number;
+  /**
+   * Exact offer that priced this selection, or null when the parent family
+   * (or a variant override) did. Callers must forward this into the cart
+   * add so two offers that canonicalize to the same condition keep
+   * separate cart lines.
+   */
+  offerId: string | null;
 }
 
 function formatCurrentOfferCurrency(value: number): string {
@@ -25,7 +32,12 @@ export function resolveCurrentOffer(
     price_modifier?: number | null;
     stock_quantity?: number | null;
     inventory_tracking_policy?: string | null;
-  }> | null
+  }> | null,
+  // Validated ?offer_id from the route (names one of this product's offers):
+  // preferred over condition matching so two rows that canonicalize alike
+  // (used vs uk_used) resolve the exact advertised offer. Required to match
+  // the selected condition so an explicit later pick wins over the URL id.
+  routeOfferId?: string | null
 ): ProductDetailsCurrentOffer {
   let price = productData.rawPrice || 0;
   if (!price && typeof productData.price === 'string') {
@@ -34,6 +46,7 @@ export function resolveCurrentOffer(
   }
 
   let selectedOffer: { price: number; stock_quantity: number | null } | undefined;
+  let resolvedOfferId: string | null = null;
 
   // Canonical on both sides: a legacy-spelled parent (uk_used,
   // refurbished) is the selection's own family, so same-condition offer
@@ -42,12 +55,23 @@ export function resolveCurrentOffer(
     // Canonical comparison: stored rows use merchant spellings (refurbished,
     // uk_used) that never equal the canonical selection raw, which silently
     // fell back to the parent price for exactly those offers.
-    const offer = productData.offers?.find(
-      (item) => normalizeConditionType(item.condition) === selectedCondition
-    );
+    const idMatchedOffer =
+      routeOfferId != null
+        ? productData.offers?.find(
+            (item) =>
+              String(item.id) === routeOfferId &&
+              normalizeConditionType(item.condition) === selectedCondition
+          )
+        : undefined;
+    const offer =
+      idMatchedOffer ??
+      productData.offers?.find(
+        (item) => normalizeConditionType(item.condition) === selectedCondition
+      );
 
     if (offer) {
       selectedOffer = { price: offer.rawPrice, stock_quantity: offer.stock_quantity ?? offer.stock ?? null };
+      resolvedOfferId = offer.id != null ? String(offer.id) : null;
     }
   }
 
@@ -64,6 +88,7 @@ export function resolveCurrentOffer(
       rawPrice: price,
       stock,
       id: productData.id,
+      offerId: null,
     };
   }
 
@@ -92,7 +117,7 @@ export function resolveCurrentOffer(
         { ...productData, price }, { variant, resolvedVariantPrice: price, condition: selectedCondition }
       );
       return { price: formatCurrentOfferCurrency(option.price ?? price),
-        rawPrice: option.price ?? price, stock: option.stockQuantity, id: productData.id };
+        rawPrice: option.price ?? price, stock: option.stockQuantity, id: productData.id, offerId: null };
     }
   }
 
@@ -104,5 +129,6 @@ export function resolveCurrentOffer(
     rawPrice: option.price ?? price,
     stock: selectedOffer || productData.manage_stock !== false ? option.stockQuantity : 999,
     id: productData.id,
+    offerId: resolvedOfferId,
   };
 }

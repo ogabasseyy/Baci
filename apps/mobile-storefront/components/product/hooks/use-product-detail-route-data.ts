@@ -11,6 +11,7 @@ import { getFirstRouteParamValue } from '../product-detail-route-params';
 import { getFallbackVariantSelections } from './get-fallback-variant-selections';
 import { getFirstImageIndexForColor } from './get-first-image-index-for-color';
 import { getSelectionSyncSignature } from './get-selection-sync-signature';
+import { resolveRouteOfferState } from './use-product-detail-route-offer';
 import { useProductDetailSelection } from './use-product-detail-selection';
 
 /**
@@ -46,11 +47,73 @@ export function useProductDetailRouteData({
   const routeSelectionInput = routeSelectionResolution?.selectionInput ?? {};
   const routeSelectionAttributes = (routeSelectionInput.attributes ??
     {}) as Record<string, string>;
+  const routeOfferIdParam = getFirstRouteParamValue(routeParams.offer_id);
+  // Search/compare entry points mark ID-less base-row matches explicitly:
+  // without this identity the entry condition is indistinguishable from a
+  // condition-offer selection, and the PDP would adopt the offer's price.
+  const routeBaseMatch =
+    getFirstRouteParamValue(routeParams.match_base) === '1';
+  // A stale row on a flag-disabled parent is invisible to all matching.
+  const routeOfferRow =
+    product?.has_condition_offers === true
+      ? product?.offers?.find(
+          (offer) => String(offer.id) === String(routeOfferIdParam)
+        )
+      : undefined;
+  // ID-only offer links derive the condition from this product's live
+  // offer (mirrors web): the snapshot condition is deliberately omitted by
+  // entry points because it can be stale, and seeding from the live option
+  // keeps the identified offer honored instead of rejected.
   const routeCondition = normalizeRouteCondition(
     routeSelectionInput.condition ??
-      (!usesVariantRouteSelection ? routeConditionParam : undefined)
+      (!usesVariantRouteSelection
+        ? (routeConditionParam ?? routeOfferRow?.condition)
+        : undefined)
   );
   const routeVariantId = routeSelectionInput.variantId ?? null;
+  // Exact-match contract for variants (mirrors the offer handling): the
+  // resolution only exists when variants hydrated with siblings, so an
+  // invalid id means the advertised variant was deleted — surface it as
+  // missing instead of redirecting to the bare URL, where the PDP would
+  // silently select a different price/specification.
+  const routeVariantMissing =
+    routeSelectionResolution?.type === 'invalid_variant_id';
+  const routeVariantMissingError = routeVariantMissing
+    ? 'This variant is no longer available. It may have been removed or sold.'
+    : null;
+  // An exact variant link whose variant fetch failed must not render as a
+  // variantless product (mirrors the offer hydration contract below):
+  // usesVariantRouteSelection is false without variants, so the missing
+  // predicate stays silent and the shopper gets a normal PDP with no
+  // retry/error state. Surface the existing error path instead.
+  const routeVariantIdParam =
+    getFirstRouteParamValue(routeParams.variant_id) ??
+    getFirstRouteParamValue(routeParams.variantId);
+  const routeVariantHydrationFailed =
+    routeVariantIdParam != null &&
+    routeVariantIdParam.length > 0 &&
+    product?.variants_hydration_failed === true;
+  const routeVariantHydrationError = routeVariantHydrationFailed
+    ? 'This option could not be loaded. Check your connection and try again.'
+    : null;
+  // A failed base-inventory fetch must not render as a confident
+  // out-of-stock verdict: without the projection the PDP cannot tell
+  // "no units" from "unknown units", and a serialized product with a
+  // zero legacy scalar would show unavailable with no retry. Surface
+  // the existing error path (retry via refetch) instead.
+  const routeBaseInventoryHydrationFailed =
+    product?.base_inventory_hydration_failed === true;
+  const routeBaseInventoryHydrationError = routeBaseInventoryHydrationFailed
+    ? 'Availability could not be loaded. Check your connection and try again.'
+    : null;
+  // The condition-compatibility check happens at selection time so a
+  // later condition change on the PDP is never pinned to a stale offer.
+  const {
+    routeOfferHydrationError,
+    routeOfferHydrationFailed,
+    routeOfferHydrationPending,
+    routeOfferId,
+  } = resolveRouteOfferState({ product, routeOfferIdParam, routeOfferRow });
   const routeSelectionSignature = JSON.stringify({
     attributes: Object.fromEntries(
       Object.entries(routeSelectionAttributes).sort(([a], [b]) =>
@@ -101,6 +164,18 @@ export function useProductDetailRouteData({
         (product?.offers?.length === 1
           ? (product.offers[0]?.condition ?? null)
           : null);
+  // A base-row entry keeps the advertised base price until the shopper
+  // picks a condition on the PDP (any explicit pick re-enables offers).
+  // The entry selection equals the route one, or the entry carries no
+  // condition at all (bare flag); ids-bearing links never suppress.
+  const suppressConditionOfferMatch =
+    product?.has_condition_offers !== true ||
+    (routeBaseMatch &&
+      !routeOfferId &&
+      !routeVariantId &&
+      !selection.hasCustomizedSelection &&
+      (selection.effectiveSelectedCondition === routeCondition ||
+        routeCondition == null));
   const displayProduct = product
     ? {
         ...product,
@@ -120,9 +195,15 @@ export function useProductDetailRouteData({
       product?.slug &&
       product.slug !== slug
     ) {
-      router.replace(`/product/${product.slug}`);
+      // Canonicalize a legacy slug without dropping the saved selection
+      // (the invalid-selection effect below intentionally clears params;
+      // a mere slug change must keep variant/offer/base-match identity).
+      router.replace({
+        pathname: '/product/[slug]',
+        params: { ...routeParams, slug: product.slug },
+      } as const);
     }
-  }, [isValidSlug, product?.slug, slug]);
+  }, [isValidSlug, product?.slug, routeParams, slug]);
 
   useEffect(() => {
     if (!product?.slug || product.slug !== slug) return;
@@ -132,9 +213,11 @@ export function useProductDetailRouteData({
     }
     if (
       !hasInvalidSelectionRedirectedRef.current &&
+      // invalid_variant_id is intentionally absent: a deleted exact
+      // variant fails closed with routeVariantMissingError instead of
+      // stripping the id and silently reselecting a sibling.
       (routeSelectionResolution.type === 'attribute_only' ||
         routeSelectionResolution.type === 'ambiguous' ||
-        routeSelectionResolution.type === 'invalid_variant_id' ||
         routeSelectionResolution.type === 'zero_match')
     ) {
       hasInvalidSelectionRedirectedRef.current = true;
@@ -155,7 +238,12 @@ export function useProductDetailRouteData({
 
   return {
     displayProduct,
-    error,
+    error:
+      error ??
+      routeOfferHydrationError ??
+      routeVariantHydrationError ??
+      routeBaseInventoryHydrationError ??
+      routeVariantMissingError,
     isLoading,
     isOnline,
     isValidSlug,
@@ -166,8 +254,15 @@ export function useProductDetailRouteData({
     refetch,
     resolvedColorImages,
     reviewsState,
+    routeBaseInventoryHydrationFailed,
+    routeOfferHydrationFailed,
+    routeOfferHydrationPending,
+    routeOfferId,
     routeParams,
+    routeVariantHydrationFailed,
+    routeVariantMissing,
     slug,
+    suppressConditionOfferMatch,
     ...selection,
   };
 }

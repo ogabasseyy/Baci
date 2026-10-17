@@ -120,6 +120,7 @@ export function mapCartItemsToOrderItems(
       condition: item.condition,
       image_url: item.image_url,
       variant_id: item.variant_id,
+      offer_id: item.offer_id,
       variant_name: item.variant_name,
       variant_attributes: item.variant_attributes,
       has_assurance: item.hasAssurance || false,

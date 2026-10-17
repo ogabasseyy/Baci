@@ -1,3 +1,7 @@
+import {
+  normalizeCanonicalProductCondition,
+  resolveAddedLineAssurance,
+} from '@baci/shared/lib';
 import type { CartItem } from './cart-store.types';
 
 export function createCartLineId(
@@ -53,7 +57,11 @@ function hasMatchingVoucherIdentifier(
 
 export function mergeExistingCartItem(
   existingItem: CartItem,
-  incomingItem: Omit<CartItem, 'id'>
+  incomingItem: Omit<CartItem, 'id'>,
+  policy: {
+    smartCartProEnabled: boolean;
+    merchantSlug: string | null | undefined;
+  }
 ): CartItem {
   const newQuantity = existingItem.quantity + incomingItem.quantity;
   const isVoucherLine =
@@ -63,6 +71,16 @@ export function mergeExistingCartItem(
     ...existingItem,
     ...incomingItem,
     id: existingItem.id,
+    // The matcher wildcards a missing dimension on either side, but the
+    // spread above would then let an explicit undefined blank the stored
+    // value. Matched lines agree wherever both sides are set, so keeping
+    // the existing value when the incoming add omits it is always safe.
+    color: incomingItem.color ?? existingItem.color,
+    storage: incomingItem.storage ?? existingItem.storage,
+    condition: incomingItem.condition ?? existingItem.condition,
+    voucher_award_id:
+      incomingItem.voucher_award_id ?? existingItem.voucher_award_id,
+    voucher_token: incomingItem.voucher_token ?? existingItem.voucher_token,
     quantity: isVoucherLine
       ? 1
       : existingItem.max_quantity
@@ -70,7 +88,11 @@ export function mergeExistingCartItem(
         : newQuantity,
     negotiatedPrice: existingItem.negotiatedPrice,
     negotiationStatus: existingItem.negotiationStatus,
-    hasAssurance: existingItem.hasAssurance,
+    hasAssurance: resolveAddedLineAssurance(
+      incomingItem.hasAssurance,
+      existingItem,
+      { ...policy, hasQuizVoucher: isVoucherLine }
+    ),
     assuranceRate: existingItem.assuranceRate,
   };
 }
@@ -87,6 +109,37 @@ function areEquivalentCartAttributes(
     normalizedExistingValue === null ||
     normalizedIncomingValue === null
   );
+}
+
+// Conditions compare canonically: the PDP stamps the display string
+// ("Open Box") at add time while reprice reconciliation stores the raw
+// live code ("open_box"). Strict equality would split the reconciled
+// line from its re-add into a duplicate; checkout canonically compares
+// the submitted condition too, so canonical matching agrees with it.
+function areEquivalentCartConditions(
+  existingValue: string | undefined,
+  incomingValue: string | undefined
+) {
+  const normalizedExistingValue = existingValue ?? null;
+  const normalizedIncomingValue = incomingValue ?? null;
+
+  if (normalizedExistingValue === null || normalizedIncomingValue === null) {
+    return normalizedExistingValue === normalizedIncomingValue;
+  }
+  return (
+    normalizeCanonicalProductCondition(normalizedExistingValue) ===
+    normalizeCanonicalProductCondition(normalizedIncomingValue)
+  );
+}
+
+function areEquivalentVariantCartConditions(
+  existingValue: string | undefined,
+  incomingValue: string | undefined
+) {
+  if ((existingValue ?? null) === null || (incomingValue ?? null) === null) {
+    return true;
+  }
+  return areEquivalentCartConditions(existingValue, incomingValue);
 }
 
 export function isSameCartLine(
@@ -117,11 +170,15 @@ export function isSameCartLine(
     return false;
   }
 
+  if ((existingItem.offer_id ?? null) !== (incomingItem.offer_id ?? null)) {
+    return false;
+  }
+
   if (existingVariantId || incomingVariantId) {
     return (
       areEquivalentCartAttributes(existingItem.color, incomingItem.color) &&
       areEquivalentCartAttributes(existingItem.storage, incomingItem.storage) &&
-      areEquivalentCartAttributes(
+      areEquivalentVariantCartConditions(
         existingItem.condition,
         incomingItem.condition
       )
@@ -131,6 +188,6 @@ export function isSameCartLine(
   return (
     (existingItem.color ?? null) === (incomingItem.color ?? null) &&
     (existingItem.storage ?? null) === (incomingItem.storage ?? null) &&
-    (existingItem.condition ?? null) === (incomingItem.condition ?? null)
+    areEquivalentCartConditions(existingItem.condition, incomingItem.condition)
   );
 }

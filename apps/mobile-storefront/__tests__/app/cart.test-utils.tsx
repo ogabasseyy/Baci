@@ -23,6 +23,13 @@ export type MockPriceChange = {
   newPrice: number;
 };
 
+export type MockConditionChange = {
+  id: string;
+  name: string;
+  oldCondition: string;
+  newCondition: string;
+};
+
 export const mockOpenNegotiation = jest.fn();
 export const mockUseColorScheme = jest.fn(() => 'dark');
 export const mockQueryClient = { prefetchQuery: jest.fn() };
@@ -31,11 +38,13 @@ export const mockDismissPriceChanges = jest.fn();
 export const mockRepriceHolder: {
   current: {
     priceChanges: MockPriceChange[];
+    conditionChanges: MockConditionChange[];
     dismissPriceChanges: typeof mockDismissPriceChanges;
   };
 } = {
   current: {
     priceChanges: [],
+    conditionChanges: [],
     dismissPriceChanges: mockDismissPriceChanges,
   },
 };
@@ -231,6 +240,7 @@ export function setupCartMocks(colorScheme: 'dark' | 'light' = 'dark'): void {
   mockCartStateHolder.current = createMockCartState();
   mockRepriceHolder.current = {
     priceChanges: [],
+    conditionChanges: [],
     dismissPriceChanges: mockDismissPriceChanges,
   };
 }

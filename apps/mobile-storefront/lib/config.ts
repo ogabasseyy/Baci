@@ -43,6 +43,21 @@ function readString(
     : fallback;
 }
 
+function readBoolean(
+  extra: Record<string, unknown>,
+  key: string,
+  fallback: boolean
+): boolean {
+  const value = extra[key];
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1') return true;
+    if (normalized === 'false' || normalized === '0') return false;
+  }
+  return fallback;
+}
+
 const extra = readExpoExtra();
 
 export const CONFIG = {
@@ -51,4 +66,8 @@ export const CONFIG = {
   MERCHANT_SLUG: readString(extra, 'merchantSlug', 'ogabassey'),
   TEMPLATE_ID: readString(extra, 'templateId', 'default'),
   BUSINESS_TYPE: readString(extra, 'businessType', 'electronics'), // New: Business category
+  // Smart Cart Pro gate, mirroring web's enableSmartCartPro prop. Default-on
+  // for this Ogabassey app build; set extra.enableSmartCartPro=false to
+  // make assurance opt-in without a code change.
+  ENABLE_SMART_CART_PRO: readBoolean(extra, 'enableSmartCartPro', true),
 } as const;

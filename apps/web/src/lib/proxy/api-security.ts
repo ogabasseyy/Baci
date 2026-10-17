@@ -16,6 +16,7 @@ import {
 } from '@/lib/proxy/host';
 import { isAuthenticatedInternalRequest } from '@/lib/proxy/request-classification';
 import { checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
+import { isRecentlyUnmappedCustomDomain } from '@/lib/reverse-domain-cache';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 
 export type ApiSecurityContext = {
@@ -65,6 +66,15 @@ export async function runApiSecurityStage(
   context: ApiSecurityContext
 ): Promise<NextResponse | null> {
   const { apiRateLimitPathname, aliasApiShape, isAliasApiShaped } = context;
+  // Repeat forged origins are rejected before they can burn the caller's
+  // budget: only origins whose unmapped status was recently observed take
+  // this path, so cold origins still flow through the limiter to the
+  // async lookup (which populates the negative on a miss). The limiter
+  // itself stays first for everything else.
+  if (apiRateLimitPathname.startsWith('/api')) {
+    const earlyRejection = checkKnownBadOrigin(request, apiRateLimitPathname);
+    if (earlyRejection) return earlyRejection;
+  }
   if (apiRateLimitPathname.startsWith('/api')) {
     const isExemptInternalCall =
       !isAliasApiShaped &&
@@ -72,7 +82,7 @@ export async function runApiSecurityStage(
       isAuthenticatedInternalRequest(request);
     const rateLimitResult = isExemptInternalCall
       ? null
-      : await checkRateLimit(request);
+      : await checkRateLimit(request, apiRateLimitPathname);
     if (rateLimitResult && !rateLimitResult.allowed) {
       return createRateLimitResponse(
         rateLimitResult.limit,
@@ -117,26 +127,7 @@ export async function runApiSecurityStage(
   }
 
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return null;
-  const isBearerAuth = request.headers
-    .get('Authorization')
-    ?.startsWith('Bearer ');
-  const isPaymentWebhook = /^\/api\/payments\/[^/]+\/webhook$/.test(
-    apiSecurityPathname
-  );
-  const isWebhook =
-    apiSecurityPathname.startsWith('/api/webhooks/') || isPaymentWebhook;
-  const isAuthCallback = apiSecurityPathname.startsWith('/api/auth/');
-  const isCron = apiSecurityPathname.startsWith('/api/cron/');
-  const isPublicAnalytics = apiSecurityPathname === '/api/platform/events';
-  if (
-    isBearerAuth ||
-    isWebhook ||
-    isAuthCallback ||
-    isCron ||
-    isPublicAnalytics
-  ) {
-    return null;
-  }
+  if (isOriginCheckExempt(request, apiSecurityPathname)) return null;
   const origin = request.headers.get('origin');
   if (!origin) return null;
   let originHostname: string;
@@ -162,4 +153,54 @@ export async function runApiSecurityStage(
         { error: 'Cross-origin request blocked' },
         { status: 403 }
       );
+}
+
+function isOriginCheckExempt(request: NextRequest, pathname: string): boolean {
+  const isBearerAuth = request.headers
+    .get('Authorization')
+    ?.startsWith('Bearer ');
+  const isPaymentWebhook = /^\/api\/payments\/[^/]+\/webhook$/.test(pathname);
+  const isWebhook = pathname.startsWith('/api/webhooks/') || isPaymentWebhook;
+  const isAuthCallback = pathname.startsWith('/api/auth/');
+  const isCron = pathname.startsWith('/api/cron/');
+  const isPublicAnalytics = pathname === '/api/platform/events';
+  return Boolean(
+    isBearerAuth || isWebhook || isAuthCallback || isCron || isPublicAnalytics
+  );
+}
+
+/**
+ * Pre-limiter short-circuit for repeat forged origins. Mirrors the main
+ * origin gate's sync prefix (method, exemptions, presence, parse, static
+ * allowlist) and rejects only origins with a recently observed unmapped
+ * status; everything else falls through to the limiter and the async
+ * custom-domain lookup, preserving the limiter-first guard order.
+ */
+function checkKnownBadOrigin(
+  request: NextRequest,
+  pathname: string
+): NextResponse | null {
+  if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method)) return null;
+  if (isOriginCheckExempt(request, pathname)) return null;
+  const origin = request.headers.get('origin');
+  if (!origin) return null;
+  let originHostname: string;
+  try {
+    originHostname = new URL(origin).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  const normalizedRoot = ROOT_DOMAIN.toLowerCase();
+  const isAllowed =
+    originHostname === normalizedRoot ||
+    originHostname.endsWith(`.${normalizedRoot}`) ||
+    isLocalhost(originHostname) ||
+    isVercelPreview(originHostname);
+  if (isAllowed) return null;
+  return isRecentlyUnmappedCustomDomain(originHostname)
+    ? NextResponse.json(
+        { error: 'Cross-origin request blocked' },
+        { status: 403 }
+      )
+    : null;
 }

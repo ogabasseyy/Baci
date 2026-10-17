@@ -2,11 +2,15 @@
 
 import type React from 'react';
 import { createContext, use, useEffect, useRef, useState } from 'react';
+import { comparisonSnapshotSchema } from '@/schemas/comparison-snapshot';
 import type { Product } from '../types';
 
 interface V2ComparisonContextType {
   compareItems: Product[];
-  addToCompare: (product: Product) => void;
+  // Returns the evicted item when the tray was full, so callers announce
+  // the replacement from the hydrated source instead of possibly-stale
+  // state; null when the product was appended or already present.
+  addToCompare: (product: Product) => Product | null;
   removeFromCompare: (productId: number | string) => void;
   isInCompare: (productId: number | string) => boolean;
   clearCompare: () => void;
@@ -15,14 +19,37 @@ interface V2ComparisonContextType {
 const V2ComparisonContext = createContext<V2ComparisonContextType | undefined>(
   undefined
 );
+// Tab-session storage preserves navigation/reloads without carrying selections into a new session.
+// Legacy localStorage selections are intentionally ignored.
 const COMPARISON_STORAGE_KEY = 'ogabassey_v2_compare';
 const STORAGE_HYDRATION_TIMEOUT_MS = 1200;
+// Tray capacity (1 main + 3 comparisons): the live add path evicts the
+// oldest entry past this, so hydration enforces the same invariant.
+const COMPARISON_TRAY_CAPACITY = 4;
 
 function getComparisonStorageKey(storageNamespace?: string | null) {
   const normalizedNamespace = storageNamespace?.trim();
   return normalizedNamespace
     ? `${COMPARISON_STORAGE_KEY}:${encodeURIComponent(normalizedNamespace)}`
     : COMPARISON_STORAGE_KEY;
+}
+
+function readValidStoredComparisonItems(stored: string): Product[] {
+  const parsed: unknown = JSON.parse(stored);
+  if (!Array.isArray(parsed)) return [];
+  // Storage can hold more than the tray allows (buggy older client or
+  // manual edits): dedupe by product id keeping the first row, then keep
+  // the most recent entries, mirroring the live oldest-first eviction.
+  const seenProductIds = new Set<string>();
+  const deduped = parsed.flatMap((entry) => {
+    const result = comparisonSnapshotSchema.safeParse(entry);
+    if (!result.success) return [];
+    const productKey = String(result.data.id);
+    if (seenProductIds.has(productKey)) return [];
+    seenProductIds.add(productKey);
+    return [result.data];
+  });
+  return deduped.slice(-COMPARISON_TRAY_CAPACITY);
 }
 
 export const useV2Comparison = () => {
@@ -58,13 +85,11 @@ export const V2ComparisonProvider: React.FC<{
     }
 
     let nextComparisonItems: Product[] = [];
-    const stored = localStorage.getItem(storageKey);
-    if (stored) {
-      try {
-        nextComparisonItems = JSON.parse(stored);
-      } catch (error) {
-        console.error('Failed to parse comparison items', error);
-      }
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      if (stored) nextComparisonItems = readValidStoredComparisonItems(stored);
+    } catch {
+      // Storage is optional: denied access starts an in-memory comparison.
     }
 
     hasHydratedStorageRef.current = true;
@@ -130,27 +155,46 @@ export const V2ComparisonProvider: React.FC<{
       hasHydratedStorage &&
       hydratedStorageKeyRef.current === storageKey
     ) {
-      localStorage.setItem(storageKey, JSON.stringify(compareItems));
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify(compareItems));
+      } catch {
+        // The state remains usable when tab-session persistence is denied.
+      }
     }
   }, [compareItems, hasHydratedStorage, storageKey]);
 
-  const addToCompare = (product: Product) => {
+  const addToCompare = (product: Product): Product | null => {
     const hydratedComparisonItems = hydrateComparisonItems();
+    // The hydrated list is authoritative when hydration just ran; otherwise
+    // state is current (React flushes between discrete events, and this is
+    // the only writer besides remove/clear). The updater below stays the
+    // single tray writer so same-tick mutations still chain correctly.
+    const source = hydratedComparisonItems ?? compareItems;
+    // Identity is product-keyed by design: one row per product, so a
+    // second option of the same product counts as already present.
+    const isDuplicate = source.some(
+      (p) => String(p.id) === String(product.id)
+    );
+    const replacedComparisonItem =
+      !isDuplicate && source.length >= COMPARISON_TRAY_CAPACITY
+        ? source[0]
+        : null;
 
     setCompareItems((prev) => {
-      const source = hydratedComparisonItems ?? prev;
+      const current = hydratedComparisonItems ?? prev;
       // Avoid duplicates
-      if (source.some((p) => String(p.id) === String(product.id))) {
-        return source;
+      if (current.some((p) => String(p.id) === String(product.id))) {
+        return current;
       }
 
-      // Limit to 4 items for UI sanity (1 main + 3 comparisons)
-      if (source.length >= 4) {
+      // Limit to the tray capacity for UI sanity (1 main + 3 comparisons)
+      if (current.length >= COMPARISON_TRAY_CAPACITY) {
         // Remove first, add new
-        return [...source.slice(1), product];
+        return [...current.slice(1), product];
       }
-      return [...source, product];
+      return [...current, product];
     });
+    return replacedComparisonItem;
   };
 
   const removeFromCompare = (productId: number | string) => {
@@ -163,9 +207,9 @@ export const V2ComparisonProvider: React.FC<{
     );
   };
 
-  const isInCompare = (productId: number | string) => {
-    return compareItems.some((p) => String(p.id) === String(productId));
-  };
+  // Match the empty server snapshot until scheduled hydration commits.
+  const isInCompare = (productId: number | string) =>
+    compareItems.some((p) => String(p.id) === String(productId));
 
   const clearCompare = () => {
     hydrateComparisonItems();

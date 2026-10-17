@@ -16,6 +16,7 @@ const OrderItemSchema = z.object({
   image_url: z.string().optional(),
   variant: z.string().optional(),
   variant_id: z.string().optional(),
+  offer_id: z.string().optional(),
   variant_name: z.string().optional(),
   variant_attributes: z.record(z.string(), z.string()).optional(),
   has_assurance: z.boolean().optional(),

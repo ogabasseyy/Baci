@@ -27,6 +27,7 @@ export function buildOrderPayload({
       image_url: item.image_url,
       value: Math.round(item.price * item.quantity),
       variant_id: item.variant_id,
+      offer_id: item.offer_id,
       variant_name: item.variant_name,
       variant_attributes: item.variant_attributes || {},
       has_assurance: item.has_assurance ?? false,

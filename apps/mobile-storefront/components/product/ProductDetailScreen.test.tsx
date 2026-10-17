@@ -151,7 +151,9 @@ function createRouteData(overrides: Record<string, unknown> = {}) {
 }
 
 function setupLoadedRoute() {
-  const cartState = { quantityInCart: 1 };
+  // productQuantityInCart differs from quantityInCart so the purchase
+  // hook forwarding assertion proves which value is passed.
+  const cartState = { quantityInCart: 1, productQuantityInCart: 2 };
   const purchaseState = {
     canPurchase: true,
     conditionOffersForDisplay: [],
@@ -313,11 +315,14 @@ describe('ProductDetailScreen', () => {
     );
 
     // Negotiation now lives in the cart, so the PDP prices with no negotiated
-    // override (null) rather than a PDP-level negotiated price.
+    // override (null) rather than a PDP-level negotiated price. The
+    // product-wide cart quantity follows as the fourth argument for the
+    // strict-pool cap.
     expect(mockUseProductDetailPurchaseState).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
-      null
+      null,
+      2
     );
   });
 

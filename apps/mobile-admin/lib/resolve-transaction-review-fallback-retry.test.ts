@@ -37,6 +37,15 @@ describe('resolveTransactionReviewFallbackRetry', () => {
     expect(onMissingSchemaColumn).toHaveBeenCalledWith('line_id');
   });
 
+  it('retries a missing offer identity column', () => {
+    // offer_id ships its own stripping fallback; without a retryable
+    // entry the first missing-column error would surface instead of
+    // degrading to the bare selector.
+    expect(resolve(missingColumnError('offer_id'))).toBe(true);
+    expect(markUnavailableSchemaColumn).toHaveBeenCalledWith('offer_id');
+    expect(onMissingSchemaColumn).toHaveBeenCalledWith('offer_id');
+  });
+
   it('ignores unrelated errors without retrying', () => {
     expect(resolve({ message: 'insufficient_privilege' })).toBe(false);
     expect(resolve(null)).toBe(false);

@@ -6,7 +6,292 @@ export const EXPECTED_SEARCH_PENDING_SOURCES = [
   },
   {
     repositoryPath:
+      'supabase/migrations/20261002090046_storefront_search_refinements.sql',
+    sha256: 'f2a1e439271d32eeb9e83dbde9f79782f00aedfdf318f28020c5edaef8a58372',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261002190000_storefront_product_requests.sql',
+    sha256: '4172e5b207a5f307c0cc87c53886e41625187065daa8576035ef8ed613f4c2bd',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261003180000_storefront_available_search_facets.sql',
+    sha256: 'ebcca693935aa385264f78b54becd4a1a8dc4695159b6dcd366ca9bceaa9166b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261003193000_storefront_processor_filters.sql',
+    sha256: '1d2cd0d1eb95dff2334911ae0b51085705c16aa865eae4c5d2e90b39786e2fd7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261003194500_storefront_category_facets.sql',
+    sha256: '14bd400f6d42cf80df4797dfd96c6f9db863f82488abeee9394fd6c7237d7769',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261003230000_storefront_search_refinement_fixes.sql',
+    sha256: '4191724fdc1c2cbf5385827541b349e21a699d1cbe49ad68dbbed35fa96682e3',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004060000_search_inventory_option_guards.sql',
+    sha256: 'fc38be9916cdfd1d2e119a36d6f65364dd50eb002be17e097962e758b225e10d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004131000_search_price_options_offer_base_rows.sql',
+    sha256: '8c130a5aafd43d55ad849544583a7056e83527ed9541db55938dd8aa35f4e3d4',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004151000_search_price_options_offer_scope_null_stock.sql',
+    sha256: '02466fa717fdedcf319185125156667e6f3647dda574d441939b3364bef3a14b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004170500_restrict_storefront_product_request_intake.sql',
+    sha256: '04911056ed22ba801bd1ddc7d2aa64af164fac4714183f93fa4b7f2439384c01',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004193000_private_purchasable_search_candidates.sql',
+    sha256: '9411a597fcb496fc6fd05e491850a953d99f22348b6d8357679a4abbb72a0b5e',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004210000_bounded_refined_search_offsets.sql',
+    sha256: '2deb8a6b836b4f7f201d613eb9371ee6627597b2380d9043b54d50d8abc59884',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261004230000_storefront_search_brand_case_insensitive.sql',
+    sha256: '812ef23ecca9b94c2095ed0b1e4cd771ecebbfc1dfae0b8f2381c046d7c294aa',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008090001_search_processor_filter_bounds.sql',
+    sha256: 'c30fbf34615df3d224b68d5451dd214fe62bfa98d34265dd9f4a65c0e2caf864',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008100000_search_candidate_query_length_first.sql',
+    sha256: 'ef1241eb3477524a659d5104b6871a2ded344c8d69633f130d77ed6fc8278b97',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008110000_search_processor_refined_drop_redundant_exists.sql',
+    sha256: '4465f0090e5efabbad1378d0a45fdc149ff93c0d3f55f187b86e90749ef21180',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008120001_search_processor_filter_case_insensitive.sql',
+    sha256: '009d11016870b50efc84f13665b62ffa51d2e8e90d7ab1c8338bb9980ca29a76',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008130001_search_price_options_null_stock_managed.sql',
+    sha256: '57e332b8262d5d0fdb97bf2c1cc8c57c4c211d4aa84abba24b9257c6b6b2f333',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008140000_search_price_options_sku_matrix_drift.sql',
+    sha256: 'c76327447c423ffe28e38bd09276ac4446717e20428d361958aa0b51d8d62cec',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008150000_search_platform_admin_visibility.sql',
+    sha256: '039b49f8c0d03185650f9c3bcfad53d24207064dfff675f7f3c8bba0e64c886b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008160000_search_price_options_offer_parent_stock.sql',
+    sha256: 'b00e8573ebb956a1efc19209c9f6884354a53f4140db1d713f01fe488cde7e47',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008170000_storefront_product_request_platform_admin.sql',
+    sha256: 'c4822a102f733534a05d54c145c05a0e0aae889fa0228188efa889f9673fd55b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008180000_search_price_options_same_condition_offers.sql',
+    sha256: '2ed3088c14a1cf259dd7d3e2dc7505e4f2ee6e6675ceaf5ac28f7a6637592a80',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008190000_search_price_options_offer_pdp_window.sql',
+    sha256: 'd6272745f650346fedb32e2b0e072f64a088a7de4721f0d82318c5e1707e1a5b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008200000_search_price_options_variant_population_guard.sql',
+    sha256: '32fdad8d88deb50803536b3ebd3928a365e188691123cf6c3f98b052b4f8e52f',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008210000_storefront_product_request_contact_canonical.sql',
+    sha256: '6b2e3ec614362c9b4dd7798794f3e3f5b48c9ee7a14123653f1d000c0add25e3',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008220000_storefront_product_request_outcome_codes.sql',
+    sha256: '61288b5a8eb03c2f1aeb4511e08ad8f28a0851ac7098f6bcfa8374cb15eca5a4',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008230001_storefront_product_request_contact_intl_prefix.sql',
+    sha256: '8f62f43b635df75e52eb3fb810e159ef72b43f79472f6935a840362c3ccc71ff',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008240000_search_candidate_admin_visibility_predicate.sql',
+    sha256: 'a95713ac05e7fdb0ef58d5b646aea586ffe34863418969f8aea8cb01f10d66b5',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008250000_storefront_product_request_contact_zero_run.sql',
+    sha256: '6ed4dc6e4d191f77d8a6ab5a35fc483b2985164b47313585fe101f80e3ee1895',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008260000_storefront_product_request_query_key.sql',
+    sha256: '8e770e1cdb8112cee1d0d3e395b860965bf016589cd1670eab35642e79a6644e',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008270000_storefront_variant_rpc_serialized_policy.sql',
+    sha256: '9fdc92939769a88811e1d98e50cacbf1069d80880785a30b60099d712cbf61a7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008280000_storefront_variant_rpc_admin_visibility.sql',
+    sha256: 'c33e64d8b744e664379addb10f18f4216248edd071c355fd93b26cf55250ea2a',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008290000_storefront_product_base_inventory.sql',
+    sha256: 'b2ce1a68b2dad1a7a4800ff8749c2670d2cf316b1ab5de93e6baa0db2d0d5b77',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008300000_storefront_order_item_offer.sql',
+    sha256: '60908359583cd8e9a1029141bc684804b6af60f403578c8f6d1114859e39f240',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008310000_storefront_order_offer_economics.sql',
+    sha256: '9c23da93240556878ed6f4bb06df88c6e1b7f6599ca4b1d752ef8ed7af3f30e6',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008320000_storefront_order_item_offer_delete_rule.sql',
+    sha256: 'c1b37261b0623dfa7b7cbce16288987a6183c843ddd942e088ad1e9d39727162',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008330000_storefront_restock_offer_serialized_policy.sql',
+    sha256: '0f6211984231189106afa336f2b07a9cc6f5844c21222215c295406f7604139d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008340000_storefront_search_offer_serialized_unit_gate.sql',
+    sha256: '579b8899271749079fcaa5f82a6fdeb7005cc612e41e4d67c5b288e0403accd7',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008350000_storefront_order_offer_line_discriminator.sql',
+    sha256: '04a6a12ff6cbe5019bd45e15122c7db17096af2c81da3513cdacc22b53dc23c0',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008360000_storefront_search_offer_unlimited_scalar_gate.sql',
+    sha256: 'fbb02728c699cd7409c07b7fb4da8d47ae0b2c9e9fbca642e8206495eaf71ad1',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008370000_search_processor_filter_before_precise_prune.sql',
+    sha256: 'ac9f52b42cb133ca9baab1ff3e6bf25fc36c0269f62cc2c3b45f6a6267bb942d',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008380000_storefront_order_offer_unlimited_allocation.sql',
+    sha256: 'baa3583ce8c18fa9c74337799b2dc972250d2718d5b8eb3df4c3e0700d501bae',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008390000_storefront_restock_offer_unlimited_scalar.sql',
+    sha256: 'f507a298518e8933601a09381ed95b72c6189e73e0924dce48424f48f814d89c',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008400000_storefront_order_offer_managed_guard.sql',
+    sha256: 'b5cc60d5185a6c32ee639a24bed35e76cabf3b1a346b400378b999bd3af4eb66',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008410000_storefront_restock_offer_unmanaged_parent.sql',
+    sha256: '43e1b67685db380d437c058cdef0657604b8d99689b5adfdd3fb96c3bdc8b191',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008420000_storefront_strict_offer_scalar.sql',
+    sha256: '89463fb6cd7a4f9cb425fc5c6c65d4101dac7716ebc2a43d43aa9aee87950b06',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008430000_storefront_search_offer_unmanaged_scalar.sql',
+    sha256: '73bdd7d599624c61bd214a50d98a8bd53b735eb4f4363211fa18b0ebe1b4b674',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008440000_storefront_redvault_refund_offer_scalar.sql',
+    sha256: '54ba7edde1d7315a86bee81c434c88de6f9eb680d61c31e5bf46dcfe126d6a8b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008450000_storefront_redvault_refund_offer_single_owner.sql',
+    sha256: 'd2b3264af0069377f5594f17c62e62acb9ff6fbe457795efa1d7fc1348e43d23',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261008460000_storefront_order_offer_line_integrity.sql',
+    sha256: '7beffccfb20d84b0c668ae5d80de71b296fb40770af15a6d42fd5ec00555aa07',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261009320000_storefront_order_offer_label_snapshot.sql',
+    sha256: 'f2422d5d37f9ba9bb8b94c9ec5a352c80f9ce0d65ceca3fc68efc01032a401bb',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261009330000_storefront_order_offer_label_snapshot_marker.sql',
+    sha256: '947acc3d89c5ecbe66d7359bbdf8f7334ec38053f844ab6e2a7862895c843fab',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261009340000_search_mobile_admin_transaction_review_offer_labels.sql',
+    sha256: '58bea041d0b3610c0489f785d27f3aadb0ff1e4e950478ebab9b2b0d8c1d1a18',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261010110000_search_category_facets_scoped_precise.sql',
+    sha256: '8907c5436f165cfe6850e8efb8a21b603defe13ad0a9de699a45a44bbc820a33',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261011230000_search_mobile_admin_transaction_review_item_condition.sql',
+    sha256: '6ef2e2953c5593868de878b2482064405f7b8ef55f604314facc4d4b8d841533',
+  },
+  {
+    repositoryPath:
       'supabase/migrations/20261010000000_search_analytics_service_role_only_insert.sql',
     sha256: '274359d702da714d1ddb7bba6251b25e5dc1764bc43af18afbbb8ff17e7d9d3b',
+  },
+  {
+    repositoryPath:
+      'supabase/migrations/20261016170000_storefront_search_merchant_visibility_rpc.sql',
+    sha256: '181d497bf30175c1d150a63cb7d2f50ea8b915c6c23f7a4b3cacd955731e8ca0',
   },
 ] as const;

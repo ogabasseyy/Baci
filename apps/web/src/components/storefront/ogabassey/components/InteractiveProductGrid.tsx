@@ -124,7 +124,9 @@ export const InteractiveProductGrid: React.FC<InteractiveProductGridProps> = ({
   });
 
   const handleAddToCart = (e: React.MouseEvent, product: Product) => {
-    addToCart(product as any, 1);
+    if (addToCart(product as any, 1) === 'rejected') {
+      return;
+    }
 
     const rect = e.currentTarget.getBoundingClientRect();
     const id = Date.now() + Math.random();

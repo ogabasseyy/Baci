@@ -193,8 +193,12 @@ export function getCategorizedRedirectTarget(
 }
 
 // Returns the canonical redirect target when the URL's variant params are
-// inconsistent (attribute-only, ambiguous, invalid id, zero-match). Pure —
-// see getCategorizedRedirectTarget above for the rationale.
+// inconsistent (attribute-only, ambiguous, zero-match). Pure — see
+// getCategorizedRedirectTarget above for the rationale. An unknown exact
+// variant id is NOT redirected: listing/search cards deep-link the
+// advertised option, and stripping the param would silently render (and
+// let the shopper buy) the default variant at a different price. The
+// client surfaces the dead link as missing instead (routeVariantMissing).
 export function getInvalidVariantSelectionRedirectTarget(
   storeSlug: string,
   product: Product,
@@ -212,7 +216,6 @@ export function getInvalidVariantSelectionRedirectTarget(
   if (
     selectionResolution.type === 'attribute_only' ||
     selectionResolution.type === 'ambiguous' ||
-    selectionResolution.type === 'invalid_variant_id' ||
     selectionResolution.type === 'zero_match'
   ) {
     return buildSelectionSafeRedirectPath(

@@ -89,4 +89,25 @@ describe('checkRateLimit', () => {
       checkRateLimit(supabase, 'user-1', 'newsletter', 3, 1)
     ).resolves.toBe(true);
   });
+
+  it('fails closed for non-verification endpoints that opt in', async () => {
+    const unavailable = new Error('database unavailable');
+    const errored = {
+      rpc: vi.fn().mockResolvedValue({ data: null, error: unavailable }),
+    };
+    const rejected = {
+      rpc: vi.fn().mockRejectedValue(unavailable),
+    };
+
+    await expect(
+      checkRateLimit(errored, 'm1', 'search_assist_tenant', 60, 1, {
+        failClosed: true,
+      })
+    ).rejects.toBe(unavailable);
+    await expect(
+      checkRateLimit(rejected, 'm1', 'search_assist_tenant', 60, 1, {
+        failClosed: true,
+      })
+    ).rejects.toBe(unavailable);
+  });
 });

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveAgenticTaxLinePrice } from './resolve-agentic-tax-line-price';
 
 // Codex P1 (PR #1622 round 5): agentic checkout dispatch builds its
 // payload from `calculateCheckoutSession`, which currently computes
@@ -57,6 +58,7 @@ interface AgenticTaxItem {
   // itself skips items with missing product_id defensively.
   product_id?: string;
   variant_id?: string | null;
+  offer_id?: string | null;
   quantity: number;
 }
 
@@ -112,10 +114,17 @@ function roundToCents(n: number): number {
 export async function computeAgenticOrderTax({
   items,
   merchantId,
+  offerPrices,
   supabase,
 }: {
   items: AgenticTaxItem[];
   merchantId: string;
+  // Live offer prices by `${product_id}::${offer_id}`, loaded once by the
+  // route alongside offer verification. The RPC taxes the resolved line
+  // price (variant override, then live offer, then parent), so this
+  // helper must tax the same basis or valid offer orders trip the
+  // `tax_amount_mismatch` guard.
+  offerPrices?: Map<string, number>;
   supabase: SupabaseClient;
 }): Promise<number> {
   if (items.length === 0 || !merchantId) {
@@ -238,24 +247,16 @@ export async function computeAgenticOrderTax({
     const category = product.vat_category_code ?? 'S';
     if (category !== 'S') continue;
 
-    // High finding (PR #1622 review): variant must belong to the
-    // SAME product the order line claims. The RPC's LEFT JOIN
-    // (`v.product_id = p.id`) enforces this and falls back to base
-    // price for mismatched variant_ids; the helper must mirror it
-    // or a caller can spoof a variant_id from a different product
-    // and trip the parity guard. SDF returns variants for ALL
-    // products in `productIds`, so cross-line ambiguity exists when
-    // multiple products are in the cart.
     const candidateVariant = item.variant_id
       ? variantMap.get(item.variant_id)
       : null;
-    const variant =
-      candidateVariant && candidateVariant.product_id === item.product_id
-        ? candidateVariant
-        : null;
-    const priceRaw = variant?.price_override ?? product.price ?? 0;
-    const price = Number(priceRaw);
-    if (!Number.isFinite(price) || price <= 0) continue;
+    const price = resolveAgenticTaxLinePrice({
+      candidateVariant,
+      item,
+      offerPrices,
+      product,
+    });
+    if (price === null) continue;
 
     const quantity = Number(item.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) continue;

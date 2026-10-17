@@ -7,6 +7,7 @@ import type {
   TransactionReviewItem,
   TransactionReviewOrder,
 } from '@/hooks/useTransactionReview';
+import { TransactionOrderCardItem } from './TransactionOrderCardItem';
 import { TransactionOrderDiscountBadge } from './TransactionOrderDiscountBadge';
 import { TransactionOrderProfitSummary } from './TransactionOrderProfitSummary';
 import { formatTransactionDisplayText } from './transaction-display-format';
@@ -180,111 +181,16 @@ export function TransactionOrderCard({
               formatCurrency={formatCurrency}
             />
           </View>
-          {order.items.map((item) => {
-            const isLoss = item.profit != null && item.profit < 0;
-            const itemName = formatTransactionDisplayText(item.name);
-            const supplierName = formatTransactionDisplayText(
-              item.supplierName
-            );
-            const profitLabel =
-              item.profit == null
-                ? 'Profit unavailable'
-                : isLoss
-                  ? `Loss ${formatCurrency(Math.abs(item.profit))}`
-                  : `Profit ${formatCurrency(item.profit)}`;
-            return (
-              <Pressable
-                key={item.id}
-                style={[styles.itemRow, { borderTopColor: colors.border }]}
-                onPress={() => onOpenEditor(order, item)}
-                accessibilityRole="button"
-                accessibilityLabel={`${itemName}, ${item.quantity} units, revenue ${formatCurrency(item.revenue)}${
-                  supplierName ? `, supplier ${supplierName}` : ''
-                }`}
-                accessibilityHint="Opens the transaction editor for this item"
-              >
-                <View style={styles.flexOne}>
-                  <Text style={[styles.itemName, { color: colors.text }]}>
-                    {itemName}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.orderSubtitle,
-                      { color: colors.textSecondary },
-                    ]}
-                  >
-                    {item.quantity} units · Revenue{' '}
-                    {formatCurrency(item.revenue)}
-                  </Text>
-                  {supplierName ? (
-                    <Text
-                      style={[
-                        styles.itemDetailText,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Supplier {supplierName}
-                    </Text>
-                  ) : null}
-                  {!item.productId ? (
-                    <Text
-                      style={[
-                        styles.itemDetailText,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      Custom item
-                    </Text>
-                  ) : null}
-                  {item.imeiValues[0] ? (
-                    <Text
-                      style={[
-                        styles.itemDetailText,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      IMEI {item.imeiValues[0]}
-                    </Text>
-                  ) : null}
-                  {item.serialValues[0] ? (
-                    <Text
-                      style={[
-                        styles.itemDetailText,
-                        { color: colors.textMuted },
-                      ]}
-                    >
-                      S/N {item.serialValues[0]}
-                    </Text>
-                  ) : null}
-                </View>
-                <View style={styles.itemMeta}>
-                  <Text style={[styles.itemMetaValue, { color: colors.text }]}>
-                    {item.costPrice == null
-                      ? 'Cost missing'
-                      : `Cost ${formatCurrency(item.costPrice)}`}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.orderSubtitle,
-                      {
-                        color:
-                          item.costPrice == null || isLoss
-                            ? colors.error
-                            : colors.textMuted,
-                      },
-                    ]}
-                  >
-                    {profitLabel}
-                  </Text>
-                </View>
-                <Ionicons
-                  name="create-outline"
-                  size={18}
-                  color={colors.textMuted}
-                />
-              </Pressable>
-            );
-          })}
+          {order.items.map((item) => (
+            <TransactionOrderCardItem
+              colors={colors}
+              formatCurrency={formatCurrency}
+              item={item}
+              key={item.id}
+              onOpenEditor={onOpenEditor}
+              order={order}
+            />
+          ))}
           <TransactionOrderProfitSummary
             colors={colors}
             estimatedProfit={order.estimatedProfit}

@@ -116,4 +116,83 @@ describe('findMergingCartLineIndex', () => {
 
     expect(findMergingCartLineIndex(cart, product)).toBe(0);
   });
+
+  it('keeps two same-condition offers on separate lines', () => {
+    const product = makeProduct();
+    const cart = [
+      makeCartItem({
+        id: 'p1',
+        cartItemId: 'p1::condition=used::offerId=offer-a',
+        condition: 'used',
+        offerId: 'offer-a',
+      }),
+    ];
+
+    expect(
+      findMergingCartLineIndex(cart, product, {
+        condition: 'used',
+        offerId: 'offer-b',
+      })
+    ).toBe(-1);
+    expect(
+      findMergingCartLineIndex(cart, product, {
+        condition: 'used',
+        offerId: 'offer-a',
+      })
+    ).toBe(0);
+  });
+
+  it('does not merge an exact-offer add into a legacy line', () => {
+    const product = makeProduct();
+    const cart = [makeLegacyCartItem({ id: 'p1', condition: 'used' })];
+
+    expect(
+      findMergingCartLineIndex(cart, product, {
+        condition: 'used',
+        offerId: 'offer-a',
+      })
+    ).toBe(-1);
+    expect(findMergingCartLineIndex(cart, product, { condition: 'used' })).toBe(
+      0
+    );
+  });
+
+  it('does not merge a legacy line whose condition differs', () => {
+    const product = makeProduct();
+    const cart = [makeLegacyCartItem({ id: 'p1', condition: 'new' })];
+
+    expect(findMergingCartLineIndex(cart, product, { condition: 'used' })).toBe(
+      -1
+    );
+    expect(findMergingCartLineIndex(cart, product, { condition: 'new' })).toBe(
+      0
+    );
+  });
+
+  it('keeps a color-bearing variant line separate from a color-less add', () => {
+    // Cross-platform parity pin (mirrored in mobile
+    // stores/cart-line.test.ts): native isSameCartLine wildcards a
+    // missing color/storage/condition on variant lines and merges here,
+    // while web matches the exact cart item id and stays separate.
+    // Alignment is a product decision; this pins the current web
+    // contract so either side drifting fails loudly.
+    const cart = [
+      makeCartItem({
+        id: 'p1',
+        cartItemId: 'p1::variant=v1::color=red',
+        variantId: 'v1',
+        selectedColor: 'red',
+      }),
+    ];
+
+    expect(
+      findMergingCartLineIndex(cart, makeProduct(), { variantId: 'v1' })
+    ).toBe(-1);
+    expect(
+      findMergingCartLineIndex(cart, makeProduct(), {
+        variantId: 'v1',
+        color: 'red',
+      })
+    ).toBe(0);
+  });
 });

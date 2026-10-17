@@ -24,6 +24,9 @@ export interface PendingCheckoutOrderItem {
   variantAttributes?: Record<string, string>;
   has_assurance?: boolean;
   assurance_fee?: number;
+  // Exact condition-offer identity: swapping same-priced offers for one
+  // product must not reuse the pending order built for the other offer.
+  offer_id?: string;
 }
 
 export interface PendingCheckoutFingerprintInput {

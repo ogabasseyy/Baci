@@ -489,4 +489,42 @@ describe('checkout order builders', () => {
     );
     expect(payload.items[0].condition).toBe('new');
   });
+
+  it('carries the exact condition-offer id through the order chain', () => {
+    const itemsSnapshot = [
+      {
+        id: 'line-1',
+        product_id: 'product-1',
+        slug: 'iphone-15-used',
+        name: 'iPhone 15',
+        price: 400000,
+        quantity: 1,
+        condition: 'used',
+        offer_id: 'offer-used-b',
+      },
+    ];
+    const snapshot = createCheckoutSnapshot(itemsSnapshot, 0, 0);
+
+    const request = buildCheckoutOrderRequest({
+      address,
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '08012345678',
+      deliveryMethod: 'door',
+      itemsSnapshot,
+      paymentMethodForOrder: 'card',
+      selectedQuote: undefined,
+      shippingProvider: undefined,
+      snapshot,
+    });
+
+    expect(request.items[0].offer_id).toBe('offer-used-b');
+
+    const parsed = CreateOrderRequestSchema.parse(request);
+    const payload = buildOrderPayload({
+      merchantId: 'merchant-1',
+      request: parsed,
+    });
+    expect(payload.items[0].offer_id).toBe('offer-used-b');
+  });
 });

@@ -2,6 +2,7 @@ export interface ScrollHeaderVisibilityInput {
   currentOffsetY: number;
   previousOffsetY: number;
   isVisible: boolean;
+  maximumOffsetY?: number;
   directionThreshold?: number;
   revealThreshold?: number;
 }
@@ -18,9 +19,16 @@ export function resolveScrollHeaderVisibility({
   currentOffsetY,
   previousOffsetY,
   isVisible,
+  maximumOffsetY = Number.POSITIVE_INFINITY,
   directionThreshold = DEFAULT_DIRECTION_THRESHOLD,
   revealThreshold = DEFAULT_REVEAL_THRESHOLD,
 }: ScrollHeaderVisibilityInput): ScrollHeaderVisibilityResult {
+  if (
+    !Number.isFinite(currentOffsetY) ||
+    currentOffsetY < 0 ||
+    currentOffsetY > maximumOffsetY
+  )
+    return { isVisible, previousOffsetY };
   const nextOffsetY = Math.max(0, currentOffsetY);
 
   if (nextOffsetY <= revealThreshold) {
@@ -35,7 +43,7 @@ export function resolveScrollHeaderVisibility({
   if (Math.abs(deltaY) < directionThreshold) {
     return {
       isVisible,
-      previousOffsetY: nextOffsetY,
+      previousOffsetY,
     };
   }
 

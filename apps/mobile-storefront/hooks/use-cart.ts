@@ -12,13 +12,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { isSameCartLine } from '@/stores/cart-line';
 import { useCartStore } from '@/stores/cart-store';
 import { showCartToast } from './cart-notifications';
-import { getCachedProductStock } from './cart-query-cache';
+import { createUpdateQuantityMutation } from './cart-quantity-mutation';
+import { getCachedOptionStock } from './cart-query-cache';
 import {
   type AddToCartInput,
   checkStock,
-  getTotalRequestedQuantityForStock,
+  getExistingCartQuantityForStock,
+  getExistingProductQuantityForStock,
 } from './cart-stock';
 
 /**
@@ -33,6 +36,7 @@ export function useCart() {
     addItem: addItemToStore,
     removeItem: removeItemFromStore,
     updateQuantity: updateQuantityInStore,
+    restoreItems: restoreItemsInStore,
     itemCount,
     subtotal,
     getItem,
@@ -43,6 +47,7 @@ export function useCart() {
       addItem: state.addItem,
       removeItem: state.removeItem,
       updateQuantity: state.updateQuantity,
+      restoreItems: state.restoreItems,
       itemCount: state.itemCount,
       subtotal: state.subtotal,
       getItem: state.getItem,
@@ -52,6 +57,10 @@ export function useCart() {
 
   // Track pending operations for rollback
   const pendingRollbacks = useRef<Map<string, () => void>>(new Map());
+  // Monotonic rollback sequence: Date.now() alone can collide for two
+  // rapid adds in the same millisecond, so the sequence keeps every
+  // pending entry addressable even when timestamps match.
+  const rollbackSequence = useRef(0);
 
   /** L11 fix: Evict oldest rollback entries to prevent memory leak under rapid mutation spam */
   function trackRollback(id: string, fn: () => void) {
@@ -71,13 +80,28 @@ export function useCart() {
    */
   const addToCartMutation = useMutation({
     mutationFn: async (item: AddToCartInput) => {
-      const totalQuantity = getTotalRequestedQuantityForStock(item);
+      // onMutate already applied this line to the store, so the store
+      // total IS the requested total; adding the incoming quantity again
+      // would double-count the optimistic line.
+      const totalQuantity = getExistingCartQuantityForStock(item);
 
-      // Validate stock in background, with cached fallback for offline
+      // Validate stock in background, with cached fallback for offline.
+      // The store already holds the optimistic line, so the product
+      // aggregate below is the post-add total strict sibling caps need.
       const stockCheck = await checkStock(
         item.product_id,
         totalQuantity,
-        getCachedProductStock(queryClient, item.product_id)
+        getCachedOptionStock(queryClient, item.product_id, {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+        }),
+        {
+          variantId: item.variant_id ?? null,
+          offerId: item.offer_id ?? null,
+          aggregateQuantity: getExistingProductQuantityForStock(
+            item.product_id
+          ),
+        }
       );
 
       if (!stockCheck.available) {
@@ -92,18 +116,58 @@ export function useCart() {
     // Optimistic update - runs immediately before mutationFn
     onMutate: (item) => {
       // Generate a temporary ID for potential rollback
-      const rollbackId = `${item.product_id}-${item.variant_id || 'default'}-${Date.now()}`;
+      const rollbackId = `${item.product_id}-${item.variant_id || 'default'}-${Date.now()}-${rollbackSequence.current++}`;
 
       // Capture current state for rollback (read fresh from store to avoid stale closure)
       const previousItems = [...useCartStore.getState().items];
+      const previousLine = previousItems.find((line) =>
+        isSameCartLine(line, item)
+      );
 
       // Optimistically add to cart (instant UI update)
       addItemToStore(item);
+      const addedLine = useCartStore
+        .getState()
+        .items.find((line) => isSameCartLine(line, item));
 
-      // Store rollback function (L11 fix: uses trackRollback to enforce size limit)
+      // Store rollback function (L11 fix: uses trackRollback to enforce size limit).
+      // Contribution-scoped: a failed add subtracts exactly the units
+      // it wrote — never a whole-cart snapshot — so a concurrent
+      // successful add to the same line survives a sibling's stock
+      // failure, and a clamped later add is never rolled back with it.
+      // Measured post-write so max_quantity clamping is honored.
+      const previousQuantity = previousLine?.quantity ?? 0;
+      const contributedQuantity = addedLine
+        ? Math.max(0, addedLine.quantity - previousQuantity)
+        : 0;
       trackRollback(rollbackId, () => {
-        // Restore previous state
-        useCartStore.setState({ items: previousItems });
+        if (!addedLine) {
+          return;
+        }
+        useCartStore.setState((state) => {
+          const current = state.items.find((i) => i.id === addedLine.id);
+          // Concurrently removed: leave alone, never resurrect.
+          if (!current) {
+            return state;
+          }
+          const rolledBackQuantity = current.quantity - contributedQuantity;
+          // The line now holds less than we wrote: another writer
+          // (removal, explicit quantity set) already consumed our
+          // contribution, so there is nothing left to remove.
+          if (rolledBackQuantity < 0) {
+            return state;
+          }
+          if (rolledBackQuantity === 0) {
+            return {
+              items: state.items.filter((i) => i.id !== addedLine.id),
+            };
+          }
+          return {
+            items: state.items.map((i) =>
+              i.id === addedLine.id ? { ...i, quantity: rolledBackQuantity } : i
+            ),
+          };
+        });
       });
 
       return { rollbackId, previousItems };
@@ -172,64 +236,24 @@ export function useCart() {
   /**
    * Update quantity with optimistic update and stock validation
    */
-  const updateQuantityMutation = useMutation({
-    mutationFn: async ({ id, quantity }: { id: string; quantity: number }) => {
-      // H21 fix: Read fresh items from store instead of stale closure variable
-      const freshItems = useCartStore.getState().items;
-      const item = freshItems.find((i) => i.id === id);
-      if (!item) throw new Error('Item not found');
-
-      // Validate stock for the new quantity, with cached fallback for offline
-      const stockCheck = await checkStock(
-        item.product_id,
-        quantity,
-        getCachedProductStock(queryClient, item.product_id)
-      );
-
-      if (!stockCheck.available) {
-        throw new Error(
-          `Only ${stockCheck.currentStock} items available in stock`
-        );
-      }
-
-      return { id, quantity, stockCheck };
-    },
-
-    onMutate: ({ id, quantity }) => {
-      // Read fresh from store to avoid stale closure
-      const previousItems = [...useCartStore.getState().items];
-
-      // Optimistically update quantity
-      updateQuantityInStore(id, quantity);
-
-      return { previousItems };
-    },
-
-    onError: (_error, _, context) => {
-      if (context?.previousItems) {
-        useCartStore.setState({ items: context.previousItems });
-      }
-      showCartToast(
-        'Stock Error: Quantity adjusted to available stock',
-        'error'
-      );
-    },
-
-    onSuccess: (data) => {
-      // Bug #96 fix: Read fresh items from store instead of stale closure
-      const freshItems = useCartStore.getState().items;
-      const item = freshItems.find((i) => i.id === data.id);
-      if (item) {
-        queryClient.invalidateQueries({
-          queryKey: ['product', item.product_id],
-        });
-      }
-    },
-  });
+  const updateQuantityMutation = useMutation(
+    createUpdateQuantityMutation({
+      queryClient,
+      updateQuantityInStore,
+      restoreItemsInStore,
+    })
+  );
 
   // Wrapped functions for easier consumption
   const addToCart = (item: AddToCartInput) => {
     addToCartMutation.mutate(item);
+  };
+
+  // Promise variant for callers that must gate success-only behavior
+  // (analytics, confirmation toasts) on validation succeeding: the
+  // fire-and-forget wrapper above cannot report a stock rejection.
+  const addToCartAsync = (item: AddToCartInput) => {
+    return addToCartMutation.mutateAsync(item);
   };
 
   const removeFromCart = (id: string) => {
@@ -248,6 +272,7 @@ export function useCart() {
 
     // Optimistic actions
     addToCart,
+    addToCartAsync,
     removeFromCart,
     updateQuantity,
 

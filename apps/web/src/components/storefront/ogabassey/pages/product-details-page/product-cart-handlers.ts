@@ -1,3 +1,4 @@
+import type { AddToCartOutcome } from '@/hooks/cart/cart-types';
 import {
   buildCartProduct,
   type ConditionType,
@@ -10,7 +11,7 @@ interface ProductCartHandlersArgs {
     product: ReturnType<typeof buildCartProduct>,
     quantity: number,
     metadata?: Record<string, string | Record<string, string> | undefined>
-  ) => void;
+  ) => AddToCartOutcome | void;
   applyNegotiatedPrice?: (cartItemId: string, price: number) => void;
   currentCartItemId: string;
   currentOffer: ProductDetailsCurrentOffer;
@@ -82,6 +83,7 @@ export function createProductCartHandlers({
         : undefined,
     storage: selectedAttributes.storage,
     condition: selectedCondition,
+    offerId: currentOffer.offerId ?? undefined,
     variantId: selectedVariantId,
     variantAttributes: selectedVariantId ? selectedAttributes : undefined,
   });
@@ -103,7 +105,7 @@ export function createProductCartHandlers({
       return false;
     }
 
-    addToCart(
+    const outcome = addToCart(
       buildCartProduct(
         productData,
         currentOffer,
@@ -116,6 +118,16 @@ export function createProductCartHandlers({
       1,
       buildSelectionMetadata()
     );
+
+    if (outcome === 'rejected') {
+      toast({
+        title: 'Unable to add to cart',
+        description: 'There is no available stock left for this selection.',
+        className:
+          'border-2 border-store-primary bg-white text-store-background-text',
+      });
+      return false;
+    }
 
     toast({
       title: 'Added to cart',

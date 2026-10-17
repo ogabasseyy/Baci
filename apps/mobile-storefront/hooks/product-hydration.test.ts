@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import {
+  hydrateRowsNeedingBaseInventory,
+  hydrateRowsNeedingConditionOffers,
   hydrateRowsNeedingStorefrontVariants,
+  needsBaseInventoryHydration,
+  needsConditionOffersHydration,
   needsVariantHydration,
 } from './product-hydration';
 
 const mockHydrateProductRowsWithStorefrontVariants: jest.Mock = jest.fn();
+const mockHydrateProductRowsWithBaseInventory: jest.Mock = jest.fn();
+const mockHydrateProductRowsWithConditionOffers: jest.Mock = jest.fn();
 const mockLoggerWarn = jest.fn();
 
 jest.mock('@/lib/logger', () => ({
@@ -19,6 +25,16 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@/lib/storefront-product-variants', () => ({
   hydrateProductRowsWithStorefrontVariants: (...args: unknown[]) =>
     mockHydrateProductRowsWithStorefrontVariants(...args),
+}));
+
+jest.mock('@/lib/storefront-product-base-inventory', () => ({
+  hydrateProductRowsWithBaseInventory: (...args: unknown[]) =>
+    mockHydrateProductRowsWithBaseInventory(...args),
+}));
+
+jest.mock('@/lib/storefront-product-offers', () => ({
+  hydrateProductRowsWithConditionOffers: (...args: unknown[]) =>
+    mockHydrateProductRowsWithConditionOffers(...args),
 }));
 
 describe('product-hydration', () => {
@@ -158,12 +174,16 @@ describe('product-hydration', () => {
     expect(result[0]).toBe(rows[0]);
   });
 
-  it('falls back to original rows when variant hydration fails', async () => {
+  it('marks attempted rows when variant hydration throws', async () => {
     const rows = [
       {
         id: 'needs-hydration',
         has_variants: true,
         variants: [],
+      },
+      {
+        id: 'not-attempted',
+        has_variants: false,
       },
     ];
     mockHydrateProductRowsWithStorefrontVariants.mockImplementationOnce(() =>
@@ -172,9 +192,172 @@ describe('product-hydration', () => {
 
     const result = await hydrateRowsNeedingStorefrontVariants(rows);
 
-    expect(result).toBe(rows);
+    // Thrown failures carry the same marker as RPC error results so
+    // exact variant links surface retry; unattempted rows stay clean.
+    expect(result).toEqual([
+      { ...rows[0], variants_hydration_failed: true },
+      rows[1],
+    ]);
+    expect(result[1]).toBe(rows[1]);
     expect(mockLoggerWarn).toHaveBeenCalledWith(
       'Failed to hydrate storefront variants; using original rows',
+      expect.objectContaining({
+        error: expect.any(Error),
+      })
+    );
+  });
+
+  it('identifies only non-variant rows as base inventory candidates', () => {
+    expect(
+      needsBaseInventoryHydration({ has_variants: false, variants: [] })
+    ).toBe(true);
+    expect(needsBaseInventoryHydration({ variants: [] })).toBe(true);
+    expect(
+      needsBaseInventoryHydration({ has_variants: true, variants: [] })
+    ).toBe(false);
+  });
+
+  it('hydrates only simple rows with base inventory in one batch', async () => {
+    const rows = [
+      {
+        id: 'simple-product',
+        has_variants: false,
+        variants: [],
+      },
+      {
+        id: 'variant-product',
+        has_variants: true,
+        variants: [],
+      },
+    ];
+    const hydratedRow = {
+      ...rows[0],
+      base_effective_policy: 'serialized_strict',
+      base_available_units: 4,
+    };
+    mockHydrateProductRowsWithBaseInventory.mockImplementationOnce(async () => [
+      hydratedRow,
+    ]);
+
+    const result = await hydrateRowsNeedingBaseInventory(rows);
+
+    expect(mockHydrateProductRowsWithBaseInventory).toHaveBeenCalledWith([
+      rows[0],
+    ]);
+    expect(mockHydrateProductRowsWithBaseInventory).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([hydratedRow, rows[1]]);
+    expect(result[1]).toBe(rows[1]);
+  });
+
+  it('marks attempted rows when base inventory hydration throws', async () => {
+    const rows = [
+      {
+        id: 'simple-product',
+        has_variants: false,
+        variants: [],
+      },
+      {
+        id: 'variant-product',
+        has_variants: true,
+        variants: [],
+      },
+    ];
+    mockHydrateProductRowsWithBaseInventory.mockImplementationOnce(() =>
+      Promise.reject(new Error('RPC failed'))
+    );
+
+    const result = await hydrateRowsNeedingBaseInventory(rows);
+
+    // Thrown failures carry the same marker as RPC error results so the
+    // PDP surfaces retry instead of the stock fallback; unattempted rows
+    // stay clean.
+    expect(result).toEqual([
+      { ...rows[0], base_inventory_hydration_failed: true },
+      rows[1],
+    ]);
+    expect(result[1]).toBe(rows[1]);
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Failed to hydrate base inventory; using original rows',
+      expect.objectContaining({
+        error: expect.any(Error),
+      })
+    );
+  });
+
+  it('identifies only flagged rows as condition-offer candidates', () => {
+    expect(needsConditionOffersHydration({ has_condition_offers: true })).toBe(
+      true
+    );
+    expect(needsConditionOffersHydration({ has_condition_offers: false })).toBe(
+      false
+    );
+    expect(needsConditionOffersHydration({})).toBe(false);
+  });
+
+  it('returns empty hydration input without calling the offer hydrator', async () => {
+    await expect(hydrateRowsNeedingConditionOffers([])).resolves.toEqual([]);
+
+    expect(mockHydrateProductRowsWithConditionOffers).not.toHaveBeenCalled();
+  });
+
+  it('hydrates only flagged rows with condition offers in one batch', async () => {
+    const rows = [
+      {
+        id: 'offer-product',
+        has_condition_offers: true,
+        offers: [],
+      },
+      {
+        id: 'plain-product',
+        has_condition_offers: false,
+        offers: [],
+      },
+    ];
+    const hydratedRow = {
+      ...rows[0],
+      offers: [{ id: 'offer-7' }],
+    };
+    mockHydrateProductRowsWithConditionOffers.mockImplementationOnce(
+      async () => [hydratedRow]
+    );
+
+    const result = await hydrateRowsNeedingConditionOffers(rows);
+
+    expect(mockHydrateProductRowsWithConditionOffers).toHaveBeenCalledWith([
+      rows[0],
+    ]);
+    expect(mockHydrateProductRowsWithConditionOffers).toHaveBeenCalledTimes(1);
+    expect(result).toEqual([hydratedRow, rows[1]]);
+    expect(result[1]).toBe(rows[1]);
+  });
+
+  it('marks attempted rows when offer hydration throws', async () => {
+    const rows = [
+      {
+        id: 'offer-product',
+        has_condition_offers: true,
+        offers: [],
+      },
+      {
+        id: 'not-attempted',
+        has_condition_offers: false,
+      },
+    ];
+    mockHydrateProductRowsWithConditionOffers.mockImplementationOnce(() =>
+      Promise.reject(new Error('RPC failed'))
+    );
+
+    const result = await hydrateRowsNeedingConditionOffers(rows);
+
+    // Thrown failures carry the same marker as RPC error results so
+    // exact offer links surface retry; unattempted rows stay clean.
+    expect(result).toEqual([
+      { ...rows[0], offers_hydration_failed: true },
+      rows[1],
+    ]);
+    expect(result[1]).toBe(rows[1]);
+    expect(mockLoggerWarn).toHaveBeenCalledWith(
+      'Failed to hydrate condition offers; using original rows',
       expect.objectContaining({
         error: expect.any(Error),
       })

@@ -37,6 +37,7 @@ interface NormalizeProductOptions {
  * Normalized product structure for frontend consumption
  */
 export interface NormalizedProduct {
+  searchMatch?: import('@baci/shared/lib').RefinedSearchRow;
   id: string;
   name: string;
   slug: string;

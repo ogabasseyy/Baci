@@ -22,6 +22,7 @@ vi.mock('@/lib/cached-data', () => ({
 
 import {
   getCategorizedRedirectTarget,
+  getInvalidVariantSelectionRedirectTarget,
   getProductCached,
 } from './product-page-resolution';
 
@@ -130,5 +131,45 @@ describe('getCategorizedRedirectTarget', () => {
         { condition: 'used' }
       )
     ).toBeNull();
+  });
+});
+
+describe('getInvalidVariantSelectionRedirectTarget', () => {
+  const variantProduct = {
+    id: 'product-1',
+    name: 'Variant Phone',
+    slug: 'variant-phone',
+    price: 800000,
+    has_variants: true,
+    variants: [
+      {
+        id: 'variant-used-128',
+        attributes: { storage: '128GB' },
+        condition: 'used',
+        price_override: 750000,
+      },
+      {
+        id: 'variant-open-box-128',
+        attributes: { storage: '128GB' },
+        condition: 'open_box',
+        price_override: 650000,
+      },
+    ],
+  } as never;
+
+  it('does not redirect an unknown exact variant id (client shows missing)', () => {
+    expect(
+      getInvalidVariantSelectionRedirectTarget('test-store', variantProduct, {
+        variant_id: 'variant-gone',
+      })
+    ).toBeNull();
+  });
+
+  it('still redirects ambiguous attribute-only selections', () => {
+    expect(
+      getInvalidVariantSelectionRedirectTarget('test-store', variantProduct, {
+        storage: '128GB',
+      })
+    ).not.toBeNull();
   });
 });

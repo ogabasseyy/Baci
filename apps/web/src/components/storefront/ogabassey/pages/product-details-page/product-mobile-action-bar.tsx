@@ -3,6 +3,7 @@
 import type { Route } from 'next';
 import { Minus, Plus, ShoppingCart, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import { AssuranceDefaultNote } from './assurance-default-note';
 
 interface ProductMobileActionBarProps {
   cartHref: Route;
@@ -68,22 +69,29 @@ export function ProductMobileActionBar({
           </Link>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={(event) =>
-            onMobileAddToCart(event.currentTarget.getBoundingClientRect())
-          }
-          disabled={!canPurchase}
-          aria-label={canPurchase ? 'Add this product to cart' : 'Product out of stock'}
-          className={`flex h-14 w-full items-center justify-center gap-2 rounded-xl font-bold shadow-lg transition-all ${
-            canPurchase
-              ? 'bg-store-primary text-store-primary-text active:scale-[0.98] active:bg-store-primary/90 active:shadow-none'
-              : 'cursor-not-allowed bg-store-background-text/10 text-store-background-text/45 shadow-none'
-          }`}
-        >
-          <ShoppingCart size={20} />
-          {canPurchase ? 'Add to Cart' : 'Out of Stock'}
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={(event) =>
+              onMobileAddToCart(event.currentTarget.getBoundingClientRect())
+            }
+            disabled={!canPurchase}
+            aria-label={canPurchase ? 'Add this product to cart' : 'Product out of stock'}
+            className={`flex h-14 w-full items-center justify-center gap-2 rounded-xl font-bold shadow-lg transition-all ${
+              canPurchase
+                ? 'bg-store-primary text-store-primary-text active:scale-[0.98] active:bg-store-primary/90 active:shadow-none'
+                : 'cursor-not-allowed bg-store-background-text/10 text-store-background-text/45 shadow-none'
+            }`}
+          >
+            <ShoppingCart size={20} />
+            {canPurchase ? 'Add to Cart' : 'Out of Stock'}
+          </button>
+          <AssuranceDefaultNote
+            canPurchase={canPurchase}
+            quantityInCart={quantityInCart}
+            className="mt-2 text-center text-xs text-store-background-text/60"
+          />
+        </>
       )}
     </div>
   );

@@ -36,6 +36,7 @@ export interface LcpRouteProduct {
   image: string;
   imageHint: string;
   imageLarge: string;
+  inventory_tracking_policy?: string | null;
   keywords?: string[];
   manage_stock: boolean;
   max_variant_price?: number;
@@ -147,6 +148,7 @@ export function getCachedProductRoutePrimaryImage(
     normalizeStorefrontProductVariants(cachedProduct.product_variants, {
       merchantId: cachedProduct.merchant_id || OGABASSEY_MERCHANT_ID,
       productId: cachedProduct.id,
+      parentStock: getEffectiveStock(cachedProduct),
     });
   const initialVariant = getInitialRouteVariant(
     cachedProduct,
@@ -180,6 +182,7 @@ export function mapCachedProductLcpHintToRouteProduct(
     {
       merchantId: cachedProduct.merchant_id || OGABASSEY_MERCHANT_ID,
       productId: cachedProduct.id,
+      parentStock: effectiveStock,
     }
   );
   const primaryImage =
@@ -216,6 +219,7 @@ export function mapCachedProductLcpHintToRouteProduct(
     image: primaryImage,
     imageHint: cachedProduct.name,
     imageLarge: primaryImage,
+    inventory_tracking_policy: cachedProduct.inventory_tracking_policy ?? null,
     manage_stock: manageStock,
     max_variant_price: canUseDenormalizedVariantPrices
       ? (parseRouteProductNumber(cachedProduct.max_variant_price) ?? undefined)

@@ -6,19 +6,26 @@ import { Ratelimit } from '@upstash/ratelimit';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { rateLimitDiagnostics } from './rate-limit-diagnostics';
+import {
+  checkMemoryRateLimit,
+  resetMemoryRateLimitStore,
+} from './rate-limit-memory';
 import { getRateLimitConfig } from './rate-limit-routes';
 import { getRedis } from './redis';
+
+export { cleanupRateLimitStore } from './rate-limit-memory';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface RateLimitConfig {
+export interface RateLimitConfig {
   maxRequests: number;
   windowMs: number;
+  failClosedWithoutRedis?: boolean;
 }
 
-interface RateLimitResult {
+export interface RateLimitResult {
   allowed: boolean;
   limit: number;
   remaining: number;
@@ -104,63 +111,32 @@ function getUpstashLimiter(config: RateLimitConfig): Ratelimit | null {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory fallback (when Redis is unavailable)
-// ---------------------------------------------------------------------------
-
-const memoryStore = new Map<string, { count: number; resetTime: number }>();
-const MAX_STORE_SIZE = 10_000;
-const PRUNE_BATCH_SIZE = 100;
-
-function pruneStore(now: number): void {
-  if (memoryStore.size < MAX_STORE_SIZE) return;
-  let pruned = 0;
-  for (const [key, entry] of memoryStore) {
-    if (now > entry.resetTime) {
-      memoryStore.delete(key);
-      pruned++;
-      if (pruned >= PRUNE_BATCH_SIZE) break;
-    }
-  }
-}
-
-function checkMemoryRateLimit(
-  identifier: string,
-  pattern: string,
-  config: RateLimitConfig
-): RateLimitResult {
-  const key = `${identifier}:${pattern}`;
-  const now = Date.now();
-  pruneStore(now);
-
-  let entry = memoryStore.get(key);
-  if (!entry || now > entry.resetTime) {
-    entry = { count: 0, resetTime: now + config.windowMs };
-  }
-
-  entry.count++;
-  memoryStore.set(key, entry);
-
-  const allowed = entry.count <= config.maxRequests;
-  const remaining = Math.max(0, config.maxRequests - entry.count);
-
-  return {
-    allowed,
-    limit: config.maxRequests,
-    remaining,
-    resetTime: entry.resetTime,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Main entry point (async — uses Redis when available, memory fallback)
 // ---------------------------------------------------------------------------
 
-export function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
+export function checkRateLimit(
+  request: NextRequest,
+  pathnameOverride?: string
+): Promise<RateLimitResult> {
   const identifier = getClientIdentifier(request);
-  const pathname = request.nextUrl.pathname;
+  // Alias-shaped API paths (e.g. /old-slug/api/...) must be bucketed by
+  // their normalized endpoint pathname: the raw path matches no endpoint
+  // pattern and would silently fall back to the generic 50/min default.
+  const pathname = pathnameOverride ?? request.nextUrl.pathname;
   const { config, pattern } = getRateLimitConfig(pathname);
 
   return applyRateLimit(identifier, pattern, config);
+}
+
+function denyWithoutDistributedBackend(
+  config: RateLimitConfig
+): RateLimitResult {
+  return {
+    allowed: false,
+    limit: config.maxRequests,
+    remaining: 0,
+    resetTime: Date.now() + config.windowMs,
+  };
 }
 
 async function applyRateLimit(
@@ -185,17 +161,24 @@ async function applyRateLimit(
         resetTime: result.reset,
       };
     } catch {
-      // Redis error — fall through to in-memory
+      // Redis error — fall through to in-memory, unless this abuse-
+      // sensitive bucket fails closed without its distributed backend.
       void rateLimitDiagnostics.report({
         backend: 'memory',
         reason: 'redis_error',
       });
+      if (config.failClosedWithoutRedis) {
+        return denyWithoutDistributedBackend(config);
+      }
     }
   } else {
     void rateLimitDiagnostics.report({
       backend: 'memory',
       reason: 'redis_unavailable',
     });
+    if (config.failClosedWithoutRedis) {
+      return denyWithoutDistributedBackend(config);
+    }
   }
 
   // Fallback to in-memory
@@ -244,23 +227,6 @@ export function createRateLimitResponse(
 }
 
 // ---------------------------------------------------------------------------
-// Cleanup (in-memory fallback only)
-// ---------------------------------------------------------------------------
-
-export function cleanupRateLimitStore(): void {
-  const now = Date.now();
-  for (const [key, entry] of memoryStore.entries()) {
-    if (now > entry.resetTime) {
-      memoryStore.delete(key);
-    }
-  }
-}
-
-if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupRateLimitStore, 5 * 60 * 1000);
-}
-
-// ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
@@ -270,7 +236,7 @@ export function __resetRateLimitStoreForTesting(): void {
       '__resetRateLimitStoreForTesting should only be called in test environment'
     );
   }
-  memoryStore.clear();
+  resetMemoryRateLimitStore();
   upstashLimiters.clear();
   rateLimitDiagnostics.reset();
 }

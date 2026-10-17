@@ -36,10 +36,49 @@ export const eventPipelineFrozenRoutes = {
   // site and inherited authority is unchanged.
   // Re-pinned after moving the pilot gate below server-verified fee
   // computation; it now judges the effective shipping fee.
+  // Re-pinned for exact condition-offer identity: the route accepts
+  // offerId/offer_id twins, passes them into the order RPC items, and
+  // verifies each line against live offers (400/500); notification and
+  // payment authority are unchanged. Re-pinned again for the offer
+  // economics errors: invalid_offer/insufficient_offer_stock map to 400
+  // beside the variant twins; no other route behavior changed. Re-pinned a
+  // third time for live-offer pricing: the route loads live offer prices
+  // once, recomputes offer-line assurance fees from them, and threads them
+  // into the negotiation catalog and VAT basis; authority unchanged.
+  // Re-pinned a fourth time: fee recompute moved after the negotiation
+  // preflight onto the validated charged basis; authority unchanged.
+  // Re-pinned a fifth time: offer lines bind the live offer condition
+  // (persist it, reject mismatches) and the canonical subtotal prices
+  // offer lines from verified live offer economics for discount and
+  // shipping-rate eligibility; notification and payment authority are
+  // unchanged. Re-pinned a sixth time: offer verification, condition
+  // reconciliation, and assurance recomputation move to focused route
+  // helpers with identical responses; authority unchanged. Re-pinned a
+  // seventh time: those helpers move to lib/checkout (import-only);
+  // authority unchanged. Re-pinned an eighth time: the savings fallback
+  // idempotency fingerprint includes the line offer id so two savings
+  // orders for different offers of one product mint distinct redemption
+  // keys; notification and payment authority are unchanged. Idempotent
+  // retries now bypass live offer economics via a keyed-order probe so the
+  // RPC replays the stored order; fresh-order validation is unchanged.
+  // Re-pinned a ninth time: replay restores the stored discount and
+  // canonical per-line fees, and quote validation prices exact-offer
+  // lines from live offers; fresh-order authority is unchanged.
+  // Re-pinned a tenth time: REDVAULT replay skips stored-discount
+  // restore and offer replay falls back to the unambiguous offerless
+  // reduced key; notification and payment authority are unchanged.
+  // Re-pinned an eleventh time: F1 replay call, failure mapping, and
+  // result destructure extracted to resolveOfferReplayForOrderRoute
+  // (Boy Scout Rule); replay semantics and responses are unchanged.
+  // Re-pinned for the 16..128-byte idempotency-key floor at the route
+  // gate (400 for short/low-entropy keys); notification, payment
+  // authority, and database operations are unchanged.
+  'apps/web/src/app/api/orders/route.ts':
+    '318e7f5c0abc51365361847bc68577fb2b114735a7b6ff44861d25dfa5ea27e4',
   // Re-pinned for reviewed new-order-only attested shipping coordinates.
   // Existing-order replay, notification and payment authority are unchanged.
-  'apps/web/src/app/api/orders/route.ts':
-    '157cfe3c8fb5dccfe0ec49545b3560878d0c8fb89bd40da286870b8c8bdf6c70',
+  // Merge re-pin: branch extraction plus main's attested shipping
+  // coordinates; both reviewed, hash covers the union.
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

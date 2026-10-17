@@ -84,6 +84,8 @@ export type ProductCondition = 'new' | 'used' | 'open_box' | 'refurbished';
 export interface ProductVariant {
   id: string;
   inventory_tracking_policy?: string | null;
+  effective_policy?: string | null;
+  available_units?: number | null;
   product_id: string;
   merchant_id: string;
   attributes: Record<string, string>; // { color: 'Blue', storage: '128GB' }
@@ -174,6 +176,11 @@ export interface Product {
   price: number;
   manage_stock: boolean;
   stock: number;
+  inventory_tracking_policy?: string | null;
+  // Base-unit pool for strict serialized products: hydration folds exact
+  // units here while offer adds overwrite stock with the selected
+  // allocation, so the cart aggregate cap reads this field.
+  stock_quantity?: number | null;
   minimum_order_quantity?: number;
   image: string;
   imageLarge: string;

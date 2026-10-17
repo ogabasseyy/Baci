@@ -16,12 +16,16 @@ import Colors from '@/constants/Colors';
 import { MODAL_DISMISS_FALLBACK_MS } from '@/constants/modal-dismiss';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
 import { useHaptics } from '@/hooks/use-haptics';
+import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
 import { isValidCartStore } from '@/lib/cart-validation';
 import { CONFIG } from '@/lib/config';
 import { getTemplateConfig } from '@/lib/templates';
 import { type CartItem, formatPrice, useCartStore } from '@/stores/cart-store';
 
 export default function CartScreen() {
+  // Reconcile lines stamped pending while the setting was unknown: a
+  // cold deep link to /cart never mounts the tab layout's warm-up.
+  useWarmMerchantPaymentSettings();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const colorScheme = (useColorScheme() ?? 'light') as 'light' | 'dark';
@@ -162,8 +166,10 @@ export default function CartScreen() {
   } = useCartNegotiation({ items, grandTotal });
 
   // Reconcile cart prices against the live catalog when the cart opens.
-  const { priceChanges, dismissPriceChanges } = useCartReprice();
-  const isPriceChangeVisible = priceChanges.length > 0;
+  const { priceChanges, conditionChanges, dismissPriceChanges } =
+    useCartReprice();
+  const isPriceChangeVisible =
+    priceChanges.length > 0 || conditionChanges.length > 0;
 
   useEffect(() => {
     if (isPriceChangeVisible) setPriceChangeDismissed(false);
@@ -275,6 +281,7 @@ export default function CartScreen() {
       <PriceChangeModal
         visible={isPriceChangeVisible}
         changes={priceChanges}
+        conditionChanges={conditionChanges}
         onClose={dismissPriceChanges}
         onDismissed={() => setPriceChangeDismissed(true)}
         colors={colors}

@@ -1,23 +1,36 @@
 'use client';
 
+import {
+  resolveAssuranceMerchantSetting,
+  resolveDefaultVariantSelection,
+} from '@baci/shared/lib';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { logger } from '@/lib/logger';
 import type { Product } from '@/lib/products';
-import { resolveDefaultVariantSelection } from '../../../../../packages/shared/src/lib/product-default-variant';
+import { resolveSerializedVariantStock } from '@/lib/serialized-variant-stock';
 import { CartContext } from './cart-context';
+import { applyStorefrontCartLineAdd } from './cart-line-add';
+import {
+  capUpdatedSimpleLineQuantity,
+  resolveSimpleLineAddCaps,
+} from './cart-stock-caps';
 import {
   DEFAULT_ASSURANCE_RATE,
   DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS,
-  generateCartItemId,
   getMerchantSlugFromStorage,
   saveCartToStorage,
   saveCartWideNegotiationToStorage,
   saveMerchantSlugToStorage,
 } from './cart-storage';
-import type { AddToCartOptions, CartContextType, CartItem } from './cart-types';
-import { findMergingCartLineIndex } from './find-merging-cart-line';
+import type {
+  AddToCartOptions,
+  AddToCartOutcome,
+  CartContextType,
+  CartItem,
+} from './cart-types';
 import { getMerchantCartState } from './merchant-cart-storage';
 import {
   applyValidationResults,
@@ -31,6 +44,28 @@ interface StorefrontCartProviderProps {
   merchantSlug?: string | null;
   deferValidationUntilIdle?: boolean;
   validationActivationTimeoutMs?: number;
+}
+
+/**
+ * Quantity-edit line targeting, shared by the applied-ness probe and
+ * the cart updater so the two can never diverge: an explicit variant
+ * id pins the line, otherwise the V2 cart item id or a variant-less
+ * product id matches.
+ */
+function findQuantityEditTargetIndex(
+  cart: CartItem[],
+  cartItemIdOrProductId: string,
+  variantId?: string
+): number {
+  return cart.findIndex((item) => {
+    if (variantId) {
+      return item.id === cartItemIdOrProductId && item.variantId === variantId;
+    }
+    return (
+      item.cartItemId === cartItemIdOrProductId ||
+      (item.id === cartItemIdOrProductId && !item.variantId)
+    );
+  });
 }
 
 export function StorefrontCartProvider({
@@ -67,6 +102,12 @@ export function StorefrontCartProvider({
   const [showUpsell, setShowUpsell] = useState(false);
   const upsellTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastValidatedCartHashRef = useRef('');
+  const cartRef = useRef<CartItem[]>(cart);
+  // Merchant context is the same source the line items use for the
+  // shipping-insurance toggle, so the add-time default can never charge
+  // a fee the toggle hides. Null outside a merchant provider (tests,
+  // non-shell usages), where the slug-scoped default is preserved.
+  const merchantContext = useMerchantSafe();
 
   // Re-sync the slug + cart when the merchant slug prop changes (after the
   // initial hydration). Adjusting during render avoids the stale frame a
@@ -107,6 +148,16 @@ export function StorefrontCartProvider({
   useEffect(() => {
     cartWideNegotiationActiveRef.current = cartWideNegotiationActive;
   }, [cartWideNegotiationActive]);
+
+  // Serializes batched adds for outcome reporting: addToCart probes
+  // against this ref and advances it synchronously on applied adds, so
+  // two adds in the same tick observe each other (the render's `cart`
+  // would show both the same stale snapshot). Updater-based writers
+  // (remove, quantity edits, validation) converge here after commit;
+  // value writers below sync it eagerly.
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
 
   // Hydrate cart + merchant slug from localStorage after mount (storage is
   // unavailable during SSR), gated by `isHydrated` so consumers keep rendering
@@ -341,7 +392,9 @@ export function StorefrontCartProvider({
               defaultVariantSelection.compareAtPrice ??
               product.compare_at_price,
             stock:
-              defaultVariantSelection.variant.stock_quantity ?? product.stock,
+              resolveSerializedVariantStock(defaultVariantSelection.variant) ??
+              defaultVariantSelection.variant.stock_quantity ??
+              product.stock,
           }
         : product;
 
@@ -355,7 +408,7 @@ export function StorefrontCartProvider({
     );
     if (
       !isQuizPrizeVoucherLine &&
-      productForCart.manage_stock &&
+      (productForCart.manage_stock ?? true) &&
       (productForCart.stock ?? 0) <= 0
     ) {
       logger.warn({
@@ -364,8 +417,18 @@ export function StorefrontCartProvider({
         productName: productForCart.name,
         stock: productForCart.stock,
       });
-      return;
+      return 'rejected';
     }
+
+    // Add-path caps (offer allocation + shared strict pool) live in
+    // cart-stock-caps; the same caps cover fresh and merged adds.
+    const addCaps = resolveSimpleLineAddCaps({
+      product: productForCart,
+      isVoucherLine: isQuizPrizeVoucherLine,
+      variantId: normalizedOptions?.variantId,
+      offerId: normalizedOptions?.offerId,
+      stock: productForCart.stock,
+    });
 
     if (product.has_variants && !normalizedOptions?.variantId) {
       logger.warn({
@@ -373,58 +436,65 @@ export function StorefrontCartProvider({
         productId: productForCart.id,
         productName: productForCart.name,
       });
-      return;
+      return 'rejected';
+    }
+
+    // The add-time assurance default must match the toggle the line
+    // items render (see the shared setting resolver): a definite slug
+    // mismatch forces the default off rather than charging a fee with
+    // no removal control.
+    const contextMerchant = merchantContext?.merchant;
+    const shippingInsuranceEnabled = resolveAssuranceMerchantSetting({
+      contextSlug: contextMerchant?.slug,
+      contextSetting:
+        contextMerchant?.feature_settings?.shipping_insurance_enabled,
+      cartSlug: merchantSlugRef.current,
+    });
+
+    const lineAddInput = {
+      product,
+      productForCart,
+      normalizedOptions,
+      quantity,
+      caps: addCaps,
+      assurance: {
+        smartCartProEnabled: enableSmartCartPro,
+        merchantSlug: merchantSlugRef.current,
+        hasQuizVoucher: Boolean(
+          normalizedOptions?.quizAwardId || normalizedOptions?.quizVoucherToken
+        ),
+        shippingInsuranceEnabled,
+      },
+    };
+    // Probe the outcome against the serialized cart ref so callers can
+    // gate success effects (upsell, toasts, analytics) on it, and advance
+    // the ref on applied adds so batched same-tick adds observe each
+    // other. The write below still runs through the updater against
+    // committed state (preserving multi-writer safety with the
+    // updater-based remove/edit paths); only a same-tick removal or
+    // edit racing this add can skew the probe. That edge skips one
+    // success toast while the cart badge still updates, and can leave
+    // the group flag set after the updater stripped the lines — the
+    // money paths key off per-line negotiatedPrice so no charged total
+    // changes, and the next validation drift self-heals the flag.
+    const probeResult = applyStorefrontCartLineAdd({
+      previousCart: cartRef.current,
+      ...lineAddInput,
+    });
+    const outcome: AddToCartOutcome =
+      probeResult === cartRef.current ? 'rejected' : 'applied';
+    if (outcome === 'applied') {
+      cartRef.current = probeResult;
     }
 
     const wasGroupActive = cartWideNegotiationActiveRef.current;
     setCart((previousCart) => {
-      const cartItemId = generateCartItemId(
-        productForCart.id,
-        normalizedOptions
-      );
-      const existingIndex = findMergingCartLineIndex(
+      const result = applyStorefrontCartLineAdd({
         previousCart,
-        product,
-        normalizedOptions
-      );
-
-      let result: CartItem[];
-      if (existingIndex >= 0) {
-        const nextCart = [...previousCart];
-        const existingItem = nextCart[existingIndex];
-        nextCart[existingIndex] = {
-          ...existingItem,
-          quantity: existingItem.quantity + quantity,
-          cartItemId: existingItem.cartItemId || cartItemId,
-        };
-        result = nextCart;
-      } else {
-        result = [
-          ...previousCart,
-          {
-            ...productForCart,
-            cartItemId,
-            quantity,
-            variantId: normalizedOptions?.variantId,
-            variantAttributes: normalizedOptions?.variantAttributes,
-            selectedColor: normalizedOptions?.color,
-            selectedColorValue: normalizedOptions?.colorValue,
-            secondaryColor: normalizedOptions?.secondaryColor,
-            secondaryColorValue: normalizedOptions?.secondaryColorValue,
-            selectedStorage: normalizedOptions?.storage,
-            condition: normalizedOptions?.condition as
-              | 'new'
-              | 'used'
-              | 'open_box'
-              | 'refurbished'
-              | undefined,
-            quizAwardId: normalizedOptions?.quizAwardId,
-            quizVoucherToken: normalizedOptions?.quizVoucherToken,
-            negotiationStatus: 'none',
-            hasAssurance: false,
-            assuranceRate: DEFAULT_ASSURANCE_RATE,
-          },
-        ];
+        ...lineAddInput,
+      });
+      if (result === previousCart) {
+        return previousCart;
       }
 
       // Adding/merging a line changes the cart composition, so an active
@@ -444,16 +514,20 @@ export function StorefrontCartProvider({
       return result;
     });
 
-    if (wasGroupActive) {
+    // A rejected add changes nothing, so the group deal survives it;
+    // clearing the flag here would persist discounted lines under a
+    // false inactive flag.
+    if (wasGroupActive && outcome === 'applied') {
       setCartWideNegotiationActive(false);
     }
 
-    if (enableSmartCartPro) {
+    if (outcome === 'applied' && enableSmartCartPro) {
       setLastAddedProduct(productForCart);
       upsellTimerRef.current = setTimeout(() => {
         setShowUpsell(true);
       }, 500);
     }
+    return outcome;
   };
 
   const removeFromCart = (
@@ -500,19 +574,40 @@ export function StorefrontCartProvider({
     variantId?: string
   ) => {
     const wasGroupActive = cartWideNegotiationActiveRef.current;
+    // Probe applied-ness synchronously, mirroring the add path: updaters
+    // run later, so an in-updater flag would still read true at the gate
+    // below. A missing target or a keepPrevious cap leaves the cart —
+    // including per-line negotiated prices — untouched, so the group
+    // deal must survive. Same-tick writers can skew the probe the way
+    // they can the add probe; the updater stays authoritative for the
+    // cart contents.
+    const probeCart = cartRef.current;
+    const probeIndex = findQuantityEditTargetIndex(
+      probeCart,
+      cartItemIdOrProductId,
+      variantId
+    );
+    let editApplied = probeIndex !== -1;
+    if (editApplied && quantity > 0) {
+      const probeItem = probeCart[probeIndex];
+      const probeMinimum = probeItem.minimum_order_quantity || 1;
+      const probeQuantity = quantity < probeMinimum ? probeMinimum : quantity;
+      editApplied = !(
+        'keepPrevious' in
+        capUpdatedSimpleLineQuantity({
+          item: probeItem,
+          cart: probeCart,
+          excludeIndex: probeIndex,
+          quantity: probeQuantity,
+        })
+      );
+    }
     setCart((previousCart) => {
-      const targetIndex = previousCart.findIndex((item) => {
-        if (variantId) {
-          return (
-            item.id === cartItemIdOrProductId && item.variantId === variantId
-          );
-        }
-
-        return (
-          item.cartItemId === cartItemIdOrProductId ||
-          (item.id === cartItemIdOrProductId && !item.variantId)
-        );
-      });
+      const targetIndex = findQuantityEditTargetIndex(
+        previousCart,
+        cartItemIdOrProductId,
+        variantId
+      );
 
       if (targetIndex === -1) return previousCart;
       if (quantity <= 0) {
@@ -532,10 +627,23 @@ export function StorefrontCartProvider({
       const nextCart = [...previousCart];
       const item = nextCart[targetIndex];
       const minimumOrderQuantity = item.minimum_order_quantity || 1;
+      let nextQuantity =
+        quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity;
+      // Update-path caps (offer allocation + strict pool) live in
+      // cart-stock-caps with the add-path rules.
+      const capped = capUpdatedSimpleLineQuantity({
+        item,
+        cart: previousCart,
+        excludeIndex: targetIndex,
+        quantity: nextQuantity,
+      });
+      if ('keepPrevious' in capped) {
+        return previousCart;
+      }
+      nextQuantity = capped.quantity;
       nextCart[targetIndex] = {
         ...item,
-        quantity:
-          quantity < minimumOrderQuantity ? minimumOrderQuantity : quantity,
+        quantity: nextQuantity,
       };
       // A quantity change alters the cart total, so an active cart-wide
       // negotiation no longer represents the agreed total — clear the group
@@ -549,7 +657,7 @@ export function StorefrontCartProvider({
       }
       return nextCart;
     });
-    if (wasGroupActive) {
+    if (wasGroupActive && editApplied) {
       setCartWideNegotiationActive(false);
     }
   };
@@ -563,6 +671,9 @@ export function StorefrontCartProvider({
     saveCartToStorage([], slugToClear);
     saveCartWideNegotiationToStorage(false, slugToClear);
     setCart([]);
+    // Keep the serialized add-probe ref aligned: a same-tick add after
+    // this clear must probe against the empty cart, not the stale one.
+    cartRef.current = [];
     merchantSlugRef.current = null;
     setMerchantSlugState(null);
     saveMerchantSlugToStorage(null);
@@ -580,6 +691,9 @@ export function StorefrontCartProvider({
     const merchantCartState = getMerchantCartState(slug);
     setMerchantSlugState(slug);
     setCart(merchantCartState.cart);
+    // Same-tick adds after a merchant switch must probe against the
+    // newly loaded cart, not the previous merchant's lines.
+    cartRef.current = merchantCartState.cart;
     setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
     saveMerchantSlugToStorage(slug);
   };

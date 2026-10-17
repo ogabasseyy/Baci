@@ -49,4 +49,26 @@ describe('SearchResultsEmptyState', () => {
     );
     expect(onCategoryPress).toHaveBeenCalledWith('all');
   });
+
+  it('hides the request action for queries the intake schema rejects', () => {
+    const { unmount } = renderEmptyState({ committedQuery: 'a'.repeat(150) });
+
+    expect(
+      screen.queryByRole('button', { name: 'Request this product' })
+    ).toBeNull();
+    unmount();
+
+    renderEmptyState({ committedQuery: '!!' });
+    expect(
+      screen.queryByRole('button', { name: 'Request this product' })
+    ).toBeNull();
+  });
+
+  it('shows the request action for schema-valid queries', () => {
+    renderEmptyState({ committedQuery: 'iphone 99' });
+
+    expect(
+      screen.getByRole('button', { name: 'Request this product' })
+    ).toBeTruthy();
+  });
 });

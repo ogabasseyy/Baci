@@ -11,6 +11,7 @@ import {
 import { createWarmPositiveCache } from './create-warm-positive-cache';
 import { fetchCustomDomain, fetchSlugForDomain } from './domain-cache-database';
 import { cacheableDomainResolution } from './domain-cache-resolution';
+import { normalizeDomain, reverseDomainCache } from './reverse-domain-cache';
 import { SingleFlight } from './single-flight';
 
 interface CacheEntry {
@@ -67,10 +68,6 @@ const reverseDbReads = new SingleFlight<string | null>();
 
 function normalizeSlug(slug: string): string {
   return slug.trim().toLowerCase();
-}
-
-function normalizeDomain(domain: string): string {
-  return domain.trim().toLowerCase().replace(/\.+$/, '');
 }
 
 /** Look up a merchant's primary custom domain by slug. */
@@ -167,13 +164,6 @@ export function invalidateForwardDomainCacheForSlug(slug: string): void {
  * Uses in-memory cache with DB fallback (same pattern as getCustomDomainForSlug).
  * Used by the proxy to rewrite SEO file paths (sitemap, robots) without dots in [slug].
  */
-interface ReverseCacheEntry {
-  slug: string | null;
-  timestamp: number;
-}
-
-const reverseDomainCache = new Map<string, ReverseCacheEntry>();
-
 /** Drop reverse domain->slug entries that map to a renamed slug. */
 export function invalidateReverseDomainCacheForSlug(slug: string): void {
   const normalizedSlug = normalizeSlug(slug);

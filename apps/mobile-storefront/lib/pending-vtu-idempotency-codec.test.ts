@@ -37,14 +37,17 @@ describe('pending-vtu-idempotency-codec', () => {
   });
 
   it('round-trips completion timestamps; legacy entries default to null', () => {
+    // Pinned clock (R156): the entry() helper defaults rememberedAt to
+    // Date.now(), so building the two sides on separate ticks flakes
+    // by 1ms under CI load (failed 2026-10-17 on ...230 vs ...231).
     const now = Date.now();
     const serialized = serializePendingVtuEntries(
-      [['a', entry({ completedAt: now - 1000 })]],
+      [['a', entry({ completedAt: now - 1000, rememberedAt: now })]],
       []
     );
 
     expect(parsePendingVtuSnapshot(serialized, now)).toEqual({
-      entries: [['a', entry({ completedAt: now - 1000 })]],
+      entries: [['a', entry({ completedAt: now - 1000, rememberedAt: now })]],
       forgotten: [],
     });
     // Pre-completion-tracking snapshots omit the field: fail open so

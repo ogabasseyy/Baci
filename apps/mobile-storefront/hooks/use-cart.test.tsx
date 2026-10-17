@@ -423,6 +423,9 @@ describe('useCart stock validation', () => {
 
   it('removes only the failed add when same-line adds overlap', async () => {
     type StockResult = { available: boolean; currentStock: number };
+    // Pin the clock: both adds share a timestamp, so the rollback
+    // entries must stay addressable without relying on ms boundaries.
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1792215000000);
     let releaseFirst!: (result: StockResult) => void;
     const firstGate = new Promise<StockResult>((resolve) => {
       releaseFirst = resolve;
@@ -481,6 +484,7 @@ describe('useCart stock validation', () => {
         expect(useCartStore.getState().items[0].quantity).toBe(2);
       });
     } finally {
+      nowSpy.mockRestore();
       unmount();
       queryClient.clear();
     }

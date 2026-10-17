@@ -57,6 +57,10 @@ export function useCart() {
 
   // Track pending operations for rollback
   const pendingRollbacks = useRef<Map<string, () => void>>(new Map());
+  // Monotonic rollback sequence: Date.now() alone can collide for two
+  // rapid adds in the same millisecond, so the sequence keeps every
+  // pending entry addressable even when timestamps match.
+  const rollbackSequence = useRef(0);
 
   /** L11 fix: Evict oldest rollback entries to prevent memory leak under rapid mutation spam */
   function trackRollback(id: string, fn: () => void) {
@@ -112,7 +116,7 @@ export function useCart() {
     // Optimistic update - runs immediately before mutationFn
     onMutate: (item) => {
       // Generate a temporary ID for potential rollback
-      const rollbackId = `${item.product_id}-${item.variant_id || 'default'}-${Date.now()}`;
+      const rollbackId = `${item.product_id}-${item.variant_id || 'default'}-${Date.now()}-${rollbackSequence.current++}`;
 
       // Capture current state for rollback (read fresh from store to avoid stale closure)
       const previousItems = [...useCartStore.getState().items];

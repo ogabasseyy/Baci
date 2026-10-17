@@ -10,6 +10,10 @@ vi.mock('@/hooks/use-cart', () => ({
   clearCartStorage: vi.fn(),
 }));
 
+vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
+  revokeCartDeviceSession: vi.fn().mockResolvedValue({ ok: true }),
+}));
+
 vi.mock('@/contexts/customer-live-identity', () => ({
   publishCustomerIdentity: vi.fn(),
 }));

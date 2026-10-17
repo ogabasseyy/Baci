@@ -14,6 +14,7 @@ export const orderRefundStatusLabels: Record<string, string> = {
   retry_requested: 'Retry requested',
   manual_recorded: 'Manual refund recorded',
   provider_confirmed: 'Refund confirmed',
+  note_corrected: 'Note corrected',
 };
 
 // Ledger refund methods: metadata.method for manual rows, gateway

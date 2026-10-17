@@ -65,6 +65,12 @@ BEGIN
           AND transaction_type='refund' AND status IN ('completed','refunded')
           AND public.normalized_gateway_name_v1(gateway)='MANUAL'
           AND btrim(metadata->>'reference')=NULLIF(btrim(p_reference),'');
+      -- The transactions audit trigger fires on status changes only,
+      -- so a note-only rewrite would land silently: log who/when per
+      -- transfer. Details stay reference-only (an allowed mask key).
+      INSERT INTO public.order_refund_events(order_id,merchant_id,actor_id,action,details)
+        VALUES (p_order_id,p_merchant_id,auth.uid(),'note_corrected',
+          jsonb_build_object('reference',p_reference));
     END IF;
     RETURN 'status'; -- Idempotent retry of an already recorded transfer.
   END IF;

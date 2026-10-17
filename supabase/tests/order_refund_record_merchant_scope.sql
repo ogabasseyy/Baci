@@ -90,8 +90,22 @@ BEGIN
     -- fully drained and route the attestation to review.
     ('9ef82000-0000-4000-8000-000000000006', v_merchant_b, v_ps_order_id,
       'refund', 100, 'NGN', 'completed', 'manual', 'scope-rogue-ps',
-      jsonb_build_object('payment_transaction_id', v_ps_leg_id::text));
+      jsonb_build_object('payment_transaction_id', v_ps_leg_id::text)),
+    -- Rogue payment leg plus a partial manual linked to it: an
+    -- unscoped partial scan would report partial-manual state for
+    -- merchant A from merchant B's rows alone.
+    ('9ef82000-0000-4000-8000-000000000007', v_merchant_b, v_order_id,
+      'payment', 100, 'NGN', 'completed', 'cash', 'scope-rogue-leg',
+      '{}'::jsonb),
+    ('9ef82000-0000-4000-8000-000000000008', v_merchant_b, v_order_id,
+      'refund', 40, 'NGN', 'completed', 'manual', 'scope-rogue-partial',
+      jsonb_build_object(
+        'payment_transaction_id',
+        '9ef82000-0000-4000-8000-000000000007'));
 
+  -- Reach the partial helper past the schema boundary (rolled
+  -- back): the suite asserts production keeps USAGE denied.
+  GRANT USAGE ON SCHEMA private TO authenticated;
 END;
 $scope_fixtures$;
 
@@ -106,16 +120,30 @@ SELECT pg_catalog.set_config(
 DO $scope_assert$
 DECLARE
   v_result jsonb;
+  v_partial boolean;
+  v_note_events integer;
+  -- Replay identity includes the refund instant: record and replay
+  -- must present the same instant, not two clock reads apart.
+  v_refunded_at timestamptz := pg_catalog.now();
 BEGIN
   -- Through the production manager path (DEFINER-side writes): the
   -- rogue rows are invisible to the merchant-scoped scans, so the
   -- full manual record succeeds instead of routing to review.
   SELECT public.manage_order_refund(
     '9ef81000-0000-4000-8000-000000000001', 'manual', 100,
-    pg_catalog.now(), 'bank_transfer', 'scope-rec-1', NULL, true
+    v_refunded_at, 'bank_transfer', 'scope-rec-1', NULL, true
   ) INTO v_result;
   IF v_result IS NULL THEN
     RAISE EXCEPTION 'scoped record returned null';
+  END IF;
+  -- The pin-candidate legs list the capture before anything is
+  -- recorded: an unscoped outstanding aggregate would read the
+  -- rogue drain and hide it.
+  SELECT public.manage_order_refund(
+    '9ef81000-0000-4000-8000-000000000002'
+  ) INTO v_result;
+  IF jsonb_array_length(v_result->'legs') <> 1 THEN
+    RAISE EXCEPTION 'rogue drain hid the pin-candidate leg';
   END IF;
   -- Unpinned Paystack attestation beside the rogue drain: the lone
   -- capture self-pins (candidate/outstanding aggregates ignore the
@@ -126,6 +154,29 @@ BEGIN
   ) INTO v_result;
   IF v_result IS NULL THEN
     RAISE EXCEPTION 'scoped paystack record returned null';
+  END IF;
+  -- Partial-manual state ignores the rogue leg pair: merchant A has
+  -- no partial coverage (order 1 fully recorded), so only an
+  -- unscoped scan could report partial here. (True-behavior is
+  -- pinned by the retry-gating suites.)
+  SELECT private.manual_refund_partial_v1(
+    '9ef81000-0000-4000-8000-000000000001', 100
+  ) INTO v_partial;
+  IF v_partial IS NOT FALSE THEN
+    RAISE EXCEPTION 'rogue rows reported partial-manual state';
+  END IF;
+  -- Replaying the transfer with a corrected note audits the
+  -- rewrite: the metadata-only update fires no status trigger.
+  SELECT public.manage_order_refund(
+    '9ef81000-0000-4000-8000-000000000001', 'manual', 100,
+    v_refunded_at, 'bank_transfer', 'scope-rec-1', 'Corrected note',
+    true
+  ) INTO v_result;
+  SELECT count(*) INTO v_note_events FROM public.order_refund_events
+    WHERE order_id = '9ef81000-0000-4000-8000-000000000001'
+      AND action = 'note_corrected';
+  IF v_note_events <> 1 THEN
+    RAISE EXCEPTION 'note rewrite logged % events, want 1', v_note_events;
   END IF;
 END;
 $scope_assert$;

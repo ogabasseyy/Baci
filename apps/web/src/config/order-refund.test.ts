@@ -27,6 +27,7 @@ describe('refund display labels', () => {
       'retry_requested',
       'manual_recorded',
       'provider_confirmed',
+      'note_corrected',
     ]) {
       expect(orderRefundStatusLabels[action]).toMatch(/\S/);
       expect(orderRefundStatusLabels[action]).not.toContain('_');

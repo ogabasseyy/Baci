@@ -70,7 +70,7 @@ BEGIN
     FROM (SELECT p.id,p.amount,p.gateway,p.gateway_reference,p.created_at,
       GREATEST(p.amount-COALESCE((SELECT sum(r.amount)
         FROM public.transactions r
-        WHERE r.order_id=p_order_id AND r.transaction_type='refund'
+        WHERE r.order_id=p_order_id AND r.merchant_id=p_merchant_id AND r.transaction_type='refund'
         AND r.status IN ('completed','refunded')
         AND upper(btrim(r.currency))=upper(btrim(p.currency))
         AND r.metadata->>'payment_transaction_id'=p.id::text),0),0) AS outstanding

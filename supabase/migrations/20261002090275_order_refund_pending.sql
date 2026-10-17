@@ -265,20 +265,20 @@ BEGIN
   SELECT p_remaining > 0 AND EXISTS (
       SELECT 1
       FROM public.transactions leg
-      WHERE leg.order_id = p_order_id
+      WHERE leg.order_id = p_order_id AND leg.merchant_id = v_merchant
         AND leg.transaction_type = 'payment'
         AND leg.amount > 0
         AND EXISTS (
           SELECT 1
           FROM public.transactions m
-          WHERE m.order_id = p_order_id
+          WHERE m.order_id = p_order_id AND m.merchant_id = v_merchant
             AND m.transaction_type = 'refund'
             AND m.status IN ('completed', 'refunded')
             AND public.normalized_gateway_name_v1(m.gateway) = 'MANUAL'
             AND m.metadata ->> 'payment_transaction_id' = leg.id::text)
         AND (SELECT COALESCE(SUM(m.amount), 0)
           FROM public.transactions m
-          WHERE m.order_id = p_order_id
+          WHERE m.order_id = p_order_id AND m.merchant_id = v_merchant
             AND m.transaction_type = 'refund'
             AND m.status IN ('completed', 'refunded')
             AND public.normalized_gateway_name_v1(m.gateway) = 'MANUAL'

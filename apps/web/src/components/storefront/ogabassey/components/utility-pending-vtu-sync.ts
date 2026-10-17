@@ -257,13 +257,11 @@ export function schedulePendingVtuFlush(): void {
 }
 
 /**
- * Terminal-success forget (Codex R153 P2): memory drops synchronously
- * (same-tab reads stay exact), then one locked flush is awaited so the
- * deletion is durable BEFORE the result finalizes — a scheduled-only
- * forget can lose to a pre-drain exit, and the next identical purchase
- * would replay the old vend as new. True = durable before return; false
- * = lock unacquired or locks unavailable (a background retry is
- * scheduled; memory stays correct for this tab).
+ * Terminal-success forget (Codex R153 P2): memory drops synchronously,
+ * then a locked flush is awaited (3 tight attempts, R155: transient
+ * write blips absorb inline) so the deletion is durable BEFORE the
+ * result finalizes. True = durable; false = persistent failure
+ * (logged; background retry scheduled; memory stays correct).
  */
 export async function forgetPendingVtuPurchaseDurable(
   payloadSignature: string
@@ -271,14 +269,14 @@ export async function forgetPendingVtuPurchaseDurable(
   const live = pendingVtuPurchases.get(payloadSignature);
   pendingVtuPurchases.delete(payloadSignature);
   noteForgottenVtuScope(payloadSignature, Date.now(), live?.key);
-  try {
-    if (await flushPendingVtuPurchases()) {
-      return true;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      if (await flushPendingVtuPurchases()) return true;
+    } catch {
+      break; // Locks unavailable: only the scheduled retry can help.
     }
-  } catch {
-    // Locks unavailable: unreachable from finalize paths (mint fails
-    // closed first); fall through to the scheduled retry for uniformity.
   }
+  console.error('VTU registry terminal forget not durable; retry scheduled.');
   schedulePendingVtuFlush();
   return false;
 }

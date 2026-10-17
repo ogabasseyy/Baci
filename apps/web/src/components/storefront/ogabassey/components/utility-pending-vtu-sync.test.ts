@@ -789,4 +789,74 @@ describe('keyed tombstones (6rrMIj)', () => {
     );
     expect(recallPendingVtuKey(sigDurable)).toBeUndefined();
   });
+
+  it('absorbs transient write blips inside the durable forget (Codex R155 P2)', async () => {
+    clearPendingVtuKeys();
+    mockNavigatorLocks();
+    const signature = scopePendingVtuSignature(
+      'user-1',
+      'merchant-1',
+      '{"blip":true}'
+    );
+    await getPendingVtuKey(signature);
+    await flushPendingVtuPurchases();
+    // Drain the scheduled chain: only the durable attempts below may
+    // consume the one-shot storage failures.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    setItem.mockImplementationOnce(() => {
+      throw new Error('QuotaExceededError');
+    });
+    setItem.mockImplementationOnce(() => {
+      throw new Error('QuotaExceededError');
+    });
+    try {
+      // Two attempts fail, the third lands: true, no scheduled retry.
+      await expect(
+        forgetPendingVtuPurchaseDurable(signature)
+      ).resolves.toBe(true);
+    } finally {
+      setItem.mockRestore();
+    }
+
+    const snapshot = parsePendingVtuSnapshot(loadPendingVtuSnapshot());
+    expect(snapshot.entries).toHaveLength(0);
+    expect(snapshot.forgotten.map((tombstone) => tombstone.scoped)).toContain(
+      signature
+    );
+  });
+
+  it('reports persistent storage failure instead of claiming durability (Codex R155 P2)', async () => {
+    clearPendingVtuKeys();
+    mockNavigatorLocks();
+    const signature = scopePendingVtuSignature(
+      'user-1',
+      'merchant-1',
+      '{"broken":true}'
+    );
+    await getPendingVtuKey(signature);
+    await flushPendingVtuPurchases();
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const setItem = vi
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('QuotaExceededError');
+      });
+    try {
+      // All attempts fail: false (never a false true), memory still
+      // drops so this tab stays exact, and the failure is logged.
+      await expect(
+        forgetPendingVtuPurchaseDurable(signature)
+      ).resolves.toBe(false);
+      expect(consoleError).toHaveBeenCalledWith(
+        'VTU registry terminal forget not durable; retry scheduled.'
+      );
+      expect(recallPendingVtuKey(signature)).toBeUndefined();
+    } finally {
+      consoleError.mockRestore();
+      setItem.mockRestore();
+    }
+  });
 });

@@ -73,15 +73,10 @@ export function hydratePendingVtuPurchases(
 
 /**
  * Merges entries another Expo web tab persisted since this tab loaded
- * (Codex R143 P1 — web mirror of syncPendingVtuPurchasesFromSnapshot).
- * Without this, a retry in a second already-open tab misses the first
- * tab's key, mints fresh, and the server debits a second transaction.
- * In-memory entries win (this tab's writes are fresher than the
- * snapshot); same-key entries merge newer knowledge (reference /
- * completion); snapshot tombstones live-delete matches and suppress
- * older generations. Key-bound on both sides (web R55/R61 parity):
- * only the deleted generation's key is suppressed; keyless legacy
- * tombstones fall back to timestamp arbitration.
+ * (Codex R143 P1, web mirror): without this a second-tab retry misses
+ * the first tab's key, mints fresh, and double-debits. Memory wins;
+ * same-key entries merge knowledge; tombstones live-delete. Key-bound
+ * both sides (R55/R61): keyless legacy tombstones use timestamps.
  */
 export function syncPendingVtuPurchasesFromSnapshot(
   now: number = Date.now()
@@ -205,11 +200,14 @@ export async function forgetPendingVtuPurchaseDurable(
   const live = pendingPurchases.get(descriptor);
   pendingPurchases.delete(descriptor);
   noteForgottenVtuScopes([descriptor], Date.now(), live?.key);
-  try {
-    if (await flushPendingVtuPurchases()) return true;
-  } catch {
-    /* Locks unavailable: fall through to the scheduled retry. */
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      if (await flushPendingVtuPurchases()) return true;
+    } catch {
+      break;
+    }
   }
+  console.error('VTU registry terminal forget not durable; retry scheduled.');
   schedulePendingVtuFlush();
   return false;
 }

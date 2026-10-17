@@ -374,4 +374,59 @@ describe('pending-vtu-idempotency-sync', () => {
     );
     expect(recallPendingVtuKey(durable)).toBeNull();
   });
+
+  it('absorbs transient write blips inside the durable forget (Codex R155 P2, web mirror)', async () => {
+    const descriptor = scopedDescriptor('blip');
+    await getPendingVtuKey(descriptor);
+    await flushPendingVtuPurchases();
+    // Drain the scheduled chain: only the durable attempts below may
+    // consume the one-shot persist failures.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const persistSpy = jest
+      .spyOn(vtuStore, 'persistPendingVtuEntries')
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false);
+    try {
+      // Two attempts fail, the third lands: true, no scheduled retry.
+      await expect(forgetPendingVtuPurchaseDurable(descriptor)).resolves.toBe(
+        true
+      );
+    } finally {
+      persistSpy.mockRestore();
+    }
+
+    const snapshot = vtuCodec.parsePendingVtuSnapshot(
+      vtuStore.loadPendingVtuSnapshot()
+    );
+    expect(snapshot.entries).toHaveLength(0);
+    expect(snapshot.forgotten.map((tombstone) => tombstone.scoped)).toContain(
+      descriptor
+    );
+  });
+
+  it('reports persistent storage failure instead of claiming durability (Codex R155 P2, web mirror)', async () => {
+    const descriptor = scopedDescriptor('broken');
+    await getPendingVtuKey(descriptor);
+    await flushPendingVtuPurchases();
+    const consoleError = jest
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const persistSpy = jest
+      .spyOn(vtuStore, 'persistPendingVtuEntries')
+      .mockReturnValue(false);
+    try {
+      // All attempts fail: false (never a false true), memory still
+      // drops so this tab stays exact, and the failure is logged.
+      await expect(forgetPendingVtuPurchaseDurable(descriptor)).resolves.toBe(
+        false
+      );
+      expect(consoleError).toHaveBeenCalledWith(
+        'VTU registry terminal forget not durable; retry scheduled.'
+      );
+      expect(recallPendingVtuKey(descriptor)).toBeNull();
+    } finally {
+      consoleError.mockRestore();
+      persistSpy.mockRestore();
+    }
+  });
 });

@@ -12,6 +12,18 @@ describe('catalog option reference schema', () => {
     ).toBe(true);
   });
 
+  it('accepts the exact matched_option handoff shape while keeping facts optional', () => {
+    expect(
+      mcpCatalogOptionReferenceSchema.safeParse({
+        kind: 'variant',
+        option_id: 'variant-1',
+        condition: 'new',
+        price: 1,
+        attributes: { storage: '256GB' },
+      }).success
+    ).toBe(true);
+  });
+
   it('rejects price fields and empty identifiers', () => {
     expect(
       mcpCatalogOptionReferenceSchema.safeParse({

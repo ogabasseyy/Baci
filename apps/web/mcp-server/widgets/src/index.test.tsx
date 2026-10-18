@@ -55,6 +55,26 @@ describe('Ogabassey cart handoff widget', () => {
     expect(screen.getByRole('button', { name: 'Expand catalog' })).toBeTruthy();
   });
 
+  it('reports inline height again when standard host actions become ready', () => {
+    vi.stubGlobal('ResizeObserver', undefined);
+    const notifyIntrinsicHeight = vi.fn();
+    window.openai = { toolOutput: { products }, notifyIntrinsicHeight };
+    render(<App />);
+    const initialCalls = notifyIntrinsicHeight.mock.calls.length;
+    expect(initialCalls).toBeGreaterThan(0);
+
+    act(() => {
+      widgetHost.update({
+        mcpAppReady: true,
+        notifyIntrinsicHeight,
+        requestDisplayMode: vi.fn().mockResolvedValue(undefined),
+      });
+    });
+
+    expect(notifyIntrinsicHeight.mock.calls.length).toBeGreaterThan(initialCalls);
+    vi.unstubAllGlobals();
+  });
+
   it('updates the catalog layout when the host enters fullscreen', () => {
     window.openai = {
       toolOutput: { products },

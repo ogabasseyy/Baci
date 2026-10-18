@@ -6,8 +6,8 @@ import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 
 const MAX_CONCURRENT_LOOKUPS = 4;
 
-function normalizeCondition(condition: string) {
-  return normalizeCanonicalProductCondition(condition) || 'new';
+function normalizeCondition(condition: string | null | undefined) {
+  return normalizeCanonicalProductCondition(condition);
 }
 
 /** Build the renderer that reloads selected products from authoritative data. */
@@ -48,6 +48,7 @@ export function createCatalogRenderer(
             if (option) {
               stage = 'option_validation';
               const selectedCondition = normalizeCondition(option.condition);
+              if (!selectedCondition) throw new Error('Selected option condition is invalid');
               let price: number | undefined;
               let compareAtPrice: number | null | undefined;
               let condition: string | undefined;
@@ -55,24 +56,26 @@ export function createCatalogRenderer(
               let variantId = option.variantId;
 
               if (option.kind === 'base') {
-                if (option.option_id || option.variantId || product.has_variants || product.base_in_stock === false || normalizeCondition(product.base_condition ?? product.condition) !== selectedCondition) {
+                const baseCondition = normalizeCondition(product.base_condition ?? product.condition) || 'new';
+                if (option.option_id || option.variantId || product.has_variants || product.base_in_stock === false || baseCondition !== selectedCondition) {
                   throw new Error('Base option no longer available');
                 }
                 price = product.base_price ?? (!product.has_condition_offers ? product.price : null) ?? undefined;
                 compareAtPrice = product.compare_at_price;
-                condition = option.condition;
+                condition = baseCondition;
                 availability = product.base_in_stock === true ? 'in_stock' : 'unconfirmed';
               } else if (option.kind === 'variant') {
                 if (!option.option_id) throw new Error('Variant identity missing');
                 const matched = parsed.variants?.find((candidate) => candidate.option_id === option.option_id);
-                if (!matched || typeof matched.price !== 'number' || normalizeCondition(matched.condition ?? product.base_condition ?? product.condition) !== selectedCondition || matched.availability === 'out_of_stock') {
+                const matchedCondition = normalizeCondition(matched?.condition ?? product.base_condition ?? product.condition);
+                if (!matched || typeof matched.price !== 'number' || !matchedCondition || matchedCondition !== selectedCondition || matched.availability === 'out_of_stock') {
                   throw new Error('Variant no longer available');
                 }
                 price = matched.price;
                 // The storefront PDP falls back to the parent comparison
                 // price because the public variants RPC omits variant values.
                 compareAtPrice = matched.compare_at_price ?? product.compare_at_price;
-                condition = option.condition;
+                condition = matchedCondition;
                 availability = matched.availability;
                 variantId = option.option_id;
               } else {
@@ -80,8 +83,19 @@ export function createCatalogRenderer(
                 if (structuredDiscoveryIdentity.variantsOwnConditionAxis(product, parsed.variants)) {
                   throw new Error('Condition offers are not valid with variant-owned conditions');
                 }
+                const parentCondition = normalizeCondition(product.base_condition ?? product.condition) || 'new';
+                const firstOfferForCondition = parsed.condition_offers?.find(
+                  (candidate) => normalizeCondition(candidate.condition) === selectedCondition
+                );
                 const matched = parsed.condition_offers?.find((candidate) => candidate.offer_id === option.option_id);
-                if (!matched || normalizeCondition(matched.condition) !== selectedCondition) {
+                const matchedCondition = normalizeCondition(matched?.condition);
+                if (
+                  !matched ||
+                  !matchedCondition ||
+                  matchedCondition !== selectedCondition ||
+                  selectedCondition === parentCondition ||
+                  firstOfferForCondition?.offer_id !== option.option_id
+                ) {
                   throw new Error('Offer no longer available');
                 }
                 if (variantId) {
@@ -100,7 +114,7 @@ export function createCatalogRenderer(
                   compareAtPrice = product.compare_at_price;
                   availability = matched.availability;
                 }
-                condition = option.condition;
+                condition = matchedCondition;
               }
 
               if (price === undefined || !Number.isFinite(price) || price < 0 || !condition) {

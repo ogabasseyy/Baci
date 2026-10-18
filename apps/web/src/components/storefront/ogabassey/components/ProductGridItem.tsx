@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import type React from 'react';
 import { useState } from 'react';
-import { getProductImageAlt } from '@baci/shared/lib';
+import { getProductImageAlt } from '@baci/shared/lib/product-image-alt';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import type { Product } from '../types';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
@@ -192,7 +192,7 @@ export const ProductGridItem: React.FC<ProductGridItemProps> = ({
             // hydration attaches onLoad — without this mount-time check the
             // card would keep its skeleton and hold the image at opacity-0.
             ref={(img) => {
-              if (img?.complete && img.naturalWidth > 0) {
+              if (!isImageLoaded && img?.complete && img.naturalWidth > 0) {
                 setIsImageLoaded(true);
               }
             }}

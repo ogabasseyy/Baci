@@ -1,4 +1,4 @@
-import { getProductImageAlt } from '@baci/shared/lib';
+import { getProductImageAlt } from '@baci/shared/lib/product-image-alt';
 import { prioritizeSmartphoneProducts } from '@baci/shared/storefront/prioritize-smartphone-products';
 import { PLACEHOLDER_IMAGE } from '@/lib/image-utils';
 import { getProductUrl } from '@/lib/product-url';

@@ -23,7 +23,7 @@ it('requires explicit shared and native enrollment plus the configured merchant 
   ).toBe(false);
 });
 
-it('matches stored feature values with web-style normalization', () => {
+it('rejects non-canonical feature values that SQL containment gates reject', () => {
   const merchant = {
     id: 'a',
     slug: 'alpha',
@@ -31,7 +31,7 @@ it('matches stored feature values with web-style normalization', () => {
   };
   expect(
     nativeCartEnabled(merchant, { merchantId: 'a', merchantSlug: 'alpha' })
-  ).toBe(true);
+  ).toBe(false);
 });
 
 it('ignores non-string feature entries instead of crashing', () => {
@@ -76,7 +76,7 @@ it('requires the separate accounts enrollment for account linking', () => {
       { merchantId: 'a', merchantSlug: 'alpha' }
     )
   ).toBe(true);
-  // The account-link flag itself is normalized the same way.
+  // Non-canonical account-link flags stay disabled to match the SQL gate.
   expect(
     nativeCartAccountsEnabled(
       {
@@ -89,5 +89,5 @@ it('requires the separate accounts enrollment for account linking', () => {
       },
       { merchantId: 'a', merchantSlug: 'alpha' }
     )
-  ).toBe(true);
+  ).toBe(false);
 });

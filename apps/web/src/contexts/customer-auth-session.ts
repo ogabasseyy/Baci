@@ -109,25 +109,39 @@ async function retirePreviousAccountCartAuthority(
   return true;
 }
 
+type CustomerSessionFetchResult =
+  | { status: 'authenticated'; session: CustomerSession }
+  | { status: 'unauthenticated' }
+  | { status: 'lookup_failed'; userId: string | null };
+
 async function fetchCustomerSession(
   merchantSlug: string
-): Promise<CustomerSession | null> {
+): Promise<CustomerSessionFetchResult> {
   const response = await fetch(
     `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
   );
+  if (response.ok === false) {
+    return { status: 'lookup_failed', userId: null };
+  }
   const data = (await response.json()) as {
     authenticated?: boolean;
     customer?: Customer;
     user?: CustomerUser;
   };
 
+  if (data.authenticated === false) {
+    return { status: 'unauthenticated' };
+  }
   if (!data.authenticated || !data.user || !data.customer) {
-    return null;
+    return { status: 'lookup_failed', userId: data.user?.id ?? null };
   }
 
   return {
-    customer: data.customer,
-    user: data.user,
+    status: 'authenticated',
+    session: {
+      customer: data.customer,
+      user: data.user,
+    },
   };
 }
 
@@ -150,10 +164,11 @@ export async function loadCustomerSession(
     currentUserId
   );
   try {
-    const session = await fetchCustomerSession(merchantSlug);
+    const result = await fetchCustomerSession(merchantSlug);
     if (isCancelled()) return;
 
-    if (session) {
+    if (result.status === 'authenticated') {
+      const { session } = result;
       if (previousUserId && previousUserId !== session.user.id) {
         const retired = await retirePreviousAccountCartAuthority(
           merchantSlug,
@@ -172,7 +187,11 @@ export async function loadCustomerSession(
       setCustomer(session.customer);
       publishCustomerIdentity(session.user, session.customer, merchantSlug);
     } else {
-      if (previousUserId) {
+      if (
+        previousUserId &&
+        (result.status === 'unauthenticated' ||
+          (result.userId !== null && result.userId !== previousUserId))
+      ) {
         await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
         if (isCancelled()) return;
       }
@@ -183,10 +202,6 @@ export async function loadCustomerSession(
   } catch (error) {
     if (isCancelled()) return;
     console.error('Session check error:', error);
-    if (previousUserId) {
-      await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
-      if (isCancelled()) return;
-    }
     setUser(null);
     setCustomer(null);
     publishCustomerIdentity(null, null, merchantSlug);

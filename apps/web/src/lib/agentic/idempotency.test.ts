@@ -145,6 +145,54 @@ describe('agentic idempotency', () => {
     expect(inserted).toMatchObject({ agent_id: 'agent-a' });
   });
 
+  it('replays a legacy unscoped receipt for an identified caller instead of reserving again', async () => {
+    const body = '{"items":[]}';
+    const requestHash = hashIdempotencyRequest({
+      ...defaultFingerprint,
+      body,
+    });
+    const mock = createSupabaseMock({
+      existingRecord: {
+        request_hash: requestHash,
+        response_body: { id: 'session-legacy-1' },
+        status_code: 201,
+      },
+    });
+    const insertSpy = vi.fn();
+    const supabase = {
+      from: (table: string) => {
+        const chain = (
+          mock.supabase.from as (
+            name: string
+          ) => ReturnType<typeof mock.supabase.from>
+        )(table);
+        return {
+          ...chain,
+          insert: insertSpy,
+        };
+      },
+    };
+
+    const result = await reserveAgenticIdempotencyKey({
+      ...defaultFingerprint,
+      agentId: 'agent-a',
+      body,
+      key: 'idem-legacy-1',
+      merchantId: 'merchant-1',
+      route: 'checkout_sessions.create',
+      supabase: supabase as never,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      requestHash,
+      response: { id: 'session-legacy-1' },
+      state: 'replay',
+      status: 201,
+    });
+    expect(insertSpy).not.toHaveBeenCalled();
+  });
+
   it('reserves a new idempotency key before mutation', async () => {
     const mock = createSupabaseMock();
     const body = '{"items":[]}';

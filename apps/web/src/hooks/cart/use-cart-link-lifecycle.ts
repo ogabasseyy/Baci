@@ -1,14 +1,10 @@
 'use client';
 
 import type { CartSnapshot } from '@baci/shared/cart';
-
 import { useEffect } from 'react';
 import { buildImportEntries } from './build-import-entries';
-
 import { getCartFromStorage, getSharedCartImportReceipt } from './cart-storage';
-
 import type { CartItem } from './cart-types';
-
 import { fetchSharedCartSnapshot } from './shared-cart-client';
 import {
   ADOPT_RETRY_BASE_MS,
@@ -20,7 +16,11 @@ import {
 } from './shared-cart-hook-support';
 import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
-import { ensureCartDeviceRevocationCleared } from './shared-cart-session-revoke-client';
+import {
+  ensureCartDeviceRevocationCleared,
+  markCartDeviceSessionActive,
+  retireDeEnrolledCartDeviceSession,
+} from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -67,10 +67,15 @@ export function useCartLinkLifecycle(
   useEffect(() => {
     linkRunRef.current += 1;
     if (!enabled) {
+      retireDeEnrolledCartDeviceSession?.(merchantSlug, {
+        hasCartId: stateRef.current.cartId !== null,
+        hasImportReceipt: getSharedCartImportReceipt(merchantSlug) !== null,
+      });
       setHydrated(true);
       setLinkPhase('ready');
       return;
     }
+    if (merchantSlug) markCartDeviceSessionActive?.(merchantSlug);
     const generation = sessionGeneration;
     let cancelled = false;
     let adoptTimer: ReturnType<typeof setTimeout> | null = null;

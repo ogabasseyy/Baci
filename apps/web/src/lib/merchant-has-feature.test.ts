@@ -66,11 +66,18 @@ describe('merchantHasFeature', () => {
 
 it.each([
   'shared_cart',
+  'shared_cart_accounts',
   'shared_cart_realtime',
-] as const)('requires explicit pilot enrollment for %s even with all_features', (feature) => {
+] as const)('requires explicit canonical pilot enrollment for %s even with all_features', (feature) => {
   expect(
     merchantHasFeature(
       { plan_tier: 'enterprise', premium_features: ['all_features'] },
+      feature
+    )
+  ).toBe(false);
+  expect(
+    merchantHasFeature(
+      { plan_tier: 'free', premium_features: [` ${feature.toUpperCase()} `] },
       feature
     )
   ).toBe(false);

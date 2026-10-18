@@ -8,6 +8,7 @@ import {
 } from './order-proof';
 import {
   getSharedCartOrderAuthority,
+  resolveSharedCartOrderAuthority,
   submitSharedCartOrderBinding,
 } from './order-route-binding';
 
@@ -54,6 +55,21 @@ it('fails closed when shared-cart session authority omits its binding', async ()
     code: 'SHARED_CART_BINDING_REQUIRED',
   });
   expect(submitCartBoundOrder).not.toHaveBeenCalled();
+});
+it('allows legacy checkout when shared_cart is disabled after a shopper received a cart cookie', async () => {
+  vi.mocked(requestCarriesSharedCartSessionProof).mockReturnValue(true);
+  vi.mocked(requestPresentsCartProofMaterial).mockReturnValue(true);
+  expect(
+    await resolveSharedCartOrderAuthority(
+      request,
+      undefined,
+      'merchant',
+      async () => false
+    )
+  ).toEqual({
+    ok: true,
+    principalId: null,
+  });
 });
 it('fails closed when cart proof material is presented but no longer verifies', async () => {
   vi.mocked(requestPresentsCartProofMaterial).mockReturnValue(true);

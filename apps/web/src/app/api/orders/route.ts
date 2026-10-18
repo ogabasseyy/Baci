@@ -12,7 +12,7 @@ import {
   selectOrderBindingVariant,
 } from '@/lib/cart/order-binding';
 import { dispatchOrderCreation } from '@/lib/cart/order-creation-dispatch';
-import { getSharedCartOrderAuthority } from '@/lib/cart/order-route-binding';
+import { resolveSharedCartOrderAuthority } from '@/lib/cart/order-route-binding';
 import { addStorefrontOrderLineOrdinals } from '@/lib/checkout/add-storefront-order-line-ordinals';
 import { buildTransactionDiscountAdTracking } from '@/lib/checkout/build-transaction-discount-ad-tracking';
 import {
@@ -68,6 +68,7 @@ import {
   toFiniteNumber,
 } from '@/lib/immediate-order-notification';
 import { logger } from '@/lib/logger';
+import { getMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { ORDER_WITH_ITEMS_QUERY } from '@/lib/order-queries';
 import { recordPreGatewayRedemption } from '@/lib/payments/record-pre-gateway-redemption';
 import {
@@ -540,10 +541,18 @@ export async function POST(request: NextRequest) {
     // Do NOT trust user_id from body if user is unauthenticated (guest).
     const resolvedUserId = user?.id || null;
 
-    const cartAuthority = getSharedCartOrderAuthority(
+    const cartAuthority = await resolveSharedCartOrderAuthority(
       request,
       shared_cart,
-      merchant_id
+      merchant_id,
+      async () => {
+        const access = await getMerchantFeatureAccess(
+          supabase,
+          merchant_id,
+          'shared_cart'
+        );
+        return access.error ? true : access.allowed;
+      }
     );
     if (!cartAuthority.ok) return cartAuthority.response;
     const sharedCartPrincipalId = cartAuthority.principalId;

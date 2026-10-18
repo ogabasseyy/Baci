@@ -17,6 +17,18 @@ export function merchantHasFeature(
   feature: MerchantFeatureGate,
   now = new Date()
 ): boolean {
+  if (
+    feature === 'shared_cart' ||
+    feature === 'shared_cart_accounts' ||
+    feature === 'shared_cart_realtime'
+  ) {
+    return (
+      Array.isArray(merchant?.premium_features) &&
+      merchant.premium_features.some(
+        (value) => typeof value === 'string' && value === feature
+      )
+    );
+  }
   const features = new Set(
     Array.isArray(merchant?.premium_features)
       ? merchant.premium_features
@@ -26,12 +38,6 @@ export function merchantHasFeature(
       : []
   );
   if (features.has(feature)) return true;
-  if (
-    feature === 'shared_cart' ||
-    feature === 'shared_cart_accounts' ||
-    feature === 'shared_cart_realtime'
-  )
-    return false;
   if (features.has('all_features')) return true;
 
   const allowedTiers: Record<MerchantFeatureGate, ReadonlySet<string>> = {

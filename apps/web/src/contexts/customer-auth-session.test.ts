@@ -116,6 +116,48 @@ describe('customer-auth-session passive identity revocation', () => {
     expect(clearCartDeviceRevocationPending).toHaveBeenCalledWith('ogabassey');
   });
 
+  it('does not revoke cart authority or clear cart storage on session lookup failures', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({ error: 'Internal server error' }, { status: 500 })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          authenticated: true,
+          customer: null,
+          user: {
+            email: 'one@example.com',
+            id: 'user-1',
+            role: 'customer',
+          },
+        })
+      )
+      .mockRejectedValueOnce(new Error('network down'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const setUser = vi.fn();
+    const setCustomer = vi.fn();
+    const setIsLoading = vi.fn();
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await loadCustomerSession('ogabassey', {
+        currentUserId: 'user-1',
+        setCustomer,
+        setIsLoading,
+        setUser,
+      });
+    }
+
+    expect(markCartDeviceRevocationPending).not.toHaveBeenCalled();
+    expect(revokeCartDeviceSession).not.toHaveBeenCalled();
+    expect(clearCartStorage).not.toHaveBeenCalled();
+    expect(consoleError).toHaveBeenCalledTimes(1);
+  });
+
   it('revokes device cart authority when session load switches to a different user', async () => {
     vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: true });
     const fetchMock = vi

@@ -18,11 +18,15 @@ type OrderCartBinding = OrderCreateInput['shared_cart'];
 export function getSharedCartOrderAuthority(
   request: Request,
   binding: OrderCartBinding,
-  merchantId: string
+  merchantId: string,
+  options?: { sharedCartEnrolled?: boolean }
 ):
   | { ok: true; principalId: string | null }
   | { ok: false; response: NextResponse } {
   if (!binding) {
+    if (options?.sharedCartEnrolled === false) {
+      return { ok: true, principalId: null };
+    }
     // A request carrying shared-cart session authority must submit
     // its reviewed checkout binding; without one it must not fall
     // through to the legacy direct order path. Presented but expired
@@ -62,6 +66,29 @@ export function getSharedCartOrderAuthority(
       { status: 401 }
     ),
   };
+}
+
+/**
+ * Resolves shared-cart order authority, consulting merchant enrollment only
+ * when an unbound order request presents a leftover cart cookie/proof.
+ */
+export async function resolveSharedCartOrderAuthority(
+  request: Request,
+  binding: OrderCartBinding,
+  merchantId: string,
+  isSharedCartEnrolled?: () => Promise<boolean> | boolean
+): Promise<
+  | { ok: true; principalId: string | null }
+  | { ok: false; response: NextResponse }
+> {
+  const initial = getSharedCartOrderAuthority(request, binding, merchantId);
+  if (initial.ok || binding || !isSharedCartEnrolled) {
+    return initial;
+  }
+  const sharedCartEnrolled = await isSharedCartEnrolled();
+  return getSharedCartOrderAuthority(request, binding, merchantId, {
+    sharedCartEnrolled,
+  });
 }
 
 /** Binding failures stop checkout; inner order errors retain the legacy mapper. */

@@ -46,18 +46,15 @@ export type IdempotencyReservationResult =
     }
   | { error: typeof IDEMPOTENCY_RESERVATION_FAILED_ERROR; ok: false };
 
-export async function reserveAgenticIdempotencyKey({
-  agentId,
-  apiVersion,
-  body,
-  key,
-  merchantId,
-  method,
-  now = new Date(),
-  pathname,
-  route,
-  supabase,
-}: {
+interface IdempotencyScopeContext {
+  agentId: string;
+  key: string;
+  merchantId: string;
+  route: string;
+  supabase: SupabaseClient;
+}
+
+export async function reserveAgenticIdempotencyKey(input: {
   agentId?: string | null;
   apiVersion: string;
   body: string;
@@ -69,15 +66,9 @@ export async function reserveAgenticIdempotencyKey({
   route: string;
   supabase: SupabaseClient;
 }): Promise<IdempotencyReservationResult> {
-  // Tenant/route/key receipts are also scoped by verified caller.
-  // Unidentified callers retain the legacy empty scope.
-  const callerScope = agentId ?? '';
-  const requestHash = hashIdempotencyRequest({
-    apiVersion,
-    body,
-    method,
-    pathname,
-  });
+  const { key, merchantId, now = new Date(), route, supabase } = input;
+  const callerScope = input.agentId ?? '';
+  const requestHash = hashIdempotencyRequest(input);
 
   const { error: purgeError } = await supabase
     .from('agentic_idempotency_records')
@@ -94,6 +85,29 @@ export async function reserveAgenticIdempotencyKey({
   }
 
   const expiresAt = new Date(now.getTime() + IDEMPOTENCY_TTL_MS).toISOString();
+  const baseScope = { key, merchantId, route, supabase };
+  if (callerScope !== '') {
+    const legacy = await getExistingIdempotencyRecord({
+      ...baseScope,
+      agentId: '',
+    });
+    if (!legacy.ok) {
+      logger.error({
+        message: 'Failed to load legacy agentic idempotency record',
+        error: legacy.error,
+        merchantId,
+        route,
+      });
+      return { error: IDEMPOTENCY_RESERVATION_FAILED_ERROR, ok: false };
+    }
+    if (legacy.record) {
+      return resolveExistingIdempotencyRecord(
+        { ...baseScope, agentId: '' },
+        { callerScope, expiresAt, now, record: legacy.record, requestHash }
+      );
+    }
+  }
+
   const { error } = await supabase
     .from('agentic_idempotency_records')
     .insert({
@@ -107,21 +121,13 @@ export async function reserveAgenticIdempotencyKey({
     .select('id')
     .maybeSingle();
 
-  if (!error) {
-    return { ok: true, state: 'reserved' };
-  }
+  if (!error) return { ok: true, state: 'reserved' };
   if (error.code !== POSTGRES_UNIQUE_VIOLATION) {
     return { error: IDEMPOTENCY_RESERVATION_FAILED_ERROR, ok: false };
   }
 
-  const existing = await getExistingIdempotencyRecord({
-    agentId: callerScope,
-    key,
-    merchantId,
-    route,
-    supabase,
-  });
-
+  const scopedContext = { ...baseScope, agentId: callerScope };
+  const existing = await getExistingIdempotencyRecord(scopedContext);
   if (!existing.ok) {
     logger.error({
       message: 'Failed to load existing agentic idempotency record',
@@ -134,82 +140,85 @@ export async function reserveAgenticIdempotencyKey({
   if (!existing.record) {
     return { error: IDEMPOTENCY_TRANSIENT_LOOKUP_ERROR, ok: false };
   }
-  if (existing.record.request_hash !== requestHash) {
+  return resolveExistingIdempotencyRecord(scopedContext, {
+    callerScope,
+    expiresAt,
+    now,
+    record: existing.record,
+    requestHash,
+  });
+}
+
+async function resolveExistingIdempotencyRecord(
+  scope: IdempotencyScopeContext,
+  input: {
+    callerScope: string;
+    expiresAt: string;
+    now: Date;
+    record: IdempotencyRecord;
+    requestHash: string;
+  }
+): Promise<IdempotencyReservationResult> {
+  const { callerScope, expiresAt, now, record, requestHash } = input;
+  if (record.request_hash !== requestHash) {
     return { error: IDEMPOTENCY_PARAMETER_MISMATCH_ERROR, ok: false };
   }
-  if (typeof existing.record.status_code !== 'number') {
-    const reclaimed = await reclaimStaleIdempotencyReservation({
-      agentId: callerScope,
+  if (typeof record.status_code !== 'number') {
+    const reclaimed = await reclaimStaleIdempotencyReservation(scope, {
+      claimedAgentId: callerScope,
       expiresAt,
-      key,
-      merchantId,
       now,
-      record: existing.record,
+      record,
       requestHash,
-      route,
-      supabase,
     });
-    if (reclaimed.ok) {
-      return { ok: true, state: 'reserved' };
-    }
+    if (reclaimed.ok) return { ok: true, state: 'reserved' };
     if (reclaimed.error) {
       return { error: IDEMPOTENCY_RESERVATION_FAILED_ERROR, ok: false };
     }
-
     return { error: IDEMPOTENCY_REQUEST_IN_PROGRESS_ERROR, ok: false };
   }
-
   return {
     ok: true,
     requestHash,
-    response: existing.record.response_body,
+    response: record.response_body,
     state: 'replay',
-    status: existing.record.status_code,
+    status: record.status_code,
   };
 }
 
-async function reclaimStaleIdempotencyReservation({
-  agentId,
-  expiresAt,
-  key,
-  merchantId,
-  now,
-  record,
-  requestHash,
-  route,
-  supabase,
-}: {
-  agentId: string;
-  expiresAt: string;
-  key: string;
-  merchantId: string;
-  now: Date;
-  record: IdempotencyRecord;
-  requestHash: string;
-  route: string;
-  supabase: SupabaseClient;
-}): Promise<{ error?: unknown; ok: boolean }> {
-  if (!isStaleInProgressReservation(record, now)) {
+async function reclaimStaleIdempotencyReservation(
+  scope: IdempotencyScopeContext,
+  input: {
+    claimedAgentId: string;
+    expiresAt: string;
+    now: Date;
+    record: IdempotencyRecord;
+    requestHash: string;
+  }
+): Promise<{ error?: unknown; ok: boolean }> {
+  if (!isStaleInProgressReservation(input.record, input.now)) {
     return { ok: false };
   }
-
   const staleBefore = new Date(
-    now.getTime() - IDEMPOTENCY_IN_PROGRESS_TTL_MS
+    input.now.getTime() - IDEMPOTENCY_IN_PROGRESS_TTL_MS
   ).toISOString();
-  const { data, error } = await supabase
+  const { data, error } = await scope.supabase
     .from('agentic_idempotency_records')
     .update({
-      expires_at: expiresAt,
-      request_hash: requestHash,
+      ...(input.claimedAgentId !== scope.agentId
+        ? { agent_id: input.claimedAgentId }
+        : {}),
+      expires_at: input.expiresAt,
+      request_hash: input.requestHash,
       response_body: null,
       status_code: null,
-      updated_at: now.toISOString(),
+      updated_at: input.now.toISOString(),
     })
-    .eq('route', route)
-    .eq('idempotency_key', key)
-    .eq('merchant_id', merchantId)
-    .eq('agent_id', agentId)
-    .eq('request_hash', requestHash)
+    .eq('route', scope.route)
+    .eq('idempotency_key', scope.key)
+    .eq('merchant_id', scope.merchantId)
+    .eq('agent_id', scope.agentId)
+    .eq('request_hash', input.requestHash)
     .is('status_code', null)
     .lt('updated_at', staleBefore)
     .select('id')
@@ -219,24 +228,15 @@ async function reclaimStaleIdempotencyReservation({
     logger.warn({
       message: 'Failed to reclaim stale agentic idempotency reservation',
       error,
-      merchantId,
-      route,
+      merchantId: scope.merchantId,
+      route: scope.route,
     });
     return { error, ok: false };
   }
-
   return { ok: !!data };
 }
 
-export async function storeAgenticIdempotencyResponse({
-  agentId,
-  key,
-  merchantId,
-  response,
-  route,
-  status,
-  supabase,
-}: {
+export async function storeAgenticIdempotencyResponse(input: {
   agentId?: string | null;
   key: string;
   merchantId: string;
@@ -245,56 +245,41 @@ export async function storeAgenticIdempotencyResponse({
   status: number;
   supabase: SupabaseClient;
 }) {
-  const { data, error } = await supabase
+  const { data, error } = await input.supabase
     .from('agentic_idempotency_records')
     .update({
-      response_body: response,
-      status_code: status,
+      response_body: input.response,
+      status_code: input.status,
       updated_at: new Date().toISOString(),
     })
-    .eq('route', route)
-    .eq('idempotency_key', key)
-    .eq('merchant_id', merchantId)
-    .eq('agent_id', agentId ?? '')
+    .eq('route', input.route)
+    .eq('idempotency_key', input.key)
+    .eq('merchant_id', input.merchantId)
+    .eq('agent_id', input.agentId ?? '')
     .select('id')
     .maybeSingle();
 
-  if (error) {
-    return { error, ok: false };
-  }
+  if (error) return { error, ok: false };
   if (!data) {
     return {
       error: new Error('Agentic idempotency record not found'),
       ok: false,
     };
   }
-
   return { error: null, ok: true };
 }
 
-async function getExistingIdempotencyRecord({
-  agentId,
-  key,
-  merchantId,
-  route,
-  supabase,
-}: {
-  agentId: string;
-  key: string;
-  merchantId: string;
-  route: string;
-  supabase: SupabaseClient;
-}): Promise<ExistingIdempotencyRecordResult> {
-  const { data, error } = await supabase
+async function getExistingIdempotencyRecord(
+  scope: IdempotencyScopeContext
+): Promise<ExistingIdempotencyRecordResult> {
+  const { data, error } = await scope.supabase
     .from('agentic_idempotency_records')
     .select('request_hash, response_body, status_code, updated_at')
-    .eq('route', route)
-    .eq('idempotency_key', key)
-    .eq('merchant_id', merchantId)
-    .eq('agent_id', agentId)
+    .eq('route', scope.route)
+    .eq('idempotency_key', scope.key)
+    .eq('merchant_id', scope.merchantId)
+    .eq('agent_id', scope.agentId)
     .maybeSingle();
-  if (error) {
-    return { error, ok: false };
-  }
+  if (error) return { error, ok: false };
   return { ok: true, record: data as IdempotencyRecord | null };
 }

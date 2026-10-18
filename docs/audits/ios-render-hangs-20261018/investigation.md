@@ -91,6 +91,10 @@ so these captures cannot support detailed UIKit/WebKit attribution. Capture wind
 and loading/idle time differ; total CPU durations are not compared. Earlier setup
 runs with onboarding overlays or an unsupported data URI are excluded from results.
 
+The disposable fixture source is retained in `/tmp/baci-ios-render-probe-fixture/`.
+Temporary QA app, Metro and report server were removed/stopped; the simulator booted
+for this investigation was shut down. The production simulator app was not replaced.
+
 ## Validation status
 
 - Full monorepo lint/typecheck: 10/10 tasks passed.
@@ -99,7 +103,9 @@ runs with onboarding overlays or an unsupported data URI are excluded from resul
 - Web: 7,978 files / 51,031 tests passed initially; four failures were isolated to
   CLI package-manager lookup and clean-worktree/committed-lockfile prerequisites.
   Both CLI tests passed when rerun with the pinned pnpm 11.7.0 first on PATH.
-  The two Git-authority tests require a clean task commit before their final rerun.
+  Both Git-authority tests then passed on clean task commit `f78d46e8cf`.
+  All four initial failures passed in targeted reruns; the complete broad run itself
+  is recorded as initially failing rather than represented as a new all-green run.
 - Shared: 232 files / 1,605 tests passed separately after web stopped the Turbo run.
 - Cloudflare worker: 10 tests passed; TikTok package: 9 tests passed.
 - Native clipping: 10 checks passed after failing on the old forwarder.

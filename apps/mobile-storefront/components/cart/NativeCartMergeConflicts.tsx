@@ -4,12 +4,12 @@ import {
   cartLineIdentity,
 } from '@baci/shared/cart';
 import { Pressable, Text, View } from 'react-native';
-import type Colors from '@/constants/Colors';
+import type { ThemeColors } from '@/hooks/useTheme';
 import { useCartStore } from '@/stores/cart-store';
 
 interface NativeCartMergeConflictsProps {
   conflicts: CartMergeConflict[];
-  colors: (typeof Colors)['light'];
+  colors: ThemeColors;
   disabled: boolean;
   onPick: (pick: CartMergeResolution) => void;
 }

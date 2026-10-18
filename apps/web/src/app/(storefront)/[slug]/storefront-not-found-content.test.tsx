@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockUseMerchantSafe = vi.fn();
 
+vi.mock('@/app/(storefront)/storefront-not-found.css', () => ({}));
+
 vi.mock('next/link', () => ({
   default: ({
     children,

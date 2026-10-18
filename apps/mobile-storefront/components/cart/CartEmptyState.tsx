@@ -1,11 +1,11 @@
 import CartStateView from '@/components/cart/CartStateView';
 import { NativeCartAccountPanel } from '@/components/cart/NativeCartAccountPanel';
 import { SharedCartStatusPanel } from '@/components/cart/SharedCartStatusPanel';
-import type Colors from '@/constants/Colors';
+import type { ThemeColors } from '@/hooks/useTheme';
 
 interface CartEmptyStateProps {
   colorScheme: 'light' | 'dark';
-  colors: (typeof Colors)['light'];
+  colors: ThemeColors;
   onRetry: () => void;
   onStartShopping: () => void;
 }

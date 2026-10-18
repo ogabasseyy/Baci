@@ -827,3 +827,90 @@ it('checks for completion before clearing a bound cart after checkout', async ()
   await waitFor(() => expect(result.current.cart).toEqual([]));
   expect(sendSharedCartCommand).not.toHaveBeenCalled();
 });
+
+it('preserves queue order when an item is added while the pre-clear snapshot check is in flight', async () => {
+  vi.clearAllMocks();
+  window.localStorage.clear();
+  vi.mocked(fetchSharedCartProducts).mockResolvedValue(new Map());
+  mockAdopted();
+  const { result } = renderHook(() =>
+    useSharedCart({
+      merchantId: MERCHANT_ID,
+      merchantSlug: SLUG,
+      sessionGeneration: 1,
+    })
+  );
+  await waitFor(() => expect(result.current.cart).toHaveLength(1));
+
+  let resolveSnapshotCheck!: (
+    value: Awaited<ReturnType<typeof fetchSharedCartSnapshot>>
+  ) => void;
+  vi.mocked(fetchSharedCartSnapshot).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveSnapshotCheck = resolve;
+      })
+  );
+  vi.mocked(sendSharedCartCommand)
+    .mockResolvedValueOnce({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({ lines: [], version: 4 }),
+      warnings: [],
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      replayed: false,
+      snapshot: snapshot({
+        lines: [
+          cartLine({
+            id: 'line-after-clear',
+            item: { productId: 'prod-after-clear' },
+            quantity: 1,
+          }),
+        ],
+        version: 5,
+      }),
+      warnings: [],
+    });
+
+  act(() => {
+    result.current.clearCart();
+    result.current.addToCart(
+      product({ id: 'prod-after-clear', name: 'New Phone' }),
+      1
+    );
+  });
+
+  // The optimistic cart reflects the clear followed by the new add, and the
+  // add does not jump ahead of the clear while the snapshot check is pending.
+  expect(result.current.cart.map((item) => item.id)).toEqual([
+    'prod-after-clear',
+  ]);
+  expect(sendSharedCartCommand).not.toHaveBeenCalled();
+
+  await act(async () => {
+    resolveSnapshotCheck({
+      ok: true,
+      snapshot: snapshot({ version: 3 }),
+      warnings: [],
+    });
+  });
+
+  await waitFor(() =>
+    expect(vi.mocked(sendSharedCartCommand)).toHaveBeenCalledTimes(2)
+  );
+  expect(vi.mocked(sendSharedCartCommand).mock.calls[0]?.[0]).toMatchObject({
+    command: { type: 'clear' },
+  });
+  expect(vi.mocked(sendSharedCartCommand).mock.calls[1]?.[0]).toMatchObject({
+    command: {
+      item: { productId: 'prod-after-clear' },
+      quantity: 1,
+      type: 'add',
+    },
+  });
+  expect(result.current.cart.map((item) => item.id)).toEqual([
+    'prod-after-clear',
+  ]);
+});

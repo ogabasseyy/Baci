@@ -8,7 +8,6 @@ import {
 import type { Product } from '@/lib/products';
 
 import type { AddToCartOptions, SharedCartDisplayItem } from './cart-types';
-import { fetchSharedCartSnapshot } from './shared-cart-client';
 import {
   findMatchingLineIndex,
   targetForLine,
@@ -164,29 +163,13 @@ export function createCartActions(context: SharedCartRuntime) {
     });
   }
 
-  async function clearCart(): Promise<void> {
+  function clearCart(): void {
     if (!enabled) return;
-    const generation = generationRef.current;
     if (
       stateRef.current.confirmed &&
       isTerminalCart(stateRef.current.confirmed)
     )
       return;
-    // Checkout commits completion before cleanup runs. Refresh first so a
-    // successful order never issues a mutation against its immutable cart.
-    const fresh = await fetchSharedCartSnapshot(
-      undefined,
-      context.optionsRef.current.merchantSlug
-    );
-    if (generationRef.current !== generation) return;
-    if (fresh.ok && isTerminalCart(fresh.snapshot)) {
-      dispatch({
-        generation,
-        snapshot: fresh.snapshot,
-        type: 'snapshot/polled',
-      });
-      return;
-    }
     enqueueIntent({ kind: 'clear' });
   }
 

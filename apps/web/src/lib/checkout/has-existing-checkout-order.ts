@@ -1,6 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
-import { createStorefrontOrderRpcClient } from './storefront-order-rpc-client';
 
 export interface CheckoutReplaySnapshot {
   orderId: string;
@@ -31,17 +30,12 @@ export async function loadCheckoutReplaySnapshot({
   merchantId,
   requestIdempotencyKey,
 }: {
+  /** Route-created, merchant-scoped storefront order client. */
   client: SupabaseClient;
   merchantId: string;
   requestIdempotencyKey: string;
 }): Promise<CheckoutReplaySnapshot | null> {
-  const rpcClient = createStorefrontOrderRpcClient({
-    fallbackClient: client,
-    hasCanonicalDeliveryMetadata: false,
-    merchantId,
-    userId: null,
-  });
-  const { data, error } = await rpcClient.rpc(
+  const { data, error } = await client.rpc(
     'storefront_checkout_replay_snapshot',
     {
       p_checkout_idempotency_key: requestIdempotencyKey,

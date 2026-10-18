@@ -1202,7 +1202,12 @@ export async function POST(request: NextRequest) {
     // of failing closed before the RPC's replay path can run.
     const replaySnapshot = requestIdempotencyKey
       ? await loadCheckoutReplaySnapshot({
-          client: supabase,
+          client: createStorefrontOrderRpcClient({
+            fallbackClient: supabase,
+            hasCanonicalDeliveryMetadata: false,
+            merchantId: merchant_id,
+            userId: null,
+          }),
           merchantId: merchant_id,
           requestIdempotencyKey,
         })

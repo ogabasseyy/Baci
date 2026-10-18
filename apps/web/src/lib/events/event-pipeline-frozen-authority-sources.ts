@@ -61,7 +61,7 @@ export const eventPipelineFrozenRoutes = {
   // the probe returned to the normal client with a minimized snapshot
   // projection (no service-role client on the guest checkout path).
   'apps/web/src/app/api/orders/route.ts':
-    'e08dc86c0cd38e5d080b0948de7fb2c9c7d70e61bbf20aad1b36f6b2142a15d1',
+    'cf13f3e8b8ceacc03c6c1e732d275df979ba13713e7f98395ac745aef8b623f3',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

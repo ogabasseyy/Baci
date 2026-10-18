@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { loadCheckoutReplaySnapshot } from './has-existing-checkout-order';
 
+// The loader must use the route's injected authority, never mint its own.
+vi.mock('./storefront-order-rpc-client', () => ({
+  createStorefrontOrderRpcClient: () => {
+    throw new Error('Replay loader must not create credential authority');
+  },
+}));
+
 describe('loadCheckoutReplaySnapshot', () => {
   it('returns the committed order condition prices from the scoped RPC', async () => {
     const rpc = vi.fn(async () => ({

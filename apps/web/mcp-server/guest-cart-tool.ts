@@ -56,10 +56,9 @@ export function registerGuestCartTool(
     },
     async (args) => {
       try {
-        // Registration passes only the input shape, which drops the
-        // object-level refinement, so re-parse with the full schema
-        // before quota or database work: cross-field violations fail
-        // fast here instead of surfacing as generic store errors.
+        // Defensive validation for direct callers and tests. The SDK already
+        // enforces the full schema, including cross-field refinements, before
+        // invoking this registered handler.
         const parsed = mcpGuestCartInputSchema.safeParse(args);
         if (!parsed.success) {
           return {

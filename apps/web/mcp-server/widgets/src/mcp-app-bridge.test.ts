@@ -62,7 +62,11 @@ it('prefers the standard bridge while retaining ChatGPT state persistence', asyn
   };
   window.openai = bridge;
   await connectMcpApp();
-  expect(factory).toHaveBeenCalled();
+  expect(factory).toHaveBeenCalledWith(
+    { name: 'Ogabassey catalog', version: '1.0.0' },
+    { availableDisplayModes: ['inline', 'fullscreen'] },
+    { autoResize: false },
+  );
   expect(host.connect).toHaveBeenCalledWith(undefined, { timeout: 10000 });
   expect(window.openai).toBe(bridge);
   expect(getWidgetHost()?.widgetState).toBe(bridge.widgetState);

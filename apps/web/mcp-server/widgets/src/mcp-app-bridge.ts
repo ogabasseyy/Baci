@@ -11,7 +11,7 @@ export async function connectMcpApp() {
   const extensions = window.openai;
   const app = new App(
     { name: 'Ogabassey catalog', version: '1.0.0' },
-    {},
+    { availableDisplayModes: ['inline', 'fullscreen'] },
     { autoResize: false },
   );
   const update = updateWidgetHost;

@@ -266,8 +266,10 @@ export function useSharedCart(options: Options, deps: Deps = defaults): void {
         })
       );
     } catch {
+      release();
       useCartStore.setState({ isLoading: false });
       useNativeSharedCartStore.setState({
+        ...DISABLED_SHARED_CART_STATE,
         status: 'error',
         code: 'invalid_configuration',
       });

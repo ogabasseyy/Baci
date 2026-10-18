@@ -132,4 +132,14 @@ describe('redirectSystemPath', () => {
       expect.objectContaining({ platformRootDomain: '' })
     );
   });
+
+  it('fails closed without throwing when EXPO_PUBLIC_API_URL is malformed', () => {
+    mockEnv.apiUrl = 'not a url';
+    redirectSystemPath({ path: '/cart/link#handoff=token', initial: true });
+
+    expect(mockCapture).toHaveBeenCalledWith(
+      '/cart/link#handoff=token',
+      expect.objectContaining({ platformRootDomain: '' })
+    );
+  });
 });

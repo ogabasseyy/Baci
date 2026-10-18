@@ -7,16 +7,33 @@ describe('resolveCartApiOrigin', () => {
     );
   });
 
-  it('passes programmatic and custom operator hosts through unchanged', () => {
+  it('passes recognized programmatic platform hosts through unchanged', () => {
     expect(resolveCartApiOrigin('https://api.usebaci.com')).toBe(
       'https://api.usebaci.com'
     );
     expect(resolveCartApiOrigin('https://api-staging.usebaci.com')).toBe(
       'https://api-staging.usebaci.com'
     );
-    expect(resolveCartApiOrigin('https://shop.example.com')).toBe(
-      'https://shop.example.com'
-    );
+  });
+
+  it('resolves custom white-label origins to the configured platform root API host', () => {
+    expect(
+      resolveCartApiOrigin('https://shop.example.com', 'usebaci.com')
+    ).toBe('https://api.usebaci.com');
+    expect(
+      resolveCartApiOrigin('https://shop.example.com', 'example.com')
+    ).toBe('https://api.example.com');
+    expect(
+      resolveCartApiOrigin('https://api-staging.example.com', 'example.com')
+    ).toBe('https://api-staging.example.com');
+  });
+
+  it('rejects unsupported custom origins and malformed URLs when no trusted programmatic root is configured', () => {
+    expect(resolveCartApiOrigin('https://shop.example.com')).toBe('');
+    expect(
+      resolveCartApiOrigin('https://shop.example.com', 'https://bad-root')
+    ).toBe('');
+    expect(resolveCartApiOrigin('not a url')).toBe('');
   });
 
   it('maps the hosted staging host to its programmatic cart surface', () => {
@@ -25,8 +42,10 @@ describe('resolveCartApiOrigin', () => {
     );
   });
 
-  it('passes malformed origins through for the client to reject', () => {
-    expect(resolveCartApiOrigin('not a url')).toBe('not a url');
+  it('allows local LAN dev origins in dev builds', () => {
+    expect(resolveCartApiOrigin('http://192.168.100.70:4193')).toBe(
+      'http://192.168.100.70:4193'
+    );
   });
 });
 

@@ -7,36 +7,21 @@
  */
 /**
  * Cart-scoped API origin: the cart bootstrap proof is only disclosed
- * on the programmatic api.* surface, so when the app-wide configured
- * origin is the platform apex, cart calls go to its api.* counterpart.
- * Already-programmatic and custom operator hosts pass through
- * unchanged (custom deployments serve cart from their configured API
- * host and own that deployment contract).
+ * on recognized programmatic api.* surfaces (and dev loopback/LAN),
+ * never on browsable storefront hosts. Map platform apex and custom
+ * white-label origins paired with an explicit platform root domain to
+ * their programmatic api.* counterpart, and fail closed to an empty
+ * string when a custom host has no trusted programmatic target.
  */
-const PLATFORM_APEX_TO_CART_HOST: Record<string, string> = {
-  'usebaci.com': 'api.usebaci.com',
-  // The hosted-staging pin is the browsable staging host; its
-  // programmatic counterpart is where body proofs are disclosed.
-  'staging.ogabassey.com': 'api-staging.ogabassey.com',
-};
+const BARE_HOSTNAME =
+  /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/;
 
-export function resolveCartApiOrigin(configuredOrigin: string): string {
-  try {
-    const url = new URL(configuredOrigin);
-    const cartHost = PLATFORM_APEX_TO_CART_HOST[url.hostname.toLowerCase()];
-    if (!cartHost) return configuredOrigin;
-    url.hostname = cartHost;
-    return url.toString().replace(/\/$/, '');
-  } catch {
-    return configuredOrigin;
-  }
+function normalizeRootDomain(value: string): string | undefined {
+  const normalized = value.trim().toLowerCase().replace(/\.$/, '');
+  return BARE_HOSTNAME.test(normalized) ? normalized : undefined;
 }
 
-export function isAllowedCartApiProtocol(base: URL): boolean {
-  if (base.protocol === 'https:') return true;
-  if (base.protocol !== 'http:') return false;
-  if (typeof __DEV__ === 'undefined' || !__DEV__) return false;
-  const host = base.hostname.toLowerCase();
+function isLocalDevHost(host: string): boolean {
   return (
     host === 'localhost' ||
     host === '127.0.0.1' ||
@@ -54,4 +39,59 @@ export function isAllowedCartApiProtocol(base: URL): boolean {
       host
     )
   );
+}
+
+export function resolveCartApiOrigin(
+  configuredOrigin: string,
+  explicitRootDomain?: string
+): string {
+  try {
+    const url = new URL(configuredOrigin);
+    if (
+      !isAllowedCartApiProtocol(url) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      return '';
+    }
+    const host = url.hostname.toLowerCase();
+    if (
+      host === 'staging.ogabassey.com' ||
+      host === 'api-staging.ogabassey.com'
+    ) {
+      url.hostname = 'api-staging.ogabassey.com';
+      return url.toString().replace(/\/$/, '');
+    }
+    if (explicitRootDomain !== undefined) {
+      const root = normalizeRootDomain(explicitRootDomain);
+      if (!root) return '';
+      if (host === `api.${root}` || host === `api-staging.${root}`) {
+        return url.toString().replace(/\/$/, '');
+      }
+      url.hostname = `api.${root}`;
+      return url.toString().replace(/\/$/, '');
+    }
+    if (host === 'usebaci.com' || host === 'api.usebaci.com') {
+      url.hostname = 'api.usebaci.com';
+      return url.toString().replace(/\/$/, '');
+    }
+    if (host === 'api-staging.usebaci.com') {
+      return url.toString().replace(/\/$/, '');
+    }
+    if (typeof __DEV__ !== 'undefined' && __DEV__ && isLocalDevHost(host)) {
+      return url.toString().replace(/\/$/, '');
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
+export function isAllowedCartApiProtocol(base: URL): boolean {
+  if (base.protocol === 'https:') return true;
+  if (base.protocol !== 'http:') return false;
+  if (typeof __DEV__ === 'undefined' || !__DEV__) return false;
+  return isLocalDevHost(base.hostname.toLowerCase());
 }

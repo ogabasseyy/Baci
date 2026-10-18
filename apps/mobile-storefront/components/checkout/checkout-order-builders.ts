@@ -52,34 +52,53 @@ function getMerchantRateId(
   return parseMerchantRateQuoteId(selectedQuote.id);
 }
 
+function calculateItemAssuranceFeeMinor(item: CartItem): number {
+  if (!item.hasAssurance) return 0;
+  const effectivePriceMinor = Math.round(getCartItemEffectivePrice(item) * 100);
+  return Math.round(
+    effectivePriceMinor * item.quantity * (item.assuranceRate ?? 0.05)
+  );
+}
+
 export function createCheckoutSnapshot(
   itemsSnapshot: CartItem[],
   deliveryFee: number,
   taxAmount: number
 ): CheckoutSnapshot {
-  const subtotal = itemsSnapshot.reduce((total, item) => {
-    const effectivePrice = getCartItemEffectivePrice(item);
-    return total + effectivePrice * item.quantity;
+  const subtotalMinor = itemsSnapshot.reduce((total, item) => {
+    const effectivePriceMinor = Math.round(
+      getCartItemEffectivePrice(item) * 100
+    );
+    return total + effectivePriceMinor * item.quantity;
   }, 0);
-  const assuranceFee = calculateCheckoutAssuranceFee(itemsSnapshot);
+  const assuranceFeeMinor = itemsSnapshot.reduce(
+    (sum, item) => sum + calculateItemAssuranceFeeMinor(item),
+    0
+  );
+  const subtotal = subtotalMinor / 100;
+  const assuranceFee = assuranceFeeMinor / 100;
   return {
     assuranceFee,
     deliveryFee,
     subtotal,
     taxAmount,
-    total: subtotal + deliveryFee + assuranceFee + taxAmount,
+    total:
+      Math.round(
+        subtotalMinor +
+          assuranceFeeMinor +
+          Math.round(deliveryFee * 100) +
+          Math.round(taxAmount * 100)
+      ) / 100,
   };
 }
 
 export function calculateCheckoutAssuranceFee(itemsSnapshot: CartItem[]) {
-  return itemsSnapshot.reduce((sum, item) => {
-    if (!item.hasAssurance) return sum;
-    const effectivePrice = getCartItemEffectivePrice(item);
-    return (
-      sum +
-      Math.round(effectivePrice * item.quantity * (item.assuranceRate ?? 0.05))
-    );
-  }, 0);
+  return (
+    itemsSnapshot.reduce(
+      (sum, item) => sum + calculateItemAssuranceFeeMinor(item),
+      0
+    ) / 100
+  );
 }
 
 export function buildOrderShippingAddress(
@@ -128,11 +147,7 @@ export function mapCartItemsToOrderItems(
       variant_name: item.variant_name,
       variant_attributes: item.variant_attributes,
       has_assurance: item.hasAssurance || false,
-      assurance_fee: item.hasAssurance
-        ? Math.round(
-            effectivePrice * item.quantity * (item.assuranceRate ?? 0.05)
-          )
-        : 0,
+      assurance_fee: calculateItemAssuranceFeeMinor(item) / 100,
       // Quiz prize voucher lines: /api/orders verifies the signed token and
       // compares `condition` against the value baked into it — dropping these
       // here silently broke mobile prize redemption at checkout.

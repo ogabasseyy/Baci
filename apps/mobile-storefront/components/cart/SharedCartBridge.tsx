@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { EXPO_PUBLIC_API_URL } from '@/env';
+import { EXPO_PUBLIC_API_URL, EXPO_PUBLIC_ROOT_DOMAIN } from '@/env';
 import { useMerchant } from '@/hooks/use-merchant';
 import { useSharedCart } from '@/hooks/use-shared-cart';
 import { resolveCartApiOrigin } from '@/lib/cart/api-origin';
@@ -33,7 +33,10 @@ export function SharedCartBridge() {
       }),
     merchantId: CONFIG.MERCHANT_ID,
     merchantSlug: CONFIG.MERCHANT_SLUG,
-    apiOrigin: resolveCartApiOrigin(EXPO_PUBLIC_API_URL),
+    apiOrigin: resolveCartApiOrigin(
+      EXPO_PUBLIC_API_URL,
+      EXPO_PUBLIC_ROOT_DOMAIN
+    ),
     subjectKey,
   });
   return null;

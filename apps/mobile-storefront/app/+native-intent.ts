@@ -47,7 +47,12 @@ export function redirectSystemPath({
   path: string;
   initial: boolean;
 }): string {
-  const apiHostname = new URL(EXPO_PUBLIC_API_URL).hostname;
+  let apiHostname = '';
+  try {
+    apiHostname = new URL(EXPO_PUBLIC_API_URL).hostname;
+  } catch {
+    apiHostname = '';
+  }
   // Empty string is the fail-closed signal: capture must not
   // substitute the production root for an underivable staging root.
   const platformRootDomain =

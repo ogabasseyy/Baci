@@ -39,6 +39,8 @@ export function reviewedCheckoutItems(
         negotiationStatus === 'rejected'
           ? negotiationStatus
           : undefined,
+      hasAssurance: line.hasAssurance,
+      assuranceRate: line.assuranceRate ?? item.assuranceRate,
       voucher_token: isVoucher ? (line.voucherToken ?? undefined) : undefined,
       voucher_award_id: isVoucher
         ? (line.voucherAwardId ?? undefined)

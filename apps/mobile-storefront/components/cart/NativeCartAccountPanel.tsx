@@ -19,26 +19,19 @@ import { useSavedCartRead } from './use-saved-cart-read';
  * requires this panel, and signing in alone never links the cart.
  */
 export function NativeCartAccountPanel() {
-  const accountUserId = useNativeSharedCartStore(
-    (state) => state.accountUserId
-  );
-  const enabled = useNativeSharedCartStore((state) => state.enabled);
-  const accountsEnabled = useNativeSharedCartStore(
-    (state) => state.accountsEnabled
-  );
-  const linkAccount = useNativeSharedCartStore((state) => state.linkAccount);
-  const loadSavedCart = useNativeSharedCartStore(
-    (state) => state.loadSavedCart
-  );
-  const snapshot = useNativeSharedCartStore((state) => state.snapshot);
-  const savedCart = useNativeSharedCartStore((state) => state.savedCart);
+  const accountUserId = useNativeSharedCartStore((s) => s.accountUserId);
+  const enabled = useNativeSharedCartStore((s) => s.enabled);
+  const accountsEnabled = useNativeSharedCartStore((s) => s.accountsEnabled);
+  const linkAccount = useNativeSharedCartStore((s) => s.linkAccount);
+  const loadSavedCart = useNativeSharedCartStore((s) => s.loadSavedCart);
+  const snapshot = useNativeSharedCartStore((s) => s.snapshot);
+  const savedCart = useNativeSharedCartStore((s) => s.savedCart);
   const colors = Colors[useColorScheme() ?? 'light'];
   const operationRef = useRef<string | null>(null);
   // Owner-scoped flight guard: stale attempts never block a new owner.
-  const inFlight = useRef<{
-    userId: string | null;
-    generation: number;
-  } | null>(null);
+  const inFlight = useRef<{ userId: string | null; generation: number } | null>(
+    null
+  );
   const pendingInput = useRef<
     Parameters<NonNullable<typeof linkAccount>>[0] | null
   >(null);
@@ -51,15 +44,9 @@ export function NativeCartAccountPanel() {
   // a render-phase state update advances the generation atomically
   // with the committed render, so a discarded concurrent render can
   // never advance the scope past a generation that was never shown.
-  const [ownerScope, setOwnerScope] = useState({
-    userId,
-    generation: 0,
-  });
+  const [ownerScope, setOwnerScope] = useState({ userId, generation: 0 });
   if (ownerScope.userId !== userId) {
-    setOwnerScope({
-      userId,
-      generation: ownerScope.generation + 1,
-    });
+    setOwnerScope({ userId, generation: ownerScope.generation + 1 });
   }
   // Merge picks are made against one saved/current version pair. If
   // either cart moves (realtime refresh, a new saved-cart read), the
@@ -219,6 +206,7 @@ export function NativeCartAccountPanel() {
           />
           <Pressable
             accessibilityRole="button"
+            accessibilityState={{ disabled: pending || !savedReady }}
             disabled={pending || !savedReady}
             onPress={() =>
               void run({
@@ -232,6 +220,9 @@ export function NativeCartAccountPanel() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityState={{
+              disabled: pending || !savedReady || !plan?.ok,
+            }}
             disabled={pending || !savedReady || !plan?.ok}
             onPress={() => {
               if (!plan?.ok) return;
@@ -257,6 +248,7 @@ export function NativeCartAccountPanel() {
           </Text>
           <Pressable
             accessibilityRole="button"
+            accessibilityState={{ disabled: pending || !savedReady }}
             disabled={pending || !savedReady}
             onPress={() =>
               void run({
@@ -273,6 +265,7 @@ export function NativeCartAccountPanel() {
       {current ? (
         <Pressable
           accessibilityRole="button"
+          accessibilityState={{ disabled: pending || !savedReady }}
           disabled={pending || !savedReady}
           onPress={() =>
             void run({

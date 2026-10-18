@@ -11,7 +11,7 @@ import {
 import { ModalSheet } from '@/components/ui/ModalSheet';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { EXPO_PUBLIC_API_URL } from '@/env';
+import { EXPO_PUBLIC_API_URL, EXPO_PUBLIC_ROOT_DOMAIN } from '@/env';
 import { resolveCartApiOrigin } from '@/lib/cart/api-origin';
 import {
   cartPairingRevision,
@@ -54,7 +54,10 @@ export function NativeCartPairingPanel() {
       const client = createNativeCartClient({
         merchantId: CONFIG.MERCHANT_ID,
         merchantSlug: CONFIG.MERCHANT_SLUG,
-        apiOrigin: resolveCartApiOrigin(EXPO_PUBLIC_API_URL),
+        apiOrigin: resolveCartApiOrigin(
+          EXPO_PUBLIC_API_URL,
+          EXPO_PUBLIC_ROOT_DOMAIN
+        ),
       });
       void client
         .previewHandoff(current.handoffId, current.token)
@@ -126,6 +129,7 @@ export function NativeCartPairingPanel() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
+        accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={() => {
           void run();

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useCartStore } from '@/stores/cart-store';
 import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
 function conflictKey(item: CartItemIdentity): string {
@@ -16,6 +17,7 @@ function conflictKey(item: CartItemIdentity): string {
 }
 export function SharedCartStatusPanel() {
   const state = useNativeSharedCartStore();
+  const items = useCartStore((cart) => cart.items);
   const colors = Colors[useColorScheme() ?? 'light'];
   const [picks, setPicks] = useState<Record<string, 'incoming' | 'existing'>>(
     {}
@@ -76,46 +78,65 @@ export function SharedCartStatusPanel() {
           </Text>
           {state.mergeConflictReason === 'duplicate_identity' ? null : (
             <>
-              {conflicts.map((item) => (
-                <View key={conflictKey(item)}>
-                  <Text style={{ color: colors.text }}>
-                    Item {item.productId}
-                    {item.variantId ? ` (${item.variantId})` : ''}
-                  </Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() =>
-                      setPicks((current) => ({
-                        ...current,
-                        [conflictKey(item)]: 'existing',
-                      }))
-                    }
-                  >
-                    <Text style={{ color: colors.primary }}>
-                      {picks[conflictKey(item)] === 'existing'
-                        ? 'Keeping saved offer'
-                        : 'Keep saved offer'}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() =>
-                      setPicks((current) => ({
-                        ...current,
-                        [conflictKey(item)]: 'incoming',
-                      }))
-                    }
-                  >
-                    <Text style={{ color: colors.primary }}>
-                      {picks[conflictKey(item)] === 'incoming'
-                        ? 'Keeping device offer'
-                        : 'Keep device offer'}
-                    </Text>
-                  </Pressable>
-                </View>
-              ))}
+              {conflicts.map((item) => {
+                const exactMatch = items.find(
+                  (line) =>
+                    line.product_id.toLowerCase() ===
+                      item.productId.toLowerCase() &&
+                    (line.variant_id ?? '').toLowerCase() ===
+                      (item.variantId ?? '').toLowerCase()
+                );
+                const fallbackMatch =
+                  exactMatch ??
+                  items.find(
+                    (line) =>
+                      line.product_id.toLowerCase() ===
+                      item.productId.toLowerCase()
+                  );
+                const name = exactMatch
+                  ? exactMatch.variant_name
+                    ? `${exactMatch.name} (${exactMatch.variant_name})`
+                    : exactMatch.name
+                  : (fallbackMatch?.name ?? 'Item');
+                return (
+                  <View key={conflictKey(item)}>
+                    <Text style={{ color: colors.text }}>{name}</Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setPicks((current) => ({
+                          ...current,
+                          [conflictKey(item)]: 'existing',
+                        }))
+                      }
+                    >
+                      <Text style={{ color: colors.primary }}>
+                        {picks[conflictKey(item)] === 'existing'
+                          ? 'Keeping saved offer'
+                          : 'Keep saved offer'}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() =>
+                        setPicks((current) => ({
+                          ...current,
+                          [conflictKey(item)]: 'incoming',
+                        }))
+                      }
+                    >
+                      <Text style={{ color: colors.primary }}>
+                        {picks[conflictKey(item)] === 'incoming'
+                          ? 'Keeping device offer'
+                          : 'Keep device offer'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ disabled: !allPicked }}
                 disabled={!allPicked}
                 onPress={() =>
                   run(

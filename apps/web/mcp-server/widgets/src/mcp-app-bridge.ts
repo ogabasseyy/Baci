@@ -60,7 +60,7 @@ export async function connectMcpApp() {
       : {}),
     callTool: capabilities?.serverTools
       ? (name, args) => app.callServerTool({ name, arguments: args })
-      : undefined,
+      : extensions?.callTool?.bind(extensions),
     openExternal: capabilities?.openLinks
       ? async ({ href }) => {
           update({ hostError: null });
@@ -74,7 +74,7 @@ export async function connectMcpApp() {
             });
           }
         }
-      : undefined,
+      : extensions?.openExternal?.bind(extensions),
     requestDisplayMode: context?.availableDisplayModes?.includes('fullscreen')
       ? async ({ mode }) => {
           update({ hostError: null });
@@ -113,7 +113,7 @@ export async function connectMcpApp() {
             });
           }
         }
-      : undefined,
+      : extensions?.sendFollowUpMessage?.bind(extensions),
     setWidgetState: (widgetState) => {
       extensions?.setWidgetState?.(widgetState);
       update({ widgetState });

@@ -1,19 +1,29 @@
 import type {} from './hooks/use-openai-global';
 
 type WidgetHost = NonNullable<Window['openai']>;
-let standardHost: WidgetHost | undefined;
+let overrides: Partial<WidgetHost> | undefined;
+const adapter: WidgetHost = new Proxy({} as WidgetHost, {
+  get(_target, key) {
+    if (overrides && Object.hasOwn(overrides, key))
+      return Reflect.get(overrides, key);
+    const native = window.openai;
+    if (!native) return undefined;
+    const value: unknown = Reflect.get(native, key, native);
+    return typeof value === 'function' ? value.bind(native) : value;
+  },
+});
 
 /** Keep the standard adapter separate from the host-owned ChatGPT extension. */
 export function getWidgetHost(): WidgetHost | undefined {
-  return standardHost ?? window.openai;
+  return overrides ? adapter : window.openai;
 }
 
 export function resetWidgetHost() {
-  standardHost = undefined;
+  overrides = undefined;
 }
 
 export function updateWidgetHost(globals: Partial<WidgetHost>) {
-  standardHost = { ...getWidgetHost(), ...globals };
+  overrides = { ...overrides, ...globals };
   window.dispatchEvent(
     new CustomEvent('openai:set_globals', { detail: { globals } }),
   );

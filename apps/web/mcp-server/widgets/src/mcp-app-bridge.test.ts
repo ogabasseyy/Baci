@@ -236,3 +236,31 @@ it('shows a connection error for navigation-only extensions with no delivered re
     products: [],
   });
 });
+
+it('retains native actions when the standard host omits their capabilities', async () => {
+  const native = {
+    callTool: vi.fn().mockResolvedValue({}),
+    openExternal: vi.fn(),
+    sendFollowUpMessage: vi.fn(),
+  };
+  window.openai = native;
+  host.getHostCapabilities.mockReturnValueOnce(
+    {} as ReturnType<typeof host.getHostCapabilities>,
+  );
+  await connectMcpApp();
+  await getWidgetHost()?.callTool?.('get_product', { product_id: 'phone' });
+  await getWidgetHost()?.openExternal?.({ href: 'https://ogabassey.com' });
+  await getWidgetHost()?.sendFollowUpMessage?.({ prompt: 'Negotiate' });
+  expect(native.callTool).toHaveBeenCalledWith('get_product', {
+    product_id: 'phone',
+  });
+  expect(native.openExternal).toHaveBeenCalledWith({
+    href: 'https://ogabassey.com',
+  });
+  expect(native.sendFollowUpMessage).toHaveBeenCalledWith({
+    prompt: 'Negotiate',
+  });
+  expect(host.callServerTool).not.toHaveBeenCalled();
+  expect(host.openLink).not.toHaveBeenCalled();
+  expect(host.sendMessage).not.toHaveBeenCalled();
+});

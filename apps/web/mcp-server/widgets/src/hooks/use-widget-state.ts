@@ -1,5 +1,5 @@
 import { getWidgetHost } from '../widget-host';
-import { type SetStateAction, useState } from 'react';
+import { type SetStateAction, useRef, useState } from 'react';
 import { useOpenAiGlobal } from './use-openai-global';
 
 type UnknownObject = Record<string, unknown>;
@@ -9,13 +9,13 @@ type UnknownObject = Record<string, unknown>;
  * Automatically syncs with getWidgetHost()?.widgetState
  */
 export function useWidgetState<T extends UnknownObject>(
-  defaultState: T | (() => T)
+  defaultState: T | (() => T),
 ): readonly [T, (state: SetStateAction<T>) => void];
 export function useWidgetState<T extends UnknownObject>(
-  defaultState?: T | (() => T | null) | null
+  defaultState?: T | (() => T | null) | null,
 ): readonly [T | null, (state: SetStateAction<T | null>) => void];
 export function useWidgetState<T extends UnknownObject>(
-  defaultState?: T | (() => T | null) | null
+  defaultState?: T | (() => T | null) | null,
 ): readonly [T | null, (state: SetStateAction<T | null>) => void] {
   const widgetStateFromWindow = useOpenAiGlobal('widgetState') as T;
 
@@ -42,17 +42,19 @@ export function useWidgetState<T extends UnknownObject>(
     }
   }
 
+  const latestState = useRef(widgetState);
+  latestState.current = widgetState;
+
   const setWidgetState = (state: SetStateAction<T | null>) => {
-    _setWidgetState((prevState) => {
-      const newState = typeof state === 'function' ? state(prevState) : state;
+    const newState =
+      typeof state === 'function' ? state(latestState.current) : state;
+    latestState.current = newState;
+    _setWidgetState(newState);
 
-      // Sync to getWidgetHost()?.widgetState for persistence
-      if (newState != null && typeof window !== 'undefined') {
-        void getWidgetHost()?.setWidgetState?.(newState);
-      }
-
-      return newState;
-    });
+    // Persist outside React's updater, which React may replay.
+    if (newState != null && typeof window !== 'undefined') {
+      void getWidgetHost()?.setWidgetState?.(newState);
+    }
   };
 
   return [widgetState, setWidgetState] as const;

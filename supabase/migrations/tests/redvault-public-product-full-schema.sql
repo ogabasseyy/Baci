@@ -4,6 +4,11 @@ UPDATE redvault_private_pilot_case SET
   order_input=jsonb_set(jsonb_set(order_input,'{tax_amount}','7.5'),'{expected_total}','102.5'),
   quote=jsonb_set(jsonb_set(quote,'{lines,0,vatRateBp}','750'),'{groups,0,vatRateBp}','750');
 SELECT private.configure_uba_redvault_public_product_test(true,(SELECT product_id FROM redvault_private_pilot_case));
+SELECT private.configure_uba_redvault_public_product_test(false,NULL);
+SELECT private.restore_uba_redvault_private_test_audience();
+SELECT private.configure_uba_redvault_live_pilot(true,(SELECT product_id FROM redvault_private_pilot_case),now()+interval '1 hour');
+SELECT private.configure_uba_redvault_live_pilot(false,NULL,NULL);
+SELECT private.configure_uba_redvault_public_product_test(true,(SELECT product_id FROM redvault_private_pilot_case));
 CREATE TEMP TABLE public_test_orders(actor text,order_id uuid,attempt_id uuid) ON COMMIT DROP;
 GRANT SELECT,INSERT,UPDATE ON public_test_orders TO authenticated;
 SELECT pg_catalog.set_config('request.jwt.claims',jsonb_build_object(
@@ -60,6 +65,14 @@ DO $$ BEGIN
   END IF;
 END $$;
 SELECT private.configure_uba_redvault_public_product_test(false,NULL);
+DO $$ BEGIN
+  BEGIN
+    PERFORM private.restore_uba_redvault_private_test_audience();
+    RAISE EXCEPTION 'used_public_audience_restore_accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM<>'redvault_public_test_history_requires_preserved_audience' THEN RAISE; END IF;
+  END;
+END $$;
 SET LOCAL ROLE authenticated;
 DO $$
 DECLARE caught text;

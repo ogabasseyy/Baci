@@ -3,6 +3,18 @@ INSERT INTO public.products VALUES (
   '6b5cb8a4-5575-456c-b936-8cdfae30db74', 'UBA Test', NULL, 'active', 100, false, 'off'
 );
 SELECT private.configure_uba_redvault_public_product_test(true,'f6f4261f-8cc8-42c4-941c-e8d3483c6628');
+SELECT private.configure_uba_redvault_public_product_test(false,NULL);
+SELECT private.restore_uba_redvault_private_test_audience();
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy
+    WHERE audience='private_user' AND NOT enabled AND product_id='f6f4261f-8cc8-42c4-941c-e8d3483c6628') THEN
+    RAISE EXCEPTION 'unused_public_test_private_restore_failed';
+  END IF;
+  IF has_function_privilege('authenticated','private.restore_uba_redvault_private_test_audience()','EXECUTE') THEN
+    RAISE EXCEPTION 'private_audience_restore_grant_leaked';
+  END IF;
+END $$;
+SELECT private.configure_uba_redvault_public_product_test(true,'f6f4261f-8cc8-42c4-941c-e8d3483c6628');
 INSERT INTO public.product_variants(id,product_id,is_inventory_anchor)
 VALUES ('99999999-9999-4999-8999-999999999999','f6f4261f-8cc8-42c4-941c-e8d3483c6628',true);
 SELECT private.configure_uba_redvault_public_product_test(true,'f6f4261f-8cc8-42c4-941c-e8d3483c6628');
@@ -111,6 +123,12 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE product_id IS NOT NULL) THEN
     RAISE EXCEPTION 'disabled_product_binding_lost';
   END IF;
+  BEGIN
+    PERFORM private.restore_uba_redvault_private_test_audience();
+    RAISE EXCEPTION 'used_public_audience_restore_accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM<>'redvault_public_test_history_requires_preserved_audience' THEN RAISE; END IF;
+  END;
 END $$;
 DO $$
 DECLARE rejected boolean:=false;

@@ -1,3 +1,9 @@
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM public.merchants) OR EXISTS (SELECT 1 FROM public.orders)
+    OR EXISTS (SELECT 1 FROM private.uba_redvault_refunds) THEN
+    RAISE EXCEPTION 'public_product_fixture_requires_empty_disposable_database';
+  END IF;
+END $$;
 INSERT INTO auth.users(id) VALUES ('70261bce-d358-45a4-9ede-8b9d71fb3bd9') ON CONFLICT DO NOTHING;
 SET LOCAL session_replication_role='replica';
 INSERT INTO public.merchants(id,email,slug,business_name,paystack_subaccount_code,vat_registration_status,vat_rate)

@@ -29,6 +29,9 @@ refund reconciliation and webhook signature checks remain unchanged.
 3. Keep the runtime disabled until discount binding, public-test-specific terms,
    bank code, live domain and verified issuer evidence are configured. Do not
    invent public campaign funding, caps or dates from test-product settings.
+   Automated live refunds stay disabled: use the owner-approved supervised
+   process in `redvault-public-product-supervised-refunds.md`, with a responsible
+   operator and verified provider completion for each capture.
 4. Configure the server's existing production/database binding plus
    `REDVAULT_LIVE_PILOT_AUDIENCE=public_product_test`. No automatic-expiry or
    single-global-attempt setting should be used for this audience.
@@ -52,6 +55,17 @@ revoke a Paystack checkout URL already issued. A subsequent capture remains held
 Confirm refund completion with the provider and persisted state; submission is not refund
 completion. A single Mastercard verification does not establish coverage of all
 three card networks.
+
+Paystack Dashboard refunds alone do not reconcile the private REDVAULT ledger.
+Follow the supervised refund runbook and distinguish financial completion from
+remaining inventory/lifecycle review.
+
+Before the public product has any order history, disable it and call the
+owner-only `private.restore_uba_redvault_private_test_audience()` before using
+the legacy private-tester configuration function. The restore retains the product
+binding and refuses an enabled or previously used public test. After any public
+order exists, retain the public audience and quarantine; switching that history
+to private mode requires a separately reviewed migration, not a policy-row reset.
 
 ## Validation
 

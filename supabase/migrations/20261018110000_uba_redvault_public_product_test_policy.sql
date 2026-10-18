@@ -67,6 +67,29 @@ ALTER FUNCTION private.configure_uba_redvault_public_product_test(boolean,uuid) 
 REVOKE ALL ON FUNCTION private.configure_uba_redvault_public_product_test(boolean,uuid)
   FROM PUBLIC,anon,authenticated,service_role;
 
+CREATE OR REPLACE FUNCTION private.restore_uba_redvault_private_test_audience()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE policy private.uba_redvault_live_pilot_policy%ROWTYPE;
+BEGIN
+  PERFORM 1 FROM public.products WHERE id=(
+    SELECT product_id FROM private.uba_redvault_live_pilot_policy WHERE singleton
+  ) FOR SHARE;
+  SELECT * INTO STRICT policy FROM private.uba_redvault_live_pilot_policy WHERE singleton FOR UPDATE;
+  IF policy.audience IS DISTINCT FROM 'public_product_test' OR policy.enabled IS NOT FALSE THEN
+    RAISE EXCEPTION 'redvault_public_test_must_be_disabled';
+  END IF;
+  IF policy.reserved_order_id IS NOT NULL OR policy.reserved_attempt_id IS NOT NULL
+    OR EXISTS (SELECT 1 FROM public.order_items WHERE product_id=policy.product_id) THEN
+    RAISE EXCEPTION 'redvault_public_test_history_requires_preserved_audience';
+  END IF;
+  UPDATE private.uba_redvault_live_pilot_policy
+  SET audience='private_user',expires_at=NULL,updated_at=pg_catalog.now() WHERE singleton;
+END;
+$$;
+ALTER FUNCTION private.restore_uba_redvault_private_test_audience() OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.restore_uba_redvault_private_test_audience()
+  FROM PUBLIC,anon,authenticated,service_role;
+
 CREATE OR REPLACE FUNCTION private.assert_uba_redvault_public_product_test_order(p_order_id uuid,p_require_application boolean DEFAULT true)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE

@@ -21,6 +21,7 @@ on:
       - 'apps/mobile-storefront/ios/Ogabassey/Info.plist'
       - '.github/scripts/ios-scene-presentation.test.mjs'
       - 'patches/expo-linear-gradient@*'
+      - 'patches/react-native@*'
       - 'apps/mobile-storefront/scripts/native-regressions/**'
       - 'apps/mobile-storefront/config/ios-gradient-layer.test.mjs'
       - '.github/scripts/ios-runtime-scheduler.test.mjs'
@@ -59,6 +60,9 @@ jobs:
 
       - name: Verify native gradient composition
         run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh
+
+      - name: Verify native clipping geometry and traversal work
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-clipping-views.sh
 
       - name: Verify scene presentation Swift and legacy window fallback
         run: node --test .github/scripts/ios-scene-presentation.test.mjs apps/mobile-storefront/config/ios-scene-presentation.test.mjs

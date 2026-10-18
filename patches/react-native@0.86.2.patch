@@ -1,14 +1,37 @@
+diff --git a/React/Fabric/Mounting/UIView+ComponentViewProtocol.mm b/React/Fabric/Mounting/UIView+ComponentViewProtocol.mm
+index 36e5f64f4b19b0c027cb60b14f5571202351a231..d88ea57c0da0ddd1a3cfe567146bed3e9bb63d6c 100644
+--- a/React/Fabric/Mounting/UIView+ComponentViewProtocol.mm
++++ b/React/Fabric/Mounting/UIView+ComponentViewProtocol.mm
+@@ -163,13 +163,12 @@ - (void)setPropKeysManagedByAnimated_DO_NOT_USE_THIS_IS_BROKEN:(nullable NSSet<N
+ 
+ - (void)updateClippedSubviewsWithClipRect:(CGRect)clipRect relativeToView:(UIView *)clipView
+ {
+-  clipRect = [clipView convertRect:clipRect toView:self];
+-
+-  // Normal views don't support unmounting, so all
+-  // this does is forward message to our subviews,
+-  // in case any of those do support it
++  // Ordinary UIKit views cannot clip React children. Keep the original
++  // coordinate space while forwarding; an actual clipping view converts
++  // the rectangle when it needs it. Converting at every native descendant
++  // walks CALayer ancestry even for leaves and WebKit's private view tree.
+   for (UIView *subview in self.subviews) {
+-    [subview updateClippedSubviewsWithClipRect:clipRect relativeToView:self];
++    [subview updateClippedSubviewsWithClipRect:clipRect relativeToView:clipView];
+   }
+ }
+ 
 diff --git a/ReactAndroid/build.gradle.kts b/ReactAndroid/build.gradle.kts
-index 99e05410f8c1b86f90d3907cb163d04db9cf0f59..d6d4f7c9542127a1d0d2e68e18a57490f78a2e03 100644
+index 3a1592d763a373bfb83c17a552ecbe565cd3d8d2..c2a74eb972ddbc52810d2ff630f8e5bc0c708688 100644
 --- a/ReactAndroid/build.gradle.kts
 +++ b/ReactAndroid/build.gradle.kts
 @@ -719,7 +719,7 @@ dependencies {
-
+ 
    // It's up to the consumer to decide if hermes or other engines should be included or not.
    // Therefore hermes-engine is a compileOnly dependencies.
 -  compileOnly(project(":packages:react-native:ReactAndroid:hermes-engine"))
 +  compileOnly("com.facebook.hermes:hermes-android:250829098.0.16")
-
+ 
    testImplementation(libs.junit)
    testImplementation(libs.assertj)
 diff --git a/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt b/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
@@ -16,7 +39,7 @@ index 97725bfcb7d20525999a38b357399b25a962bb67..c917e00386e706e9820f5637117eac97
 --- a/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
 +++ b/ReactAndroid/src/main/java/com/facebook/react/modules/statusbar/StatusBarModule.kt
 @@ -9,6 +9,7 @@ package com.facebook.react.modules.statusbar
-
+ 
  import android.animation.ArgbEvaluator
  import android.animation.ValueAnimator
 +import android.os.Build
@@ -34,7 +57,7 @@ index 97725bfcb7d20525999a38b357399b25a962bb67..c917e00386e706e9820f5637117eac97
 @@ -64,21 +64,28 @@ internal class StatusBarModule(reactContext: ReactApplicationContext?) :
      extraWindows.remove(window)
    }
-
+ 
 -  @Suppress("DEPRECATION")
    override fun getTypedExportedConstants(): Map<String, Any> {
      val currentActivity = reactApplicationContext.currentActivity
@@ -57,7 +80,7 @@ index 97725bfcb7d20525999a38b357399b25a962bb67..c917e00386e706e9820f5637117eac97
 +        DEFAULT_BACKGROUND_COLOR_KEY to defaultBackgroundColor,
      )
    }
-
+ 
 -  @Suppress("DEPRECATION")
    override fun setColor(colorDouble: Double, animated: Boolean) {
 +    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
@@ -103,7 +126,7 @@ index 97725bfcb7d20525999a38b357399b25a962bb67..c917e00386e706e9820f5637117eac97
          }
 @@ -117,6 +118,10 @@ internal class StatusBarModule(reactContext: ReactApplicationContext?) :
    }
-
+ 
    override fun setTranslucent(translucent: Boolean) {
 +    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
 +      return
@@ -157,7 +180,7 @@ index 400860cc17abfc0d2ef5a9a9a6dfe1170f6f2c79..ece2ff6c035f054c674dab9532469c88
 +++ b/ReactAndroid/src/main/java/com/facebook/react/views/view/WindowUtil.kt
 @@ -8,7 +8,6 @@
  package com.facebook.react.views.view
-
+ 
  import android.app.Activity
 -import android.graphics.Color
  import android.os.Build
@@ -166,7 +189,7 @@ index 400860cc17abfc0d2ef5a9a9a6dfe1170f6f2c79..ece2ff6c035f054c674dab9532469c88
 @@ -22,15 +21,6 @@ import androidx.core.view.WindowInsetsControllerCompat
  import com.facebook.react.util.AndroidVersion
  import com.facebook.react.views.common.UiModeUtils
-
+ 
 -// The light scrim color used in the platform API 29+
 -// https://cs.android.com/android/platform/superproject/+/master:frameworks/base/core/java/com/android/internal/policy/DecorView.java;drc=6ef0f022c333385dba2c294e35b8de544455bf19;l=142
 -internal val LightNavigationBarColor = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
@@ -182,7 +205,7 @@ index 400860cc17abfc0d2ef5a9a9a6dfe1170f6f2c79..ece2ff6c035f054c674dab9532469c88
 @@ -123,55 +113,29 @@ internal fun Window.setStatusBarStyle(style: String?) {
    }
  }
-
+ 
 -@Suppress("DEPRECATION")
  private fun Window.statusBarHide() {
 -  if (isEdgeToEdgeFeatureFlagOn) {
@@ -205,7 +228,7 @@ index 400860cc17abfc0d2ef5a9a9a6dfe1170f6f2c79..ece2ff6c035f054c674dab9532469c88
 +    hide(WindowInsetsCompat.Type.statusBars())
    }
  }
-
+ 
 -@Suppress("DEPRECATION")
  private fun Window.statusBarShow() {
 -  if (isEdgeToEdgeFeatureFlagOn) {
@@ -227,14 +250,14 @@ index 400860cc17abfc0d2ef5a9a9a6dfe1170f6f2c79..ece2ff6c035f054c674dab9532469c88
 +    show(WindowInsetsCompat.Type.statusBars())
    }
  }
-
+ 
 -@Suppress("DEPRECATION")
  internal fun Window.enableEdgeToEdge() {
    WindowCompat.setDecorFitsSystemWindows(this, false)
-
+ 
    val insetsController = WindowInsetsControllerCompat(this, decorView)
    val isDarkMode = UiModeUtils.isDarkMode(context)
-
+ 
 -  statusBarColor = Color.TRANSPARENT
 -
    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -242,16 +265,16 @@ index 400860cc17abfc0d2ef5a9a9a6dfe1170f6f2c79..ece2ff6c035f054c674dab9532469c88
 -
      val attributes = intArrayOf(android.R.attr.enforceNavigationBarContrast)
      val typedArray = context.theme.obtainStyledAttributes(attributes)
-
-@@ -192,17 +156,11 @@ internal fun Window.enableEdgeToEdge() {
+ 
+@@ -192,18 +156,12 @@ internal fun Window.enableEdgeToEdge() {
      val isAppearanceLightNavigationBars =
          Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isDarkMode
-
+ 
 -    navigationBarColor =
 -        if (isAppearanceLightNavigationBars) LightNavigationBarColor else DarkNavigationBarColor
      insetsController.isAppearanceLightNavigationBars = isAppearanceLightNavigationBars
    }
-
+ 
 -  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
 +  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
      attributes.layoutInDisplayCutoutMode =
@@ -263,10 +286,15 @@ index 400860cc17abfc0d2ef5a9a9a6dfe1170f6f2c79..ece2ff6c035f054c674dab9532469c88
 +        WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
    }
  }
+ 
 diff --git a/ReactCommon/react/renderer/uimanager/UIManager.cpp b/ReactCommon/react/renderer/uimanager/UIManager.cpp
+index 4d640400dc129724b1a46e429fc90da2fb1919cc..e87c94d7970ffae82c33b52f3d4ae9c84aafbd13 100644
 --- a/ReactCommon/react/renderer/uimanager/UIManager.cpp
 +++ b/ReactCommon/react/renderer/uimanager/UIManager.cpp
-@@ -538,24 +538,4 @@
+@@ -535,30 +535,10 @@ std::shared_ptr<const ShadowNode> UIManager::findShadowNodeByTag_DEPRECATED(
+   auto shadowNode = std::shared_ptr<const ShadowNode>{};
+ 
+   shadowTreeRegistry_.enumerate([&](const ShadowTree& shadowTree, bool& stop) {
 -    // Obtain a pointer to the root node. The flag-gated path uses
 -    // getCurrentRevision() which keeps the root alive via shared_ptr for
 -    // the entire traversal, fixing a use-after-free race condition.
@@ -295,3 +323,6 @@ diff --git a/ReactCommon/react/renderer/uimanager/UIManager.cpp b/ReactCommon/re
 +    // can retire the root after a cancelled tryCommit releases its lock.
 +    const auto rootShadowNode =
 +        shadowTree.getCurrentRevision().rootShadowNode;
+ 
+     if (rootShadowNode != nullptr) {
+       const auto& children = rootShadowNode->getChildren();

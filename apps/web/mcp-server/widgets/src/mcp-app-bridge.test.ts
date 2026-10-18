@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
+
 const { host, factory } = vi.hoisted(() => {
   const host = {
     connect: vi.fn().mockResolvedValue(undefined),
@@ -47,10 +48,13 @@ const { host, factory } = vi.hoisted(() => {
 vi.mock('@modelcontextprotocol/ext-apps/app-with-deps', () => ({
   App: factory,
 }));
-import { getWidgetHost, resetWidgetHost } from './widget-host';
-import { connectMcpApp, initializeMcpApp } from './mcp-app-bridge';
+
+import { initializeMcpApp } from './initialize-mcp-app';
+import { connectMcpApp } from './mcp-app-bridge';
+import { widgetHost } from './widget-host';
+
 afterEach(() => {
-  resetWidgetHost();
+  widgetHost.reset();
   delete window.openai;
   vi.clearAllMocks();
 });
@@ -65,14 +69,14 @@ it('prefers the standard bridge while retaining ChatGPT state persistence', asyn
   expect(factory).toHaveBeenCalledWith(
     { name: 'Ogabassey catalog', version: '1.0.0' },
     { availableDisplayModes: ['inline', 'fullscreen'] },
-    { autoResize: false },
+    { autoResize: false }
   );
   expect(host.connect).toHaveBeenCalledWith(undefined, { timeout: 10000 });
   expect(window.openai).toBe(bridge);
-  expect(getWidgetHost()?.widgetState).toBe(bridge.widgetState);
-  getWidgetHost()?.setWidgetState?.({ cart: ['phone'] });
+  expect(widgetHost.get()?.widgetState).toBe(bridge.widgetState);
+  widgetHost.get()?.setWidgetState?.({ cart: ['phone'] });
   expect(bridge.setWidgetState).toHaveBeenCalledWith({ cart: ['phone'] });
-  await getWidgetHost()?.callTool?.('get_product', { product_id: 'phone' });
+  await widgetHost.get()?.callTool?.('get_product', { product_id: 'phone' });
   expect(bridge.callTool).not.toHaveBeenCalled();
   expect(host.callServerTool).toHaveBeenCalledWith({
     name: 'get_product',
@@ -82,12 +86,12 @@ it('prefers the standard bridge while retaining ChatGPT state persistence', asyn
 it('delivers standard tool results, deferred arguments and host theme changes', async () => {
   await connectMcpApp();
   host.ontoolresult?.({ structuredContent: { products: [{ id: 'phone' }] } });
-  expect(getWidgetHost()?.toolOutput).toEqual({ products: [{ id: 'phone' }] });
+  expect(widgetHost.get()?.toolOutput).toEqual({ products: [{ id: 'phone' }] });
   host.ontoolinput?.({ arguments: { product_ids: ['phone'] } });
-  expect(getWidgetHost()?.toolInput).toEqual({ product_ids: ['phone'] });
+  expect(widgetHost.get()?.toolInput).toEqual({ product_ids: ['phone'] });
   host.onhostcontextchanged?.({ theme: 'dark' });
-  expect(getWidgetHost()?.theme).toBe('dark');
-  await getWidgetHost()?.callTool?.('update_ogabassey_guest_cart', {
+  expect(widgetHost.get()?.theme).toBe('dark');
+  await widgetHost.get()?.callTool?.('update_ogabassey_guest_cart', {
     quantity: 1,
   });
   expect(host.callServerTool).toHaveBeenCalledWith({
@@ -99,7 +103,7 @@ it('delivers standard tool results, deferred arguments and host theme changes', 
 it('clears displayed products after host cancellation', async () => {
   await connectMcpApp();
   host.ontoolcancelled?.();
-  expect(getWidgetHost()?.toolOutput).toMatchObject({
+  expect(widgetHost.get()?.toolOutput).toMatchObject({
     status: 'error',
     products: [],
   });
@@ -107,12 +111,12 @@ it('clears displayed products after host cancellation', async () => {
 it('shows a safe fallback when the standard handshake fails', async () => {
   host.connect.mockRejectedValueOnce(new Error('private transport details'));
   await initializeMcpApp();
-  expect(getWidgetHost()?.toolOutput).toMatchObject({
+  expect(widgetHost.get()?.toolOutput).toMatchObject({
     status: 'error',
     products: [],
   });
-  expect(JSON.stringify(getWidgetHost()?.toolOutput)).not.toContain(
-    'private transport',
+  expect(JSON.stringify(widgetHost.get()?.toolOutput)).not.toContain(
+    'private transport'
   );
 });
 
@@ -121,14 +125,14 @@ it('uses the existing legacy bridge only when standard initialization fails', as
   window.openai = bridge;
   host.connect.mockRejectedValueOnce(new Error('unsupported protocol'));
   await initializeMcpApp();
-  expect(getWidgetHost()).toBe(bridge);
+  expect(widgetHost.get()).toBe(bridge);
   expect(host.close).toHaveBeenCalled();
 });
 it('supports follow-up messages and local state without ChatGPT extensions', async () => {
   await connectMcpApp();
-  getWidgetHost()?.setWidgetState?.({ cart: ['phone'] });
-  expect(getWidgetHost()?.widgetState).toEqual({ cart: ['phone'] });
-  getWidgetHost()?.sendFollowUpMessage?.({ prompt: 'Compare these phones' });
+  widgetHost.get()?.setWidgetState?.({ cart: ['phone'] });
+  expect(widgetHost.get()?.widgetState).toEqual({ cart: ['phone'] });
+  widgetHost.get()?.sendFollowUpMessage?.({ prompt: 'Compare these phones' });
   expect(host.sendMessage).toHaveBeenCalledWith({
     role: 'user',
     content: [{ type: 'text', text: 'Compare these phones' }],
@@ -143,24 +147,24 @@ it('maps standard response metadata and safe areas without changing the native b
     structuredContent: { products: [] },
     _meta: { source: 'catalog' },
   });
-  expect(getWidgetHost()?.toolResponseMetadata).toEqual({ source: 'catalog' });
+  expect(widgetHost.get()?.toolResponseMetadata).toEqual({ source: 'catalog' });
   const insets = { top: 1, right: 2, bottom: 3, left: 4 };
   host.onhostcontextchanged?.({ theme: 'dark', safeAreaInsets: insets });
-  expect(getWidgetHost()?.safeArea).toEqual({ insets });
+  expect(widgetHost.get()?.safeArea).toEqual({ insets });
   expect(native).toEqual({ theme: 'light' });
 });
 
 it('does not advertise unsupported tool calls or fullscreen', async () => {
   host.getHostCapabilities.mockReturnValueOnce(
-    {} as ReturnType<typeof host.getHostCapabilities>,
+    {} as ReturnType<typeof host.getHostCapabilities>
   );
   host.getHostContext.mockReturnValueOnce({
     theme: 'light',
     availableDisplayModes: ['inline'],
   });
   await connectMcpApp();
-  expect(getWidgetHost()?.callTool).toBeUndefined();
-  expect(getWidgetHost()?.requestDisplayMode).toBeUndefined();
+  expect(widgetHost.get()?.callTool).toBeUndefined();
+  expect(widgetHost.get()?.requestDisplayMode).toBeUndefined();
 });
 it.each([
   'denied',
@@ -169,11 +173,13 @@ it.each([
   host.openLink.mockImplementationOnce(() =>
     failure === 'denied'
       ? Promise.resolve({ isError: true })
-      : Promise.reject(new Error('private error')),
+      : Promise.reject(new Error('private error'))
   );
   await connectMcpApp();
-  await getWidgetHost()?.openExternal?.({ href: 'https://ogabassey.com/cart' });
-  expect(getWidgetHost()?.hostError).toContain('Could not open');
+  await widgetHost
+    .get()
+    ?.openExternal?.({ href: 'https://ogabassey.com/cart' });
+  expect(widgetHost.get()?.hostError).toContain('Could not open');
 });
 
 it('retains a display-only legacy result when the standard handshake fails', async () => {
@@ -184,8 +190,8 @@ it('retains a display-only legacy result when the standard handshake fails', asy
   window.openai = bridge;
   host.connect.mockRejectedValueOnce(new Error('unsupported'));
   await initializeMcpApp();
-  expect(getWidgetHost()).toBe(bridge);
-  expect(getWidgetHost()?.toolOutput).toBe(bridge.toolOutput);
+  expect(widgetHost.get()).toBe(bridge);
+  expect(widgetHost.get()?.toolOutput).toBe(bridge.toolOutput);
 });
 it('retains results delivered during a failed handshake', async () => {
   host.connect.mockImplementationOnce(async () => {
@@ -193,15 +199,15 @@ it('retains results delivered during a failed handshake', async () => {
     throw new Error('disconnect');
   });
   await initializeMcpApp();
-  expect(getWidgetHost()?.toolOutput).toEqual({ products: [{ id: 'phone' }] });
+  expect(widgetHost.get()?.toolOutput).toEqual({ products: [{ id: 'phone' }] });
 });
 it('does not expose unsupported link or message methods', async () => {
   host.getHostCapabilities.mockReturnValueOnce(
-    {} as ReturnType<typeof host.getHostCapabilities>,
+    {} as ReturnType<typeof host.getHostCapabilities>
   );
   await connectMcpApp();
-  expect(getWidgetHost()?.openExternal).toBeUndefined();
-  expect(getWidgetHost()?.sendFollowUpMessage).toBeUndefined();
+  expect(widgetHost.get()?.openExternal).toBeUndefined();
+  expect(widgetHost.get()?.sendFollowUpMessage).toBeUndefined();
 });
 it.each([
   'denied',
@@ -210,23 +216,23 @@ it.each([
   host.sendMessage.mockImplementationOnce(() =>
     failure === 'denied'
       ? Promise.resolve({ isError: true })
-      : Promise.reject(new Error('private details')),
+      : Promise.reject(new Error('private details'))
   );
   await connectMcpApp();
-  await getWidgetHost()?.sendFollowUpMessage?.({ prompt: 'Negotiate' });
-  expect(getWidgetHost()?.hostError).toContain('Could not send');
-  expect(getWidgetHost()?.hostError).not.toContain('private');
+  await widgetHost.get()?.sendFollowUpMessage?.({ prompt: 'Negotiate' });
+  expect(widgetHost.get()?.hostError).toContain('Could not send');
+  expect(widgetHost.get()?.hostError).not.toContain('private');
 });
 it('handles rejected display-mode and sizing calls without unhandled rejections', async () => {
   host.requestDisplayMode.mockRejectedValueOnce(new Error('private details'));
   host.sendSizeChanged.mockRejectedValueOnce(new Error('private details'));
   const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
   await connectMcpApp();
-  await getWidgetHost()?.requestDisplayMode?.({ mode: 'fullscreen' });
-  await getWidgetHost()?.notifyIntrinsicHeight?.(300);
-  expect(getWidgetHost()?.hostError).toContain('Could not expand');
+  await widgetHost.get()?.requestDisplayMode?.({ mode: 'fullscreen' });
+  await widgetHost.get()?.notifyIntrinsicHeight?.(300);
+  expect(widgetHost.get()?.hostError).toContain('Could not expand');
   expect(warning).toHaveBeenCalledWith(
-    'Ogabassey widget size notification failed.',
+    'Ogabassey widget size notification failed.'
   );
   warning.mockRestore();
 });
@@ -235,7 +241,7 @@ it('shows a connection error for navigation-only extensions with no delivered re
   window.openai = { openExternal: vi.fn(), setWidgetState: vi.fn() };
   host.connect.mockRejectedValueOnce(new Error('unsupported'));
   await initializeMcpApp();
-  expect(getWidgetHost()?.toolOutput).toMatchObject({
+  expect(widgetHost.get()?.toolOutput).toMatchObject({
     status: 'error',
     products: [],
   });
@@ -249,12 +255,12 @@ it('retains native actions when the standard host omits their capabilities', asy
   };
   window.openai = native;
   host.getHostCapabilities.mockReturnValueOnce(
-    {} as ReturnType<typeof host.getHostCapabilities>,
+    {} as ReturnType<typeof host.getHostCapabilities>
   );
   await connectMcpApp();
-  await getWidgetHost()?.callTool?.('get_product', { product_id: 'phone' });
-  await getWidgetHost()?.openExternal?.({ href: 'https://ogabassey.com' });
-  await getWidgetHost()?.sendFollowUpMessage?.({ prompt: 'Negotiate' });
+  await widgetHost.get()?.callTool?.('get_product', { product_id: 'phone' });
+  await widgetHost.get()?.openExternal?.({ href: 'https://ogabassey.com' });
+  await widgetHost.get()?.sendFollowUpMessage?.({ prompt: 'Negotiate' });
   expect(native.callTool).toHaveBeenCalledWith('get_product', {
     product_id: 'phone',
   });

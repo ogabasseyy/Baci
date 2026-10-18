@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { mcpCatalogRenderInputSchema as catalogRenderInputSchema } from '../src/schemas/mcp-catalog-render';
+import { createCatalogRenderer } from './create-catalog-renderer';
 import { createSearchProductsToolConfig } from './search-products-tool-config';
-import {
-  createCatalogRenderer,
-  catalogRenderInputSchema,
-} from './catalog-render-tool';
 
 describe('decoupled catalog rendering', () => {
   it('search returns data without launching a widget', () => {
@@ -38,7 +36,7 @@ describe('decoupled catalog rendering', () => {
       catalogRenderInputSchema.safeParse({
         product_ids: ['first'],
         products: [{ price: 1 }],
-      }).success,
+      }).success
     ).toBe(false);
   });
   it('fails closed when any lookup fails instead of presenting a partial comparison', async () => {
@@ -52,11 +50,11 @@ describe('decoupled catalog rendering', () => {
   });
   it('rejects empty and oversized selections', () => {
     expect(
-      catalogRenderInputSchema.safeParse({ product_ids: [] }).success,
+      catalogRenderInputSchema.safeParse({ product_ids: [] }).success
     ).toBe(false);
     expect(
       catalogRenderInputSchema.safeParse({ product_ids: Array(21).fill('id') })
-        .success,
+        .success
     ).toBe(false);
   });
 });
@@ -80,12 +78,31 @@ it('does not render an unconfirmed price as a zero-priced product', async () => 
   expect((await render({ product_ids: ['phone'] })).isError).toBe(true);
 });
 
-it.each(['variant_lookup_failed', 'offer_lookup_failed'])('rejects unverified option data when %s', async (flag) => {
-  const render = createCatalogRenderer(async () => ({ structuredContent: {
-    products: [{ id: 'phone', name: 'Phone', price: 10, condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high' }],
-    [flag]: true,
-  } }));
+it.each([
+  'variant_lookup_failed',
+  'offer_lookup_failed',
+])('rejects unverified option data when %s', async (flag) => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: {
+      products: [
+        {
+          id: 'phone',
+          name: 'Phone',
+          price: 10,
+          condition: 'new',
+          in_stock: true,
+          stock_level: 'available',
+          stock_confidence: 'high',
+        },
+      ],
+      [flag]: true,
+    },
+  }));
   const result = await render({ product_ids: ['phone'] });
   expect(result.isError).toBe(true);
-  expect(result.structuredContent).toMatchObject({ status: 'unavailable', products: [], message: expect.stringContaining('Search again') });
+  expect(result.structuredContent).toMatchObject({
+    status: 'unavailable',
+    products: [],
+    message: expect.stringContaining('Search again'),
+  });
 });

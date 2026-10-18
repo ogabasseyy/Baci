@@ -1,5 +1,5 @@
-import { getWidgetHost } from '../widget-host';
 import { useSyncExternalStore } from 'react';
+import { widgetHost } from '../widget-host';
 
 // Event type for OpenAI global changes
 const SET_GLOBALS_EVENT_TYPE = 'openai:set_globals';
@@ -17,7 +17,9 @@ interface OpenAiGlobals {
   theme: string;
   displayMode: string;
   maxHeight: number;
-  safeArea: { insets: { top: number; bottom: number; left: number; right: number } };
+  safeArea: {
+    insets: { top: number; bottom: number; left: number; right: number };
+  };
   locale: string;
 }
 
@@ -32,7 +34,9 @@ declare global {
       theme?: string;
       displayMode?: string;
       maxHeight?: number;
-      safeArea?: { insets: { top: number; bottom: number; left: number; right: number } };
+      safeArea?: {
+        insets: { top: number; bottom: number; left: number; right: number };
+      };
       locale?: string;
       setWidgetState?: (state: unknown) => void;
       callTool?: (
@@ -43,8 +47,13 @@ declare global {
       notifyIntrinsicHeight?: (height: number) => void | Promise<void>;
       setOpenInAppUrl?: (options: { href: string }) => void;
       requestModal?: (options: unknown) => void;
-      requestDisplayMode?: (options: { mode: 'inline' | 'fullscreen' | 'pip' }) => Promise<unknown>;
-      sendFollowUpMessage?: (message: { prompt: string; scrollToBottom?: boolean }) => void | Promise<void>;
+      requestDisplayMode?: (options: {
+        mode: 'inline' | 'fullscreen' | 'pip';
+      }) => Promise<unknown>;
+      sendFollowUpMessage?: (message: {
+        prompt: string;
+        scrollToBottom?: boolean;
+      }) => void | Promise<void>;
     };
   }
 }
@@ -59,7 +68,9 @@ export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
   return useSyncExternalStore(
     (onChange) => {
       if (typeof window === 'undefined') {
-        return () => {};
+        return () => {
+          // No browser event source exists during server rendering.
+        };
       }
 
       const handleSetGlobal = (event: Event) => {
@@ -79,7 +90,7 @@ export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
         window.removeEventListener(SET_GLOBALS_EVENT_TYPE, handleSetGlobal);
       };
     },
-    () => (getWidgetHost()?.[key] ?? null) as OpenAiGlobals[K] | null,
+    () => (widgetHost.get()?.[key] ?? null) as OpenAiGlobals[K] | null,
     () => null as OpenAiGlobals[K] | null
   );
 }

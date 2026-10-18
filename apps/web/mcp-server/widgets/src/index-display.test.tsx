@@ -1,15 +1,20 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './index';
+import { widgetHost } from './widget-host';
 
 const products = [
   { id: '11111111-1111-4111-8111-111111111111', name: 'Phone One', slug: 'phone-one', price: 100000 },
 ];
 afterEach(() => {
+  widgetHost.reset();
   delete window.openai;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   document.body.style.padding = '';
+});
+beforeEach(() => {
+  widgetHost.reset();
 });
 describe('Ogabassey inline result presentation', () => {
   it('reports compact content height after a resize and never opens fullscreen automatically', () => {

@@ -1,5 +1,5 @@
-import { getWidgetHost } from '../widget-host';
 import { type SetStateAction, useLayoutEffect, useRef, useState } from 'react';
+import { widgetHost } from '../widget-host';
 import { useOpenAiGlobal } from './use-openai-global';
 
 type UnknownObject = Record<string, unknown>;
@@ -9,13 +9,13 @@ type UnknownObject = Record<string, unknown>;
  * Automatically syncs with getWidgetHost()?.widgetState
  */
 export function useWidgetState<T extends UnknownObject>(
-  defaultState: T | (() => T),
+  defaultState: T | (() => T)
 ): readonly [T, (state: SetStateAction<T>) => void];
 export function useWidgetState<T extends UnknownObject>(
-  defaultState?: T | (() => T | null) | null,
+  defaultState?: T | (() => T | null) | null
 ): readonly [T | null, (state: SetStateAction<T | null>) => void];
 export function useWidgetState<T extends UnknownObject>(
-  defaultState?: T | (() => T | null) | null,
+  defaultState?: T | (() => T | null) | null
 ): readonly [T | null, (state: SetStateAction<T | null>) => void] {
   const widgetStateFromWindow = useOpenAiGlobal('widgetState') as T;
 
@@ -55,7 +55,7 @@ export function useWidgetState<T extends UnknownObject>(
 
     // Persist outside React's updater, which React may replay.
     if (newState != null && typeof window !== 'undefined') {
-      void getWidgetHost()?.setWidgetState?.(newState);
+      void widgetHost.get()?.setWidgetState?.(newState);
     }
   };
 

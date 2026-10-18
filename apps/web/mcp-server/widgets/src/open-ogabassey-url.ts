@@ -1,14 +1,14 @@
-import { getWidgetHost } from './widget-host';
+import { widgetHost } from './widget-host';
 // Opens an Ogabassey URL from the widget: the ChatGPT host bridge when
 // available, otherwise a synchronously-reserved tab (popup blockers honor
 // only those) or a fresh tab. Returns false for a known failed request;
 // browser popup outcomes can be indeterminate with noopener.
 export function openOgabasseyUrl(
   url: string,
-  pendingTab?: Window | null,
+  pendingTab?: Window | null
 ): boolean {
-  if (getWidgetHost()?.openExternal) {
-    getWidgetHost()?.openExternal?.({ href: url });
+  if (widgetHost.get()?.openExternal) {
+    widgetHost.get()?.openExternal?.({ href: url });
     return true;
   } else if (pendingTab && !pendingTab.closed) {
     pendingTab.location.href = url;

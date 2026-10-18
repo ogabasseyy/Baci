@@ -1,12 +1,15 @@
 import { act, render, screen } from '@testing-library/react';
-import { startTransition, Suspense } from 'react';
+import { Suspense, startTransition } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
+
 const source = vi.hoisted(() => ({ state: { count: 0 } }));
 vi.mock('./use-openai-global', () => ({ useOpenAiGlobal: () => source.state }));
-import { resetWidgetHost } from '../widget-host';
+
+import { widgetHost } from '../widget-host';
 import { useWidgetState } from './use-widget-state';
+
 afterEach(() => {
-  resetWidgetHost();
+  widgetHost.reset();
   delete window.openai;
 });
 it('does not expose state from an uncommitted suspended render to actions', async () => {
@@ -32,7 +35,7 @@ it('does not expose state from an uncommitted suspended render to actions', asyn
   const view = render(
     <Suspense fallback={<p>Loading</p>}>
       <Widget suspended={false} />
-    </Suspense>,
+    </Suspense>
   );
   await act(async () => {
     source.state = { count: 10 };
@@ -40,8 +43,8 @@ it('does not expose state from an uncommitted suspended render to actions', asyn
       view.rerender(
         <Suspense fallback={<p>Loading</p>}>
           <Widget suspended />
-        </Suspense>,
-      ),
+        </Suspense>
+      )
     );
   });
   expect(screen.getByText('Count 0')).toBeInTheDocument();

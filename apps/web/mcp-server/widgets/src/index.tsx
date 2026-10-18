@@ -1,13 +1,13 @@
-import { openOgabasseyUrl } from './open-ogabassey-url';
-import { getWidgetHost } from './widget-host';
-import { initializeMcpApp } from './mcp-app-bridge';
 import { useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrandLogo } from './brand-logo';
 import { CartSummary } from './cart-summary';
 import { useCartHandoff } from './hooks/use-cart-handoff';
 import { useOpenAiGlobal } from './hooks/use-openai-global';
+import { initializeMcpApp } from './initialize-mcp-app';
+import { openOgabasseyUrl } from './open-ogabassey-url';
 import { ProductCard } from './product-card';
+import { widgetHost } from './widget-host';
 import type { Product } from './widget-types';
 
 void initializeMcpApp();
@@ -28,7 +28,7 @@ export function App() {
   const widgetRef = useRef<HTMLDivElement>(null);
   const resultMessage = !toolOutput
     ? 'Loading product results…'
-    : (toolOutput.status === 'error' || toolOutput.status === 'unavailable')
+    : toolOutput.status === 'error' || toolOutput.status === 'unavailable'
       ? toolOutput.message || 'Product search is temporarily unavailable.'
       : toolOutput.status === 'incomplete'
         ? toolOutput.message || 'Narrow your search to check prices accurately.'
@@ -37,11 +37,19 @@ export function App() {
             ? 'No verified match was found among the checked products. Other products may match.'
             : 'No verified products match this search.'
           : toolOutput.message || 'View the tool response in the conversation.';
-  const { cart, canReviewCart, cartError, cartNotice, isSavingCart, handleAddToCart, handleRemoveItem, handleViewCart } =
-    useCartHandoff();
+  const {
+    cart,
+    canReviewCart,
+    cartError,
+    cartNotice,
+    isSavingCart,
+    handleAddToCart,
+    handleRemoveItem,
+    handleViewCart,
+  } = useCartHandoff();
 
   useEffect(() => {
-    getWidgetHost()?.setOpenInAppUrl?.({ href: 'https://ogabassey.com' });
+    widgetHost.get()?.setOpenInAppUrl?.({ href: 'https://ogabassey.com' });
   }, []);
 
   useEffect(() => {
@@ -52,9 +60,11 @@ export function App() {
       const padding =
         Number.parseFloat(bodyStyle.paddingTop) +
         Number.parseFloat(bodyStyle.paddingBottom);
-      getWidgetHost()?.notifyIntrinsicHeight?.(
-        Math.ceil(element.getBoundingClientRect().height + (padding || 0))
-      );
+      widgetHost
+        .get()
+        ?.notifyIntrinsicHeight?.(
+          Math.ceil(element.getBoundingClientRect().height + (padding || 0))
+        );
     };
     reportHeight();
     if (typeof ResizeObserver === 'undefined') return;
@@ -91,12 +101,12 @@ export function App() {
         <div className="header-actions">
           {products.length > 1 &&
             displayMode !== 'fullscreen' &&
-            getWidgetHost()?.requestDisplayMode && (
+            widgetHost.get()?.requestDisplayMode && (
               <button
                 type="button"
                 className="expand-button"
                 onClick={() =>
-                  void getWidgetHost()?.requestDisplayMode?.({
+                  void widgetHost.get()?.requestDisplayMode?.({
                     mode: 'fullscreen',
                   })
                 }
@@ -175,7 +185,14 @@ export function App() {
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
-          <p role={(toolOutput?.status === 'error' || toolOutput?.status === 'unavailable') ? 'alert' : 'status'}>
+          <p
+            role={
+              toolOutput?.status === 'error' ||
+              toolOutput?.status === 'unavailable'
+                ? 'alert'
+                : 'status'
+            }
+          >
             {resultMessage}
           </p>
         </div>
@@ -195,9 +212,13 @@ export function App() {
           <button
             type="button"
             className="btn-negotiate-icon"
-            disabled={isSavingCart || cart.length === 0 || !getWidgetHost()?.sendFollowUpMessage}
+            disabled={
+              isSavingCart ||
+              cart.length === 0 ||
+              !widgetHost.get()?.sendFollowUpMessage
+            }
             onClick={() => {
-              getWidgetHost()?.sendFollowUpMessage?.({
+              widgetHost.get()?.sendFollowUpMessage?.({
                 prompt:
                   'I would like to negotiate the price for my selected item.',
               });

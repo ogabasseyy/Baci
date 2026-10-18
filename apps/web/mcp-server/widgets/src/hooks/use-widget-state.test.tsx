@@ -1,10 +1,11 @@
 import { act, renderHook } from '@testing-library/react';
-import { StrictMode, type ReactNode } from 'react';
+import { type ReactNode, StrictMode } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { resetWidgetHost, updateWidgetHost } from '../widget-host';
+import { widgetHost } from '../widget-host';
 import { useWidgetState } from './use-widget-state';
+
 afterEach(() => {
-  resetWidgetHost();
+  widgetHost.reset();
   delete window.openai;
 });
 it('persists each queued action once without a React updater replay', () => {
@@ -26,7 +27,7 @@ it('persists each queued action once without a React updater replay', () => {
   expect(updater).toHaveBeenCalledTimes(2);
   expect(persist).toHaveBeenCalledTimes(2);
   expect(persist.mock.calls).toEqual([[{ count: 1 }], [{ count: 2 }]]);
-  act(() => updateWidgetHost({ widgetState: { count: 10 } }));
+  act(() => widgetHost.update({ widgetState: { count: 10 } }));
   act(() => result.current[1](updater));
   expect(result.current[0]).toEqual({ count: 11 });
 });

@@ -1,10 +1,6 @@
 import { App } from '@modelcontextprotocol/ext-apps/app-with-deps';
 import type {} from './hooks/use-openai-global';
-import {
-  getWidgetHost,
-  resetWidgetHost,
-  updateWidgetHost,
-} from './widget-host';
+import { widgetHost } from './widget-host';
 
 /** Standard MCP Apps transport, adapted to the widget's existing host interface. */
 export async function connectMcpApp() {
@@ -12,9 +8,9 @@ export async function connectMcpApp() {
   const app = new App(
     { name: 'Ogabassey catalog', version: '1.0.0' },
     { availableDisplayModes: ['inline', 'fullscreen'] },
-    { autoResize: false },
+    { autoResize: false }
   );
-  const update = updateWidgetHost;
+  const update = widgetHost.update;
   app.ontoolresult = (result) =>
     update({
       toolOutput: result.structuredContent,
@@ -39,9 +35,11 @@ export async function connectMcpApp() {
   try {
     await app.connect(undefined, { timeout: 10000 });
   } catch (error) {
-    const deliveredOutput = getWidgetHost()?.toolOutput;
-    await app.close().catch(() => {});
-    resetWidgetHost();
+    const deliveredOutput = widgetHost.get()?.toolOutput;
+    await app.close().catch(() => {
+      // Ignore close failures after a failed connection attempt.
+    });
+    widgetHost.reset();
     // Read-only legacy hosts can display results without cart tool support.
     if (deliveredOutput != null) {
       if (deliveredOutput !== extensions?.toolOutput)
@@ -119,19 +117,4 @@ export async function connectMcpApp() {
       update({ widgetState });
     },
   });
-}
-
-export async function initializeMcpApp() {
-  try {
-    await connectMcpApp();
-  } catch {
-    if (getWidgetHost()?.toolOutput != null) return;
-    const toolOutput = {
-      status: 'error',
-      products: [],
-      message:
-        'Unable to connect to the shopping interface. Use the conversation to continue.',
-    };
-    updateWidgetHost({ toolOutput });
-  }
 }

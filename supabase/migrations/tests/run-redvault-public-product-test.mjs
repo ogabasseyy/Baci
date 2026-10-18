@@ -24,7 +24,9 @@ try {
     source('20261018110000_uba_redvault_public_product_test_policy.sql'),
     source('20261018110100_uba_redvault_public_product_test_guards.sql'),
     source('20261018110200_uba_redvault_public_product_test_projection.sql'),
+    source('20261018110300_uba_redvault_public_product_test_history.sql'),
     source('tests/redvault-public-product-test-cases.sql'),
+    source('tests/redvault-public-product-history-cases.sql'),
   ];
   psql(database, scripts.join('\n'));
   process.stdout.write('Public REDVAULT product PostgreSQL regression passed; no provider requests.\n');

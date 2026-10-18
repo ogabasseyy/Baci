@@ -50,7 +50,9 @@ FROM public.orders;
 INSERT INTO private.uba_redvault_payment_attempts(id,order_id,application_id,merchant_id,amount_kobo,currency)
 SELECT id,id,id,merchant_id,round(total*100)::bigint,'NGN' FROM public.orders;
 INSERT INTO private.uba_redvault_line_allocations
-SELECT id,'f6f4261f-8cc8-42c4-941c-e8d3483c6628' FROM private.uba_redvault_applications;
+SELECT application.id,item.product_id,item.id,1,500,10000,NULL
+FROM private.uba_redvault_applications application
+JOIN public.order_items item ON item.order_id=application.order_id;
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM private.uba_redvault_live_pilot_policy WHERE reserved_attempt_id IS NOT NULL) THEN
     RAISE EXCEPTION 'public_mode_consumed_global_attempt';

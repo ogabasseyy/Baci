@@ -34,7 +34,10 @@ CREATE TABLE private.uba_redvault_payment_attempts (
   id uuid PRIMARY KEY, order_id uuid, application_id uuid, merchant_id uuid,
   amount_kobo bigint, currency text
 );
-CREATE TABLE private.uba_redvault_line_allocations (application_id uuid,product_id uuid);
+CREATE TABLE private.uba_redvault_line_allocations (
+  application_id uuid,product_id uuid,order_item_id uuid,unit_ordinal integer,
+  allocation_kobo bigint,unit_price_kobo bigint,variant_id uuid
+);
 CREATE TABLE public.shipments (id uuid DEFAULT gen_random_uuid(),order_id uuid);
 CREATE FUNCTION private.is_uba_redvault_negotiable_product(text,text)
 RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT $1 IS DISTINCT FROM 'Vivo' $$;

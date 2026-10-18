@@ -88,3 +88,8 @@ Focused web/mobile tests cover the explicit audience, mismatched database policy
 guest and arbitrary-user access, wrong merchant/product, fee combinations and
 legacy private-mode behaviour. Full release checks and live browser validation
 are separate required evidence.
+## Historical order safety
+
+Apply `20261018110300_uba_redvault_public_product_test_history.sql` before activation. First activation rejects every existing order item for the product, including ordinary REDVAULT applications with the same NGN5 discount. A successful clean activation records an owner-only durable activation identifier. An already-public binding with history but no identifier is not grandfathered: re-enable fails closed and requires operator investigation, not a marker backfill.
+
+Re-enable requires the same public audience and product binding, the activation identifier, and exactly one NGN100 item and matching NGN5 allocation per application/order (merchant, order-item ID, product, unit price, quantity, and discount must agree). Missing, unrelated, additional, or mismatched allocations are rejected. Disable and unused private-audience restoration do not erase provenance; private-audience history still prevents public activation. Cancellation/refund status alone does not invalidate genuine public history; financial snapshots, allocation membership, and physical-fulfillment restrictions remain checked. Re-enable does not resume cancelled orders or waive payment/fulfillment gates. If a cancellation path changes the financial snapshot, re-enable deliberately fails closed for operator review rather than classifying that history as an ordinary order.

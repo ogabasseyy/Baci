@@ -18,6 +18,9 @@ export function initializeErrorMonitoring(
   }
 
   const buildSha = (env?.EXPO_PUBLIC_BUILD_SHA ?? bundledBuildSha)?.trim();
+  const nativeOptions = (
+    globalThis as typeof globalThis & { __SENTRY_OPTIONS__?: unknown }
+  ).__SENTRY_OPTIONS__;
   Sentry.init({
     attachScreenshot: false,
     attachThreads: true,
@@ -29,6 +32,12 @@ export function initializeErrorMonitoring(
     enableHistoricalTombstoneReporting: true,
     enableNative: true,
     enableNativeCrashHandling: true,
+    // Expo's options prelude means native startup owns the SDK. Preserve its
+    // breadcrumb/MetricKit callback in development too, where Sentry otherwise
+    // reinitializes from JS and replaces the native options.
+    ...(nativeOptions && typeof nativeOptions === 'object'
+      ? { autoInitializeNativeSdk: false }
+      : {}),
     enableTombstone: true,
     // Receipt capabilities and address/session queries must never enter network
     // spans or breadcrumbs. Keep native frame and explicit surface tracing.

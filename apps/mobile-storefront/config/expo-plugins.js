@@ -94,7 +94,11 @@ function createExpoPlugins({
     './config/withAndroidSystemBars.js',
     './config/withAndroidGradleFixes.js',
     './config/withReactNativeFromSource.js',
-    ...(sentryPlugin ? [sentryPlugin] : []),
+    // Expo executes AppDelegate mods in reverse registration order. Register
+    // our callback first so it sees Sentry's generated native initializer.
+    ...(sentryPlugin
+      ? ['./config/withSentryNativeDiagnostics.js', sentryPlugin]
+      : []),
     [
       'posthog-react-native/expo',
       {

@@ -73,6 +73,15 @@ and assertions were unchanged. The successful log is
 
 ## Delivery and limits
 
+PR #3716's first sanitizer jobs stopped at the existing patch-size contract:
+the combined React Native patch had grown to 328 lines. Regenerating it with
+one line of diff context (two at the final boundary) reduces it to 268 lines
+without changing the resulting source: applying the original and compact patches to pristine files produces
+byte-identical content for all five patched native files. The contract failed
+before this representation-only change and passes afterward. The lockfile was
+refreshed for the new patch hash; package versions and resolution metadata are
+unchanged. Fresh current-head CI and Codex review are required before merge.
+
 Changes are local and require a new native build/release. MetricKit subscriber
 installation and SDK filtering are verified; receiving a real Apple-generated hang,
 CPU or disk diagnostic in production is not. OS diagnostics may be sampled/delayed.

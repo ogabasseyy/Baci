@@ -39,6 +39,8 @@ export const OGABASSEY_HOME_CHROME_CRITICAL_CSS = `
 .ogabassey-navbar-search__icon{color:color-mix(in srgb,var(--store-foreground,var(--ogabassey-surface-text,#111827)) 38%,transparent);height:1.25rem;left:1rem;pointer-events:none;position:absolute;top:50%;translate:0 -50%;width:1.25rem;z-index:20}
 .ogabassey-navbar__desktop-actions{display:none}
 .ogabassey-navbar__icon-link{align-items:center;color:color-mix(in srgb,var(--ogabassey-shell-text) 80%,transparent);display:flex;justify-content:center;position:relative;text-decoration:none}
+.ogabassey-navbar__cart-badge{position:absolute;transform:scale(0)}
+.ogabassey-navbar__cart-badge[data-visible="true"]{transform:scale(1)}
 .ogabassey-navbar-secondary{background:var(--ogabassey-surface);border-bottom:1px solid var(--ogabassey-border);display:none;position:relative;z-index:10}
 .ogabassey-navbar-secondary__inner{margin:0 auto;max-width:1400px;padding:0 1.5rem;position:relative;z-index:10}
 .ogabassey-navbar-secondary__list{align-items:center;display:flex;gap:1.5rem;height:3rem}

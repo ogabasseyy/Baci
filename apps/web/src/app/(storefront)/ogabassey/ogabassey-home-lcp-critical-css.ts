@@ -21,6 +21,7 @@ export const OGABASSEY_HOME_LCP_CRITICAL_CSS = `
     background: var(--store-background, #ffffff) !important;
   }
   [data-ogabassey-desktop-hero] { display: none !important; }
+  [data-ogabassey-home-hero-reserve-fallback] > section > :last-child { display: none !important; }
   .ogabassey-home-lcp-desktop-title { display: none !important; }
 }
 footer[aria-label="Semantic storefront footer"] {
@@ -39,10 +40,12 @@ footer[aria-label="Semantic storefront footer"] {
     min-height: 910px;
   }
   [data-ogabassey-mobile-hero],
+  [data-ogabassey-home-hero-reserve-mobile],
   [data-ogabassey-empty-mobile-hero],
   [data-ogabassey-mobile-hero-bg-extension] {
     display: none !important;
   }
+  [data-ogabassey-home-hero-reserve-fallback] > section > :last-child,
   [data-ogabassey-desktop-hero],
   [data-ogabassey-empty-desktop-hero] {
     display: grid !important;
@@ -56,6 +59,7 @@ footer[aria-label="Semantic storefront footer"] {
   footer[aria-label="Semantic storefront footer"] {
     min-height: 770px;
   }
+  [data-ogabassey-home-hero-reserve-fallback] > section > :last-child,
   [data-ogabassey-desktop-hero],
   [data-ogabassey-empty-desktop-hero] {
     grid-template-columns: repeat(5, minmax(0, 1fr));

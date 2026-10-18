@@ -3,6 +3,7 @@ import { realpathSync } from 'node:fs';
 import path from 'node:path';
 import { readSupabaseHistoryEffects } from './read-supabase-history-effects';
 import { replayRepository } from './replay-repository-root';
+import { supabaseCommandDiagnostic } from './supabase-command-diagnostic';
 import { supabaseHistoryEffectQueryContract } from './supabase-history-effect-query-contract';
 import { supabaseHistoryReplayManifest } from './supabase-history-replay-manifest';
 import type {
@@ -47,6 +48,9 @@ function boundedPsqlDiagnostic(
   stderr: readonly Buffer[]
 ): string {
   const commandName = sanitizedCommandName(command);
+  if (commandName === 'supabase') {
+    return supabaseCommandDiagnostic(Buffer.concat(stderr).toString('utf8'));
+  }
   if (!/^psql(?:-[A-Za-z0-9._-]+)?$/.test(commandName)) {
     return '';
   }

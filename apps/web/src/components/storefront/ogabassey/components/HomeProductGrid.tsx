@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 import type { Route } from 'next';
 import Link from 'next/link';
 import type React from 'react';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, startTransition, useEffect, useRef, useState } from 'react';
 import { prioritizeSmartphoneProducts } from '@baci/shared/storefront/prioritize-smartphone-products';
 import { useDeferredActivation } from './deferred-shell-feature';
 import type {
@@ -136,8 +136,10 @@ export function HomeProductGrid({
       }
 
       captureFocusBeforeSwap();
-      setInteractionBindings(() => bindingsModule.ProductGridInteractionBindings);
-      setInteractiveCard(() => interactiveCardModule.ProductGridItem);
+      startTransition(() => {
+        setInteractionBindings(() => bindingsModule.ProductGridInteractionBindings);
+        setInteractiveCard(() => interactiveCardModule.ProductGridItem);
+      });
     });
 
     return () => {

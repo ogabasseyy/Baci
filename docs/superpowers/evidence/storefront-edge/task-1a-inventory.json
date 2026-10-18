@@ -20,12 +20,12 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "39ea89fdb313bec9a3daad240c7b0206fdf0ad11",
+  "originMainSha": "b6493edd5b8b0ca6c29189193459223896f99765",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "183bd0f01c28a841f8b858e689eb3f36ba7b9482aafb77b2db4e488b79ec30d1",
+  "routeTreeSha256": "0f2fbaf278bc0df5947ea0fca163f0adf28ecb90a8460a161e569f178cd74dec",
   "routingProxyInputSha256": "22f0a06c2846b843d983f3d6ec39af256bbe6d69931d10228b012bae1d48c991",
   "rows": [
     {
@@ -1746,7 +1746,7 @@
         "ANY"
       ],
       "reason": "configured_posthog_relay",
-      "routePattern": "/ingest",
+      "routePattern": "/baci-relay",
       "sourceKind": "machine_family",
       "sourcePath": "apps/web/src/proxy.ts"
     },
@@ -1757,7 +1757,7 @@
         "ANY"
       ],
       "reason": "configured_posthog_relay",
-      "routePattern": "/ingest/{*path?}",
+      "routePattern": "/baci-relay/{*path?}",
       "sourceKind": "machine_family",
       "sourcePath": "apps/web/src/proxy.ts"
     },
@@ -8495,5 +8495,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "dcd405f8dd3c3371d17c88abb71a0ac33aac6566a775fb9d28dfcd10665f867f"
+  "inventorySha256": "2d81398e7ec43a6198ceb0982f0e16b3e25c314ff19c8e9843fa05201283f469"
 }

@@ -20,6 +20,7 @@ import {
 } from './shared-cart-hook-support';
 import { isTerminalCart } from './shared-cart-queue';
 import { planLegacyImport } from './shared-cart-reducer';
+import { ensureCartDeviceRevocationCleared } from './shared-cart-session-revoke-client';
 import type { createCartSnapshotActions } from './shared-cart-snapshots';
 import type { SharedCartRuntime } from './use-shared-cart-runtime';
 
@@ -114,6 +115,18 @@ export function useCartLinkLifecycle(
         removeVisibilityWaiter = () =>
           document.removeEventListener('visibilitychange', onVisible);
         document.addEventListener('visibilitychange', onVisible);
+        return;
+      }
+      if (
+        (await ensureCartDeviceRevocationCleared?.(
+          optionsRef.current.merchantSlug
+        )) === false
+      ) {
+        if (cancelled || generationRef.current !== generation) return;
+        adoptTimer = setTimeout(
+          () => void adopt(attempt + 1),
+          backoffMs(ADOPT_RETRY_BASE_MS, attempt)
+        );
         return;
       }
       const result = await fetchSharedCartSnapshot(

@@ -7,7 +7,12 @@
 //
 // The type imports below are type-only (erased at compile time); there is no
 // runtime cycle back into the context module.
-import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
+import {
+  clearCartDeviceRevocationPending,
+  markCartDeviceRevocationPending,
+  resetPendingCartDeviceRevocationsForTests,
+  revokeCartDeviceSession,
+} from '@/hooks/cart/shared-cart-session-revoke-client';
 import { clearCartStorage } from '@/hooks/use-cart';
 import type { Customer, CustomerUser, OtpState } from './customer-auth-context';
 import {
@@ -72,6 +77,7 @@ function setRememberedCustomerUserId(
 
 export function resetRememberedCustomerSessionsForTests(): void {
   rememberedCustomerUserByMerchant.clear();
+  resetPendingCartDeviceRevocationsForTests?.();
   if (typeof window === 'undefined') return;
   try {
     for (const key of Object.keys(window.localStorage)) {
@@ -88,13 +94,17 @@ async function retirePreviousAccountCartAuthority(
   merchantSlug: string,
   previousUserId: string
 ): Promise<boolean> {
-  // Always clear local cart storage and bump cartSessionGeneration so
-  // the browser immediately drops local cart items and fences in-flight
-  // reads, while keeping the remembered userId until server revocation
-  // succeeds so subsequent loads/switches retry revocation.
+  // Always mark revocation pending, clear local cart storage, and bump
+  // cartSessionGeneration so the browser drops local cart items and
+  // fences shared-cart adoption until server revocation succeeds.
+  markCartDeviceRevocationPending?.(merchantSlug);
   clearCartStorage(merchantSlug, previousUserId);
   const revoked = await revokeCartDeviceSession(merchantSlug);
-  if (!revoked.ok) return false;
+  if (!revoked.ok) {
+    setRememberedCustomerUserId(merchantSlug, previousUserId);
+    return false;
+  }
+  clearCartDeviceRevocationPending?.(merchantSlug);
   setRememberedCustomerUserId(merchantSlug, null);
   return true;
 }
@@ -173,6 +183,10 @@ export async function loadCustomerSession(
   } catch (error) {
     if (isCancelled()) return;
     console.error('Session check error:', error);
+    if (previousUserId) {
+      await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
+      if (isCancelled()) return;
+    }
     setUser(null);
     setCustomer(null);
     publishCustomerIdentity(null, null, merchantSlug);

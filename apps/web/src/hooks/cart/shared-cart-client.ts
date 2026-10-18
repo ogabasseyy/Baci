@@ -7,6 +7,10 @@ import type {
 } from '@baci/shared/cart';
 
 import { fetchWithCsrf } from '@/lib/api-client';
+import {
+  ensureCartDeviceRevocationCleared,
+  isCartDeviceRevocationPending,
+} from './shared-cart-session-revoke-client';
 
 export type SharedCartFetchResult =
   | { ok: true; snapshot: CartSnapshot; warnings: CartWarning[] }
@@ -86,14 +90,24 @@ export function failureOf(
   return { code, ok: false, retryable, snapshot };
 }
 
-/**
- * Reads the authorized snapshot for the cookie session. Creates nothing:
- * callers bootstrap lazily on the first mutating action instead.
- */
+const UNAVAILABLE_FETCH: Extract<SharedCartFetchResult, { ok: false }> = {
+  code: 'temporarily_unavailable',
+  ok: false,
+  retryable: true,
+  snapshot: null,
+};
+
+/** Reads the authorized snapshot for the cookie session. */
 export async function fetchSharedCartSnapshot(
   signal?: AbortSignal,
   merchantSlug?: string | null
 ): Promise<SharedCartFetchResult> {
+  if (
+    isCartDeviceRevocationPending(merchantSlug) &&
+    !(await ensureCartDeviceRevocationCleared(merchantSlug))
+  ) {
+    return UNAVAILABLE_FETCH;
+  }
   let response: Response;
   try {
     response = await fetch(cartRoute('/api/storefront/cart', merchantSlug), {
@@ -103,12 +117,7 @@ export async function fetchSharedCartSnapshot(
       signal,
     });
   } catch {
-    return {
-      code: 'temporarily_unavailable',
-      ok: false,
-      retryable: true,
-      snapshot: null,
-    };
+    return UNAVAILABLE_FETCH;
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
@@ -118,14 +127,7 @@ export async function fetchSharedCartSnapshot(
       warnings: warningsOf(body),
     };
   }
-  if (response.ok) {
-    return {
-      code: 'temporarily_unavailable',
-      ok: false,
-      retryable: true,
-      snapshot: null,
-    };
-  }
+  if (response.ok) return UNAVAILABLE_FETCH;
   return failureOf(body, response.status);
 }
 
@@ -167,9 +169,13 @@ export function bootstrapSharedCart(
 
 async function requestBootstrap(
   merchantSlug?: string
-): Promise<
-  { ok: true } | { ok: false; code: CartErrorCode; retryable: boolean }
-> {
+): Promise<BootstrapResult> {
+  if (
+    isCartDeviceRevocationPending(merchantSlug) &&
+    !(await ensureCartDeviceRevocationCleared(merchantSlug))
+  ) {
+    return { code: 'temporarily_unavailable', ok: false, retryable: true };
+  }
   let response: Response;
   try {
     response = await fetchWithCsrf('/api/storefront/cart/bootstrap', {
@@ -196,6 +202,12 @@ export async function createSharedCart(
   input: CreateSharedCartInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {
+  if (
+    isCartDeviceRevocationPending(merchantSlug) &&
+    !(await ensureCartDeviceRevocationCleared(merchantSlug))
+  ) {
+    return UNAVAILABLE_FETCH;
+  }
   let response: Response;
   try {
     response = await fetchWithCsrf(
@@ -211,12 +223,7 @@ export async function createSharedCart(
       }
     );
   } catch {
-    return {
-      code: 'temporarily_unavailable',
-      ok: false,
-      retryable: true,
-      snapshot: null,
-    };
+    return UNAVAILABLE_FETCH;
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
@@ -227,14 +234,7 @@ export async function createSharedCart(
       warnings: warningsOf(body),
     };
   }
-  if (response.ok) {
-    return {
-      code: 'temporarily_unavailable',
-      ok: false,
-      retryable: true,
-      snapshot: null,
-    };
-  }
+  if (response.ok) return UNAVAILABLE_FETCH;
   return failureOf(body, response.status);
 }
 
@@ -248,6 +248,12 @@ export async function sendSharedCartCommand(
   input: SendSharedCartCommandInput,
   merchantSlug?: string | null
 ): Promise<SharedCartMutationResult> {
+  if (
+    isCartDeviceRevocationPending(merchantSlug) &&
+    !(await ensureCartDeviceRevocationCleared(merchantSlug))
+  ) {
+    return UNAVAILABLE_FETCH;
+  }
   let response: Response;
   try {
     response = await fetchWithCsrf(
@@ -263,12 +269,7 @@ export async function sendSharedCartCommand(
       }
     );
   } catch {
-    return {
-      code: 'temporarily_unavailable',
-      ok: false,
-      retryable: true,
-      snapshot: null,
-    };
+    return UNAVAILABLE_FETCH;
   }
   const body = await readBody(response);
   if (response.ok && body && isSnapshot(body.cart)) {
@@ -279,14 +280,7 @@ export async function sendSharedCartCommand(
       warnings: warningsOf(body),
     };
   }
-  if (response.ok) {
-    return {
-      code: 'temporarily_unavailable',
-      ok: false,
-      retryable: true,
-      snapshot: null,
-    };
-  }
+  if (response.ok) return UNAVAILABLE_FETCH;
   return failureOf(body, response.status);
 }
 

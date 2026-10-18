@@ -1,8 +1,16 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as csrf from '@/lib/csrf';
 import { useCartHandoff } from './use-cart-handoff';
 
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => {
+  vi.spyOn(csrf, 'getClientCsrfToken').mockReturnValue('test-csrf-token');
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 it('removes the pairing fragment even when preview retrieval fails', async () => {
   window.history.replaceState(null, '', '/cart/handoff#pairing-secret');
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));

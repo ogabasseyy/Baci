@@ -6,10 +6,18 @@ import {
   resetRememberedCustomerSessionsForTests,
 } from '@/contexts/customer-auth-session';
 import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
-import { revokeCartDeviceSession } from '@/hooks/cart/shared-cart-session-revoke-client';
+import {
+  clearCartDeviceRevocationPending,
+  markCartDeviceRevocationPending,
+  resetPendingCartDeviceRevocationsForTests,
+  revokeCartDeviceSession,
+} from '@/hooks/cart/shared-cart-session-revoke-client';
 import { clearCartStorage } from '@/hooks/use-cart';
 
 vi.mock('@/hooks/cart/shared-cart-session-revoke-client', () => ({
+  clearCartDeviceRevocationPending: vi.fn(),
+  markCartDeviceRevocationPending: vi.fn(),
+  resetPendingCartDeviceRevocationsForTests: vi.fn(),
   revokeCartDeviceSession: vi.fn(),
 }));
 vi.mock('@/hooks/use-cart', () => ({
@@ -65,10 +73,47 @@ describe('customer-auth-session passive identity revocation', () => {
       setUser,
     });
 
+    expect(markCartDeviceRevocationPending).toHaveBeenCalledWith('ogabassey');
     expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
+    expect(clearCartDeviceRevocationPending).toHaveBeenCalledWith('ogabassey');
     expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
     expect(setUser).toHaveBeenLastCalledWith(null);
     expect(setCustomer).toHaveBeenLastCalledWith(null);
+    expect(resetPendingCartDeviceRevocationsForTests).not.toHaveBeenCalled();
+  });
+
+  it('keeps cart revocation fenced when passive session expiry revocation fails', async () => {
+    vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: false });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ authenticated: false }))
+      .mockResolvedValueOnce(Response.json({ authenticated: false }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const setUser = vi.fn();
+    const setCustomer = vi.fn();
+    const setIsLoading = vi.fn();
+
+    await loadCustomerSession('ogabassey', {
+      currentUserId: 'user-1',
+      setCustomer,
+      setIsLoading,
+      setUser,
+    });
+
+    expect(markCartDeviceRevocationPending).toHaveBeenCalledWith('ogabassey');
+    expect(clearCartDeviceRevocationPending).not.toHaveBeenCalled();
+    expect(setUser).toHaveBeenLastCalledWith(null);
+
+    vi.mocked(revokeCartDeviceSession).mockResolvedValueOnce({ ok: true });
+    await loadCustomerSession('ogabassey', {
+      setCustomer,
+      setIsLoading,
+      setUser,
+    });
+
+    expect(revokeCartDeviceSession).toHaveBeenCalledTimes(2);
+    expect(clearCartDeviceRevocationPending).toHaveBeenCalledWith('ogabassey');
   });
 
   it('revokes device cart authority when session load switches to a different user', async () => {

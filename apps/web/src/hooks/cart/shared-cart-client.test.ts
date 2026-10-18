@@ -9,6 +9,11 @@ import {
   prepareSharedCartCheckout,
   sendSharedCartCommand,
 } from './shared-cart-client';
+import {
+  isCartDeviceRevocationPending,
+  markCartDeviceRevocationPending,
+  resetPendingCartDeviceRevocationsForTests,
+} from './shared-cart-session-revoke-client';
 
 vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: vi.fn(),
@@ -44,6 +49,7 @@ function jsonResponse(payload: unknown, status = 200) {
 
 describe('shared-cart-client snapshot', () => {
   beforeEach(() => {
+    resetPendingCartDeviceRevocationsForTests();
     vi.clearAllMocks();
   });
 
@@ -104,10 +110,45 @@ describe('shared-cart-client snapshot', () => {
       retryable: true,
     });
   });
+
+  it('fences snapshot reads while device-session revocation is pending until revocation succeeds', async () => {
+    markCartDeviceRevocationPending('ogabassey');
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse({ code: 'rate_limited' }, 429)
+    );
+
+    await expect(
+      fetchSharedCartSnapshot(undefined, 'ogabassey')
+    ).resolves.toEqual({
+      code: 'temporarily_unavailable',
+      ok: false,
+      retryable: true,
+      snapshot: null,
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(isCartDeviceRevocationPending('ogabassey')).toBe(true);
+
+    vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
+      jsonResponse({ revoked: true }, 200)
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ cart: snapshot(), warnings: [] })
+    );
+
+    await expect(
+      fetchSharedCartSnapshot(undefined, 'ogabassey')
+    ).resolves.toMatchObject({
+      ok: true,
+      snapshot: { version: 3 },
+    });
+    expect(isCartDeviceRevocationPending('ogabassey')).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('shared-cart-client bootstrap and create', () => {
   beforeEach(() => {
+    resetPendingCartDeviceRevocationsForTests();
     vi.clearAllMocks();
   });
 

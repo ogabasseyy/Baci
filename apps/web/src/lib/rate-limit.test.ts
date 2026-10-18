@@ -35,6 +35,7 @@ describe('legacy bridge rate limit keying', () => {
 
   afterEach(() => {
     __resetRateLimitStoreForTesting();
+    vi.unstubAllEnvs();
   });
 
   it('keys legacy bridge buckets by token, not the shared egress IP', async () => {
@@ -69,7 +70,8 @@ describe('legacy bridge rate limit keying', () => {
     expect(otherToken.remaining).toBe(599);
   });
 
-  it('enforces the aggregate per-IP ceiling across rotating tokens', async () => {
+  it('enforces the aggregate per-IP ceiling across rotating tokens using the trusted client identifier', async () => {
+    vi.stubEnv('VERCEL', '1');
     const prefix = `Bearer ${['legacy', 'mcp'].join('_')}_`;
     const url = 'https://ogabassey.com/api/storefront/cart/legacy';
     const requestFrom = (ip: string, tokenIndex: number) =>
@@ -94,6 +96,36 @@ describe('legacy bridge rate limit keying', () => {
     expect(blocked.limit).toBe(3_000);
     const control = await checkRateLimit(requestFrom('192.0.2.31', 3_001));
     expect(control.allowed).toBe(true);
+  });
+
+  it('collapses untrusted x-real-ip and x-forwarded-for headers into one legacy bridge ceiling bucket', async () => {
+    const prefix = `Bearer ${['legacy', 'mcp'].join('_')}_`;
+    const url = 'https://ogabassey.com/api/storefront/cart/legacy';
+    for (let index = 0; index < 3_000; index++) {
+      const result = await checkRateLimit(
+        new NextRequest(url, {
+          method: 'POST',
+          headers: {
+            authorization: `${prefix}${index.toString(16).padStart(64, '0')}`,
+            'x-forwarded-for': `203.0.113.${index % 250}`,
+            'x-real-ip': `198.51.100.${index % 250}`,
+          },
+        })
+      );
+      expect(result.allowed).toBe(true);
+    }
+    const blocked = await checkRateLimit(
+      new NextRequest(url, {
+        method: 'POST',
+        headers: {
+          authorization: `${prefix}${(3_001).toString(16).padStart(64, '0')}`,
+          'x-forwarded-for': '203.0.113.254',
+          'x-real-ip': '198.51.100.254',
+        },
+      })
+    );
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.limit).toBe(3_000);
   });
 });
 

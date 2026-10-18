@@ -94,7 +94,10 @@ export function useLegacyCartValidation({
           setCartWideNegotiationActiveState(false);
         }
       } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (
+          controller.signal.aborted ||
+          (error instanceof Error && error.name === 'AbortError')
+        ) {
           return;
         }
 

@@ -130,7 +130,7 @@ export function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
       request,
       pattern,
       config,
-      clientIdentifier,
+      getTrustedClientIdentifier(request),
       applyRateLimit
     );
   }

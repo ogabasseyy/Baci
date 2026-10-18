@@ -365,4 +365,62 @@ describe('customer-auth-session passive identity revocation', () => {
     expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
     expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
   });
+
+  it('refuses to restore an unconfirmed switched session when rollback logout fails until logout succeeds', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(revokeCartDeviceSession)
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: true });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('logout failed', { status: 500 }))
+      .mockResolvedValueOnce(Response.json({ success: true }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const setUser = vi.fn();
+    const setCustomer = vi.fn();
+    const setOtpState = vi.fn();
+    const setIsLoading = vi.fn();
+
+    const committed = await commitCustomerAuthSession(
+      'ogabassey',
+      {
+        customer: {
+          email: 'two@example.com',
+          first_name: 'Two',
+          id: 'customer-2',
+          last_name: 'Buyer',
+        },
+        user: {
+          email: 'two@example.com',
+          id: 'user-2',
+          role: 'customer',
+        },
+      },
+      {
+        currentUserId: 'user-1',
+        setCustomer,
+        setOtpState,
+        setUser,
+      }
+    );
+
+    expect(committed).toBe(false);
+    expect(setUser).toHaveBeenCalledWith(null);
+
+    setUser.mockClear();
+    setCustomer.mockClear();
+
+    await loadCustomerSession('ogabassey', {
+      setCustomer,
+      setIsLoading,
+      setUser,
+    });
+
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/storefront/auth/logout', {
+      method: 'POST',
+    });
+    expect(setUser).toHaveBeenCalledWith(null);
+    expect(setCustomer).toHaveBeenCalledWith(null);
+  });
 });

@@ -145,18 +145,20 @@ describe('agentic idempotency', () => {
     expect(inserted).toMatchObject({ agent_id: 'agent-a' });
   });
 
-  it('replays a legacy unscoped receipt for an identified caller instead of reserving again', async () => {
+  it('replays and claims a legacy unscoped receipt when caller ownership is verified', async () => {
     const body = '{"items":[]}';
     const requestHash = hashIdempotencyRequest({
       ...defaultFingerprint,
       body,
     });
+    const legacyRecord = {
+      request_hash: requestHash,
+      response_body: { agent_id: 'agent-a', id: 'session-legacy-1' },
+      status_code: 201,
+    };
     const mock = createSupabaseMock({
-      existingRecord: {
-        request_hash: requestHash,
-        response_body: { id: 'session-legacy-1' },
-        status_code: 201,
-      },
+      existingRecord: legacyRecord,
+      updateData: legacyRecord,
     });
     const insertSpy = vi.fn();
     const supabase = {
@@ -186,11 +188,40 @@ describe('agentic idempotency', () => {
     expect(result).toEqual({
       ok: true,
       requestHash,
-      response: { id: 'session-legacy-1' },
+      response: { agent_id: 'agent-a', id: 'session-legacy-1' },
       state: 'replay',
       status: 201,
     });
+    expect(mock.update).toHaveBeenCalledWith({ agent_id: 'agent-a' });
     expect(insertSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not replay a legacy unscoped receipt belonging to a different caller', async () => {
+    const body = '{"items":[]}';
+    const requestHash = hashIdempotencyRequest({
+      ...defaultFingerprint,
+      body,
+    });
+    const mock = createSupabaseMock({
+      existingRecord: {
+        request_hash: requestHash,
+        response_body: { agent_id: 'agent-a', id: 'session-legacy-1' },
+        status_code: 201,
+      },
+    });
+
+    const result = await reserveAgenticIdempotencyKey({
+      ...defaultFingerprint,
+      agentId: 'agent-b',
+      body,
+      key: 'idem-legacy-1',
+      merchantId: 'merchant-1',
+      route: 'checkout_sessions.create',
+      supabase: mock.supabase as never,
+    });
+
+    expect(result).toEqual({ ok: true, state: 'reserved' });
+    expect(mock.update).not.toHaveBeenCalled();
   });
 
   it('reserves a new idempotency key before mutation', async () => {

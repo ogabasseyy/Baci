@@ -1,4 +1,5 @@
 import { cartSessionStorage } from '@/lib/cart/session-storage';
+import { CONFIG } from '@/lib/config';
 import { useCartStore } from './cart-store';
 import { clearDeviceCartForAccountTeardown } from './clear-device-cart';
 import { installSharedCartWriter } from './shared-cart-writer';
@@ -86,4 +87,25 @@ it('propagates a retire failure instead of reporting teardown success', async ()
     merchantId: '11111111-1111-4111-8111-111111111111',
     cartId: '22222222-2222-4222-8222-222222222222',
   });
+});
+
+it('retires the configured merchant proof when sharedCartRef is absent', async () => {
+  const mutableConfig = CONFIG as { MERCHANT_ID: string };
+  const previousMerchantId = mutableConfig.MERCHANT_ID;
+  mutableConfig.MERCHANT_ID = '33333333-3333-4333-8333-333333333333';
+  const clearCart = jest.fn().mockResolvedValue(undefined);
+  jest.mocked(cartSessionStorage.retire)?.mockClear();
+  jest.mocked(useCartStore.getState).mockReturnValue({
+    clearCart,
+    sharedCartRef: undefined,
+  } as never);
+  try {
+    await clearDeviceCartForAccountTeardown();
+    expect(cartSessionStorage.retire).toHaveBeenCalledWith(
+      '33333333-3333-4333-8333-333333333333'
+    );
+    expect(clearCart).toHaveBeenCalledTimes(1);
+  } finally {
+    mutableConfig.MERCHANT_ID = previousMerchantId;
+  }
 });

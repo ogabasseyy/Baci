@@ -13,6 +13,10 @@ export function openOgabasseyUrl(
   } else if (pendingTab && !pendingTab.closed) {
     pendingTab.location.href = url;
     return true;
+  } else if (pendingTab !== undefined) {
+    // An explicit reservation failed or was closed. This async path no longer
+    // has a user gesture, so a fresh popup cannot recover it reliably.
+    return false;
   } else {
     // Explicit noopener: unlike <a target=_blank>, window.open does not
     // imply it, and the opened page would otherwise keep a live opener

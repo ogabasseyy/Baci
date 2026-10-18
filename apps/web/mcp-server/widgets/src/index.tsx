@@ -61,7 +61,7 @@ export function App() {
     const observer = new ResizeObserver(reportHeight);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [displayMode, toolOutput, cart, cartError, cartNotice]);
+  }, [displayMode, toolOutput, cart, cartError, cartNotice, hostError]);
 
   return (
     <div

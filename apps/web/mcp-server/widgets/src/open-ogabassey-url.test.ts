@@ -54,24 +54,15 @@ it('does not report a failed popup from the null result required by noopener', (
   expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(true);
 });
 
-it('falls back to a fresh tab when the pending tab was closed', () => {
-  window.openai = {};
-  const opened = vi
-    .spyOn(window, 'open')
-    .mockReturnValue({} as unknown as Window);
-  const pendingTab = { closed: true, location: { href: '' } };
-
+it.each([
+  null,
+  { closed: true, location: { href: '' } },
+])('reports an unavailable reserved tab without an async popup retry', (tab) => {
+  const opened = vi.spyOn(window, 'open');
   expect(
-    openOgabasseyUrl(
-      'https://ogabassey.com/cart',
-      pendingTab as unknown as Window,
-    ),
-  ).toBe(true);
-  expect(opened).toHaveBeenCalledWith(
-    'https://ogabassey.com/cart',
-    '_blank',
-    'noopener,noreferrer',
-  );
+    openOgabasseyUrl('https://ogabassey.com/cart', tab as Window | null),
+  ).toBe(false);
+  expect(opened).not.toHaveBeenCalled();
 });
 
 it('reports a browser exception as a failed navigation request', () => {

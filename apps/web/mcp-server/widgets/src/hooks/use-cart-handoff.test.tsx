@@ -31,7 +31,10 @@ function expiredResponse() {
   return { structuredContent: { success: false, cart_expired: true } };
 }
 beforeEach(() => {
-  vi.stubGlobal('open', vi.fn(() => null));
+  vi.stubGlobal(
+    'open',
+    vi.fn(() => null),
+  );
 });
 afterEach(() => {
   delete window.openai;
@@ -113,7 +116,7 @@ it('reconciles survivors with the removal response', async () => {
   const removalUrl = new URL('https://ogabassey.com/cart');
   removalUrl.searchParams.set(
     'guest_cart',
-    JSON.stringify([{ product_id: third.id, quantity: 7 }])
+    JSON.stringify([{ product_id: third.id, quantity: 7 }]),
   );
   const callTool = vi
     .fn()
@@ -232,7 +235,7 @@ it('closes the reserved tab when no navigation is needed', async () => {
   const tab = { location: { href: '' }, closed: false, close: vi.fn() };
   vi.stubGlobal(
     'open',
-    vi.fn(() => tab)
+    vi.fn(() => tab),
   );
   const callTool = vi.fn().mockResolvedValue(response());
   window.openai = { callTool, setWidgetState: vi.fn() };
@@ -288,4 +291,25 @@ it('forgets the dead token when a removal empties the cart', async () => {
     quantity: 1,
     cart_token: undefined,
   });
+});
+it('reports a blocked reservation instead of retrying a popup after async option lookup', async () => {
+  const openSpy = vi.fn(() => null);
+  vi.stubGlobal('open', openSpy);
+  window.openai = {
+    callTool: vi.fn().mockResolvedValue({
+      structuredContent: {
+        success: false,
+        requires_variant_selection: true,
+        product_id: product.id,
+        product_url: 'https://ogabassey.com/products/phone',
+      },
+    }),
+    setWidgetState: vi.fn(),
+  };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await result.current.handleAddToCart(product);
+  });
+  expect(result.current.cartError).toContain('Please allow popups');
+  expect(openSpy).toHaveBeenCalledExactlyOnceWith('about:blank', '_blank');
 });

@@ -54,7 +54,7 @@ describe('catalog render selection contract', () => {
             kind: 'variant',
             option_id: 'v1',
             condition: 'new',
-            price: 1,
+            unsupported: true,
           },
         },
       ],

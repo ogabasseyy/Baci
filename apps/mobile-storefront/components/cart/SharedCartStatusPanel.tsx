@@ -161,23 +161,22 @@ export function SharedCartStatusPanel() {
           )}
         </>
       ) : null}
-      {!busy &&
-      state.status === 'choice_required' &&
-      conflicts.length === 0 &&
-      state.chooseLegacy ? (
+      {!busy && state.status === 'choice_required' && state.chooseLegacy ? (
         <>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() =>
-              run(
-                state.chooseLegacy
-                  ? () => state.chooseLegacy?.('merge') ?? Promise.resolve()
-                  : null
-              )
-            }
-          >
-            <Text style={{ color: colors.primary }}>Combine carts</Text>
-          </Pressable>
+          {conflicts.length === 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                run(
+                  state.chooseLegacy
+                    ? () => state.chooseLegacy?.('merge') ?? Promise.resolve()
+                    : null
+                )
+              }
+            >
+              <Text style={{ color: colors.primary }}>Combine carts</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             onPress={() =>

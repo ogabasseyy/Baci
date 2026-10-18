@@ -45,6 +45,7 @@ interface SharedCartState {
         snapshot: NativeCheckoutSnapshot;
         replayed: boolean;
         sessionReused: boolean;
+        sessionExpiresAt?: string;
       }>)
     | null;
 }

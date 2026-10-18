@@ -174,6 +174,7 @@ export function createNativeAccountCheckout(deps: Deps) {
       snapshot: NativeCheckoutSnapshot;
       replayed: boolean;
       sessionReused: boolean;
+      sessionExpiresAt?: string;
     }> {
       if (
         !operationId(input.operationId) ||
@@ -196,6 +197,9 @@ export function createNativeAccountCheckout(deps: Deps) {
         snapshot: result.snapshot,
         replayed: result.replayed === true,
         sessionReused: result.sessionReused === true,
+        ...(result.sessionExpiresAt
+          ? { sessionExpiresAt: result.sessionExpiresAt }
+          : {}),
       };
     },
   };

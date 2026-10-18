@@ -35,6 +35,7 @@ export function NativeCartPairingPanel() {
     status: 'loading',
     count: 0,
   });
+  const [retryTick, setRetryTick] = useState(0);
   const [failed, setFailed] = useState(false);
   const [resolutions, setResolutions] = useState<
     Record<string, 'incoming' | 'existing'>
@@ -43,6 +44,7 @@ export function NativeCartPairingPanel() {
   const items = useCartStore((state) => state.items);
   const colors = Colors[useColorScheme() ?? 'light'];
   const link = peekCartPairingLink();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: retryTick intentionally re-triggers the preview check for the active revision.
   useEffect(() => {
     let alive = true;
     const current = peekCartPairingLink();
@@ -81,7 +83,7 @@ export function NativeCartPairingPanel() {
     return () => {
       alive = false;
     };
-  }, [revision]);
+  }, [revision, retryTick]);
   if (!link) return null;
   const ready = preview.revision === revision && preview.status === 'ready';
   const busy = shared.status === 'loading' || shared.status === 'pending';
@@ -165,6 +167,9 @@ export function NativeCartPairingPanel() {
             ? `${preview.count} items are ready to review. Nothing will be ordered here.`
             : 'Checking your cart link.'}
       </Text>
+      {preview.status === 'error'
+        ? button('Try again', async () => setRetryTick((n) => n + 1))
+        : null}
       {failed ? (
         <Text style={{ color: colors.text }}>
           The cart has not finished syncing. Retry sync to check the saved

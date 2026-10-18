@@ -190,13 +190,49 @@ it('requires a canonical handoff for checkout and clears contents for cancellati
     },
   });
   await handleCanonicalUcpCart(
-    { ...input, action: 'cancel', operationId: 'cancel' },
+    { ...input, action: 'cancel', operationId: 'cancel', expectedVersion: 3 },
     deps as never
   );
   expect(deps.operate).toHaveBeenLastCalledWith(
     expect.anything(),
-    expect.objectContaining({ command: { type: 'clear' } })
+    expect.objectContaining({ command: { type: 'clear' }, expectedVersion: 3 })
   );
+});
+
+it('fences unversioned UCP update and cancel mutations after the cart has been migrated or shared', async () => {
+  const deps = fixture();
+  const updateResult = await handleCanonicalUcpCart(
+    {
+      ...input,
+      action: 'update',
+      lines: [{ item: { productId: 'p' }, quantity: 2 }],
+      operationId: 'late-update',
+    },
+    deps as never
+  );
+  expect(updateResult).toMatchObject({
+    status: 409,
+    body: {
+      code: 'refresh_required',
+      cart_version: 3,
+      continue_url: 'https://shop/cart#handoff=secret',
+    },
+  });
+  expect(deps.operate.mock.calls[0][1]).not.toHaveProperty('command');
+
+  const cancelResult = await handleCanonicalUcpCart(
+    { ...input, action: 'cancel', operationId: 'late-cancel' },
+    deps as never
+  );
+  expect(cancelResult).toMatchObject({
+    status: 409,
+    body: {
+      code: 'refresh_required',
+      cart_version: 3,
+      continue_url: 'https://shop/cart#handoff=secret',
+    },
+  });
+  expect(deps.operate.mock.calls[1][1]).not.toHaveProperty('command');
 });
 
 it('hides canonical carts when the broker rejects a different agent', async () => {
@@ -256,12 +292,12 @@ it('does not mint a handoff credential for a plain read', async () => {
 it('keeps signed mutation operation keys stable and refreshes read handoff attempt identity', async () => {
   const deps = fixture();
   await handleCanonicalUcpCart(
-    { ...input, action: 'cancel', operationId: 'same' },
+    { ...input, action: 'cancel', operationId: 'same', expectedVersion: 3 },
     deps as never
   );
   const first = deps.operate.mock.calls[0][1].operationId;
   await handleCanonicalUcpCart(
-    { ...input, action: 'cancel', operationId: 'same' },
+    { ...input, action: 'cancel', operationId: 'same', expectedVersion: 3 },
     deps as never
   );
   expect(deps.operate.mock.calls[1][1].operationId).toBe(first);
@@ -285,8 +321,14 @@ it('retains the owner recovery handle in cart_id for the next read', async () =>
 });
 it('derives replay-safe mutation keys when the request omits an operation id', async () => {
   const deps = fixture();
-  await handleCanonicalUcpCart({ ...input, action: 'cancel' }, deps as never);
-  await handleCanonicalUcpCart({ ...input, action: 'cancel' }, deps as never);
+  await handleCanonicalUcpCart(
+    { ...input, action: 'cancel', expectedVersion: 3 },
+    deps as never
+  );
+  await handleCanonicalUcpCart(
+    { ...input, action: 'cancel', expectedVersion: 3 },
+    deps as never
+  );
   expect(deps.operate.mock.calls[0][1].operationId).toBe(
     deps.operate.mock.calls[1][1].operationId
   );

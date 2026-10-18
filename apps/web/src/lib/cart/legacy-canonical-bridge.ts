@@ -91,10 +91,11 @@ export async function openLegacyCanonicalCart(
     return parsed;
   }
   let current = await context();
-  if (!current.cartId) {
+  const migrated = Boolean(current.cartId);
+  if (!migrated) {
     if (!current.lines || !current.legacyVersion || !current.currency)
       throw new Error('Invalid legacy owner context');
-    const migrated = await deps.migrate(client, {
+    const migration = await deps.migrate(client, {
       provider: owner.provider,
       legacyTokenHash: hash,
       operationId: `legacy-migrate:${hash}`,
@@ -102,8 +103,8 @@ export async function openLegacyCanonicalCart(
       legacyVersion: current.legacyVersion,
       currency: current.currency,
     });
-    if (!migrated.ok)
-      throw new LegacyBridgeError(migrated.code ?? 'refresh_required');
+    if (!migration.ok)
+      throw new LegacyBridgeError(migration.code ?? 'refresh_required');
     current = await context();
   }
   if (
@@ -129,19 +130,14 @@ export async function openLegacyCanonicalCart(
     principal,
     client: session,
     state: read.state,
+    migrated,
     owner,
     deps,
     recoverAuthority: context,
   };
 }
 
-/**
- * Read-only liveness probe for a legacy capability: resolves the
- * owner context and reports whether it names a live legacy or
- * migrated cart. Never migrates, mutates, reads the canonical cart,
- * or issues a credential, so probes cannot consume the one-time
- * migration or race a first real update.
- */
+/** Read-only liveness probe for a legacy capability; never migrates, mutates, or issues a credential. */
 export async function probeLegacyCanonicalCart(
   owner: LegacyBridgeOwner,
   deps = defaults

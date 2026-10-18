@@ -235,3 +235,51 @@ it('offers saved-cart adoption before a current cart exists', async () => {
     expect(accountState.link).toHaveBeenCalledWith('use_saved')
   );
 });
+
+it('invalidates the prepared merge review when the current cart version advances', async () => {
+  const { fetchSharedCartSnapshot } = await import(
+    '@/hooks/cart/shared-cart-client'
+  );
+  const base = {
+    currency: 'NGN',
+    merchantId: 'm',
+    version: 10,
+    state: 'active',
+    subtotalMinor: 100,
+    totalMinor: 100,
+    estimatedTotals: false,
+    expiresAt: '2030-01-01',
+    lines: [
+      {
+        id: 'line-1',
+        item: { productId: 'product' },
+        quantity: 1,
+        unitPriceMinor: 100,
+        lineTotalMinor: 100,
+      },
+    ],
+  };
+  accountState.savedCart = { ...base, cartId: 'saved', version: 2 };
+  vi.mocked(fetchSharedCartSnapshot).mockResolvedValue({
+    ok: true,
+    snapshot: { ...base, cartId: 'old', version: 10 },
+    warnings: [],
+  } as never);
+  const { rerender } = render(<CartAccountLink merchantSlug="shop" />);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Review combining both carts' })
+  );
+  expect(
+    await screen.findByRole('button', { name: 'Combine both carts' })
+  ).toBeInTheDocument();
+
+  cartState.sharedCartRef = { cartId: 'old', version: 11 };
+  rerender(<CartAccountLink merchantSlug="shop" />);
+
+  expect(
+    screen.queryByRole('button', { name: 'Combine both carts' })
+  ).toBeNull();
+  expect(
+    screen.getByRole('button', { name: 'Review combining both carts' })
+  ).toBeInTheDocument();
+});

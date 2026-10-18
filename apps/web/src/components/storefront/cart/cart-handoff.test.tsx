@@ -398,6 +398,58 @@ describe('CartHandoff', () => {
       unmount();
     }
   });
+
+  it('keeps consumed-handoff replays retryable when the receipt replay fails transiently', async () => {
+    sessionStorage.setItem(
+      `baci-cart-handoff-attempt:${HANDOFF_ID}:body`,
+      JSON.stringify({
+        attemptId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        choice: 'connect',
+        handoffId: HANDOFF_ID,
+        token: TOKEN,
+      })
+    );
+    let redeemAttempts = 0;
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const href = String(url);
+      if (href.includes('/api/storefront/cart/handoff?')) {
+        return jsonResponse({
+          expiresAt: '2026-10-12T06:05:00.000Z',
+          merchant: null,
+          snapshot: null,
+          status: 'consumed',
+          warnings: [],
+        });
+      }
+      if (href.includes('/api/storefront/cart/handoff/redeem')) {
+        redeemAttempts += 1;
+        if (redeemAttempts === 1) {
+          return jsonResponse({ code: 'temporarily_unavailable' }, 503);
+        }
+        return jsonResponse({
+          cart: snapshot(),
+          choice: 'connect',
+          proof: 'cp1.new.session',
+          replayed: true,
+          warnings: [],
+        });
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    });
+
+    render(<CartHandoff handoffId={HANDOFF_ID} token={TOKEN} />);
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /confirming your cart continuation/i,
+      })
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/already used/i)).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole('button', { name: /try again/i }));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/cart'));
+    expect(redeemAttempts).toBe(2);
+  });
 });
 
 describe('new guest handoff', () => {

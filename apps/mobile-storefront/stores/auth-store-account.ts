@@ -52,6 +52,13 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
         const storedToken = await getStoredPushToken();
         await clearLocalAndDeactivatePushToken(storedToken);
         const { error: signOutError } = await supabase.auth.signOut();
+        if (signOutError) {
+          await supabase.auth
+            .signOut({ scope: 'local' })
+            .catch((localError) =>
+              log.warn('Local signOut fallback failed:', localError)
+            );
+        }
         if (signOutError || !get()._authSubscription) {
           clearQueryCachePreservingObservers(queryClient);
         }
@@ -68,6 +75,11 @@ export function createAccountActions(set: AuthStoreSet, get: AuthStoreGet) {
         log.error('Sign out error:', error);
         // The cart generation has already been retired. Finish local
         // teardown even if the provider sign-out request threw.
+        try {
+          await supabase.auth.signOut({ scope: 'local' });
+        } catch (localError) {
+          log.warn('Local signOut fallback failed:', localError);
+        }
         try {
           await clearUserStores();
         } catch {

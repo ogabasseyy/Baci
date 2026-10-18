@@ -22,6 +22,8 @@ export function useCartCheckoutSnapshot() {
   );
   const refresh = useNativeSharedCartStore((state) => state.refresh);
   const [review, setReview] = useState<NativeCheckoutSnapshot | null>(null);
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const reviewScope = useRef<string | null>(null);
   const [status, setStatus] = useState<CartCheckoutReviewStatus>('idle');
   const [retryCount, setRetryCount] = useState(0);
@@ -62,6 +64,8 @@ export function useCartCheckoutSnapshot() {
       );
     };
     setReview(null);
+    setSessionExpiresAt(null);
+    setSessionExpired(false);
     useNativeSharedCartStore.setState({ checkoutReview: null });
     if (!enabled || !cartId || !merchantId || !version || !prepare) {
       setStatus('idle');
@@ -80,12 +84,16 @@ export function useCartCheckoutSnapshot() {
         if (
           result.snapshot.cartId !== cartId ||
           result.snapshot.merchantId !== merchantId ||
-          result.snapshot.cartVersion !== version
+          result.snapshot.cartVersion !== version ||
+          (result.sessionExpiresAt !== undefined &&
+            Date.parse(result.sessionExpiresAt) <= Date.now())
         )
           throw new NativeCartError('refresh_required');
         reviewScope.current = `${key}:${retryCount}`;
         operation.current = null;
         setReview(result.snapshot);
+        setSessionExpiresAt(result.sessionExpiresAt ?? null);
+        setSessionExpired(false);
         useNativeSharedCartStore.setState({ checkoutReview: result.snapshot });
         setStatus('ready');
       } catch (error) {
@@ -114,11 +122,38 @@ export function useCartCheckoutSnapshot() {
     retryCount,
   ]);
 
+  useEffect(() => {
+    if (!enabled || !review || !sessionExpiresAt) return;
+    const expiresAtMs = Date.parse(sessionExpiresAt);
+    if (!Number.isFinite(expiresAtMs)) return;
+    const remainingMs = expiresAtMs - Date.now();
+    if (remainingMs <= 0) {
+      setSessionExpired(true);
+      setStatus((prev) => (prev === 'ready' ? 'stale' : prev));
+      return;
+    }
+    const renewDelayMs = Math.max(0, remainingMs - 5000);
+    const renewTimer = setTimeout(() => {
+      operation.current = null;
+      setRetryCount((count) => count + 1);
+    }, renewDelayMs);
+    const expireTimer = setTimeout(() => {
+      setSessionExpired(true);
+      setStatus((prev) => (prev === 'ready' ? 'stale' : prev));
+    }, remainingMs);
+    return () => {
+      clearTimeout(renewTimer);
+      clearTimeout(expireTimer);
+    };
+  }, [enabled, review, sessionExpiresAt]);
+
   const stale =
     reviewScope.current !== `${key}:${retryCount}` ||
     !enabled ||
     !review ||
     !snapshot ||
+    sessionExpired ||
+    (sessionExpiresAt !== null && Date.parse(sessionExpiresAt) <= Date.now()) ||
     review.merchantId !== snapshot.merchantId ||
     review.cartId !== snapshot.cartId ||
     review.cartVersion !== snapshot.version;

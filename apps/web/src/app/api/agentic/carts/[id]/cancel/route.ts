@@ -107,6 +107,9 @@ export async function POST(request: NextRequest, props: RouteProps) {
     agentId: mutation.agentId,
     action: 'cancel',
     operationId: mutation.idempotencyKey,
+    expectedVersion: (
+      mutation.body as { expectedVersion?: unknown } | null | undefined
+    )?.expectedVersion,
   });
   if (canonical) return respond(canonical.body, canonical.status);
 

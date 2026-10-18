@@ -43,12 +43,13 @@ it('hides the resolution-less combine while conflicts need picks', () => {
     screen.getByRole('button', { name: 'Combine with my choices' })
   ).toBeTruthy();
 });
-it('shows update guidance instead of offer choices for duplicate conflicts', () => {
+it('shows update guidance instead of offer choices for duplicate conflicts while keeping Use saved cart available', () => {
+  const chooseLegacy = jest.fn().mockResolvedValue(undefined);
   useNativeSharedCartStore.setState({
     mergeConflicts: [{ productId }],
     mergeConflictReason: 'duplicate_identity',
     status: 'choice_required',
-    chooseLegacy: jest.fn().mockResolvedValue(undefined),
+    chooseLegacy,
   });
   const screen = render(<SharedCartStatusPanel />);
   expect(
@@ -62,6 +63,8 @@ it('shows update guidance instead of offer choices for duplicate conflicts', () 
   expect(
     screen.queryByRole('button', { name: 'Keep device offer' })
   ).toBeNull();
+  fireEvent.press(screen.getByRole('button', { name: 'Use saved cart' }));
+  expect(chooseLegacy).toHaveBeenCalledWith('keep_server');
 });
 
 it('requires a per-item offer choice before combining legacy carts', () => {

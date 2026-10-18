@@ -50,9 +50,14 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
     props.merchantSlug,
     auth?.user?.id,
     cart.sharedCartRef?.cartId,
+    cart.sharedCartRef?.version,
+    savedCart?.cartId,
+    savedCart?.version,
   ]);
   const current =
-    currentResult?.scope === ownerScope ? currentResult.snapshot : null;
+    savedCartLoaded && currentResult?.scope === ownerScope
+      ? currentResult.snapshot
+      : null;
   const [resolutions, setResolutions] = useState<CartMergeResolution[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const authenticated = Boolean(auth?.isAuthenticated);
@@ -65,6 +70,8 @@ export function CartAccountLink(props: { merchantSlug?: string | null }) {
   // repeating an unauthorized account read. (Plain function: React
   // Compiler owns memoization in this repo.)
   async function ensureSavedCart() {
+    setCurrent(null);
+    setResolutions([]);
     if (!sharedRef) {
       await bootstrapSharedCart(props.merchantSlug ?? undefined);
     }

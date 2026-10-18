@@ -180,3 +180,32 @@ it('prepares again when offer totals change at the same cart version', async () 
   );
   await waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
 });
+
+it('renews the checkout review before sessionExpiresAt lapses', async () => {
+  jest.useFakeTimers();
+  try {
+    const prepare = jest
+      .fn()
+      .mockResolvedValueOnce({
+        snapshot: review,
+        sessionExpiresAt: new Date(Date.now() + 10000).toISOString(),
+      })
+      .mockResolvedValueOnce({
+        snapshot: { ...review, generation: 2 },
+        sessionExpiresAt: new Date(Date.now() + 60000).toISOString(),
+      });
+    useNativeSharedCartStore.setState({ prepareCheckoutReview: prepare });
+    const { result } = renderHook(() => useCartCheckoutSnapshot());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.binding?.checkout_generation).toBe(1);
+    await act(async () => {
+      jest.advanceTimersByTime(5000);
+    });
+    await waitFor(() =>
+      expect(result.current.binding?.checkout_generation).toBe(2)
+    );
+    expect(prepare).toHaveBeenCalledTimes(2);
+  } finally {
+    jest.useRealTimers();
+  }
+});

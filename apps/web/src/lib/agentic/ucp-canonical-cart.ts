@@ -74,14 +74,24 @@ export async function handleCanonicalUcpCart(
       input.action === 'read' && !input.operationId
         ? deps.readOperationId()
         : `ucp-${input.action}:${createHash('sha256').update(`${input.agentId}|${mutationIdentity}`).digest('hex')}`;
+    const unversionedSharedMutation =
+      typeof input.expectedVersion !== 'number' &&
+      ((cart as { migrated?: boolean }).migrated === true ||
+        cart.state.version > 1) &&
+      (input.action === 'cancel' ||
+        (input.action === 'update' &&
+          !input.detailsRequireHandoff &&
+          Boolean(input.lines)));
     const result = await deps.operate(cart, {
-      ...(input.action === 'cancel'
-        ? { command: { type: 'clear' as const } }
-        : (input.action === 'update' || input.action === 'create') &&
-            !input.detailsRequireHandoff &&
-            input.lines
-          ? { command: { type: 'replace' as const, lines: input.lines } }
-          : {}),
+      ...(unversionedSharedMutation
+        ? {}
+        : input.action === 'cancel'
+          ? { command: { type: 'clear' as const } }
+          : (input.action === 'update' || input.action === 'create') &&
+              !input.detailsRequireHandoff &&
+              input.lines
+            ? { command: { type: 'replace' as const, lines: input.lines } }
+            : {}),
       expectedVersion:
         typeof input.expectedVersion === 'number'
           ? input.expectedVersion
@@ -145,7 +155,15 @@ export async function handleCanonicalUcpCart(
       cart_id: input.cartId,
       canonical_cart_id: snapshot.cartId,
       cart_version: snapshot.version,
-      ...(input.action === 'cancel' ? { code: 'cart_contents_cleared' } : {}),
+      ...(input.action === 'cancel' && !unversionedSharedMutation
+        ? { code: 'cart_contents_cleared' }
+        : {}),
+      ...(unversionedSharedMutation
+        ? {
+            code: 'refresh_required',
+            error: 'Refresh your cart and try again',
+          }
+        : {}),
       ...(input.detailsRequireHandoff
         ? {
             code: 'cart_details_require_handoff',
@@ -162,7 +180,11 @@ export async function handleCanonicalUcpCart(
     return {
       body,
       status:
-        input.action === 'checkout' || input.detailsRequireHandoff ? 409 : 200,
+        input.action === 'checkout' ||
+        input.detailsRequireHandoff ||
+        unversionedSharedMutation
+          ? 409
+          : 200,
     };
   } catch (error) {
     if (

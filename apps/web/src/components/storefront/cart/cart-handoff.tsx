@@ -85,6 +85,34 @@ export function CartHandoff(props: { token: string; handoffId: string }) {
   }
 
   if (preview.status === 'consumed') {
+    if (attemptSent || redeemError) {
+      return (
+        <section
+          aria-label="Cart handoff"
+          className="mx-auto max-w-xl px-4 py-10"
+        >
+          <h1 className="text-xl font-semibold">
+            Confirming your cart continuation
+          </h1>
+          {redeemError ? (
+            <p role="alert" className="mt-2 text-sm">
+              {redeemError}
+            </p>
+          ) : (
+            <p className="mt-2 text-sm">
+              Checking your earlier choice for this link…
+            </p>
+          )}
+          <Button
+            className="mt-4"
+            disabled={redeeming}
+            onClick={() => void loadPreview()}
+          >
+            {redeeming ? 'Checking…' : 'Try again'}
+          </Button>
+        </section>
+      );
+    }
     return (
       <section
         aria-label="Cart handoff"

@@ -1454,11 +1454,12 @@ describe('useAuthStore', () => {
       expect(useAuthStore.getState().user).toBeNull();
     });
 
-    it('finishes local teardown when the auth provider throws during sign-out', async () => {
-      (supabase.auth.signOut as jest.Mock).mockRejectedValueOnce(
-        new Error('offline')
-      );
+    it('finishes local teardown and removes persisted session when the auth provider or push cleanup throws during sign-out', async () => {
+      (supabase.auth.signOut as jest.Mock)
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce({ error: null });
       await useAuthStore.getState().signOut();
+      expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
       expect(useAuthStore.getState().user).toBeNull();
       expect(useAuthStore.getState().session).toBeNull();
       expect(mockClearCart).toHaveBeenCalled();

@@ -1,4 +1,5 @@
 import { fireEvent, render } from '@testing-library/react-native';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import CartItemQuantityControls from './CartItemQuantityControls';
 
 jest.mock('@react-native-vector-icons/ionicons', () => 'Icon');
@@ -41,7 +42,10 @@ const props = {
   surfaceInset: '#333',
   disabledIconColor: '#444',
 };
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  useNativeSharedCartStore.setState({ enabled: true });
+});
 it('keeps voucher quantity fixed and disables both quantity actions', () => {
   const view = render(<CartItemQuantityControls {...props} isVoucherLine />);
   fireEvent.press(view.getByLabelText('Decrease quantity for Phone'));
@@ -60,12 +64,21 @@ it('routes ordinary quantity controls to the exact line without editing sibling 
   ]);
   expect(props.updateQuantity).toHaveBeenCalledWith('line-1', 4);
 });
-it('does not increment an ordinary line past the shared-cart maximum', () => {
+it('does not increment an ordinary line past the shared-cart maximum when shared cart is enabled', () => {
   const view = render(
     <CartItemQuantityControls {...props} item={{ ...item, quantity: 10 }} />
   );
   fireEvent.press(view.getByLabelText('Increase quantity for Phone'));
   expect(props.handleQuantityChange).not.toHaveBeenCalled();
+});
+it('allows incrementing past 10 when shared cart is disabled and no product max_quantity applies', () => {
+  useNativeSharedCartStore.setState({ enabled: false });
+  const legacyItem = { ...item, quantity: 10 };
+  const view = render(
+    <CartItemQuantityControls {...props} item={legacyItem} />
+  );
+  fireEvent.press(view.getByLabelText('Increase quantity for Phone'));
+  expect(props.handleQuantityChange).toHaveBeenCalledWith(legacyItem, 1);
 });
 it('does not decrement an ordinary line below one', () => {
   const view = render(

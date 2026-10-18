@@ -90,3 +90,44 @@ it('does not offer the browser fallback when server preview rejects a crafted we
   ).toBeNull();
   expect(WebBrowser.openBrowserAsync).not.toHaveBeenCalled();
 });
+it('lets the shopper retry a transient preview failure without closing the pairing link', async () => {
+  const merchant = '11111111-1111-4111-8111-111111111111';
+  let attempts = 0;
+  const spy = jest
+    .spyOn(
+      jest.requireMock('@/lib/cart/shared-cart-client'),
+      'createNativeCartClient'
+    )
+    .mockImplementation(() => ({
+      previewHandoff: async () => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('network error');
+        return {
+          snapshot: { lines: [{ quantity: 3 }] },
+          expiresAt: '2099-01-01T00:00:00Z',
+        };
+      },
+    }));
+  try {
+    const token = `ch1.${Buffer.from(JSON.stringify({ merchantId: merchant, destination: { type: 'web' } })).toString('base64url')}.signature`;
+    const url = `https://shop.example.com/cart#handoff=${token}&hid=22222222-2222-4222-8222-222222222222`;
+    captureCartPairingLink(url, {
+      merchantId: merchant,
+      merchantSlug: 'shop',
+      merchantDomain: 'shop.example.com',
+    });
+    const screen = render(<NativeCartPairingPanel />);
+    const retry = await waitFor(() =>
+      screen.getByRole('button', { name: 'Try again' })
+    );
+    fireEvent.press(retry);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Continue on website' })
+      ).toBeTruthy()
+    );
+    expect(attempts).toBe(2);
+  } finally {
+    spy.mockRestore();
+  }
+});

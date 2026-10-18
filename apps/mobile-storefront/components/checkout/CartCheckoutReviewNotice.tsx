@@ -15,7 +15,7 @@ export function CartCheckoutReviewNotice({
 }) {
   return (
     <>
-      {status === 'error' ? (
+      {status === 'error' || status === 'stale' ? (
         <View>
           <Text accessibilityRole="alert" style={{ color: textColor }}>
             We could not review your cart. Check your connection and retry

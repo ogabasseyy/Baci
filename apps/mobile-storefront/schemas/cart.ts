@@ -60,6 +60,7 @@ export type NativeCartMergeConflicts = z.infer<
 export const nativeCartReplySchema = z.object({
   conflicts: nativeCartMergeConflictsSchema.optional(),
   snapshot: nativeCheckoutSnapshotSchema.optional(),
+  sessionExpiresAt: z.iso.datetime({ offset: true }).optional(),
   sessionReused: z.boolean().optional(),
   cart: nativeCartSnapshotSchema.nullable().optional(),
   proof: z

@@ -2,6 +2,8 @@ import { SHARED_CART_MAX_QUANTITY_PER_LINE } from '@baci/shared/cart';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { Pressable, Text, View } from 'react-native';
 import type { CartItem } from '@/stores/cart-store';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
+import { hasSharedCartWriter } from '@/stores/shared-cart-writer';
 import CartQuantityInput from './CartQuantityInput';
 import styles from './styles';
 
@@ -28,9 +30,19 @@ export default function CartItemQuantityControls({
   surfaceInset,
   disabledIconColor,
 }: CartItemQuantityControlsProps) {
+  const sharedCartEnabled =
+    useNativeSharedCartStore((state) => state.enabled) || hasSharedCartWriter();
+  const itemMaxQuantity =
+    item.max_quantity && item.max_quantity > 0 ? item.max_quantity : undefined;
+  const maxQuantity = sharedCartEnabled
+    ? itemMaxQuantity
+      ? Math.min(SHARED_CART_MAX_QUANTITY_PER_LINE, itemMaxQuantity)
+      : SHARED_CART_MAX_QUANTITY_PER_LINE
+    : itemMaxQuantity;
   const decreaseDisabled = item.quantity <= 1 || isVoucherLine;
   const increaseDisabled =
-    isVoucherLine || item.quantity >= SHARED_CART_MAX_QUANTITY_PER_LINE;
+    isVoucherLine ||
+    (maxQuantity !== undefined && item.quantity >= maxQuantity);
   return (
     <View
       style={[
@@ -60,7 +72,7 @@ export default function CartItemQuantityControls({
         <CartQuantityInput
           style={[styles.quantityText, { color: textColor }]}
           value={item.quantity}
-          maxValue={SHARED_CART_MAX_QUANTITY_PER_LINE}
+          maxValue={maxQuantity}
           onChange={(newQuantity) => updateQuantity(item.id, newQuantity)}
         />
       )}

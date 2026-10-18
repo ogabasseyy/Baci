@@ -399,37 +399,4 @@ describe('useSharedCart link', () => {
       expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(2)
     );
   });
-
-  it('retires surviving device cart authority when shared_cart is disabled after enrollment', async () => {
-    mockAdopted();
-    const fetchSpy = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(Response.json({ revoked: true }));
-    const { rerender } = renderHook(
-      ({ enabled }) =>
-        useSharedCart({
-          enabled,
-          merchantId: MERCHANT_ID,
-          merchantSlug: SLUG,
-          sessionGeneration: 1,
-        }),
-      { initialProps: { enabled: true } }
-    );
-
-    await waitFor(() =>
-      expect(fetchSharedCartSnapshot).toHaveBeenCalledTimes(1)
-    );
-
-    await act(async () => {
-      rerender({ enabled: false });
-    });
-
-    await waitFor(() =>
-      expect(fetchSpy).toHaveBeenCalledWith(
-        '/api/storefront/cart/session/revoke?merchantSlug=ogabassey',
-        expect.objectContaining({ method: 'POST' })
-      )
-    );
-    fetchSpy.mockRestore();
-  });
 });

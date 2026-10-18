@@ -28,6 +28,7 @@ export interface NativeCartReply {
   replayed?: boolean;
   warnings?: { code: string; message: string; lineId?: string }[];
   snapshot?: NativeCheckoutSnapshot;
+  sessionExpiresAt?: string;
   sessionReused?: boolean;
   linkedUserId?: string;
 }

@@ -5,9 +5,15 @@ const gateMocks = vi.hoisted(() => ({
   validateRedvaultLivePilotOrder: vi.fn(),
 }));
 
-vi.mock('@/lib/checkout/redvault-payment-availability', () => ({
-  getRedvaultPaymentAvailability: gateMocks.getRedvaultPaymentAvailability,
-}));
+vi.mock(
+  '@/lib/checkout/redvault-payment-availability',
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import('./redvault-payment-availability')
+    >()),
+    getRedvaultPaymentAvailability: gateMocks.getRedvaultPaymentAvailability,
+  })
+);
 vi.mock('@/lib/checkout/redvault-live-pilot', () => ({
   validateRedvaultLivePilotOrder: gateMocks.validateRedvaultLivePilotOrder,
 }));

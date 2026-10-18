@@ -51,7 +51,25 @@ An archived, unchanged `d56d122dfe` source snapshot with the same generated Expo
 route types reproduces exactly the same seven errors. No errors arise in changed
 TypeScript. These unrelated files were preserved.
 
-The complete monorepo test task is pending final verification.
+The complete monorepo test run passed all six tasks, with no cached results:
+
+- Web: 7,982 files and 51,035 tests passed; 68 files/215 tests skipped and one todo.
+- Storefront: 1,464 Jest suites/8,842 tests and 64 Node configuration tests passed.
+- Mobile admin: 926 files/4,661 tests passed.
+- Shared: 232 files/1,605 tests passed.
+- TikTok: three files/nine tests passed.
+- Cloudflare qualification: one file/ten tests passed.
+
+Two earlier attempts crashed inside Node 24.11.1's V8 garbage collector, without
+test assertion failures. The crash stack matched the upstream
+[Node issue 62393](https://github.com/nodejs/node/issues/62393). The successful run
+used an isolated, checksum-verified official Node 24.22.0 runtime with the issue's
+`--no-sparkplug` workaround applied only to Jest processes, and serialized package
+tasks. The global Node installation, repository runtime pins, test configuration
+and assertions were unchanged. The successful log is
+`/tmp/baci-sentry-full-tests.log`; failed attempts are retained as
+`/tmp/baci-sentry-full-tests-concurrent.log` and
+`/tmp/baci-sentry-full-tests-serial-node2411.log`.
 
 ## Delivery and limits
 

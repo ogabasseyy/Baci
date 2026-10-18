@@ -569,6 +569,10 @@ const LIGHTWEIGHT_PUBLIC_BLOG_CONFIG_OVERRIDES: Partial<PostHogConfig> = {
   rageclick: false,
 };
 
+/**
+ * Builds the PostHog browser client configuration with storefront privacy,
+ * sampling, and external script restrictions applied.
+ */
 export function buildPostHogClientConfig(
   env: PostHogEnv = process.env,
   projectToken: string | undefined = getPublicPostHogProjectToken(),

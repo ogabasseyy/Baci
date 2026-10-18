@@ -65,6 +65,10 @@ interface HomeProductGridProps {
   loadPreviewCatalog?: () => Promise<PreviewCatalogModule>;
 }
 
+/**
+ * Renders the homepage featured-products grid with static cards initially and
+ * upgrades them to interactive cards inside a transition upon grid interaction.
+ */
 export function HomeProductGrid({
   basePath: explicitBasePath,
   storeSlug,

@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Home, Search } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect } from 'react';
 import { ThemedButton } from '@/components/themed/themed-button';
 import { useMerchantSafe } from '@/hooks/merchant/use-merchant';
 import { asRoute } from '@/lib/routes';
@@ -24,6 +25,12 @@ function buildStorefrontPath(
 }
 
 export function StorefrontNotFoundContent() {
+  useEffect(() => {
+    void import('@/app/(storefront)/storefront-not-found.css').catch(
+      () => undefined
+    );
+  }, []);
+
   const merchantContext = useMerchantSafe();
   const merchant = merchantContext?.merchant;
   const isLoading = merchantContext?.loading;

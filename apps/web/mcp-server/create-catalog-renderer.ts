@@ -6,13 +6,16 @@ import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 
 const MAX_CONCURRENT_LOOKUPS = 4;
 
+type SerializedBaseStockStatus = 'in_stock' | 'out_of_stock' | 'not_serialized' | 'unknown';
+
 function normalizeCondition(condition: string | null | undefined) {
   return normalizeCanonicalProductCondition(condition);
 }
 
 /** Build the renderer that reloads selected products from authoritative data. */
 export function createCatalogRenderer(
-  lookup: (id: string) => Promise<{ structuredContent?: unknown }>
+  lookup: (id: string) => Promise<{ structuredContent?: unknown }>,
+  getSerializedBaseStock: (id: string) => Promise<SerializedBaseStockStatus> = async () => 'not_serialized'
 ) {
   return async (input: z.infer<typeof mcpCatalogRenderInputSchema>) => {
     try {
@@ -56,14 +59,25 @@ export function createCatalogRenderer(
               let variantId = option.variantId;
 
               if (option.kind === 'base') {
+                const serializedStock = await getSerializedBaseStock(selection.product_id);
                 const baseCondition = normalizeCondition(product.base_condition ?? product.condition) || 'new';
-                if (option.option_id || option.variantId || product.has_variants || product.base_in_stock === false || baseCondition !== selectedCondition) {
+                if (
+                  option.option_id ||
+                  option.variantId ||
+                  product.has_variants ||
+                  product.base_in_stock === false ||
+                  serializedStock === 'out_of_stock' ||
+                  serializedStock === 'unknown' ||
+                  baseCondition !== selectedCondition
+                ) {
                   throw new Error('Base option no longer available');
                 }
                 price = product.base_price ?? (!product.has_condition_offers ? product.price : null) ?? undefined;
                 compareAtPrice = product.compare_at_price;
                 condition = baseCondition;
-                availability = product.base_in_stock === true ? 'in_stock' : 'unconfirmed';
+                availability = serializedStock === 'in_stock' || product.base_in_stock === true
+                  ? 'in_stock'
+                  : 'unconfirmed';
               } else if (option.kind === 'variant') {
                 if (!option.option_id) throw new Error('Variant identity missing');
                 const matched = parsed.variants?.find((candidate) => candidate.option_id === option.option_id);

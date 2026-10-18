@@ -8,7 +8,8 @@ import { createCatalogRenderer } from './create-catalog-renderer';
 export function registerCatalogRenderer(
   server: McpServer,
   uri: string,
-  lookup: (id: string) => Promise<{ structuredContent?: unknown }>
+  lookup: (id: string) => Promise<{ structuredContent?: unknown }>,
+  getSerializedBaseStock?: (id: string) => Promise<'in_stock' | 'out_of_stock' | 'not_serialized' | 'unknown'>
 ) {
   server.registerTool(
     'render_ogabassey_catalog',
@@ -29,6 +30,6 @@ export function registerCatalogRenderer(
         'openai/toolInvocation/invoked': 'Catalog ready',
       },
     },
-    createCatalogRenderer(lookup)
+    createCatalogRenderer(lookup, getSerializedBaseStock)
   );
 }

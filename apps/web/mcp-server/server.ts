@@ -2,6 +2,7 @@ import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { registerCatalogRenderer } from './catalog-render-tool';
+import { resolveSerializedAnchorStock } from '../src/lib/serialized-anchor-stock';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { formatInvalidDiscoveryIntent } from './format-invalid-discovery-intent';
 /**
@@ -1737,7 +1738,26 @@ function createOgabasseyServer(options: { clientIp?: string } = {}) {
     },
     getProductDetails
   );
-  registerCatalogRenderer(server, STORE_WIDGET_URI, (id) => getProductDetails({ product_id: id }));
+  registerCatalogRenderer(
+    server,
+    STORE_WIDGET_URI,
+    (id) => getProductDetails({ product_id: id }),
+    async (id) => {
+      const merchantId = await getMerchantId();
+      if (!merchantId) return 'unknown';
+      const anchors = await resolveSerializedAnchorStock({
+        supabase,
+        merchantId,
+        productIds: [id],
+      });
+      if (anchors.failed) return 'unknown';
+      const projection = anchors.projections.get(id.toLowerCase());
+      if (!projection) return 'not_serialized';
+      return projection.manageStock && projection.stockQuantity <= 0
+        ? 'out_of_stock'
+        : 'in_stock';
+    }
+  );
 
   if (ORDER_PAYMENT_TOOLS_ENABLED) {
     // Tool: Check order status

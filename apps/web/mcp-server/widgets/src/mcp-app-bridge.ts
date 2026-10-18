@@ -1,6 +1,10 @@
-import { App } from '@modelcontextprotocol/ext-apps';
+import { App } from '@modelcontextprotocol/ext-apps/app-with-deps';
 import type {} from './hooks/use-openai-global';
-import { resetWidgetHost, updateWidgetHost } from './widget-host';
+import {
+  getWidgetHost,
+  resetWidgetHost,
+  updateWidgetHost,
+} from './widget-host';
 
 /** Standard MCP Apps transport, adapted to the widget's existing host interface. */
 export async function connectMcpApp() {
@@ -35,9 +39,15 @@ export async function connectMcpApp() {
   try {
     await app.connect(undefined, { timeout: 10000 });
   } catch (error) {
-    await app.close();
+    const deliveredOutput = getWidgetHost()?.toolOutput;
+    await app.close().catch(() => {});
     resetWidgetHost();
-    // Frozen/cached legacy resources may run in hosts without ui/initialize.
+    // Read-only legacy hosts can display results without cart tool support.
+    if (deliveredOutput != null) {
+      if (deliveredOutput !== extensions?.toolOutput)
+        update({ toolOutput: deliveredOutput });
+      return;
+    }
     if (extensions?.callTool) return;
     throw error;
   }
@@ -51,30 +61,59 @@ export async function connectMcpApp() {
     callTool: capabilities?.serverTools
       ? (name, args) => app.callServerTool({ name, arguments: args })
       : undefined,
-    openExternal: async ({ href }) => {
-      update({ hostError: null });
+    openExternal: capabilities?.openLinks
+      ? async ({ href }) => {
+          update({ hostError: null });
+          try {
+            const result = await app.openLink({ url: href });
+            if (result.isError) throw new Error('Link denied');
+          } catch {
+            update({
+              hostError:
+                'Could not open Ogabassey. Please try again or continue in the conversation.',
+            });
+          }
+        }
+      : undefined,
+    requestDisplayMode: context?.availableDisplayModes?.includes('fullscreen')
+      ? async ({ mode }) => {
+          update({ hostError: null });
+          try {
+            const result = await app.requestDisplayMode({ mode });
+            if (result.mode !== mode) throw new Error('Display mode declined');
+            return result;
+          } catch {
+            update({
+              hostError:
+                'Could not expand the catalog. Continue using the inline view.',
+            });
+          }
+        }
+      : undefined,
+    notifyIntrinsicHeight: async (height) => {
       try {
-        const result = await app.openLink({ url: href });
-        if (result.isError) throw new Error('Link denied');
+        await app.sendSizeChanged({ height });
       } catch {
-        update({
-          hostError:
-            'Could not open Ogabassey. Please try again or continue in the conversation.',
-        });
+        console.warn('Ogabassey widget size notification failed.');
       }
     },
-    requestDisplayMode: context?.availableDisplayModes?.includes('fullscreen')
-      ? ({ mode }) => app.requestDisplayMode({ mode })
+    sendFollowUpMessage: capabilities?.message?.text
+      ? async ({ prompt }) => {
+          update({ hostError: null });
+          try {
+            const result = await app.sendMessage({
+              role: 'user',
+              content: [{ type: 'text', text: prompt }],
+            });
+            if (result.isError) throw new Error('Message declined');
+          } catch {
+            update({
+              hostError:
+                'Could not send your message. Please type it in the conversation.',
+            });
+          }
+        }
       : undefined,
-    notifyIntrinsicHeight: (height) => {
-      void app.sendSizeChanged({ height });
-    },
-    sendFollowUpMessage: ({ prompt }) => {
-      void app.sendMessage({
-        role: 'user',
-        content: [{ type: 'text', text: prompt }],
-      });
-    },
     setWidgetState: (widgetState) => {
       extensions?.setWidgetState?.(widgetState);
       update({ widgetState });
@@ -86,6 +125,7 @@ export async function initializeMcpApp() {
   try {
     await connectMcpApp();
   } catch {
+    if (getWidgetHost()?.toolOutput != null) return;
     const toolOutput = {
       status: 'error',
       products: [],

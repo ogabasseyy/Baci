@@ -1,3 +1,4 @@
+import { openOgabasseyUrl } from './open-ogabassey-url';
 import { getWidgetHost } from './widget-host';
 import { initializeMcpApp } from './mcp-app-bridge';
 import { useEffect, useRef } from 'react';
@@ -194,7 +195,7 @@ export function App() {
           <button
             type="button"
             className="btn-negotiate-icon"
-            disabled={isSavingCart || cart.length === 0}
+            disabled={isSavingCart || cart.length === 0 || !getWidgetHost()?.sendFollowUpMessage}
             onClick={() => {
               getWidgetHost()?.sendFollowUpMessage?.({
                 prompt:
@@ -234,11 +235,7 @@ export function App() {
           type="button"
           className="btn-browse-more"
           onClick={() => {
-            if (getWidgetHost()?.openExternal) {
-              getWidgetHost()?.openExternal?.({ href: 'https://ogabassey.com' });
-            } else {
-              window.open('https://ogabassey.com', '_blank');
-            }
+            openOgabasseyUrl('https://ogabassey.com');
           }}
         >
           Browse All Products →

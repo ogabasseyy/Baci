@@ -195,3 +195,24 @@ describe('GET /.well-known/mcp/server-card.json', () => {
     expect(tool.inputSchema.properties).not.toHaveProperty('estimated_weight');
   });
 });
+
+it('serializes the renderer contract with native Zod 4 JSON Schema support', async () => {
+  const { GET } = await import('./route');
+  const body = await GET().json();
+  const renderer = body.tools.find(
+    (tool: { name: string }) => tool.name === 'render_ogabassey_catalog'
+  );
+  expect(renderer.inputSchema).toMatchObject({
+    type: 'object',
+    additionalProperties: false,
+    required: ['product_ids'],
+    properties: {
+      product_ids: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 20,
+        items: { type: 'string' },
+      },
+    },
+  });
+});

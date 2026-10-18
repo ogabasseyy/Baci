@@ -198,3 +198,19 @@ it('shows catalog failures as actionable alerts', () => {
   render(<App />);
   expect(screen.getByRole('alert').textContent).toBe('Search again before rendering.');
 });
+
+it('disables negotiation when the host cannot accept follow-up messages', () => {
+  window.openai = {
+    toolOutput: { products },
+    widgetState: { cart: [{ product: products[0], quantity: 1 }], cartUrl: 'https://ogabassey.com/cart?guest_cart=[]' },
+  };
+  render(<App />);
+  expect(screen.getByRole('button', { name: 'Negotiate Price' })).toBeDisabled();
+});
+it('uses the hardened browser fallback for storefront navigation', () => {
+  window.openai = { toolOutput: { products } };
+  const open = vi.spyOn(window, 'open').mockReturnValue(null);
+  render(<App />);
+  fireEvent.click(screen.getByRole('button', { name: 'Browse All Products →' }));
+  expect(open).toHaveBeenCalledWith('https://ogabassey.com', '_blank', 'noopener,noreferrer');
+});

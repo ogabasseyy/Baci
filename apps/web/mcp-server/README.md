@@ -159,6 +159,7 @@ With trust disabled, the server uses the validated socket `remoteAddress`.
 | `update_ogabassey_guest_cart` | Persist a guest cart without login and return a website checkout handoff |
 | `prepare_storefront_cart_link` | Prepare a storefront cart URL without saving a server-side cart |
 | `add_to_cart` | Deprecated alias of `prepare_storefront_cart_link` for cached tool lists |
+| `render_ogabassey_catalog` | Display selected products after a search or product lookup |
 | `browse_categories` | Browse active store categories |
 | `cancel_agentic_checkout_session` | Cancel a mutable signed Baci agentic checkout session |
 | `cancel_ucp_cart` | Cancel an active UCP cart |
@@ -384,6 +385,11 @@ in display order. It deduplicates IDs and re-fetches public merchant-scoped
 product details; callers cannot provide prices or arbitrary product cards.
 If any product cannot be loaded, it returns an error instead of a partial
 comparison. Option selection stays on the storefront.
+
+The browser bridge imports the SDK’s `app-with-deps` entry so the generated
+widget does not depend on workspace peer hoisting. A build regression test
+rejects external SDK peer resolution; regenerate the committed asset after
+widget changes.
 
 The v5 catalog resource uses `text/html;profile=mcp-app` and standard
 `ui.resourceUri`/`ui.visibility` metadata. Every host first connects through

@@ -40,11 +40,11 @@ declare global {
         args: Record<string, unknown>
       ) => Promise<unknown>;
       openExternal?: (options: { href: string }) => void | Promise<void>;
-      notifyIntrinsicHeight?: (height: number) => void;
+      notifyIntrinsicHeight?: (height: number) => void | Promise<void>;
       setOpenInAppUrl?: (options: { href: string }) => void;
       requestModal?: (options: unknown) => void;
       requestDisplayMode?: (options: { mode: 'inline' | 'fullscreen' | 'pip' }) => Promise<unknown>;
-      sendFollowUpMessage?: (message: { prompt: string; scrollToBottom?: boolean }) => void;
+      sendFollowUpMessage?: (message: { prompt: string; scrollToBottom?: boolean }) => void | Promise<void>;
     };
   }
 }

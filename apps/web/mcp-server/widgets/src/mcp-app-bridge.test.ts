@@ -8,7 +8,11 @@ const { host, factory } = vi.hoisted(() => {
       theme: 'light',
       availableDisplayModes: ['inline', 'fullscreen'],
     })),
-    getHostCapabilities: vi.fn(() => ({ serverTools: {}, openLinks: {} })),
+    getHostCapabilities: vi.fn(() => ({
+      serverTools: {},
+      openLinks: {},
+      message: { text: {} },
+    })),
     callServerTool: vi.fn().mockResolvedValue({ content: [] }),
     openLink: vi.fn(),
     requestDisplayMode: vi.fn(),
@@ -40,7 +44,9 @@ const { host, factory } = vi.hoisted(() => {
     }),
   };
 });
-vi.mock('@modelcontextprotocol/ext-apps', () => ({ App: factory }));
+vi.mock('@modelcontextprotocol/ext-apps/app-with-deps', () => ({
+  App: factory,
+}));
 import { getWidgetHost, resetWidgetHost } from './widget-host';
 import { connectMcpApp, initializeMcpApp } from './mcp-app-bridge';
 afterEach(() => {
@@ -164,4 +170,69 @@ it.each([
   await connectMcpApp();
   await getWidgetHost()?.openExternal?.({ href: 'https://ogabassey.com/cart' });
   expect(getWidgetHost()?.hostError).toContain('Could not open');
+});
+
+it('retains a display-only legacy result when the standard handshake fails', async () => {
+  const bridge = {
+    toolOutput: { products: [{ id: 'phone' }] },
+    openExternal: vi.fn(),
+  };
+  window.openai = bridge;
+  host.connect.mockRejectedValueOnce(new Error('unsupported'));
+  await initializeMcpApp();
+  expect(getWidgetHost()).toBe(bridge);
+  expect(getWidgetHost()?.toolOutput).toBe(bridge.toolOutput);
+});
+it('retains results delivered during a failed handshake', async () => {
+  host.connect.mockImplementationOnce(async () => {
+    host.ontoolresult?.({ structuredContent: { products: [{ id: 'phone' }] } });
+    throw new Error('disconnect');
+  });
+  await initializeMcpApp();
+  expect(getWidgetHost()?.toolOutput).toEqual({ products: [{ id: 'phone' }] });
+});
+it('does not expose unsupported link or message methods', async () => {
+  host.getHostCapabilities.mockReturnValueOnce(
+    {} as ReturnType<typeof host.getHostCapabilities>,
+  );
+  await connectMcpApp();
+  expect(getWidgetHost()?.openExternal).toBeUndefined();
+  expect(getWidgetHost()?.sendFollowUpMessage).toBeUndefined();
+});
+it.each([
+  'denied',
+  'transport',
+])('surfaces %s follow-up failures safely', async (failure) => {
+  host.sendMessage.mockImplementationOnce(() =>
+    failure === 'denied'
+      ? Promise.resolve({ isError: true })
+      : Promise.reject(new Error('private details')),
+  );
+  await connectMcpApp();
+  await getWidgetHost()?.sendFollowUpMessage?.({ prompt: 'Negotiate' });
+  expect(getWidgetHost()?.hostError).toContain('Could not send');
+  expect(getWidgetHost()?.hostError).not.toContain('private');
+});
+it('handles rejected display-mode and sizing calls without unhandled rejections', async () => {
+  host.requestDisplayMode.mockRejectedValueOnce(new Error('private details'));
+  host.sendSizeChanged.mockRejectedValueOnce(new Error('private details'));
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  await connectMcpApp();
+  await getWidgetHost()?.requestDisplayMode?.({ mode: 'fullscreen' });
+  await getWidgetHost()?.notifyIntrinsicHeight?.(300);
+  expect(getWidgetHost()?.hostError).toContain('Could not expand');
+  expect(warning).toHaveBeenCalledWith(
+    'Ogabassey widget size notification failed.',
+  );
+  warning.mockRestore();
+});
+
+it('shows a connection error for navigation-only extensions with no delivered result', async () => {
+  window.openai = { openExternal: vi.fn(), setWidgetState: vi.fn() };
+  host.connect.mockRejectedValueOnce(new Error('unsupported'));
+  await initializeMcpApp();
+  expect(getWidgetHost()?.toolOutput).toMatchObject({
+    status: 'error',
+    products: [],
+  });
 });

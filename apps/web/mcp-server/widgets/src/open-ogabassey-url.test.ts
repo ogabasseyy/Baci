@@ -26,8 +26,8 @@ it('navigates a live pending tab instead of opening a new one', () => {
   expect(
     openOgabasseyUrl(
       'https://ogabassey.com/cart',
-      pendingTab as unknown as Window
-    )
+      pendingTab as unknown as Window,
+    ),
   ).toBe(true);
   expect(pendingTab.location.href).toBe('https://ogabassey.com/cart');
   expect(opened).not.toHaveBeenCalled();
@@ -43,15 +43,15 @@ it('opens a noopener tab when no bridge or pending tab exists', () => {
   expect(opened).toHaveBeenCalledWith(
     'https://ogabassey.com/cart',
     '_blank',
-    'noopener,noreferrer'
+    'noopener,noreferrer',
   );
 });
 
-it('reports blocked popups instead of throwing', () => {
+it('does not report a failed popup from the null result required by noopener', () => {
   window.openai = {};
   vi.spyOn(window, 'open').mockReturnValue(null);
 
-  expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(false);
+  expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(true);
 });
 
 it('falls back to a fresh tab when the pending tab was closed', () => {
@@ -64,12 +64,20 @@ it('falls back to a fresh tab when the pending tab was closed', () => {
   expect(
     openOgabasseyUrl(
       'https://ogabassey.com/cart',
-      pendingTab as unknown as Window
-    )
+      pendingTab as unknown as Window,
+    ),
   ).toBe(true);
   expect(opened).toHaveBeenCalledWith(
     'https://ogabassey.com/cart',
     '_blank',
-    'noopener,noreferrer'
+    'noopener,noreferrer',
   );
+});
+
+it('reports a browser exception as a failed navigation request', () => {
+  window.openai = {};
+  vi.spyOn(window, 'open').mockImplementation(() => {
+    throw new Error('navigation rejected');
+  });
+  expect(openOgabasseyUrl('https://ogabassey.com/cart')).toBe(false);
 });

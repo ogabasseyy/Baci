@@ -69,5 +69,31 @@ BEGIN
   ) IS NOT NULL THEN
     RAISE EXCEPTION 'unknown UUID replay keys must resolve no snapshot';
   END IF;
+  IF public.storefront_checkout_replay_snapshot(
+    '77777777-7777-4777-8777-777777777777',
+    repeat('ab', 32)
+  ) IS NOT NULL THEN
+    RAISE EXCEPTION 'unknown 64-hex mobile replay keys must resolve no snapshot';
+  END IF;
+
+  INSERT INTO public.orders (
+    id, merchant_id, order_number, total, payment_status, checkout_idempotency_key
+  ) VALUES (
+    'eeeeeeee-9980-4000-8000-000000000000',
+    v_merchant,
+    'ORD-9980',
+    1500,
+    'pending',
+    repeat('cd', 32)
+  );
+  v_snapshot := public.storefront_checkout_replay_snapshot(
+    v_merchant,
+    repeat('cd', 32)
+  );
+  DELETE FROM public.orders WHERE id = 'eeeeeeee-9980-4000-8000-000000000000';
+  IF v_snapshot IS NULL
+    OR (v_snapshot ->> 'order_id') IS DISTINCT FROM 'eeeeeeee-9980-4000-8000-000000000000' THEN
+    RAISE EXCEPTION 'mobile 64-hex replay key must resolve committed order snapshot: %', v_snapshot;
+  END IF;
 END
 $$;

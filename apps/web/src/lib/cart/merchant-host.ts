@@ -62,12 +62,18 @@ export function isPrivateLanHost(host: string): boolean {
  * purposes, but a hint there must not mint tenant authority — the
  * merchant subdomain or custom domain is the tenant signal on the web.
  */
+export const HOSTED_STAGING_API_HOST = 'api-staging.ogabassey.com';
+
 export function isHintPlatformHost(
   host: string,
   rootDomain: string,
   environment: string | undefined = process.env.NODE_ENV
 ): boolean {
-  if (host === `api.${rootDomain}` || host === `api-staging.${rootDomain}`)
+  if (
+    host === `api.${rootDomain}` ||
+    host === `api-staging.${rootDomain}` ||
+    host === HOSTED_STAGING_API_HOST
+  )
     return true;
   const isLocalHost =
     host === 'localhost' || host === '127.0.0.1' || isPrivateLanHost(host);
@@ -91,6 +97,7 @@ export function isSharedPlatformHost(
     // merchantSlug hint; 'api' is a platform host, never a merchant.
     host === `api.${rootDomain}` ||
     host === `api-staging.${rootDomain}` ||
+    host === HOSTED_STAGING_API_HOST ||
     (environment !== 'production' && isLocalHost)
   );
 }

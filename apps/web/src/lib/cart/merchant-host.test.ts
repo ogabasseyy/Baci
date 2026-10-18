@@ -94,6 +94,7 @@ describe('isSharedPlatformHost', () => {
       `www.${root}`,
       `api.${root}`,
       `api-staging.${root}`,
+      'api-staging.ogabassey.com',
       'localhost',
       '127.0.0.1',
       '192.168.1.20',

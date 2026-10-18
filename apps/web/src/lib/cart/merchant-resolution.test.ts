@@ -432,26 +432,34 @@ describe('resolveCartMerchant on the platform API host', () => {
   });
 });
 
-it('uses the validated merchant hint on the staging API host', async () => {
-  const client = {
-    rpc: vi.fn(async (_name: string, args: { p_identifier: string }) => ({
-      data: args.p_identifier === 'ogabassey' ? [merchantRow()] : [],
-      error: null,
-    })),
-  };
-  const result = await resolveCartMerchant(
-    new Request(
-      'https://api-staging.usebaci.com/api/storefront/cart?merchantSlug=ogabassey'
-    ),
-    {
-      rootDomain: 'usebaci.com',
-      resolveAlias: async () => null,
-      rpcClient: client,
-    }
-  );
-  expect(result).toMatchObject({ ok: true, merchant: { id: MERCHANT_ID } });
-  expect(client.rpc).toHaveBeenCalledTimes(1);
-  expect(client.rpc).toHaveBeenCalledWith('resolve_storefront_auth_merchant', {
-    p_identifier: 'ogabassey',
-  });
+it('uses the validated merchant hint on the staging API hosts', async () => {
+  for (const stagingHost of [
+    'api-staging.usebaci.com',
+    'api-staging.ogabassey.com',
+  ]) {
+    const client = {
+      rpc: vi.fn(async (_name: string, args: { p_identifier: string }) => ({
+        data: args.p_identifier === 'ogabassey' ? [merchantRow()] : [],
+        error: null,
+      })),
+    };
+    const result = await resolveCartMerchant(
+      new Request(
+        `https://${stagingHost}/api/storefront/cart?merchantSlug=ogabassey`
+      ),
+      {
+        rootDomain: 'usebaci.com',
+        resolveAlias: async () => null,
+        rpcClient: client,
+      }
+    );
+    expect(result).toMatchObject({ ok: true, merchant: { id: MERCHANT_ID } });
+    expect(client.rpc).toHaveBeenCalledTimes(1);
+    expect(client.rpc).toHaveBeenCalledWith(
+      'resolve_storefront_auth_merchant',
+      {
+        p_identifier: 'ogabassey',
+      }
+    );
+  }
 });

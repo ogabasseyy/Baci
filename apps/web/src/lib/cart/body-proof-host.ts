@@ -1,4 +1,8 @@
-import { isPrivateLanHost, requestHost } from './merchant-host';
+import {
+  HOSTED_STAGING_API_HOST,
+  isPrivateLanHost,
+  requestHost,
+} from './merchant-host';
 
 function isBodyProofPlatformHost(
   host: string,
@@ -19,6 +23,7 @@ function isBodyProofPlatformHost(
     // full session proof.
     host === `api.${rootDomain}` ||
     host === `api-staging.${rootDomain}` ||
+    host === HOSTED_STAGING_API_HOST ||
     (environment !== 'production' && isLocalHost)
   );
 }

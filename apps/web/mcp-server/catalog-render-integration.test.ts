@@ -30,7 +30,7 @@ it('only the catalog renderer launches UI and reuses public product lookup', asy
         method: 'tools/call',
         params: {
           name: 'render_ogabassey_catalog',
-          arguments: { product_ids: ['available-product'] },
+          arguments: { products: [{ product_id: 'available-product' }] },
         },
       }),
     );

@@ -22,7 +22,8 @@ const { host, factory } = vi.hoisted(() => {
     ontoolresult: undefined as
       | undefined
       | ((v: {
-          structuredContent: unknown;
+          structuredContent?: unknown;
+          isError?: boolean;
           _meta?: Record<string, unknown>;
         }) => void),
     ontoolinput: undefined as undefined | ((v: { arguments: unknown }) => void),
@@ -97,6 +98,17 @@ it('delivers standard tool results, deferred arguments and host theme changes', 
   expect(host.callServerTool).toHaveBeenCalledWith({
     name: 'update_ogabassey_guest_cart',
     arguments: { quantity: 1 },
+  });
+});
+
+it('shows a safe error when a tool result has no structured content', async () => {
+  await connectMcpApp();
+  host.ontoolresult?.({ isError: true });
+
+  expect(widgetHost.get()?.toolOutput).toEqual({
+    status: 'error',
+    products: [],
+    message: 'Product results could not be displayed. Please search again.',
   });
 });
 
@@ -235,6 +247,15 @@ it('handles rejected display-mode and sizing calls without unhandled rejections'
     'Ogabassey widget size notification failed.'
   );
   warning.mockRestore();
+});
+
+it('publishes the display mode granted by the host', async () => {
+  host.requestDisplayMode.mockResolvedValueOnce({ mode: 'fullscreen' });
+  await connectMcpApp();
+
+  await widgetHost.get()?.requestDisplayMode?.({ mode: 'fullscreen' });
+
+  expect(widgetHost.get()?.displayMode).toBe('fullscreen');
 });
 
 it('shows a connection error for navigation-only extensions with no delivered result', async () => {

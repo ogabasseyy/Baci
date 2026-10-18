@@ -50,6 +50,7 @@ export async function buildMcpProductDetail({
 }): Promise<ProductDetailResult> {
   // Fetch variants if product has variants
   let variants: Array<{
+    id: string;
     attributes: Record<string, unknown> | null;
     price_override: number | null;
     stock_quantity: number;
@@ -72,6 +73,7 @@ export async function buildMcpProductDetail({
 
   // Fetch condition offers if available
   let conditionOffers: Array<{
+    offer_id: string;
     condition: string;
     price: number;
     stock_quantity: number;
@@ -129,6 +131,11 @@ export async function buildMcpProductDetail({
     name: product.name,
     slug: product.slug,
     price: displayPrice,
+    base_price: product.price,
+    base_condition: product.condition || 'new',
+    base_in_stock: product.manage_stock === true
+      ? Number(product.stock_quantity ?? 0) > 0
+      : null,
     compare_at_price: displayCompareAtPrice,
     image: getSafeCatalogImageUrl(typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url) ?? null,
     condition: displayCondition,
@@ -225,8 +232,9 @@ export async function buildMcpProductDetail({
       products: [formatted],
       catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels and safely projected color images; they do not establish selectable variant or stock combinations.'),
       variants: variants.map((v) => ({
+        option_id: v.id,
         attributes: v.attributes,
-        price: v.price_override,
+        price: v.price_override ?? product.price,
         stock: product.manage_stock ? v.stock_quantity : null,
         availability: getMcpOfferAvailability(product.manage_stock, v.stock_quantity).availability,
         condition: v.condition,

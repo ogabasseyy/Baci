@@ -6,7 +6,7 @@ import {
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { createCatalogRenderer } from './create-catalog-renderer';
 
-/** Register the app-only renderer for selected, server-validated products. */
+/** Register the model-and-app renderer for selected, server-validated products. */
 export function registerCatalogRenderer(
   server: McpServer,
   uri: string,

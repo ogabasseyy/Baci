@@ -1,58 +1,147 @@
 import type { z } from 'zod';
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
 import { mcpCatalogRenderInputSchema } from '../src/schemas/mcp-catalog-render';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
+
+const MAX_CONCURRENT_LOOKUPS = 4;
+
+function normalizeCondition(condition: string) {
+  return normalizeCanonicalProductCondition(condition) || 'new';
+}
 
 /** Build the renderer that reloads selected products from authoritative data. */
 export function createCatalogRenderer(
   lookup: (id: string) => Promise<{ structuredContent?: unknown }>
 ) {
-  return async ({
-    product_ids,
-  }: z.infer<typeof mcpCatalogRenderInputSchema>) => {
+  return async (input: z.infer<typeof mcpCatalogRenderInputSchema>) => {
     try {
-      const { product_ids: ids } = mcpCatalogRenderInputSchema.parse({
-        product_ids,
-      });
-      const products = await Promise.all(
-        [...new Set(ids)].map(async (id) => {
-          const result = await lookup(id);
-          const parsed = mcpToolOutputSchemas.get_product.parse(
-            result.structuredContent
-          );
-          if (
-            parsed.variant_lookup_failed ||
-            parsed.offer_lookup_failed ||
-            parsed.products.length !== 1 ||
-            parsed.products[0].id !== id ||
-            parsed.products[0].price === null
-          )
-            throw new Error('Product unavailable');
-          return parsed.products[0];
-        })
-      );
+      const { products: selections } = mcpCatalogRenderInputSchema.parse(input);
+      const uniqueSelections = [...new Map(
+        selections.map((selection) => [
+          `${selection.product_id}:${selection.matched_option?.kind ?? 'auto'}:${selection.matched_option?.option_id ?? ''}:${selection.matched_option?.variantId ?? ''}:${selection.matched_option?.condition ?? ''}`,
+          selection,
+        ])
+      ).values()];
+      const rendered = new Array<z.infer<typeof mcpToolOutputSchemas.get_product>['products'][number]>(uniqueSelections.length);
+      let nextIndex = 0;
+      let failed = false;
+
+      const worker = async () => {
+        while (!failed) {
+          const index = nextIndex++;
+          if (index >= uniqueSelections.length) return;
+          const selection = uniqueSelections[index];
+          let stage: 'lookup' | 'product_validation' | 'option_validation' = 'lookup';
+          try {
+            const result = await lookup(selection.product_id);
+            stage = 'product_validation';
+            const parsed = mcpToolOutputSchemas.get_product.parse(result.structuredContent);
+            if (
+              parsed.variant_lookup_failed ||
+              parsed.offer_lookup_failed ||
+              parsed.products.length !== 1 ||
+              parsed.products[0].id !== selection.product_id ||
+              parsed.products[0].price === null
+            ) throw new Error('Product unavailable');
+
+            const product = parsed.products[0];
+            const option = selection.matched_option;
+            if (option) {
+              stage = 'option_validation';
+              const selectedCondition = normalizeCondition(option.condition);
+              let price: number | undefined;
+              let condition: string | undefined;
+              let availability: 'in_stock' | 'out_of_stock' | 'unconfirmed' = 'unconfirmed';
+              let variantId = option.variantId;
+
+              if (option.kind === 'base') {
+                if (option.option_id || option.variantId || product.has_variants || product.base_in_stock === false || normalizeCondition(product.base_condition ?? product.condition) !== selectedCondition) {
+                  throw new Error('Base option no longer available');
+                }
+                price = product.base_price ?? (!product.has_condition_offers ? product.price : null) ?? undefined;
+                condition = option.condition;
+                availability = product.base_in_stock === true ? 'in_stock' : 'unconfirmed';
+              } else if (option.kind === 'variant') {
+                if (!option.option_id) throw new Error('Variant identity missing');
+                const matched = parsed.variants?.find((candidate) => candidate.option_id === option.option_id);
+                if (!matched || typeof matched.price !== 'number' || normalizeCondition(matched.condition ?? product.base_condition ?? product.condition) !== selectedCondition || matched.availability === 'out_of_stock') {
+                  throw new Error('Variant no longer available');
+                }
+                price = matched.price;
+                condition = option.condition;
+                availability = matched.availability;
+                variantId = option.option_id;
+              } else {
+                if (!option.option_id) throw new Error('Offer identity missing');
+                const matched = parsed.condition_offers?.find((candidate) => candidate.offer_id === option.option_id);
+                if (!matched || normalizeCondition(matched.condition) !== selectedCondition) {
+                  throw new Error('Offer no longer available');
+                }
+                if (variantId) {
+                  const pairedVariant = parsed.variants?.find((candidate) => candidate.option_id === variantId);
+                  if (!pairedVariant || typeof pairedVariant.price !== 'number' || pairedVariant.availability === 'out_of_stock') {
+                    throw new Error('Paired variant no longer available');
+                  }
+                  price = pairedVariant.price;
+                  availability = pairedVariant.availability;
+                } else {
+                  if (matched.availability === 'out_of_stock') throw new Error('Offer no longer available');
+                  price = matched.price;
+                  availability = matched.availability;
+                }
+                condition = option.condition;
+              }
+
+              if (price === undefined || !Number.isFinite(price) || price < 0 || !condition) {
+                throw new Error('Selected option is incomplete');
+              }
+              const url = new URL(`https://ogabassey.com/products/${encodeURIComponent(product.slug || product.id)}`);
+              url.searchParams.set('condition', condition);
+              if (variantId) url.searchParams.set('variantId', variantId);
+              rendered[index] = {
+                ...product,
+                price,
+                condition,
+                in_stock: availability === 'in_stock' ? true : null,
+                stock_level: availability === 'in_stock' ? 'In Stock' : 'Confirm at checkout',
+                stock_confidence: availability === 'in_stock' ? 'high' : 'unconfirmed',
+                url: url.toString(),
+              };
+            } else {
+              rendered[index] = product;
+            }
+          } catch {
+            console.error('MCP catalog renderer failed during', stage);
+            failed = true;
+            return;
+          }
+        }
+      };
+
+      await Promise.all(Array.from(
+        { length: Math.min(MAX_CONCURRENT_LOOKUPS, uniqueSelections.length) },
+        () => worker()
+      ));
+      if (failed || rendered.some((product) => !product)) throw new Error('Catalog lookup failed');
+
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Showing selected Ogabassey products. Confirm options and availability before checkout.',
-          },
-        ],
-        structuredContent: { products },
+        content: [{
+          type: 'text' as const,
+          text: 'Showing selected Ogabassey products. Confirm options and availability before checkout.',
+        }],
+        structuredContent: { products: rendered },
       };
     } catch {
       return {
         isError: true,
-        content: [
-          {
-            type: 'text' as const,
-            text: 'Selected products could not be loaded. Search again before rendering.',
-          },
-        ],
+        content: [{
+          type: 'text' as const,
+          text: 'Selected products could not be loaded. Search again before rendering.',
+        }],
         structuredContent: {
           products: [],
           status: 'unavailable' as const,
-          message:
-            'Selected products could not be loaded. Search again before rendering.',
+          message: 'Selected products could not be loaded. Search again before rendering.',
         },
       };
     }

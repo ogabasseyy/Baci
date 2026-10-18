@@ -13,7 +13,14 @@ export async function connectMcpApp() {
   const update = widgetHost.update;
   app.ontoolresult = (result) =>
     update({
-      toolOutput: result.structuredContent,
+      toolOutput:
+        result.isError || result.structuredContent == null
+          ? {
+              status: 'error',
+              products: [],
+              message: 'Product results could not be displayed. Please search again.',
+            }
+          : result.structuredContent,
       toolResponseMetadata: result._meta,
     });
   app.ontoolinput = (input) => update({ toolInput: input.arguments });
@@ -80,6 +87,7 @@ export async function connectMcpApp() {
           try {
             const result = await app.requestDisplayMode({ mode });
             if (result.mode !== mode) throw new Error('Display mode declined');
+            update({ displayMode: result.mode });
             return result;
           } catch {
             update({

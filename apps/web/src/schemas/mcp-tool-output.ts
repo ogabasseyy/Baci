@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mcpMatchedOptionSchema } from './mcp-matched-option';
 
 const availability = z.enum(['unconfirmed', 'in_stock', 'out_of_stock']);
 const attributes = z.record(z.string(), z.unknown()).nullable();
@@ -19,7 +20,11 @@ const product = z.object({
   id: z.string(),
   name: z.string(),
   price: money.nullable(),
+  base_price: money.nullable().optional(),
+  base_condition: z.string().optional(),
+  base_in_stock: z.boolean().nullable().optional(),
   slug: z.string().nullable().optional(),
+  url: z.string().optional(),
   compare_at_price: money.nullable().optional(),
   image: z.string().nullable().optional(),
   condition: z.string(),
@@ -33,6 +38,7 @@ const product = z.object({
   has_condition_offers: z.boolean().nullable().optional(),
 });
 const conditionOffer = z.looseObject({
+  offer_id: z.string().optional(),
   condition: z.string(),
   grade: z.string().nullable().optional(),
   price: money,
@@ -56,16 +62,7 @@ export const mcpToolOutputSchemas = {
         available_variants: z.string(),
         last_updated: z.string().nullable().optional(),
         url: z.string(),
-        matched_option: z
-          .object({
-            kind: z.enum(['base', 'variant', 'offer']),
-            option_id: z.string().optional(),
-            variantId: z.string().optional(),
-            condition: z.string(),
-            price: money,
-            attributes: z.record(z.string(), z.unknown()),
-          })
-          .optional(),
+        matched_option: mcpMatchedOptionSchema.optional(),
       })
     ),
     coverage: z.enum(['complete', 'partial']).optional(),
@@ -105,6 +102,7 @@ export const mcpToolOutputSchemas = {
     variants: z
       .array(
         z.object({
+          option_id: z.string().optional(),
           attributes,
           price: money.nullable().optional(),
           stock: z.number().nonnegative().nullable().optional(),

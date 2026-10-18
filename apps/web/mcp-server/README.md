@@ -380,9 +380,13 @@ is optional and defaults to off. This feature does not place orders or charge bu
 ### MCP Apps catalog rendering
 
 `search_products` and `get_product` return data without launching UI. After
-choosing products, call `render_ogabassey_catalog` with 1–20 exact product IDs
-in display order. It deduplicates IDs and re-fetches public merchant-scoped
-product details; callers cannot provide prices or arbitrary product cards.
+choosing products, call `render_ogabassey_catalog` with 1–20 product selections
+in display order: `{ products: [{ product_id, matched_option? }] }`. When a
+search result includes `matched_option`, pass its `kind`, `option_id`,
+`variantId`, and `condition` so the renderer can revalidate and preserve the
+selected variant or condition offer. It re-fetches public merchant-scoped
+product and option details; callers cannot provide prices or arbitrary product
+cards. Lookups are bounded and any stale or unavailable selection fails closed.
 If any product cannot be loaded, it returns an error instead of a partial
 comparison. Option selection stays on the storefront.
 

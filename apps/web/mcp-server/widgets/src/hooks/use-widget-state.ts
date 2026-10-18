@@ -1,5 +1,5 @@
 import { getWidgetHost } from '../widget-host';
-import { type SetStateAction, useRef, useState } from 'react';
+import { type SetStateAction, useLayoutEffect, useRef, useState } from 'react';
 import { useOpenAiGlobal } from './use-openai-global';
 
 type UnknownObject = Record<string, unknown>;
@@ -43,7 +43,9 @@ export function useWidgetState<T extends UnknownObject>(
   }
 
   const latestState = useRef(widgetState);
-  latestState.current = widgetState;
+  useLayoutEffect(() => {
+    latestState.current = widgetState;
+  }, [widgetState]);
 
   const setWidgetState = (state: SetStateAction<T | null>) => {
     const newState =

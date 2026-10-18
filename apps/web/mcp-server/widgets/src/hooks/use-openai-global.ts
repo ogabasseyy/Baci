@@ -21,6 +21,7 @@ interface OpenAiGlobals {
     insets: { top: number; bottom: number; left: number; right: number };
   };
   locale: string;
+  mcpAppReady: boolean;
 }
 
 declare global {
@@ -38,6 +39,7 @@ declare global {
         insets: { top: number; bottom: number; left: number; right: number };
       };
       locale?: string;
+      mcpAppReady?: boolean;
       setWidgetState?: (state: unknown) => void;
       callTool?: (
         name: string,

@@ -24,7 +24,12 @@ export function App() {
   const theme = useOpenAiGlobal('theme') || 'dark';
   const displayMode = useOpenAiGlobal('displayMode') || 'inline';
   const safeArea = useOpenAiGlobal('safeArea');
+  const mcpAppReady = useOpenAiGlobal('mcpAppReady') === true;
   const products = toolOutput?.products || [];
+  const requestDisplayMode = widgetHost.get()?.requestDisplayMode;
+  const canExpand =
+    Boolean(requestDisplayMode) &&
+    (mcpAppReady || typeof window.openai?.requestDisplayMode === 'function');
   const widgetRef = useRef<HTMLDivElement>(null);
   const resultMessage = !toolOutput
     ? 'Loading product results…'
@@ -101,14 +106,12 @@ export function App() {
         <div className="header-actions">
           {products.length > 1 &&
             displayMode !== 'fullscreen' &&
-            widgetHost.get()?.requestDisplayMode && (
+            canExpand && (
               <button
                 type="button"
                 className="expand-button"
                 onClick={() =>
-                  void widgetHost.get()?.requestDisplayMode?.({
-                    mode: 'fullscreen',
-                  })
+                  void requestDisplayMode?.({ mode: 'fullscreen' })
                 }
               >
                 Expand catalog

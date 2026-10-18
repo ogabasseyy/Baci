@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createDefaultState, type WidgetState } from '../widget-types';
+import { widgetHost } from '../widget-host';
 import { createCartAddHandler } from './use-cart-add';
 
 const product = {
@@ -10,6 +11,7 @@ const product = {
 };
 
 beforeEach(() => {
+  widgetHost.reset();
   vi.stubGlobal(
     'open',
     vi.fn(() => null)
@@ -17,8 +19,35 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  widgetHost.reset();
   delete window.openai;
   vi.unstubAllGlobals();
+});
+
+it('reports a blocked direct option link instead of silently skipping navigation', async () => {
+  const setCartError = vi.fn();
+  window.openai = {};
+  vi.stubGlobal(
+    'open',
+    vi.fn(() => {
+      throw new Error('popup blocked');
+    })
+  );
+  const handler = createCartAddHandler({
+    widgetState: null,
+    setWidgetState: vi.fn(),
+    setCartError,
+    setIsSavingCart: vi.fn(),
+    syncCartNotice: vi.fn(),
+    handoffRequestId: { current: 0 },
+    busy: { current: false },
+  });
+
+  await handler({ ...product, has_variants: true });
+
+  expect(setCartError).toHaveBeenLastCalledWith(
+    'Could not open the product page. Please allow popups and try again.'
+  );
 });
 
 it('persists a validated guest-cart result after the server accepts an add', async () => {

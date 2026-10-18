@@ -53,7 +53,12 @@ export function createCartAddHandler({
     const optionLink = resolveOptionAwareProductUrl(product);
     if (optionLink.hasOptions) {
       try {
-        openOgabasseyUrl(optionLink.url);
+        if (!openOgabasseyUrl(optionLink.url)) {
+          if (requestId !== handoffRequestId.current) return;
+          setCartError(
+            'Could not open the product page. Please allow popups and try again.'
+          );
+        }
       } catch {
         if (requestId !== handoffRequestId.current) return;
         setCartError('Could not open the cart. Please try again.');

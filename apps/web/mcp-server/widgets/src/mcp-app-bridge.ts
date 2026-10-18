@@ -52,6 +52,7 @@ export async function connectMcpApp() {
   const context = app.getHostContext();
   const capabilities = app.getHostCapabilities();
   update({
+    mcpAppReady: true,
     ...context,
     ...(context?.safeAreaInsets
       ? { safeArea: { insets: context.safeAreaInsets } }

@@ -624,5 +624,38 @@ describe('useCheckoutOrderSubmission', () => {
       expect(submitPreparedCheckout).not.toHaveBeenCalled();
       expect(context.processing.isOrderInFlightRef.current).toBe(false);
     });
+
+    it('stops the submit when the display cart includes an unimported zero-price line not in the review', async () => {
+      const context = freshContext();
+      context.cart.sharedCartRef = SHARED_REF;
+      context.cart.sharedCartSyncStatus = 'synced';
+      context.cart.refreshSharedCart = vi.fn().mockResolvedValue(undefined);
+      context.cart.checkoutCart = [
+        ...context.cart.checkoutCart,
+        {
+          cartItemId: 'unimported-prize',
+          id: '99999999-9999-4999-8999-999999999999',
+          name: 'Unimported Voucher Prize',
+          price: 0,
+          quantity: 1,
+        } as never,
+      ];
+      vi.mocked(prepareSharedCartCheckout).mockResolvedValue({
+        ok: true,
+        replayed: false,
+        review: REVIEW,
+        sessionReused: false,
+      });
+
+      const { result } = renderHook(() => useCheckoutOrderSubmission(context));
+      await act(async () => result.current.handlePlaceOrder());
+
+      expect(submitPreparedCheckout).not.toHaveBeenCalled();
+      expect(context.cart.refreshSharedCart).toHaveBeenCalledTimes(1);
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Cart Changed' })
+      );
+      expect(context.processing.isOrderInFlightRef.current).toBe(false);
+    });
   });
 });

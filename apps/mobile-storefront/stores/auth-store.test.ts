@@ -134,7 +134,11 @@ jest.mock('../lib/validation', () => ({
 const mockClearCart = jest.fn(async () => undefined);
 jest.mock('./cart-store', () => ({
   useCartStore: {
-    getState: jest.fn(() => ({ items: [], clearCart: mockClearCart })),
+    getState: jest.fn(() => ({
+      items: [],
+      clearCart: mockClearCart,
+    })),
+    setState: jest.fn(),
   },
 }));
 
@@ -208,6 +212,7 @@ import * as pushTokenStorage from '../lib/push-token-storage';
 import { supabase } from '../lib/supabase';
 import * as pushNotificationsService from '../services/push-notifications';
 import { useAuthStore } from './auth-store';
+import { useCartStore } from './cart-store';
 
 // Spies wired in beforeEach
 let mockGetStoredPushToken: jest.SpyInstance;
@@ -944,6 +949,38 @@ describe('useAuthStore', () => {
       expect(mockClearComparison).toHaveBeenCalled();
       // Quiz attempt/result/prize must not survive a sign-out.
       expect(mockQuizReset).toHaveBeenCalled();
+    });
+
+    it('blanks displayed cart items when device cart retirement fails on SIGNED_OUT', async () => {
+      resetSupabaseMocks({
+        session: mockSession,
+        getUser: { data: { user: mockUser }, error: null },
+        customerResult: { data: mockCustomerRow, error: null },
+      });
+      (supabase.from as jest.Mock).mockImplementation((table: string) =>
+        makeChain(
+          table === 'merchants'
+            ? { data: mockMerchantRow, error: null }
+            : { data: mockCustomerRow, error: null }
+        )
+      );
+
+      await act(async () => {
+        await useAuthStore.getState().initialize();
+      });
+      (useCartStore.setState as jest.Mock).mockClear();
+      mockClearCart.mockRejectedValueOnce(new Error('offline'));
+
+      await act(async () => {
+        await emitAuthStateChange('SIGNED_OUT', null);
+        await _flushPromises();
+      });
+
+      expect(useCartStore.setState).toHaveBeenCalledWith({
+        items: [],
+        lineSequence: 0,
+        cartWideNegotiationActive: false,
+      });
     });
   });
 

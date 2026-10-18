@@ -151,11 +151,25 @@ export function createInitializeAction({
         (event, session) => {
           const { merchantId, user: previousUser } = get();
           deferAuthStateChange(async () => {
+            const retireDeviceCartSafely = async () => {
+              try {
+                await clearDeviceCartForAccountTeardown();
+              } catch {
+                log.error(
+                  'Failed to retire cart device during auth transition'
+                );
+                if (typeof useCartStore.setState === 'function') {
+                  useCartStore.setState({
+                    items: [],
+                    lineSequence: 0,
+                    cartWideNegotiationActive: false,
+                  });
+                }
+              }
+            };
             if (event === 'SIGNED_IN' && session?.user) {
               if (previousUser?.id && previousUser.id !== session.user.id)
-                await clearDeviceCartForAccountTeardown().catch(
-                  () => undefined
-                );
+                await retireDeviceCartSafely();
               // Only wipe quiz state on an actual account SWITCH. SIGNED_IN also
               // fires on same-user session re-establishment / token refresh —
               // resetting then would kick a shopper out of an in-progress quiz.
@@ -176,7 +190,7 @@ export function createInitializeAction({
               }
             } else if (event === 'SIGNED_OUT') {
               // Teardown invalidates callbacks synchronously; offline retirement stays in secure storage.
-              await clearDeviceCartForAccountTeardown().catch(() => undefined);
+              await retireDeviceCartSafely();
               const storedToken = await getStoredPushToken();
               await clearLocalAndDeactivatePushToken(storedToken);
               useSavedStore.getState().clearSaved();

@@ -86,10 +86,27 @@ BEGIN
     'pending',
     repeat('cd', 32)
   );
+  IF public.storefront_checkout_replay_snapshot(
+    v_merchant,
+    repeat('cd', 32)
+  ) IS NOT NULL THEN
+    DELETE FROM public.orders WHERE id = 'eeeeeeee-9980-4000-8000-000000000000';
+    RAISE EXCEPTION 'replay snapshot must reject calls without route context claim';
+  END IF;
+  PERFORM set_config(
+    'request.jwt.claims',
+    jsonb_build_object(
+      'role', 'authenticated',
+      'storefront_order_context', 'route',
+      'storefront_order_merchant_id', v_merchant::text
+    )::text,
+    true
+  );
   v_snapshot := public.storefront_checkout_replay_snapshot(
     v_merchant,
     repeat('cd', 32)
   );
+  PERFORM set_config('request.jwt.claims', '', true);
   DELETE FROM public.orders WHERE id = 'eeeeeeee-9980-4000-8000-000000000000';
   IF v_snapshot IS NULL
     OR (v_snapshot ->> 'order_id') IS DISTINCT FROM 'eeeeeeee-9980-4000-8000-000000000000' THEN

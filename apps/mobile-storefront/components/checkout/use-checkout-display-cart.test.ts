@@ -13,13 +13,15 @@ jest.mock('@/stores/cart-store', () => ({
     selector({
       clearCart: mockClearCart,
       items: mockItems,
-      subtotal: () => 500_000,
+      subtotal: () => 400_000,
     }),
 }));
 
 describe('useCheckoutDisplayCart', () => {
   beforeEach(() => {
-    mockItems = [{ id: 'real-cart-item', name: 'Cart phone' }];
+    mockItems = [
+      { id: 'real-cart-item', name: 'Cart phone', price: 500_000, quantity: 1 },
+    ];
   });
   it.each([
     'pending',
@@ -31,6 +33,7 @@ describe('useCheckoutDisplayCart', () => {
         id: 'phone',
         name: 'Phone',
         price: 500_000,
+        quantity: 1,
         negotiatedPrice: 400_000,
         negotiationStatus,
       },
@@ -47,18 +50,20 @@ describe('useCheckoutDisplayCart', () => {
         id: 'phone',
         name: 'Phone',
         price: 500_000,
+        quantity: 1,
         negotiatedPrice: 400_000,
         negotiationStatus: 'accepted',
       },
     ];
     const { result } = renderHook(() => useCheckoutDisplayCart());
     expect(result.current.items[0].negotiatedPrice).toBe(400_000);
+    expect(result.current.subtotal).toBe(400_000);
   });
   it('uses the persisted cart outside simulation mode', () => {
     const { result } = renderHook(() => useCheckoutDisplayCart());
 
     expect(result.current.items).toEqual([
-      { id: 'real-cart-item', name: 'Cart phone' },
+      { id: 'real-cart-item', name: 'Cart phone', price: 500_000, quantity: 1 },
     ]);
     expect(result.current.subtotal).toBe(500_000);
   });

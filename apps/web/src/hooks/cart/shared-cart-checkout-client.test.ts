@@ -246,6 +246,18 @@ describe('reviewedCheckoutItems', () => {
     expect(reviewedCheckoutItems([], review)).toBeNull();
   });
 
+  it('returns null when the display cart includes unimported lines not in the review', () => {
+    const legacyShell = {
+      cartItemId: 'legacy-1',
+      id: '99999999-9999-4999-8999-999999999999',
+      name: 'Legacy Prize',
+      price: 0,
+      product_id: '99999999-9999-4999-8999-999999999999',
+      quantity: 1,
+    } as never;
+    expect(reviewedCheckoutItems([shell, legacyShell], review)).toBeNull();
+  });
+
   it('never restores voucher credentials from the display shell', () => {
     const voucherShell = Object.assign({}, shell, {
       quizAwardId: 'award-shell',

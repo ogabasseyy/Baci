@@ -205,7 +205,17 @@ export async function commitCustomerAuthSession(
       merchantSlug,
       previousUserId
     );
-    if (!retired) return false;
+    if (!retired) {
+      try {
+        await fetch('/api/storefront/auth/logout', { method: 'POST' });
+      } catch (error) {
+        console.error('Auth switch rollback error:', error);
+      }
+      setUser(null);
+      setCustomer(null);
+      publishCustomerIdentity(null, null, merchantSlug);
+      return false;
+    }
   }
   setRememberedCustomerUserId(merchantSlug, session.user.id);
   setUser(session.user);

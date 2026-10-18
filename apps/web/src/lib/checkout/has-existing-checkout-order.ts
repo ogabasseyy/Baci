@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '@/lib/logger';
+import { createStorefrontOrderRpcClient } from './storefront-order-rpc-client';
 
 export interface CheckoutReplaySnapshot {
   orderId: string;
@@ -15,9 +16,10 @@ interface ReplaySnapshotRow {
 /**
  * Loads the immutable snapshot of the order already committed for
  * this (merchant, checkout idempotency key) through the narrowly
- * scoped `storefront_checkout_replay_snapshot` RPC on the request's
- * normal client; the function projects only the committed order id
- * and line composition for the (merchant, idempotency key) pair. A
+ * scoped `storefront_checkout_replay_snapshot` RPC on the route's
+ * signed storefront-order context client; the function projects only
+ * the committed order id and line composition for the (merchant,
+ * idempotency key) pair when presented with a route-minted claim. A
  * confirmed snapshot means the current request is a response-loss
  * retry and must replay the original order instead of being re-judged
  * against the merchant's current catalog state. Probe errors are not
@@ -33,7 +35,13 @@ export async function loadCheckoutReplaySnapshot({
   merchantId: string;
   requestIdempotencyKey: string;
 }): Promise<CheckoutReplaySnapshot | null> {
-  const { data, error } = await client.rpc(
+  const rpcClient = createStorefrontOrderRpcClient({
+    fallbackClient: client,
+    hasCanonicalDeliveryMetadata: false,
+    merchantId,
+    userId: null,
+  });
+  const { data, error } = await rpcClient.rpc(
     'storefront_checkout_replay_snapshot',
     {
       p_checkout_idempotency_key: requestIdempotencyKey,

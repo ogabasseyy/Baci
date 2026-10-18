@@ -29,6 +29,8 @@ export function reviewedCheckoutItems(
   display: readonly (CartItem & { serverLineId?: string | null })[],
   review: SharedCartCheckoutReview
 ): CartItem[] | null {
+  if (display.length !== review.lines.length) return null;
+  if (display.some((item) => !item.serverLineId)) return null;
   const items: CartItem[] = [];
   for (const line of review.lines) {
     const shell = display.find((item) => item.serverLineId === line.id);

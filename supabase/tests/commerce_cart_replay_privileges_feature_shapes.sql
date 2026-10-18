@@ -13,6 +13,13 @@ BEGIN
   ) LIKE '%discount_amount%' THEN
     RAISE EXCEPTION 'replay snapshot must not project discount_amount';
   END IF;
+  IF has_function_privilege(
+    'anon',
+    'public.storefront_checkout_replay_snapshot(uuid, text)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'anon must not execute storefront_checkout_replay_snapshot';
+  END IF;
 END $regression$;
 
 DO $regression$

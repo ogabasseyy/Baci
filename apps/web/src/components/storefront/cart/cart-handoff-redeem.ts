@@ -1,5 +1,5 @@
-import { buildCsrfHeaders } from '@/lib/csrf';
-import { fetchJson, type MergeConflictView } from './cart-handoff-support';
+import { fetchWithCsrf } from '@/lib/api-client';
+import type { MergeConflictView } from './cart-handoff-support';
 
 export interface HandoffRedeemDeps {
   handoffId: string;
@@ -34,13 +34,11 @@ export async function postHandoffRedeem(
   try {
     const slug = deps.merchantSlug;
     if (deps.bootstrapRequired.current) {
-      const bootstrap = await fetchJson('/api/storefront/cart/bootstrap', {
+      const bootstrap = await fetchWithCsrf('/api/storefront/cart/bootstrap', {
         body: JSON.stringify(slug ? { merchantSlug: slug } : {}),
-        headers: {
-          'Content-Type': 'application/json',
-          ...buildCsrfHeaders(),
-        },
+        headers: { 'Content-Type': 'application/json' },
         method: 'POST',
+        referrerPolicy: 'no-referrer',
       });
       if (!bootstrap.ok) {
         deps.setRedeemError(
@@ -54,10 +52,11 @@ export async function postHandoffRedeem(
     const url = slug
       ? `/api/storefront/cart/handoff/redeem?merchantSlug=${encodeURIComponent(slug)}`
       : '/api/storefront/cart/handoff/redeem';
-    const response = await fetchJson(url, {
+    const response = await fetchWithCsrf(url, {
       body: JSON.stringify(body),
-      headers: { 'Content-Type': 'application/json', ...buildCsrfHeaders() },
+      headers: { 'Content-Type': 'application/json' },
       method: 'POST',
+      referrerPolicy: 'no-referrer',
     });
     const payload = (await response.json()) as {
       code?: string;

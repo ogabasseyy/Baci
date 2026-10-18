@@ -197,6 +197,7 @@ describe('customer-auth-session passive identity revocation', () => {
     setUser.mockClear();
     setCustomer.mockClear();
     vi.mocked(clearCartStorage).mockClear();
+    fetchMock.mockResolvedValueOnce(Response.json({ success: true }));
 
     const committed = await commitCustomerAuthSession(
       'ogabassey',
@@ -222,7 +223,11 @@ describe('customer-auth-session passive identity revocation', () => {
 
     expect(committed).toBe(false);
     expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
-    expect(setUser).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenLastCalledWith('/api/storefront/auth/logout', {
+      method: 'POST',
+    });
+    expect(setUser).toHaveBeenCalledWith(null);
+    expect(setCustomer).toHaveBeenCalledWith(null);
     expect(setOtpState).not.toHaveBeenCalled();
   });
 

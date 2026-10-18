@@ -8,10 +8,9 @@ import type { CheckoutPrizeSimulation } from './checkout-prize-simulation.types'
 export function useCheckoutDisplayCart(
   prizeSimulation?: CheckoutPrizeSimulation
 ) {
-  const { cartItems, cartSubtotal, clearCart } = useCartStore(
+  const { cartItems, clearCart } = useCartStore(
     useShallow((state) => ({
       cartItems: state.items,
-      cartSubtotal: state.subtotal(),
       clearCart: state.clearCart,
     }))
   );
@@ -38,23 +37,18 @@ export function useCheckoutDisplayCart(
       /* Keep the visible cart; submission remains blocked until hydration. */
     }
   }
-  const reviewedSubtotal =
-    reviewedItems === cartItems
-      ? cartSubtotal
-      : reviewedItems.reduce(
-          (sum, item) => sum + getCartItemEffectivePrice(item) * item.quantity,
-          0
-        );
+  const sanitizedItems = reviewedItems.map((item) =>
+    item.negotiationStatus === 'accepted' || item.negotiatedPrice === undefined
+      ? item
+      : { ...item, negotiatedPrice: undefined }
+  );
+  const reviewedSubtotal = sanitizedItems.reduce(
+    (sum, item) => sum + getCartItemEffectivePrice(item) * (item.quantity ?? 1),
+    0
+  );
   return {
     clearCart,
-    items: prizeSimulation
-      ? [prizeSimulation.item]
-      : reviewedItems.map((item) =>
-          item.negotiationStatus === 'accepted' ||
-          item.negotiatedPrice === undefined
-            ? item
-            : { ...item, negotiatedPrice: undefined }
-        ),
+    items: prizeSimulation ? [prizeSimulation.item] : sanitizedItems,
     subtotal: prizeSimulation ? 0 : reviewedSubtotal,
   };
 }

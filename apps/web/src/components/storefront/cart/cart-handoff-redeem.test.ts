@@ -1,10 +1,18 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import * as csrf from '@/lib/csrf';
 import {
   type HandoffRedeemDeps,
   postHandoffRedeem,
 } from './cart-handoff-redeem';
 
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(() => {
+  vi.spyOn(csrf, 'getClientCsrfToken').mockReturnValue('test-csrf-token');
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function deps(overrides: Partial<HandoffRedeemDeps> = {}): HandoffRedeemDeps {
   return {
@@ -23,6 +31,47 @@ function deps(overrides: Partial<HandoffRedeemDeps> = {}): HandoffRedeemDeps {
     ...overrides,
   };
 }
+
+it('initializes CSRF via /api/csrf before bootstrap and redeem when no CSRF cookie exists', async () => {
+  let currentCsrfToken: string | null = null;
+  vi.spyOn(csrf, 'getClientCsrfToken').mockImplementation(
+    () => currentCsrfToken
+  );
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+    if (url === '/api/csrf') {
+      currentCsrfToken = 'minted-csrf-token';
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    if (url === '/api/storefront/cart/bootstrap') {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ code: 'handoff_consumed' }), {
+      status: 410,
+    });
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const redeemDeps = deps({ bootstrapRequired: { current: true } });
+
+  await expect(
+    postHandoffRedeem(redeemDeps, { choice: 'connect' })
+  ).resolves.toBe(false);
+
+  expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    '/api/csrf',
+    '/api/storefront/cart/bootstrap',
+    '/api/storefront/cart/handoff/redeem?merchantSlug=shop',
+  ]);
+  const bootstrapInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
+  const redeemInit = fetchMock.mock.calls[2]?.[1] as RequestInit;
+  expect(new Headers(bootstrapInit.headers).get('x-csrf-token')).toBe(
+    'minted-csrf-token'
+  );
+  expect(bootstrapInit.referrerPolicy).toBe('no-referrer');
+  expect(new Headers(redeemInit.headers).get('x-csrf-token')).toBe(
+    'minted-csrf-token'
+  );
+  expect(redeemInit.referrerPolicy).toBe('no-referrer');
+});
 
 it('releases the attempt and refreshes previews after a version conflict', async () => {
   vi.stubGlobal(

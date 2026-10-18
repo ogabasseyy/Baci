@@ -6,7 +6,12 @@ import {
   getRedvaultLivePilotPolicy,
   REDVAULT_PILOT_USER_ID,
 } from '@/lib/checkout/redvault-live-pilot';
-import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import { verifyRedvaultLivePilotDatabasePolicy } from '@/lib/checkout/redvault-live-pilot-database-policy';
+import {
+  getRedvaultPaymentAvailability,
+  isRedvaultLivePilotReason,
+} from '@/lib/checkout/redvault-payment-availability';
+import { createClient } from '@/lib/supabase/server';
 import { redvaultAvailabilityQuerySchema } from '@/schemas/redvault-availability-query';
 
 const NO_STORE_HEADERS = { 'Cache-Control': 'no-store' };
@@ -32,20 +37,49 @@ export async function GET(request: NextRequest) {
   }
 
   const availability = getRedvaultPaymentAvailability();
-  if (availability.reason === 'private_live_pilot') {
+  if (isRedvaultLivePilotReason(availability.reason)) {
+    const publicProductTest = availability.reason === 'public_product_test';
     const policy = getRedvaultLivePilotPolicy();
-    if (!policy || parsed.data.product_id !== policy.productId) {
+    if (
+      !policy ||
+      parsed.data.product_id !== policy.productId ||
+      (publicProductTest && policy.audience !== 'public_product_test')
+    ) {
       return NextResponse.json(
         { available: false, reason: 'unavailable' },
         { headers: NO_STORE_HEADERS }
       );
     }
-    const auth = await authenticateApiRequest(request);
-    if (auth?.user?.id !== REDVAULT_PILOT_USER_ID) {
+    const auth = publicProductTest
+      ? null
+      : await authenticateApiRequest(request);
+    if (!publicProductTest && auth?.user?.id !== REDVAULT_PILOT_USER_ID) {
       return NextResponse.json(
         { available: false, reason: 'unavailable' },
         { headers: NO_STORE_HEADERS }
       );
+    }
+    let supabase = auth?.supabase;
+    if (publicProductTest) {
+      try {
+        supabase = await createClient();
+        if (
+          !(await verifyRedvaultLivePilotDatabasePolicy({
+            client: supabase,
+            policy,
+          }))
+        ) {
+          return NextResponse.json(
+            { available: false, reason: 'unavailable' },
+            { headers: NO_STORE_HEADERS }
+          );
+        }
+      } catch {
+        return NextResponse.json(
+          { available: false, reason: 'unavailable' },
+          { headers: NO_STORE_HEADERS }
+        );
+      }
     }
     // Activation validates the dedicated-product shape (NGN 100, no
     // variants, inventory tracking off, active status, REDVAULT-eligible
@@ -53,8 +87,8 @@ export async function GET(request: NextRequest) {
     // variant-enabled, newly tracked, deactivated, or
     // renamed-to-ineligible product stops being offered. Any lookup
     // failure fails closed.
-    const shapeLookup = auth.supabase
-      ? await auth.supabase
+    const shapeLookup = supabase
+      ? await supabase
           .from('products')
           .select(
             'price, has_variants, inventory_tracking_policy, brand, name, status'
@@ -87,7 +121,10 @@ export async function GET(request: NextRequest) {
     // Expose the pilot expiry so checkout clients can stop retaining a
     // positive result (and revalidate) once the short pilot window ends.
     return NextResponse.json(
-      { ...availability, expiresAt: policy.expiresAt },
+      {
+        ...availability,
+        ...(policy.expiresAt === null ? {} : { expiresAt: policy.expiresAt }),
+      },
       { headers: NO_STORE_HEADERS }
     );
   }

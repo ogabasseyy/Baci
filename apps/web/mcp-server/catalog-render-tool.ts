@@ -1,8 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/server';
-import {
-  MCP_CATALOG_RENDER_DESCRIPTION,
-  mcpCatalogRenderInputSchema,
-} from '../src/schemas/mcp-catalog-render';
+import { MCP_CATALOG_RENDER_DESCRIPTION } from '../src/schemas/mcp-catalog-render-description';
+import { mcpCatalogRenderInputSchema } from '../src/schemas/mcp-catalog-render';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { createCatalogRenderer } from './create-catalog-renderer';
 

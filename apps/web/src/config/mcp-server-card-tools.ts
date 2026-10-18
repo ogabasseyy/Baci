@@ -3,10 +3,8 @@ import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from '../../mcp-server/option-colo
 import { MCP_SEARCH_CATEGORY_GUIDANCE } from '../../mcp-server/search-category-guidance';
 import { MCP_SEARCH_PRODUCTS_DESCRIPTION } from '../../mcp-server/search-products-description';
 import { cartLinkInputSchema } from '../schemas/cart-link-input';
-import {
-  MCP_CATALOG_RENDER_DESCRIPTION,
-  mcpCatalogRenderInputSchema,
-} from '../schemas/mcp-catalog-render';
+import { mcpCatalogRenderInputSchema } from '../schemas/mcp-catalog-render';
+import { MCP_CATALOG_RENDER_DESCRIPTION } from '../schemas/mcp-catalog-render-description';
 import {
   MCP_DELIVERY_FEE_INFO_DESCRIPTION,
   mcpDeliveryFeeInfoInputSchema,

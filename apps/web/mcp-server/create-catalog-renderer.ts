@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { normalizeCanonicalProductCondition } from '@baci/shared/lib';
+import { structuredDiscoveryIdentity } from './structured-discovery-identity';
 import { mcpCatalogRenderInputSchema } from '../src/schemas/mcp-catalog-render';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 
@@ -16,12 +17,7 @@ export function createCatalogRenderer(
   return async (input: z.infer<typeof mcpCatalogRenderInputSchema>) => {
     try {
       const { products: selections } = mcpCatalogRenderInputSchema.parse(input);
-      const uniqueSelections = [...new Map(
-        selections.map((selection) => [
-          `${selection.product_id}:${selection.matched_option?.kind ?? 'auto'}:${selection.matched_option?.option_id ?? ''}:${selection.matched_option?.variantId ?? ''}:${selection.matched_option?.condition ?? ''}`,
-          selection,
-        ])
-      ).values()];
+      const uniqueSelections = selections;
       const rendered = new Array<z.infer<typeof mcpToolOutputSchemas.get_product>['products'][number]>(uniqueSelections.length);
       let nextIndex = 0;
       let failed = false;
@@ -46,10 +42,14 @@ export function createCatalogRenderer(
 
             const product = parsed.products[0];
             const option = selection.matched_option;
+            if (!option && (product.has_variants || product.has_condition_offers)) {
+              throw new Error('An option reference is required for this product');
+            }
             if (option) {
               stage = 'option_validation';
               const selectedCondition = normalizeCondition(option.condition);
               let price: number | undefined;
+              let compareAtPrice: number | null | undefined;
               let condition: string | undefined;
               let availability: 'in_stock' | 'out_of_stock' | 'unconfirmed' = 'unconfirmed';
               let variantId = option.variantId;
@@ -59,6 +59,7 @@ export function createCatalogRenderer(
                   throw new Error('Base option no longer available');
                 }
                 price = product.base_price ?? (!product.has_condition_offers ? product.price : null) ?? undefined;
+                compareAtPrice = product.compare_at_price;
                 condition = option.condition;
                 availability = product.base_in_stock === true ? 'in_stock' : 'unconfirmed';
               } else if (option.kind === 'variant') {
@@ -68,11 +69,17 @@ export function createCatalogRenderer(
                   throw new Error('Variant no longer available');
                 }
                 price = matched.price;
+                // The storefront PDP falls back to the parent comparison
+                // price because the public variants RPC omits variant values.
+                compareAtPrice = matched.compare_at_price ?? product.compare_at_price;
                 condition = option.condition;
                 availability = matched.availability;
                 variantId = option.option_id;
               } else {
                 if (!option.option_id) throw new Error('Offer identity missing');
+                if (structuredDiscoveryIdentity.variantsOwnConditionAxis(product, parsed.variants)) {
+                  throw new Error('Condition offers are not valid with variant-owned conditions');
+                }
                 const matched = parsed.condition_offers?.find((candidate) => candidate.offer_id === option.option_id);
                 if (!matched || normalizeCondition(matched.condition) !== selectedCondition) {
                   throw new Error('Offer no longer available');
@@ -83,10 +90,14 @@ export function createCatalogRenderer(
                     throw new Error('Paired variant no longer available');
                   }
                   price = pairedVariant.price;
+                  compareAtPrice = pairedVariant.compare_at_price;
                   availability = pairedVariant.availability;
                 } else {
                   if (matched.availability === 'out_of_stock') throw new Error('Offer no longer available');
                   price = matched.price;
+                  // Condition-offer compare-at prices are not used by the PDP;
+                  // bare offers retain the parent product comparison price.
+                  compareAtPrice = product.compare_at_price;
                   availability = matched.availability;
                 }
                 condition = option.condition;
@@ -96,11 +107,12 @@ export function createCatalogRenderer(
                 throw new Error('Selected option is incomplete');
               }
               const url = new URL(`https://ogabassey.com/products/${encodeURIComponent(product.slug || product.id)}`);
-              url.searchParams.set('condition', condition);
+              if (option.kind !== 'base') url.searchParams.set('condition', condition);
               if (variantId) url.searchParams.set('variantId', variantId);
               rendered[index] = {
                 ...product,
                 price,
+                compare_at_price: compareAtPrice ?? null,
                 condition,
                 in_stock: availability === 'in_stock' ? true : null,
                 stock_level: availability === 'in_stock' ? 'In Stock' : 'Confirm at checkout',

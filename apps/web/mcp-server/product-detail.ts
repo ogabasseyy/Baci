@@ -53,6 +53,7 @@ export async function buildMcpProductDetail({
     id: string;
     attributes: Record<string, unknown> | null;
     price_override: number | null;
+    compare_at_price: number | null;
     stock_quantity: number;
     condition: string;
     images: unknown[];
@@ -76,6 +77,7 @@ export async function buildMcpProductDetail({
     offer_id: string;
     condition: string;
     price: number;
+    compare_at_price: number | null;
     stock_quantity: number;
     grade: string | null;
     condition_notes: string | null;
@@ -235,6 +237,7 @@ export async function buildMcpProductDetail({
         option_id: v.id,
         attributes: v.attributes,
         price: v.price_override ?? product.price,
+        compare_at_price: v.compare_at_price,
         stock: product.manage_stock ? v.stock_quantity : null,
         availability: getMcpOfferAvailability(product.manage_stock, v.stock_quantity).availability,
         condition: v.condition,

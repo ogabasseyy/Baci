@@ -205,13 +205,21 @@ it('serializes the renderer contract with native Zod 4 JSON Schema support', asy
   expect(renderer.inputSchema).toMatchObject({
     type: 'object',
     additionalProperties: false,
-    required: ['product_ids'],
+    required: ['products'],
     properties: {
-      product_ids: {
+      products: {
         type: 'array',
         minItems: 1,
         maxItems: 20,
-        items: { type: 'string' },
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['product_id'],
+          properties: {
+            product_id: { type: 'string', minLength: 1, maxLength: 80 },
+            matched_option: expect.objectContaining({ type: 'object' }),
+          },
+        },
       },
     },
   });

@@ -39,6 +39,15 @@ describe('catalog render selection contract', () => {
     { products: [{ product_id: 'phone', price: 1 }] },
     {
       products: [
+        { product_id: 'phone' },
+        {
+          product_id: 'phone',
+          matched_option: { kind: 'base', condition: 'new' },
+        },
+      ],
+    },
+    {
+      products: [
         {
           product_id: 'phone',
           matched_option: {

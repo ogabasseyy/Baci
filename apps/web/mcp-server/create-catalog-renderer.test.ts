@@ -9,7 +9,7 @@ describe('decoupled catalog rendering', () => {
     expect(config._meta).not.toHaveProperty('openai/outputTemplate');
     expect(config._meta).not.toHaveProperty('ui.resourceUri');
   });
-  it('fetches selected IDs once, preserves order and never accepts supplied prices', async () => {
+  it('fetches selected IDs in order and never accepts supplied prices', async () => {
     const lookup = vi.fn(async (id: string) => ({
       structuredContent: {
         products: [
@@ -26,11 +26,10 @@ describe('decoupled catalog rendering', () => {
       },
     }));
     const render = createCatalogRenderer(lookup);
-    const result = await render({ products: [{ product_id: 'second' }, { product_id: 'first' }, { product_id: 'second' }] });
+    const result = await render({ products: [{ product_id: 'second' }, { product_id: 'first' }] });
     expect(lookup.mock.calls.map(([id]) => id)).toEqual(['second', 'first']);
     expect(result.structuredContent.products.map((p) => p.id)).toEqual([
-      'second',
-      'first',
+      'second', 'first',
     ]);
     expect(
       catalogRenderInputSchema.safeParse({
@@ -38,6 +37,16 @@ describe('decoupled catalog rendering', () => {
         product_ids: ['first'],
       }).success
     ).toBe(false);
+  });
+  it('rejects rendering multiple option selections for the same product', async () => {
+    const lookup = vi.fn();
+    const render = createCatalogRenderer(lookup);
+    const result = await render({ products: [
+      { product_id: 'phone', matched_option: { kind: 'variant', option_id: 'v1', condition: 'new' } },
+      { product_id: 'phone', matched_option: { kind: 'variant', option_id: 'v2', condition: 'new' } },
+    ] });
+    expect(result.isError).toBe(true);
+    expect(lookup).not.toHaveBeenCalled();
   });
   it('fails closed when any lookup fails instead of presenting a partial comparison', async () => {
     const render = createCatalogRenderer(async () => {
@@ -114,7 +123,7 @@ it('revalidates a matched variant and renders its authoritative price and select
         id: 'phone', name: 'Phone', slug: 'phone', price: 100, condition: 'new',
         in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true,
       }],
-      variants: [{ option_id: 'variant-7', attributes: { storage: '256GB' }, price: 125, stock: 2, availability: 'in_stock', condition: 'new' }],
+      variants: [{ option_id: 'variant-7', attributes: { storage: '256GB' }, price: 125, compare_at_price: 150, stock: 2, availability: 'in_stock', condition: 'new' }],
     },
   }));
   const result = await render({ products: [{
@@ -123,9 +132,48 @@ it('revalidates a matched variant and renders its authoritative price and select
   }] });
   expect(result.structuredContent.products[0]).toMatchObject({
     price: 125,
+    compare_at_price: 150,
     condition: 'new',
     url: 'https://ogabassey.com/products/phone?condition=new&variantId=variant-7',
   });
+});
+
+it('keeps base selections on the simple-product cart URL without an option query', async () => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: { products: [{ id: 'phone', name: 'Phone', slug: 'phone', price: 100, base_price: 100, base_condition: 'new', base_in_stock: true, condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high' }] },
+  }));
+  const result = await render({ products: [{ product_id: 'phone', matched_option: { kind: 'base', condition: 'new' } }] });
+  expect(result.structuredContent.products[0].url).toBe('https://ogabassey.com/products/phone');
+});
+
+it('rejects an offer selection when variants own the condition axis', async () => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: {
+      products: [{ id: 'phone', name: 'Phone', price: 80, base_price: 100, base_condition: 'new', condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true, has_condition_offers: true }],
+      variants: [{ option_id: 'v1', price: 100, availability: 'in_stock', condition: 'used' }],
+      condition_offers: [{ offer_id: 'o1', condition: 'used', price: 80, availability: 'in_stock' }],
+    },
+  }));
+  const result = await render({ products: [{ product_id: 'phone', matched_option: { kind: 'offer', option_id: 'o1', condition: 'used' } }] });
+  expect(result.isError).toBe(true);
+});
+
+it('requires an explicit matched option for option-bearing products', async () => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: { products: [{ id: 'phone', name: 'Phone', price: 80, condition: 'used', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_condition_offers: true }] },
+  }));
+  expect((await render({ products: [{ product_id: 'phone' }] })).isError).toBe(true);
+});
+
+it('uses the matched offer comparison price', async () => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: {
+      products: [{ id: 'phone', name: 'Phone', price: 80, base_price: 100, compare_at_price: 110, condition: 'used', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_condition_offers: true }],
+      condition_offers: [{ offer_id: 'o1', condition: 'used', price: 80, compare_at_price: 95, stock_quantity: 1, availability: 'in_stock' }],
+    },
+  }));
+  const result = await render({ products: [{ product_id: 'phone', matched_option: { kind: 'offer', option_id: 'o1', condition: 'used' } }] });
+  expect(result.structuredContent.products[0]).toMatchObject({ price: 80, compare_at_price: 110 });
 });
 
 it('fails closed when the searched option no longer exists', async () => {
@@ -166,7 +214,7 @@ it('uses paired variant price and stock when the selected offer is out of stock'
   const render = createCatalogRenderer(async () => ({
     structuredContent: {
       products: [{ id: 'phone', name: 'Phone', slug: 'phone', price: 100, base_price: 100, base_condition: 'new', condition: 'used', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true, has_condition_offers: true }],
-      variants: [{ option_id: 'variant-7', attributes: { storage: '256GB' }, price: 125, stock: 2, availability: 'in_stock', condition: 'new' }],
+      variants: [{ option_id: 'variant-7', attributes: { storage: '256GB' }, price: 125, stock: 2, availability: 'in_stock', condition: null }],
       condition_offers: [{ offer_id: 'offer-2', condition: 'used', price: 80, stock_quantity: 0, availability: 'out_of_stock' }],
     },
   }));

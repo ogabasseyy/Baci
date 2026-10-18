@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type PaymentAvailabilityModule =
+  typeof import('@/lib/checkout/redvault-payment-availability');
+
 const routeMocks = vi.hoisted(() => ({
   getRedvaultPaymentAvailability: vi.fn(),
   authenticateApiRequest: vi.fn(),
@@ -11,9 +14,7 @@ const routeMocks = vi.hoisted(() => ({
 vi.mock(
   '@/lib/checkout/redvault-payment-availability',
   async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import('@/lib/checkout/redvault-payment-availability')
-    >()),
+    ...(await importOriginal<PaymentAvailabilityModule>()),
     getRedvaultPaymentAvailability: routeMocks.getRedvaultPaymentAvailability,
   })
 );

@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+type PaymentAvailabilityModule =
+  typeof import('@/lib/checkout/redvault-payment-availability');
+
 const mocks = vi.hoisted(() => ({
   availability: vi.fn(),
   policy: vi.fn(),
@@ -10,9 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock(
   '@/lib/checkout/redvault-payment-availability',
   async (importOriginal) => ({
-    ...(await importOriginal<
-      typeof import('@/lib/checkout/redvault-payment-availability')
-    >()),
+    ...(await importOriginal<PaymentAvailabilityModule>()),
     getRedvaultPaymentAvailability: mocks.availability,
   })
 );

@@ -20,7 +20,7 @@ UPDATE private.uba_redvault_runtime SET enabled=true,commercial_terms_confirmed=
     'campaign_dates',jsonb_build_object('starts_at','2000-01-01T00:00:00Z','ends_at','2100-01-01T00:00:00Z'),
     'minimum_spend',jsonb_build_object('eligible_subtotal_kobo',10000),
     'caps',jsonb_build_object('discount_kobo',500),
-    'usage_limits',jsonb_build_object('fixture',true),
+    'usage_limits',jsonb_build_object('usage_limit',NULL,'usage_limit_per_customer',NULL),
     'stacking',jsonb_build_object('fixture',true),
     'split_payments',jsonb_build_object('fixture',true),
     'funding_fees',jsonb_build_object('fixture',true),

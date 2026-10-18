@@ -131,13 +131,108 @@ describe('customer-auth-session passive identity revocation', () => {
     );
   });
 
+  it('blocks session-load and OTP identity switches when cart revocation fails', async () => {
+    vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: false });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          authenticated: true,
+          customer: {
+            email: 'one@example.com',
+            first_name: 'One',
+            id: 'customer-1',
+            last_name: 'Buyer',
+          },
+          user: {
+            email: 'one@example.com',
+            id: 'user-1',
+            role: 'customer',
+          },
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          authenticated: true,
+          customer: {
+            email: 'two@example.com',
+            first_name: 'Two',
+            id: 'customer-2',
+            last_name: 'Buyer',
+          },
+          user: {
+            email: 'two@example.com',
+            id: 'user-2',
+            role: 'customer',
+          },
+        })
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const setUser = vi.fn();
+    const setCustomer = vi.fn();
+    const setIsLoading = vi.fn();
+    const setOtpState = vi.fn();
+
+    await loadCustomerSession('ogabassey', {
+      setCustomer,
+      setIsLoading,
+      setUser,
+    });
+    setUser.mockClear();
+    setCustomer.mockClear();
+
+    await loadCustomerSession('ogabassey', {
+      currentUserId: 'user-1',
+      setCustomer,
+      setIsLoading,
+      setUser,
+    });
+
+    expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
+    expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
+    expect(setUser).toHaveBeenCalledWith(null);
+    expect(setCustomer).toHaveBeenCalledWith(null);
+
+    setUser.mockClear();
+    setCustomer.mockClear();
+    vi.mocked(clearCartStorage).mockClear();
+
+    const committed = await commitCustomerAuthSession(
+      'ogabassey',
+      {
+        customer: {
+          email: 'two@example.com',
+          first_name: 'Two',
+          id: 'customer-2',
+          last_name: 'Buyer',
+        },
+        user: {
+          email: 'two@example.com',
+          id: 'user-2',
+          role: 'customer',
+        },
+      },
+      {
+        setCustomer,
+        setOtpState,
+        setUser,
+      }
+    );
+
+    expect(committed).toBe(false);
+    expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
+    expect(setUser).not.toHaveBeenCalled();
+    expect(setOtpState).not.toHaveBeenCalled();
+  });
+
   it('revokes device cart authority when OTP verification replaces an authenticated user', async () => {
     vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: true });
     const setUser = vi.fn();
     const setCustomer = vi.fn();
     const setOtpState = vi.fn();
 
-    await commitCustomerAuthSession(
+    const committed = await commitCustomerAuthSession(
       'ogabassey',
       {
         customer: {
@@ -160,6 +255,7 @@ describe('customer-auth-session passive identity revocation', () => {
       }
     );
 
+    expect(committed).toBe(true);
     expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
     expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
     expect(setUser).toHaveBeenCalledWith(

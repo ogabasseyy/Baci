@@ -88,12 +88,15 @@ async function retirePreviousAccountCartAuthority(
   merchantSlug: string,
   previousUserId: string
 ): Promise<boolean> {
-  const revoked = await revokeCartDeviceSession(merchantSlug);
+  // Always clear local cart storage and bump cartSessionGeneration so
+  // the browser immediately drops local cart items and fences in-flight
+  // reads, while keeping the remembered userId until server revocation
+  // succeeds so subsequent loads/switches retry revocation.
   clearCartStorage(merchantSlug, previousUserId);
-  if (revoked.ok) {
-    setRememberedCustomerUserId(merchantSlug, null);
-  }
-  return revoked.ok;
+  const revoked = await revokeCartDeviceSession(merchantSlug);
+  if (!revoked.ok) return false;
+  setRememberedCustomerUserId(merchantSlug, null);
+  return true;
 }
 
 async function fetchCustomerSession(
@@ -142,8 +145,17 @@ export async function loadCustomerSession(
 
     if (session) {
       if (previousUserId && previousUserId !== session.user.id) {
-        await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
+        const retired = await retirePreviousAccountCartAuthority(
+          merchantSlug,
+          previousUserId
+        );
         if (isCancelled()) return;
+        if (!retired) {
+          setUser(null);
+          setCustomer(null);
+          publishCustomerIdentity(null, null, merchantSlug);
+          return;
+        }
       }
       setRememberedCustomerUserId(merchantSlug, session.user.id);
       setUser(session.user);
@@ -183,19 +195,24 @@ export async function commitCustomerAuthSession(
     setCustomer: (customer: Customer | null) => void;
     setOtpState: (otp: OtpState | null) => void;
   }
-): Promise<void> {
+): Promise<boolean> {
   const previousUserId = getRememberedCustomerUserId(
     merchantSlug,
     currentUserId
   );
   if (previousUserId && previousUserId !== session.user.id) {
-    await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
+    const retired = await retirePreviousAccountCartAuthority(
+      merchantSlug,
+      previousUserId
+    );
+    if (!retired) return false;
   }
   setRememberedCustomerUserId(merchantSlug, session.user.id);
   setUser(session.user);
   setCustomer(session.customer);
   publishCustomerIdentity(session.user, session.customer, merchantSlug);
   setOtpState(null);
+  return true;
 }
 
 export async function prepareCustomerOAuthRedirect(

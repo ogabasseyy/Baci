@@ -214,7 +214,7 @@ export function CustomerAuthProvider({
 
       // Set user and customer from response, retiring any previous
       // customer's device cart authority before switching identities.
-      await commitCustomerAuthSession(
+      const committed = await commitCustomerAuthSession(
         merchantSlug,
         { customer: data.customer, user: data.user },
         {
@@ -224,6 +224,13 @@ export function CustomerAuthProvider({
           setUser,
         }
       );
+      if (!committed) {
+        return {
+          success: false,
+          error:
+            'Could not safely switch accounts. Please retry when connected.',
+        };
+      }
 
       return { success: true };
     } catch (error) {

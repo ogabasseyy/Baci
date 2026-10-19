@@ -16,7 +16,7 @@ function snapshot() {
     cartId,
     currency: 'NGN',
     estimatedTotals: false,
-    expiresAt: '2026-10-19T04:00:00.000Z',
+    expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
     lines: [],
     merchantId,
     state: 'active',
@@ -34,9 +34,10 @@ beforeEach(() => {
 
 describe('shared-cart saved-cart client', () => {
   it('reads the saved account cart without creating one', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({ cart: snapshot() }));
+    const saved = snapshot();
+    fetchMock.mockResolvedValue(jsonResponse({ cart: saved }));
     await expect(fetchSavedAccountCart('shop')).resolves.toEqual({
-      cart: snapshot(),
+      cart: saved,
       ok: true,
     });
     expect(fetchMock).toHaveBeenCalledWith(

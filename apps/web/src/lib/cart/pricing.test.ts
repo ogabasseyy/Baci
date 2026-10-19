@@ -30,7 +30,7 @@ function raw(lines: RawCartLine[] = [line()]): RawCartState {
     cartId: '22222222-2222-4222-8222-222222222222',
     checkoutSessionId: null,
     currency: 'NGN',
-    expiresAt: '2026-10-19T04:00:00Z',
+    expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
     lines,
     merchantId: '11111111-1111-4111-8111-111111111111',
     replayed: false,

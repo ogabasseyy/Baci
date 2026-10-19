@@ -105,7 +105,7 @@ function rawState(overrides: Record<string, unknown> = {}) {
     cartId: INCOMING_CART_ID,
     checkoutSessionId: null,
     currency: 'NGN',
-    expiresAt: '2026-10-19T04:00:00Z',
+    expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
     lines: [rawLine()],
     merchantId: MERCHANT_ID,
     replayed: false,

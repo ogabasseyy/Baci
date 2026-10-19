@@ -32,7 +32,7 @@ function snapshot(overrides: Record<string, unknown> = {}) {
     cartId: '22222222-2222-4222-8222-222222222222',
     currency: 'NGN',
     estimatedTotals: false,
-    expiresAt: '2026-10-19T04:00:00.000Z',
+    expiresAt: new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
     lines: [],
     merchantId: '11111111-1111-4111-8111-111111111111',
     state: 'active',
@@ -294,11 +294,9 @@ describe('shared-cart-client commands', () => {
   });
 
   it('carries the current cart on conflict responses for rebasing', async () => {
+    const conflictCart = snapshot({ version: 6 });
     vi.mocked(fetchWithCsrf).mockResolvedValueOnce(
-      jsonResponse(
-        { cart: snapshot({ version: 6 }), code: 'version_conflict' },
-        409
-      )
+      jsonResponse({ cart: conflictCart, code: 'version_conflict' }, 409)
     );
 
     const result = await sendSharedCartCommand({
@@ -311,7 +309,7 @@ describe('shared-cart-client commands', () => {
       code: 'version_conflict',
       ok: false,
       retryable: false,
-      snapshot: snapshot({ version: 6 }),
+      snapshot: conflictCart,
     });
   });
 

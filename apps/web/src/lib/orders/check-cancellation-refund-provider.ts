@@ -85,7 +85,10 @@ export async function checkCancellationRefundProvider({
     logger.error({
       error,
       message: 'Cancellation refund provider verification failed',
-      reference,
+      // Order-scoped, never the raw gateway reference: provider
+      // identifiers stay out of log aggregation; ops correlate
+      // through the order and its quarantine record instead.
+      orderId: order.id,
     });
     // Budget exhaustion is not provider evidence: a timed-out page
     // says nothing about the money, so defer with a fresh budget

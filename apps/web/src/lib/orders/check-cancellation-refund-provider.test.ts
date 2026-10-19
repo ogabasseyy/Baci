@@ -66,8 +66,12 @@ describe('checkCancellationRefundProvider', () => {
       expect.objectContaining({
         error: failure,
         message: 'Cancellation refund provider verification failed',
-        reference: 'capture-1',
+        orderId: 'order-1',
       })
+    );
+    // The raw gateway reference never reaches the log call.
+    expect(vi.mocked(logger.error)).not.toHaveBeenCalledWith(
+      expect.objectContaining({ reference: expect.anything() })
     );
   });
   it('allows accounted processed refunds but blocks pending ones', async () => {

@@ -20,7 +20,7 @@ describe('paystack refund recovery watch', () => {
       evidence: {
         amount_minor: 10000,
         currency: 'NGN',
-        provider_payment_transaction_id: 555,
+        provider_payment_transaction_id: '555',
         provider_refund_status: 'processed',
       },
       providerRefundId: 202,
@@ -31,7 +31,7 @@ describe('paystack refund recovery watch', () => {
       p_evidence: {
         amount_minor: 10000,
         currency: 'NGN',
-        provider_payment_transaction_id: 555,
+        provider_payment_transaction_id: '555',
         provider_refund_status: 'processed',
       },
       p_paystack_ref: 'PSK-1',
@@ -50,7 +50,7 @@ describe('paystack refund recovery watch', () => {
         evidence: {
           amount_minor: 10000,
           currency: 'NGN',
-          provider_payment_transaction_id: 555,
+          provider_payment_transaction_id: '555',
           provider_refund_status: 'processed',
         },
         providerRefundId: 202,

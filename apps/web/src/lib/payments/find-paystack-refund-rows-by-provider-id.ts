@@ -13,33 +13,85 @@ const MAX_PROVIDER_REFUND_MATCHES = 2;
  * keyset scan walks past corrupt rows and returns at most two
  * genuine matches: enough for callers to distinguish
  * none/one/ambiguous. The caller owns the projection; rows must
- * carry at least the gateway and id.
+ * carry at least the gateway and id. Stamped manual Paystack rows
+ * match by their stored provider id (their merchant reference is
+ * not a provider id): without this a webhook recovery to
+ * `processed` after a contradiction would never observe the manual
+ * row and the order would stay falsely reopened. A native row and
+ * a stamped manual sharing one provider id is a genuine
+ * double-record, so both scans feed the same ambiguity cap. The id
+ * travels as validated decimal text end to end: a >2^53 provider id
+ * would not survive a number round-trip, and stamped manual ids are
+ * stored text — both compare exactly against the text predicates.
  */
 export async function findPaystackRefundRowsByProviderId<
   T extends { gateway?: unknown; id: string },
->(supabase: SupabaseClient, refundId: number, columns: string): Promise<T[]> {
+>(
+  supabase: SupabaseClient,
+  refundId: number | string,
+  columns: string
+): Promise<T[]> {
+  const idText =
+    typeof refundId === 'string' && /^[1-9][0-9]*$/.test(refundId)
+      ? refundId
+      : typeof refundId === 'number' &&
+          Number.isSafeInteger(refundId) &&
+          refundId > 0
+        ? String(refundId)
+        : null;
+  if (idText === null) throw new Error('refund_event_lookup_failed');
   const matches: T[] = [];
-  let cursor: string | null = null;
-  for (;;) {
-    const query = supabase
-      .from('transactions')
-      .select(columns)
-      .eq('transaction_type', 'refund')
-      .ilike('gateway', '%paystack%')
-      .eq('gateway_reference', String(refundId))
-      .order('id', { ascending: true })
-      .limit(PROVIDER_REFUND_LOOKUP_PAGE_SIZE);
-    const { data, error } =
-      cursor === null ? await query : await query.gt('id', cursor);
-    if (error) throw new Error('refund_event_lookup_failed');
-    const page = (data ?? []) as unknown as T[];
-    for (const row of page) {
-      if (normalizePaymentGateway(row.gateway) !== 'PAYSTACK') continue;
-      matches.push(row);
-      if (matches.length >= MAX_PROVIDER_REFUND_MATCHES) return matches;
+  const scan = async (
+    gatewayPrefilter: string,
+    reference: { column: string; value: string },
+    genuineGateway: 'PAYSTACK' | 'MANUAL'
+  ): Promise<void> => {
+    let cursor: string | null = null;
+    for (;;) {
+      const query = supabase
+        .from('transactions')
+        .select(columns)
+        .eq('transaction_type', 'refund')
+        .ilike('gateway', gatewayPrefilter)
+        .eq(reference.column, reference.value)
+        .order('id', { ascending: true })
+        .limit(PROVIDER_REFUND_LOOKUP_PAGE_SIZE);
+      const { data, error } =
+        cursor === null ? await query : await query.gt('id', cursor);
+      if (error) throw new Error('refund_event_lookup_failed');
+      const page = (data ?? []) as unknown as T[];
+      for (const row of page) {
+        // The code-side gate (not the prefilter) decides: a native
+        // row carrying a stored provider id must not double-count in
+        // the manual scan, and vice versa.
+        if (normalizePaymentGateway(row.gateway) !== genuineGateway) continue;
+        matches.push(row);
+        if (matches.length >= MAX_PROVIDER_REFUND_MATCHES) return;
+      }
+      if (page.length < PROVIDER_REFUND_LOOKUP_PAGE_SIZE) return;
+      cursor = page[page.length - 1]?.id ?? null;
+      if (cursor === null) return;
     }
-    if (page.length < PROVIDER_REFUND_LOOKUP_PAGE_SIZE) return matches;
-    cursor = page[page.length - 1]?.id ?? null;
-    if (cursor === null) return matches;
+  };
+  await scan(
+    '%paystack%',
+    {
+      column: 'gateway_reference',
+      value: idText,
+    },
+    'PAYSTACK'
+  );
+  if (matches.length < MAX_PROVIDER_REFUND_MATCHES) {
+    // `->>` extracts the stored id as text whether the stamp wrote
+    // a number or a string, mirroring the sweep's numeric predicate.
+    await scan(
+      '%manual%',
+      {
+        column: 'metadata->>provider_refund_id',
+        value: idText,
+      },
+      'MANUAL'
+    );
   }
+  return matches;
 }

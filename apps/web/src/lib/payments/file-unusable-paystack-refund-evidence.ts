@@ -36,7 +36,7 @@ export async function fileUnusablePaystackRefundEvidence(
     };
     evidence: RefundRecoveryEvidence;
     reference: string;
-    refundId: number;
+    refundId: number | string;
   }
 ): Promise<never> {
   const invalidReason = `Paystack refund ${refundId} returned unusable provider evidence for reference ${reference}`;

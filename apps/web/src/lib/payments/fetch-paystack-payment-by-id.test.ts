@@ -29,7 +29,13 @@ describe('fetchPaystackPaymentById', () => {
     request.mockResolvedValue(provider);
 
     await expect(fetchPaystackPaymentById(555, signal)).resolves.toBe(provider);
-    expect(request).toHaveBeenCalledWith('/transaction/555', { signal });
+    expect(request).toHaveBeenCalledWith(
+      '/transaction/555',
+      expect.objectContaining({
+        preprocessResponseText: expect.any(Function),
+        signal,
+      })
+    );
   });
 
   it('forwards provider failures without converting them to success', async () => {
@@ -37,5 +43,39 @@ describe('fetchPaystackPaymentById', () => {
     request.mockResolvedValue(failure);
 
     await expect(fetchPaystackPaymentById(555)).resolves.toBe(failure);
+  });
+
+  it.each([
+    'not-an-id',
+    '0',
+    '-5',
+    '12.5',
+  ])('rejects non-decimal-text provider ID %s before a request', async (id) => {
+    await expect(fetchPaystackPaymentById(id)).resolves.toMatchObject({
+      success: false,
+      code: 'VALIDATION_ERROR',
+    });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('accepts decimal-text ids above 2^53 and quotes the response id', async () => {
+    const big = '9007199254740993';
+    request.mockResolvedValue({ success: true });
+
+    await fetchPaystackPaymentById(big);
+
+    expect(request).toHaveBeenCalledWith(
+      `/transaction/${big}`,
+      expect.objectContaining({
+        preprocessResponseText: expect.any(Function),
+      })
+    );
+    const preprocess = request.mock.calls[0][1].preprocessResponseText as (
+      raw: string
+    ) => string;
+    const parsed = JSON.parse(
+      preprocess(`{"status":true,"data":{"id":${big},"reference":"PSK-1"}}`)
+    ).data;
+    expect(parsed.id).toBe(big);
   });
 });

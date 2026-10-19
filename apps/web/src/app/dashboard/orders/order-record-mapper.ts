@@ -54,6 +54,7 @@ interface DashboardTransactionRecord {
   id: string;
   reference?: string;
   gateway_reference?: string;
+  transaction_type?: string;
   status: string;
   amount: number;
   currency: string;
@@ -155,6 +156,7 @@ export function mapDashboardOrderRecord(
             id: transaction.id,
             reference:
               transaction.reference || transaction.gateway_reference || '',
+            transaction_type: transaction.transaction_type,
             status: transaction.status,
             amount: transaction.amount,
             currency: transaction.currency,

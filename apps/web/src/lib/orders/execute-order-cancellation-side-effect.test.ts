@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   initiateRefund: vi.fn(),
 }));
 
+vi.mock('@/lib/orders/check-cancellation-refund-provider', () => ({
+  checkCancellationRefundProvider: vi.fn().mockResolvedValue([]),
+}));
 vi.mock('@/lib/initiate-paystack-refund', () => ({
   initiateRefund: mocks.initiateRefund,
 }));

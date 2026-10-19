@@ -21,7 +21,7 @@ export async function fileInvalidRefundEvidenceBeforeReject(
   }: {
     error: unknown;
     paymentReference?: string;
-    refundId: number;
+    refundId: number | string;
   }
 ): Promise<void> {
   if (

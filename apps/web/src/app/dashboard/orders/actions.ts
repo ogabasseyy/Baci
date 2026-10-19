@@ -30,7 +30,7 @@ import {
   ResendOrderConfirmationInputSchema,
 } from '@/schemas/dashboard-order-actions';
 import type { Order } from './dashboard-order';
-import type { Transaction } from './dashboard-transaction';
+import { fetchOrderTransactions } from './fetch-order-transactions';
 import { resolveJumiaDashboardOrderScope } from './jumia-dashboard-order-scope';
 import type { JumiaOrder } from './map-jumia-dashboard-order';
 import { mapJumiaDashboardOrder } from './map-jumia-dashboard-order';
@@ -523,19 +523,16 @@ export async function getOrder(
     (order.order_items || []).map((item) => item.product_id)
   );
 
-  // Fetch transactions
-  const { data: transactions } = await supabase
-    .from('transactions')
-    .select(
-      'id, gateway_reference, status, amount, currency, gateway, created_at'
-    )
-    .eq('order_id', order.id)
-    .order('created_at', { ascending: false });
+  const transactions = await fetchOrderTransactions({
+    merchantId: authorizedMerchantId,
+    orderId: order.id,
+    supabase,
+  });
 
   return mapDashboardOrderRecord(order, {
     includeDetails: true,
     orderItemImageMap,
-    transactions: (transactions || []) as Transaction[],
+    transactions,
   });
 }
 

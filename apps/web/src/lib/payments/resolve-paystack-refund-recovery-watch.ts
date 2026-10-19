@@ -14,7 +14,7 @@ export async function resolvePaystackRefundRecoveryWatch(
     providerRefundId,
     reference,
   }: {
-    providerRefundId: number;
+    providerRefundId: number | string;
     reference: string;
   }
 ): Promise<void> {

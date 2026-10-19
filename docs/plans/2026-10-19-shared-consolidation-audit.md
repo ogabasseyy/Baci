@@ -81,8 +81,13 @@ proxy/APM/error reporting, database/APM logging proven not to
 persist pairing-token RPC arguments, compatible server adapters
 deployed, and cart roles/signing material provisioned including a
 deployment-unique `CART_PROOF_ENVIRONMENT`, an operator alert on
-the `Cart quota store degraded` warning, and the rollout's
-dashboards/observability in place — the pilot
+the `Cart quota store degraded` warning with the per-instance
+budget multiplication during Redis degradation explicitly accepted
+for the pilot, outbox publisher qualification during the
+authorized release, and the rollout's dashboards/observability in
+place. (This list incorporates the rollout doc's pre-enrollment
+gates; if that doc adds gates, they are included by reference.)
+— the pilot
 merchant is enrolled, and the acceptance
 matrix in `docs/qa/shared-cart-acceptance.md` passes — per
 `docs/deploy/shared-cart-rollout.md`. The rollout's *expansion*
@@ -126,8 +131,19 @@ green CI and change no activation state.
    in a resumable pending/recovery state for that order — it must
    never fall through to the legacy DVA fallback, which is exactly
    the double-funding path this wave removes. Only a confirmed
-   create failure with no possible intent (e.g. a validation
-   response received from the server) may proceed to fallback. No server change is
+   create failure with no possible intent may proceed to fallback.
+   The wave must implement this explicit classification (server
+   error code on a *received* response is the classifier input;
+   `getWalletFundingErrorDetails` in
+   `wallet-funded-bank-transfer.ts` is the current extraction
+   point):
+
+   | Class | Examples | Behavior |
+   |---|---|---|
+   | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Prompt for consent, then retry create once |
+   | Confirmed no-intent (safe to fall back) | Received 4xx validation/business rejections (invalid order state, ineligible wallet, amount violations) — the wave enumerates the exact server codes from the create route before coding | Legacy DVA fallback allowed |
+   | Unknown-after-POST | Transport failure, timeout, 5xx, or any failure with no received response after the mutating POST | Bounded idempotent re-create; on exhaustion, resumable pending state — **never** DVA |
+   | Unparseable received response | Response received but fails schema parsing | Treat as unknown-after-POST (an intent may exist); re-create to fetch the canonical intent | No server change is
    needed for the concurrent
    case: the insert path's RPC
    (`create_order_wallet_funding_intent_for_customer`,

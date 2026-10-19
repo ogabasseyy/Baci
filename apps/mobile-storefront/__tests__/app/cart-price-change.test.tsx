@@ -69,6 +69,7 @@ describe('CartScreen price-change modal', () => {
         },
       ],
       conditionChanges: [],
+      unavailableLines: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -76,6 +77,23 @@ describe('CartScreen price-change modal', () => {
 
     expect(screen.getByText('Prices updated')).toBeTruthy();
     expect(screen.getByLabelText('Continue with updated prices')).toBeTruthy();
+  });
+
+  it('surfaces unavailable lines in the cart without price drift', () => {
+    mockRepriceHolder.current = {
+      priceChanges: [],
+      conditionChanges: [],
+      unavailableLines: [{ id: 'cart-9', name: 'Vanished Phone' }],
+      dismissPriceChanges: mockDismissPriceChanges,
+    };
+
+    render(<CartScreen />);
+
+    expect(screen.getByText('Items unavailable')).toBeTruthy();
+    expect(screen.getByText('Vanished Phone')).toBeTruthy();
+    expect(
+      screen.getByLabelText('Continue after reviewing unavailable items')
+    ).toBeTruthy();
   });
 
   it('dismisses the price-change modal when the shopper continues', () => {
@@ -89,6 +107,7 @@ describe('CartScreen price-change modal', () => {
         },
       ],
       conditionChanges: [],
+      unavailableLines: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -112,6 +131,7 @@ describe('CartScreen price-change modal', () => {
         },
       ],
       conditionChanges: [],
+      unavailableLines: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
 
@@ -121,6 +141,7 @@ describe('CartScreen price-change modal', () => {
     mockRepriceHolder.current = {
       priceChanges: [],
       conditionChanges: [],
+      unavailableLines: [],
       dismissPriceChanges: mockDismissPriceChanges,
     };
     rerender(<CartScreen />);

@@ -39,12 +39,14 @@ export const mockRepriceHolder: {
   current: {
     priceChanges: MockPriceChange[];
     conditionChanges: MockConditionChange[];
+    unavailableLines: { id: string; name: string }[];
     dismissPriceChanges: typeof mockDismissPriceChanges;
   };
 } = {
   current: {
     priceChanges: [],
     conditionChanges: [],
+    unavailableLines: [],
     dismissPriceChanges: mockDismissPriceChanges,
   },
 };
@@ -241,6 +243,7 @@ export function setupCartMocks(colorScheme: 'dark' | 'light' = 'dark'): void {
   mockRepriceHolder.current = {
     priceChanges: [],
     conditionChanges: [],
+    unavailableLines: [],
     dismissPriceChanges: mockDismissPriceChanges,
   };
 }

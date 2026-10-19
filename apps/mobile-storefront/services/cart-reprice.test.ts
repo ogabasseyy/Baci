@@ -238,6 +238,61 @@ describe('repriceCartItems', () => {
     ]);
   });
 
+  it('records a zero live price on base and variant lines', async () => {
+    // Zero is a legitimate catalog price (free item / promo):
+    // skipping it would keep the stale paid price while the server
+    // charges zero, with no drift prompt. Mirrors exact-offer lines.
+    const items = [
+      createCartItem({ id: 'base-line', product_id: 'base-product' }),
+      createCartItem({
+        id: 'variant-line',
+        product_id: 'variant-product',
+        variant_id: 'variant-1',
+        name: 'Galaxy A27 8GB',
+        price: 420000,
+      }),
+    ];
+    productQuery.in.mockResolvedValue({
+      data: [
+        { id: 'base-product', price: 0 },
+        { id: 'variant-product', price: 450000 },
+      ],
+      error: null,
+    });
+    setVariantOverrides({
+      data: [
+        {
+          id: 'variant-1',
+          product_id: 'variant-product',
+          price_override: 0,
+        },
+      ],
+      error: null,
+    });
+
+    const result = await repriceCartItems(items, 'merchant-1');
+
+    expect(result.priceById).toEqual({
+      'base-line': 0,
+      'variant-line': 0,
+    });
+    expect(result.changes).toEqual([
+      {
+        id: 'base-line',
+        name: 'iPhone 13',
+        oldPrice: 390000,
+        newPrice: 0,
+      },
+      {
+        id: 'variant-line',
+        name: 'Galaxy A27 8GB',
+        oldPrice: 420000,
+        newPrice: 0,
+      },
+    ]);
+    expect(result.unavailable).toEqual([]);
+  });
+
   it('does not report a price change within the one-naira tolerance', async () => {
     productQuery.in.mockResolvedValue({
       data: [{ id: 'product-1', price: 390001 }],

@@ -312,6 +312,13 @@ jobs:
       # concurrency suite needs live dblink sessions and runs
       # standalone. Keep comments out of the folded run scalar below:
       # a # there comments out every later --sql-check argument.
+      # Each --sql-check suite below EXECUTES against live PostgreSQL
+      # (psql -f with ON_ERROR_STOP=1 over the replayed database, via
+      # create-supabase-replay-sql-applier.ts) — it is not a parse
+      # check. RLS, advisory locks, triggers, and unique violations
+      # all surface here (e.g. the id_snapshot 23505 caught pre-merge),
+      # so replay sql-check is sufficient for the order-offer and
+      # product-request suites without a second disposable runner.
       - name: Test final order-notification outbox RPC privileges
         run: >-
           pnpm --filter @baci/web db:replay:chronological

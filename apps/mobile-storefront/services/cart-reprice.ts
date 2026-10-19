@@ -259,7 +259,10 @@ export async function repriceCartItems(
         result.unavailable.push({ id: item.id, name: item.name });
         continue;
       }
-      if (!Number.isFinite(liveUnitPrice) || liveUnitPrice <= 0) {
+      // Zero is a legitimate catalog price (free item / promo): record
+      // it and let drift detection prompt review, mirroring exact-offer
+      // lines. Only non-finite or negative values (corrupt reads) skip.
+      if (!Number.isFinite(liveUnitPrice) || liveUnitPrice < 0) {
         continue;
       }
 

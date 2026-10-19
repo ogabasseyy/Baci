@@ -120,8 +120,14 @@ green CI and change no activation state.
    an idempotent re-create for the same order — sequenced *after*
    the mobile parser fix (a re-create returns the same intent, and
    an unfixed parser would just fail on its `+00:00` `expiresAt`
-   again), bounded to a small retry count with backoff, and only
-   ever attempted before any gateway fallback. No server change is
+   again), bounded to a small retry count with backoff.
+   **Unknown-after-POST is terminal for fallback:** if the bounded
+   re-creates still cannot confirm the intent, the flow must stop
+   in a resumable pending/recovery state for that order — it must
+   never fall through to the legacy DVA fallback, which is exactly
+   the double-funding path this wave removes. Only a confirmed
+   create failure with no possible intent (e.g. a validation
+   response received from the server) may proceed to fallback. No server change is
    needed for the concurrent
    case: the insert path's RPC
    (`create_order_wallet_funding_intent_for_customer`,

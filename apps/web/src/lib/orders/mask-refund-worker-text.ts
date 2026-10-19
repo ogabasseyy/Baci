@@ -137,11 +137,15 @@ export function maskRefundWorkerText(data: Record<string, unknown>) {
   // a non-boolean.
   masked.historyTruncated = masked.historyTruncated === true;
   masked.eventsTruncated = masked.eventsTruncated === true;
-  // The flag gates terminality (a missing flag would otherwise read
-  // as 'no Paystack payment' and silently end the contradiction
-  // watch). Only an explicit false counts: anything else keeps the
-  // watch, failing open toward detection like the rest of the mask.
-  masked.hasPaystackPayment = masked.hasPaystackPayment !== false;
+  // The flag gates terminality on refunded summaries (a missing
+  // flag would otherwise read as 'no Paystack payment' and silently
+  // end the contradiction watch). Only an explicit false counts:
+  // anything else keeps the watch, failing open toward detection
+  // like the rest of the mask. Scoped to refunded so non-terminal
+  // wire shapes stay untouched.
+  if (masked.status === 'refunded') {
+    masked.hasPaystackPayment = masked.hasPaystackPayment !== false;
+  }
   return masked;
 }
 function pickAllowedKeys(

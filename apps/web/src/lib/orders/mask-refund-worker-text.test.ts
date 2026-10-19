@@ -20,7 +20,6 @@ describe('maskRefundWorkerText', () => {
       events: [],
       eventsTruncated: false,
       historyTruncated: false,
-      hasPaystackPayment: true,
       legs: [],
     });
   });
@@ -161,7 +160,6 @@ describe('maskRefundWorkerText', () => {
       eventsTruncated: false,
       history: [null, ['nested'], { id: 'refund-2' }],
       historyTruncated: false,
-      hasPaystackPayment: true,
       legs: [],
     });
   });

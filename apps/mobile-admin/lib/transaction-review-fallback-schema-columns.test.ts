@@ -28,6 +28,16 @@ describe('omitUnavailableTransactionReviewSchemaColumns', () => {
     ).toBe(true);
   });
 
+  it('tracks a missing product offer id once for fallback retries', () => {
+    const state = createTransactionReviewSchemaColumnState();
+
+    expect(state.markMissingSchemaColumn('product_offer_id')).toBe(true);
+    expect(state.markMissingSchemaColumn('product_offer_id')).toBe(false);
+    expect(state.getSchemaColumnAvailability().productOfferIdUnavailable).toBe(
+      true
+    );
+  });
+
   it('returns a selector unchanged when every column is available', () => {
     const selector = 'id, discount_amount, ad_tracking';
 
@@ -93,6 +103,18 @@ describe('omitUnavailableTransactionReviewSchemaColumns', () => {
     );
   });
 
+  it('removes the product offer id while keeping the offer id', () => {
+    const selector =
+      'id, order_items(id, condition, offer_id, product_offer_id, offer_id_snapshot, name)';
+
+    expect(
+      omitUnavailableTransactionReviewSchemaColumns(selector, {
+        ...noUnavailableColumns,
+        productOfferIdUnavailable: true,
+      })
+    ).toBe('id, order_items(id, condition, offer_id, offer_id_snapshot, name)');
+  });
+
   it('removes the offer snapshot when that column is unavailable', () => {
     const selector =
       'id, order_items(id, condition, offer_id, offer_id_snapshot, variant_attributes, name)';
@@ -139,5 +161,21 @@ describe('omitUnavailableTransactionReviewSchemaColumns', () => {
 
     // Assert
     expect(result).toBe('id, order_items(id)');
+  });
+
+  it('omits a missing product offer id from the tracked unavailable-column set', () => {
+    // Arrange
+    const selector =
+      'id, order_items(id, condition, offer_id, product_offer_id, name)';
+    const unavailableColumns = new Set(['product_offer_id']);
+
+    // Act
+    const result = omitUnavailableTransactionReviewSchemaColumns(
+      selector,
+      unavailableColumns
+    );
+
+    // Assert
+    expect(result).toBe('id, order_items(id, condition, offer_id, name)');
   });
 });

@@ -18,10 +18,12 @@ from capability_gate_contract_ci_checks import (
 )
 
 # The gate job's run block, stripped per line. Any edit fails until this expectation is updated alongside it; that update cannot take effect same-PR (the running checker is base-owned), so run-block changes need two PRs.
+# Keep inline ${{ }} out of bare run arguments and avoid case-pattern alternations: the SAST Pro rules parse run snippets as Bash and fail the required check on PartialParsing warnings. Resolve dynamic values via GITHUB_EVENT_PATH instead.
 EXPECTED_RUN = [
     'if [ -n "${{ github.event.pull_request.head.sha }}" ]; then',
     "rm -rf /tmp/cg-check && mkdir -p /tmp/cg-check",
-    'git fetch --no-tags --depth 1 origin "${{ github.base_ref }}"',
+    'base_ref=$(jq -r .pull_request.base.ref "$GITHUB_EVENT_PATH")',
+    'git fetch --no-tags --depth 1 origin "$base_ref"',
     "git archive FETCH_HEAD .github/scripts/capability_gate_contract_check.py .github/scripts/capability_gate_contract_ci_checks.py .github/scripts/capability_gate_contract_workflow_checks.py | tar -x -C /tmp/cg-check",
     "CHECKER=/tmp/cg-check/.github/scripts/capability_gate_contract_check.py",
     "else",

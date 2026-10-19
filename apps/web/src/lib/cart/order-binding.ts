@@ -24,22 +24,26 @@ export { ORDER_BINDING_VARIANTS };
 export const ORDER_BINDING_RPC_NAMES: Record<OrderBindingVariant, string> = {
   base: 'create_storefront_order',
   discount_code: 'create_storefront_order_with_discount_code',
+  loyalty_code: 'create_storefront_order_with_loyalty_code',
   quiz_voucher: 'create_storefront_order_with_quiz_voucher',
   savings: 'create_storefront_order_with_savings',
 };
 
 /**
  * Selects the order variant the same way the storefront route does:
- * savings first, then quiz voucher, then discount code, else base.
+ * savings first, then quiz voucher, then discount code, then loyalty
+ * code, else base.
  */
 export function selectOrderBindingVariant(input: {
   requestedSavingsRedemption: boolean;
   hasVoucherItem: boolean;
   discountCodeId: string | null | undefined;
+  loyaltyRedemptionId?: string | null | undefined;
 }): OrderBindingVariant {
   if (input.requestedSavingsRedemption) return 'savings';
   if (input.hasVoucherItem) return 'quiz_voucher';
   if (input.discountCodeId) return 'discount_code';
+  if (input.loyaltyRedemptionId) return 'loyalty_code';
   return 'base';
 }
 

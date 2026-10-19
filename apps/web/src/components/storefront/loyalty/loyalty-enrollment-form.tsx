@@ -2,6 +2,7 @@
 
 import { Check, Gift, Sparkles, Trophy, Users } from 'lucide-react';
 import { useState } from 'react';
+import { ThemedButton } from '@/components/themed';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ interface LoyaltyEnrollmentFormProps {
   customerId: string;
   merchantName?: string;
   onEnrolled?: () => void;
+  onReceiptDismiss?: () => void;
 }
 
 interface SubmitLoyaltyEnrollmentParams {
@@ -69,9 +71,13 @@ export function LoyaltyEnrollmentForm({
   customerId,
   merchantName = 'this store',
   onEnrolled,
+  onReceiptDismiss,
 }: LoyaltyEnrollmentFormProps) {
   const { toast } = useToast();
-  const { enrolled, enroll, data } = useLoyalty(merchantId, customerId);
+  const { enrolled, enroll, data, refetch } = useLoyalty(
+    merchantId,
+    customerId
+  );
   const [referralCode, setReferralCode] = useState('');
   const [enrolling, setEnrolling] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -79,10 +85,6 @@ export function LoyaltyEnrollmentForm({
     points: number;
     referralCode: string;
   } | null>(null);
-
-  if (enrolled) {
-    return null; // Already enrolled, component should be hidden
-  }
 
   const handleEnroll = () => {
     void submitLoyaltyEnrollment({
@@ -96,6 +98,23 @@ export function LoyaltyEnrollmentForm({
     });
   };
 
+  // Dismissal must clear THIS component's receipt too: when the
+  // post-enroll refresh failed, enrolled is still false, so the parent
+  // keeps rendering the form — clearing only the parent's flag would
+  // leave showSuccess set and "View my rewards" would look dead.
+  // Clear locally and retry the status load so a recovered fetch
+  // flips enrolled and the parent swaps to the rewards view.
+  const handleReceiptDismiss = () => {
+    setShowSuccess(false);
+    setEnrollmentData(null);
+    void refetch();
+    onReceiptDismiss?.();
+  };
+
+  // The receipt renders before the enrolled branch below: the enroll
+  // refresh flips enrolled before enroll() returns, and hiding on
+  // enrolled first would discard the success card (points + referral
+  // code) the shopper just earned.
   if (showSuccess && enrollmentData) {
     return (
       <Card className="border-green-200 bg-green-50">
@@ -124,10 +143,22 @@ export function LoyaltyEnrollmentForm({
                 </p>
               </div>
             )}
+            {onReceiptDismiss && (
+              <ThemedButton
+                onClick={handleReceiptDismiss}
+                className="w-full mt-4"
+              >
+                View my rewards
+              </ThemedButton>
+            )}
           </div>
         </CardContent>
       </Card>
     );
+  }
+
+  if (enrolled) {
+    return null; // Already enrolled, component should be hidden
   }
 
   const benefits = [

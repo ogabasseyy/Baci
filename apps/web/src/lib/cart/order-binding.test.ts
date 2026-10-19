@@ -376,8 +376,28 @@ describe('selectOrderBindingVariant', () => {
     expect(ORDER_BINDING_RPC_NAMES).toEqual({
       base: 'create_storefront_order',
       discount_code: 'create_storefront_order_with_discount_code',
+      loyalty_code: 'create_storefront_order_with_loyalty_code',
       quiz_voucher: 'create_storefront_order_with_quiz_voucher',
       savings: 'create_storefront_order_with_savings',
     });
+  });
+
+  it('selects the loyalty variant only after discount precedence', () => {
+    const base = {
+      discountCodeId: null,
+      hasVoucherItem: false,
+      requestedSavingsRedemption: false,
+    };
+    expect(
+      selectOrderBindingVariant({ ...base, loyaltyRedemptionId: 'redeem-1' })
+    ).toBe('loyalty_code');
+    expect(
+      selectOrderBindingVariant({
+        ...base,
+        discountCodeId: 'code-1',
+        loyaltyRedemptionId: 'redeem-1',
+      })
+    ).toBe('discount_code');
+    expect(selectOrderBindingVariant(base)).toBe('base');
   });
 });

@@ -3,6 +3,7 @@ export const ORDER_BINDING_VARIANTS = [
   'savings',
   'quiz_voucher',
   'discount_code',
+  'loyalty_code',
 ] as const;
 
 export type OrderBindingVariant = (typeof ORDER_BINDING_VARIANTS)[number];

@@ -10,9 +10,11 @@ import { EXPECTED_GIGL_TRACKING_PENDING_SOURCES } from './expected-gigl-tracking
 import { EXPECTED_GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './expected-gigl-wallet-shipping-pending-sources.test-support';
 import { EXPECTED_INVENTORY_PENDING_SOURCES } from './expected-inventory-pending-sources.test-support';
 import { EXPECTED_JUMIA_PENDING_SOURCES } from './expected-jumia-pending-sources.test-support';
+import { EXPECTED_LOYALTY_PENDING_SOURCES } from './expected-loyalty-pending-sources.test-support';
 import { EXPECTED_MERCHANT_INVOICE_PENDING_SOURCES } from './expected-merchant-invoice-pending-sources.test-support';
 import { EXPECTED_MERCHANT_PAYMENT_PENDING_SOURCES } from './expected-merchant-payment-pending-sources.test-support';
 import { EXPECTED_NEGOTIATION_PENDING_SOURCES } from './expected-negotiation-pending-sources.test-support';
+import { EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES } from './expected-order-cancellation-pending-sources.test-support';
 import { EXPECTED_PAYSTACK_PENDING_SOURCES } from './expected-paystack-pending-sources.test-support';
 import { AUDIT_PENDING_SOURCES } from './expected-pending-audit-sources.test-support';
 import { EXPECTED_PENDING_GUEST_CART_SOURCES } from './expected-pending-guest-cart-sources.test-support';
@@ -46,31 +48,7 @@ export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_CART_PENDING_SOURCES,
   ...EXPECTED_CONNECTOR_PENDING_SOURCES,
   ...EXPECTED_BLOG_PENDING_SOURCES,
-  {
-    repositoryPath:
-      'supabase/migrations/20260721093205_harden_paid_order_completion_and_side_effect_retries.sql',
-    sha256: 'e8398b0b10a5e9d199707bcceb5835f865bfce85dd4732e9bc46fc4e13d16d29',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260721093206_merchant_order_cancellation_audit.sql',
-    sha256: 'b36447107978f1612b0f158bbd3331f635bf8bd940ec0ff01545ecba765a753b',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260721093207_order_cancellation_side_effect_claims.sql',
-    sha256: '399dfc28247c2f3d3c720783eeb13c3376a1b207f7ea1095e66366e919f1e5ea',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260721140000_forward_harden_merchant_order_cancellation.sql',
-    sha256: '46efbde5a4a1f241ad0bc829edac60ecbbee156187f5d4f7975f3b6aabb9693b',
-  },
-  {
-    repositoryPath:
-      'supabase/migrations/20260721140100_forward_harden_cancellation_side_effects.sql',
-    sha256: '1fa573e186b486ade1ae4bc628969a74c37ee01f850cf7ab4d60ac3a40fad8a8',
-  },
+  ...EXPECTED_ORDER_CANCELLATION_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260721150000_quiz_leaderboard_bounded_and_self.sql',
@@ -201,6 +179,7 @@ export const EXPECTED_PENDING_SOURCES = [
   ...EXPECTED_PENDING_TAIL_SOURCES.late,
   ...EXPECTED_STOREFRONT_ORDER_PENDING_SOURCES,
   ...EXPECTED_JUMIA_PENDING_SOURCES,
+  ...EXPECTED_LOYALTY_PENDING_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260825154500_persist_shipment_shipping_quote.sql',

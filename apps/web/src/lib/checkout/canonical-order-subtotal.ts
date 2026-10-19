@@ -5,7 +5,7 @@ import {
 } from '@/lib/checkout/order-condition-prices';
 import { logger } from '@/lib/logger';
 
-type CanonicalSubtotalItem = {
+export type CanonicalSubtotalItem = {
   product_id?: string;
   condition?: string | null;
   variant_id?: string | null;

@@ -1,5 +1,4 @@
 import {
-  CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
   CheckoutPage,
   expect,
   fireEvent,
@@ -156,10 +155,11 @@ it('keeps another checkout recovery key when a DVA transfer confirms', async () 
     expect(completedEvents).toHaveLength(1);
   });
 
-  // Completing the older transfer must not delete the newer tab's key.
-  const stored = JSON.parse(
-    window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
-  );
-  expect(stored.key).toBe(otherTabKey);
+  // Completing the older transfer must not delete the newer tab's key:
+  // resolving that fingerprint still returns the key the other tab
+  // created (a clobber would mint a fresh one here).
+  await expect(
+    getCheckoutIdempotencyKey('other-tab-fingerprint')
+  ).resolves.toBe(otherTabKey);
   fetchMock.mockRestore();
 });

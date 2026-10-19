@@ -8,7 +8,10 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
-import { updateDiscountCodeSchema } from '@/schemas/discount-codes';
+import {
+  isReservedDiscountCodePrefix,
+  updateDiscountCodeSchema,
+} from '@/schemas/discount-codes';
 
 const DISCOUNT_CODE_COLUMNS =
   'id, code, description, discount_type, discount_value, minimum_purchase_amount, maximum_discount_amount, usage_limit, usage_limit_per_customer, usage_count, starts_at, expires_at, is_active, applies_to, product_ids, category_ids, created_at, updated_at';
@@ -88,6 +91,34 @@ export async function PATCH(
 
     const updateData = parseResult.data;
 
+    // The update schema cannot reject RDM- at parse time (legacy rows
+    // resend their unchanged code), so re-check on actual change like
+    // the dashboard upsert: renaming INTO the reserved prefix would
+    // otherwise reach the DB guard and surface as a 500.
+    if (updateData.code) {
+      const { data: currentRow, error: currentError } = await supabase
+        .from('discount_codes')
+        .select('code')
+        .eq('id', id)
+        .eq('merchant_id', merchantId)
+        .maybeSingle();
+      // A failed lookup is a retryable error, not an absent row:
+      // treating it as changed could falsely reject a legacy code.
+      if (currentError) throw currentError;
+      const codeChanged =
+        currentRow?.code?.toUpperCase() !== updateData.code.toUpperCase();
+      if (
+        currentRow &&
+        codeChanged &&
+        isReservedDiscountCodePrefix(updateData.code)
+      ) {
+        return NextResponse.json(
+          { error: 'Code prefix RDM- is reserved for loyalty redemptions' },
+          { status: 400 }
+        );
+      }
+    }
+
     // Empty PATCH is a no-op (idempotent) — return current state
     if (Object.keys(updateData).length === 0) {
       const { data: discountCode, error } = await supabase
@@ -124,6 +155,19 @@ export async function PATCH(
         return NextResponse.json(
           { error: 'Discount code not found' },
           { status: 404 }
+        );
+      }
+      // A concurrent rename can slip between the prefix pre-check and
+      // this UPDATE; the DB guard then raises instead of corrupting,
+      // so map it to the same 400 the pre-check would have returned.
+      if (
+        updateData.code &&
+        isReservedDiscountCodePrefix(updateData.code) &&
+        error.message?.includes('prefix RDM- is reserved')
+      ) {
+        return NextResponse.json(
+          { error: 'Code prefix RDM- is reserved for loyalty redemptions' },
+          { status: 400 }
         );
       }
       // A used code's identity is immutable (DB trigger) so retries can still

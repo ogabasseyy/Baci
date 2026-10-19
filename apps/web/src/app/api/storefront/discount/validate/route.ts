@@ -2,9 +2,9 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
 import { isLoyaltyCodeCurrencyCurrent } from '@/lib/checkout/is-loyalty-code-currency-current';
 import { logger } from '@/lib/logger';
+import { createLoyaltyResolverServiceClient } from '@/lib/loyalty/server-resolver-client';
 import { formatPayoutOnlyCurrency } from '@/lib/resolve-merchant-currency';
 import { createAnonClient } from '@/lib/supabase/anon';
-import { createServiceClient } from '@/lib/supabase/service';
 import {
   loyaltyCheckoutCodeRowSchema,
   storefrontDiscountCodeRowSchema,
@@ -79,10 +79,10 @@ export async function POST(request: NextRequest) {
       : (parsedSingle?.data ?? null);
 
     if (!discountCode) {
-      // Service-role only for the loyalty resolver (issue #3696):
-      // anon/authenticated lost EXECUTE, so the shared anon client
-      // would 403 here. Everything else on this route stays anon.
-      const serviceSupabase = createServiceClient();
+      // Branded resolver client only for the loyalty RPC (issue
+      // #3696): anon/authenticated lost EXECUTE, so the shared anon
+      // client would 403 here. Everything else stays anon.
+      const serviceSupabase = createLoyaltyResolverServiceClient();
       const { data: loyaltyData, error: loyaltyError } =
         await serviceSupabase.rpc('get_loyalty_redemption_for_checkout', {
           p_merchant_id: merchant_id,

@@ -9,23 +9,23 @@ vi.mock('@/lib/supabase/anon', () => ({
   createAnonClient: vi.fn(),
 }));
 
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: vi.fn(),
+vi.mock('@/lib/loyalty/server-resolver-client', () => ({
+  createLoyaltyResolverServiceClient: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
+import { createLoyaltyResolverServiceClient } from '@/lib/loyalty/server-resolver-client';
 import { createAnonClient } from '@/lib/supabase/anon';
-import { createServiceClient } from '@/lib/supabase/service';
 
 // Dynamic import AFTER the mocks register (never a static re-export:
 // the route module must evaluate against the mocked clients).
 export const { POST } = await import('./route');
 
 const mockCreateAnonClient = vi.mocked(createAnonClient);
-const mockCreateServiceClient = vi.mocked(createServiceClient);
+const mockCreateServiceClient = vi.mocked(createLoyaltyResolverServiceClient);
 
 let merchantRow: unknown = null;
 

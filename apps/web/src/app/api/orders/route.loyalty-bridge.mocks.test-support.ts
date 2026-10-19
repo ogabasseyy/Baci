@@ -6,7 +6,7 @@
 import { vi } from 'vitest';
 
 const mockCreateAdminClient = vi.hoisted(() => vi.fn());
-const mockCreateServiceClient = vi.hoisted(() => vi.fn());
+const mockCreateLoyaltyResolverServiceClient = vi.hoisted(() => vi.fn());
 const mockAfter = vi.hoisted(() => vi.fn((cb: () => unknown) => cb()));
 
 vi.mock('@/env', () => ({
@@ -42,11 +42,11 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
 }));
 
-// Issue #3696: resolveLoyaltyCheckoutCode builds its own service-role
-// client (the resolver RPC lost anon EXECUTE), so the harness wires
-// the service factory to an override-driven fake too.
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: mockCreateServiceClient,
+// Issue #3696: resolveLoyaltyCheckoutCode builds its own branded
+// resolver client (the resolver RPC lost anon EXECUTE), so the
+// harness wires the branded factory to an override-driven fake too.
+vi.mock('@/lib/loyalty/server-resolver-client', () => ({
+  createLoyaltyResolverServiceClient: mockCreateLoyaltyResolverServiceClient,
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -150,4 +150,4 @@ vi.mock('@/lib/shipping/providers/gigl', () => ({
 export const { POST } = await import('./route');
 export const { authenticateApiRequest } = await import('@/lib/api-auth');
 export const { NextRequest } = await import('next/server');
-export { mockCreateAdminClient, mockCreateServiceClient };
+export { mockCreateAdminClient, mockCreateLoyaltyResolverServiceClient };

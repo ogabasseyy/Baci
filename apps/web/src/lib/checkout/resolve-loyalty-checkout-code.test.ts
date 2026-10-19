@@ -6,13 +6,13 @@ vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
 
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: vi.fn(),
+vi.mock('@/lib/loyalty/server-resolver-client', () => ({
+  createLoyaltyResolverServiceClient: vi.fn(),
 }));
 
-import { createServiceClient } from '@/lib/supabase/service';
+import { createLoyaltyResolverServiceClient } from '@/lib/loyalty/server-resolver-client';
 
-const mockCreateServiceClient = vi.mocked(createServiceClient);
+const mockCreateServiceClient = vi.mocked(createLoyaltyResolverServiceClient);
 
 const ROW = {
   redemption_id: '22222222-2222-4222-8222-222222222222',
@@ -51,7 +51,7 @@ describe('resolveLoyaltyCheckoutCode', () => {
     vi.clearAllMocks();
   });
 
-  it('resolves through the service-role client, never anon (issue #3696)', async () => {
+  it('resolves through the branded resolver client, never anon (issue #3696)', async () => {
     const { rpc } = serviceClientWith(() => ({ data: [ROW], error: null }));
 
     const resolution = await resolveLoyaltyCheckoutCode({

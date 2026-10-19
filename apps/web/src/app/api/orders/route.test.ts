@@ -679,12 +679,12 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(),
 }));
 
-// Issue #3696: the loyalty resolver runs on its own service-role
-// client. Only the unknown-code path reaches it here (SAVE10 resolves
-// on the merchant path), and it must see no rows so the code stays
-// invalid; per-case overrides live in the bridge suites.
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: vi.fn(() => ({
+// Issue #3696: the loyalty resolver runs on its own branded
+// resolver client. Only the unknown-code path reaches it here (SAVE10
+// resolves on the merchant path), and it must see no rows so the code
+// stays invalid; per-case overrides live in the bridge suites.
+vi.mock('@/lib/loyalty/server-resolver-client', () => ({
+  createLoyaltyResolverServiceClient: vi.fn(() => ({
     rpc: vi.fn(async () => ({ data: [], error: null })),
     from: vi.fn(() => ({
       select: vi.fn(() => ({

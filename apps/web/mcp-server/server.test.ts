@@ -225,6 +225,7 @@ describe('MCP streamable HTTP probe compatibility', () => {
       'get_product_variants',
       'get_store_info',
       'prepare_storefront_cart_link',
+      'render_ogabassey_catalog',
       'search_products',
       'update_ogabassey_guest_cart',
     ]);

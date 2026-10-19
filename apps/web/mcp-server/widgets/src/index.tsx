@@ -4,8 +4,13 @@ import { BrandLogo } from './brand-logo';
 import { CartSummary } from './cart-summary';
 import { useCartHandoff } from './hooks/use-cart-handoff';
 import { useOpenAiGlobal } from './hooks/use-openai-global';
+import { initializeMcpApp } from './initialize-mcp-app';
+import { openOgabasseyUrl } from './open-ogabassey-url';
 import { ProductCard } from './product-card';
+import { widgetHost } from './widget-host';
 import type { Product } from './widget-types';
+
+void initializeMcpApp();
 
 // Main App Component
 export function App() {
@@ -15,14 +20,22 @@ export function App() {
     coverage?: string;
     message?: string;
   } | null;
+  const hostError = useOpenAiGlobal('hostError');
   const theme = useOpenAiGlobal('theme') || 'dark';
   const displayMode = useOpenAiGlobal('displayMode') || 'inline';
   const safeArea = useOpenAiGlobal('safeArea');
+  const mcpAppReady = useOpenAiGlobal('mcpAppReady') === true;
   const products = toolOutput?.products || [];
+  // Subscribed (not read opportunistically) so late capability changes
+  // re-render the expand control on every host path.
+  const requestDisplayMode = useOpenAiGlobal('requestDisplayMode');
+  const canExpand =
+    Boolean(requestDisplayMode) &&
+    (mcpAppReady || typeof window.openai?.requestDisplayMode === 'function');
   const widgetRef = useRef<HTMLDivElement>(null);
   const resultMessage = !toolOutput
     ? 'Loading product results…'
-    : toolOutput.status === 'error'
+    : toolOutput.status === 'error' || toolOutput.status === 'unavailable'
       ? toolOutput.message || 'Product search is temporarily unavailable.'
       : toolOutput.status === 'incomplete'
         ? toolOutput.message || 'Narrow your search to check prices accurately.'
@@ -31,11 +44,19 @@ export function App() {
             ? 'No verified match was found among the checked products. Other products may match.'
             : 'No verified products match this search.'
           : toolOutput.message || 'View the tool response in the conversation.';
-  const { cart, canReviewCart, cartError, cartNotice, isSavingCart, handleAddToCart, handleRemoveItem, handleViewCart } =
-    useCartHandoff();
+  const {
+    cart,
+    canReviewCart,
+    cartError,
+    cartNotice,
+    isSavingCart,
+    handleAddToCart,
+    handleRemoveItem,
+    handleViewCart,
+  } = useCartHandoff();
 
   useEffect(() => {
-    window.openai?.setOpenInAppUrl?.({ href: 'https://ogabassey.com' });
+    widgetHost.get()?.setOpenInAppUrl?.({ href: 'https://ogabassey.com' });
   }, []);
 
   useEffect(() => {
@@ -46,16 +67,18 @@ export function App() {
       const padding =
         Number.parseFloat(bodyStyle.paddingTop) +
         Number.parseFloat(bodyStyle.paddingBottom);
-      window.openai?.notifyIntrinsicHeight?.(
-        Math.ceil(element.getBoundingClientRect().height + (padding || 0))
-      );
+      widgetHost
+        .get()
+        ?.notifyIntrinsicHeight?.(
+          Math.ceil(element.getBoundingClientRect().height + (padding || 0))
+        );
     };
     reportHeight();
     if (typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(reportHeight);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [displayMode, toolOutput, cart, cartError, cartNotice]);
+  }, [displayMode, toolOutput, cart, cartError, cartNotice, hostError, mcpAppReady]);
 
   return (
     <div
@@ -85,14 +108,12 @@ export function App() {
         <div className="header-actions">
           {products.length > 1 &&
             displayMode !== 'fullscreen' &&
-            window.openai?.requestDisplayMode && (
+            canExpand && (
               <button
                 type="button"
                 className="expand-button"
                 onClick={() =>
-                  void window.openai?.requestDisplayMode?.({
-                    mode: 'fullscreen',
-                  })
+                  void requestDisplayMode?.({ mode: 'fullscreen' })
                 }
               >
                 Expand catalog
@@ -124,9 +145,9 @@ export function App() {
       </header>
 
       {isSavingCart && <p role="status">Saving your guest cart…</p>}
-      {cartError && (
+      {(cartError || hostError) && (
         <p role="alert" className="cart-error">
-          {cartError}
+          {cartError || hostError}
         </p>
       )}
       {cartNotice && (
@@ -145,7 +166,7 @@ export function App() {
         <div
           className={`products-grid ${products.length === 1 ? 'products-grid--single' : ''}`}
         >
-          {products.slice(0, 6).map((product) => (
+          {products.map((product) => (
             <ProductCard
               key={product.id}
               product={product}
@@ -169,7 +190,14 @@ export function App() {
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.35-4.35" />
           </svg>
-          <p role={toolOutput?.status === 'error' ? 'alert' : 'status'}>
+          <p
+            role={
+              toolOutput?.status === 'error' ||
+              toolOutput?.status === 'unavailable'
+                ? 'alert'
+                : 'status'
+            }
+          >
             {resultMessage}
           </p>
         </div>
@@ -189,9 +217,13 @@ export function App() {
           <button
             type="button"
             className="btn-negotiate-icon"
-            disabled={isSavingCart || cart.length === 0}
+            disabled={
+              isSavingCart ||
+              cart.length === 0 ||
+              !widgetHost.get()?.sendFollowUpMessage
+            }
             onClick={() => {
-              window.openai?.sendFollowUpMessage?.({
+              widgetHost.get()?.sendFollowUpMessage?.({
                 prompt:
                   'I would like to negotiate the price for my selected item.',
               });
@@ -229,11 +261,7 @@ export function App() {
           type="button"
           className="btn-browse-more"
           onClick={() => {
-            if (window.openai?.openExternal) {
-              window.openai.openExternal({ href: 'https://ogabassey.com' });
-            } else {
-              window.open('https://ogabassey.com', '_blank');
-            }
+            openOgabasseyUrl('https://ogabassey.com');
           }}
         >
           Browse All Products →

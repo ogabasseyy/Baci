@@ -1,7 +1,6 @@
 import { sanitizeText } from '../src/lib/sanitize-core';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { resolveMcpSearchProductCondition } from './product-condition-filter';
-import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
 import type { discoverMcpProducts } from './discover-products';
@@ -150,9 +149,5 @@ export function formatSearchProductsResponse({
   return {
     content: [{ type: 'text' as const, text: resultText }],
     structuredContent,
-    _meta: {
-      'openai/outputTemplate': STORE_WIDGET_URI,
-      'openai/widgetPrefersBorder': true,
-    },
   };
 }

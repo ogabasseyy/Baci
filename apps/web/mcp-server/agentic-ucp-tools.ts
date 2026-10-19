@@ -1,4 +1,5 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { AgenticCheckoutClientConfig } from './agentic-checkout-client';
 import {
   cancelUcpCart,
@@ -24,6 +25,7 @@ export function registerAgenticUcpTools(
   server: McpServer,
   config: AgenticCheckoutClientConfig
 ) {
+
   server.registerTool(
     'search_ucp_catalog',
     {
@@ -35,7 +37,7 @@ export function registerAgenticUcpTools(
       },
       description:
         'Search Ogabassey products through the signed UCP catalog search route.',
-      inputSchema: searchUcpCatalogInputSchema,
+      inputSchema: z.object(searchUcpCatalogInputSchema),
       _meta: {
         'openai/toolInvocation/invoking': 'Searching UCP catalog...',
         'openai/toolInvocation/invoked': 'UCP catalog search complete',
@@ -61,7 +63,7 @@ export function registerAgenticUcpTools(
       },
       description:
         'Fetch exact Ogabassey product IDs through the signed UCP catalog lookup route.',
-      inputSchema: lookupUcpCatalogItemsInputSchema,
+      inputSchema: z.object(lookupUcpCatalogItemsInputSchema),
       _meta: {
         'openai/toolInvocation/invoking': 'Looking up UCP catalog items...',
         'openai/toolInvocation/invoked': 'UCP catalog items loaded',
@@ -88,7 +90,7 @@ export function registerAgenticUcpTools(
       },
       description:
         'Create a persistent signed UCP cart session for selected products and quantities.',
-      inputSchema: createUcpCartInputSchema,
+      inputSchema: z.object(createUcpCartInputSchema),
       _meta: {
         'openai/toolInvocation/invoking': 'Creating UCP cart...',
         'openai/toolInvocation/invoked': 'UCP cart created',
@@ -114,7 +116,7 @@ export function registerAgenticUcpTools(
         idempotentHint: true,
       },
       description: 'Read a signed UCP cart session state.',
-      inputSchema: getUcpCartInputSchema,
+      inputSchema: z.object(getUcpCartInputSchema),
       _meta: {
         'openai/toolInvocation/invoking': 'Reading UCP cart...',
         'openai/toolInvocation/invoked': 'UCP cart loaded',
@@ -141,7 +143,7 @@ export function registerAgenticUcpTools(
       },
       description:
         'Replace UCP cart line items, buyer details, currency, or fulfillment context.',
-      inputSchema: updateUcpCartInputSchema,
+      inputSchema: z.object(updateUcpCartInputSchema),
       _meta: {
         'openai/toolInvocation/invoking': 'Updating UCP cart...',
         'openai/toolInvocation/invoked': 'UCP cart updated',
@@ -168,7 +170,7 @@ export function registerAgenticUcpTools(
       },
       description:
         'Create or reuse a Baci checkout session from a persistent UCP cart.',
-      inputSchema: convertUcpCartToCheckoutInputSchema,
+      inputSchema: z.object(convertUcpCartToCheckoutInputSchema),
       _meta: {
         'openai/toolInvocation/invoking': 'Converting UCP cart...',
         'openai/toolInvocation/invoked': 'UCP cart converted',
@@ -194,7 +196,7 @@ export function registerAgenticUcpTools(
         idempotentHint: true,
       },
       description: 'Cancel an active signed UCP cart session.',
-      inputSchema: cancelUcpCartInputSchema,
+      inputSchema: z.object(cancelUcpCartInputSchema),
       _meta: {
         'openai/toolInvocation/invoking': 'Canceling UCP cart...',
         'openai/toolInvocation/invoked': 'UCP cart canceled',

@@ -101,7 +101,7 @@ green CI and change no activation state.
 1. **Wallet-funding contract (rows 9, 13) — first, ahead of
    formatting:** the mobile `z.iso.datetime()` offset divergence is
    a present-tense payment-path bug, not future drift, so this wave
-   leads. Share only the identical intent/poll subshape — the create response's `account` block has legitimately diverged (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) and stays local per app. The wave verifies the subshape against live PostgREST payloads before adopting it; the wave must also align the create-failure
+   leads. Share the intent/poll subshape **and** a canonical account subshape derived from the single server response builder (`wallet-order-funding-intent-response.ts` emits exactly `accountName/accountNumber/bankName/provider` from `result.account`): both clients parse the same endpoint payload, so the client schemas' divergence (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) is drift to align to the server's actual emission, not a legitimate per-app contract. The wave verifies the subshape against live PostgREST payloads before adopting it; the wave must also align the create-failure
    protocol — the failure classifier is
    `apps/mobile-storefront/lib/checkout/wallet-funded-bank-transfer.ts`
    (every non-consent error invokes `onFallback`), and
@@ -127,7 +127,8 @@ green CI and change no activation state.
    an unfixed parser would just fail on its `+00:00` `expiresAt`
    again), bounded to a small retry count with backoff.
    **Unknown-after-POST is terminal for fallback:** if the bounded
-   re-creates still cannot confirm the intent, the flow must stop
+   re-creates still cannot confirm the intent (or obtain the
+   server-verifiable no-intent proof above), the flow must stop
    in a resumable pending/recovery state for that order — it must
    never fall through to the legacy DVA fallback, which is exactly
    the double-funding path this wave removes. Only a confirmed
@@ -141,7 +142,7 @@ green CI and change no activation state.
    | Class | Examples | Behavior |
    |---|---|---|
    | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Prompt for consent; on grant, create the funding account (`createWalletFundingAccount`), then retry intent create once (the current client's actual sequence in `wallet-funded-bank-transfer.ts`) |
-   | Confirmed no-intent (safe to fall back) | **First attempt only**, server-code-first on a received response: received 4xx validation/business rejections and `WALLET_DVA_SETUP_FAILED` (502). **Context limit:** account resolution runs *before* the existing-intent check in `createOrderWalletFundingIntent`, so on a re-create after an unknown attempt this same code can be returned while the first intent is active — after any unknown attempt, no fallback code alone qualifies; fallback requires a re-create outcome that demonstrably passed the existing-intent check. The wave enumerates the exact server codes from the create route before coding | Legacy DVA fallback allowed (first attempt only) |
+   | Confirmed no-intent (safe to fall back) | **Server-verifiable no-intent for the order** — not a client-side attempt count. Today this proof is *not obtainable*: settings/eligibility/account resolution in `createOrderWalletFundingIntent` all run (and can return fallback codes) *before* `findActiveOrderIntent`, and no order-scoped lookup endpoint exists, so no received code — on a first attempt or a retry — proves no intent exists (a prior session may have created one). The wallet wave therefore includes a server change: check for an existing intent before account resolution (returning it if present), or add an explicit no-intent signal / order-scoped lookup. Only with that proof does a received business rejection (4xx, `WALLET_DVA_SETUP_FAILED`) qualify. | Legacy DVA fallback allowed only with server-verifiable no-intent |
    | Unknown-after-POST | Transport failure, timeout, or any failure with **no received response** after the mutating POST (a received 5xx is classified by its server code first, per the row above) | Bounded idempotent re-create; on exhaustion, resumable pending state — **never** DVA |
    | Unparseable received response | Response received but fails schema parsing | Treat as unknown-after-POST (an intent may exist); re-create to fetch the canonical intent |
    | Unenumerated received code (default) | Any server code not enumerated above | **Fail closed:** treat as unknown-after-POST; never fall back on an unclassified code |

@@ -23,7 +23,6 @@ import { adaptUcpShippingAddressToAgentic } from '@/lib/agentic/ucp-request-adap
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
-import { createAnonClient } from '@/lib/supabase/anon';
 import { ucpCartCreateRequestSchema } from '@/schemas/ucp-cart-request';
 
 const CREATE_CART_ROUTE = 'carts.create';
@@ -56,9 +55,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const merchant = await resolveAgenticMerchantContextFromRpc(
-    createAnonClient()
-  );
+  const merchant = await resolveAgenticMerchantContextFromRpc();
   if (!merchant) {
     return NextResponse.json(
       { error: 'Agentic merchant not found' },

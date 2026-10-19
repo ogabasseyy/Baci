@@ -13,7 +13,6 @@ import {
   type UcpCartSessionRecord,
 } from '@/lib/agentic/ucp-cart-storage';
 import { buildRequestScopedStoreUrl } from '@/lib/store-url';
-import { createAnonClient } from '@/lib/supabase/anon';
 
 export async function resolveUcpCartContext(request: NextRequest): Promise<
   | {
@@ -23,9 +22,7 @@ export async function resolveUcpCartContext(request: NextRequest): Promise<
     }
   | { ok: false; response: NextResponse }
 > {
-  const merchant = await resolveAgenticMerchantContextFromRpc(
-    createAnonClient()
-  );
+  const merchant = await resolveAgenticMerchantContextFromRpc();
   if (!merchant) {
     return {
       ok: false,

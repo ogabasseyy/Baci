@@ -207,6 +207,15 @@ operator-visible as `guestCartsCanonical: 'disabled'` in the MCP
 field reads `enabled` for every deployment expected to migrate MCP
 guest carts to the canonical shared cart.
 
+Merchant agentic context: `resolve_agentic_merchant_context` is available
+only to the server-minted `agentic_merchant_context` role, with a
+normalized configured-slug claim matching the requested slug. It has
+no direct table grants; anonymous, ordinary authenticated and service
+roles cannot execute the projection. This keeps private checkout
+controls and agent allow/deny lists out of public PostgREST responses.
+Apply the registered authority migration before serving the new UCP
+callers; no anonymous fallback or new production secret is introduced.
+
 ## Observability gaps to close before activation
 
 - No production dashboards/alerts exist yet for mutation latency,

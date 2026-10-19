@@ -7,6 +7,7 @@ import {
 } from '@/env';
 import { readAgenticRequestControls } from '@/lib/agentic/agent-request-controls';
 import { hasUsableAgenticJwtSigningMaterial } from '@/lib/agentic/jwt-signing-material';
+import { createAgenticMerchantContextClient } from '@/lib/agentic/scoped-supabase';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 
@@ -63,16 +64,20 @@ interface AgenticMerchantContextRpcClient {
  * SECURITY DEFINER projection instead of a service-role client, so
  * user-facing cart routes never bypass RLS to read merchant config.
  */
-export async function resolveAgenticMerchantContextFromRpc(
-  client: AgenticMerchantContextRpcClient
-): Promise<AgenticMerchantContext | null> {
+export async function resolveAgenticMerchantContextFromRpc(): Promise<AgenticMerchantContext | null> {
   const merchantSlug = getConfiguredAgenticMerchantSlug();
   if (!merchantSlug) {
     return null;
   }
-  const { data, error } = await client.rpc('resolve_agentic_merchant_context', {
-    p_slug: merchantSlug,
-  });
+  const normalizedSlug = merchantSlug.trim().toLowerCase();
+  const contextClient: AgenticMerchantContextRpcClient =
+    createAgenticMerchantContextClient(normalizedSlug);
+  const { data, error } = await contextClient.rpc(
+    'resolve_agentic_merchant_context',
+    {
+      p_slug: normalizedSlug,
+    }
+  );
   const row = Array.isArray(data) ? data[0] : null;
   if (error || !row || typeof row !== 'object') {
     if (error) {

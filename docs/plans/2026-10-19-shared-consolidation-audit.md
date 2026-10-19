@@ -140,9 +140,9 @@ green CI and change no activation state.
 
    | Class | Examples | Behavior |
    |---|---|---|
-   | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Prompt for consent, then retry create once |
-   | Confirmed no-intent (safe to fall back) | Received 4xx validation/business rejections (invalid order state, ineligible wallet, amount violations) — the wave enumerates the exact server codes from the create route before coding | Legacy DVA fallback allowed |
-   | Unknown-after-POST | Transport failure, timeout, 5xx, or any failure with no received response after the mutating POST | Bounded idempotent re-create; on exhaustion, resumable pending state — **never** DVA |
+   | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Prompt for consent; on grant, create the funding account (`createWalletFundingAccount`), then retry intent create once (the current client's actual sequence in `wallet-funded-bank-transfer.ts`) |
+   | Confirmed no-intent (safe to fall back) | **Server-code-first on any received response, regardless of status class:** `WALLET_DVA_SETUP_FAILED` (502, documented pre-insert setup failure in `order-wallet-funding-intents.ts`) and received 4xx validation/business rejections (invalid order state, ineligible wallet, amount violations) — the wave enumerates the exact server codes from the create route before coding | Legacy DVA fallback allowed |
+   | Unknown-after-POST | Transport failure, timeout, or any failure with **no received response** after the mutating POST (a received 5xx is classified by its server code first, per the row above) | Bounded idempotent re-create; on exhaustion, resumable pending state — **never** DVA |
    | Unparseable received response | Response received but fails schema parsing | Treat as unknown-after-POST (an intent may exist); re-create to fetch the canonical intent |
 
    No server change is
@@ -183,9 +183,9 @@ green CI and change no activation state.
 ≥2 consumers: yes (3). Platform-free: mostly — `Intl` exists in
 Next.js, Hermes, and Node, but Node-run fixtures cannot pin Hermes
 locale/currency output; the repo already acknowledges runtimes
-without full Intl data (the cited fallback,
-`apps/mobile-admin/lib/utils.ts`, covers `Intl.NumberFormat`
-currency formatting only — no date fallback is claimed or needed
+without full Intl data (see the `Intl.NumberFormat` try/catch
+fallback in `formatMerchantCurrencyAmount`,
+`apps/mobile-admin/lib/utils.ts:195-215`, currency formatting only — no date fallback is claimed or needed
 for this currency-only wave). The formatting wave must therefore
 add an on-device/Hermes verification (or a verified locale/currency
 allowlist) before relying on fixture parity. Size: one shared module

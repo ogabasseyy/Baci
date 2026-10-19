@@ -38,6 +38,7 @@ jest.mock('@/lib/release-codepoint-checkout-item-sort', () => ({
 jest.mock('expo/fetch', () => ({ fetch: jest.fn() }));
 jest.mock('expo-crypto', () => ({ randomUUID: () => 'operation' }));
 jest.mock('expo-secure-store', () => ({
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'whenUnlockedThisDeviceOnly',
   getItemAsync: jest.fn(),
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
@@ -136,7 +137,8 @@ it('discards canonical ownership when enrollment turns off', async () => {
   await waitFor(() =>
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       `baci.cart.session.${options.merchantId}`,
-      expect.stringContaining('"retired":true')
+      expect.stringContaining('"retired":true'),
+      { keychainAccessible: 'whenUnlockedThisDeviceOnly' }
     )
   );
   expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith(

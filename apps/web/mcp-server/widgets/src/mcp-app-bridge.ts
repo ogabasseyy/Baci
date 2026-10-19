@@ -53,7 +53,10 @@ export async function connectMcpApp() {
         update({ toolOutput: deliveredOutput });
       return;
     }
-    if (extensions?.callTool) return;
+    // A callTool-only bridge with no delivered result would hang on loading:
+    // rethrow so the safe connection error renders (late legacy results
+    // still replace it via set_globals).
+    if (extensions?.callTool && extensions.toolOutput != null) return;
     throw error;
   }
   const context = app.getHostContext();

@@ -133,12 +133,26 @@ it('shows a safe fallback when the standard handshake fails', async () => {
 });
 
 it('uses the existing legacy bridge only when standard initialization fails', async () => {
-  const bridge = { callTool: vi.fn(), widgetState: { cart: ['saved'] } };
+  const bridge = {
+    callTool: vi.fn(),
+    widgetState: { cart: ['saved'] },
+    toolOutput: { products: [{ id: 'phone' }] },
+  };
   window.openai = bridge;
   host.connect.mockRejectedValueOnce(new Error('unsupported protocol'));
   await initializeMcpApp();
   expect(widgetHost.get()).toBe(bridge);
   expect(host.close).toHaveBeenCalled();
+});
+
+it('shows a connection error for a callTool-only bridge with no delivered result', async () => {
+  window.openai = { callTool: vi.fn() };
+  host.connect.mockRejectedValueOnce(new Error('unsupported'));
+  await initializeMcpApp();
+  expect(widgetHost.get()?.toolOutput).toMatchObject({
+    status: 'error',
+    products: [],
+  });
 });
 it('supports follow-up messages and local state without ChatGPT extensions', async () => {
   await connectMcpApp();

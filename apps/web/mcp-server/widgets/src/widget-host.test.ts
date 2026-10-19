@@ -46,3 +46,36 @@ it('replaces adapter widget state when the native host publishes a newer value',
 
   expect(widgetHost.get()?.widgetState).toEqual({ count: 3 });
 });
+
+it('notifies subscribers with native values when the adapter resets', () => {
+  window.openai = { theme: 'light' };
+  widgetHost.update({ theme: 'dark', toolOutput: { products: [] } });
+  const seen: Array<Record<string, unknown>> = [];
+  const listener = (event: Event) => {
+    seen.push({
+      ...(event as CustomEvent<{ globals: Record<string, unknown> }>)
+        .detail.globals,
+    });
+  };
+  window.addEventListener('openai:set_globals', listener);
+  try {
+    widgetHost.reset();
+  } finally {
+    window.removeEventListener('openai:set_globals', listener);
+  }
+  expect(seen).toHaveLength(1);
+  expect(seen[0]?.theme).toBe('light');
+  expect(seen[0] && 'toolOutput' in seen[0]).toBe(true);
+  expect(widgetHost.get()).toBe(window.openai);
+});
+
+it('dispatches nothing when resetting without adapter state', () => {
+  const listener = vi.fn();
+  window.addEventListener('openai:set_globals', listener);
+  try {
+    widgetHost.reset();
+  } finally {
+    window.removeEventListener('openai:set_globals', listener);
+  }
+  expect(listener).not.toHaveBeenCalled();
+});

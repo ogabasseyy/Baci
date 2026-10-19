@@ -77,8 +77,10 @@ export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
 
       const handleSetGlobal = (event: Event) => {
         const customEvent = event as SetGlobalsEvent;
-        const value = customEvent.detail?.globals?.[key];
-        if (value === undefined) {
+        const globals = customEvent.detail?.globals;
+        // Presence, not value: a reset notification carries native values
+        // that may be undefined, and subscribers must still re-read.
+        if (!globals || !(key in globals)) {
           return;
         }
         onChange();

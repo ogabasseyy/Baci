@@ -17,8 +17,11 @@ const adapter: WidgetHost = new Proxy({} as WidgetHost, {
 });
 
 const syncHostGlobals = (event: Event) => {
-  const globals = (event as CustomEvent<{ globals?: WidgetHostOverrides }>)
-    .detail?.globals;
+  const detail = (event as CustomEvent<{ globals?: WidgetHostOverrides; reset?: boolean }>).detail;
+  // Reset notifications carry native values for re-rendering only; merging
+  // them would resurrect the adapter the reset just cleared.
+  if (detail?.reset) return;
+  const globals = detail?.globals;
   if (globals) overrides = { ...overrides, ...globals };
 };
 
@@ -32,7 +35,19 @@ function get(): WidgetHost | undefined {
 
 /** Clear standard adapter values when the standard handshake is rejected. */
 function reset() {
+  const previous = overrides;
+  if (!previous) return;
   overrides = undefined;
+  // Notify subscribers that adapter values are gone: get() now resolves to
+  // the native host, so previously overridden keys must re-render even when
+  // the native host has no value for them.
+  const native = window.openai;
+  const globals = Object.fromEntries(
+    Object.keys(previous).map((key) => [key, native?.[key as keyof NonNullable<typeof native>]])
+  ) as WidgetHostOverrides;
+  window.dispatchEvent(
+    new CustomEvent('openai:set_globals', { detail: { globals, reset: true } })
+  );
 }
 
 /** Apply a standard bridge update and notify the widget's external-store hooks. */

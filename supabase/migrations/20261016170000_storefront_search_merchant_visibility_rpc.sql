@@ -26,4 +26,10 @@ $$;
 REVOKE ALL ON FUNCTION public.storefront_search_merchant_is_visible(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.storefront_search_merchant_is_visible(uuid) TO anon, authenticated;
 
+-- New public RPC on a running project: PostgREST keeps its prior
+-- schema cache until reloaded, so refined-search hydration would get
+-- PGRST202 (missing function) until an unrelated reload. Notify here
+-- (fires at COMMIT) following the sibling-migration convention.
+NOTIFY pgrst, 'reload schema';
+
 COMMIT;

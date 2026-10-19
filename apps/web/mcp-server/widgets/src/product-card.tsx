@@ -1,3 +1,4 @@
+import { openOgabasseyUrl } from './open-ogabassey-url';
 import { useState } from 'react';
 import { getProductImageUrl } from './product-image';
 import { formatPrice } from './format-price';
@@ -117,11 +118,7 @@ export function ProductCard({
           className="btn-buy-now"
           onClick={() => {
             const url = resolveOptionAwareProductUrl(product).url;
-            if (window.openai?.openExternal) {
-              window.openai.openExternal({ href: url });
-            } else {
-              window.open(url, '_blank');
-            }
+            openOgabasseyUrl(url);
           }}
         >
           Review on Ogabassey

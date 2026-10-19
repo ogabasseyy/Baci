@@ -140,6 +140,41 @@ describe('transaction review helpers', () => {
     expect(order.items[0]).toMatchObject({ offerId: 'offer-9' });
     expect(order.items[0].searchText).toContain('offer-9');
     expect(order.searchText).toContain('offer-9');
+  });
+
+  it('falls back to the resolved condition offer when no exact id was stored', () => {
+    const [order] = mapTransactionOrderRows([
+      {
+        created_at: '2026-05-11T12:30:00.000Z',
+        customer_email: 'ada@example.com',
+        customer_name: 'Ada Buyer',
+        customer_phone: '08030000000',
+        fulfillment_details: null,
+        id: 'order-1',
+        order_items: [
+          {
+            condition: 'used',
+            fulfillment_data: null,
+            id: 'item-1',
+            name: 'iPhone 11 Pro',
+            offer_id: null,
+            offer_id_snapshot: null,
+            product_offer_id: 'offer-7',
+            price: 150_000,
+            product_id: 'product-1',
+            products: null,
+            quantity: 1,
+          },
+        ],
+        order_number: 'ORD-1',
+        payment_method: 'transfer',
+        total: 150_000,
+      },
+    ]);
+
+    expect(order.items[0]).toMatchObject({ offerId: 'offer-7' });
+    expect(order.items[0].searchText).toContain('offer-7');
+    expect(order.searchText).toContain('offer-7');
     // The displayed line condition must be searchable too: an
     // offer-backed line identifiable only by its shown condition
     // otherwise returns no result.

@@ -169,6 +169,7 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
           item.condition,
           item.offer_id,
           item.offer_id_snapshot,
+          item.product_offer_id,
           item.offer_grade,
           item.offer_condition_notes,
           variant?.sku,
@@ -209,7 +210,11 @@ export function mapTransactionOrderRows(rows: TransactionReviewOrderRow[]) {
             identifierValue: resolvedUnit.identifierValue,
             imeiValues: resolvedUnit.imeiValues,
             name: item.name ?? 'Product',
-            offerId: item.offer_id ?? item.offer_id_snapshot ?? null,
+            offerId:
+              item.offer_id ??
+              item.offer_id_snapshot ??
+              item.product_offer_id ??
+              null,
             offerGrade: item.offer_grade ?? null,
             offerConditionNotes: item.offer_condition_notes ?? null,
             orderItemId: item.id,

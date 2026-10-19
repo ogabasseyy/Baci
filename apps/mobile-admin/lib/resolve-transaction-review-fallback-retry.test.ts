@@ -46,6 +46,14 @@ describe('resolveTransactionReviewFallbackRetry', () => {
     expect(onMissingSchemaColumn).toHaveBeenCalledWith('offer_id');
   });
 
+  it('retries a missing resolved condition offer column', () => {
+    expect(resolve(missingColumnError('product_offer_id'))).toBe(true);
+    expect(markUnavailableSchemaColumn).toHaveBeenCalledWith(
+      'product_offer_id'
+    );
+    expect(onMissingSchemaColumn).toHaveBeenCalledWith('product_offer_id');
+  });
+
   it('ignores unrelated errors without retrying', () => {
     expect(resolve({ message: 'insufficient_privilege' })).toBe(false);
     expect(resolve(null)).toBe(false);

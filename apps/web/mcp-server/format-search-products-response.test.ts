@@ -90,10 +90,7 @@ describe('formatSearchProductsResponse', () => {
       semantic_unavailable: true,
       meta: { total: 1, query: 'Baci laptop' },
     });
-    expect(response._meta).toEqual({
-      'openai/outputTemplate': expect.any(String),
-      'openai/widgetPrefersBorder': true,
-    });
+    expect(response).not.toHaveProperty('_meta.openai/outputTemplate');
     expect(getSafeCatalogImageUrl).toHaveBeenCalledWith('https://cdn.ogabassey.com/products/laptop.webp');
   });
 

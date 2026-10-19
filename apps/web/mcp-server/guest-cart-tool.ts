@@ -3,7 +3,7 @@ import {
   GuestCartPersistedError,
 } from './guest-cart-errors';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from "@modelcontextprotocol/server";
 import {
   MCP_GUEST_CART_DESCRIPTION,
   mcpGuestCartInputSchema,
@@ -32,13 +32,14 @@ export function registerGuestCartTool(
     clientIp?: string;
   }
 ) {
+
   server.registerTool(
     'update_ogabassey_guest_cart',
     {
       outputSchema: mcpGuestCartOutputSchema,
       title: 'Update Ogabassey Guest Cart',
       description: MCP_GUEST_CART_DESCRIPTION,
-      inputSchema: mcpGuestCartInputSchema.shape,
+      inputSchema: mcpGuestCartInputSchema,
       annotations: {
         readOnlyHint: false,
         // Quantity 0 removes a line and a lowered absolute quantity shrinks
@@ -51,6 +52,7 @@ export function registerGuestCartTool(
         idempotentHint: false,
       },
       _meta: {
+        ui: { visibility: ['model', 'app'] },
         'openai/widgetAccessible': true,
         'openai/toolInvocation/invoking': 'Saving to your guest cart…',
         'openai/toolInvocation/invoked': 'Guest cart saved',
@@ -58,10 +60,9 @@ export function registerGuestCartTool(
     },
     async (args) => {
       try {
-        // Registration passes only the input shape, which drops the
-        // object-level refinement, so re-parse with the full schema
-        // before quota or database work: cross-field violations fail
-        // fast here instead of surfacing as generic store errors.
+        // Defensive validation for direct callers and tests. The SDK already
+        // enforces the full schema, including cross-field refinements, before
+        // invoking this registered handler.
         const parsed = mcpGuestCartInputSchema.safeParse(args);
         if (!parsed.success) {
           return {

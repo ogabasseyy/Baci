@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useCartHandoff } from './use-cart-handoff';
+
 const product = {
   id: '11111111-1111-4111-8111-111111111111',
   name: 'Phone',
@@ -27,11 +28,11 @@ function response(products = [product], cartToken = token) {
     },
   };
 }
-function expiredResponse() {
-  return { structuredContent: { success: false, cart_expired: true } };
-}
 beforeEach(() => {
-  vi.stubGlobal('open', vi.fn(() => null));
+  vi.stubGlobal(
+    'open',
+    vi.fn(() => null)
+  );
 });
 afterEach(() => {
   delete window.openai;
@@ -207,7 +208,7 @@ it('re-adds with the incremented absolute total', async () => {
   });
 });
 it('navigates a synchronously-opened tab when selection is required', async () => {
-  const tab = { location: { href: '' }, closed: false, close: vi.fn() };
+  const tab = { location: { href: '' }, closed: false, opener: {} as unknown, close: vi.fn() };
   const openSpy = vi.fn(() => tab);
   vi.stubGlobal('open', openSpy);
   const callTool = vi.fn().mockResolvedValue({
@@ -226,6 +227,7 @@ it('navigates a synchronously-opened tab when selection is required', async () =
   expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank');
   expect(tab.location.href).toBe('https://ogabassey.com/products/phone');
   expect(tab.close).not.toHaveBeenCalled();
+  expect(tab.opener).toBeNull();
   expect(result.current.cart).toHaveLength(0);
 });
 it('closes the reserved tab when no navigation is needed', async () => {
@@ -288,4 +290,23 @@ it('forgets the dead token when a removal empties the cart', async () => {
     quantity: 1,
     cart_token: undefined,
   });
+});
+
+it('serializes overlapping option-product navigation and permits a later attempt', async () => {
+  const openExternal = vi.fn();
+  window.openai = { openExternal };
+  const optionProduct = {
+    ...product, has_variants: true,
+    url: 'https://ogabassey.com/products/phone?variantId=v1',
+  };
+  const { result } = renderHook(() => useCartHandoff());
+  await act(async () => {
+    await Promise.all([
+      result.current.handleAddToCart(optionProduct),
+      result.current.handleAddToCart(optionProduct),
+    ]);
+  });
+  expect(openExternal).toHaveBeenCalledTimes(1);
+  await act(async () => { await result.current.handleAddToCart(optionProduct); });
+  expect(openExternal).toHaveBeenCalledTimes(2);
 });

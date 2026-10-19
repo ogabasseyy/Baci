@@ -3,6 +3,7 @@ import { getJoinedRecord } from '@/lib/supabase-utils';
 
 interface OrderItemRow {
   offer_id?: string | null;
+  product_offer_id?: string | null;
   offer_id_snapshot?: string | null;
   offer_grade?: string | null;
   offer_condition_notes?: string | null;
@@ -76,6 +77,7 @@ export function mapOrderItems(items: OrderItemRow[] | null | undefined) {
       image_url: item.image_url ?? undefined,
       name: itemName,
       offer_id: item.offer_id ?? undefined,
+      product_offer_id: item.product_offer_id ?? undefined,
       offer_id_snapshot: item.offer_id_snapshot ?? undefined,
       offer_grade: item.offer_grade ?? undefined,
       offer_condition_notes: item.offer_condition_notes ?? undefined,
@@ -137,6 +139,7 @@ type AttachedOfferLabelItem<TItem> = TItem & {
 export async function attachOrderItemOfferLabels<
   TItem extends {
     offer_id?: string;
+    product_offer_id?: string | null;
     offer_grade?: string | null;
     offer_condition_notes?: string | null;
     offer_labels_snapshotted?: boolean | null;
@@ -149,10 +152,19 @@ export async function attachOrderItemOfferLabels<
     error: unknown;
   }>
 ): Promise<AttachedOfferLabelItem<TItem>[]> {
+  // Condition-only legacy lines carry no exact offer_id: the resolved
+  // offer lives in product_offer_id, so either identity qualifies the
+  // line for the legacy label fallback.
+  const resolvedOfferId = (item: TItem): string | null =>
+    typeof item.offer_id === 'string' && item.offer_id !== ''
+      ? item.offer_id
+      : typeof item.product_offer_id === 'string' &&
+          item.product_offer_id !== ''
+        ? item.product_offer_id
+        : null;
   const offerItems = items.filter(
-    (item): item is TItem & { offer_id: string; product_id: string } =>
-      typeof item.offer_id === 'string' &&
-      item.offer_id !== '' &&
+    (item): item is TItem & { product_id: string } =>
+      resolvedOfferId(item) !== null &&
       typeof item.product_id === 'string' &&
       item.product_id !== ''
   );
@@ -220,10 +232,8 @@ export async function attachOrderItemOfferLabels<
   }
 
   return items.map((item) => {
-    if (
-      typeof item.offer_id !== 'string' ||
-      typeof item.product_id !== 'string'
-    ) {
+    const lookupOfferId = resolvedOfferId(item);
+    if (lookupOfferId === null || typeof item.product_id !== 'string') {
       return item as AttachedOfferLabelItem<TItem>;
     }
     if (hasOfferLabelSnapshot(item)) {
@@ -242,7 +252,7 @@ export async function attachOrderItemOfferLabels<
             : undefined,
       };
     }
-    const label = labels.get(`${item.product_id}::${item.offer_id}`);
+    const label = labels.get(`${item.product_id}::${lookupOfferId}`);
     if (!label) return item as AttachedOfferLabelItem<TItem>;
     return {
       ...item,

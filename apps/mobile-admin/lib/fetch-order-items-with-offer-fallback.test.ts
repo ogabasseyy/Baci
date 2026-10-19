@@ -110,6 +110,30 @@ describe('fetchOrderItemsWithOfferFallback', () => {
     expect(result.data).toEqual([{ id: '1' }]);
   });
 
+  it('retries without product_offer_id on schema drift', async () => {
+    const run = vi
+      .fn<
+        (columns: string) => Promise<{
+          data: unknown;
+          error: { code: string; message: string } | null;
+        }>
+      >()
+      .mockResolvedValueOnce({
+        data: null,
+        error: schemaCacheError('product_offer_id'),
+      })
+      .mockResolvedValueOnce({ data: [{ id: '1' }], error: null });
+
+    const result = await fetchOrderItemsWithOfferFallback(
+      run,
+      `${COLUMNS}, product_offer_id`
+    );
+
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenNthCalledWith(2, COLUMNS.replace(/, /g, ','));
+    expect(result.data).toEqual([{ id: '1' }]);
+  });
+
   it('does not retry non-schema errors', async () => {
     const run = vi.fn(async () => ({
       data: null,

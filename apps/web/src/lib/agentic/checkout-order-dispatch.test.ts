@@ -934,6 +934,63 @@ describe('agentic checkout order dispatch — shared cart binding', () => {
     );
   });
 
+  it('replays a bound order when the exact offer was deleted after commit', async () => {
+    // Shared-cart checkout committed but the response was lost; the
+    // merchant then deleted the selected exact offer. The retry's
+    // offer verification fails against the live catalog, but the
+    // binding RPC must still be reached so it can replay the
+    // completed order instead of reporting an invalid offer.
+    const productId = '22222222-2222-4222-8222-222222222222';
+    const deletedOfferId = '33333333-3333-4333-8333-333333333333';
+    const rpc = vi.fn(async (name: string) => {
+      if (name === 'get_product_offers') {
+        return { data: [], error: null };
+      }
+      if (name === 'get_order_condition_prices') {
+        return {
+          data: [
+            {
+              product_id: productId,
+              condition: 'used',
+              status: 'inactive',
+              price: null,
+            },
+          ],
+          error: null,
+        };
+      }
+      return { data: BOUND_ENVELOPE, error: null };
+    });
+    const payload = boundPayload() as unknown as {
+      items: Record<string, unknown>[];
+    } & Record<string, unknown>;
+    payload.items = [
+      {
+        condition: 'used',
+        name: 'Phone',
+        offerId: deletedOfferId,
+        price: 500_000,
+        product_id: productId,
+        quantity: 1,
+      },
+    ];
+
+    const result = await createAgenticCheckoutOrder(
+      payload as unknown as Record<string, unknown>,
+      dispatchClient(rpc)
+    );
+
+    expect(result).toMatchObject({ ok: true, orderId: 'order-1' });
+    expect(rpc).toHaveBeenCalledWith(
+      'get_product_offers',
+      expect.objectContaining({ p_product_id: productId })
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
   it('submits a bound base order through the binding RPC', async () => {
     const rpc = vi
       .fn()

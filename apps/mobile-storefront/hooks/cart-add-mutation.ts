@@ -43,17 +43,15 @@ export function createAddToCartMutation({
   pendingRollbacks,
   rollbackSequence,
 }: AddToCartMutationDeps) {
-  /** L11 fix: Evict oldest rollback entries to prevent memory leak under rapid mutation spam */
+  // Rollback callbacks are kept until their mutation settles: every entry
+  // is deleted on success and on error, so the map holds only in-flight
+  // mutations. An earlier revision capped the map at 50 entries, but
+  // evicting a pending callback orphaned its optimistic units — when
+  // that mutation later failed, onError found nothing and the rejected
+  // stock stayed in the cart. Each entry is a small closure, so the
+  // cap traded negligible memory for real cart corruption.
   function trackRollback(id: string, fn: () => void) {
-    const map = pendingRollbacks.current;
-    // Keep at most 50 pending rollbacks
-    if (map.size >= 50) {
-      const oldestKey = map.keys().next().value;
-      if (oldestKey !== undefined) {
-        map.delete(oldestKey);
-      }
-    }
-    map.set(id, fn);
+    pendingRollbacks.current.set(id, fn);
   }
 
   return {

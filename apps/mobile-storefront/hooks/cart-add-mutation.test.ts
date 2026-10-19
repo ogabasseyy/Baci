@@ -164,4 +164,28 @@ describe('cart add mutation', () => {
     );
     expect(useCartStore.getState().items).toHaveLength(0);
   });
+
+  it('rolls back the oldest add even with 50 later mutations in flight', () => {
+    const options = mutation();
+    const first = input({ product_id: 'product-first', quantity: 2 });
+    const firstContext = options.onMutate(first);
+    // Rapid repeat taps while stock validation is slow: every later
+    // add stays pending too, past the old 50-entry eviction budget.
+    for (let index = 0; index < 55; index++) {
+      options.onMutate(
+        input({ product_id: `product-later-${index}`, quantity: 1 })
+      );
+    }
+
+    options.onError(
+      new Error('Only 0 items available in stock'),
+      first,
+      firstContext
+    );
+    const items = useCartStore.getState().items;
+    expect(items).toHaveLength(55);
+    expect(items).not.toContainEqual(
+      expect.objectContaining({ product_id: 'product-first' })
+    );
+  });
 });

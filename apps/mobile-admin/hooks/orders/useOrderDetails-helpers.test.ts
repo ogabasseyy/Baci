@@ -75,6 +75,33 @@ describe('mapOrderItems', () => {
     expect(result).toEqual([expect.objectContaining({ offer_id: 'offer-7' })]);
   });
 
+  it('carries the resolved condition offer id for legacy label resolution', () => {
+    const result = mapOrderItems([
+      {
+        condition: 'used',
+        has_assurance: null,
+        id: 'item-1',
+        image_url: null,
+        item_description: null,
+        name: 'Phone',
+        offer_id: null,
+        price: 80000,
+        product_match_status: 'linked',
+        product_id: 'product-1',
+        product_offer_id: 'offer-9',
+        products: null,
+        quantity: 1,
+        variant_attributes: null,
+        variant_id: null,
+        variant_name: null,
+      },
+    ]);
+
+    expect(result).toEqual([
+      expect.objectContaining({ product_offer_id: 'offer-9' }),
+    ]);
+  });
+
   it('carries the immutable offer snapshot for deleted-offer refs', () => {
     const result = mapOrderItems([
       {
@@ -308,6 +335,30 @@ describe('attachOrderItemOfferLabels', () => {
 
     expect(result[0]).toMatchObject({ offer_grade: 'B' });
     expect(result[1]).not.toHaveProperty('offer_grade');
+  });
+
+  it('resolves legacy labels through the resolved condition offer id', async () => {
+    const fetchOffers = vi.fn(async () => ({
+      data: [{ offer_id: 'offer-9', grade: 'C', condition_notes: 'Worn' }],
+      error: null,
+    }));
+
+    const result = await attachOrderItemOfferLabels(
+      [
+        {
+          offer_id: undefined,
+          product_offer_id: 'offer-9',
+          product_id: 'product-1',
+        },
+      ],
+      fetchOffers
+    );
+
+    expect(fetchOffers).toHaveBeenCalledWith('product-1');
+    expect(result[0]).toMatchObject({
+      offer_grade: 'C',
+      offer_condition_notes: 'Worn',
+    });
   });
 
   it('skips the lookup when no line names an offer', async () => {

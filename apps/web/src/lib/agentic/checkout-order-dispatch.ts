@@ -104,6 +104,7 @@ export async function createAgenticCheckoutOrder(
     };
   }
 
+  const sharedCartBinding = body.shared_cart ?? null;
   // Offer lines name a live offer of their own product: verify and
   // reconcile exactly like /api/orders before computing economics, or
   // the order would price and reserve the parent instead of the
@@ -116,9 +117,19 @@ export async function createAgenticCheckoutOrder(
     orderItemsPayload
   );
   if (!preparedOffers.ok) {
-    return preparedOffers.result;
+    // A committed bound order must still replay when the offer catalog
+    // changed under the retry (exact offer deleted/deactivated after
+    // commit, response lost): refusing here would report an invalid
+    // offer for a completed checkout without ever reaching the binding
+    // RPC's replay path. Fall through with no live prices — the
+    // binding path revalidates authoritatively in SQL, so it replays
+    // or fails closed there. Mirrors the
+    // OrderConditionUnavailableError fall-through below.
+    if (!sharedCartBinding) return preparedOffers.result;
   }
-  const liveOfferPrices = preparedOffers.liveOfferPrices;
+  const liveOfferPrices: Map<string, number> = preparedOffers.ok
+    ? preparedOffers.liveOfferPrices
+    : new Map();
 
   // B3.5 round 5 (Codex P1, PR #1622): agentic
   // `calculateCheckoutSession` produces `tax: 0` for every line item,
@@ -138,7 +149,6 @@ export async function createAgenticCheckoutOrder(
   // Wrap the call so a failure surfaces as a 500 the GPT-agent
   // caller can retry — distinct from the validation-shaped 400s
   // the RPC itself produces.
-  const sharedCartBinding = body.shared_cart ?? null;
   let computedTaxAmount: number;
   try {
     // CodeRabbit High (PR #1622 round 7): use the caller-supplied

@@ -11,6 +11,7 @@ import type { TransactionReviewQueryError } from './transaction-review-fallback-
  */
 const ORDER_DETAILS_OFFER_COLUMNS = [
   'offer_id',
+  'product_offer_id',
   'offer_id_snapshot',
   'offer_grade',
   'offer_condition_notes',

@@ -11,6 +11,7 @@ import type {
   SupabaseHistoryEffectComparisonMode,
 } from './supabase-history-replay-types';
 import { createSupabaseReplayDatabaseEnvironment } from './supabase-replay-contract';
+import { supabaseReplayFailureDiagnostic } from './supabase-replay-failure-diagnostic';
 
 export type ReplayCommandLimits = {
   stderrBytes: number;
@@ -71,7 +72,13 @@ function commandFailure(
   stderr: readonly Buffer[] = []
 ): Error {
   const diagnostic =
-    failure === 'non-zero-exit' ? boundedPsqlDiagnostic(command, stderr) : '';
+    failure !== 'non-zero-exit'
+      ? ''
+      : sanitizedCommandName(command) === 'supabase'
+        ? supabaseReplayFailureDiagnostic(
+            Buffer.concat(stderr).toString('utf8')
+          )
+        : boundedPsqlDiagnostic(command, stderr);
   return new Error(
     `${sanitizedCommandName(command)} failed: ${failure}${diagnostic}`
   );

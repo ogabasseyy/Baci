@@ -108,6 +108,32 @@ describe('createReplayCommand', () => {
     );
   });
 
+  it.each([
+    ['failed to connect to postgres: connection refused', 'connection-refused'],
+    ['failed to pull image from private registry', 'image-pull'],
+    ['failed to create docker container', 'container-create'],
+    ['bind: address already in use', 'port-conflict'],
+    ['container is unhealthy', 'container-health'],
+    [
+      'client version is too old. Minimum supported API version is 1.44',
+      'docker-api',
+    ],
+    ['no space left on device', 'disk-full'],
+    ['ERROR: permission denied (SQLSTATE 42501)', 'postgres-42501'],
+  ])('classifies Supabase failures without copying private output: %s', async (message, diagnostic) => {
+    const root = await temporaryRoot();
+    const supabase = path.join(root, 'supabase');
+    await writeFile(
+      supabase,
+      `#!${process.execPath}\nprocess.stderr.write(${JSON.stringify(`${message}\nhttps://user:private-password@db.example token=private-value`)});process.exit(1);\n`,
+      { mode: 0o700 }
+    );
+    const runCommand = replayCommandRuntime.create(root);
+    await expect(runCommand(supabase, ['db', 'start'])).rejects.toMatchObject({
+      message: `supabase failed: non-zero-exit (diagnostic=${diagnostic})`,
+    });
+  });
+
   it('reports bounded diagnostics from a versioned psql executable', async () => {
     const root = await temporaryRoot();
     const psql = path.join(root, 'psql-18.3');

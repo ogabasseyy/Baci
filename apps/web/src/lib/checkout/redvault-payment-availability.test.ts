@@ -1,7 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getRedvaultPaymentAvailability } from './redvault-payment-availability';
+import {
+  getRedvaultPaymentAvailability,
+  isRedvaultLivePilotReason,
+} from './redvault-payment-availability';
 
 describe('REDVAULT payment availability', () => {
+  it.each([
+    ['private_live_pilot', true],
+    ['public_product_test', true],
+    ['staging_test_mode', false],
+    ['provider_evidence_unavailable', false],
+    ['', false],
+  ])('classifies pilot reason %s as %j', (reason, expected) => {
+    expect(isRedvaultLivePilotReason(reason)).toBe(expected);
+  });
   afterEach(() => vi.unstubAllEnvs());
 
   function isolatedTestSettings() {

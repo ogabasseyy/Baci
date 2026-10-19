@@ -5,6 +5,7 @@ import {
   getRedvaultLivePilotPolicy,
   REDVAULT_PILOT_USER_ID,
 } from './redvault-live-pilot';
+import { verifyRedvaultLivePilotDatabasePolicy } from './redvault-live-pilot-database-policy';
 
 export type RedvaultLivePilotRejection = {
   message: string;
@@ -53,7 +54,8 @@ export async function verifyRedvaultLivePilotSnapshot({
     const expectedPayableKobo = 10_000 - 500 + summary.quote.tax_kobo;
     const exactPilotSnapshot = Boolean(
       pilot &&
-        userId === REDVAULT_PILOT_USER_ID &&
+        (pilot.audience === 'public_product_test' ||
+          userId === REDVAULT_PILOT_USER_ID) &&
         merchantId === pilot.merchantId &&
         summary.order.currency.toUpperCase() === 'NGN' &&
         summary.quote.product_subtotal_kobo === 10_000 &&
@@ -68,6 +70,12 @@ export async function verifyRedvaultLivePilotSnapshot({
         summary.quote.mixed_basket === false
     );
     if (!exactPilotSnapshot) {
+      return { ok: false, rejection: UNAVAILABLE };
+    }
+    if (
+      pilot?.audience === 'public_product_test' &&
+      !(await verifyRedvaultLivePilotDatabasePolicy({ client, policy: pilot }))
+    ) {
       return { ok: false, rejection: UNAVAILABLE };
     }
     return { ok: true };

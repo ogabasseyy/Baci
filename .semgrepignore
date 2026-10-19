@@ -3,13 +3,34 @@
 
 # Internal dev tooling & staging - not production code.
 # NOTE: production/operational trees are intentionally NOT excluded here:
-# apps/web/mcp-server (deployed token-handling server), vps-workers
-# (deploy.yml), infra (nginx/CDN runtime), ci_scripts (CI-executed).
+# apps/web/mcp-server (deployed token-handling server),
+# apps/web/tools/connector-gateway (production grant/token gateway:
+# Dockerfile.production, compose.production.yaml, bearerToken server),
+# vps-workers (deploy.yml), infra (nginx/CDN runtime), ci_scripts
+# (CI-executed).
 .gemini/
 /.claude/
 scripts/
 /tools/
-/apps/web/tools/
+# apps/web/tools, narrowed per-directory: connector-gateway is production
+# (see NOTE) and stays scanned; connector-harness is test-only (refuses to
+# start under NODE_ENV=production, binds 127.0.0.1); the rest are local
+# analysis/migration/perf scripts.
+/apps/web/tools/connector-harness/
+/apps/web/tools/cost/
+/apps/web/tools/db/
+/apps/web/tools/events/
+/apps/web/tools/perf/
+/apps/web/tools/piggyvest-staging/
+/apps/web/tools/savings-notifications/
+/apps/web/tools/search/
+/apps/web/tools/seo/
+/apps/web/tools/shipping/
+/apps/web/tools/connector-http.ts
+/apps/web/tools/connector-http.test.ts
+/apps/web/tools/typedoc-portable-paths.test.mjs
+/apps/web/tools/typedoc-typescript6.mjs
+/apps/web/tools/typedoc-typescript6.test.mjs
 
 # Test suites outside protected scan_targets (contain mock tokens, synthetic secrets, test certs)
 /apps/mobile-storefront/__tests__/

@@ -13,7 +13,12 @@ consumed by all three apps. Counting non-test `.ts`/`.tsx` files that
 import `@baci/shared` or any subpath (import-aware count, excluding
 comment-only, `jest.mock`, and test-config alias matches):
 `apps/web/src` 460, `apps/mobile-storefront` 147,
-`apps/mobile-admin` 121. Uniform
+`apps/mobile-admin` 121. Reproduce with
+`grep -rl "@baci/shared" --include="*.ts" --include="*.tsx" <app>`
+per app, then drop test files and non-import matches; other precise
+counts in this doc are from the same session's `find`/`wc`/`grep`
+pass on this base and should be treated as ±1 file at file
+boundaries (tests vs fixtures classification). Uniform
 Zod `^4.4.3`; Metro maps the package in both mobile apps; Next.js
 consumes it directly. Per-domain subpath exports already exist
 (`./cart`, `./schemas`, `./contracts`, …). The pattern is proven; the
@@ -23,10 +28,10 @@ work below extends it.
 
 | # | Domain | Evidence (side-by-side) | Consumers | Verdict |
 |---|--------|-------------------------|-----------|---------|
-| 1 | Currency/price formatting | `formatPrice` is independently defined at least 7 times with *divergent* semantics: mobile-storefront hardcodes an NGN formatter (`types/product.ts:182`), mobile-admin delegates to merchant-locale formatting (`components/orders-screen/format-price.ts`), web is country-aware with a formatter cache (`lib/currency-utils.ts:213`). `formatCurrency` has 4+ separate definitions (web `lib/currency.ts`, `lib/utils.ts`, mobile-admin `utils/format.ts`, …) across 133 call sites. `packages/shared` has **no** formatting module. Date formatting is **out of scope** for this wave: it carries separate decisions (timezone source, `date-fns` dependency on mobile-admin vs `Intl.DateTimeFormat`) and gets its own evidenced audit later. | web, storefront, admin | **Share (first wave, currency/price only).** Off the cart activation path. Requires one semantic decision (locale/currency source of truth) before moving; then one `Intl`-based implementation in shared with per-app thin wrappers preserving call-site signatures. Characterization fixtures must pin current outputs per app first — outputs differ today, so this wave intentionally unifies behavior where divergence is accidental, and records any intentional difference as an explicit option. |
+| 1 | Currency/price formatting | `formatPrice` is independently defined at least 7 times with *divergent* semantics: mobile-storefront hardcodes an NGN formatter (`types/product.ts:182`), mobile-admin delegates to merchant-locale formatting (`components/orders-screen/format-price.ts`), web is country-aware with a formatter cache (`lib/currency-utils.ts:213`). `formatCurrency` has 4+ separate definitions (web `lib/currency.ts`, `lib/utils.ts`, mobile-admin `utils/format.ts`, …) across 133 call sites. `packages/shared` has **no** formatting module. Date formatting is **out of scope** for this wave: it carries separate decisions (timezone source, `date-fns` dependency on mobile-admin vs `Intl.DateTimeFormat`) and gets its own evidenced audit later. | web, storefront, admin | **Share (formatting wave; sequence step 2, after the wallet wave).** Off the cart activation path. Requires one semantic decision (locale/currency source of truth) before moving; then one `Intl`-based implementation in shared with per-app thin wrappers preserving call-site signatures. Characterization fixtures must pin current outputs per app first — outputs differ today, so this wave intentionally unifies behavior where divergence is accidental, and records any intentional difference as an explicit option. |
 | 2 | Cart pure logic (remainder) | Already largely consolidated: web `lib/cart/merge.ts` is a 6-line re-export of `@baci/shared/cart` (207-line merge, 222-line types, commands, line-identity). Remaining duplication is presentational: web `lib/cart/pricing.ts` (150 lines, server snapshot building — server-canonical, stays) vs mobile `lib/cart/display.ts` (117) + `lib/cart-pricing.ts` (88) display math. | web, storefront | **Share display math only, post-activation** (plan gate). Server pricing stays web-only by design. |
 | 3 | Schemas | Web `src/schemas` is 446 files / ~25k lines, overwhelmingly server API input schemas with no mobile consumer — not duplication. Real overlap is narrow: `apps/mobile-storefront/schemas` holds 39 non-test source files (~2.2k lines; 79 files including tests), of which 7 are cart-related (`cart*.ts`: pairing/session/snapshot/pending-request parsing of the same payloads whose types already live in `@baci/shared/cart`). | web, storefront | **Share the cart-payload schemas post-activation;** the rest of web schemas are server-canonical and stay. Most of the apparent schema mass is a false positive. |
-| 4 | Product transform/hydration | Mobile `hooks/product-utils.ts` / `product-transform` vs web `lib/normalize-product.ts` and PDP normalizers shape the same product rows differently per surface (display vs indexing). Partially same concept, partially surface-specific. | web, storefront | **Defer.** Extract only the shared row-shaping primitives if a future product change touches both; full unification would force surface compromises. Re-audit after Wave 1. |
+| 4 | Product transform/hydration | Mobile `hooks/product-utils.ts` / `product-transform` vs web `lib/normalize-product.ts` and PDP normalizers shape the same product rows differently per surface (display vs indexing). Partially same concept, partially surface-specific. | web, storefront | **Defer.** Extract only the shared row-shaping primitives if a future product change touches both; full unification would force surface compromises. Re-audit after the formatting wave. |
 | 5 | Auth session handling | Web `lib/auth` (6 files / 573 lines, server session) vs mobile `lib/auth` (5 files / 661 lines, device session storage) share vocabulary, not logic: different trust models and storage. | web, storefront | **Keep platform-specific.** Share only error-code/claim type contracts if the audit of a future auth change shows drift. |
 | 6 | Checkout payload shapes | Web holds the server side (`lib/checkout`, 62 files / ~4.9k lines; `src/schemas/orders.ts` 452 lines), **but mobile does reimplement payload construction**: `apps/mobile-storefront/components/checkout/checkout-order-builders.ts` (225 lines) builds the customer/item/total/payment/shipping/discount/shared-cart request, and `services/orders.ts` validates its own `CreateOrderRequestSchema` before POSTing to `/api/orders`. The transport shape is therefore implemented twice. | web, storefront | **Share the transport subshape post-activation** (it is on the cart activation path via the shared-cart fields): one shared order-request schema/types in `@baci/shared`; server validation rules and adapter-specific fields stay local. Server remains canonical for pricing/trust. |
 | 7 | Exported-symbol overlap (whole lib) | Only ~20 exported names are shared between web and mobile `lib` trees (`calculateOrderTotals`, `normalizeVariantAttributes`, `getPrimaryProductImage`, `hexToRgba`, …). Duplication is concentrated, not diffuse. | all | Confirms the ranked waves cover most real overlap; a whole-monorepo sweep is not warranted. |
@@ -35,9 +40,9 @@ work below extends it.
 | 10 | Mobile update policy core | Both mobile apps implement the same `MobileReleasePolicy`/`resolveMobileUpdatePrompt` flow in `components/updates/mobile-update-check.ts` (storefront and admin), and have already diverged: when a required policy lacks `storeUrl`, admin fails open while storefront creates an unusable blocking prompt. | storefront, admin | **Share the pure policy core** in its own wave: policy fetching stays local; gating/decision logic moves to shared with app-specific route/app-name/OTA adapters. The `storeUrl` divergence needs an explicit decision recorded with its threat model: fail-open lets a forced-update policy be bypassed when its store link is missing (integrity risk), fail-closed strands users on a dead prompt (availability risk). Neither is asserted here; the wave picks one with the rejected alternative documented. |
 | 11 | Sanitization primitives | `apps/web/src/lib/sanitize-core.ts` and `apps/mobile-admin/lib/sanitize.ts` implement the same `stripHtmlTags`, `sanitizeText`, `sanitizeEmail`, `sanitizePhone`, `sanitizeSearchQuery` transformations feeding order schemas and admin requests; independent edits can make accepted input differ by surface. | web, admin | **Share the primitives** in a small wave with characterization fixtures; schema-level rules stay local. |
 | 12 | Business-type catalog | `apps/mobile-admin/constants/business-types.ts` duplicates the eight id/label pairs from the declared source of truth `apps/web/src/config/business-types.ts` and independently adds `other`; category changes can leave the native selector stale. Note the type domains differ: web's `BusinessTypeId` is `keyof typeof BUSINESS_TYPES` (record keys), while values carry separate `id` fields — a shared union must be built from the **id values**, not the record keys. | web, admin | **Share the data contract** built from id values (ids/labels/union) or generate the mobile projection from the web source; web-only templates/icons stay local. Resolve whether `other` belongs in the source of truth during that wave. |
+| 13 | Wallet top-up limits | Identical `WALLET_TOP_UP_MIN_AMOUNT` (100) / `WALLET_TOP_UP_MAX_AMOUNT` (500_000) constants duplicated in `apps/web/src/lib/wallet-top-up-constants.ts` (server Zod validation; comment says "must match mobile validation") and `apps/mobile-storefront/lib/wallet-top-up-constants.ts` (UI disable + input validation; comment says "must match server validation"). Changing one side silently makes accepted amounts disagree by surface. | web, storefront | **Share the constants** — a trivial move into `@baci/shared` that can ride with the wallet-funding wave (sequence step 1). |
 | 14 | IMEI payment-recovery protocol | Near-verbatim `resolveImeiCheckFailure` implementations in the web and storefront IMEI checkers, plus a matching pending-lookup persistence contract, decide whether paid IMEI retries retain or discard an idempotency key for debit/refund-uncertain results (`REFUND_PENDING`, `DEBIT_FAILURE_STATE_SAVE_FAILED`). An independent edit can make one client retry with a fresh key (double-debit risk) while the other preserves it. | web, storefront | **Deferred shared-core candidate (money-safety).** Same treatment as row 8: extract the failure-classification core to shared with persistence adapters local, characterization fixtures first. |
 | 15 | Merchant-country catalog | The shared/web `MERCHANT_COUNTRIES` catalog (`packages/shared/src/constants/merchant-countries.ts`) is duplicated by mobile-admin's local `COUNTRIES` (`apps/mobile-admin/constants/countries.ts`), which adds unsupported entries (e.g. Zambia `ZM`/`ZMW`) that the admin settings screen can persist through a shape-only RPC check — producing merchant country/currency states web onboarding and provisioning do not support. | web (via shared), admin | **Share a merchant-country projection** from the shared catalog for the admin selector; remove or explicitly gate unsupported entries. Small wave; correctness-relevant because it constrains what can be persisted. |
-| 13 | Wallet top-up limits | Identical `WALLET_TOP_UP_MIN_AMOUNT` (100) / `WALLET_TOP_UP_MAX_AMOUNT` (500_000) constants duplicated in `apps/web/src/lib/wallet-top-up-constants.ts` (server Zod validation; comment says "must match mobile validation") and `apps/mobile-storefront/lib/wallet-top-up-constants.ts` (UI disable + input validation; comment says "must match server validation"). Changing one side silently makes accepted amounts disagree by surface. | web, storefront | **Share the constants** — a trivial move into `@baci/shared` that can ride with the wallet-funding wave (sequence step 3). |
 
 ## Sampled out (explicit)
 
@@ -46,8 +51,8 @@ work below extends it.
 - `packages/shared/src/contracts` (174 files) and `receipt`: already
   shared; no action.
 - Mobile-admin order-screen formatters beyond price: admin-only
-  presentation, covered by Wave 1's shared formatting primitives if
-  adopted there. Date formatting is excluded from Wave 1 and from
+  presentation, covered by the formatting wave's shared primitives if
+  adopted there. Date formatting is excluded from that wave and from
   this note; it awaits its own evidenced audit.
 
 ## Definitions
@@ -85,12 +90,12 @@ green CI and change no activation state.
    response means no ID was received); it must resolve by an
    order-scoped intent lookup or an idempotent re-create keyed by
    the order, never by starting a parallel gateway payment.
-2. **Wave 1: currency/price formatting.** One shared `Intl`
+2. **Formatting wave: currency/price formatting.** One shared `Intl`
    formatting module, characterization fixtures pinning each app's
    current outputs, semantic unification decision recorded in the
    wave PR (NGN-only vs merchant-locale vs country-aware per call
    class). All three apps adopt via thin wrappers.
-3. **Guardrails alongside Wave 1:** contributor rule (pure logic with
+3. **Guardrails alongside the formatting wave:** contributor rule (pure logic with
    ≥2 consumers that is platform-free lands in `packages/shared`
    first) and the decision rule (≥2 consumers, platform-free, ≤~400
    changed lines per PR) recorded in `packages/shared/README` or
@@ -106,13 +111,13 @@ green CI and change no activation state.
 6. Re-audit after each wave; deferred domains (product, auth) are
    revisited only when a change touches both sides.
 
-## Decision-rule check for Wave 1
+## Decision-rule check for the formatting wave
 
 ≥2 consumers: yes (3). Platform-free: mostly — `Intl` exists in
 Next.js, Hermes, and Node, but Node-run fixtures cannot pin Hermes
 locale/currency output; the repo already acknowledges runtimes
 without full Intl data (`apps/mobile-admin/lib/utils.ts` wraps
-`Intl.NumberFormat` in try/catch fallbacks). Wave 1 must therefore
+`Intl.NumberFormat` in try/catch fallbacks). The formatting wave must therefore
 add an on-device/Hermes verification (or a verified locale/currency
 allowlist) before relying on fixture parity. Size: one shared module
 plus wrapper swaps — fits one PR under ~400 changed lines if call

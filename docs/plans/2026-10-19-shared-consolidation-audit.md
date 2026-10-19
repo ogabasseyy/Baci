@@ -18,7 +18,12 @@ comment-only, `jest.mock`, and test-config alias matches):
 per app, then drop test files and non-import matches; other precise
 counts in this doc are from the same session's `find`/`wc`/`grep`
 pass on this base and should be treated as ±1 file at file
-boundaries (tests vs fixtures classification). Uniform
+boundaries (tests vs fixtures classification). Bases differ
+because the web app keeps nearly all TypeScript under
+`apps/web/src`, while both mobile apps keep substantial TypeScript
+at the app root (`lib/`, `components/`, `schemas/`, `hooks/`), so
+mobile counts cover the app tree excluding `node_modules`.
+Uniform
 Zod `^4.4.3`; Metro maps the package in both mobile apps; Next.js
 consumes it directly. Per-domain subpath exports already exist
 (`./cart`, `./schemas`, `./contracts`, …). The pattern is proven; the
@@ -39,10 +44,10 @@ work below extends it.
 | 9 | Wallet-funding response contract | The order wallet-funding response schema exists on both sides and has already diverged: web `src/schemas/order-wallet-funding-intent.ts:62` accepts PostgREST `+00:00` timestamps via `z.iso.datetime({ offset: true })`, while mobile `schemas/order-wallet-funding-intent.ts:27` uses bare `z.iso.datetime()` for create/poll responses. | web, storefront | **Share the response contract** (own wave, can precede cart waves): one shared response schema in `@baci/shared`; server-only request/auth schemas stay local. The offset divergence should be treated as a latent mobile parsing bug and verified against live PostgREST payloads during that wave. |
 | 10 | Mobile update policy core | Both mobile apps implement the same `MobileReleasePolicy`/`resolveMobileUpdatePrompt` flow in `components/updates/mobile-update-check.ts` (storefront and admin), and have already diverged: when a required policy lacks `storeUrl`, admin fails open while storefront creates an unusable blocking prompt. | storefront, admin | **Share the pure policy core** in its own wave: policy fetching stays local; gating/decision logic moves to shared with app-specific route/app-name/OTA adapters. The `storeUrl` divergence needs an explicit decision recorded with its threat model: fail-open lets a forced-update policy be bypassed when its store link is missing (integrity risk), fail-closed strands users on a dead prompt (availability risk). Neither is asserted here; the wave picks one with the rejected alternative documented. |
 | 11 | Sanitization primitives | `apps/web/src/lib/sanitize-core.ts` and `apps/mobile-admin/lib/sanitize.ts` implement the same `stripHtmlTags`, `sanitizeText`, `sanitizeEmail`, `sanitizePhone`, `sanitizeSearchQuery` transformations feeding order schemas and admin requests; independent edits can make accepted input differ by surface. | web, admin | **Share the primitives** in a small wave with characterization fixtures; schema-level rules stay local. |
-| 12 | Business-type catalog | `apps/mobile-admin/constants/business-types.ts` duplicates the eight id/label pairs from the declared source of truth `apps/web/src/config/business-types.ts` and independently adds `other`; category changes can leave the native selector stale. Note the type domains differ: web's `BusinessTypeId` is `keyof typeof BUSINESS_TYPES` (record keys), while values carry separate `id` fields — a shared union must be built from the **id values**, not the record keys. | web, admin | **Share the data contract** built from id values (ids/labels/union) or generate the mobile projection from the web source; web-only templates/icons stay local. Resolve whether `other` belongs in the source of truth during that wave. |
+| 12 | Business-type catalog | `apps/mobile-admin/constants/business-types.ts` duplicates the eight id/label pairs from the declared source of truth `apps/web/src/config/business-types.ts` and independently adds `other`; category changes can leave the native selector stale. Note the type domains differ: web's `BusinessTypeId` is `keyof typeof BUSINESS_TYPES` (record keys), while values carry separate `id` fields — a shared union must be built from the **id values**, not the record keys. | web, admin | **Share the data contract** built from id values (ids/labels/union) or generate the mobile projection from the web source; web-only templates/icons stay local. Resolve whether `other` belongs in the source of truth during that wave. **Approval gate:** `apps/web/src/config/business-types.ts` is a protected file (CLAUDE.md/AGENTS.md); touching or building on it requires explicit approval recorded in that wave's PR. |
 | 13 | Wallet top-up limits | Identical `WALLET_TOP_UP_MIN_AMOUNT` (100) / `WALLET_TOP_UP_MAX_AMOUNT` (500_000) constants duplicated in `apps/web/src/lib/wallet-top-up-constants.ts` (server Zod validation; comment says "must match mobile validation") and `apps/mobile-storefront/lib/wallet-top-up-constants.ts` (UI disable + input validation; comment says "must match server validation"). Changing one side silently makes accepted amounts disagree by surface. | web, storefront | **Share the constants** — a trivial move into `@baci/shared` that can ride with the wallet-funding wave (sequence step 1). |
 | 14 | IMEI payment-recovery protocol | Near-verbatim `resolveImeiCheckFailure` implementations in the web and storefront IMEI checkers, plus a matching pending-lookup persistence contract, decide whether paid IMEI retries retain or discard an idempotency key for debit/refund-uncertain results (`REFUND_PENDING`, `DEBIT_FAILURE_STATE_SAVE_FAILED`). An independent edit can make one client retry with a fresh key (double-debit risk) while the other preserves it. | web, storefront | **Deferred shared-core candidate (money-safety).** Same treatment as row 8: extract the failure-classification core to shared with persistence adapters local, characterization fixtures first. |
-| 15 | Merchant-country catalog | The shared/web `MERCHANT_COUNTRIES` catalog (`packages/shared/src/constants/merchant-countries.ts`) is duplicated by mobile-admin's local `COUNTRIES` (`apps/mobile-admin/constants/countries.ts`), which adds unsupported entries (e.g. Zambia `ZM`/`ZMW`) that the admin settings screen can persist through a shape-only RPC check — producing merchant country/currency states web onboarding and provisioning do not support. | web (via shared), admin | **Share a merchant-country projection** from the shared catalog for the admin selector; remove or explicitly gate unsupported entries. Small wave; correctness-relevant because it constrains what can be persisted. |
+| 15 | Merchant-country catalog | The shared/web `MERCHANT_COUNTRIES` catalog (`packages/shared/src/constants/merchant-countries.ts`) is duplicated by mobile-admin's local `COUNTRIES` (`apps/mobile-admin/constants/countries.ts`), which adds unsupported entries (e.g. Zambia `ZM`/`ZMW`) that the admin settings screen can persist through a shape-only RPC check — producing merchant country/currency states web onboarding and provisioning do not support. | web (via shared), admin | **Split the catalog by consumer before changing anything:** the local `COUNTRIES` also feeds phone-country calling codes (`lib/phone-country.ts`), the supported-currency fallback (`lib/merchant-currency.ts`), and currency formatting — those keep the wide catalog. Only the merchant-settings selector gets a projection gated to the shared 22-entry `MERCHANT_COUNTRIES`. Merchants who already persisted unsupported values (e.g. ZM) need an explicit repair/backfill decision before gating, not a silent selector change. |
 
 ## Sampled out (explicit)
 
@@ -80,16 +85,23 @@ green CI and change no activation state.
    a present-tense payment-path bug, not future drift, so this wave
    leads. One shared response schema, verified against live
    PostgREST payloads; the wave must also align the create-failure
-   protocol — today mobile routes every non-consent create failure
-   (including timeout/5xx after the mutating POST, where an intent
-   may already exist) to the gateway fallback in
-   `components/checkout/checkout-payment-finalization.ts`, risking a
-   double payment path. Failure classification (consent vs transient
-   vs unknown-after-POST) is part of the shared contract.
+   protocol — the failure classifier is
+   `apps/mobile-storefront/lib/checkout/wallet-funded-bank-transfer.ts`
+   (every non-consent error invokes `onFallback`), and
+   `components/checkout/checkout-payment-finalization.ts` is only
+   the fall-through site that then starts gateway payment, risking a
+   double payment path after timeout/5xx where an intent may
+   already exist. Failure classification (consent vs transient vs
+   unknown-after-POST) is part of the shared contract.
    Unknown-after-POST cannot poll by intent ID (a lost create
-   response means no ID was received); it must resolve by an
-   order-scoped intent lookup or an idempotent re-create keyed by
-   the order, never by starting a parallel gateway payment.
+   response means no ID was received, and no order-scoped lookup
+   endpoint exists today) — but it does not need one: the server
+   create path is already order-keyed
+   (`apps/web/src/lib/order-wallet-funding-intents.ts`
+   `findActiveOrderIntent` returns the existing active intent for
+   the order before inserting), so the correct client behavior is
+   an idempotent re-create for the same order, never a parallel
+   gateway payment.
 2. **Formatting wave: currency/price formatting.** One shared `Intl`
    formatting module, characterization fixtures pinning each app's
    current outputs, semantic unification decision recorded in the

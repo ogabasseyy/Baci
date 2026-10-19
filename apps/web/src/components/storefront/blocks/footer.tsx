@@ -154,8 +154,7 @@ export function Footer({
 
         <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-neutral-500 text-sm">
-            {copyrightText ||
-              `© ${new Date().getFullYear()} ${businessName}. Powered by Baci.`}
+            {copyrightText || `© ${businessName}. Powered by Baci.`}
           </p>
           <div className="flex gap-6 text-sm text-neutral-500">
             <Link href="#" className="hover:text-white transition-colors">

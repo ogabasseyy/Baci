@@ -116,6 +116,8 @@ export async function createRepairBooking(
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
 
+  // Pickup inserts persist pickup_payment_status='awaiting_payment' inside the
+  // booking RPC (atomic with the row). The post-create mark RPC only reinforces.
   const { data: rpcData, error } = await supabase.rpc('create_repair_booking', {
     p_merchant_id: parsedMerchantId.data,
     p_customer_name: input.customerName,

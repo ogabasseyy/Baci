@@ -145,6 +145,7 @@ export default function ProductEditScreen() {
             name: controller.formData.name,
             sku: controller.formData.sku,
           }}
+          hasVariants={controller.formData.has_variants}
           hideColorField={controller.formData.has_variants}
           isEditing={controller.isEditing}
           onChange={controller.updateBasicInformation}

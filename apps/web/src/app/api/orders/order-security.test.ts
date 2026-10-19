@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeAgenticOrderTax } from '@/lib/agentic/checkout-order-tax';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
 import { createQuizVoucherToken } from '@/lib/quiz-voucher-token';
 import { POST } from './route';
@@ -123,6 +124,21 @@ const mockSupabase = {
       if (name === 'get_order_variant_overrides') {
         return Promise.resolve({ data: [], error: null });
       }
+      // Immediate-notification delivery is gated on the proof-bound
+      // claim (tracking token verified inside the RPC): the winner
+      // delivers, completions record terminal state.
+      if (name === 'claim_immediate_order_notification_with_proof') {
+        return Promise.resolve({
+          data: [{ claimed: true, claim_token: 'lease-sec-1' }],
+          error: null,
+        });
+      }
+      if (name === 'mark_immediate_order_notification_started_with_proof') {
+        return Promise.resolve({ data: true, error: null });
+      }
+      if (name === 'complete_immediate_order_notification_with_proof') {
+        return Promise.resolve({ data: null, error: null });
+      }
       return Promise.resolve({
         data: [
           {
@@ -132,6 +148,9 @@ const mockSupabase = {
             subtotal: 1000,
             shipping_fee: 0,
             customer_id: 'customer-id',
+            // Production orders always carry a tracking token (NOT NULL
+            // default): the proof-bound claim needs it to authorize.
+            tracking_token: 'tok-order-1',
           },
         ],
         error: null,
@@ -208,6 +227,7 @@ vi.mock('@/lib/email-templates', () => ({
 }));
 
 vi.mock('@/lib/expo-push', () => ({
+  notifyNewInvoice: vi.fn(() => Promise.resolve()),
   notifyNewOrder: mockNotifyNewOrder,
   notifyPaymentReceived: mockNotifyPaymentReceived,
 }));
@@ -441,6 +461,40 @@ describe('Order API Security', () => {
 
     expect(response.status).toBe(400);
     expect(data.details).toBe('invalid_payment_status');
+  });
+
+  it('maps an inactive condition lookup to 400 before order creation', async () => {
+    vi.mocked(computeAgenticOrderTax).mockRejectedValueOnce(
+      new OrderConditionUnavailableError()
+    );
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(validOrderPayload),
+      })
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).details).toBe('invalid_condition_offer');
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    'invalid_condition_offer',
+    'condition_offer_price_changed',
+    'insufficient_condition_offer_stock',
+  ])('returns 400 for condition validation failure %s', async (code) => {
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'P0001', message: code },
+    });
+    const response = await POST(
+      new NextRequest('http://localhost:3000/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(validOrderPayload),
+      })
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).details).toBe(code);
   });
 
   it('returns 400 when create_storefront_order rejects an unsupported payment_status via error code', async () => {

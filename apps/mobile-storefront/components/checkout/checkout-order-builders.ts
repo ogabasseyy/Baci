@@ -1,3 +1,4 @@
+import { parseMerchantRateQuoteId } from '@baci/shared/lib';
 import {
   getPickupStationAddressText,
   isProviderStationPickupQuote,
@@ -10,6 +11,7 @@ import type {
 import { getCartItemEffectivePrice } from '@/lib/cart-pricing';
 import type { MobileCheckoutOrderItemPayload } from '@/lib/checkout-order-idempotency';
 import type { ShippingAddressInput } from '@/lib/validation';
+import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
 import type { CreateOrderRequest } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 
@@ -33,40 +35,70 @@ interface BuildOrderRequestParams {
   selectedQuote: ShippingQuote | undefined;
   shippingProvider: string | undefined;
   snapshot: CheckoutSnapshot;
+  sharedCartBinding?: CartCheckoutBinding;
 }
 
 type CheckoutOrderRequest = Omit<CreateOrderRequest, 'items'> & {
   items: MobileCheckoutOrderItemPayload[];
 };
 
+function getMerchantRateId(
+  selectedQuote: ShippingQuote | undefined
+): string | undefined {
+  if (selectedQuote?.provider !== 'MERCHANT') {
+    return undefined;
+  }
+
+  return parseMerchantRateQuoteId(selectedQuote.id);
+}
+
+function calculateItemAssuranceFeeMinor(item: CartItem): number {
+  if (!item.hasAssurance) return 0;
+  const effectivePriceMinor = Math.round(getCartItemEffectivePrice(item) * 100);
+  return Math.round(
+    effectivePriceMinor * item.quantity * (item.assuranceRate ?? 0.05)
+  );
+}
+
 export function createCheckoutSnapshot(
   itemsSnapshot: CartItem[],
   deliveryFee: number,
   taxAmount: number
 ): CheckoutSnapshot {
-  const subtotal = itemsSnapshot.reduce((total, item) => {
-    const effectivePrice = getCartItemEffectivePrice(item);
-    return total + effectivePrice * item.quantity;
+  const subtotalMinor = itemsSnapshot.reduce((total, item) => {
+    const effectivePriceMinor = Math.round(
+      getCartItemEffectivePrice(item) * 100
+    );
+    return total + effectivePriceMinor * item.quantity;
   }, 0);
-  const assuranceFee = calculateCheckoutAssuranceFee(itemsSnapshot);
+  const assuranceFeeMinor = itemsSnapshot.reduce(
+    (sum, item) => sum + calculateItemAssuranceFeeMinor(item),
+    0
+  );
+  const subtotal = subtotalMinor / 100;
+  const assuranceFee = assuranceFeeMinor / 100;
   return {
     assuranceFee,
     deliveryFee,
     subtotal,
     taxAmount,
-    total: subtotal + deliveryFee + assuranceFee + taxAmount,
+    total:
+      Math.round(
+        subtotalMinor +
+          assuranceFeeMinor +
+          Math.round(deliveryFee * 100) +
+          Math.round(taxAmount * 100)
+      ) / 100,
   };
 }
 
 export function calculateCheckoutAssuranceFee(itemsSnapshot: CartItem[]) {
-  return itemsSnapshot.reduce((sum, item) => {
-    if (!item.hasAssurance) return sum;
-    const effectivePrice = getCartItemEffectivePrice(item);
-    return (
-      sum +
-      Math.round(effectivePrice * item.quantity * (item.assuranceRate ?? 0.05))
-    );
-  }, 0);
+  return (
+    itemsSnapshot.reduce(
+      (sum, item) => sum + calculateItemAssuranceFeeMinor(item),
+      0
+    ) / 100
+  );
 }
 
 export function buildOrderShippingAddress(
@@ -96,12 +128,15 @@ export function buildOrderShippingAddress(
 }
 
 export function mapCartItemsToOrderItems(
-  itemsSnapshot: CartItem[]
+  itemsSnapshot: CartItem[],
+  sharedCartBinding?: CartCheckoutBinding
 ): MobileCheckoutOrderItemPayload[] {
   return itemsSnapshot.map((item) => {
     const effectivePrice = getCartItemEffectivePrice(item);
     return {
       id: item.product_id,
+      // Canonical line identity: display items carry the server line id.
+      ...(sharedCartBinding ? { cart_line_id: item.id } : {}),
       product_id: item.product_id,
       name: item.name,
       quantity: item.quantity,
@@ -112,11 +147,7 @@ export function mapCartItemsToOrderItems(
       variant_name: item.variant_name,
       variant_attributes: item.variant_attributes,
       has_assurance: item.hasAssurance || false,
-      assurance_fee: item.hasAssurance
-        ? Math.round(
-            effectivePrice * item.quantity * (item.assuranceRate ?? 0.05)
-          )
-        : 0,
+      assurance_fee: calculateItemAssuranceFeeMinor(item) / 100,
       // Quiz prize voucher lines: /api/orders verifies the signed token and
       // compares `condition` against the value baked into it — dropping these
       // here silently broke mobile prize redemption at checkout.
@@ -142,25 +173,43 @@ export function buildCheckoutOrderRequest({
   selectedQuote,
   shippingProvider,
   snapshot,
+  sharedCartBinding,
 }: BuildOrderRequestParams): CheckoutOrderRequest {
+  const isMerchantRateQuote = selectedQuote?.provider === 'MERCHANT';
+  const merchantRateId = getMerchantRateId(selectedQuote);
+  if (isMerchantRateQuote && !merchantRateId) {
+    throw new Error(
+      'The selected merchant delivery option is invalid. Please refresh shipping options.'
+    );
+  }
+  const canUseCarrierQuote =
+    !isMerchantRateQuote &&
+    selectedQuote?.id != null &&
+    ((deliveryMethod === 'door' &&
+      !isProviderStationPickupQuote(selectedQuote)) ||
+      (deliveryMethod === 'airport' && isGiglGoFasterQuote(selectedQuote)) ||
+      (deliveryMethod === 'pickup_station' &&
+        isProviderStationPickupQuote(selectedQuote)));
+
   return {
     customer_email: customerEmail,
     customer_name: customerName,
     customer_phone: customerPhone,
-    items: mapCartItemsToOrderItems(itemsSnapshot),
+    items: mapCartItemsToOrderItems(itemsSnapshot, sharedCartBinding),
+    ...(sharedCartBinding ? { shared_cart: sharedCartBinding } : {}),
     subtotal: snapshot.subtotal,
     shipping_fee: snapshot.deliveryFee,
     tax_amount: snapshot.taxAmount,
+    delivery_method: deliveryMethod,
+    ...(deliveryMethod === 'airport' && !isGiglGoFasterQuote(selectedQuote)
+      ? { airport_type: 'delivery' as const }
+      : {}),
     selected_quote_id:
-      selectedQuote?.id != null &&
-      ((deliveryMethod === 'door' &&
-        !isProviderStationPickupQuote(selectedQuote)) ||
-        (deliveryMethod === 'airport' && isGiglGoFasterQuote(selectedQuote)) ||
-        (deliveryMethod === 'pickup_station' &&
-          isProviderStationPickupQuote(selectedQuote)))
+      selectedQuote && canUseCarrierQuote
         ? String(selectedQuote.id)
         : undefined,
-    shipping_provider: shippingProvider,
+    ...(merchantRateId ? { shipping_rate_id: merchantRateId } : {}),
+    shipping_provider: isMerchantRateQuote ? undefined : shippingProvider,
     payment_method: paymentMethodForOrder,
     shipping_address: buildOrderShippingAddress(
       address,

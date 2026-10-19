@@ -37,6 +37,16 @@ const DEFAULT_CURRENCY_CODE = 'NGN';
 const DEFAULT_LOCALE = 'en-US';
 
 /**
+ * Shared platform-fallback currency config. Single source of truth for the
+ * NGN default so prompt builders and formatters cannot drift apart.
+ */
+export const DEFAULT_PLATFORM_CURRENCY_CONFIG: CurrencyConfig = {
+  code: DEFAULT_CURRENCY_CODE,
+  symbol: CURRENCY_SYMBOLS[DEFAULT_CURRENCY_CODE] ?? DEFAULT_CURRENCY_CODE,
+  locale: CURRENCY_DEFAULT_LOCALES[DEFAULT_CURRENCY_CODE] ?? DEFAULT_LOCALE,
+};
+
+/**
  * Minimal structural view of a merchant record. Extra fields are accepted and
  * ignored so callers can pass full merchant rows directly.
  */
@@ -103,6 +113,41 @@ export function formatMerchantCurrency(
 ): string {
   const config = resolveMerchantCurrencyConfig(merchant);
   return formatCurrencyWithConfig(amount, config, options);
+}
+
+/**
+ * Payout-only currency config, mirroring the SQL
+ * `merchant_resolved_currency` rule: a valid payout currency
+ * (uppercased), else NGN — the merchant's country currency never
+ * substitutes. Loyalty amounts are denominated at issuance by that
+ * rule (and checkout enforces it), so loyalty labels must format with
+ * this variant rather than the display resolver above: a US merchant
+ * with a blank payout currency issues NGN codes, and a "$100" minimum
+ * label would misstate the enforced NGN 100.
+ */
+export function resolvePayoutOnlyCurrencyConfig(
+  merchant: MerchantCurrencySource
+): CurrencyConfig {
+  const code =
+    normalizeCurrencyCode(merchant.payout_currency) ?? DEFAULT_CURRENCY_CODE;
+  return {
+    code,
+    symbol: CURRENCY_SYMBOLS[code] ?? code,
+    locale: CURRENCY_DEFAULT_LOCALES[code] ?? DEFAULT_LOCALE,
+  };
+}
+
+/** Format an amount in the merchant's payout-only (issuance) currency. */
+export function formatPayoutOnlyCurrency(
+  amount: number,
+  merchant: MerchantCurrencySource,
+  options?: Partial<Intl.NumberFormatOptions>
+): string {
+  return formatCurrencyWithConfig(
+    amount,
+    resolvePayoutOnlyCurrencyConfig(merchant),
+    options
+  );
 }
 
 /**

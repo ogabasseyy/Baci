@@ -54,7 +54,7 @@ export async function trackPurchase(order: TrackedOrder): Promise<void> {
 
   trackFacebookPurchase(order.total, currency, {
     fb_order_id: order.orderId,
-    fb_content_type: 'product',
+    fb_content_type: 'product_group',
     fb_content_id: JSON.stringify(order.items.map((item) => item.id)),
     fb_num_items: totalItems,
     _eventId: eventId,

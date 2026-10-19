@@ -2,7 +2,6 @@
 
 import { getProductImageAlt } from '@baci/shared/lib';
 import { Eye, Minus, Plus } from 'lucide-react';
-import type { Route } from 'next';
 import Link from 'next/link';
 import { ProductCardImage } from '@/components/optimized-image';
 import { ThemedButton, ThemedCard } from '@/components/themed';
@@ -11,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import type { CartItem } from '@/hooks/use-cart';
 import { useCurrency } from '@/hooks/use-currency';
 import type { Product } from '@/lib/products';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getStorefrontProductHref } from '@/lib/storefront-product-href';
 
 // 2026 Best Practice: Extend Product type to include joined category data
 // This avoids 'any' casts and provides type safety for the categories join
@@ -26,28 +25,14 @@ interface StorefrontProductCardProps {
   onAddToCart: (product: Product) => void;
   onUpdateQuantity: (productId: string, quantity: number) => void;
   onQuickView: (product: Product) => void;
-  merchantSlug?: string | null;
+  basePath?: string;
   priority?: boolean;
-}
-
-function buildStorefrontProductHref(
-  product: Product,
-  merchantSlug?: string | null
-): Route {
-  const productPath = getProductUrl(product);
-  if (!merchantSlug) return productPath;
-
-  if (
-    productPath === `/${merchantSlug}` ||
-    productPath.startsWith(`/${merchantSlug}/`)
-  ) {
-    return productPath;
-  }
-
-  const normalizedPath = productPath.startsWith('/')
-    ? productPath
-    : `/${productPath}`;
-  return `/${merchantSlug}${normalizedPath}` as Route;
+  // Lab-only href suffix, pinned to the exact arm queries at the type
+  // level: a dynamic or malformed suffix is a compile error, never a
+  // render-time throw in the production grid. Production callers omit
+  // it; getStorefrontProductHref keeps its runtime allowlist as the
+  // last line against injection.
+  hrefSuffix?: '' | '?arm=pilot' | '?arm=control';
 }
 
 /**
@@ -61,8 +46,9 @@ export function StorefrontProductCard({
   onAddToCart,
   onUpdateQuantity,
   onQuickView,
-  merchantSlug,
+  basePath = '',
   priority = false,
+  hrefSuffix = '',
 }: StorefrontProductCardProps) {
   const { formatCurrency } = useCurrency();
 
@@ -141,7 +127,7 @@ export function StorefrontProductCard({
     >
       <div className="relative group/image">
         <Link
-          href={buildStorefrontProductHref(product, merchantSlug)}
+          href={getStorefrontProductHref(product, basePath, hrefSuffix)}
           className="block"
         >
           <ProductCardImage

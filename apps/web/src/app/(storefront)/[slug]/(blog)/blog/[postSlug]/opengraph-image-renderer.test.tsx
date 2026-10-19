@@ -173,7 +173,7 @@ describe('merchant blog post OG image route', () => {
     );
   });
 
-  it('renders a cacheable merchant-branded fallback when the post is missing', async () => {
+  it('renders a no-store merchant-branded fallback when the post is missing', async () => {
     mockGetMerchantBlogOgImageData.mockResolvedValue(
       createData({ post: null })
     );
@@ -187,7 +187,7 @@ describe('merchant blog post OG image route', () => {
     expect(collectImageSources(element)).toContain(
       'data:image/png;base64,bG9nbw=='
     );
-    expect(cacheControlOf(options.headers)).toBeNull();
+    expect(cacheControlOf(options.headers)).toBe('no-store, max-age=0');
   });
 
   it('uses no-store for transient image failures before rendering fallback art', async () => {
@@ -205,7 +205,7 @@ describe('merchant blog post OG image route', () => {
     expect(cacheControlOf(options.headers)).toBe('no-store, max-age=0');
   });
 
-  it('keeps permanent missing or disallowed image fallbacks cacheable', async () => {
+  it('keeps permanent missing or disallowed image fallbacks no-store', async () => {
     mockGetMerchantBlogOgImageData.mockResolvedValue(
       createData({
         featuredDataUri: null,
@@ -216,7 +216,7 @@ describe('merchant blog post OG image route', () => {
     await renderImage();
 
     const { options } = getLastImageResponseCall();
-    expect(cacheControlOf(options.headers)).toBeNull();
+    expect(cacheControlOf(options.headers)).toBe('no-store, max-age=0');
   });
 
   it('falls back to no-store merchant artwork when primary serialization fails', async () => {

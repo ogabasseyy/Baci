@@ -36,4 +36,34 @@ describe('expenses-list styles', () => {
       textTransform: 'uppercase',
     });
   });
+
+  it('keeps the filter control and grouped summary metadata compact', () => {
+    expect(styles.filterButton).toMatchObject({
+      alignItems: 'center',
+      borderRadius: RADIUS.full,
+      borderWidth: 1,
+      flexDirection: 'row',
+      minHeight: SPACING.touchTarget,
+    });
+    expect(styles.sectionHeaderSummary).toMatchObject({
+      flexDirection: 'row',
+      gap: SPACING.xs,
+    });
+  });
+
+  it('keeps the row edit shortcut separate and touch friendly', () => {
+    expect(styles.expenseMain).toMatchObject({
+      alignItems: 'center',
+      flex: 1,
+      flexDirection: 'row',
+      minHeight: SPACING.touchTarget,
+    });
+    expect(styles.editButton).toMatchObject({
+      alignItems: 'center',
+      borderRadius: RADIUS.full,
+      borderWidth: 1,
+      flexDirection: 'row',
+      minHeight: SPACING.touchTarget,
+    });
+  });
 });

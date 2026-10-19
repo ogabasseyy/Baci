@@ -88,7 +88,7 @@ describe('builder AI component catalog', () => {
     expect(optionValues('Features', 'columns')).toEqual([2, 3, 4]);
     expect(numericLimits('ProductGrid', 'columns')).toMatchObject({
       max: 4,
-      min: 1,
+      min: 2,
     });
     expect(numericLimits('ProductGrid', 'limit')).toMatchObject({
       max: 24,

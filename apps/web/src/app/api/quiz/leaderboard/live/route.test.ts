@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { requireQuizUser } from '@/app/api/quiz/_shared/route-auth';
 import { logger } from '@/lib/logger';
 
+type RouteAuthModule = typeof import('@/app/api/quiz/_shared/route-auth');
+
 vi.mock('@/app/api/quiz/_shared/route-auth', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/app/api/quiz/_shared/route-auth')>();
+  const actual = await importOriginal<RouteAuthModule>();
   return { ...actual, requireQuizUser: vi.fn() };
 });
 vi.mock('@/lib/logger', () => ({
@@ -29,8 +30,21 @@ function request(eventId = EVENT_ID) {
   );
 }
 
-function authenticate(data: unknown, error: unknown = null) {
-  const rpc = vi.fn().mockResolvedValue({ data, error });
+function authenticate(
+  data: unknown,
+  error: unknown = null,
+  participantCount: unknown = null,
+  rpcOverride?: ReturnType<typeof vi.fn>
+) {
+  const rpc =
+    rpcOverride ??
+    vi.fn((name: string) =>
+      Promise.resolve(
+        name === 'get_quiz_participant_count_public_v2'
+          ? { data: participantCount, error: null }
+          : { data, error }
+      )
+    );
   vi.mocked(requireQuizUser).mockResolvedValue({
     authMethod: 'cookie',
     response: null,
@@ -63,11 +77,15 @@ describe('quiz live leaderboard route', () => {
   });
 
   it('maps the live projection into the public response', async () => {
-    const rpc = authenticate({
-      current_player: ROW,
-      entries: [ROW],
-      status: 'live',
-    });
+    const rpc = authenticate(
+      {
+        current_player: ROW,
+        entries: [ROW],
+        status: 'live',
+      },
+      null,
+      42
+    );
     const { GET } = await import('./route');
     const response = await GET(request());
 
@@ -95,9 +113,35 @@ describe('quiz live leaderboard route', () => {
           totalTimeSeconds: 30.5,
         },
       ],
-      participantCount: null,
+      participantCount: 42,
       status: 'live',
     });
+  });
+
+  it('returns standings when the optional participant count is slow', async () => {
+    vi.useFakeTimers();
+    try {
+      const rpc = vi.fn((name: string) => {
+        if (name === 'get_quiz_participant_count_public_v2') {
+          return new Promise<never>(() => undefined);
+        }
+        return Promise.resolve({
+          data: { current_player: ROW, entries: [ROW], status: 'live' },
+          error: null,
+        });
+      });
+      authenticate(null, null, null, rpc);
+      const { GET } = await import('./route');
+      const responsePromise = GET(request());
+
+      await vi.advanceTimersByTimeAsync(150);
+      const response = await responsePromise;
+
+      expect(response.status).toBe(200);
+      expect((await response.json()).participantCount).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejects malformed live projections without logging projection contents', async () => {

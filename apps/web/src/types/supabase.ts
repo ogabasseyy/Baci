@@ -9,6 +9,151 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      merchant_ad_connections: {
+        Row: {
+          access_token_ciphertext: string | null;
+          created_at: string;
+          id: string;
+          last_synced_at: string | null;
+          last_synced_end_date: string | null;
+          last_synced_start_date: string | null;
+          merchant_id: string;
+          metadata: Json;
+          account_timezone: string | null;
+          attribution_metadata: Json;
+          provider: string;
+          provider_account_label: string | null;
+          provider_customer_id: string | null;
+          refresh_token_ciphertext: string | null;
+          scopes: string[];
+          status: string;
+          sync_run_id: string | null;
+          sync_run_started_at: string | null;
+          token_expires_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          access_token_ciphertext?: string | null;
+          created_at?: string;
+          id?: string;
+          last_synced_at?: string | null;
+          last_synced_end_date?: string | null;
+          last_synced_start_date?: string | null;
+          merchant_id: string;
+          metadata?: Json;
+          account_timezone?: string | null;
+          attribution_metadata?: Json;
+          provider?: string;
+          provider_account_label?: string | null;
+          provider_customer_id?: string | null;
+          refresh_token_ciphertext?: string | null;
+          scopes?: string[];
+          status?: string;
+          sync_run_id?: string | null;
+          sync_run_started_at?: string | null;
+          token_expires_at?: string | null;
+          updated_at?: string;
+        };
+        Update: {
+          access_token_ciphertext?: string | null;
+          created_at?: string;
+          id?: string;
+          last_synced_at?: string | null;
+          last_synced_end_date?: string | null;
+          last_synced_start_date?: string | null;
+          merchant_id?: string;
+          metadata?: Json;
+          account_timezone?: string | null;
+          attribution_metadata?: Json;
+          provider?: string;
+          provider_account_label?: string | null;
+          provider_customer_id?: string | null;
+          refresh_token_ciphertext?: string | null;
+          scopes?: string[];
+          status?: string;
+          sync_run_id?: string | null;
+          sync_run_started_at?: string | null;
+          token_expires_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'merchant_ad_connections_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      merchant_ad_spend_daily: {
+        Row: {
+          account_timezone: string | null;
+          attribution_metadata: Json;
+          clicks: string;
+          conversions: string;
+          created_at: string;
+          currency_code: string;
+          fetched_at: string;
+          id: string;
+          impressions: string;
+          merchant_id: string;
+          provider: string;
+          provider_customer_id: string;
+          reach: string | null;
+          spend_amount_decimal: string | null;
+          spend_date: string;
+          spend_micros: string;
+          updated_at: string;
+        };
+        Insert: {
+          account_timezone?: string | null;
+          attribution_metadata?: Json;
+          clicks?: string;
+          conversions?: string;
+          created_at?: string;
+          currency_code: string;
+          fetched_at?: string;
+          id?: string;
+          impressions?: string;
+          merchant_id: string;
+          provider?: string;
+          provider_customer_id: string;
+          reach?: string | null;
+          spend_amount_decimal?: string | null;
+          spend_date: string;
+          spend_micros?: string;
+          updated_at?: string;
+        };
+        Update: {
+          account_timezone?: string | null;
+          attribution_metadata?: Json;
+          clicks?: string;
+          conversions?: string;
+          created_at?: string;
+          currency_code?: string;
+          fetched_at?: string;
+          id?: string;
+          impressions?: string;
+          merchant_id?: string;
+          provider?: string;
+          provider_customer_id?: string;
+          reach?: string | null;
+          spend_amount_decimal?: string | null;
+          spend_date?: string;
+          spend_micros?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'merchant_ad_spend_daily_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       agentic_cart_sessions: {
         Row: {
           agent_id: string | null;
@@ -670,6 +815,21 @@ export type Database = {
           },
         ];
       };
+      blog_media_delete_tombstones: {
+        Row: {
+          created_at: string;
+          path: string;
+        };
+        Insert: {
+          created_at?: string;
+          path: string;
+        };
+        Update: {
+          created_at?: string;
+          path?: string;
+        };
+        Relationships: [];
+      };
       blog_post_products: {
         Row: {
           blog_post_id: string;
@@ -832,6 +992,8 @@ export type Database = {
           featured_image_width: number | null;
           focus_keyword: string | null;
           id: string;
+          intent: string | null;
+          intent_source: string | null;
           is_ai_generated: boolean | null;
           is_platform_post: boolean | null;
           keywords: string[] | null;
@@ -867,6 +1029,8 @@ export type Database = {
           featured_image_width?: number | null;
           focus_keyword?: string | null;
           id?: string;
+          intent?: string | null;
+          intent_source?: string | null;
           is_ai_generated?: boolean | null;
           is_platform_post?: boolean | null;
           keywords?: string[] | null;
@@ -902,6 +1066,8 @@ export type Database = {
           featured_image_width?: number | null;
           focus_keyword?: string | null;
           id?: string;
+          intent?: string | null;
+          intent_source?: string | null;
           is_ai_generated?: boolean | null;
           is_platform_post?: boolean | null;
           keywords?: string[] | null;
@@ -2297,6 +2463,8 @@ export type Database = {
           customer_id: string;
           early_end_fee_accepted_at: string | null;
           future_debits_cancelled_at: string | null;
+          goal_idempotency_key: string | null;
+          goal_request_fingerprint: string | null;
           id: string;
           initial_contribution_amount: number;
           maturity_date: string;
@@ -2330,6 +2498,8 @@ export type Database = {
           customer_id: string;
           early_end_fee_accepted_at?: string | null;
           future_debits_cancelled_at?: string | null;
+          goal_idempotency_key?: string | null;
+          goal_request_fingerprint?: string | null;
           id?: string;
           initial_contribution_amount?: number;
           maturity_date: string;
@@ -2363,6 +2533,8 @@ export type Database = {
           customer_id?: string;
           early_end_fee_accepted_at?: string | null;
           future_debits_cancelled_at?: string | null;
+          goal_idempotency_key?: string | null;
+          goal_request_fingerprint?: string | null;
           id?: string;
           initial_contribution_amount?: number;
           maturity_date?: string;
@@ -3956,36 +4128,57 @@ export type Database = {
           branch_id: string | null;
           category: string;
           created_at: string;
+          created_by_user_id: string | null;
           date: string;
           description: string | null;
+          group_id: string | null;
           id: string;
           merchant_id: string;
+          payment_method: string | null;
+          receipt_storage_path: string | null;
           receipt_url: string | null;
+          reference: string | null;
           updated_at: string;
+          updated_by_user_id: string | null;
+          vendor_name: string | null;
         };
         Insert: {
           amount?: number;
           branch_id?: string | null;
           category: string;
           created_at?: string;
+          created_by_user_id?: string | null;
           date?: string;
           description?: string | null;
+          group_id?: string | null;
           id?: string;
           merchant_id: string;
+          payment_method?: string | null;
+          receipt_storage_path?: string | null;
           receipt_url?: string | null;
+          reference?: string | null;
           updated_at?: string;
+          updated_by_user_id?: string | null;
+          vendor_name?: string | null;
         };
         Update: {
           amount?: number;
           branch_id?: string | null;
           category?: string;
           created_at?: string;
+          created_by_user_id?: string | null;
           date?: string;
           description?: string | null;
+          group_id?: string | null;
           id?: string;
           merchant_id?: string;
+          payment_method?: string | null;
+          receipt_storage_path?: string | null;
           receipt_url?: string | null;
+          reference?: string | null;
           updated_at?: string;
+          updated_by_user_id?: string | null;
+          vendor_name?: string | null;
         };
         Relationships: [
           {
@@ -3993,6 +4186,20 @@ export type Database = {
             columns: ['branch_id'];
             isOneToOne: false;
             referencedRelation: 'branches';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'expenses_created_by_user_id_fkey';
+            columns: ['created_by_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'expenses_group_id_fkey';
+            columns: ['group_id'];
+            isOneToOne: false;
+            referencedRelation: 'expense_groups';
             referencedColumns: ['id'];
           },
           {
@@ -4011,6 +4218,62 @@ export type Database = {
           },
           {
             foreignKeyName: 'expenses_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'top_merchants';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'expenses_updated_by_user_id_fkey';
+            columns: ['updated_by_user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      expense_groups: {
+        Row: {
+          archived_at: string | null;
+          created_at: string;
+          id: string;
+          merchant_id: string;
+          name: string;
+          updated_at: string;
+        };
+        Insert: {
+          archived_at?: string | null;
+          created_at?: string;
+          id?: string;
+          merchant_id: string;
+          name: string;
+          updated_at?: string;
+        };
+        Update: {
+          archived_at?: string | null;
+          created_at?: string;
+          id?: string;
+          merchant_id?: string;
+          name?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'expense_groups_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchant_health';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'expense_groups_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'expense_groups_merchant_id_fkey';
             columns: ['merchant_id'];
             isOneToOne: false;
             referencedRelation: 'top_merchants';
@@ -4745,6 +5008,7 @@ export type Database = {
           jumia_order_id: string;
           jumia_order_number: string | null;
           jumia_shop_id: string;
+          marketplace_key: string;
           merchant_id: string;
           notification_sent: boolean;
           shipping_address: Json | null;
@@ -4764,6 +5028,7 @@ export type Database = {
           jumia_order_id: string;
           jumia_order_number?: string | null;
           jumia_shop_id: string;
+          marketplace_key?: string;
           merchant_id: string;
           notification_sent?: boolean;
           shipping_address?: Json | null;
@@ -4783,6 +5048,7 @@ export type Database = {
           jumia_order_id?: string;
           jumia_order_number?: string | null;
           jumia_shop_id?: string;
+          marketplace_key?: string;
           merchant_id?: string;
           notification_sent?: boolean;
           shipping_address?: Json | null;
@@ -5223,6 +5489,93 @@ export type Database = {
             isOneToOne: true;
             referencedRelation: 'top_merchants';
             referencedColumns: ['merchant_id'];
+          },
+        ];
+      };
+      loyalty_redemption_idempotency_keys: {
+        Row: {
+          created_at: string;
+          customer_id: string;
+          key: string;
+          merchant_id: string;
+          requested_reward_id: string;
+          response: Json;
+          reward_id: string | null;
+        };
+        Insert: {
+          created_at?: string;
+          customer_id: string;
+          key: string;
+          merchant_id: string;
+          requested_reward_id: string;
+          response: Json;
+          reward_id?: string | null;
+        };
+        Update: {
+          created_at?: string;
+          customer_id?: string;
+          key?: string;
+          merchant_id?: string;
+          requested_reward_id?: string;
+          response?: Json;
+          reward_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customer_insights';
+            referencedColumns: ['customer_id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'customers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'priority_winback_customers';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_customer_id_fkey';
+            columns: ['customer_id'];
+            isOneToOne: false;
+            referencedRelation: 'secure_customer_insights';
+            referencedColumns: ['customer_id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchant_health';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'merchants';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_merchant_id_fkey';
+            columns: ['merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'top_merchants';
+            referencedColumns: ['merchant_id'];
+          },
+          {
+            foreignKeyName: 'loyalty_redemption_idempotency_keys_reward_id_fkey';
+            columns: ['reward_id'];
+            isOneToOne: false;
+            referencedRelation: 'loyalty_rewards';
+            referencedColumns: ['id'];
           },
         ];
       };
@@ -5994,27 +6347,33 @@ export type Database = {
       merchant_notifications: {
         Row: {
           banner_dismissed_at: string | null;
+          banner_visible: boolean;
           created_at: string | null;
           dismissed_at: string | null;
           id: string;
+          in_app_visible: boolean;
           merchant_id: string;
           notification_id: string;
           read_at: string | null;
         };
         Insert: {
           banner_dismissed_at?: string | null;
+          banner_visible?: boolean;
           created_at?: string | null;
           dismissed_at?: string | null;
           id?: string;
+          in_app_visible?: boolean;
           merchant_id: string;
           notification_id: string;
           read_at?: string | null;
         };
         Update: {
           banner_dismissed_at?: string | null;
+          banner_visible?: boolean;
           created_at?: string | null;
           dismissed_at?: string | null;
           id?: string;
+          in_app_visible?: boolean;
           merchant_id?: string;
           notification_id?: string;
           read_at?: string | null;
@@ -6624,7 +6983,7 @@ export type Database = {
           phone: string | null;
           plan_expires_at: string | null;
           plan_started_at: string | null;
-          plan_tier: string | null;
+          plan_tier: string;
           premium_features: Json | null;
           published_at: string | null;
           published_config: Json | null;
@@ -6721,7 +7080,7 @@ export type Database = {
           phone?: string | null;
           plan_expires_at?: string | null;
           plan_started_at?: string | null;
-          plan_tier?: string | null;
+          plan_tier?: string;
           premium_features?: Json | null;
           published_at?: string | null;
           published_config?: Json | null;
@@ -6818,7 +7177,7 @@ export type Database = {
           phone?: string | null;
           plan_expires_at?: string | null;
           plan_started_at?: string | null;
-          plan_tier?: string | null;
+          plan_tier?: string;
           premium_features?: Json | null;
           published_at?: string | null;
           published_config?: Json | null;
@@ -7068,26 +7427,32 @@ export type Database = {
       notification_preferences: {
         Row: {
           banner_enabled: boolean | null;
+          follow_up_notifications_enabled: boolean;
           in_app_enabled: boolean | null;
           merchant_id: string;
           quiet_hours_end: string | null;
           quiet_hours_start: string | null;
+          quiet_hours_time_zone: string;
           updated_at: string | null;
         };
         Insert: {
           banner_enabled?: boolean | null;
+          follow_up_notifications_enabled?: boolean;
           in_app_enabled?: boolean | null;
           merchant_id: string;
           quiet_hours_end?: string | null;
           quiet_hours_start?: string | null;
+          quiet_hours_time_zone?: string;
           updated_at?: string | null;
         };
         Update: {
           banner_enabled?: boolean | null;
+          follow_up_notifications_enabled?: boolean;
           in_app_enabled?: boolean | null;
           merchant_id?: string;
           quiet_hours_end?: string | null;
           quiet_hours_start?: string | null;
+          quiet_hours_time_zone?: string;
           updated_at?: string | null;
         };
         Relationships: [
@@ -7154,6 +7519,13 @@ export type Database = {
           channels: Json;
           created_at: string | null;
           created_by: string;
+          delivery_attempts: number;
+          delivery_claimed_at: string | null;
+          delivery_claim_token: string | null;
+          delivery_failed_at: string | null;
+          delivery_failure_attempts: number;
+          delivery_last_error: string | null;
+          delivery_state: string;
           expires_at: string | null;
           id: string;
           is_system: boolean | null;
@@ -7174,6 +7546,13 @@ export type Database = {
           channels?: Json;
           created_at?: string | null;
           created_by: string;
+          delivery_attempts?: number;
+          delivery_claimed_at?: string | null;
+          delivery_claim_token?: string | null;
+          delivery_failed_at?: string | null;
+          delivery_failure_attempts?: number;
+          delivery_last_error?: string | null;
+          delivery_state?: string;
           expires_at?: string | null;
           id?: string;
           is_system?: boolean | null;
@@ -7194,6 +7573,13 @@ export type Database = {
           channels?: Json;
           created_at?: string | null;
           created_by?: string;
+          delivery_attempts?: number;
+          delivery_claimed_at?: string | null;
+          delivery_claim_token?: string | null;
+          delivery_failed_at?: string | null;
+          delivery_failure_attempts?: number;
+          delivery_last_error?: string | null;
+          delivery_state?: string;
           expires_at?: string | null;
           id?: string;
           is_system?: boolean | null;
@@ -7650,6 +8036,7 @@ export type Database = {
           product_match_status: string;
           quantity: number;
           quiz_award_id: string | null;
+          quiz_award_amount: number | null;
           sellers_item_id: string | null;
           supplier_name: string | null;
           unit_code: string | null;
@@ -7679,6 +8066,7 @@ export type Database = {
           product_match_status?: string;
           quantity: number;
           quiz_award_id?: string | null;
+          quiz_award_amount?: number | null;
           sellers_item_id?: string | null;
           supplier_name?: string | null;
           unit_code?: string | null;
@@ -7708,6 +8096,7 @@ export type Database = {
           product_match_status?: string;
           quantity?: number;
           quiz_award_id?: string | null;
+          quiz_award_amount?: number | null;
           sellers_item_id?: string | null;
           supplier_name?: string | null;
           unit_code?: string | null;
@@ -8297,6 +8686,7 @@ export type Database = {
           cancelled_by: string | null;
           checkout_idempotency_key: string | null;
           checkout_request_hash: string | null;
+          checkout_request_hash_version: number | null;
           created_at: string | null;
           credit_notes: string | null;
           currency: string | null;
@@ -8305,6 +8695,8 @@ export type Database = {
           customer_name: string | null;
           customer_phone: string | null;
           delivered_at: string | null;
+          delivery_method: string | null;
+          airport_type: string | null;
           discount_amount: number | null;
           discount_code_id: string | null;
           exchange_rate: number | null;
@@ -8380,6 +8772,7 @@ export type Database = {
           cancelled_by?: string | null;
           checkout_idempotency_key?: string | null;
           checkout_request_hash?: string | null;
+          checkout_request_hash_version?: number | null;
           created_at?: string | null;
           credit_notes?: string | null;
           currency?: string | null;
@@ -8388,6 +8781,8 @@ export type Database = {
           customer_name?: string | null;
           customer_phone?: string | null;
           delivered_at?: string | null;
+          delivery_method?: string | null;
+          airport_type?: string | null;
           discount_amount?: number | null;
           discount_code_id?: string | null;
           exchange_rate?: number | null;
@@ -8463,6 +8858,7 @@ export type Database = {
           cancelled_by?: string | null;
           checkout_idempotency_key?: string | null;
           checkout_request_hash?: string | null;
+          checkout_request_hash_version?: number | null;
           created_at?: string | null;
           credit_notes?: string | null;
           currency?: string | null;
@@ -8471,6 +8867,8 @@ export type Database = {
           customer_name?: string | null;
           customer_phone?: string | null;
           delivered_at?: string | null;
+          delivery_method?: string | null;
+          airport_type?: string | null;
           discount_amount?: number | null;
           discount_code_id?: string | null;
           exchange_rate?: number | null;
@@ -9433,6 +9831,81 @@ export type Database = {
           success_rate?: number | null;
           turnaround?: string | null;
           updated_at?: string;
+        };
+        Relationships: [];
+      };
+      platform_admin_memberships: {
+        Row: {
+          created_at: string;
+          granted_at: string;
+          granted_by: string | null;
+          id: string;
+          reason: string;
+          revoked_at: string | null;
+          revoked_by: string | null;
+          role: Database['public']['Enums']['platform_admin_role'];
+          status: string;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          created_at?: string;
+          granted_at?: string;
+          granted_by?: string | null;
+          id?: string;
+          reason: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          role: Database['public']['Enums']['platform_admin_role'];
+          status?: string;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          granted_at?: string;
+          granted_by?: string | null;
+          id?: string;
+          reason?: string;
+          revoked_at?: string | null;
+          revoked_by?: string | null;
+          role?: Database['public']['Enums']['platform_admin_role'];
+          status?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      platform_audit_events: {
+        Row: {
+          action: string;
+          actor_user_id: string;
+          changed_fields: string[];
+          id: string;
+          metadata: Json;
+          occurred_at: string;
+          resource_id: string;
+          resource_type: string;
+        };
+        Insert: {
+          action: string;
+          actor_user_id: string;
+          changed_fields?: string[];
+          id?: string;
+          metadata?: Json;
+          occurred_at?: string;
+          resource_id: string;
+          resource_type: string;
+        };
+        Update: {
+          action?: string;
+          actor_user_id?: string;
+          changed_fields?: string[];
+          id?: string;
+          metadata?: Json;
+          occurred_at?: string;
+          resource_id?: string;
+          resource_type?: string;
         };
         Relationships: [];
       };
@@ -10543,6 +11016,7 @@ export type Database = {
           cost_price: number | null;
           created_at: string | null;
           default_variant_id: string | null;
+          discovery_metadata: Json | null;
           description: string | null;
           description_digital_source_type: string | null;
           description_provenance_sha256: string | null;
@@ -10624,6 +11098,7 @@ export type Database = {
           cost_price?: number | null;
           created_at?: string | null;
           default_variant_id?: string | null;
+          discovery_metadata?: Json | null;
           description?: string | null;
           description_digital_source_type?: string | null;
           description_provenance_sha256?: string | null;
@@ -10705,6 +11180,7 @@ export type Database = {
           cost_price?: number | null;
           created_at?: string | null;
           default_variant_id?: string | null;
+          discovery_metadata?: Json | null;
           description?: string | null;
           description_digital_source_type?: string | null;
           description_provenance_sha256?: string | null;
@@ -11584,6 +12060,60 @@ export type Database = {
           source_reference_checked_at?: string | null;
           updated_at?: string;
           verification_status?: string | null;
+        };
+        Relationships: [];
+      };
+      quiz_deadline_clock_health_v2: {
+        Row: {
+          consecutive_failures: number;
+          last_failure_at: string | null;
+          last_failure_count: number;
+          last_run_at: string;
+          last_success_at: string | null;
+          last_summary: Json;
+          singleton: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          consecutive_failures?: number;
+          last_failure_at?: string | null;
+          last_failure_count?: number;
+          last_run_at: string;
+          last_success_at?: string | null;
+          last_summary?: Json;
+          singleton?: boolean;
+          updated_at?: string;
+        };
+        Update: {
+          consecutive_failures?: number;
+          last_failure_at?: string | null;
+          last_failure_count?: number;
+          last_run_at?: string;
+          last_success_at?: string | null;
+          last_summary?: Json;
+          singleton?: boolean;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      quiz_runtime_control_v2: {
+        Row: {
+          production_approved: boolean;
+          production_phase: boolean;
+          singleton: boolean;
+          updated_at: string;
+        };
+        Insert: {
+          production_approved?: boolean;
+          production_phase?: boolean;
+          singleton?: boolean;
+          updated_at?: string;
+        };
+        Update: {
+          production_approved?: boolean;
+          production_phase?: boolean;
+          singleton?: boolean;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -12755,6 +13285,41 @@ export type Database = {
           },
         ];
       };
+      repair_pickup_pending_payment_references: {
+        Row: {
+          consumed_at: string | null;
+          created_at: string;
+          id: string;
+          merchant_id: string;
+          reference: string;
+          repair_id: string;
+        };
+        Insert: {
+          consumed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          merchant_id: string;
+          reference: string;
+          repair_id: string;
+        };
+        Update: {
+          consumed_at?: string | null;
+          created_at?: string;
+          id?: string;
+          merchant_id?: string;
+          reference?: string;
+          repair_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'repair_pickup_pending_payment_references_repair_fk';
+            columns: ['repair_id', 'merchant_id'];
+            isOneToOne: false;
+            referencedRelation: 'repairs';
+            referencedColumns: ['id', 'merchant_id'];
+          },
+        ];
+      };
       repair_pickup_quotes: {
         Row: {
           carrier_name: string | null;
@@ -13003,6 +13568,12 @@ export type Database = {
           pickup_address: string | null;
           pickup_booking_lock_token: string | null;
           pickup_booking_started_at: string | null;
+          pickup_currency: string | null;
+          pickup_fee: number | null;
+          pickup_paid_at: string | null;
+          pickup_payment_pending_reference: string | null;
+          pickup_payment_reference: string | null;
+          pickup_payment_status: string | null;
           preferred_date: string | null;
           quote_id: string | null;
           quoted_price: number | null;
@@ -13029,6 +13600,12 @@ export type Database = {
           pickup_address?: string | null;
           pickup_booking_lock_token?: string | null;
           pickup_booking_started_at?: string | null;
+          pickup_currency?: string | null;
+          pickup_fee?: number | null;
+          pickup_paid_at?: string | null;
+          pickup_payment_pending_reference?: string | null;
+          pickup_payment_reference?: string | null;
+          pickup_payment_status?: string | null;
           preferred_date?: string | null;
           quote_id?: string | null;
           quoted_price?: number | null;
@@ -13055,6 +13632,12 @@ export type Database = {
           pickup_address?: string | null;
           pickup_booking_lock_token?: string | null;
           pickup_booking_started_at?: string | null;
+          pickup_currency?: string | null;
+          pickup_fee?: number | null;
+          pickup_paid_at?: string | null;
+          pickup_payment_pending_reference?: string | null;
+          pickup_payment_reference?: string | null;
+          pickup_payment_status?: string | null;
           preferred_date?: string | null;
           quote_id?: string | null;
           quoted_price?: number | null;
@@ -13230,14 +13813,20 @@ export type Database = {
       };
       reward_redemptions: {
         Row: {
+          consume_idempotency_key: string | null;
           created_at: string | null;
           customer_id: string;
           discount_code: string | null;
           expires_at: string | null;
           id: string;
+          issuance_currency: string | null;
+          max_redemption_percentage: number | null;
           merchant_id: string;
+          minimum_order_amount: number | null;
           points_spent: number;
           reward_id: string | null;
+          reward_name: string | null;
+          reward_product_id: string | null;
           reward_type: string;
           reward_value: number | null;
           used: boolean | null;
@@ -13245,14 +13834,20 @@ export type Database = {
           used_on_order_id: string | null;
         };
         Insert: {
+          consume_idempotency_key?: string | null;
           created_at?: string | null;
           customer_id: string;
           discount_code?: string | null;
           expires_at?: string | null;
           id?: string;
+          issuance_currency?: string | null;
+          max_redemption_percentage?: number | null;
           merchant_id: string;
+          minimum_order_amount?: number | null;
           points_spent: number;
           reward_id?: string | null;
+          reward_name?: string | null;
+          reward_product_id?: string | null;
           reward_type: string;
           reward_value?: number | null;
           used?: boolean | null;
@@ -13260,14 +13855,20 @@ export type Database = {
           used_on_order_id?: string | null;
         };
         Update: {
+          consume_idempotency_key?: string | null;
           created_at?: string | null;
           customer_id?: string;
           discount_code?: string | null;
           expires_at?: string | null;
           id?: string;
+          issuance_currency?: string | null;
+          max_redemption_percentage?: number | null;
           merchant_id?: string;
+          minimum_order_amount?: number | null;
           points_spent?: number;
           reward_id?: string | null;
+          reward_name?: string | null;
+          reward_product_id?: string | null;
           reward_type?: string;
           reward_value?: number | null;
           used?: boolean | null;
@@ -13655,7 +14256,7 @@ export type Database = {
           manual_terminal_override_at: string | null;
           next_poll_at: string | null;
           notification_events_not_before: string | null;
-          order_id: string;
+          order_id: string | null;
           provider: string;
           shipment_id: string;
           started_at: string;
@@ -13680,7 +14281,7 @@ export type Database = {
           manual_terminal_override_at?: string | null;
           next_poll_at?: string | null;
           notification_events_not_before?: string | null;
-          order_id: string;
+          order_id?: string | null;
           provider: string;
           shipment_id: string;
           started_at?: string;
@@ -13705,7 +14306,7 @@ export type Database = {
           manual_terminal_override_at?: string | null;
           next_poll_at?: string | null;
           notification_events_not_before?: string | null;
-          order_id?: string;
+          order_id?: string | null;
           provider?: string;
           shipment_id?: string;
           started_at?: string;
@@ -13750,7 +14351,7 @@ export type Database = {
           merchant_id: string;
           next_attempt_at: string;
           notification_kind: string;
-          order_id: string;
+          order_id: string | null;
           sent_at: string | null;
           shipment_id: string;
           skip_reason: string | null;
@@ -13773,7 +14374,7 @@ export type Database = {
           merchant_id: string;
           next_attempt_at?: string;
           notification_kind: string;
-          order_id: string;
+          order_id?: string | null;
           sent_at?: string | null;
           shipment_id: string;
           skip_reason?: string | null;
@@ -13796,7 +14397,7 @@ export type Database = {
           merchant_id?: string;
           next_attempt_at?: string;
           notification_kind?: string;
-          order_id?: string;
+          order_id?: string | null;
           sent_at?: string | null;
           shipment_id?: string;
           skip_reason?: string | null;
@@ -13873,6 +14474,7 @@ export type Database = {
           provider: string;
           provider_response: Json | null;
           provider_shipment_id: string | null;
+          shipping_quote_id: string | null;
           receiver_address: Json;
           refund_amount: number | null;
           sender_address: Json;
@@ -13907,6 +14509,7 @@ export type Database = {
           provider: string;
           provider_response?: Json | null;
           provider_shipment_id?: string | null;
+          shipping_quote_id?: string | null;
           receiver_address: Json;
           refund_amount?: number | null;
           sender_address: Json;
@@ -13941,6 +14544,7 @@ export type Database = {
           provider?: string;
           provider_response?: Json | null;
           provider_shipment_id?: string | null;
+          shipping_quote_id?: string | null;
           receiver_address?: Json;
           refund_amount?: number | null;
           sender_address?: Json;
@@ -13981,6 +14585,13 @@ export type Database = {
             columns: ['order_id'];
             isOneToOne: false;
             referencedRelation: 'orders';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'shipments_shipping_quote_id_fkey';
+            columns: ['shipping_quote_id'];
+            isOneToOne: false;
+            referencedRelation: 'shipping_quotes';
             referencedColumns: ['id'];
           },
         ];
@@ -15631,6 +16242,104 @@ export type Database = {
       };
     };
     Functions: {
+      blog_media_objects_present_v1: {
+        Args: { p_paths: string[] };
+        Returns: {
+          path: string;
+        }[];
+      };
+      claim_sweepable_blog_media_tombstones: {
+        Args: { p_cutoff: string; p_limit: number };
+        Returns: {
+          tombstone_claimed: boolean;
+          tombstone_path: string;
+        }[];
+      };
+      consume_loyalty_redemption: {
+        Args: {
+          p_code: string;
+          p_idempotency_key?: string;
+          p_merchant_id: string;
+        };
+        Returns: Json;
+      };
+      create_storefront_order_with_loyalty_code: {
+        Args: {
+          p_ad_tracking?: Json;
+          p_checkout_idempotency_key?: string;
+          p_checkout_request_hash?: string;
+          p_customer_email: string;
+          p_customer_name: string;
+          p_customer_phone?: string;
+          p_discount_amount?: number;
+          p_expected_total?: number;
+          p_gift_wrapping_fee?: number;
+          p_items: Json;
+          p_loyalty_redemption_id?: string;
+          p_merchant_id: string;
+          p_notes?: string;
+          p_payment_method?: string;
+          p_payment_status?: string;
+          p_selected_quote_id?: string;
+          p_shipping_address?: Json;
+          p_shipping_fee?: number;
+          p_shipping_provider?: string;
+          p_shipping_status?: string;
+          p_source?: string;
+          p_tax_amount?: number;
+          p_tax_basis?: string;
+          p_tracking_number?: string;
+          p_user_id?: string;
+        };
+        Returns: {
+          customer_email: string;
+          customer_id: string;
+          customer_name: string;
+          customer_phone: string;
+          discount_amount: number;
+          gift_wrapping_fee: number;
+          id: string;
+          idempotency_replayed: boolean;
+          merchant_id: string;
+          order_number: string;
+          payment_method: string;
+          payment_status: string;
+          shipping_address: Json;
+          shipping_fee: number;
+          shipping_status: string;
+          subtotal: number;
+          tax_amount: number;
+          tax_basis: string;
+          total: number;
+          tracking_token: string;
+        }[];
+      };
+      get_loyalty_redemption_for_checkout: {
+        Args: { p_code: string; p_merchant_id: string };
+        Returns: {
+          expires_at: string;
+          issuance_currency: string;
+          max_redemption_percentage: number;
+          minimum_known: boolean;
+          minimum_order_amount: number;
+          redemption_id: string;
+          reward_name: string;
+          reward_type: string;
+          reward_value: number;
+          used: boolean;
+        }[];
+      };
+      loyalty_consume_is_authorized: {
+        Args: { p_merchant_id: string };
+        Returns: boolean;
+      };
+      register_blog_media_references_v1: {
+        Args: { p_paths: string[] };
+        Returns: {
+          path: string;
+          status: string;
+        }[];
+      };
       accept_staff_invite: {
         Args: { p_email: string; p_token: string };
         Returns: {
@@ -15642,9 +16351,39 @@ export type Database = {
           status: string;
         }[];
       };
+      get_santa_catalog: {
+        Args: { p_merchant_id: string };
+        Returns: {
+          brand: string | null;
+          max_margin_discount_percentage: number;
+          name: string;
+          price: number;
+        }[];
+      };
       acknowledge_recovery_code_set: {
         Args: { p_code_set_id: string; p_user_id: string };
         Returns: boolean;
+      };
+      refresh_paystack_order_payable_amount: {
+        Args: { p_order_id: string };
+        Returns: number;
+      };
+      release_expired_paystack_order_account: {
+        Args: { p_order_id: string };
+        Returns: boolean;
+      };
+      reserve_paystack_order_payment_account: {
+        Args: {
+          p_account_name: string;
+          p_account_number: string;
+          p_assigned_at: string;
+          p_bank_name: string;
+          p_expires_at: string;
+          p_expected_customer_email: string;
+          p_order_id: string;
+          p_provisioning_proof: Json;
+        };
+        Returns: string;
       };
       advance_petrock_eligibility_evidence: {
         Args: {
@@ -15799,6 +16538,16 @@ export type Database = {
         };
         Returns: boolean;
       };
+      bind_repair_pickup_pending_payment_reference: {
+        Args: {
+          p_merchant_id: string;
+          p_reference: string;
+          p_repair_id: string;
+        };
+        Returns: {
+          bound: boolean;
+        }[];
+      };
       build_product_variant_key: {
         Args: { p_attributes: Json; p_condition: string };
         Returns: string;
@@ -15829,6 +16578,15 @@ export type Database = {
           reorder_quantity: number;
           sales_trend: string;
         }[];
+      };
+      get_inventory_forecast_dashboard: {
+        Args: {
+          p_limit?: number;
+          p_low_stock_only?: boolean;
+          p_merchant_id: string;
+          p_offset?: number;
+        };
+        Returns: Json;
       };
       calculate_loyalty_tier: {
         Args: { p_lifetime_points: number; p_merchant_id: string };
@@ -15924,6 +16682,22 @@ export type Database = {
         };
         Returns: boolean;
       };
+      authorize_expense_private_receipt_cleanup_deletion: {
+        Args: {
+          p_expense_id?: string | null;
+          p_merchant_id: string;
+          p_storage_path: string;
+        };
+        Returns: boolean;
+      };
+      authorize_legacy_expense_receipt_cleanup_deletion: {
+        Args: {
+          p_expense_id: string;
+          p_merchant_id: string;
+          p_storage_path: string;
+        };
+        Returns: boolean;
+      };
       claim_cache_invalidations: {
         Args: { p_batch_size?: number; p_worker_id?: string };
         Returns: {
@@ -15950,7 +16724,7 @@ export type Database = {
       claim_due_gigl_tracking_monitors: {
         Args: { p_limit: number; p_worker_id: string };
         Returns: {
-          order_id: string;
+          order_id: string | null;
           shipment_id: string;
           state: string;
           tracking_epoch_id: string;
@@ -15971,6 +16745,30 @@ export type Database = {
           domain_event_id: string;
           id: string;
           payload: Json;
+        }[];
+      };
+      claim_failed_vtu_retry: {
+        Args: { p_vtu_transaction_id: string };
+        Returns: {
+          claimed: boolean;
+          claimed_updated_at: string | null;
+          refusal_reason: string | null;
+        }[];
+      };
+      claim_expense_private_receipt_cleanup_candidates: {
+        Args: { p_limit?: number };
+        Returns: {
+          expense_id: string | null;
+          merchant_id: string;
+          storage_path: string;
+        }[];
+      };
+      claim_legacy_expense_receipt_cleanup_candidates: {
+        Args: { p_limit?: number };
+        Returns: {
+          expense_id: string;
+          merchant_id: string;
+          storage_path: string;
         }[];
       };
       claim_manual_payment_side_effect: {
@@ -16210,7 +17008,8 @@ export type Database = {
           max_attempts: number;
           merchant_id: string;
           notification_kind: string;
-          order_id: string;
+          order_id: string | null;
+          repair_id: string | null;
           shipment_id: string;
           tracking_epoch_id: string;
           tracking_event_id: string;
@@ -16286,7 +17085,51 @@ export type Database = {
       };
       cleanup_expired_notifications: { Args: never; Returns: undefined };
       cleanup_expired_shipping_quotes: { Args: never; Returns: undefined };
+      claim_scheduled_admin_notifications_v1: {
+        Args: { p_limit?: number };
+        Returns: {
+          action_label: string | null;
+          action_url: string | null;
+          channels: Json;
+          created_at: string;
+          delivery_claim_token: string;
+          expires_at: string | null;
+          id: string;
+          message: string;
+          notification_type: string;
+          priority: string;
+          scheduled_for: string;
+          target_merchant_ids: string[];
+          target_segment: string | null;
+          target_type: string;
+          title: string;
+        }[];
+      };
       cleanup_old_oauth_handoff_tickets: { Args: never; Returns: undefined };
+      create_jumia_oauth_handoff_ticket: {
+        Args: { p_expires_at: string; p_merchant_id: string };
+        Returns: { expires_at: string; id: string }[];
+      };
+      redeem_jumia_oauth_handoff_ticket: {
+        Args: {
+          p_oauth_state: string;
+          p_redeemed_expires_at: string;
+          p_ticket_id: string;
+        };
+        Returns: boolean;
+      };
+      exchange_jumia_oauth_handoff_ticket: {
+        Args: { p_merchant_id: string; p_ticket_id: string };
+        Returns: boolean;
+      };
+      finalize_jumia_oauth_handoff_ticket: {
+        Args: { p_merchant_id: string; p_ticket_id: string };
+        Returns: boolean;
+      };
+      release_jumia_oauth_handoff_ticket: {
+        Args: { p_merchant_id: string; p_ticket_id: string };
+        Returns: boolean;
+      };
       cleanup_old_push_attempts: { Args: never; Returns: number };
       cleanup_old_push_tickets: { Args: never; Returns: number };
       cleanup_rate_limit_logs: {
@@ -16304,7 +17147,19 @@ export type Database = {
       };
       clear_vtu_customer_email_notification_attempt: {
         Args: {
+          p_attempt_at: string;
           p_attempt_key: string;
+          p_sent_key: string;
+          p_transaction_id: string;
+        };
+        Returns: Json;
+      };
+      finalize_vtu_customer_email_notification_attempt: {
+        Args: {
+          p_attempt_at: string;
+          p_attempt_key: string;
+          p_delivery_outcome: string;
+          p_sent: boolean;
           p_sent_key: string;
           p_transaction_id: string;
         };
@@ -16314,6 +17169,22 @@ export type Database = {
       compact_product_search_text: {
         Args: { search_text: string };
         Returns: string;
+      };
+      complete_expense_private_receipt_cleanup: {
+        Args: {
+          p_expense_id?: string | null;
+          p_merchant_id: string;
+          p_storage_path: string;
+        };
+        Returns: boolean;
+      };
+      complete_legacy_expense_receipt_cleanup: {
+        Args: {
+          p_expense_id: string;
+          p_merchant_id: string;
+          p_storage_path: string;
+        };
+        Returns: boolean;
       };
       complete_order_gateway_payment: {
         Args: {
@@ -16384,6 +17255,19 @@ export type Database = {
         Args: { p_merchant_id: string; p_order_id: string };
         Returns: Json;
       };
+      confirm_repair_pickup_payment: {
+        Args: {
+          p_amount: number;
+          p_currency: string;
+          p_gateway_response: Json;
+          p_merchant_id: string;
+          p_reference: string;
+          p_repair_id: string;
+        };
+        Returns: {
+          confirmed: boolean;
+        }[];
+      };
       convert_chat_order_to_paid_order_with_inventory: {
         Args: {
           p_amount: number;
@@ -16393,6 +17277,18 @@ export type Database = {
           p_reference: string;
         };
         Returns: Json;
+      };
+      create_admin_notification_recipients_v1: {
+        Args: { p_merchant_ids: string[]; p_notification_id: string };
+        Returns: number;
+      };
+      create_claimed_admin_notification_recipients_v1: {
+        Args: {
+          p_claim_token: string;
+          p_merchant_ids: string[];
+          p_notification_id: string;
+        };
+        Returns: number;
       };
       create_customer_savings_authorization_transaction: {
         Args: {
@@ -16411,6 +17307,7 @@ export type Database = {
           p_contribution_frequency: string;
           p_customer_id: string;
           p_early_end_fee_accepted_at: string;
+          p_goal_idempotency_key: string;
           p_initial_contribution_amount: number;
           p_initial_contribution_idempotency_key: string;
           p_maturity_date: string;
@@ -16420,6 +17317,7 @@ export type Database = {
           p_preferred_debit_time: string;
           p_product_id: string;
           p_product_snapshot: Json;
+          p_request_fingerprint: string;
           p_saved_payment_method_id: string;
           p_source_mode: string;
           p_start_date: string;
@@ -16808,6 +17706,10 @@ export type Database = {
       };
       current_agentic_merchant_id: { Args: never; Returns: string };
       current_agentic_session_id: { Args: never; Returns: string };
+      current_user_has_platform_admin_permission_v1: {
+        Args: { p_permission: string };
+        Returns: boolean;
+      };
       customer_order_can_cancel: {
         Args: { p_order_id: string };
         Returns: boolean;
@@ -16879,6 +17781,14 @@ export type Database = {
         }[];
       };
       delete_current_storefront_account: { Args: never; Returns: undefined };
+      delete_legacy_expense_receipt: {
+        Args: {
+          p_expense_id: string;
+          p_merchant_id: string;
+          p_storage_path: string;
+        };
+        Returns: boolean;
+      };
       delete_merchant_payment_credential: {
         Args: { p_merchant_id: string; p_provider: string };
         Returns: undefined;
@@ -16944,6 +17854,37 @@ export type Database = {
         Args: { p_merchant_id: string; p_product_identifier: string };
         Returns: undefined;
       };
+      adjust_loyalty_points: {
+        Args: {
+          p_customer_id: string;
+          p_merchant_id: string;
+          p_points: number;
+          p_reason: string | null;
+          p_type: string;
+        };
+        Returns: Json;
+      };
+      enroll_customer_loyalty: {
+        Args: {
+          p_customer_id: string;
+          p_merchant_id: string;
+          p_referral_code: string | null;
+        };
+        Returns: Json;
+      };
+      get_loyalty_status: {
+        Args: { p_customer_id: string; p_merchant_id: string };
+        Returns: Json;
+      };
+      redeem_loyalty_reward: {
+        Args: {
+          p_customer_id: string;
+          p_merchant_id: string;
+          p_reward_id: string;
+          p_idempotency_key?: string;
+        };
+        Returns: Json;
+      };
       expire_order_wallet_funding_intents: {
         Args: {
           p_customer_id?: string;
@@ -16994,6 +17935,15 @@ export type Database = {
       };
       finalize_due_quiz_events: { Args: never; Returns: number };
       finalize_due_test_quiz_events_v2: { Args: never; Returns: Json };
+      finalize_scheduled_admin_notification_v1: {
+        Args: {
+          p_claim_token: string;
+          p_error?: string;
+          p_notification_id: string;
+          p_outcome: string;
+        };
+        Returns: boolean;
+      };
       finalize_petrock_imei_lookup: {
         Args: {
           p_cached_response: Json;
@@ -17103,6 +18053,21 @@ export type Database = {
           suggested_term: string;
         };
       };
+      find_resumable_repair_pickup: {
+        Args: {
+          p_customer_email: string;
+          p_merchant_id: string;
+          p_repair_id?: string;
+        };
+        Returns: {
+          customer_phone: string;
+          device_model: string;
+          device_type: string;
+          id: string;
+          pickup_address: string | null;
+          ticket_number: number;
+        }[];
+      };
       find_spelling_suggestion: {
         Args: {
           merchant_id_param: string;
@@ -17193,6 +18158,14 @@ export type Database = {
           title: string;
         }[];
       };
+      get_admin_merchant_360: {
+        Args: { p_merchant_id: string };
+        Returns: Json;
+      };
+      get_admin_merchant_360_v2: {
+        Args: { p_merchant_id: string };
+        Returns: Json;
+      };
       get_admin_merchant_health: {
         Args: never;
         Returns: {
@@ -17208,7 +18181,91 @@ export type Database = {
           total_orders: number;
         }[];
       };
+      get_admin_merchant_health_v2: {
+        Args: {
+          p_health_status?: string | null;
+          p_limit?: number;
+          p_offset?: number;
+          p_search?: string | null;
+          p_sort_by?: string;
+        };
+        Returns: {
+          active_days: number;
+          business_name: string | null;
+          email: string | null;
+          excluded_non_ngn_or_unknown_paid_orders: number;
+          health_status: string;
+          joined_at: string;
+          last_order_date: string | null;
+          merchant_id: string;
+          storefront_slug: string | null;
+          total_count: number;
+          total_gmv: number;
+          total_orders: number;
+        }[];
+      };
       get_admin_merchant_profiles: { Args: never; Returns: Json };
+      get_admin_notification_dashboard: {
+        Args: {
+          p_priority?: string;
+          p_search?: string;
+          p_status?: string;
+          p_type?: string;
+        };
+        Returns: Json;
+      };
+      get_admin_notification_detail: {
+        Args: { p_notification_id: string };
+        Returns: Json;
+      };
+      get_admin_notification_segment_merchant_ids: {
+        Args: { p_segment: string };
+        Returns: string[];
+      };
+      get_admin_notification_stats_batch: {
+        Args: { p_notification_ids: string[] };
+        Returns: {
+          notification_id: string;
+          read_rate: number;
+          total_dismissed: number;
+          total_read: number;
+          total_sent: number;
+        }[];
+      };
+      get_follow_up_notification_preference: {
+        Args: { p_order_id: string };
+        Returns: boolean;
+      };
+      get_scheduled_notification_recipient_page_v1: {
+        Args: {
+          p_after_merchant_id?: string;
+          p_claim_token: string;
+          p_limit?: number;
+          p_notification_id: string;
+        };
+        Returns: { merchant_id: string }[];
+      };
+      get_scheduled_notification_worker_health_v1: {
+        Args: never;
+        Returns: Json;
+      };
+      get_notification_push_outbox_summary_v1: {
+        Args: { p_claim_token: string; p_notification_id: string };
+        Returns: Json;
+      };
+      get_admin_operations_v1: {
+        Args: { p_limit?: number; p_offset?: number; p_section?: string };
+        Returns: Json;
+      };
+      get_admin_operations_v2: {
+        Args: { p_limit?: number; p_offset?: number; p_section?: string };
+        Returns: Json;
+      };
+      get_admin_platform_settings_v1: { Args: never; Returns: Json };
+      get_admin_platform_analytics: {
+        Args: { p_period?: string };
+        Returns: Json;
+      };
       get_admin_platform_daily_summary: {
         Args: { p_end_date?: string; p_start_date?: string };
         Returns: {
@@ -17227,6 +18284,46 @@ export type Database = {
           new_merchants: number;
         }[];
       };
+      get_admin_reconciliation: {
+        Args: {
+          p_currency?: string;
+          p_cursor_created_at?: string;
+          p_cursor_id?: string;
+          p_lane?: string;
+          p_limit?: number;
+          p_merchant_id?: string;
+          p_period?: string;
+          p_status?: string;
+        };
+        Returns: Json;
+      };
+      get_admin_reconciliation_v2: {
+        Args: {
+          p_currency?: string | null;
+          p_cursor_created_at?: string | null;
+          p_cursor_id?: string | null;
+          p_lane?: string | null;
+          p_limit?: number | null;
+          p_merchant_id?: string | null;
+          p_period?: string | null;
+          p_status?: string | null;
+        };
+        Returns: Json;
+      };
+      get_admin_reconciliation_v3: {
+        Args: {
+          p_currency?: string | null;
+          p_cursor_created_at?: string | null;
+          p_cursor_id?: string | null;
+          p_lane?: string | null;
+          p_limit?: number | null;
+          p_merchant_id?: string | null;
+          p_period?: string | null;
+          p_status?: string | null;
+        };
+        Returns: Json;
+      };
+      get_admin_system_health_v1: { Args: never; Returns: Json };
       get_admin_top_merchants: {
         Args: never;
         Returns: {
@@ -17259,6 +18356,34 @@ export type Database = {
           provider: string;
           provider_rate_id: string;
           quote_request: Json;
+        }[];
+      };
+      get_customer_order_transactions: {
+        Args: { p_order_ids: string[] };
+        Returns: {
+          amount: number | null;
+          created_at: string;
+          description: string | null;
+          dva_account_number: string | null;
+          gateway: string | null;
+          id: string;
+          order_id: string;
+          status: string | null;
+          transaction_type: string | null;
+        }[];
+      };
+      get_customer_order_payment_accounts: {
+        Args: { p_order_ids: string[] };
+        Returns: {
+          account_name: string | null;
+          account_number: string;
+          assigned_at: string | null;
+          assignment_customer_email_source: string | null;
+          bank_name: string | null;
+          created_at: string;
+          expires_at: string | null;
+          order_id: string;
+          provider: string | null;
         }[];
       };
       get_credit_direct_settings: {
@@ -17298,6 +18423,8 @@ export type Database = {
         Args: { p_product_policy: string; p_variant_policy: string };
         Returns: string;
       };
+      get_event_pipeline_operations_admin_v2: { Args: never; Returns: Json };
+      get_event_pipeline_operations_admin_v3: { Args: never; Returns: Json };
       get_event_pipeline_operations_v1: { Args: never; Returns: Json };
       get_feed_product_variants: {
         Args: { p_merchant_id: string; p_product_ids: string[] };
@@ -17318,6 +18445,68 @@ export type Database = {
       get_merchant_analytics_config: {
         Args: { p_merchant_id: string };
         Returns: Json;
+      };
+      get_google_ads_connection_secret: {
+        Args: { p_merchant_id: string };
+        Returns: {
+          access_token_ciphertext: string | null;
+          id: string;
+          provider_customer_id: string | null;
+          refresh_token_ciphertext: string | null;
+          status: string;
+          token_expires_at: string | null;
+        }[];
+      };
+      get_merchant_ads_connection_secret: {
+        Args: { p_merchant_id: string; p_provider: string };
+        Returns: {
+          access_token_ciphertext: string | null;
+          id: string;
+          provider_customer_id: string | null;
+          refresh_token_ciphertext: string | null;
+          status: string;
+          token_expires_at: string | null;
+        }[];
+      };
+      consume_snapchat_ads_oauth_state_nonce: {
+        Args: {
+          p_merchant_id: string;
+          p_nonce: string;
+          p_redirect_uri: string;
+          p_user_id: string;
+        };
+        Returns: boolean;
+      };
+      consume_merchant_ads_oauth_state_nonce: {
+        Args: {
+          p_merchant_id: string;
+          p_nonce: string;
+          p_provider: string;
+          p_redirect_uri: string;
+          p_user_id: string;
+        };
+        Returns: boolean;
+      };
+      reserve_merchant_ads_oauth_state_nonce: {
+        Args: {
+          p_expires_at: string;
+          p_merchant_id: string;
+          p_nonce: string;
+          p_provider: string;
+          p_redirect_uri: string;
+          p_user_id: string;
+        };
+        Returns: boolean;
+      };
+      reserve_snapchat_ads_oauth_state_nonce: {
+        Args: {
+          p_expires_at: string;
+          p_merchant_id: string;
+          p_nonce: string;
+          p_redirect_uri: string;
+          p_user_id: string;
+        };
+        Returns: boolean;
       };
       get_merchant_balance: {
         Args: { currency_param: string; merchant_id_param: string };
@@ -17476,10 +18665,12 @@ export type Database = {
           currency: string;
           merchant_country: string;
           merchant_id: string;
+          payment_method: string;
           payment_status: string;
           shipping_status: string;
           total: number;
           tracking_token: string;
+          wallet_amount_used: number;
         }[];
       };
       get_order_receipt_bank_details: {
@@ -17507,6 +18698,29 @@ export type Database = {
           vat_registration_status: string;
         }[];
       };
+      get_invoice_artifact_order_items: {
+        Args: { p_order_id: string; p_tracking_token: string };
+        Returns: {
+          assurance_fee: number;
+          condition: string;
+          has_assurance: boolean;
+          id: string;
+          item_description: string;
+          line_extension_amount: number;
+          name: string;
+          price: number;
+          product_id: string;
+          quantity: number;
+          sellers_item_id: string;
+          unit_code: string;
+          variant_attributes: Json;
+          variant_id: string;
+          variant_name: string;
+          vat_amount: number;
+          vat_category_code: string;
+          vat_rate: number;
+        }[];
+      };
       get_order_tracking: {
         Args: {
           p_email?: string;
@@ -17524,7 +18738,9 @@ export type Database = {
           customer_phone: string;
           delivered_at: string;
           discount_amount: number;
+          external_source: string;
           id: string;
+          import_job_id: string;
           items: Json;
           merchant_business_name: string;
           merchant_id: string;
@@ -17535,6 +18751,7 @@ export type Database = {
           merchant_support_phone: string;
           order_number: string;
           paid_at: string;
+          payment_method: string;
           payment_status: string;
           shipped_at: string;
           shipping_address: Json;
@@ -17563,6 +18780,10 @@ export type Database = {
         Args: { p_end_date: string; p_start_date: string };
         Returns: Json;
       };
+      get_platform_admin_context_v1: {
+        Args: never;
+        Returns: { permissions: string[]; role: string }[];
+      };
       get_product_offers: {
         Args: { p_product_id: string };
         Returns: {
@@ -17588,6 +18809,16 @@ export type Database = {
         Args: { p_merchant_id: string };
         Returns: {
           category: string;
+        }[];
+      };
+      get_public_platform_analytics_config_v1: {
+        Args: never;
+        Returns: {
+          facebook_pixel_id: string | null;
+          google_analytics_id: string | null;
+          snapchat_pixel_id: string | null;
+          tiktok_pixel_id: string | null;
+          twitter_pixel_id: string | null;
         }[];
       };
       get_public_serialized_variant_availability_counts: {
@@ -17666,6 +18897,10 @@ export type Database = {
           status: string;
         }[];
       };
+      get_repair_pickup_receiver: {
+        Args: { p_merchant_id: string };
+        Returns: Json;
+      };
       get_repair_status: {
         Args: {
           p_email: string;
@@ -17676,6 +18911,9 @@ export type Database = {
           created_at: string;
           device_model: string;
           device_type: string;
+          pickup_currency: string | null;
+          pickup_fee: number | null;
+          pickup_payment_status: string | null;
           repair_type_label: string;
           service_type: string;
           status: Database['public']['Enums']['repair_status'];
@@ -17995,6 +19233,11 @@ export type Database = {
           upcoming_balance: number;
           upcoming_count: number;
           wallet_id: string;
+          auto_payout_enabled: boolean;
+          auto_payout_day: string;
+          min_payout_amount: number;
+          last_payout_at: string | null;
+          last_payout_amount: number | null;
         }[];
       };
       get_website_performance_event_summary: {
@@ -18006,6 +19249,22 @@ export type Database = {
         Returns: Json;
       };
       has_cache_invalidation_dead_letters: { Args: never; Returns: boolean };
+      has_storefront_order_idempotency_key: {
+        Args: { p_checkout_idempotency_key: string; p_merchant_id: string };
+        Returns: boolean;
+      };
+      is_legacy_storefront_order_idempotency_key: {
+        Args: { p_checkout_idempotency_key: string; p_merchant_id: string };
+        Returns: boolean;
+      };
+      is_storefront_order_idempotency_hash: {
+        Args: {
+          p_checkout_idempotency_key: string;
+          p_checkout_request_hash: string;
+          p_merchant_id: string;
+        };
+        Returns: boolean;
+      };
       has_merchant_access: {
         Args: { p_merchant_id: string };
         Returns: boolean;
@@ -18017,6 +19276,15 @@ export type Database = {
       };
       increment_hero_image_usage: {
         Args: { image_id: string };
+        Returns: undefined;
+      };
+      insert_invoice_reminder: {
+        Args: {
+          p_channel: string;
+          p_order_id: string;
+          p_payment_link: string;
+          p_tracking_token: string;
+        };
         Returns: undefined;
       };
       invoke_cleanup_pending_transactions: { Args: never; Returns: undefined };
@@ -18043,9 +19311,21 @@ export type Database = {
         };
         Returns: boolean;
       };
+      is_merchant_sales_transaction: {
+        Args: { p_metadata: Json };
+        Returns: boolean;
+      };
       is_reserved_merchant_slug: { Args: { p_slug: string }; Returns: boolean };
+      is_sent_admin_notification_v1: {
+        Args: { p_notification_id: string };
+        Returns: boolean;
+      };
       is_staff_of_merchant: {
         Args: { p_merchant_id: string };
+        Returns: boolean;
+      };
+      is_usable_repair_pickup_phone: {
+        Args: { p_phone: string };
         Returns: boolean;
       };
       is_valid_email: { Args: { email_text: string }; Returns: boolean };
@@ -18089,6 +19369,32 @@ export type Database = {
         };
         Returns: Json;
       };
+      list_event_pipeline_deliveries_admin_v2: {
+        Args: {
+          p_destination?: string;
+          p_error_code?: string;
+          p_from?: string;
+          p_limit?: number;
+          p_merchant_id?: string;
+          p_offset?: number;
+          p_status: string;
+          p_to?: string;
+        };
+        Returns: Json;
+      };
+      list_event_pipeline_deliveries_admin_v3: {
+        Args: {
+          p_destination?: string;
+          p_error_code?: string;
+          p_from?: string;
+          p_limit?: number;
+          p_merchant_id?: string;
+          p_offset?: number;
+          p_status: string;
+          p_to?: string;
+        };
+        Returns: Json;
+      };
       list_event_pipeline_ingress_failures_v1: {
         Args: {
           p_error_code?: string;
@@ -18099,6 +19405,63 @@ export type Database = {
           p_to?: string;
         };
         Returns: Json;
+      };
+      list_event_pipeline_ingress_failures_admin_v2: {
+        Args: {
+          p_error_code?: string;
+          p_from?: string;
+          p_limit?: number;
+          p_merchant_id?: string;
+          p_offset?: number;
+          p_to?: string;
+        };
+        Returns: Json;
+      };
+      list_event_pipeline_ingress_failures_admin_v3: {
+        Args: {
+          p_error_code?: string;
+          p_from?: string;
+          p_limit?: number;
+          p_merchant_id?: string;
+          p_offset?: number;
+          p_to?: string;
+        };
+        Returns: Json;
+      };
+      list_platform_admin_memberships_v1: {
+        Args: { p_limit?: number; p_offset?: number };
+        Returns: {
+          created_at: string | null;
+          email: string;
+          granted_at: string | null;
+          is_legacy_owner: boolean;
+          is_revocable: boolean;
+          reason: string;
+          revoked_at: string | null;
+          role: string;
+          status: string;
+          updated_at: string | null;
+        }[];
+      };
+      list_platform_audit_events_v1: {
+        Args: {
+          p_action?: string;
+          p_before_event_id?: string;
+          p_before_event_source?: string;
+          p_before_occurred_at?: string;
+          p_limit?: number;
+          p_resource_type?: string;
+          p_source?: string;
+        };
+        Returns: {
+          action: string;
+          actor_kind: string;
+          changed_fields: string[];
+          event_id: string;
+          event_source: string;
+          occurred_at: string;
+          resource_type: string;
+        }[];
       };
       list_merchant_audit_events_v1: {
         Args: {
@@ -18168,6 +19531,13 @@ export type Database = {
         Args: { hours_threshold?: number };
         Returns: undefined;
       };
+      mark_all_visible_merchant_notifications_read_v1: {
+        Args: { p_merchant_id: string };
+        Returns: {
+          remaining_unread_count: number;
+          updated_count: number;
+        }[];
+      };
       mark_customer_savings_redemptions_reversed: {
         Args: { p_merchant_id: string; p_order_id: string; p_reason: string };
         Returns: number;
@@ -18222,6 +19592,12 @@ export type Database = {
         };
         Returns: boolean;
       };
+      mark_repair_pickup_awaiting_payment: {
+        Args: { p_merchant_id: string; p_repair_id: string };
+        Returns: {
+          marked: boolean;
+        }[];
+      };
       mark_transaction_order_item_custom: {
         Args: { p_merchant_id: string; p_order_item_id: string };
         Returns: undefined;
@@ -18264,6 +19640,7 @@ export type Database = {
       };
       mutate_merchant_blog_post_with_product_links: {
         Args: {
+          p_media_paths?: string[];
           p_merchant_id: string;
           p_post_data: Json;
           p_post_id: string;
@@ -18302,12 +19679,91 @@ export type Database = {
           title: string;
         }[];
       };
+      mutate_platform_blog_post_atomic: {
+        Args: {
+          p_media_paths: string[];
+          p_post_data: Json;
+          p_post_id: string;
+        };
+        Returns: {
+          author_bio: string | null;
+          author_image_url: string | null;
+          author_name: string;
+          author_title: string | null;
+          category: string | null;
+          content: string;
+          created_at: string | null;
+          excerpt: string | null;
+          featured_image_alt: string | null;
+          featured_image_height: number | null;
+          featured_image_url: string | null;
+          featured_image_variants: Json;
+          featured_image_width: number | null;
+          focus_keyword: string | null;
+          id: string;
+          intent: string | null;
+          intent_source: string | null;
+          keywords: string[] | null;
+          published_at: string | null;
+          reading_time_minutes: number | null;
+          seo_description: string | null;
+          seo_title: string | null;
+          slug: string;
+          status: string | null;
+          tags: string[] | null;
+          title: string;
+          updated_at: string | null;
+          view_count: number | null;
+          word_count: number | null;
+        }[];
+      };
+      mutate_platform_blog_post_create_atomic: {
+        Args: {
+          p_media_paths: string[];
+          p_post_data: Json;
+        };
+        Returns: {
+          author_bio: string | null;
+          author_image_url: string | null;
+          author_name: string;
+          author_title: string | null;
+          category: string | null;
+          content: string;
+          created_at: string | null;
+          excerpt: string | null;
+          featured_image_alt: string | null;
+          featured_image_height: number | null;
+          featured_image_url: string | null;
+          featured_image_variants: Json;
+          featured_image_width: number | null;
+          focus_keyword: string | null;
+          id: string;
+          intent: string | null;
+          intent_source: string | null;
+          keywords: string[] | null;
+          published_at: string | null;
+          reading_time_minutes: number | null;
+          seo_description: string | null;
+          seo_title: string | null;
+          slug: string;
+          status: string | null;
+          tags: string[] | null;
+          title: string;
+          updated_at: string | null;
+          view_count: number | null;
+          word_count: number | null;
+        }[];
+      };
       normalize_inventory_identifier: {
         Args: { p_value: string };
         Returns: string;
       };
       normalize_product_search_text: {
         Args: { search_text: string };
+        Returns: string;
+      };
+      normalize_repair_pickup_phone_digits: {
+        Args: { p_phone: string };
         Returns: string;
       };
       normalize_variant_axis_value: {
@@ -18448,6 +19904,20 @@ export type Database = {
           total_amount: number;
         }[];
       };
+      process_due_quiz_deadlines_v2: {
+        Args: {
+          p_production_approved: boolean;
+          p_production_phase: boolean;
+        };
+        Returns: Json;
+      };
+      set_quiz_runtime_control_v2: {
+        Args: {
+          p_production_approved: boolean;
+          p_production_phase: boolean;
+        };
+        Returns: Json;
+      };
       product_autocomplete:
         | {
             Args: {
@@ -18531,6 +20001,18 @@ export type Database = {
           merchant_id: string;
           merchant_slug: string;
         }[];
+      };
+      queue_expense_private_receipt_cleanup: {
+        Args: {
+          p_expense_id: string;
+          p_merchant_id: string;
+          p_storage_path: string;
+        };
+        Returns: boolean;
+      };
+      queue_unreferenced_expense_private_receipt_cleanup: {
+        Args: { p_merchant_id: string; p_storage_path: string };
+        Returns: boolean;
       };
       quiz_answer_key_hash: { Args: { p_answer: string }; Returns: string };
       quiz_answer_key_matches: {
@@ -18849,6 +20331,20 @@ export type Database = {
         Args: { p_source: string; p_token_hash: string };
         Returns: undefined;
       };
+      record_repair_pickup_payment_mismatch: {
+        Args: {
+          p_amount: number;
+          p_currency: string;
+          p_gateway_response: Json;
+          p_merchant_id: string;
+          p_mismatch_reason: string;
+          p_reference: string;
+          p_repair_id: string;
+        };
+        Returns: {
+          recorded: boolean;
+        }[];
+      };
       record_shipment_inventory_reconciliation: {
         Args: {
           p_error_code: string;
@@ -19037,6 +20533,7 @@ export type Database = {
           p_amount: number;
           p_customer_id: string;
           p_description?: string;
+          p_expected_status?: string;
           p_merchant_id: string;
           p_vtu_transaction_id: string;
         };
@@ -19099,6 +20596,23 @@ export type Database = {
           p_target_status?: string;
         };
         Returns: Json;
+      };
+      release_rejected_repair_pickup_reservation: {
+        Args: {
+          p_lock_token: string;
+          p_merchant_id: string;
+          p_repair_id: string;
+          p_shipment_id: string;
+        };
+        Returns: boolean;
+      };
+      release_repair_pickup_booking_claim: {
+        Args: {
+          p_lock_token: string;
+          p_merchant_id: string;
+          p_repair_id: string;
+        };
+        Returns: boolean;
       };
       release_wallet_credit_push: {
         Args: { p_claim_token: string; p_transaction_id: string };
@@ -19188,6 +20702,10 @@ export type Database = {
         };
         Returns: number;
       };
+      replay_event_deliveries_batch_admin_v2: {
+        Args: { p_delivery_ids: string[]; p_replay_reason: string };
+        Returns: number;
+      };
       replay_event_deliveries_batch_v1: {
         Args: {
           p_delivery_ids: string[];
@@ -19210,6 +20728,10 @@ export type Database = {
           p_replay_reason: string;
           p_replayed_by: string;
         };
+        Returns: number;
+      };
+      replay_ingress_dead_letter_admin_v2: {
+        Args: { p_failure_id: string; p_replay_reason: string };
         Returns: number;
       };
       request_product_description_attestation_grant: {
@@ -19264,6 +20786,59 @@ export type Database = {
         Args: { p_order_id: string; p_reason: string };
         Returns: boolean;
       };
+      resolve_admin_notification_target_merchant_ids_v1: {
+        Args: { p_merchant_ids: string[] };
+        Returns: string[];
+      };
+      renew_scheduled_notification_claim_v1: {
+        Args: { p_claim_token: string; p_notification_id: string };
+        Returns: boolean;
+      };
+      mark_notification_push_unknown_v1: {
+        Args: {
+          p_claim_token: string;
+          p_error_code: string;
+          p_notification_id: string;
+          p_tokens: string[];
+        };
+        Returns: number;
+      };
+      record_notification_push_acceptance_v1: {
+        Args: {
+          p_claim_token: string;
+          p_notification_id: string;
+          p_ticket_ids: string[];
+          p_tokens: string[];
+        };
+        Returns: number;
+      };
+      record_notification_push_ticket_results_v1: {
+        Args: {
+          p_claim_token: string;
+          p_error_codes: string[];
+          p_notification_id: string;
+          p_statuses: string[];
+          p_ticket_ids: string[];
+          p_tokens: string[];
+        };
+        Returns: number;
+      };
+      record_scheduled_notification_worker_health_v1: {
+        Args: { p_error_code?: string; p_status: string };
+        Returns: undefined;
+      };
+      reserve_notification_push_batch_v1: {
+        Args: {
+          p_claim_token: string;
+          p_notification_id: string;
+          p_tokens: string[];
+        };
+        Returns: { push_token: string }[];
+      };
+      snapshot_claimed_notification_audience_v1: {
+        Args: { p_claim_token: string; p_notification_id: string };
+        Returns: number;
+      };
       resolve_public_feed_merchant: {
         Args: { p_identifier: string; p_is_by_slug?: boolean };
         Returns: {
@@ -19303,6 +20878,21 @@ export type Database = {
           resolution_status: string;
         };
       };
+      revoke_platform_admin_membership_v1: {
+        Args: { p_confirmed: boolean; p_email: string; p_reason: string };
+        Returns: {
+          created_at: string | null;
+          email: string;
+          granted_at: string | null;
+          is_legacy_owner: boolean;
+          is_revocable: boolean;
+          reason: string;
+          revoked_at: string | null;
+          role: string;
+          status: string;
+          updated_at: string | null;
+        }[];
+      };
       restock_variant_inventory_units: {
         Args: {
           p_branch_id?: string;
@@ -19341,6 +20931,7 @@ export type Database = {
       };
       reverse_vtu_wallet_payment: {
         Args: {
+          p_expected_status?: string;
           p_merchant_id?: string;
           p_reason?: string;
           p_vtu_transaction_id: string;
@@ -19531,6 +21122,114 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      search_product_discovery_facts: {
+        Args: {
+          brand_filter?: string;
+          category_filter?: string;
+          condition_filter?: string;
+          excluded_types_filter?: Json;
+          merchant_id_param: string;
+          query_text: string;
+          result_limit?: number;
+          result_offset?: number;
+        };
+        Returns: {
+          product_id: string;
+          total_count: number;
+        }[];
+      };
+      get_mcp_search_product_offers: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          compare_at_price: number;
+          condition: string;
+          id: string;
+          price: number;
+          product_id: string;
+          stock_quantity: number;
+        }[];
+      };
+      get_mcp_search_product_variants: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          attributes: Json;
+          condition: string;
+          created_at: string;
+          effective_policy: string;
+          id: string;
+          price_override: number;
+          product_id: string;
+          stock_quantity: number;
+        }[];
+      };
+      get_mcp_search_serialized_anchor_policies: {
+        Args: {
+          p_merchant_id: string;
+          p_product_ids: string[];
+        };
+        Returns: {
+          available_units: number;
+          effective_policy: string;
+          product_id: string;
+        }[];
+      };
+      search_product_variant_recall: {
+        Args: {
+          p_brand?: string;
+          p_category?: string;
+          p_condition?: string;
+          p_excluded_types?: Json;
+          p_filters?: Json;
+          p_identity?: Json;
+          p_limit?: number;
+          p_merchant_id: string;
+          p_offset?: number;
+        };
+        Returns: {
+          attributes: Json;
+          product_id: string;
+        }[];
+      };
+      search_products_browse: {
+        Args: {
+          p_brand?: string;
+          p_category?: string;
+          p_condition?: string;
+          p_excluded_types?: Json;
+          p_limit?: number;
+          p_merchant_id: string;
+          p_offset?: number;
+          p_sort?: string;
+        };
+        Returns: {
+          available_conditions: string[];
+          brand: string;
+          category: string;
+          compare_at_price: number;
+          condition: string;
+          condition_detail: string;
+          created_at: string;
+          description: string;
+          discovery_metadata: Json;
+          has_condition_offers: boolean;
+          has_variants: boolean;
+          id: string;
+          images: Json;
+          inventory_tracking_policy: string;
+          manage_stock: boolean;
+          name: string;
+          price: number;
+          slug: string;
+          stock_quantity: number;
+          updated_at: string;
+        }[];
+      };
       search_products_v2: {
         Args: {
           brand_filter?: string;
@@ -19553,6 +21252,17 @@ export type Database = {
           relevance: number;
           total_count: number;
         }[];
+      };
+      select_event_pipeline_replay_ids_admin_v2: {
+        Args: {
+          p_destination: string;
+          p_error_code?: string;
+          p_from?: string;
+          p_merchant_id?: string;
+          p_status: string;
+          p_to?: string;
+        };
+        Returns: string[];
       };
       select_event_pipeline_replay_ids_v1: {
         Args: {
@@ -19582,6 +21292,193 @@ export type Database = {
           p_signed_amount: number;
         };
         Returns: boolean;
+      };
+      set_google_ads_customer: {
+        Args: {
+          p_expected_access_token_ciphertext: string | null;
+          p_merchant_id: string;
+          p_provider_customer_id: string;
+        };
+        Returns: boolean;
+      };
+      update_google_ads_connection_token: {
+        Args: {
+          p_access_token_ciphertext: string;
+          p_merchant_id: string;
+          p_token_expires_at: string | null;
+        };
+        Returns: boolean;
+      };
+      update_google_ads_connection_token_if_current: {
+        Args: {
+          p_access_token_ciphertext: string;
+          p_expected_access_token_ciphertext: string | null;
+          p_expected_refresh_token_ciphertext: string | null;
+          p_merchant_id: string;
+          p_token_expires_at: string | null;
+        };
+        Returns: boolean;
+      };
+      upsert_google_ads_connection: {
+        Args: {
+          p_access_token_ciphertext: string;
+          p_merchant_id: string;
+          p_provider_customer_id: string | null;
+          p_refresh_token_ciphertext: string;
+          p_scopes: string[];
+          p_status: string;
+          p_token_expires_at: string | null;
+        };
+        Returns: string;
+      };
+      upsert_google_ads_spend_daily: {
+        Args: { p_merchant_id: string; p_rows: Json };
+        Returns: number;
+      };
+      replace_google_ads_spend_daily: {
+        Args: {
+          p_end_date: string;
+          p_merchant_id: string;
+          p_provider_customer_id: string;
+          p_rows: Json;
+          p_start_date: string;
+          p_sync_run_id: string;
+        };
+        Returns: number;
+      };
+      mark_google_ads_connection_synced: {
+        Args: { p_merchant_id: string };
+        Returns: boolean;
+      };
+      mark_google_ads_connection_reauth_if_current: {
+        Args: {
+          p_access_token_ciphertext: string | null;
+          p_merchant_id: string;
+          p_reason: string;
+          p_refresh_token_ciphertext: string | null;
+        };
+        Returns: boolean;
+      };
+      delete_google_ads_connection: {
+        Args: { p_merchant_id: string };
+        Returns: boolean;
+      };
+      delete_merchant_ads_connection: {
+        Args: { p_merchant_id: string; p_provider: string };
+        Returns: boolean;
+      };
+      mark_merchant_ads_connection_synced: {
+        Args: { p_merchant_id: string; p_provider: string };
+        Returns: boolean;
+      };
+      mark_merchant_ads_connection_synced_if_current: {
+        Args: {
+          p_merchant_id: string;
+          p_provider: string;
+          p_provider_customer_id: string;
+          p_sync_run_id: string;
+          p_sync_window_end_date: string;
+          p_sync_window_start_date: string;
+        };
+        Returns: boolean;
+      };
+      mark_merchant_ads_connection_sync_started_if_current: {
+        Args: {
+          p_merchant_id: string;
+          p_provider: string;
+          p_provider_customer_id: string;
+          p_sync_run_id: string;
+          p_sync_run_started_at: string;
+          p_sync_window_end_date: string;
+          p_sync_window_start_date: string;
+        };
+        Returns: boolean;
+      };
+      get_merchant_ads_sync_run_started_at: {
+        Args: {
+          p_merchant_id: string;
+          p_provider: string;
+          p_sync_run_id: string;
+        };
+        Returns: string | null;
+      };
+      mark_merchant_ads_connection_reauth: {
+        Args: { p_merchant_id: string; p_reason: string };
+        Returns: boolean;
+      };
+      mark_merchant_ads_connection_reauth_if_current: {
+        Args: {
+          p_access_token_ciphertext: string | null;
+          p_merchant_id: string;
+          p_provider: string;
+          p_reason: string;
+          p_refresh_token_ciphertext: string | null;
+        };
+        Returns: boolean;
+      };
+      set_merchant_ads_account: {
+        Args: {
+          p_account_timezone: string | null;
+          p_attribution_metadata: Json | null;
+          p_expected_access_token_ciphertext: string | null;
+          p_merchant_id: string;
+          p_provider: string;
+          p_provider_account_label: string | null;
+          p_provider_customer_id: string;
+        };
+        Returns: boolean;
+      };
+      update_merchant_ads_connection_token: {
+        Args: {
+          p_access_token_ciphertext: string;
+          p_merchant_id: string;
+          p_provider: string;
+          p_token_expires_at: string | null;
+        };
+        Returns: boolean;
+      };
+      update_snapchat_ads_connection_tokens: {
+        Args: {
+          p_access_token_ciphertext: string;
+          p_current_refresh_token_ciphertext: string;
+          p_merchant_id: string;
+          p_refresh_token_ciphertext: string;
+          p_token_expires_at: string | null;
+        };
+        Returns: boolean;
+      };
+      upsert_merchant_ads_connection: {
+        Args: {
+          p_access_token_ciphertext: string;
+          p_account_timezone: string | null;
+          p_attribution_metadata: Json | null;
+          p_merchant_id: string;
+          p_metadata: Json | null;
+          p_provider: string;
+          p_provider_account_label: string | null;
+          p_provider_customer_id: string | null;
+          p_refresh_token_ciphertext: string | null;
+          p_scopes: string[] | null;
+          p_status: string;
+          p_token_expires_at: string | null;
+        };
+        Returns: string;
+      };
+      replace_merchant_ads_spend_daily_window: {
+        Args: {
+          p_end_date: string;
+          p_merchant_id: string;
+          p_provider: string;
+          p_provider_customer_id: string;
+          p_rows: Json;
+          p_start_date: string;
+          p_sync_run_id: string;
+        };
+        Returns: number;
+      };
+      upsert_merchant_ads_spend_daily: {
+        Args: { p_merchant_id: string; p_provider: string; p_rows: Json };
+        Returns: number;
       };
       set_customer_date_of_birth: {
         Args: { p_date_of_birth: string; p_merchant_id: string };
@@ -19809,6 +21706,10 @@ export type Database = {
         Args: { p_order_id: string; p_payload: Json };
         Returns: Json;
       };
+      update_admin_order_with_transaction_discount_metadata: {
+        Args: { p_order_id: string; p_payload: Json };
+        Returns: Json;
+      };
       update_inventory_tracking_policy: {
         Args: {
           p_inventory_tracking_policy: string;
@@ -19874,6 +21775,31 @@ export type Database = {
         };
         Returns: Json;
       };
+      update_admin_platform_settings_v1: {
+        Args: { p_settings: Json };
+        Returns: undefined;
+      };
+      upsert_platform_admin_membership_v1: {
+        Args: {
+          p_confirmed: boolean;
+          p_email: string;
+          p_reactivate?: boolean;
+          p_reason: string;
+          p_role: Database['public']['Enums']['platform_admin_role'];
+        };
+        Returns: {
+          created_at: string | null;
+          email: string;
+          granted_at: string | null;
+          is_legacy_owner: boolean;
+          is_revocable: boolean;
+          reason: string;
+          revoked_at: string | null;
+          role: string;
+          status: string;
+          updated_at: string | null;
+        }[];
+      };
       upsert_customer_on_auth: {
         Args: {
           p_email: string;
@@ -19902,9 +21828,24 @@ export type Database = {
         };
         Returns: Json;
       };
+      write_admin_reconciliation_export_event_v1: {
+        Args: never;
+        Returns: string;
+      };
+      write_platform_audit_export_event_v1: {
+        Args: never;
+        Returns: string;
+      };
     };
     Enums: {
       negotiation_status: 'pending' | 'accepted' | 'rejected' | 'countered';
+      platform_admin_role:
+        | 'owner'
+        | 'finance'
+        | 'operations'
+        | 'support'
+        | 'content'
+        | 'viewer';
       repair_status:
         | 'pending'
         | 'confirmed'
@@ -20053,6 +21994,14 @@ export const Constants = {
   public: {
     Enums: {
       negotiation_status: ['pending', 'accepted', 'rejected', 'countered'],
+      platform_admin_role: [
+        'owner',
+        'finance',
+        'operations',
+        'support',
+        'content',
+        'viewer',
+      ],
       repair_status: [
         'pending',
         'confirmed',

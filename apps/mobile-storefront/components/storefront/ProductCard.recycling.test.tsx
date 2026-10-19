@@ -3,7 +3,27 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { Product } from '@/types/product';
 import { ProductCard } from './ProductCard';
 
-jest.mock('expo-image', () => ({ Image: 'Image' }));
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return {
+    Image: ({
+      accessibilityLabel,
+      ...props
+    }: React.ComponentProps<typeof View> & {
+      accessibilityLabel?: string;
+    }) => (
+      <View
+        {...props}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={accessibilityLabel}
+      />
+    ),
+  };
+});
 
 jest.mock('@/stores/cart-store', () => ({
   useCartStore: (selector: (state: unknown) => unknown) =>
@@ -54,5 +74,13 @@ describe('ProductCard image-fallback recycling safety', () => {
 
     expect(screen.getByTestId('grid-product-image')).toBeTruthy();
     expect(screen.queryByTestId('grid-product-placeholder')).toBeNull();
+  });
+
+  it('does not autoplay animated catalog images on recycled cards', () => {
+    render(<ProductCard product={productA} variant="grid" />);
+
+    expect(
+      screen.getByRole('image', { name: 'Product a image' }).props.autoplay
+    ).toBe(false);
   });
 });

@@ -49,7 +49,7 @@ export function OrderCard({
   onStatusUpdate: (orderNumber: string, newStatus: ShippingStatus) => void;
   onManageJumia?: (order: Order) => void;
   jumiaConnectLoading?: boolean;
-  formatCurrency: (amount: number) => string;
+  formatCurrency: (amount: number, currency?: string | null) => string;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   // Capture "now" once per mount via the useState initializer: calling
@@ -237,7 +237,7 @@ export function OrderCard({
               Total
             </span>
             <span className="text-lg font-bold dark:text-slate-50">
-              {formatCurrency(order.total)}
+              {formatCurrency(order.total, order.currency)}
             </span>
           </div>
 

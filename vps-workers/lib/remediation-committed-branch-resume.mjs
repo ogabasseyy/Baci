@@ -2,6 +2,7 @@ import { runRemediationChecked as runChecked } from './remediation-subprocess.mj
 import { cleanupRemediationWorktree } from './remediation-worktree-cleanup.mjs';
 
 export function resumeCommittedRemediationBranch({
+  onCommitted,
   prReconciler,
   rootCommandOptions,
   worktreeGitCommandOptions,
@@ -20,6 +21,7 @@ export function resumeCommittedRemediationBranch({
   if (Number(commitsAhead) === 0) return null;
 
   const { branch } = prReconciler;
+  onCommitted?.();
   runChecked(
     'git',
     ['-c', 'core.hooksPath=/dev/null', 'push', '-u', 'origin', branch],

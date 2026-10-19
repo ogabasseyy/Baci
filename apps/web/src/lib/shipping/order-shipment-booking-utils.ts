@@ -3,95 +3,21 @@ import type {
   ShipmentItem,
   ShippingAddress,
   ShippingProviderCode,
-  ShippingQuote,
 } from '@/lib/shipping/types';
 import { SHIPPING_PROVIDER_CODES } from '@/lib/shipping/types';
+import { matchesQuoteItem } from './international-quote-items-match';
+import { OrderShipmentBookingError } from './order-shipment-booking-error';
+import { readPackageDimensionsCm } from './package-dimensions';
+import { survivingShipmentQuantity } from './surviving-shipment-quantity';
 
-type OrderShippingAddress = {
-  address?: string | null;
-  city?: string | null;
-  country?: string | null;
-  countryCode?: string | null;
-  postalCode?: string | null;
-  state?: string | null;
-  phone?: string | null;
-};
+export { OrderShipmentBookingError };
 
-type OrderItemRecord = {
+export type OrderItemRecord = {
   name: string | null;
   quantity: number | null;
   price: number | string | null;
+  fulfillment_data?: unknown;
 };
-
-type MerchantRecord = {
-  business_name: string | null;
-  business_address: string | null;
-  phone: string | null;
-};
-
-type OrderRecord = {
-  customer_name: string | null;
-  customer_email: string | null;
-  customer_phone: string | null;
-  shipping_address: OrderShippingAddress | null;
-};
-
-const STREET_HINT_PATTERN =
-  /\b(street|st\.?|road|rd\.?|avenue|ave\.?|close|crescent|estate|phase|plot|no\.?|house|suite|unit)\b|\d/i;
-
-const KNOWN_STATE_NAMES = new Set([
-  'abia',
-  'adamawa',
-  'akwa ibom',
-  'anambra',
-  'bauchi',
-  'bayelsa',
-  'benue',
-  'borno',
-  'cross river',
-  'delta',
-  'ebonyi',
-  'edo',
-  'ekiti',
-  'enugu',
-  'gombe',
-  'imo',
-  'jigawa',
-  'kaduna',
-  'kano',
-  'katsina',
-  'kebbi',
-  'kogi',
-  'kwara',
-  'lagos',
-  'nasarawa',
-  'nassarawa',
-  'niger',
-  'ogun',
-  'ondo',
-  'osun',
-  'oyo',
-  'plateau',
-  'rivers',
-  'sokoto',
-  'taraba',
-  'yobe',
-  'zamfara',
-  'abuja',
-  'fct',
-  'federal capital territory',
-]);
-
-export class OrderShipmentBookingError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-    readonly code: string
-  ) {
-    super(message);
-    this.name = 'OrderShipmentBookingError';
-  }
-}
 
 export function isShippingProviderCode(
   value: string | null | undefined
@@ -117,12 +43,21 @@ function isShipmentItem(value: unknown): value is ShipmentItem {
   if (!value || typeof value !== 'object') return false;
 
   const item = value as Partial<ShipmentItem>;
+  const quantity = item.quantity;
+  const weight = item.weight;
+  const itemValue = item.value;
 
   return (
     typeof item.name === 'string' &&
-    typeof item.quantity === 'number' &&
-    typeof item.weight === 'number' &&
-    typeof item.value === 'number'
+    typeof quantity === 'number' &&
+    Number.isInteger(quantity) &&
+    quantity > 0 &&
+    typeof weight === 'number' &&
+    Number.isFinite(weight) &&
+    weight > 0 &&
+    typeof itemValue === 'number' &&
+    Number.isFinite(itemValue) &&
+    itemValue >= 0
   );
 }
 
@@ -158,6 +93,9 @@ export function parseStoredQuoteRequest(value: unknown): QuoteRequest | null {
       quoteRequest.shipmentType === 'international'
         ? 'international'
         : 'domestic',
+    ...(quoteRequest.admin_order_provenance === 'server_gigl_v1'
+      ? { admin_order_provenance: 'server_gigl_v1' as const }
+      : {}),
     sender: isShippingAddress(quoteRequest.sender)
       ? {
           ...quoteRequest.sender,
@@ -175,154 +113,187 @@ export function parseStoredQuoteRequest(value: unknown): QuoteRequest | null {
 }
 
 export function toShipmentItems(orderItems: OrderItemRecord[]): ShipmentItem[] {
-  return orderItems.map((item) => ({
-    name: item.name || 'Order item',
-    description: item.name || 'Order item',
-    quantity: Math.max(1, item.quantity ?? 1),
-    weight: 1,
-    value: Number(item.price || 0),
-  }));
+  return orderItems
+    .map((item) => ({
+      name: item.name || 'Order item',
+      description: item.name || 'Order item',
+      quantity: survivingShipmentQuantity(item),
+      weight: 1,
+      value: Number(item.price || 0),
+    }))
+    .filter((item) => item.quantity > 0);
 }
 
-export function selectPreferredQuote(
-  quotes: ShippingQuote[],
-  currentQuote: {
-    serviceTier: string | null;
-    carrierName: string | null;
-    providerRateId?: string | null;
-  }
-): ShippingQuote | null {
-  const normalizedServiceTier = currentQuote.serviceTier?.toLowerCase() ?? null;
-  const normalizedCarrierName = currentQuote.carrierName?.toLowerCase() ?? null;
-  const normalizedProviderRateId = currentQuote.providerRateId?.trim() || null;
-
-  return (
-    quotes.find(
-      (quote) =>
-        normalizedProviderRateId &&
-        quote.providerRateId === normalizedProviderRateId
-    ) ||
-    quotes.find(
-      (quote) =>
-        quote.serviceTier.toLowerCase() === normalizedServiceTier &&
-        quote.carrierName.toLowerCase() === normalizedCarrierName
-    ) ||
-    quotes.find(
-      (quote) => quote.serviceTier.toLowerCase() === normalizedServiceTier
-    ) ||
-    quotes[0] ||
-    null
+export function toDomesticBookingItems(
+  orderItems: OrderItemRecord[],
+  quoteItems: ShipmentItem[] | undefined,
+  defaultWeight?: number
+): ShipmentItem[] {
+  if (!quoteItems?.length) return toShipmentItems(orderItems);
+  // Match a complete surviving snapshot or preserve legacy original quantities.
+  const matches = (
+    orderItem: OrderItemRecord,
+    item: ShipmentItem,
+    original = false
+  ) => {
+    // Direct legacy callers lack the package context validated by order booking.
+    if (defaultWeight === undefined)
+      return (
+        orderItem.name === item.name &&
+        (original
+          ? orderItem.quantity
+          : survivingShipmentQuantity(orderItem)) === item.quantity &&
+        Number(orderItem.price) === item.value
+      );
+    const comparable = toQuoteComparableOrderItems([orderItem], {
+      defaultWeight,
+      quantityMode: original ? 'original' : undefined,
+    })[0];
+    return comparable !== undefined && matchesQuoteItem(comparable, item);
+  };
+  const survivingItems = orderItems.filter(
+    (item) => survivingShipmentQuantity(item) > 0
   );
+  const usesSurvivingQuantities =
+    quoteItems.length === survivingItems.length &&
+    quoteItems.every((item) => {
+      const index = survivingItems.findIndex((orderItem) =>
+        matches(orderItem, item)
+      );
+      if (index === -1) return false;
+      survivingItems.splice(index, 1);
+      return true;
+    });
+  const unmatchedOrderItems = [...orderItems];
+  return quoteItems
+    .map((item) => {
+      const orderItemIndex = unmatchedOrderItems.findIndex((orderItem) =>
+        matches(orderItem, item, !usesSurvivingQuantities)
+      );
+      if (orderItemIndex === -1 && defaultWeight !== undefined)
+        throw new OrderShipmentBookingError(
+          'The saved shipping quote no longer matches this order.',
+          400,
+          'SHIPPING_QUOTE_ITEMS_MISMATCH'
+        );
+      const matchedOrderItem =
+        orderItemIndex === -1 ? item : unmatchedOrderItems[orderItemIndex];
+      if (orderItemIndex !== -1) unmatchedOrderItems.splice(orderItemIndex, 1);
+      return {
+        name: item.name,
+        description: item.description || item.name,
+        quantity: survivingShipmentQuantity(matchedOrderItem),
+        weight: item.weight,
+        value: item.value,
+        ...(item.hsCode ? { hsCode: item.hsCode } : {}),
+        ...(item.length !== undefined ? { length: item.length } : {}),
+        ...(item.width !== undefined ? { width: item.width } : {}),
+        ...(item.height !== undefined ? { height: item.height } : {}),
+      };
+    })
+    .filter((item) => item.quantity > 0);
 }
 
-export function buildReceiver(order: OrderRecord): ShippingAddress {
-  const shippingAddress = order.shipping_address ?? {};
-  const address = shippingAddress.address?.trim();
-  const city = shippingAddress.city?.trim();
-  const state = shippingAddress.state?.trim();
-
-  if (!address || !city || !state) {
+/**
+ * Fail closed when refunds release every serialized unit before booking:
+ * the post-filtered collection can be empty even though the order still
+ * holds items. Never send the provider an invalid empty-items booking for
+ * a still-paid order.
+ */
+export function assertShippableBookingItems(items: ShipmentItem[]): void {
+  if (items.length === 0) {
     throw new OrderShipmentBookingError(
-      'This order is missing a complete shipping address.',
+      'All order items have been refunded; there is nothing left to ship.',
       400,
-      'INCOMPLETE_SHIPPING_ADDRESS'
+      'NO_SHIPPABLE_ITEMS'
     );
   }
-
-  return {
-    name: order.customer_name || 'Customer',
-    email: order.customer_email || undefined,
-    phone: order.customer_phone || shippingAddress.phone || '',
-    address,
-    city,
-    state,
-    country: shippingAddress.country?.trim() || 'Nigeria',
-    countryCode: shippingAddress.countryCode?.trim() || 'NG',
-    postalCode: shippingAddress.postalCode?.trim() || undefined,
-  };
 }
 
-function looksLikeStreetSegment(value: string): boolean {
-  return STREET_HINT_PATTERN.test(value);
+export function quotedShipmentItemWeight(item: {
+  product?: {
+    weight_value?: number | string | null;
+    weight_unit?: string | null;
+  } | null;
+  products?:
+    | {
+        weight_value?: number | string | null;
+        weight_unit?: string | null;
+      }
+    | Array<{
+        weight_value?: number | string | null;
+        weight_unit?: string | null;
+      }>
+    | null;
+}): number | undefined {
+  const related = item.product ?? item.products;
+  const product = Array.isArray(related) ? related[0] : related;
+  const value = Number(product?.weight_value);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  // Match buildOrderGiglQuoteRequest: only kg/g are supported. Unsupported
+  // units (lb/oz/…) fall through to the caller's 1 kg default so booking
+  // comparisons stay aligned with the quoted tariff.
+  const unit = String(product?.weight_unit ?? 'kg').toLowerCase();
+  if (unit !== 'kg' && unit !== 'g') return undefined;
+  return unit === 'g' ? value * 0.001 : value;
 }
 
-function normalizeLocationToken(value: string): string {
-  return value.trim().toLowerCase();
+export function toQuoteComparableOrderItems(
+  items: unknown,
+  options: { defaultWeight?: number; quantityMode?: 'original' } = {}
+) {
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as {
+      name?: string | null;
+      quantity?: number | null;
+      price?: number | string | null;
+      fulfillment_data?: unknown;
+      length?: number | string | null;
+      width?: number | string | null;
+      height?: number | string | null;
+      product?: Parameters<typeof quotedShipmentItemWeight>[0]['product'] & {
+        dimensions?: unknown;
+      };
+      products?: Parameters<typeof quotedShipmentItemWeight>[0]['products'] & {
+        dimensions?: unknown;
+      };
+    };
+    const related = record.product ?? record.products;
+    const product = Array.isArray(related) ? related[0] : related;
+    const dimensions =
+      readPackageDimensionsCm(
+        product && typeof product === 'object' && 'dimensions' in product
+          ? product.dimensions
+          : undefined
+      ) ??
+      readPackageDimensionsCm({
+        length: record.length,
+        width: record.width,
+        height: record.height,
+      });
+    const quantity =
+      options.quantityMode === 'original'
+        ? Math.max(0, record.quantity ?? 1)
+        : survivingShipmentQuantity({
+            fulfillment_data: record.fulfillment_data,
+            quantity: record.quantity ?? null,
+          });
+    if (quantity <= 0) return [];
+    return [
+      {
+        name: record.name ?? null,
+        quantity,
+        price: record.price,
+        weight: quotedShipmentItemWeight(record) ?? options.defaultWeight,
+        ...(dimensions ?? {}),
+      },
+    ];
+  });
 }
 
-export function deriveMerchantLocation(
-  addressValue: string | null | undefined
-): {
-  address: string;
-  city: string;
-  state: string;
-} {
-  const address = addressValue?.trim() || 'Lagos';
-  const parts = address
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  if (parts.length === 0) {
-    return {
-      address: 'Lagos',
-      city: 'Lagos',
-      state: 'Lagos',
-    };
-  }
-
-  if (parts.length === 1) {
-    return {
-      address,
-      city: parts[0],
-      state: parts[0],
-    };
-  }
-
-  const last = parts.at(-1) || 'Lagos';
-  const secondLast = parts.at(-2) || last;
-
-  if (KNOWN_STATE_NAMES.has(normalizeLocationToken(last))) {
-    return {
-      address,
-      city: secondLast,
-      state: last,
-    };
-  }
-
-  if (parts.length >= 3) {
-    return {
-      address,
-      city: secondLast,
-      state: last,
-    };
-  }
-
-  if (looksLikeStreetSegment(parts[0])) {
-    return {
-      address,
-      city: last,
-      state: last,
-    };
-  }
-
-  return {
-    address,
-    city: parts[0],
-    state: last,
-  };
-}
-
-export function buildSender(merchant: MerchantRecord): ShippingAddress {
-  const location = deriveMerchantLocation(merchant.business_address);
-
-  return {
-    name: merchant.business_name || 'Merchant',
-    phone: merchant.phone || '',
-    address: location.address,
-    city: location.city,
-    state: location.state,
-    country: 'Nigeria',
-    countryCode: 'NG',
-  };
-}
+export { buildOrderShipmentReceiver as buildReceiver } from './build-order-shipment-receiver';
+export { deriveMerchantLocation } from './merchant-location';
+export { domesticSendersDiffer } from './merchant-sender-comparison';
+export { selectPreferredQuote } from './select-preferred-quote';

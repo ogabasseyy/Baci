@@ -1,10 +1,8 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { type QueryClient, useQueryClient } from '@tanstack/react-query';
-import * as ImagePicker from 'expo-image-picker';
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -18,22 +16,21 @@ import { useShallow } from 'zustand/react/shallow';
 import {
   BranchSwitcher,
   InsightCard,
-  ProgressCard,
   QuickActionButton,
   RevenueChart,
   StatCard,
+  StoreSetupStatusCard,
   WelcomeHeader,
 } from '@/components/dashboard';
 import { RADIUS, SPACING, TYPOGRAPHY } from '@/constants/theme';
+import { useAdminTabScrollToTop } from '@/hooks/useAdminTabScrollToTop';
 import { type TimePeriod, useDashboardStats } from '@/hooks/useDashboardStats';
 import { useMerchant } from '@/hooks/useMerchant';
 import { useOrders } from '@/hooks/useOrders';
 import { useSettingsStore } from '@/hooks/useSettingsStore';
 import { useStoreReadiness } from '@/hooks/useStoreReadiness';
 import { useTheme } from '@/hooks/useTheme';
-import { BASE_URL } from '@/lib/api-client';
-import { supabase } from '@/lib/supabase';
-import { createUploadFile, type RNFormData } from '@/types/upload';
+import { pickAndUploadFavicon } from '@/lib/upload/pickAndUploadFavicon';
 
 // Helper to get currency symbol from merchant's payout_currency
 const getCurrencySymbol = (currencyCode: string | null | undefined) => {
@@ -53,92 +50,6 @@ const PERIOD_OPTIONS: { value: TimePeriod; label: string }[] = [
   { value: 'all', label: 'All Time' },
 ];
 
-// Module-scope helper keeps try/finally and throw-inside-try out of the
-// component body so React Compiler can memoize HomeScreen.
-async function pickAndUploadFavicon(
-  setIsUploading: (uploading: boolean) => void,
-  queryClient: QueryClient
-) {
-  try {
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      Alert.alert(
-        'Permission Required',
-        'Please allow access to your photo library to change your favicon.'
-      );
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (result.canceled || !result.assets[0]) return;
-
-    setIsUploading(true);
-    const asset = result.assets[0];
-    const uriExt = asset.uri.split('.').pop()?.toLowerCase();
-    const fileNameExt = asset.fileName?.split('.').pop()?.toLowerCase();
-    const fallbackExt = fileNameExt || uriExt || 'png';
-    const mimeType =
-      asset.mimeType || `image/${fallbackExt === 'jpg' ? 'jpeg' : fallbackExt}`;
-    const mimeExt = mimeType.split('/')[1]?.toLowerCase();
-    const fileExt = mimeExt === 'jpeg' ? 'jpg' : mimeExt || fallbackExt;
-    const fileName = asset.fileName || `favicon.${fileExt}`;
-
-    // Favicon variants are generated server-side (sharp), so send the picked
-    // image to the web API rather than uploading from the device. The route
-    // resolves the merchant from the auth token and persists every variant.
-    const fileData = new FormData() as RNFormData;
-    fileData.append(
-      'file',
-      createUploadFile({
-        uri: asset.uri,
-        name: fileName,
-        type: mimeType,
-      })
-    );
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session?.access_token) {
-      throw new Error('Your session has expired. Please sign in again.');
-    }
-
-    const response = await fetch(`${BASE_URL}/api/merchant/favicon`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${session.access_token}` },
-      body: fileData as unknown as FormData,
-    });
-
-    const payload = (await response.json().catch(() => null)) as {
-      error?: string;
-    } | null;
-    if (!response.ok) {
-      throw new Error(payload?.error || 'Failed to update favicon');
-    }
-
-    // Invalidate merchant query to refetch
-    queryClient.invalidateQueries({ queryKey: ['merchant'] });
-    Alert.alert('Success', 'Favicon updated successfully!');
-  } catch (error) {
-    console.error('Error updating favicon:', error);
-    Alert.alert(
-      'Error',
-      error instanceof Error
-        ? error.message
-        : 'Failed to update favicon. Please try again.'
-    );
-  } finally {
-    setIsUploading(false);
-  }
-}
-
 function getTimeOfDay(): 'morning' | 'afternoon' | 'evening' {
   const hour = new Date().getHours();
   if (hour < 12) return 'morning';
@@ -153,6 +64,7 @@ function formatMetric(value: number): string {
 }
 
 export default function HomeScreen() {
+  const scrollRef = useAdminTabScrollToTop<ScrollView>('index');
   if (__DEV__) {
     console.log('[HomeScreen] Rendering');
   }
@@ -281,6 +193,7 @@ export default function HomeScreen() {
       edges={['top']}
     >
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -338,17 +251,10 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        {/* Setup Checklist - Shown when store is not ready */}
-        {!isReadinessLoading && readiness && !readiness.isReady && (
-          <View style={styles.section}>
-            <ProgressCard
-              title="Finish Setup"
-              subtitle="Complete your store setup to start selling"
-              progress={readiness.overallProgress}
-              onPress={() => router.push('/(admin)/setup-checklist')}
-            />
-          </View>
-        )}
+        <StoreSetupStatusCard
+          isLoading={isReadinessLoading}
+          readiness={readiness}
+        />
 
         {/* Insight Card - Shown when store IS ready (or if setup is ignored) */}
         {showInsight && stats && (readiness?.isReady || false) && (

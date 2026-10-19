@@ -6,12 +6,6 @@ import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import type { z } from 'zod';
-import {
-  calculateRepairShipping,
-  createRepair,
-  type ShippingCalculationResult,
-} from '@/app/actions/repair';
-import type { PlaceDetails } from '@/components/address-autocomplete';
 import { Button } from '@/components/ui/button';
 import { Form } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +16,7 @@ import {
 import { RepairBookingSuccess } from './repair-booking-wizard/RepairBookingSuccess';
 import { RepairContactStep } from './repair-booking-wizard/RepairContactStep';
 import { RepairDeviceStep } from './repair-booking-wizard/RepairDeviceStep';
+import { RepairPickupPaymentReady } from './repair-booking-wizard/RepairPickupPaymentReady';
 import { RepairReviewStep } from './repair-booking-wizard/RepairReviewStep';
 import { RepairWizardProgressBar } from './repair-booking-wizard/RepairWizardProgressBar';
 import {
@@ -29,19 +24,15 @@ import {
   REPAIR_WIZARD_STEPS,
   type RepairBookingPreselection,
 } from './repair-booking-wizard/repair-booking-wizard-constants';
+import { useRepairBookingSubmit } from './repair-booking-wizard/use-repair-booking-submit';
+import { useRepairShippingQuote } from './repair-booking-wizard/use-repair-shipping-quote';
 
 export type { RepairBookingPreselection };
 
 interface RepairBookingWizardProps {
   merchantId: string;
-  /**
-   * Public storefront identifier (slug or custom domain). Shipping estimates
-   * resolve the merchant server-side from this instead of trusting a raw
-   * merchant UUID from the client.
-   */
   merchantSlug: string;
   merchantName: string;
-  /** Device/quote preselected via `/[slug]/repair?device=&quote=`. */
   preselection?: RepairBookingPreselection;
 }
 
@@ -52,16 +43,38 @@ export function RepairBookingWizard({
   preselection,
 }: RepairBookingWizardProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [ticketNumber, setTicketNumber] = useState<number | null>(null);
-  const [shippingQuote, setShippingQuote] =
-    useState<ShippingCalculationResult | null>(null);
-  const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
+  const [pickupPayment, setPickupPayment] = useState<{
+    amount: number;
+    authorizationUrl: string;
+    ticketNumber: number;
+  } | null>(null);
   const [showCatalogConfirmation, setShowCatalogConfirmation] = useState(
     Boolean(preselection)
   );
   const { toast } = useToast();
+  const {
+    applyShippingQuote,
+    isCalculatingShipping,
+    retry: retryShippingQuote,
+    selectAddress: handleAddressSelect,
+    shippingQuote,
+  } = useRepairShippingQuote(merchantSlug);
+
+  const { isSubmitting, onSubmit } = useRepairBookingSubmit({
+    applyShippingQuote,
+    merchantId,
+    merchantSlug,
+    onPickupPaymentReady: setPickupPayment,
+    onSuccess: (nextTicketNumber) => {
+      setTicketNumber(nextTicketNumber);
+      setIsSuccess(true);
+    },
+    setCurrentStep,
+    shippingQuote,
+    toast,
+  });
 
   const form = useForm<
     z.input<typeof repairBookingSchema>,
@@ -74,8 +87,6 @@ export function RepairBookingWizard({
   });
 
   const { control, trigger } = form;
-  // useWatch instead of watch(): watch() returns interior-mutable values that
-  // force React Compiler to skip memoizing this component.
   const formData = useWatch({ control });
 
   const handleChangeDevice = () => {
@@ -92,9 +103,6 @@ export function RepairBookingWizard({
     if (currentStep === 0) {
       fieldsToValidate = ['deviceType', 'deviceModel', 'issueDescription'];
     } else if (currentStep === 1) {
-      // Include serviceType/pickupAddress so a pickup with a blank/short address
-      // is caught here (where the FormMessage renders) instead of failing the
-      // schema refinement silently on the read-only review step.
       fieldsToValidate = [
         'customerName',
         'customerEmail',
@@ -115,71 +123,16 @@ export function RepairBookingWizard({
     setCurrentStep((prev) => prev - 1);
   };
 
-  const handleAddressSelect = (place: PlaceDetails) => {
-    // Update form value
-    form.setValue('pickupAddress', place.formattedAddress);
-
-    // Calculate shipping. Promise chain instead of try/finally: React Compiler
-    // cannot lower try statements with a finalizer inside component closures.
-    setIsCalculatingShipping(true);
-    setShippingQuote(null);
-    calculateRepairShipping(place, merchantSlug)
-      .then((result) => {
-        setShippingQuote(result);
-      })
-      .catch((error: unknown) => {
-        console.error(error);
-      })
-      .finally(() => {
-        setIsCalculatingShipping(false);
-      });
-  };
-
-  const onSubmit = (data: RepairBookingInput) => {
-    setIsSubmitting(true);
-    // Promise chain instead of try/finally: React Compiler cannot lower try
-    // statements with a finalizer inside component closures.
-    return createRepair(data, merchantId)
-      .then((result) => {
-        if (result.success) {
-          setTicketNumber(result.ticketNumber);
-          setIsSuccess(true);
-          toast({
-            description:
-              'We have received your repair request. We will contact you shortly.',
-            title: 'Request Submitted',
-          });
-        } else {
-          toast({
-            description: result.error,
-            title: 'Submission Failed',
-            variant: 'destructive',
-          });
-        }
-      })
-      .catch(() => {
-        toast({
-          description: 'Something went wrong. Please try again.',
-          title: 'Error',
-          variant: 'destructive',
-        });
-      })
-      .finally(() => {
-        setIsSubmitting(false);
-      });
-  };
+  if (pickupPayment) {
+    return <RepairPickupPaymentReady {...pickupPayment} />;
+  }
 
   if (isSuccess) {
     return (
-      <motion.div
-        animate={{ opacity: 1, scale: 1 }}
-        initial={{ opacity: 0, scale: 0.95 }}
-      >
-        <RepairBookingSuccess
-          merchantName={merchantName}
-          ticketNumber={ticketNumber}
-        />
-      </motion.div>
+      <RepairBookingSuccess
+        merchantName={merchantName}
+        ticketNumber={ticketNumber}
+      />
     );
   }
 
@@ -219,7 +172,11 @@ export function RepairBookingWizard({
                 <RepairContactStep
                   control={control}
                   isCalculatingShipping={isCalculatingShipping}
-                  onAddressSelect={handleAddressSelect}
+                  onAddressSelect={(place) => {
+                    form.setValue('pickupAddress', place.formattedAddress);
+                    handleAddressSelect(place);
+                  }}
+                  onRetryShipping={retryShippingQuote}
                   serviceType={formData.serviceType}
                   shippingQuote={shippingQuote}
                 />
@@ -265,7 +222,11 @@ export function RepairBookingWizard({
             ) : (
               <button
                 className="inline-flex items-center rounded-md px-6 py-2.5 font-medium text-white transition-colors disabled:opacity-50"
-                disabled={isSubmitting}
+                disabled={
+                  isSubmitting ||
+                  (formData.serviceType === 'pickup' &&
+                    (!shippingQuote?.price || Boolean(shippingQuote.error)))
+                }
                 style={{ backgroundColor: 'var(--theme-primary, #dc2626)' }}
                 type="submit"
               >
@@ -273,6 +234,8 @@ export function RepairBookingWizard({
                   <>
                     <Loader2 className="mr-2 size-4 animate-spin" /> Submitting…
                   </>
+                ) : formData.serviceType === 'pickup' ? (
+                  'Continue to payment'
                 ) : (
                   'Book Appointment'
                 )}

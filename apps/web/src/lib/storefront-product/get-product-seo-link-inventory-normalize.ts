@@ -11,6 +11,7 @@ export interface ProductCategoryJoin {
 }
 
 export interface ProductSeoRow {
+  created_at?: string | null;
   id?: string | null;
   slug?: string | null;
   name?: string | null;
@@ -34,7 +35,7 @@ export function getProductSeoSelect(isCategoryScoped: boolean) {
     ? 'product_categories!inner(category_id, categories(slug))'
     : 'product_categories(category_id, categories(slug))';
   return `
-    id, slug, name, brand, condition, price, stock, stock_quantity, category, category_id,
+    id, slug, name, brand, condition, price, stock, stock_quantity, category, category_id, created_at,
     categories:category_id(slug),
     ${PRODUCT_KEY_SPECS_RELATION_SELECT},
     ${productCategoriesSelect}

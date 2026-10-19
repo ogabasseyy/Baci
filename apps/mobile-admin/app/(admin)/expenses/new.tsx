@@ -1,273 +1,303 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
-import { ExpenseBranchSelector } from '@/components/expenses/ExpenseBranchSelector';
+import { useEffect, useState } from 'react';
+import { Alert, Pressable } from 'react-native';
+import { AddExpenseFooter } from '@/components/expenses/AddExpenseFooter';
 import { ExpenseCategorySheet } from '@/components/expenses/ExpenseCategorySheet';
 import { ExpenseFormFields } from '@/components/expenses/ExpenseFormFields';
+import { ExpenseGroupManagerSheet } from '@/components/expenses/ExpenseGroupManagerSheet';
+import { ExpenseStatusShell } from '@/components/expenses/ExpenseStatusShell';
 import {
-  EXPENSE_CATEGORIES,
   type ExpenseCategory,
+  toExpenseCategoryOrNull,
 } from '@/components/expenses/expense-categories';
+import { isFatalDependencyError } from '@/components/expenses/expense-edit-form-dependencies';
 import { expenseFormStyles } from '@/components/expenses/expense-form.styles';
 import { AppFormScreen } from '@/components/ui/AppFormScreen';
 import { SPACING } from '@/constants/theme';
 import { useBranches } from '@/hooks/useBranches';
 import { useBranchScope } from '@/hooks/useBranchScope';
+import { useExpenseAccess } from '@/hooks/useExpenseAccess';
+import { useExpenseFormHandlers } from '@/hooks/useExpenseFormHandlers';
+import { useExpenseFormState } from '@/hooks/useExpenseFormState';
+import { useExpenseGroups } from '@/hooks/useExpenseGroups';
 import { useMerchant } from '@/hooks/useMerchant';
+import { useSaveExpense } from '@/hooks/useSaveExpense';
 import { useTheme } from '@/hooks/useTheme';
-import { supabase } from '@/lib/supabase';
-import { createUploadFile, type RNFormData } from '@/types/upload';
+import { parseExpenseAmount } from '@/lib/expense-amount';
+import { CreateExpenseFormSchema } from '@/schemas/expense-form';
 
-async function uploadExpenseReceipt(
-  merchantId: string,
-  receiptUri: string
-): Promise<string> {
-  const fileExt = receiptUri.split('.').pop()?.toLowerCase() || 'jpg';
-  const fileName = `${merchantId}/${Date.now()}.${fileExt}`;
-  const filePath = `expenses/${fileName}`;
-  const fileData = new FormData() as RNFormData;
-  fileData.append(
-    'file',
-    createUploadFile({
-      uri: receiptUri,
-      name: fileName.split('/').pop() || 'receipt.jpg',
-      type: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
-    })
-  );
-
-  try {
-    const { error: uploadError } = await supabase.storage
-      .from('media')
-      .upload(filePath, fileData, {
-        contentType: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw uploadError;
-    }
-
-    const { data } = supabase.storage.from('media').getPublicUrl(filePath);
-    return data.publicUrl;
-  } catch (error) {
-    console.error('Receipt upload failed:', error);
-    throw new Error('Failed to upload receipt image', { cause: error });
-  }
-}
-
-export default function AddExpenseScreen() {
+function AddExpenseForm({
+  canEdit,
+  isRefreshing,
+}: {
+  canEdit: boolean;
+  isRefreshing: boolean;
+}) {
   const { colors } = useTheme();
   const { merchant } = useMerchant();
-  const { data: branches = [], isLoading: branchesLoading } = useBranches();
   const { scope } = useBranchScope();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-
-  const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<ExpenseCategory>(
-    EXPENSE_CATEGORIES[0]
+  const {
+    data: branchesData,
+    error: branchesError,
+    isLoading: branchesLoading,
+    refetch: refetchBranches,
+  } = useBranches();
+  const {
+    activeGroups,
+    allGroups,
+    archiveGroup: archiveGroupMutation,
+    createGroup,
+    hasCachedGroups,
+    renameGroup,
+    error: groupsError,
+    refetch: refetchGroups,
+  } = useExpenseGroups();
+  const branches = branchesData ?? [];
+  const fatalBranchesError = isFatalDependencyError(
+    branchesError,
+    branchesData !== undefined
   );
-  const [receiptUri, setReceiptUri] = useState<string | null>(null);
-  const [manualBranchId, setManualBranchId] = useState<string | null>(null);
-  const [isCategorySheetVisible, setCategorySheetVisible] = useState(false);
-  const parsedAmount = Number.parseFloat(amount);
-  const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
+  const fatalGroupsError = isFatalDependencyError(groupsError, hasCachedGroups);
+  const saveExpense = useSaveExpense();
+  const router = useRouter();
   const activeBranches = branches.filter((branch) => branch.active);
   const defaultBranchId =
     activeBranches.find((branch) => branch.is_default)?.id ??
     activeBranches[0]?.id ??
-    null;
-  const explicitBranchId =
-    manualBranchId &&
-    activeBranches.some((branch) => branch.id === manualBranchId)
-      ? manualBranchId
-      : null;
+    '';
+  const initialBranchId =
+    scope.type === 'branch' &&
+    activeBranches.some(({ id }) => id === scope.branchId)
+      ? scope.branchId
+      : defaultBranchId;
+  const form = useExpenseFormState({ initialBranchId });
+  const [amountText, setAmountText] = useState('');
+  const [categorySheetVisible, setCategorySheetVisible] = useState(false);
+  const [groupManagerVisible, setGroupManagerVisible] = useState(false);
+
+  useEffect(() => {
+    if (
+      scope.type === 'all' &&
+      !form.values.branchId &&
+      defaultBranchId &&
+      !form.isDirty
+    ) {
+      form.reset({ initialBranchId: defaultBranchId });
+    }
+  }, [
+    defaultBranchId,
+    form.isDirty,
+    form.reset,
+    form.values.branchId,
+    scope.type,
+  ]);
+
   const selectedBranchId =
-    scope.type === 'branch'
-      ? activeBranches.some((branch) => branch.id === scope.branchId)
-        ? scope.branchId
-        : null
-      : (explicitBranchId ?? defaultBranchId);
-  const canSaveExpense =
-    hasValidAmount && !branchesLoading && selectedBranchId !== null;
+    scope.type === 'branch' ? scope.branchId : form.values.branchId;
+  const selectedCategory = toExpenseCategoryOrNull(form.values.category);
+  const disabled = saveExpense.isPending || branchesLoading || isRefreshing;
+  const { archiveGroup, close, navigateBackAfterSave, pickReceipt } =
+    useExpenseFormHandlers({
+      archiveGroupMutation,
+      form,
+      onNavigateBack: router.back,
+    });
+  if (fatalBranchesError) {
+    return (
+      <ExpenseStatusShell
+        colors={colors}
+        errorMessage="Could not load branches. Please try again."
+        onRetry={() => void refetchBranches()}
+        status="error"
+      />
+    );
+  }
+  if (fatalGroupsError) {
+    return (
+      <ExpenseStatusShell
+        colors={colors}
+        errorMessage="Could not load expense groups. Please try again."
+        onRetry={() => void refetchGroups()}
+        status="error"
+      />
+    );
+  }
+  const save = () => {
+    if (!merchant?.id) return;
 
-  const createExpenseMutation = useMutation({
-    mutationFn: async () => {
-      if (!merchant?.id) throw new Error('Merchant ID missing');
-      if (!hasValidAmount) throw new Error('Invalid expense amount');
-      if (!selectedBranchId) throw new Error('No active branch is available');
-
-      const uploadedReceiptUrl = receiptUri
-        ? await uploadExpenseReceipt(merchant.id, receiptUri)
-        : null;
-
-      const { error } = await supabase.from('expenses').insert({
-        merchant_id: merchant.id,
-        branch_id: selectedBranchId,
-        amount: parsedAmount,
-        category: selectedCategory,
-        description: description || null,
-        receipt_url: uploadedReceiptUrl,
-      });
-
-      if (error) {
-        throw error;
-      }
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['expenses', merchant?.id] });
-      Alert.alert('Success', 'Expense saved', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
-    },
-    onError: (error: Error) => {
-      console.error('Failed to save expense:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.');
-    },
-  });
-
-  const handleAmountChange = (text: string) => {
-    const cleaned = text.replace(/,/g, '');
-    if (cleaned === '' || /^\d*\.?\d*$/.test(cleaned)) {
-      setAmount(cleaned);
-    }
-  };
-
-  const handleImagePick = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 5],
-        quality: 0.7,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setReceiptUri(result.assets[0].uri);
-      }
-    } catch {
-      Alert.alert('Error', 'Failed to pick image');
-    }
-  };
-
-  const handleSaveExpense = () => {
-    if (!hasValidAmount) {
-      Alert.alert('Invalid Amount', 'Enter a valid amount greater than zero.');
-      return;
-    }
-
-    if (branchesLoading) {
+    if (
+      scope.type === 'all' &&
+      !activeBranches.some(({ id }) => id === selectedBranchId)
+    ) {
       Alert.alert(
-        'Branches loading',
-        'Please wait for branches to finish loading.'
+        'Branch unavailable',
+        'Choose an active branch before saving.'
       );
       return;
     }
 
-    if (!selectedBranchId) {
+    if (
+      form.values.groupId &&
+      !activeGroups.some(({ id }) => id === form.values.groupId)
+    ) {
+      Alert.alert('Group unavailable', 'Choose an active group before saving.');
+      return;
+    }
+
+    const values = {
+      ...form.values,
+      branchId: selectedBranchId,
+    };
+    const parsed = CreateExpenseFormSchema.safeParse(values);
+    if (!parsed.success) {
       Alert.alert(
-        'No branch available',
-        'Create an active branch before saving expenses.'
+        'Complete required fields',
+        'Enter a valid amount and branch.'
       );
       return;
     }
 
-    createExpenseMutation.mutate();
+    saveExpense.mutate(
+      {
+        merchantId: merchant.id,
+        mode: 'create',
+        receiptChange: form.receiptChange,
+        values: parsed.data,
+      },
+      {
+        onError: () =>
+          Alert.alert('Could not save expense', 'Please try again.'),
+        onSuccess: navigateBackAfterSave,
+      }
+    );
   };
 
   return (
     <>
       <Stack.Screen
         options={{
-          title: 'Add Expense',
           headerLeft: () => (
             <Pressable
               accessibilityLabel="Close add expense screen"
               accessibilityRole="button"
-              onPress={() => router.back()}
+              onPress={close}
               style={{ padding: SPACING.sm }}
             >
-              <Ionicons name="close" size={24} color={colors.text} />
+              <Ionicons color={colors.text} name="close" size={24} />
             </Pressable>
           ),
+          title: 'Add Expense',
         }}
       />
-
       <AppFormScreen
         contentContainerStyle={expenseFormStyles.content}
         edges={['bottom']}
         footer={
-          <View
-            style={[
-              expenseFormStyles.footer,
-              {
-                backgroundColor: colors.card,
-                borderTopColor: colors.border,
-              },
-            ]}
-          >
-            <Pressable
-              accessibilityLabel="Save expense"
-              accessibilityRole="button"
-              disabled={createExpenseMutation.isPending}
-              onPress={handleSaveExpense}
-              style={[
-                expenseFormStyles.saveButton,
-                {
-                  backgroundColor: colors.primary,
-                  opacity:
-                    !canSaveExpense || createExpenseMutation.isPending
-                      ? 0.7
-                      : 1,
-                },
-              ]}
-            >
-              {createExpenseMutation.isPending ? (
-                <ActivityIndicator color={colors.textOnPrimary} />
-              ) : (
-                <Text
-                  style={[
-                    expenseFormStyles.saveButtonText,
-                    { color: colors.textOnPrimary },
-                  ]}
-                >
-                  Save Expense
-                </Text>
-              )}
-            </Pressable>
-          </View>
+          <AddExpenseFooter
+            busy={saveExpense.isPending}
+            colors={colors}
+            disabled={disabled}
+            onSave={save}
+          />
         }
         style={{ backgroundColor: colors.background }}
       >
-        {scope.type === 'all' && !branchesLoading ? (
-          <ExpenseBranchSelector
-            branches={activeBranches}
-            onSelect={setManualBranchId}
-            selectedBranchId={selectedBranchId}
-          />
-        ) : null}
         <ExpenseFormFields
-          amount={amount}
-          description={description}
-          onAmountChange={handleAmountChange}
-          onDescriptionChange={setDescription}
+          activeGroups={activeGroups}
+          amount={amountText}
+          branches={scope.type === 'all' ? activeBranches : undefined}
+          canEditGroups={canEdit}
+          date={form.values.date}
+          description={form.values.description ?? ''}
+          disabled={disabled}
+          existingReceiptUri={null}
+          onAmountChange={(value) => {
+            setAmountText(value);
+            form.setField('amount', parseExpenseAmount(value));
+          }}
+          onBranchChange={(branchId) => form.setField('branchId', branchId)}
+          onDateChange={(date) => form.setField('date', date)}
+          onDescriptionChange={(description) =>
+            form.setField('description', description || null)
+          }
+          onGroupChange={(groupId) => form.setField('groupId', groupId)}
+          onManageGroups={() => setGroupManagerVisible(true)}
           onOpenCategorySheet={() => setCategorySheetVisible(true)}
-          onReceiptPress={handleImagePick}
-          receiptUri={receiptUri}
+          onPaymentMethodChange={(paymentMethod) =>
+            form.setField('paymentMethod', paymentMethod || null)
+          }
+          onReceiptPress={() => {
+            void pickReceipt();
+          }}
+          onReceiptRemove={form.removeReceipt}
+          onReceiptRestore={form.restoreReceipt}
+          onReferenceChange={(reference) =>
+            form.setField('reference', reference || null)
+          }
+          onVendorNameChange={(vendorName) =>
+            form.setField('vendorName', vendorName || null)
+          }
+          paymentMethod={form.values.paymentMethod ?? ''}
+          receiptChange={form.receiptChange}
+          receiptUri={form.receiptPreviewUri}
+          reference={form.values.reference ?? ''}
+          selectedBranchId={selectedBranchId || null}
           selectedCategory={selectedCategory}
+          selectedGroupId={form.values.groupId}
+          vendorName={form.values.vendorName ?? ''}
         />
       </AppFormScreen>
-
       <ExpenseCategorySheet
         onClose={() => setCategorySheetVisible(false)}
-        onSelect={setSelectedCategory}
+        onSelect={(category: ExpenseCategory) => {
+          form.setField('category', category);
+          setCategorySheetVisible(false);
+        }}
         selectedCategory={selectedCategory}
-        visible={isCategorySheetVisible}
+        visible={categorySheetVisible}
+      />
+      <ExpenseGroupManagerSheet
+        archiveGroup={archiveGroup}
+        canEdit={canEdit}
+        createGroup={createGroup}
+        groups={allGroups}
+        onClose={() => setGroupManagerVisible(false)}
+        renameGroup={renameGroup}
+        visible={groupManagerVisible}
       />
     </>
   );
+}
+
+export default function AddExpenseScreen() {
+  const { colors } = useTheme();
+  const { canCreate, canEdit, error, isLoading, isRefreshing } =
+    useExpenseAccess();
+
+  if (isLoading) {
+    return <ExpenseStatusShell colors={colors} status="loading" />;
+  }
+
+  if (!canCreate) {
+    if (error) {
+      return (
+        <ExpenseStatusShell
+          colors={colors}
+          errorMessage={error.message}
+          status="error"
+        />
+      );
+    }
+
+    return (
+      <ExpenseStatusShell
+        colors={colors}
+        errorMessage="You do not have permission to add expenses"
+        status="denied"
+      />
+    );
+  }
+
+  return <AddExpenseForm canEdit={canEdit} isRefreshing={isRefreshing} />;
 }

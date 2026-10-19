@@ -4,12 +4,13 @@ import { ArrowRightLeft, Heart, ShoppingCart, Star } from 'lucide-react';
 // Migrated from temp-source/components/ProductCard.tsx
 import Link from 'next/link';
 import React, { useState } from 'react';
-import { getProductImageAlt, trimString } from '@baci/shared/lib';
+import { getProductImageAlt } from '@baci/shared/lib/product-image-alt';
+import { trimString } from '@baci/shared/lib/string-values';
 import { CdnFormatImage } from '@/components/storefront/cdn-format-image';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { PLACEHOLDER_IMAGE } from '@/lib/image-utils';
 import { asRoute } from '@/lib/routes';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getProductUrl } from '@/lib/product-url';
 import { useV2Comparison } from '../providers/v2-comparison-context';
 import { useV2Saved } from '../providers/v2-saved-context';
 import { requiresOgabasseyProductSelection } from '../product-selection';

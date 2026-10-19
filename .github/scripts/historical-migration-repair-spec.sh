@@ -35,6 +35,12 @@ historical_migration_repair_spec() {
     20260812173500:quiz_event_results_v2_deny_client_policy)
       printf '%s\t%s\t%s\n' '20260815000000' 'repair_quiz_event_results_v2_deny_client_policy' '2a1d2341ec3631c74b9d44043db1f67f80b51012a796aea6477231bedfab98ef'
       ;;
+    20260815103000:capture_private_expense_receipt_cleanup)
+      printf '%s\t%s\t%s\n' '20260815220000' 'repair_capture_private_expense_receipt_cleanup' '64530e9b7d94d9e2f832a8464593af977cb0af18c727a1a1b54c62310550997b'
+      ;;
+    20260921100200:enforce_merchant_shipping_provider_policy)
+      printf '%s\t%s\t%s\n' '20260926130000' 'repair_shipping_provider_policy_audit' 'c89fb79e44148fe68caf65d99aed81de7a1ffd0d42b6ff85fbd41d9d98eceda3'
+      ;;
     *) return 1 ;;
   esac
 }
@@ -62,6 +68,15 @@ historical_collision_repair_spec() {
     20260805090000:complete_merchant_invoice_partial_payments)
       printf '%s\t%s\n' '20260805090002' 'reapply_complete_merchant_invoice_partial_payment'
       ;;
+    # Production recorded the interim LOGIN revision under this version.
+    # These are different role contracts, not spelling aliases: require the
+    # later NOLOGIN + scope-hook repair before treating history as reconciled.
+    # The applier preserves the old row; deploy still probes the loaded hook
+    # before the separate isolate migration grants authenticator membership.
+    20260805091000:enable_least_privilege_gigl_tracking_login | \
+    20260805091000:converge_gigl_tracking_worker_nologin)
+      printf '%s\t%s\n' '20260805113000' 'restore_gigl_tracking_postgrest_capability'
+      ;;
     20260811120000:quiz_leaderboard_and_claim_projections_v2 | \
     20260811120000:allow_reviewed_paystack_email_mismatch)
       printf '%s\t%s\n' '20260813144355' 'reapply_allow_reviewed_paystack_email_mismatch'
@@ -72,7 +87,7 @@ historical_collision_repair_spec() {
 
 historical_collision_version_is_known() {
   case "$1" in
-    20260615120000 | 20260713130000 | 20260805090000 | 20260811120000) return 0 ;;
+    20260615120000 | 20260713130000 | 20260805090000 | 20260805091000 | 20260811120000) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -85,6 +100,8 @@ historical_collision_name_is_valid() {
     20260713130000:quiz_finalize_rank_winners | \
     20260805090000:add_least_privilege_gigl_tracking_worker | \
     20260805090000:complete_merchant_invoice_partial_payments | \
+    20260805091000:enable_least_privilege_gigl_tracking_login | \
+    20260805091000:converge_gigl_tracking_worker_nologin | \
     20260811120000:quiz_leaderboard_and_claim_projections_v2 | \
     20260811120000:allow_reviewed_paystack_email_mismatch)
       return 0

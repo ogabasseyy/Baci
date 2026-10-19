@@ -1,10 +1,7 @@
 source "https://rubygems.org"
 
-# fastlane 2.237.0 does not include the merged Faraday 2 migration; pin its
-# merge commit until a later release includes fastlane#30089.
-gem "fastlane",
-  "~> 2.234",
-  git: "https://github.com/fastlane/fastlane.git",
-  ref: "f8a2b4fa25b246333051618b8918ec9afe7195e1"
+# fastlane >= 2.240 includes the Faraday 2 migration (fastlane#30089) and
+# requires rubyzip >= 3.4.0 (fixes CVE-2026-85396 path traversal).
+gem "fastlane", "~> 2.240"
 gem "cocoapods", "~> 1.16"
 gem "jwt", ">= 3.2.0", "< 4"

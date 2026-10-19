@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
+import { parseRequestedMerchantId } from '@/app/api/branches/branch-route-utils';
 import { hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -7,6 +8,7 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
+import { analyticsDashboardSpecializedSchemas } from '@/schemas/analytics-dashboard-specialized';
 
 /**
  * Customer Segments API
@@ -32,8 +34,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { searchParams } = new URL(request.url);
+    const parsedQuery =
+      analyticsDashboardSpecializedSchemas.customerSegmentsQuery.safeParse({
+        limit: searchParams.get('limit') ?? undefined,
+        page: searchParams.get('page') ?? undefined,
+        segment: searchParams.get('segment') ?? undefined,
+      });
+    if (!parsedQuery.success) {
+      return NextResponse.json({ error: 'Invalid query' }, { status: 400 });
+    }
+
+    const requestedMerchant = parseRequestedMerchantId(request);
+    if (requestedMerchant.response) {
+      return requestedMerchant.response;
+    }
+
     // Get merchant context (supports both owners and staff members)
-    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
+    const merchantContext = await getMerchantForApiRequest(supabase, user.id, {
+      requestedMerchantId: requestedMerchant.merchantId,
+    });
     if (!merchantContext) {
       return NextResponse.json(
         { error: 'Merchant not found' },
@@ -45,23 +65,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const merchantId = merchantContext.merchantId;
-
-    const { searchParams } = new URL(request.url);
-    const segment = searchParams.get('segment');
-    const page = Number.parseInt(searchParams.get('page') || '1', 10);
-    const limit = Math.min(
-      Number.parseInt(searchParams.get('limit') || '20', 10),
-      100
-    );
+    const { limit, page, segment } = parsedQuery.data;
     const offset = (page - 1) * limit;
 
     // Get segment summary
-    const { data: summary } = await supabase
+    const { data: summary, error: summaryError } = await supabase
       .from('customer_segment_summary')
       .select(
-        'merchant_id, segment_name, customer_count, total_revenue, avg_order_value'
+        'merchant_id, segment_name, customer_count, total_revenue, avg_clv'
       )
       .eq('merchant_id', merchantId);
+
+    if (summaryError) {
+      console.error('Error fetching customer segment summary:', summaryError);
+      return NextResponse.json(
+        { error: 'Failed to fetch segment summary' },
+        { status: 500 }
+      );
+    }
 
     // Get customers with RFM scores
     let query = supabase
@@ -147,16 +168,6 @@ export async function GET(request: NextRequest) {
 
 export async function POST(_request: NextRequest) {
   try {
-    // CSRF protection
-    const { valid: csrfValid, response: csrfResponse } =
-      await checkCsrfProtection(_request);
-    if (!csrfValid) {
-      return (
-        csrfResponse ??
-        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-      );
-    }
-
     const cookieStore = await cookies();
     const supabase = createClient(cookieStore);
 
@@ -167,8 +178,24 @@ export async function POST(_request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { valid: csrfValid, response: csrfResponse } =
+      await checkCsrfProtection(_request);
+    if (!csrfValid) {
+      return (
+        csrfResponse ??
+        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+      );
+    }
+
+    const requestedMerchant = parseRequestedMerchantId(_request);
+    if (requestedMerchant.response) {
+      return requestedMerchant.response;
+    }
+
     // Get merchant context (supports both owners and staff members)
-    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
+    const merchantContext = await getMerchantForApiRequest(supabase, user.id, {
+      requestedMerchantId: requestedMerchant.merchantId,
+    });
     if (!merchantContext) {
       return NextResponse.json(
         { error: 'Merchant not found' },

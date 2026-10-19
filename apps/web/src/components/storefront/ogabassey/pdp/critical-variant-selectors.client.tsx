@@ -4,12 +4,10 @@ import type { Product as CartProduct } from '@/lib/products';
 import {
   formatVariantAxisLabel,
   formatVariantOptionLabel,
-  getAvailableCriticalVariantOptions,
   getVariantAxisOptions,
 } from './critical-variant-selector-options';
 
 interface OgabasseyPdpCriticalVariantSelectorsProps {
-  explicitSelectedAxes?: string[];
   onAttributeSelection: (axis: string, value: string) => void;
   renderableVariantAxes: string[];
   selectedAttributes: Record<string, string>;
@@ -19,7 +17,6 @@ interface OgabasseyPdpCriticalVariantSelectorsProps {
 }
 
 export function OgabasseyPdpCriticalVariantSelectors({
-  explicitSelectedAxes = [],
   onAttributeSelection,
   renderableVariantAxes,
   selectedAttributes,
@@ -30,12 +27,6 @@ export function OgabasseyPdpCriticalVariantSelectors({
   if (renderableVariantAxes.length === 0) {
     return null;
   }
-
-  const explicitSelectedAttributes = Object.fromEntries(
-    Object.entries(selectedAttributes).filter(([key]) =>
-      explicitSelectedAxes.includes(key)
-    )
-  );
 
   return (
     <div data-ogabassey-pdp-commerce-variant-picker>
@@ -53,14 +44,6 @@ export function OgabasseyPdpCriticalVariantSelectors({
               axis,
               variantAxisOptions
             );
-            const availableOptions = new Set(
-              getAvailableCriticalVariantOptions(
-                axis,
-                variants,
-                explicitSelectedAttributes,
-                variantAxisOptions
-              )
-            );
             const selectedOptionLabel = selectedAttributes[axis]
               ? formatVariantOptionLabel(axis, selectedAttributes[axis])
               : `Select ${label.toLowerCase()}`;
@@ -74,7 +57,6 @@ export function OgabasseyPdpCriticalVariantSelectors({
                 <div data-ogabassey-pdp-commerce-variant-options>
                   {options.map((value) => {
                     const isSelected = selectedAttributes[axis] === value;
-                    const isAvailable = availableOptions.has(value);
                     const optionLabel = formatVariantOptionLabel(axis, value);
 
                     return (
@@ -83,7 +65,6 @@ export function OgabasseyPdpCriticalVariantSelectors({
                         aria-pressed={isSelected}
                         data-ogabassey-pdp-commerce-variant-option
                         data-selected={isSelected ? 'true' : undefined}
-                        disabled={!isAvailable}
                         key={value}
                         onClick={() => onAttributeSelection(axis, value)}
                         type="button"

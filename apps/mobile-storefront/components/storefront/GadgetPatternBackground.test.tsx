@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { render, screen } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
+import { BRAND } from '@/constants/Colors';
 import { GadgetPattern } from './GadgetPattern';
 import {
   DARK_COLOR,
@@ -76,8 +77,9 @@ describe('GadgetPatternBackground', () => {
     expect(darkProps).toBeDefined();
     expect(darkProps).toMatchObject({
       opacity: DARK_OPACITY,
-      color: DARK_COLOR,
+      color: BRAND.primary,
     });
+    expect(DARK_COLOR).toBe(BRAND.primary);
   });
 
   it('forwards custom height values and defaults to PATTERN_HEIGHT when height is omitted', () => {
@@ -104,6 +106,21 @@ describe('GadgetPatternBackground', () => {
     expect(customProps).toBeDefined();
     expect(customProps).toMatchObject({
       height: customHeight,
+    });
+  });
+
+  it('allows a screen to make the shared pattern more visible', () => {
+    render(
+      <GadgetPatternBackground
+        colorScheme="dark"
+        backgroundColor="#000000"
+        opacity={0.1}
+      />
+    );
+
+    expect(getMockedGadgetPattern().mock.lastCall?.[0]).toMatchObject({
+      color: BRAND.primary,
+      opacity: 0.1,
     });
   });
 });

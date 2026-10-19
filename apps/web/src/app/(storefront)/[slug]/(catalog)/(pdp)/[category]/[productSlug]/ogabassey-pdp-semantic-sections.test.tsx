@@ -125,15 +125,16 @@ describe('OgabasseyPdpSemanticSections', () => {
       })
     );
 
-    expect(mockGetCachedProductSeoLinkData).toHaveBeenCalledWith(
-      'merchant-1',
-      'laptops',
-      'prod-1',
-      'lenovo-legion',
-      'Lenovo Legion',
-      'Lenovo',
-      true
-    );
+    expect(mockGetCachedProductSeoLinkData).toHaveBeenCalledWith({
+      blogEnabled: true,
+      categorySlug: 'laptops',
+      merchantId: 'merchant-1',
+      productBrand: 'Lenovo',
+      productId: 'prod-1',
+      productName: 'Lenovo Legion',
+      productSlug: 'lenovo-legion',
+      storeSlug: 'ogabassey',
+    });
     expect(mockBuildProductSemanticModel).toHaveBeenCalledWith(
       expect.objectContaining({
         categorySlug: 'laptops',
@@ -242,14 +243,15 @@ describe('OgabasseyPdpSemanticSections', () => {
       storeUrl: 'https://ogabassey.com',
     });
 
-    expect(mockGetCachedProductSeoLinkData).toHaveBeenCalledWith(
-      'merchant-1',
-      'laptops',
-      'prod-1',
-      'legacy-item-42',
-      'Lenovo Legion 5 Pro',
-      'Lenovo',
-      true
-    );
+    expect(mockGetCachedProductSeoLinkData).toHaveBeenCalledWith({
+      blogEnabled: true,
+      categorySlug: 'laptops',
+      merchantId: 'merchant-1',
+      productBrand: 'Lenovo',
+      productId: 'prod-1',
+      productName: 'Lenovo Legion 5 Pro',
+      productSlug: 'legacy-item-42',
+      storeSlug: 'ogabassey',
+    });
   });
 });

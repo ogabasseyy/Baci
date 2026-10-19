@@ -9,6 +9,8 @@ import {
   runRemediationCodexCanary,
 } from './remediation-codex-canary.mjs';
 
+const testContainerIdentity = { gid: 1001, uid: 1001 };
+
 describe('remediation Codex canary', () => {
   it('exits as a sanitized skip unless explicitly enabled', () => {
     const result = runRemediationCodexCanary({ env: {} });
@@ -47,6 +49,7 @@ describe('remediation Codex canary', () => {
   it('uses the remediation image in a read-only mode without git or provider mutations', () => {
     const calls = [];
     const result = runRemediationCodexCanary({
+      containerIdentity: testContainerIdentity,
       env: {
         BACI_REMEDIATION_CANARY_ENABLED: '1',
         BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
@@ -73,12 +76,14 @@ describe('remediation Codex canary', () => {
     assert.equal(calls[0].args.includes('--read-only'), true);
     assert.equal(calls[0].args.includes('--json'), true);
     assert.equal(calls[0].args.includes('--sandbox'), true);
-    assert.equal(calls[0].args.includes('workspace-write'), true);
+    assert.equal(calls[0].args.includes('read-only'), true);
     assert.equal(
       calls[0].args.includes('--dangerously-bypass-approvals-and-sandbox'),
       false
     );
-    assert.equal(calls[0].args.includes('use_legacy_landlock'), false);
+    assert.equal(calls[0].args.includes('--enable'), true);
+    assert.equal(calls[0].args.includes('use_legacy_landlock'), true);
+    assert.equal(calls[0].args.includes('workspace-write'), false);
     assert.equal(
       calls[0].args.includes('type=bind,src=/repo,dst=/repo,readonly'),
       true
@@ -100,6 +105,7 @@ describe('remediation Codex canary', () => {
     const calls = [];
 
     runRemediationCodexCanary({
+      containerIdentity: testContainerIdentity,
       env: {
         BACI_REMEDIATION_CANARY_ENABLED: '1',
         BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
@@ -125,6 +131,7 @@ describe('remediation Codex canary', () => {
     assert.throws(
       () =>
         runRemediationCodexCanary({
+          containerIdentity: testContainerIdentity,
           env: {
             BACI_REMEDIATION_CANARY_ENABLED: '1',
             BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
@@ -153,6 +160,7 @@ describe('remediation Codex canary', () => {
     assert.throws(
       () =>
         runRemediationCodexCanary({
+          containerIdentity: testContainerIdentity,
           env: {
             BACI_REMEDIATION_CANARY_ENABLED: '1',
             BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
@@ -183,6 +191,7 @@ describe('remediation Codex canary', () => {
     let calls = 0;
 
     const result = runRemediationCodexCanary({
+      containerIdentity: testContainerIdentity,
       env: {
         BACI_REMEDIATION_CANARY_ENABLED: '1',
         BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
@@ -206,6 +215,7 @@ describe('remediation Codex canary', () => {
     const calls = [];
 
     runRemediationCodexCanary({
+      containerIdentity: testContainerIdentity,
       env: {
         BACI_REMEDIATION_CANARY_ENABLED: '1',
         BACI_CODEX_CANARY_TIMEOUT_MS: '1.5',

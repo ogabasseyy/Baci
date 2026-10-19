@@ -30,7 +30,7 @@ describe('remediation git workflow policy and configuration', () => {
     );
     assert.equal(
       calls.some((call) => call.includes('remove')),
-      false
+      true
     );
   });
 
@@ -63,12 +63,13 @@ describe('remediation git workflow policy and configuration', () => {
     );
   });
 
-  it('leaves candidates retryable when verification is not configured', () => {
+  it('uses immutable verification gates instead of arbitrary configured commands', () => {
     const { calls, runner } = makeRunner();
 
     const result = runRemediationAutofix({
       candidate,
       env: {
+        BACI_REMEDIATION_VERIFY_COMMAND: 'echo untrusted override',
         BACI_REPO_DIR: '/repo',
         BACI_REMEDIATION_WORKTREE_ROOT: '/worktrees',
       },
@@ -76,19 +77,22 @@ describe('remediation git workflow policy and configuration', () => {
       runner,
     });
 
-    assert.equal(result.type, 'configuration_blocked');
-    assert.match(result.reasons.join('\n'), /VERIFY_COMMAND/);
+    assert.equal(result.type, 'pr_opened');
     assert.equal(
-      calls.some((call) => call.includes('codex')),
-      false
+      calls.some(
+        (call) =>
+          call.join(' ') ===
+          'bash -lc pnpm turbo lint && pnpm turbo typecheck && pnpm turbo test'
+      ),
+      true
     );
     assert.equal(
-      calls.some((call) => call.includes('worktree')),
+      calls.some((call) => call.includes('echo untrusted override')),
       false
     );
   });
 
-  it('preserves a changed worktree when verification fails', () => {
+  it('removes an uncommitted worktree when verification fails', () => {
     const { calls, runner } = makeRunner({
       verificationResult: {
         status: 1,
@@ -112,7 +116,7 @@ describe('remediation git workflow policy and configuration', () => {
     );
     assert.equal(
       calls.some((call) => call.includes('remove')),
-      false
+      true
     );
   });
 

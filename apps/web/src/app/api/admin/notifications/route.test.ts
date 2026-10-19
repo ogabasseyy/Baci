@@ -2,54 +2,29 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  mockChannel: vi.fn(),
-  mockChannelSend: vi.fn(),
+  mockAuthorizeNotificationAdmin: vi.fn(),
   mockCheckCsrfProtection: vi.fn(),
   mockFrom: vi.fn(),
-  mockGetMerchantForApiRequest: vi.fn(),
-  mockGetUser: vi.fn(),
   mockLoggerError: vi.fn(),
-  mockLoggerWarn: vi.fn(),
   mockNotificationInsert: vi.fn(),
-  mockNotifyMerchant: vi.fn(),
-  mockRemoveChannel: vi.fn(),
+  mockNotificationSelect: vi.fn(),
   mockRpc: vi.fn(),
 }));
 
-vi.mock('next/headers', () => ({
-  cookies: vi.fn().mockResolvedValue({}),
+vi.mock('@/lib/admin-notification-auth', () => ({
+  authorizeNotificationAdmin: mocks.mockAuthorizeNotificationAdmin,
 }));
 
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: mocks.mockCheckCsrfProtection,
 }));
 
-vi.mock('@/lib/expo-push', () => ({
-  notifyMerchant: mocks.mockNotifyMerchant,
-}));
-
-vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: mocks.mockGetMerchantForApiRequest,
-}));
-
 vi.mock('@/lib/logger', () => ({
-  logger: {
-    error: mocks.mockLoggerError,
-    info: vi.fn(),
-    warn: mocks.mockLoggerWarn,
-  },
+  logger: { error: mocks.mockLoggerError, info: vi.fn(), warn: vi.fn() },
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(() => ({
-    auth: {
-      getUser: mocks.mockGetUser,
-    },
-    channel: mocks.mockChannel,
-    from: mocks.mockFrom,
-    removeChannel: mocks.mockRemoveChannel,
-    rpc: mocks.mockRpc,
-  })),
+  createClient: vi.fn(() => ({ from: mocks.mockFrom, rpc: mocks.mockRpc })),
 }));
 
 import { POST } from './route';
@@ -59,14 +34,16 @@ const notification = {
   action_url: null,
   channels: ['in_app'],
   created_at: '2026-06-02T08:00:00.000Z',
+  delivery_state: 'pending',
   id: 'notification-1',
   message: 'This is a test notification',
   notification_type: 'info',
   priority: 'high',
+  sent_at: null,
   title: 'Test Notification',
 };
 
-function createRequest() {
+function createRequest(body: Record<string, unknown> = {}) {
   return new NextRequest('https://usebaci.com/api/admin/notifications', {
     body: JSON.stringify({
       channels: ['in_app'],
@@ -76,140 +53,133 @@ function createRequest() {
       target_segment: 'new',
       target_type: 'segment',
       title: 'Test Notification',
+      ...body,
     }),
     headers: { 'content-type': 'application/json' },
     method: 'POST',
   });
 }
 
-function createNotificationInsertQuery() {
-  return {
-    insert: mocks.mockNotificationInsert.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        single: vi.fn().mockResolvedValue({ data: notification, error: null }),
-      })),
-    })),
-  };
-}
-
-function createMerchantsQuery(
-  segmentResult: Promise<{
-    data: Array<{ id: string }> | null;
-    error: unknown;
-  }>
-) {
-  return {
-    select: vi.fn((columns: string) => {
-      if (columns === 'is_platform_admin') {
-        return {
-          eq: vi.fn(() => ({
-            maybeSingle: vi.fn().mockResolvedValue({
-              data: { is_platform_admin: true },
-              error: null,
-            }),
-          })),
-        };
-      }
-
-      if (columns === 'id') {
-        return {
-          gte: vi.fn(() => segmentResult),
-        };
-      }
-
-      throw new Error(`Unexpected merchants select columns: ${columns}`);
-    }),
-  };
-}
-
-function mockSupabaseTables(
-  segmentResult: Promise<{
-    data: Array<{ id: string }> | null;
-    error: unknown;
-  }>
-) {
+function mockSupabaseTables() {
   mocks.mockFrom.mockImplementation((table: string) => {
-    if (table === 'merchants') {
-      return createMerchantsQuery(segmentResult);
-    }
-
-    if (table === 'notifications') {
-      return createNotificationInsertQuery();
-    }
-
-    throw new Error(`Unexpected table: ${table}`);
+    if (table !== 'notifications')
+      throw new Error(`Unexpected table: ${table}`);
+    return {
+      insert: mocks.mockNotificationInsert.mockImplementation((values) => ({
+        select: mocks.mockNotificationSelect.mockImplementation(() => ({
+          single: vi.fn().mockResolvedValue({
+            data: { ...notification, scheduled_for: values.scheduled_for },
+            error: null,
+          }),
+        })),
+      })),
+    };
   });
 }
 
 describe('POST /api/admin/notifications', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.mockAuthorizeNotificationAdmin.mockResolvedValue({
+      status: 'authorized',
+      userId: 'user-1',
+    });
     mocks.mockCheckCsrfProtection.mockResolvedValue({ valid: true });
-    mocks.mockGetUser.mockResolvedValue({
-      data: { user: { id: 'user-1' } },
-    });
-    mocks.mockGetMerchantForApiRequest.mockResolvedValue({
-      merchantId: 'merchant-admin',
-      staffAccess: { isStaff: false },
-    });
-    mocks.mockNotificationInsert.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        single: vi.fn().mockResolvedValue({ data: notification, error: null }),
-      })),
-    }));
-    mocks.mockRpc.mockResolvedValue({ data: 1, error: null });
-    mocks.mockChannel.mockReturnValue({ send: mocks.mockChannelSend });
-    mocks.mockChannelSend.mockResolvedValue('ok');
-    mocks.mockRemoveChannel.mockResolvedValue(undefined);
+    mockSupabaseTables();
   });
 
-  it('returns 500 and does not broadcast when immediate segment lookup fails', async () => {
-    mockSupabaseTables(
-      Promise.resolve({ data: null, error: { message: 'Database error' } })
-    );
+  it('authenticates before CSRF validation or request processing', async () => {
+    mocks.mockAuthorizeNotificationAdmin.mockResolvedValue({
+      response: new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+      }),
+      status: 'error',
+    });
 
     const response = await POST(createRequest());
-    const body = await response.json();
 
-    expect(response.status).toBe(500);
-    expect(body).toEqual({ error: 'Failed to create notification' });
+    expect(response.status).toBe(401);
+    expect(mocks.mockCheckCsrfProtection).not.toHaveBeenCalled();
     expect(mocks.mockNotificationInsert).not.toHaveBeenCalled();
-    expect(mocks.mockRpc).not.toHaveBeenCalled();
-    expect(mocks.mockChannel).not.toHaveBeenCalled();
-    expect(mocks.mockLoggerError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Error fetching segment merchants',
-        segment: 'new',
-      })
-    );
   });
 
-  it('creates and sends an immediate segment notification when lookup succeeds', async () => {
-    mockSupabaseTables(
-      Promise.resolve({ data: [{ id: 'merchant-1' }], error: null })
-    );
+  it('rejects an invalid CSRF token before creating a notification', async () => {
+    mocks.mockCheckCsrfProtection.mockResolvedValue({
+      response: null,
+      valid: false,
+    });
+
+    const response = await POST(createRequest());
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: 'CSRF validation failed',
+    });
+    expect(mocks.mockNotificationInsert).not.toHaveBeenCalled();
+  });
+
+  it('queues an immediate segment notification without resolving recipients or sending push', async () => {
+    const before = Date.now();
 
     const response = await POST(createRequest());
     const body = await response.json();
 
     expect(response.status).toBe(201);
-    expect(body).toEqual({
-      merchants_notified: 1,
-      notification,
-      status: 'sent',
+    expect(body).toMatchObject({
+      notification: expect.objectContaining({
+        delivery_state: 'pending',
+        sent_at: null,
+      }),
+      status: 'queued',
     });
-    expect(mocks.mockRpc).toHaveBeenCalledWith(
-      'send_notification_to_merchants',
-      {
-        p_merchant_ids: ['merchant-1'],
-        p_notification_id: 'notification-1',
-      }
+    expect(new Date(body.scheduled_for).getTime()).toBeGreaterThanOrEqual(
+      before
     );
-    expect(mocks.mockChannelSend).toHaveBeenCalledWith(
+    expect(mocks.mockNotificationInsert).toHaveBeenCalledWith(
       expect.objectContaining({
-        event: 'new_notification',
-        type: 'broadcast',
+        scheduled_for: expect.any(String),
       })
     );
+    expect(mocks.mockNotificationSelect).toHaveBeenCalledWith(
+      expect.stringContaining('delivery_state')
+    );
+    expect(mocks.mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('keeps a future notification pending and reports it as scheduled', async () => {
+    const scheduledFor = '2026-12-01T09:30:00.000Z';
+
+    const response = await POST(createRequest({ scheduled_for: scheduledFor }));
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({
+      scheduled_for: scheduledFor,
+      status: 'scheduled',
+    });
+    expect(mocks.mockNotificationInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scheduled_for: scheduledFor,
+      })
+    );
+  });
+
+  it('rejects an unknown specific target through the target resolver RPC', async () => {
+    const targetId = '123e4567-e89b-12d3-a456-426614174111';
+    mocks.mockRpc.mockResolvedValue({ data: [], error: null });
+
+    const response = await POST(
+      createRequest({
+        target_merchant_ids: [targetId],
+        target_type: 'specific',
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.mockRpc).toHaveBeenCalledWith(
+      'resolve_admin_notification_target_merchant_ids_v1',
+      { p_merchant_ids: [targetId] }
+    );
+    expect(mocks.mockNotificationInsert).not.toHaveBeenCalled();
   });
 });

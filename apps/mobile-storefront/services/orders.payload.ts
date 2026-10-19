@@ -14,11 +14,13 @@ export function buildOrderPayload({
 }: BuildOrderPayloadInput) {
   return {
     merchant_id: merchantId,
+    ...(request.shared_cart ? { shared_cart: request.shared_cart } : {}),
     customer_email: request.customer_email,
     customer_name: request.customer_name,
     customer_phone: request.customer_phone,
     items: request.items.map((item) => ({
       id: item.id,
+      ...(item.cart_line_id ? { cart_line_id: item.cart_line_id } : {}),
       condition: item.condition,
       product_id: item.product_id || item.id,
       name: item.name,
@@ -45,7 +47,10 @@ export function buildOrderPayload({
     ...(request.discount_code ? { discount_code: request.discount_code } : {}),
     payment_method: request.payment_method,
     selected_quote_id: request.selected_quote_id ?? null,
+    shipping_rate_id: request.shipping_rate_id ?? null,
     shipping_provider: request.shipping_provider ?? null,
+    delivery_method: request.delivery_method,
+    airport_type: request.airport_type,
     payment_status: getInitialPaymentStatus(request.payment_method),
     shipping_status: 'pending',
     shipping_address: {

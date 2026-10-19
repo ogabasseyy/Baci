@@ -2,53 +2,10 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { logger } from '@/lib/logger';
-import {
-  type CreateOrderWalletFundingIntentResult,
-  createOrderWalletFundingIntent,
-} from '@/lib/order-wallet-funding-intents';
+import { createOrderWalletFundingIntent } from '@/lib/order-wallet-funding-intents';
 import { resolveOrderFundingMerchantAndCustomer } from '@/lib/order-wallet-funding-route-context';
 import { orderWalletFundingIntentCreateSchema } from '@/schemas/order-wallet-funding-intent';
-
-function getFallbackStatus(code: string) {
-  if (
-    code === 'WALLET_DVA_DISABLED' ||
-    code === 'WALLET_ORDER_AUTO_DEBIT_DISABLED'
-  ) {
-    return 403;
-  }
-  if (code === 'ORDER_NOT_FOUND') {
-    return 404;
-  }
-  if (code === 'WALLET_DVA_SETUP_FAILED') {
-    return 502;
-  }
-  return 409;
-}
-
-function formatIntentResult(result: CreateOrderWalletFundingIntentResult) {
-  if (result.kind === 'intent') {
-    return NextResponse.json({
-      account: {
-        accountName: result.account.accountName,
-        accountNumber: result.account.accountNumber,
-        bankName: result.account.bankName,
-        provider: result.account.provider,
-      },
-      intent: {
-        currency: result.intent.currency,
-        expectedAmount: result.intent.expectedAmount,
-        expiresAt: result.intent.expiresAt,
-        fundedAmount: result.intent.fundedAmount,
-        id: result.intent.id,
-        orderId: result.intent.orderId,
-        status: result.intent.status,
-        targetOrderAmount: result.intent.targetOrderAmount,
-      },
-    });
-  }
-
-  return NextResponse.json(result, { status: getFallbackStatus(result.code) });
-}
+import { formatIntentResult } from './wallet-order-funding-intent-response';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {

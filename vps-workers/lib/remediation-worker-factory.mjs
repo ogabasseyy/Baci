@@ -1,11 +1,15 @@
 import { join, resolve as resolvePath } from 'node:path';
 import { createRemediationCaseState } from './remediation-case-state.mjs';
 import { redactCodexError } from './remediation-codex-output.mjs';
+import { resolveRemediationContainerIdentity } from './remediation-container-identity.mjs';
 import { createRemediationDraftPrStatusResolver } from './remediation-draft-pr-status.mjs';
 import { runRemediationAutofix } from './remediation-git-workflow.mjs';
 import { reconcileRemediationLifecycle } from './remediation-lifecycle-recovery.mjs';
 import { retryRemediationNotifications } from './remediation-notification-retry.mjs';
-import { buildCodexRemediationPrompt } from './remediation-policy.mjs';
+import {
+  buildCodexRemediationPrompt,
+  buildCodexResearchPrompt,
+} from './remediation-policy.mjs';
 import { createRemediationPrJournal } from './remediation-pr-journal.mjs';
 import { writeRemediationPrompt } from './remediation-prompt-file.mjs';
 import { createRemediationState } from './remediation-state.mjs';
@@ -24,6 +28,7 @@ export function createRemediationWorker({
     autofixRunner = runRemediationAutofix,
     candidateEnricher,
     candidateLoader,
+    containerIdentity,
     draftPrStatusResolver,
     env = process.env,
     fetchFn = fetch,
@@ -154,6 +159,10 @@ export function createRemediationWorker({
     for (const candidate of lifecycleCandidates) {
       actions.push({ type: candidate.lifecycleEvent || 'lifecycle_observed' });
     }
+    const autofixContainerIdentity =
+      mode === 'autofix'
+        ? resolveRemediationContainerIdentity({ containerIdentity })
+        : undefined;
     for (const pendingCandidate of candidates) {
       let candidate = pendingCandidate;
       if (typeof candidateEnricher === 'function') {
@@ -195,8 +204,11 @@ export function createRemediationWorker({
           continue;
         }
       }
-      const prompt = buildCodexRemediationPrompt({ candidate });
-      const path = writeRemediationPrompt({ candidate, outputDir });
+      const prompt =
+        mode === 'autofix'
+          ? buildCodexRemediationPrompt({ candidate })
+          : buildCodexResearchPrompt({ candidate });
+      const path = writeRemediationPrompt({ candidate, outputDir, prompt });
       actions.push({ path, type: 'prompt_written' });
       logger.log(`[${workerName}] wrote ${path}`);
       if (mode !== 'autofix') {
@@ -214,7 +226,12 @@ export function createRemediationWorker({
       }
       let result;
       try {
-        result = await autofixRunner({ candidate, env, prompt });
+        result = await autofixRunner({
+          candidate,
+          containerIdentity: autofixContainerIdentity,
+          env,
+          prompt,
+        });
       } catch (error) {
         actions.push({
           detail: error instanceof Error ? error.message : String(error),

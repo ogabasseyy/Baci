@@ -73,6 +73,24 @@ describe('Ogabassey Footer', () => {
     vi.clearAllMocks();
   });
 
+  it('uses the saved public support phone before the legacy phone', () => {
+    mockBuildMerchantTrustProfile.mockReturnValue({
+      socialLinks: {},
+      derivedLinks: {},
+    });
+    render(
+      <Footer
+        merchant={{ ...merchantFixture, support_phone: ' +2349169449282 ' }}
+      />
+    );
+    expect(
+      screen.getByRole('link', { name: '+2349169449282' })
+    ).toHaveAttribute('href', 'tel:+2349169449282');
+    expect(
+      screen.queryByRole('link', { name: merchantFixture.phone })
+    ).not.toBeInTheDocument();
+  });
+
   it('uses named footer contrast styles instead of generated arbitrary color utilities', () => {
     mockBuildMerchantTrustProfile.mockReturnValue({
       socialLinks: {},
@@ -102,6 +120,12 @@ describe('Ogabassey Footer', () => {
     const pattern = screen.getByTestId('ogabassey-gadget-pattern');
 
     expect(pattern).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('renders the merchant-specific business name in the copyright line', () => {
+    mockBuildMerchantTrustProfile.mockReturnValue({ socialLinks: {}, derivedLinks: {} });
+    render(<Footer storeSlug="other" merchant={{ ...merchantFixture, business_name: 'Acme Devices' }} />);
+    expect(screen.getByText(/Acme Devices.*All rights reserved/)).toBeInTheDocument();
   });
 
   it('adds trust policy links to the support section when available', () => {

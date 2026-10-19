@@ -23,6 +23,14 @@ function getApplication(manifest) {
   return manifest.manifest.application[0];
 }
 
+function ensureProfileable(application) {
+  if (!application.profileable?.[0]) {
+    application.profileable = [{}];
+  }
+  application.profileable[0].$ = application.profileable[0].$ ?? {};
+  application.profileable[0].$['android:shell'] = 'true';
+}
+
 function findActivity(application, name) {
   return application.activity.find(
     (activity) => activity.$?.['android:name'] === name
@@ -73,6 +81,7 @@ function applyAdaptiveAndroidManifest(manifest) {
   ensureToolsNamespace(manifest);
 
   const application = getApplication(manifest);
+  ensureProfileable(application);
 
   for (const activityName of MAIN_ACTIVITY_NAMES) {
     const activity = findActivity(application, activityName);

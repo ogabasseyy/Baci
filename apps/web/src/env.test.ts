@@ -10,6 +10,7 @@ function stubBaseEnv() {
   vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'service-role-key');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://supabase.example.com');
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'anon-key');
+  vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'quiz-test-secret');
   delete process.env.SUPABASE_JWT_SECRET;
   delete process.env.SUPABASE_AGENTIC_JWT_PRIVATE_JWK;
   delete process.env.BACI_WORKER_PROFILE;
@@ -56,6 +57,63 @@ describe('env validation', () => {
       'SUPABASE_AGENTIC_JWT_PRIVATE_JWK'
     );
   }, 60_000);
+
+  it('includes normalized autocomplete credentials in the validated server environment', async () => {
+    vi.stubEnv('GEOAPIFY_API_KEY', ' geo-test-key ');
+    vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL',
+      ' https://redis.example.com '
+    );
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', ' counter-test-token ');
+    const { env } = await loadEnvModule();
+    expect(env).toMatchObject({
+      GEOAPIFY_API_KEY: 'geo-test-key',
+      ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: 'https://redis.example.com',
+      ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: 'counter-test-token',
+    });
+  });
+
+  it('rejects malformed autocomplete Redis URLs during production validation', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'valid-test-signing-secret');
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_URL', 'not-a-url');
+    await expect(loadEnvModule()).rejects.toThrow(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL'
+    );
+  });
+
+  it.each([
+    ['https://redis.example.com', ''],
+    ['', 'counter-test-token'],
+    ['https://redis.example.com', '   '],
+  ])('rejects a partial autocomplete Redis pair %s/%s', async (url, token) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'valid-test-signing-secret');
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_URL', url);
+    vi.stubEnv('ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN', token);
+    await expect(loadEnvModule()).rejects.toThrow(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST'
+    );
+  });
+
+  it('excludes autocomplete secrets from client environment exports', async () => {
+    vi.stubGlobal('window', {});
+    vi.stubEnv('GEOAPIFY_API_KEY', 'private-test-key');
+    vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL',
+      'https://redis.example.com'
+    );
+    vi.stubEnv(
+      'ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN',
+      'private-counter-token'
+    );
+    const { env } = await loadEnvModule();
+    expect(env.GEOAPIFY_API_KEY).toBeUndefined();
+    expect(env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL).toBeUndefined();
+    expect(env.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN).toBeUndefined();
+  });
 
   it('treats whitespace-only Supabase JWT signing material as missing', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -1103,6 +1161,18 @@ describe('env quiz validation', () => {
     expect(env.QUIZ_PRODUCTION_APPROVED).toBe(false);
   });
 
+  it('requires the proof secret for negotiated checkout in production phase 1a', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('SUPABASE_JWT_SECRET', 'jwt-secret');
+    vi.stubEnv('QUIZ_PHASE', '1a');
+    delete process.env.QUIZ_RPC_SERVER_SECRET;
+
+    await expect(loadEnvModule()).rejects.toThrow(
+      /QUIZ_RPC_SERVER_SECRET is required in production for negotiated checkout proofs/
+    );
+  });
+
   it('accepts production quiz phase and truthy production approval aliases', async () => {
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'yes');
@@ -1361,5 +1431,39 @@ describe('recovery-code env', () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubGlobal('window', {} as unknown as Window & typeof globalThis);
     expect(() => getRecoveryCodePepper()).toThrow(/client/i);
+  });
+
+  it('reads the PiggyVest secret from the validated key', async () => {
+    vi.stubEnv('PIGGYVEST_SECRET_KEY', '  pv-secret  ');
+    const { getPiggyvestWebhookSecret } = await loadEnvModule();
+
+    expect(getPiggyvestWebhookSecret()).toBe('pv-secret');
+  });
+
+  it('falls back to the legacy PVB secret name', async () => {
+    delete process.env.PIGGYVEST_SECRET_KEY;
+    vi.stubEnv('PVB_SECRET_KEY', 'pv-legacy-secret');
+    const { getPiggyvestWebhookSecret } = await loadEnvModule();
+
+    expect(getPiggyvestWebhookSecret()).toBe('pv-legacy-secret');
+  });
+
+  it('returns no PiggyVest API config without a secret', async () => {
+    delete process.env.PIGGYVEST_SECRET_KEY;
+    delete process.env.PVB_SECRET_KEY;
+    const { getPiggyvestApiConfig } = await loadEnvModule();
+
+    expect(getPiggyvestApiConfig()).toBeNull();
+  });
+
+  it('builds the PiggyVest API config from the secret', async () => {
+    vi.stubEnv('PIGGYVEST_SECRET_KEY', 'pv-secret');
+    vi.stubEnv('PIGGYVEST_API_BASE_URL', 'https://staging.example.com');
+    const { getPiggyvestApiConfig } = await loadEnvModule();
+
+    expect(getPiggyvestApiConfig()).toEqual({
+      baseUrl: 'https://staging.example.com',
+      token: 'pv-secret',
+    });
   });
 });

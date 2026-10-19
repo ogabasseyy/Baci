@@ -1,8 +1,13 @@
 import path from 'node:path';
-import { withPostHogConfig } from '@posthog/nextjs-config';
 import type { NextConfig } from 'next';
+import { builderPreviewRouteHeaders } from './src/config/builder-preview-route-headers';
+import { CACHE_LIFE_PROFILES } from './src/config/cache-life-profiles';
+import { composePostHogNextConfig } from './src/config/compose-posthog-next-config';
 import { OGABASSEY_DOCUMENT_LINK_HEADER_VALUE } from './src/config/early-hints-link-header';
+import { getHostedDraftStandaloneOutput } from './src/config/hosted-draft-standalone-output';
 import { applyNextDeploymentIdEnv } from './src/config/next-deployment-id';
+import { IMMUTABLE_NEXT_STATIC_ASSET_HEADERS } from './src/config/next-static-asset-headers';
+import { applyPilotPublicGate } from './src/config/pilot-next-gate';
 import { STATIC_GENERATION_LIMITS } from './src/config/static-generation';
 import {
   STOREFRONT_METADATA_BLOCKING_BOT_USER_AGENT_REGEX,
@@ -17,6 +22,12 @@ import {
   getPostHogUiHost,
   isPostHogSourceMapUploadEnabled,
 } from './src/lib/posthog/config';
+
+// Public assets bypass route guards; refuse non-lab builds with staged
+// data. The gate runs inside the exported config function (below),
+// keyed on the phase Next itself passes — never at module top level,
+// so importing this file (typegen, tests, tooling) has no gate side
+// effects and programmatic builds are covered exactly like CLI ones.
 
 // Keep this as an explicit static-asset suffix list. A generic dotted-path
 // exclusion drops valid HTML routes such as `/products/iphone-v1.2`.
@@ -106,6 +117,7 @@ function getPostHogRewriteRules() {
 }
 
 const nextConfig: NextConfig = {
+  ...getHostedDraftStandaloneOutput(process.env),
   deploymentId: NEXT_DEPLOYMENT_ID,
   env: POSTHOG_PUBLIC_BUILD_ENV,
 
@@ -162,32 +174,9 @@ const nextConfig: NextConfig = {
   },
 
   // Custom cache profiles for 'use cache' + cacheLife()
-  cacheLife: {
-    // Merchant data: revalidate every 60s, serve stale up to 5min, expire after 1hr
-    merchant: { stale: 300, revalidate: 60, expire: 3600 },
-    // Product catalog: revalidate every 5min, serve stale up to 5min, expire after 24hr
-    products: { stale: 300, revalidate: 300, expire: 86400 },
-    // Storefront pages (terms, FAQ, about): revalidate every 5min, stale 1min, expire 1hr
-    'storefront-page': { stale: 60, revalidate: 300, expire: 3600 },
-    // Categories: rarely change, revalidate every 1hr, expire after 24hr.
-    // Also used by large tag-invalidated remote entries keyed per category
-    // (e.g. getCachedProductSemanticInventory) where the hourly window only
-    // bounds staleness if tag revalidation fails to fire.
-    categories: { stale: 300, revalidate: 3600, expire: 86400 },
-    // Blog posts: near-static content invalidated on edit via cacheTag (see
-    // lib/cache-revalidation.ts). For LOCAL Cache Components entries
-    // (`'use cache'`, not remote), cross-instance tag eviction isn't
-    // guaranteed — the revalidate window therefore also bounds how long an
-    // edited/deleted post (or a cached missing-slug lookup) can be served on a
-    // warm instance. REMOTE entries on this profile (`'use cache: remote'`,
-    // e.g. getPublishedClusterPosts) do get cross-instance tag eviction, so
-    // for them the hourly window purely reduces re-render/cache-write churn.
-    // Hourly revalidation kills the 60s re-render storm under crawler load
-    // (~60x fewer renders) while keeping worst-case staleness bounded to an
-    // hour; `stale` stays short since the cost win is `revalidate`, not
-    // `stale`.
-    blog: { stale: 300, revalidate: 3600, expire: 86400 },
-  },
+  // Mutations target tags/paths; these profiles bound delayed or missed
+  // invalidation while reducing repeat rendering and cache writes.
+  cacheLife: CACHE_LIFE_PROFILES,
 
   // Fix Vercel middleware tracing issue with Next.js 16
   // See: https://github.com/vercel/next.js/issues/71818
@@ -673,6 +662,7 @@ const nextConfig: NextConfig = {
   // Security headers
   headers() {
     return [
+      ...builderPreviewRouteHeaders,
       {
         source: HTML_DOCUMENT_ROUTE_SOURCE,
         headers: [
@@ -684,6 +674,9 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      ...(process.env.NODE_ENV === 'production'
+        ? [IMMUTABLE_NEXT_STATIC_ASSET_HEADERS]
+        : []),
       {
         source: OGABASSEY_GENERIC_DOCUMENT_ROUTE_SOURCE,
         has: [{ type: 'host', value: OGABASSEY_DOCUMENT_HOST_MATCHER }],
@@ -740,26 +733,41 @@ const nextConfig: NextConfig = {
   },
 };
 
-function applyPostHogConfig(config: NextConfig): NextConfig {
-  if (
-    !POSTHOG_SOURCE_MAP_UPLOAD_ENABLED ||
-    !POSTHOG_SOURCE_MAP_API_KEY ||
-    !POSTHOG_SOURCE_MAP_PROJECT_ID
-  ) {
-    return config;
-  }
+// Composed once at import, exactly like the object form this replaced:
+// the exported function runs the phase-scoped gate and resolves this
+// value, so repeated evaluations never re-wrap the PostHog config.
+const composedConfig = composePostHogNextConfig(
+  nextConfig,
+  POSTHOG_SOURCE_MAP_UPLOAD_ENABLED &&
+    POSTHOG_SOURCE_MAP_API_KEY &&
+    POSTHOG_SOURCE_MAP_PROJECT_ID
+    ? {
+        personalApiKey: POSTHOG_SOURCE_MAP_API_KEY,
+        projectId: POSTHOG_SOURCE_MAP_PROJECT_ID,
+        host: getPostHogUiHost(),
+        sourcemaps: {
+          enabled: true,
+          releaseName: 'baci-web',
+          releaseVersion: getPostHogReleaseVersion(),
+          deleteAfterUpload: true,
+        },
+      }
+    : undefined
+);
 
-  return withPostHogConfig(config, {
-    personalApiKey: POSTHOG_SOURCE_MAP_API_KEY,
-    projectId: POSTHOG_SOURCE_MAP_PROJECT_ID,
-    host: getPostHogUiHost(),
-    sourcemaps: {
-      enabled: true,
-      releaseName: 'baci-web',
-      releaseVersion: getPostHogReleaseVersion(),
-      deleteAfterUpload: true,
-    },
-  });
+// Function form so the pilot gate reads Next's own phase signal:
+// PHASE_PRODUCTION_BUILD asserts, dev/start stash for the boot gate,
+// and every other phase (test, info, tooling imports that never call
+// this) skips the gate entirely. argv sniffing cannot cover
+// programmatic builds, and process.env.NEXT_PHASE is unset at config
+// time (Next assigns it late in the build, after loadConfig), so the
+// phase parameter is the only truthful signal here. Forward Next's
+// context to the optional PostHog function; the default keeps direct
+// tooling callers compatible when they provide only the phase.
+export default function pilotNextConfig(
+  phase: string,
+  context?: { defaultConfig: NextConfig }
+): NextConfig | Promise<NextConfig> {
+  applyPilotPublicGate(__dirname, phase);
+  return composedConfig(phase, context);
 }
-
-export default applyPostHogConfig(nextConfig);

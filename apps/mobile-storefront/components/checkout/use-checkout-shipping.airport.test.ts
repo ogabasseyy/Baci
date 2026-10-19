@@ -4,10 +4,14 @@ import type { UseFormSetValue } from 'react-hook-form';
 import type { ShippingAddressInput } from '@/lib/validation';
 import type { CartItem } from '@/stores/cart-store';
 import type { FetchQuotesArgs } from './checkout-shipping.helpers';
+import { loadShippingCities } from './checkout-shipping-loaders';
 import { useCheckoutShipping } from './use-checkout-shipping';
 
 const mockFetchShippingQuotes =
   jest.fn<(args: FetchQuotesArgs) => Promise<void>>();
+const mockedLoadShippingCities = loadShippingCities as jest.MockedFunction<
+  typeof loadShippingCities
+>;
 
 jest.mock('./checkout-shipping-loaders', () => ({
   loadShippingCities: jest.fn(),
@@ -48,6 +52,74 @@ describe('useCheckoutShipping airport switching', () => {
       args.setResolvedShippingQuoteContextKey(args.quoteContextKey);
       args.setIsLoadingQuotes(false);
       return Promise.resolve();
+    });
+  });
+
+  it('restores a deferred Google city when the carrier city list is unavailable', () => {
+    const setValue = jest.fn() as jest.MockedFunction<
+      UseFormSetValue<ShippingAddressInput>
+    >;
+    const { result } = renderHook(() =>
+      useCheckoutShipping({
+        apiBaseUrl: 'https://api.example.com',
+        customer: null,
+        items,
+        setValue,
+        watchedAddress: '',
+        watchedCity: '',
+        watchedEmail: 'customer@example.com',
+        watchedFirstName: 'Ada',
+        watchedLastName: 'Lovelace',
+        watchedPhone: '08012345678',
+        watchedState: 'Lagos',
+      })
+    );
+
+    act(() => {
+      result.current.handleDeliveryAddressSelect(
+        {
+          city: 'Lagos',
+          country: 'Nigeria',
+          formattedAddress: '2 Olaide Tomori St, Ikeja, Lagos, Nigeria',
+          latitude: 6.6018,
+          longitude: 3.3515,
+          route: 'Olaide Tomori St',
+          state: 'Lagos',
+          streetNumber: '2',
+          zip: '101233',
+        },
+        jest.fn()
+      );
+    });
+
+    const loadParams = mockedLoadShippingCities.mock.calls.at(-1)?.[0];
+    expect(loadParams).toBeDefined();
+    act(() => loadParams?.onCitiesUnavailable());
+
+    expect(setValue).toHaveBeenLastCalledWith('city', 'Lagos', {
+      shouldValidate: true,
+    });
+
+    setValue.mockClear();
+    act(() => {
+      result.current.handleDeliveryAddressSelect(
+        {
+          city: 'Lagos',
+          country: 'Nigeria',
+          formattedAddress: '3 Allen Avenue, Ikeja, Lagos, Nigeria',
+          latitude: 6.601,
+          longitude: 3.351,
+          route: 'Allen Avenue',
+          state: 'Lagos',
+          streetNumber: '3',
+          zip: '101233',
+        },
+        jest.fn()
+      );
+    });
+
+    expect(setValue).toHaveBeenCalledWith('city', 'Lagos', {
+      shouldValidate: true,
     });
   });
 
@@ -141,5 +213,53 @@ describe('useCheckoutShipping airport switching', () => {
     expect(result.current.shippingQuotes).toEqual([
       expect.objectContaining({ id: 'air-quote', serviceTier: 'GoFaster' }),
     ]);
+  });
+
+  it('falls back to door for same-city Lagos even with a GIGL GoFaster quote', async () => {
+    mockFetchShippingQuotes.mockImplementation((args) => {
+      args.setShippingQuotes([
+        {
+          displayName: 'GIG Logistics - GoStandard',
+          id: 'road-quote',
+          price: 3500,
+          provider: 'GIGL',
+        },
+        {
+          displayName: 'GIG Logistics - GoFaster',
+          id: 'air-quote',
+          price: 3500,
+          provider: 'GIGL',
+          serviceTier: 'GoFaster',
+        },
+      ]);
+      args.setSelectedQuoteId('road-quote');
+      args.setResolvedShippingQuoteContextKey(args.quoteContextKey);
+      return Promise.resolve();
+    });
+    const setValue = jest.fn() as jest.MockedFunction<
+      UseFormSetValue<ShippingAddressInput>
+    >;
+    const { result } = renderHook(() =>
+      useCheckoutShipping({
+        apiBaseUrl: 'https://api.example.com',
+        customer: null,
+        items,
+        setValue,
+        watchedAddress: '2 Olaide Tomori St, Ikeja, Lagos',
+        watchedCity: 'Ikeja',
+        watchedEmail: 'customer@example.com',
+        watchedFirstName: 'Ada',
+        watchedLastName: 'Lovelace',
+        watchedPhone: '08012345678',
+        watchedState: 'Lagos',
+      })
+    );
+
+    await waitFor(() =>
+      expect(result.current.selectedQuoteId).toBe('road-quote')
+    );
+    act(() => result.current.handleSelectDeliveryMethod('airport'));
+
+    expect(result.current.deliveryMethod).toBe('door');
   });
 });

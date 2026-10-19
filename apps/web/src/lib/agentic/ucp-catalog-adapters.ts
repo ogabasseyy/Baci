@@ -25,11 +25,11 @@ export type UcpCatalogProductRow = {
   category?: string | null;
   categories?: { is_active?: boolean | null; slug?: string | null } | null;
   description?: string | null;
-  id: string;
+  id?: string | null;
   images?: unknown;
   manage_stock?: boolean | null;
   merchant_id: string;
-  name: string;
+  name?: string | null;
   price?: number | string | null;
   product_categories?: Array<{
     category_id?: string | null;
@@ -89,7 +89,15 @@ export function mapUcpCatalogProductRow({
   baseUrl: string;
   currency: string;
   row: UcpCatalogProductRow;
-}) {
+}): UcpCatalogProduct | null {
+  const numericPrice = toFiniteNonNegativeNumber(row.price);
+  const trimmedId = typeof row.id === 'string' ? row.id?.trim() : undefined;
+  const trimmedName =
+    typeof row.name === 'string' ? row.name?.trim() : undefined;
+  if (numericPrice === null || !trimmedId || !trimmedName) {
+    return null;
+  }
+
   const manageStock = coerceStorefrontManageStock(row.manage_stock);
   const availability = getStorefrontAgentAvailability({
     manage_stock: manageStock,
@@ -100,19 +108,19 @@ export function mapUcpCatalogProductRow({
   return mapStorefrontProductToUcpCatalogProduct({
     currency,
     description: row.description,
-    id: row.id,
+    id: trimmedId,
     image_url: extractPrimaryImageUrl(row.images),
     in_stock: availability.is_purchasable,
-    name: row.name,
-    price: toIntegerAmount(row.price),
+    name: trimmedName,
+    price: numericPrice,
     product_url: buildAgentProductUrl({
       baseUrl,
       product: {
         canonical_url: row.canonical_url ?? null,
         category: row.category ?? null,
         categories: resolveStorefrontProductCategory(row),
-        id: row.id,
-        name: row.name,
+        id: trimmedId,
+        name: trimmedName,
         slug: row.slug ?? undefined,
       },
     }),
@@ -180,17 +188,17 @@ function extractPrimaryImageUrl(images: unknown): string | null {
   return null;
 }
 
-function toIntegerAmount(value: number | string | null | undefined): number {
+function toFiniteNonNegativeNumber(
+  value: number | string | null | undefined
+): number | null {
   const numericValue =
     typeof value === 'number'
       ? value
-      : typeof value === 'string'
-        ? Number.parseFloat(value)
-        : 0;
+      : typeof value === 'string' && value.trim()
+        ? Number(value.trim())
+        : Number.NaN;
 
-  if (!Number.isFinite(numericValue)) {
-    return 0;
-  }
-
-  return Math.max(0, Math.round(numericValue));
+  return Number.isFinite(numericValue) && numericValue >= 0
+    ? Math.round(numericValue)
+    : null;
 }

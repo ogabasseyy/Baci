@@ -10,10 +10,10 @@ export const WEB_PRODUCT_COLUMNS_PUBLIC =
   'id, created_at, updated_at, merchant_id, name, description, price, compare_at_price, stock, stock_quantity, manage_stock, low_stock_threshold, sku, slug, status, condition, condition_detail, brand, category, color, has_variants, variant_model, migration_status, default_variant_id, available_conditions, has_condition_offers, min_variant_price, max_variant_price, images, image_hint, weight_value, weight_unit, dimensions, taxable, tax_code, meta_title, meta_description, keywords, canonical_url, schema_markup, gtin, mpn, google_product_category, inventory_tracking_policy';
 
 export const WEB_PRODUCT_VARIANT_COLUMNS =
-  'id, created_at, updated_at, product_id, merchant_id, condition, attributes, price_override, cost_price, stock_quantity, sku, primary_image, images, inventory_tracking_policy';
+  'id, created_at, updated_at, product_id, merchant_id, condition, attributes, price_override, cost_price, stock_quantity, sku, primary_image, images, inventory_tracking_policy, is_inventory_anchor';
 
 export const WEB_PRODUCT_VARIANT_COLUMNS_PUBLIC =
-  'id, created_at, updated_at, product_id, merchant_id, condition, attributes, price_override, stock_quantity, sku, primary_image, images, inventory_tracking_policy';
+  'id, created_at, updated_at, product_id, merchant_id, condition, attributes, price_override, stock_quantity, sku, primary_image, images, inventory_tracking_policy, is_inventory_anchor';
 
 export const WEB_PRODUCT_WITH_VARIANTS_QUERY = `${WEB_PRODUCT_COLUMNS}, variants:product_variants!product_variants_product_id_fkey(${WEB_PRODUCT_VARIANT_COLUMNS})`;
 

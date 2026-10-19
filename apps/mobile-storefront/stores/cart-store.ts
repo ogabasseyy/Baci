@@ -1,12 +1,21 @@
+import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { checkoutGenerationRestoreGate } from '@/lib/checkout-generation-restore-gate';
+import { CONFIG } from '@/lib/config';
+import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
+import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
+import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
 import {
   createCartLineId,
   isSameCartLine,
   mergeExistingCartItem,
 } from './cart-line';
 import type { CartItem } from './cart-store.types';
+import { createCheckoutGenerationActions } from './cart-store-generation-actions';
+import { mergeCartStore } from './cart-store-merge';
+import { createCartNegotiationActions } from './cart-store-negotiation-actions';
 import {
   applyReprice,
   clearGroupNegotiation,
@@ -14,6 +23,12 @@ import {
   selectCartQuantities,
 } from './cart-store-selectors';
 import type { CartState } from './cart-store-state';
+import { partializeCartStore } from './partialize-cart-store';
+import { rotateEmptyCheckoutCart } from './rotate-empty-checkout-cart';
+import {
+  forwardSharedCartWrite,
+  hasSharedCartWriter,
+} from './shared-cart-writer';
 
 export type { CartItem } from './cart-store.types';
 export { formatPrice, selectCartQuantities };
@@ -27,25 +42,20 @@ export function resetCartLineSequence() {
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
-      // Initial state
       items: [],
       isLoading: false,
       lineSequence: 0,
+      checkoutGeneration: 'legacy',
       cartWideNegotiationActive: false,
 
-      // Computed values
       itemCount: () => {
         return get().items.reduce((total, item) => total + item.quantity, 0);
       },
 
       subtotal: () => {
         return get().items.reduce((total, item) => {
-          // Use negotiated price if available (matches web behavior)
           const effectivePrice = item.negotiatedPrice ?? item.price;
-          const itemTotal = effectivePrice * item.quantity;
-          // Assurance is calculated separately in UI/checkout layer
-          // DO NOT include assurance here to avoid double-counting
-          return total + itemTotal;
+          return total + effectivePrice * item.quantity;
         }, 0);
       },
 
@@ -58,23 +68,31 @@ export const useCartStore = create<CartState>()(
         }, 0);
       },
 
-      // Add item to cart
       addItem: (item) => {
+        const forwarded = forwardSharedCartWrite({ type: 'add', item });
+        if (forwarded) return;
         set((state) => {
           const itemToAdd =
             item.voucher_token || item.voucher_award_id
               ? { ...item, quantity: 1 }
               : item;
 
-          // Check if item already exists (same product + variant + options)
           const existingIndex = state.items.findIndex((existingItem) =>
             isSameCartLine(existingItem, itemToAdd)
           );
 
+          const checkoutGeneration =
+            state.items.length === 0
+              ? state.checkoutGeneration === 'legacy'
+                ? mintedCheckoutGenerations.register(Crypto.randomUUID())
+                : state.checkoutGeneration
+              : state.checkoutGeneration;
+          if (state.items.length === 0) {
+            persistCheckoutGenerationDetached(checkoutGeneration);
+          }
           let items: CartItem[];
           let lineSequence = state.lineSequence;
           if (existingIndex >= 0) {
-            // Refresh cart metadata from the latest add while preserving cart-only state.
             items = [...state.items];
             items[existingIndex] = mergeExistingCartItem(
               items[existingIndex],
@@ -88,85 +106,96 @@ export const useCartStore = create<CartState>()(
             ];
           }
 
-          // Adding or merging a line changes the cart composition, so an active
-          // cart-wide negotiation no longer represents the agreed total — reset
-          // it (and the newly added units never inherit a stale group share).
           if (state.cartWideNegotiationActive) {
             return {
               items: clearGroupNegotiation(items),
               lineSequence,
+              checkoutGeneration,
               cartWideNegotiationActive: false,
             };
           }
 
-          return { items, lineSequence };
+          return { items, lineSequence, checkoutGeneration };
         });
       },
 
-      // Remove item from cart
-      removeItem: (id) => {
-        set((state) => {
-          const items = state.items.filter((item) => item.id !== id);
-
-          // Removing a line breaks any cart-wide negotiated total, so reset the
-          // group deal and revert remaining lines to catalog price.
-          if (state.cartWideNegotiationActive) {
-            return {
-              items: clearGroupNegotiation(items),
-              cartWideNegotiationActive: false,
-            };
-          }
-
-          return { items };
-        });
-      },
-
-      // Update item quantity
-      updateQuantity: (id, quantity) => {
-        set((state) => {
-          if (quantity <= 0) {
-            const items = state.items.filter((item) => item.id !== id);
-            if (state.cartWideNegotiationActive) {
-              return {
-                items: clearGroupNegotiation(items),
-                cartWideNegotiationActive: false,
-              };
-            }
-            return { items };
-          }
-
-          const items = state.items.map((item) => {
-            if (item.id !== id) return item;
-
-            // Respect max quantity if set
-            const newQuantity = item.max_quantity
-              ? Math.min(quantity, item.max_quantity)
-              : quantity;
-
-            return { ...item, quantity: newQuantity };
+      removeItem: async (id) => {
+        const forwarded = forwardSharedCartWrite({ type: 'remove', id });
+        if (forwarded) return await forwarded;
+        const state = get();
+        const items = state.items.filter((item) => item.id !== id);
+        if (items.length === 0) {
+          await rotateEmptyCheckoutCart(set, {
+            previousGeneration: state.checkoutGeneration,
+            retainCreditSnapshot: false,
           });
+          return;
+        }
+        if (state.cartWideNegotiationActive) {
+          set({
+            items: clearGroupNegotiation(items),
+            cartWideNegotiationActive: false,
+          });
+          return;
+        }
+        set({ items });
+      },
 
-          // A quantity change alters the cart total, so an active cart-wide
-          // negotiation (one agreed total distributed across lines) no longer
-          // holds — reset it instead of applying the old per-unit deal to the
-          // new quantity.
+      updateQuantity: async (id, quantity) => {
+        const forwarded = forwardSharedCartWrite({
+          type: 'quantity',
+          id,
+          quantity,
+        });
+        if (forwarded) return await forwarded;
+        const state = get();
+        if (quantity <= 0) {
+          const items = state.items.filter((item) => item.id !== id);
+          if (items.length === 0) {
+            await rotateEmptyCheckoutCart(set, {
+              previousGeneration: state.checkoutGeneration,
+              retainCreditSnapshot: false,
+            });
+            return;
+          }
           if (state.cartWideNegotiationActive) {
-            return {
+            set({
               items: clearGroupNegotiation(items),
               cartWideNegotiationActive: false,
-            };
+            });
+            return;
           }
+          set({ items });
+          return;
+        }
 
-          return { items };
+        const items = state.items.map((item) => {
+          if (item.id !== id) return item;
+          const newQuantity = item.max_quantity
+            ? Math.min(quantity, item.max_quantity)
+            : quantity;
+          return { ...item, quantity: newQuantity };
+        });
+
+        if (state.cartWideNegotiationActive) {
+          set({
+            items: clearGroupNegotiation(items),
+            cartWideNegotiationActive: false,
+          });
+          return;
+        }
+        set({ items });
+      },
+
+      clearCart: async () => {
+        const forwarded = forwardSharedCartWrite({ type: 'clear' });
+        if (forwarded) return await forwarded;
+        await rotateEmptyCheckoutCart(set, {
+          previousGeneration: get().checkoutGeneration,
+          retainCreditSnapshot: false,
         });
       },
 
-      // Clear all items
-      clearCart: () => {
-        set({ items: [], lineSequence: 0, cartWideNegotiationActive: false });
-      },
-
-      // Get specific item
       getItem: (productId, variantId) => {
         return get().items.find(
           (item) =>
@@ -174,95 +203,19 @@ export const useCartStore = create<CartState>()(
         );
       },
 
-      // Apply negotiated price to item (matches web feature parity).
-      // This is an individual-line negotiation, so the group flag is cleared —
-      // and if a cart-wide deal was active, the other lines' proportional group
-      // prices are cleared first so only the freshly negotiated line keeps one.
-      applyNegotiatedPrice: (id, negotiatedPrice) => {
-        set((state) => {
-          const base = state.cartWideNegotiationActive
-            ? clearGroupNegotiation(state.items)
-            : state.items;
-          return {
-            items: base.map((item) =>
-              item.id === id
-                ? {
-                    ...item,
-                    negotiatedPrice,
-                    negotiationStatus: 'accepted' as const,
-                  }
-                : item
-            ),
-            cartWideNegotiationActive: false,
-          };
-        });
-      },
+      ...createCartNegotiationActions(set, get),
 
-      // Apply negotiation to the whole cart (matches web behavior)
-      applyCartWideNegotiation: (newTotal) => {
-        const { items } = get();
-        const currentTotal = items.reduce((sum, item) => {
-          const price = item.negotiatedPrice ?? item.price;
-          return sum + price * item.quantity;
-        }, 0);
+      ...createCheckoutGenerationActions(set),
 
-        if (currentTotal <= 0) return;
-        const ratio = newTotal / currentTotal;
-
-        set((state) => ({
-          items: state.items.map((item) => {
-            const currentPrice = item.negotiatedPrice ?? item.price;
-            return {
-              ...item,
-              negotiatedPrice: Math.round(currentPrice * ratio),
-              negotiationStatus: 'accepted' as const,
-            };
-          }),
-          cartWideNegotiationActive: true,
-        }));
-      },
-
-      // Clear negotiated price from item
-      clearNegotiatedPrice: (id) => {
-        set((state) => ({
-          items: state.items.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  negotiatedPrice: undefined,
-                  negotiationStatus: undefined,
-                }
-              : item
-          ),
-          cartWideNegotiationActive: false,
-        }));
-      },
-
-      // Restore items directly (for rollback without generating new IDs).
-      // When a snapshot of the cart-wide flag is provided, restore it too so a
-      // rolled-back group deal keeps its lines and active flag in sync.
-      restoreItems: (items, cartWideNegotiationActive) => {
-        set(
-          cartWideNegotiationActive === undefined
-            ? { items }
-            : { items, cartWideNegotiationActive }
-        );
-      },
-
-      // Reconcile line prices from live catalog values keyed by cart line id.
-      // When a base price actually changes, any prior negotiation was made
-      // against a stale basis and would be rejected at checkout, so it is
-      // cleared — the shopper re-negotiates against the current price.
-      // Reconcile line prices from live catalog values (see applyReprice):
-      // honors the ±₦1 tolerance and resets any active cart-wide group deal.
       repriceItems: (priceById) => {
+        const forwarded = forwardSharedCartWrite({ type: 'legacy_reprice' });
+        if (forwarded) return;
         set((state) => applyReprice(state, priceById));
       },
 
-      // Toggle device assurance for item
-      // Only stores a boolean flag; the actual fee is computed at checkout
-      // using the item's current effective price (negotiatedPrice ?? price).
       toggleAssurance: (id) => {
+        const forwarded = forwardSharedCartWrite({ type: 'assurance', id });
+        if (forwarded) return;
         set((state) => ({
           items: state.items.map((item) =>
             item.id === id
@@ -277,12 +230,34 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'cart-storage',
+      merge: (persisted, current) =>
+        mergeCartStore(
+          persisted,
+          current,
+          CONFIG.MERCHANT_ID,
+          hasSharedCartWriter()
+        ),
       storage: createJSONStorage(() => syncStorage),
-      partialize: (state) => ({
-        items: state.items,
-        lineSequence: state.lineSequence,
-        cartWideNegotiationActive: state.cartWideNegotiationActive,
-      }),
+      partialize: partializeCartStore,
+      onRehydrateStorage: () => (state) => {
+        const generationWhenReadBegan = state?.checkoutGeneration ?? 'legacy';
+        checkoutGenerationRestoreGate.noteRestoreStarted(
+          applyPersistedCheckoutGeneration(
+            (checkoutGeneration) => {
+              checkoutGenerationRestoreGate.noteRestoredGeneration(
+                checkoutGeneration
+              );
+              if (!hasSharedCartWriter())
+                useCartStore.setState({ checkoutGeneration });
+            },
+            {
+              generationWhenReadBegan,
+              getLiveGeneration: () =>
+                useCartStore.getState().checkoutGeneration,
+            }
+          )
+        );
+      },
     }
   )
 );

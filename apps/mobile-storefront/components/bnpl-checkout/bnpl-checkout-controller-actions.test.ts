@@ -10,15 +10,105 @@ jest.mock('./bnpl-checkout-message-handler', () => ({
 }));
 
 describe('resolveBNPLNavigationUrlEffect', () => {
+  const trustedBase = { apiBaseUrl: 'https://shop.example.com' };
+
   it('returns success with the extracted reference for order success URLs', () => {
     expect(
       resolveBNPLNavigationUrlEffect(
-        'https://shop.example.com/order-success?reference=ref_123'
+        'https://shop.example.com/order-success?reference=ref_123',
+        trustedBase
       )
     ).toEqual({
+      isPending: false,
       reference: 'ref_123',
       status: 'success',
     });
+  });
+
+  it('marks accepted-but-pending CredPal results as non-paid success', () => {
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?type=credpal&credpalStatus=pending',
+        trustedBase
+      )
+    ).toEqual({
+      isPending: true,
+      reference: null,
+      status: 'success',
+    });
+  });
+
+  it('treats a CredPal return without a status as pending, not paid', () => {
+    // The launcher omits credpalStatus when the runtime payload supplies
+    // none: without an explicit success this must not consume the durable
+    // completion claim.
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?type=credpal',
+        { ...trustedBase, gateway: 'credpal' }
+      )
+    ).toEqual({
+      isPending: true,
+      reference: null,
+      status: 'success',
+    });
+  });
+
+  it('treats an unrecognized CredPal status as pending, not paid', () => {
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?type=credpal&credpalStatus=approved',
+        { ...trustedBase, gateway: 'credpal' }
+      )
+    ).toEqual({
+      isPending: true,
+      reference: null,
+      status: 'success',
+    });
+  });
+
+  it('treats approved CredPal results as paid success', () => {
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?type=credpal&credpalStatus=success',
+        trustedBase
+      )
+    ).toEqual({
+      isPending: false,
+      reference: null,
+      status: 'success',
+    });
+  });
+
+  it('treats every Klump return as pending until the tracked order settles', () => {
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://shop.example.com/order-success?reference=klump_tx_1',
+        { ...trustedBase, gateway: 'klump' }
+      )
+    ).toEqual({
+      isPending: true,
+      reference: 'klump_tx_1',
+      status: 'success',
+    });
+  });
+
+  it('ignores success-looking URLs outside the trusted return origin', () => {
+    // A provider/intermediate page carrying /order-success must not
+    // consume the durable completion claim: main-document navigation is
+    // not pre-gated like bridge messages.
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://pay.example-provider.com/order-success?reference=Evil-1',
+        { apiBaseUrl: 'https://usebaci.com', gateway: 'credpal' }
+      )
+    ).toBeNull();
+    expect(
+      resolveBNPLNavigationUrlEffect(
+        'https://pay.example-provider.com/checkout?success=true',
+        { apiBaseUrl: 'https://usebaci.com', gateway: 'credpal' }
+      )
+    ).toBeNull();
   });
 
   it('returns to the app for checkout cancellation URLs', () => {

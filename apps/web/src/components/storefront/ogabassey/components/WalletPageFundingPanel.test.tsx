@@ -7,6 +7,10 @@ import { WalletPageFundingPanel } from './WalletPageFundingPanel';
 
 const capturedProps = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
 
+vi.mock('@/contexts/customer-auth-context', () => ({
+  useOptionalCustomerAuth: () => null,
+}));
+
 vi.mock('./WalletFundingPanel', () => ({
   WalletFundingPanel: (props: Record<string, unknown>) => {
     capturedProps.current = props;
@@ -51,11 +55,12 @@ describe('WalletPageFundingPanel', () => {
     expect(props?.surface).toBe(
       WALLET_FUNDING_TELEMETRY.surfaces.walletPage
     );
-    // Consent is required only when the flags AND a usable phone all line up.
+    // The panel owns the point-of-need phone collection, so the consent gate
+    // remains enabled when the DVA feature is available.
     expect(props?.requiresConsent).toBe(true);
   });
 
-  it('withholds consent when the customer has no usable phone', () => {
+  it('passes the no-phone state through so the panel can collect it at point of need', () => {
     render(
       <WalletPageFundingPanel
         customerId="customer-1"
@@ -67,7 +72,7 @@ describe('WalletPageFundingPanel', () => {
       />
     );
 
-    expect(capturedProps.current?.requiresConsent).toBe(false);
+    expect(capturedProps.current?.requiresConsent).toBe(true);
   });
 
   it('patches wallet state (clearing the consent flag) when an account is created', () => {

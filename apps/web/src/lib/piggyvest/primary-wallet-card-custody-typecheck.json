@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": ["node", "vitest/globals"],
+    "plugins": []
+  },
+  "include": [
+    "primary-wallet-card-*.ts",
+    "../../schemas/primary-wallet-card*.ts"
+  ]
+}

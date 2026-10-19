@@ -584,6 +584,31 @@ describe('merchantFeatureSettingsSchema', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects a provider that has no live carrier integration', () => {
+      const invalidSettings = {
+        ...createValidFeatureSettings(),
+        shipping_providers: ['shiip'],
+      };
+
+      expect(
+        merchantFeatureSettingsSchema.safeParse(invalidSettings).success
+      ).toBe(false);
+    });
+
+    it('rejects duplicate shipping providers', () => {
+      // Arrange
+      const invalidSettings = {
+        ...createValidFeatureSettings(),
+        shipping_providers: ['gigl', 'gigl'],
+      };
+
+      // Act
+      const result = merchantFeatureSettingsSchema.safeParse(invalidSettings);
+
+      // Assert
+      expect(result.success).toBe(false);
+    });
+
     it('rejects array where object expected', () => {
       // Arrange
       const invalidSettings = {

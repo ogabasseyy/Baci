@@ -3,6 +3,7 @@ type PlanTier = 'free' | 'starter' | 'pro' | 'business' | 'enterprise';
 export type MobileFeatureGate =
   | 'advanced_analytics'
   | 'custom_domain'
+  | 'custom_email_domain'
   | 'growth_integrations'
   | 'marketplace_sync'
   | 'product_limit';
@@ -28,6 +29,7 @@ const PAID_PLAN_TIERS = new Set<PlanTier>(['pro', 'business', 'enterprise']);
 const FEATURE_PLAN_TIERS: Record<MobileFeatureGate, Set<PlanTier>> = {
   advanced_analytics: PAID_PLAN_TIERS,
   custom_domain: new Set(['starter', 'pro', 'business', 'enterprise']),
+  custom_email_domain: PAID_PLAN_TIERS,
   growth_integrations: PAID_PLAN_TIERS,
   marketplace_sync: PAID_PLAN_TIERS,
   product_limit: PAID_PLAN_TIERS,

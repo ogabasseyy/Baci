@@ -265,6 +265,8 @@ export function revalidateBlogPosts(
 
   for (const identifier of normalizedIdentifiers) {
     revalidatePath(`/${identifier}/blog`);
+    revalidatePath(`/${identifier}/blog/news-sitemap.xml`);
+    revalidatePath(`/${identifier}/blog/sitemap.xml`);
 
     for (const category of normalizedListingCategories) {
       for (const page of effectiveListingPages) {

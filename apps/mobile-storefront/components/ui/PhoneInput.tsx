@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useNativeInputDraft } from '@/hooks/use-native-input-draft';
 import { COUNTRIES, type Country } from './PhoneInput.countries';
 import { phoneInputStyles as styles } from './PhoneInput.styles';
 import { PhoneInputCountryPicker } from './PhoneInputCountryPicker';
@@ -64,21 +65,40 @@ export function PhoneInput({
     return value;
   };
 
+  const { displayValue, setDraft, clearDraft } = useNativeInputDraft(
+    value,
+    getLocalNumber()
+  );
+
   const handlePhoneChange = (text: string) => {
     // Sanitize: only digits
     let cleaned = text.replace(/[^0-9]/g, '');
 
-    // Strip leading zero for Nigerian numbers
-    if (selectedCountry.code === 'NG' && cleaned.startsWith('0')) {
-      cleaned = cleaned.slice(1);
+    if (selectedCountry.code === 'NG') {
+      // The input displays only the national number, but users commonly paste
+      // the complete +234/234 or 00 234 form. Strip that prefix before the
+      // controlled value is rebuilt so the country code is not duplicated.
+      if (cleaned.startsWith('00234')) {
+        cleaned = cleaned.slice(5);
+      } else if (cleaned.startsWith('234')) {
+        cleaned = cleaned.slice(3);
+      }
+      if (cleaned.startsWith('0')) {
+        cleaned = cleaned.slice(1);
+      }
     }
+    cleaned = cleaned.slice(0, selectedCountry.maxLength || 15);
 
     // Prepend country code
     const fullNumber = cleaned ? `${selectedCountry.dialCode}${cleaned}` : '';
+    // Preserve the exact native/autofill edit while UIKit owns the keyboard.
+    // The parent still receives the canonical international number immediately.
+    setDraft(text, fullNumber);
     onChangeText?.(fullNumber);
   };
 
   const handleCountrySelect = (country: Country) => {
+    clearDraft();
     setSelectedCountry(country);
     setShowCountryPicker(false);
     setSearchQuery('');
@@ -153,7 +173,7 @@ export function PhoneInput({
         {/* Phone Input */}
         <TextInput
           style={[styles.input, { color: colors.text }]}
-          value={getLocalNumber()}
+          value={displayValue}
           onChangeText={handlePhoneChange}
           placeholder={placeholder}
           placeholderTextColor={colors.placeholder}
@@ -161,9 +181,14 @@ export function PhoneInput({
           autoComplete="tel"
           textContentType="telephoneNumber"
           accessibilityLabel={label || 'Phone number'}
-          maxLength={selectedCountry.maxLength || 15}
+          // Native maxLength counts separators too. Limit canonical digits in
+          // handlePhoneChange so formatted autofill is accepted intact.
           returnKeyType={returnKeyType}
           {...props}
+          onBlur={(event) => {
+            clearDraft();
+            props.onBlur?.(event);
+          }}
         />
       </View>
 

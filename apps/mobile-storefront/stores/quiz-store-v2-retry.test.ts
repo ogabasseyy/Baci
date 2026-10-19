@@ -114,6 +114,98 @@ describe('quiz v2 store recovery', () => {
     expect(useQuizStore.getState().v2LifecycleStatus).toBe('pending_results');
   });
 
+  it('keeps terminal recovery until the final result is available', async () => {
+    await act(async () =>
+      useQuizStore
+        .getState()
+        .startEventV2(startContext, async () => activeAttempt)
+    );
+    await act(async () =>
+      useQuizStore.getState().expireActiveEvent(async () => ({
+        availability: 'pending_results',
+        eventEndsAt: activeAttempt.eventEndsAt,
+        serverNow: activeAttempt.serverNow,
+      }))
+    );
+
+    await expect(
+      loadQuizRecoveryEnvelope('user-1', 'event-1')
+    ).resolves.toMatchObject({ attemptId: 'attempt-1' });
+
+    await act(async () => {
+      useQuizStore.getState().setV2Result({
+        attemptId: 'attempt-1',
+        availability: 'final',
+        availableAt: '2026-08-04T12:06:00.000Z',
+        rank: 1,
+        score: 2,
+        totalQuestions: 2,
+      });
+      await Promise.resolve();
+    });
+
+    await expect(
+      loadQuizRecoveryEnvelope('user-1', 'event-1')
+    ).resolves.toBeNull();
+  });
+
+  it('retains terminal recovery while a final prize is still claimable', async () => {
+    await act(async () =>
+      useQuizStore
+        .getState()
+        .startEventV2(startContext, async () => activeAttempt)
+    );
+    await act(async () =>
+      useQuizStore.getState().expireActiveEvent(async () => ({
+        availability: 'pending_results',
+        eventEndsAt: activeAttempt.eventEndsAt,
+        serverNow: activeAttempt.serverNow,
+      }))
+    );
+
+    await act(async () => {
+      useQuizStore.getState().setV2Result({
+        attemptId: 'attempt-1',
+        availability: 'final',
+        availableAt: '2026-08-04T12:06:00.000Z',
+        prizeClaim: {
+          awardId: 'award-1',
+          cartPath: '/checkout',
+          condition: null,
+          productId: 'product-1',
+          variantId: null,
+          voucherToken: 'voucher-token',
+        },
+        rank: 1,
+        score: 2,
+        totalQuestions: 2,
+      });
+      await Promise.resolve();
+    });
+
+    await expect(
+      loadQuizRecoveryEnvelope('user-1', 'event-1')
+    ).resolves.toMatchObject({ attemptId: 'attempt-1' });
+  });
+
+  it('returns to the ready state when persisted recovery cannot reach the server', async () => {
+    await act(async () =>
+      useQuizStore.getState().recoverEvent(
+        'user-1',
+        'event-1',
+        async () => {
+          throw new Error('network down');
+        },
+        jest.fn()
+      )
+    );
+
+    expect(useQuizStore.getState()).toMatchObject({
+      error: 'network down',
+      status: 'ready',
+    });
+  });
+
   it('coalesces lifecycle reconciliation to 15 seconds and observes cancellation', async () => {
     await act(async () =>
       useQuizStore
@@ -149,5 +241,36 @@ describe('quiz v2 store recovery', () => {
       )
     );
     expect(useQuizStore.getState().v2LifecycleStatus).toBe('event_cancelled');
+  });
+  it('expiry_ignores_stale_submit_response', async () => {
+    // Arrange
+    await act(async () =>
+      useQuizStore
+        .getState()
+        .startEventV2(startContext, async () => activeAttempt)
+    );
+    let resolveSubmit!: (attempt: QuizV2Attempt) => void;
+    const submitPromise = new Promise<QuizV2Attempt>((resolve) => {
+      resolveSubmit = resolve;
+    });
+    const submitOperation = useQuizStore
+      .getState()
+      .lockAndSubmitAnswer('a', async () => submitPromise);
+    await act(async () => Promise.resolve());
+
+    // Act
+    await act(async () =>
+      useQuizStore.getState().expireActiveEvent(async () => ({
+        availability: 'pending_results',
+        eventEndsAt: activeAttempt.eventEndsAt,
+        serverNow: activeAttempt.serverNow,
+      }))
+    );
+    resolveSubmit({ ...activeAttempt, status: 'in_progress' });
+    await act(async () => submitOperation);
+
+    // Assert
+    expect(useQuizStore.getState().status).toBe('result');
+    expect(useQuizStore.getState().v2LifecycleStatus).toBe('pending_results');
   });
 });

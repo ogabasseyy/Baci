@@ -16,12 +16,10 @@ type BlogOgImageSize = {
 
 type BlogOgFallback = {
   element: ReactElement;
-  noStore: boolean;
 };
 
 type BlogOgResponseOptions = {
   size: BlogOgImageSize;
-  noStore?: boolean;
   fallback?: BlogOgFallback;
 };
 
@@ -36,26 +34,27 @@ function createEmergencyPngResponse() {
 
 async function renderImageResponse(
   element: ReactElement,
-  size: BlogOgImageSize,
-  noStore: boolean
+  size: BlogOgImageSize
 ) {
   const response = new ImageResponse(element, {
     ...size,
-    ...(noStore ? { headers: NO_STORE_HEADERS } : {}),
+    headers: NO_STORE_HEADERS,
   });
   const body = await response.arrayBuffer();
+  const headers = new Headers(response.headers);
+  headers.set('Cache-Control', NO_STORE_HEADERS['Cache-Control']);
   return new Response(body, {
     status: response.status,
-    headers: response.headers,
+    headers,
   });
 }
 
 export async function createBlogOgImageResponse(
   element: ReactElement,
-  { size, noStore = false, fallback }: BlogOgResponseOptions
+  { size, fallback }: BlogOgResponseOptions
 ) {
   try {
-    return await renderImageResponse(element, size, noStore);
+    return await renderImageResponse(element, size);
   } catch (error) {
     console.error('Failed to render merchant blog OG image', { error });
   }
@@ -63,7 +62,9 @@ export async function createBlogOgImageResponse(
   if (!fallback) return createEmergencyPngResponse();
 
   try {
-    return await renderImageResponse(fallback.element, size, fallback.noStore);
+    // Every compatibility response is dynamic and strict no-store; recovery
+    // must preserve that contract too.
+    return await renderImageResponse(fallback.element, size);
   } catch (error) {
     console.error('Failed to render merchant blog OG fallback image', {
       error,

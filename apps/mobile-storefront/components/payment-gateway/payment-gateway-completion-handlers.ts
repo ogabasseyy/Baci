@@ -1,5 +1,4 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { router } from 'expo-router';
 import type { PaymentGatewayParams } from '@/schemas/payment-gateway';
 import { PAYMENT_KINDS } from './payment-gateway.helpers';
 import {
@@ -10,17 +9,22 @@ import type {
   PaymentGatewayRefs,
   PaymentStatusSetter,
 } from './payment-gateway-controller.types';
+import type { OrderCompletionContext } from './payment-gateway-order-completion';
+import { settleOrderCompletion } from './payment-gateway-order-completion';
 import { handleVtuConfirmation } from './use-vtu-payment-completion';
+import { verifyRedvaultCompletion } from './verify-redvault-order-completion';
 
 interface PaymentGatewayCompletionHandlerInput
   extends Partial<PaymentGatewayParams> {
-  clearCart: () => void;
+  clearCart: () => void | Promise<void>;
   clearPendingLoadTimeout: () => void;
   queryClient: QueryClient;
   refs: PaymentGatewayRefs;
   scheduleDelayedNavigation: (navigate: () => void) => void;
+  setConfirmedOperationReference?: (reference: string | null) => void;
   setErrorMessage: (message: string | null) => void;
   setPaymentStatus: PaymentStatusSetter;
+  setTerminalDirective?: (message: string | null) => void;
 }
 
 export function createPaymentGatewayCompletionHandlers({
@@ -33,14 +37,18 @@ export function createPaymentGatewayCompletionHandlers({
   merchantSlug,
   orderId,
   orderNumber,
+  orderTotal,
   paymentKind,
+  paymentMethod,
   queryClient,
   reference,
   refs,
   returnTo,
   scheduleDelayedNavigation,
+  setConfirmedOperationReference,
   setErrorMessage,
   setPaymentStatus,
+  setTerminalDirective,
   trackingToken,
   utilityType,
 }: PaymentGatewayCompletionHandlerInput) {
@@ -89,7 +97,7 @@ export function createPaymentGatewayCompletionHandlers({
     });
   };
 
-  const beginPaymentCompletion = () => {
+  const beginPaymentCompletion = async () => {
     const currentStatus = statusRef.current;
     if (
       paymentCompletionStartedRef.current ||
@@ -101,6 +109,27 @@ export function createPaymentGatewayCompletionHandlers({
 
     if (paymentKind === PAYMENT_KINDS.VTU) {
       beginVtuPaymentCompletion();
+      return;
+    }
+    if (paymentKind === PAYMENT_KINDS.PRIMARY_WALLET_CARD) {
+      const { beginPrimaryWalletCardCompletion } = await import(
+        './primary-wallet-card-completion'
+      );
+      beginPrimaryWalletCardCompletion({
+        clearPendingLoadTimeout,
+        gateway,
+        merchantId,
+        merchantSlug,
+        queryClient,
+        reference,
+        refs,
+        returnTo,
+        scheduleDelayedNavigation,
+        setConfirmedOperationReference,
+        setErrorMessage,
+        setPaymentStatus,
+        setTerminalDirective,
+      });
       return;
     }
 
@@ -138,22 +167,50 @@ export function createPaymentGatewayCompletionHandlers({
       return;
     }
 
-    paymentCompletionStartedRef.current = true;
-    clearPendingLoadTimeout();
-    setPaymentStatus('success');
-    clearCart();
-    scheduleDelayedNavigation(() => {
-      router.replace({
-        pathname: '/order-success',
-        params: {
-          orderId: orderId || '',
-          orderNumber: orderNumber || '',
-          paymentMethod: gateway,
-          reference: reference || '',
-          ...(trackingToken && { trackingToken }),
-        },
-      });
-    });
+    const completionContext: OrderCompletionContext = {
+      amount,
+      clearCart,
+      clearPendingLoadTimeout,
+      gateway,
+      isMountedRef,
+      orderId,
+      orderNumber,
+      orderTotal,
+      paymentCompletionStartedRef,
+      // The rails gateway and the selected method differ on the native
+      // REDVAULT route (Paystack rails, `uba_redvault` method): lanes
+      // that attribute the conversion read this, never `gateway`.
+      paymentMethod,
+      reference,
+      scheduleDelayedNavigation,
+      setErrorMessage,
+      setPaymentStatus,
+      trackingToken,
+    };
+
+    let verifiedOrderNumber = orderNumber;
+    // A provider-confirmed REDVAULT payment completes exactly once below:
+    // the REDVAULT branch owns the ad purchase emission, so the generic
+    // verification block is skipped for it — otherwise a paid
+    // tracked-order lookup would emit the same ad purchase and legacy
+    // order_completed a second time under the other claim key. The
+    // funnel payment_completed is still emitted in the shared
+    // completion under its own claim.
+    let redvaultVerified = false;
+    if (paymentMethod === 'uba_redvault') {
+      const outcome = await verifyRedvaultCompletion(completionContext);
+      if (!outcome.continueSharedCompletion) {
+        return;
+      }
+      verifiedOrderNumber = outcome.verifiedOrderNumber;
+      redvaultVerified = true;
+    }
+
+    await settleOrderCompletion(
+      completionContext,
+      verifiedOrderNumber,
+      redvaultVerified
+    );
   };
 
   return { beginPaymentCompletion, beginVtuPaymentCompletion };

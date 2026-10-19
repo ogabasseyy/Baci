@@ -10,6 +10,11 @@ export interface WalletFundingAccountRow {
   provider: string;
 }
 
+export interface CustomerSavingsEarnings {
+  earningsAvailable: boolean;
+  earningsBalance: number | null;
+}
+
 export interface CustomerWalletTransactionRow {
   amount: number | string;
   balance_after: number | string | null;

@@ -282,15 +282,13 @@ describe('buildBuilderAiEditPrompt', () => {
     expect(() =>
       buildBuilderAiEditPrompt({
         currentConfig: {
-          content: [
-            {
-              props: {
-                id: 'too-large',
-                title: 'x'.repeat(MAX_PROMPT_PROJECTION_CHARS + 1),
-              },
-              type: 'Text',
+          content: Array.from({ length: 99 }, (_, index) => ({
+            props: {
+              content: 'x'.repeat(2000),
+              id: `too-large-${index}`,
             },
-          ],
+            type: 'Text',
+          })),
           root: { title: 'Home' },
         },
         prompt: 'Safe',

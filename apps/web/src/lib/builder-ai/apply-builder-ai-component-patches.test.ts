@@ -1,4 +1,5 @@
 import type { BuilderData } from '@baci/shared/contracts';
+import { builderDesignCapabilities } from '@baci/shared/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   applyBuilderAiCarouselPatch,
@@ -63,5 +64,41 @@ describe('applyBuilderAiCarouselPatch', () => {
         (message) => new Error(message)
       )
     ).toThrow('Carousel slide title must be unique');
+  });
+
+  it('applies a newly manifest-authorized carousel special field', () => {
+    const carousel = builderDesignCapabilities.components.find(
+      ({ componentType }) => componentType === 'HeroCarousel'
+    );
+    if (!carousel?.specialOperations?.updateCarouselSlide) {
+      throw new Error('Expected carousel special operation');
+    }
+    carousel.specialOperations.updateCarouselSlide.eyebrow = {
+      maximumLength: 120,
+      type: 'string',
+    };
+    const component: BuilderData['content'][number] = {
+      props: { id: 'carousel-1', slides: [{ title: 'Before' }] },
+      type: 'HeroCarousel',
+    };
+
+    try {
+      applyBuilderAiCarouselPatch(
+        component,
+        {
+          componentId: 'carousel-1',
+          eyebrow: 'New season',
+          kind: 'update_carousel_slide',
+          slideIndex: 0,
+        } as never,
+        (message) => new Error(message)
+      );
+
+      expect(component.props.slides).toEqual([
+        { eyebrow: 'New season', title: 'Before' },
+      ]);
+    } finally {
+      delete carousel.specialOperations.updateCarouselSlide.eyebrow;
+    }
   });
 });

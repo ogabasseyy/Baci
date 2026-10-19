@@ -1,0 +1,31 @@
+import type { PlatformSettingsResponse } from '@/app/api/admin/settings/route';
+
+export const settingsResponse: PlatformSettingsResponse = {
+  created_at: '2026-06-11T00:00:00.000Z',
+  enable_analytics_export: true,
+  enable_custom_domains: true,
+  enable_merchant_signups: true,
+  facebook_pixel_id: '1234567890123456',
+  google_analytics_id: 'G-TEST1234',
+  id: 'platform-settings',
+  maintenance_message: null,
+  maintenance_mode: false,
+  payment_processor_fee_flat: 0,
+  payment_processor_fee_percentage: 1.5,
+  platform_fee_flat: 0,
+  platform_fee_percentage: 2.5,
+  platform_logo_url: null,
+  platform_name: 'Baci',
+  secretStatus: {
+    facebook_capi_token: true,
+    ga4_api_secret: true,
+    snapchat_capi_token: true,
+    tiktok_access_token: true,
+  },
+  snapchat_pixel_id: 'snap-pixel',
+  support_email: 'support@example.com',
+  support_phone: '+2348000000000',
+  tiktok_pixel_id: 'tiktok-pixel',
+  twitter_pixel_id: null,
+  updated_at: '2026-06-11T00:00:00.000Z',
+};

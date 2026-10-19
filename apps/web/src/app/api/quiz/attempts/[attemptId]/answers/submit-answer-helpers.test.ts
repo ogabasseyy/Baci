@@ -5,7 +5,13 @@ import {
   recoverReplayedAttemptResponse,
 } from './submit-answer-helpers';
 
-function createSupabaseForRecoveredAward(createdAt: unknown) {
+function createSupabaseForRecoveredAward({
+  claimExpiresAt = null,
+  createdAt = null,
+}: {
+  claimExpiresAt?: unknown;
+  createdAt?: unknown;
+} = {}) {
   const attemptQuery = createQueryResult({
     data: {
       status: 'submitted',
@@ -15,18 +21,22 @@ function createSupabaseForRecoveredAward(createdAt: unknown) {
   });
   const awardQuery = createQueryResult({
     data: {
+      awardId: '11111111-1111-4111-8111-111111111111',
+      claimExpiresAt,
       condition: 'new',
-      created_at: createdAt,
-      id: '11111111-1111-4111-8111-111111111111',
-      product_id: '22222222-2222-4222-8222-222222222222',
-      variant_id: null,
+      createdAt,
+      productId: '22222222-2222-4222-8222-222222222222',
+      variantId: null,
     },
     error: null,
   });
 
   return {
-    from: vi.fn((table: string) =>
-      table === 'quiz_attempts' ? attemptQuery : awardQuery
+    from: vi.fn(() => attemptQuery),
+    rpc: vi.fn(async (name: string) =>
+      name === 'get_quiz_attempt_prize_claim_v2'
+        ? awardQuery.maybeSingle()
+        : null
     ),
   };
 }
@@ -75,11 +85,12 @@ describe('mapSubmittedAttemptScore', () => {
 
 describe('recoverReplayedAttemptResponse', () => {
   it.each([
-    null,
-    'not-a-date',
-  ])('fails closed when the recovered award created_at is %s', async (createdAt) => {
+    { claimExpiresAt: null, createdAt: null },
+    { claimExpiresAt: 'not-a-date', createdAt: '2026-08-01T10:00:00.000Z' },
+    { claimExpiresAt: null, createdAt: 'not-a-date' },
+  ])('fails closed when the recovered award has no usable expiry', async (awardFields) => {
     const response = await recoverReplayedAttemptResponse(
-      createSupabaseForRecoveredAward(createdAt) as never,
+      createSupabaseForRecoveredAward(awardFields) as never,
       '33333333-3333-4333-8333-333333333333',
       '44444444-4444-4444-8444-444444444444'
     );
@@ -88,5 +99,69 @@ describe('recoverReplayedAttemptResponse', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Quiz request failed',
     });
+  });
+
+  it('reissues a legacy award using its created-at TTL when claim expiry is absent', async () => {
+    const originalSecret = process.env.QUIZ_RPC_SERVER_SECRET;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-02T12:00:00.000Z'));
+    process.env.QUIZ_RPC_SERVER_SECRET = 'test-secret';
+    try {
+      const response = await recoverReplayedAttemptResponse(
+        createSupabaseForRecoveredAward({
+          claimExpiresAt: null,
+          createdAt: '2026-08-01T10:00:00.000Z',
+        }) as never,
+        '33333333-3333-4333-8333-333333333333',
+        '11111111-1111-4111-8111-111111111111'
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.prizeClaim.voucherToken).toEqual(expect.any(String));
+      const payload = JSON.parse(
+        Buffer.from(
+          body.prizeClaim.voucherToken.split('.')[1],
+          'base64url'
+        ).toString('utf8')
+      );
+      expect(payload.expiresAt).toBe('2026-08-08T10:00:00.000Z');
+    } finally {
+      if (originalSecret === undefined)
+        delete process.env.QUIZ_RPC_SERVER_SECRET;
+      else process.env.QUIZ_RPC_SERVER_SECRET = originalSecret;
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reissue an expired persisted prize claim on answer replay', async () => {
+    const originalSecret = process.env.QUIZ_RPC_SERVER_SECRET;
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-16T12:00:00.000Z'));
+    process.env.QUIZ_RPC_SERVER_SECRET = 'test-secret';
+    try {
+      const response = await recoverReplayedAttemptResponse(
+        createSupabaseForRecoveredAward({
+          claimExpiresAt: '2026-08-15T10:00:00.000Z',
+          createdAt: '2026-08-08T10:00:00.000Z',
+        }) as never,
+        '33333333-3333-4333-8333-333333333333',
+        '11111111-1111-4111-8111-111111111111'
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        attemptId: '33333333-3333-4333-8333-333333333333',
+        correctAnswers: 1,
+        prizeEligible: false,
+        status: 'completed',
+        totalQuestions: 1,
+      });
+    } finally {
+      if (originalSecret === undefined)
+        delete process.env.QUIZ_RPC_SERVER_SECRET;
+      else process.env.QUIZ_RPC_SERVER_SECRET = originalSecret;
+      vi.useRealTimers();
+    }
   });
 });

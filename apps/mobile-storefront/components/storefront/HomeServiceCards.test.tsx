@@ -10,6 +10,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import * as ReactNative from 'react-native';
 import { Animated, StyleSheet } from 'react-native';
 import type { ReactTestInstance } from 'react-test-renderer';
+import { BRAND, withAlpha } from '@/constants/Colors';
 
 const mockPush = jest.fn();
 const defaultDimensions = {
@@ -53,15 +54,12 @@ function findAncestorWithWidth(instance: ReactTestInstance, width: number) {
 }
 
 describe('HomeServiceCards', () => {
-  let animationStop: jest.Mock;
-
   beforeEach(() => {
     jest.clearAllMocks();
-    animationStop = jest.fn();
     jest.spyOn(Animated, 'loop').mockReturnValue({
       reset: jest.fn(),
       start: jest.fn(),
-      stop: animationStop,
+      stop: jest.fn(),
     } as unknown as ReturnType<typeof Animated.loop>);
   });
 
@@ -78,21 +76,18 @@ describe('HomeServiceCards', () => {
     expect(screen.getByText('IMEI Checker')).toBeTruthy();
     expect(screen.getByText('Repair Lab')).toBeTruthy();
     expect(screen.getByText('Swap/Trade')).toBeTruthy();
-    expect(screen.getByText('Super Quiz')).toBeTruthy();
+    expect(screen.getByText('SuperQuiz')).toBeTruthy();
   });
 
-  it('starts one shared moving outline animation', () => {
-    render(<HomeServiceCards />);
+  it('does not schedule continuous border animation while home service cards are mounted', () => {
+    const timing = jest.spyOn(Animated, 'timing');
 
-    expect(Animated.loop).toHaveBeenCalledTimes(1);
-  });
-
-  it('stops the moving outline animation on unmount', () => {
-    const { unmount } = render(<HomeServiceCards />);
-
+    const { rerender, unmount } = render(<HomeServiceCards />);
+    rerender(<HomeServiceCards placement="aboveUtility" />);
     unmount();
 
-    expect(animationStop).toHaveBeenCalledTimes(1);
+    expect(Animated.loop).not.toHaveBeenCalled();
+    expect(timing).not.toHaveBeenCalled();
   });
 
   it('keeps the full-size shortcut dimensions from the mobile visual baseline', () => {
@@ -107,6 +102,8 @@ describe('HomeServiceCards', () => {
     expect(StyleSheet.flatten(card?.props.style)).toMatchObject({
       height: 42,
       width: 114,
+      borderWidth: 1,
+      borderColor: withAlpha(BRAND.primary, 0.48),
     });
   });
 
@@ -175,7 +172,7 @@ describe('HomeServiceCards', () => {
     fireEvent.press(screen.getByLabelText('Swap/Trade. Swap for credit'));
     expect(mockPush).toHaveBeenLastCalledWith('/swap');
 
-    fireEvent.press(screen.getByLabelText('Super Quiz. Play for rewards'));
+    fireEvent.press(screen.getByLabelText('SuperQuiz. Play for rewards'));
     expect(mockPush).toHaveBeenLastCalledWith('/quiz');
   });
 });

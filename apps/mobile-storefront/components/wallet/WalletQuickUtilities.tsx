@@ -75,7 +75,7 @@ export function WalletQuickUtilities({
             style={styles.utilityPill}
             onPress={() => router.push(utility.route)}
           >
-            <Ionicons name={utility.icon} size={14} color={accentColor} />
+            <Ionicons name={utility.icon} size={17} color={accentColor} />
             <Text style={styles.utilityPillText}>{utility.label}</Text>
           </Pressable>
         ))}

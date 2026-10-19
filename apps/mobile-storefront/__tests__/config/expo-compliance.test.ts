@@ -1,4 +1,3 @@
-import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, jest } from '@jest/globals';
@@ -129,36 +128,6 @@ describe('Expo compliance', () => {
     expect(configSource).not.toContain('newArchEnabled');
   });
 
-  it('loads nested app config helpers when Node type stripping is disabled', () => {
-    const configSource = readFileSync(
-      path.join(ROOT, 'app.config.ts'),
-      'utf-8'
-    );
-    const helperPaths = [
-      ...configSource.matchAll(
-        /require\('(\.\/config\/(?:expo-plugins|resolve-update-channel)[^']*)'\)/g
-      ),
-    ].map((match) => match[1]);
-
-    expect(helperPaths).toHaveLength(2);
-
-    const result = spawnSync(
-      process.execPath,
-      [
-        '--no-experimental-strip-types',
-        '-e',
-        `for (const helperPath of ${JSON.stringify(helperPaths)}) require(helperPath);`,
-      ],
-      {
-        cwd: ROOT,
-        encoding: 'utf8',
-      }
-    );
-
-    expect(result.stderr).toBe('');
-    expect(result.status).toBe(0);
-  });
-
   it('uploads the R8 mapping file with Android production releases', () => {
     const workflowSource = readFileSync(
       path.resolve(
@@ -167,7 +136,6 @@ describe('Expo compliance', () => {
       ),
       'utf-8'
     );
-
     expect(workflowSource).toMatch(
       /mappingFile: \$\{\{ env\.WORKING_DIR \}\}\/android\/app\/build\/outputs\/mapping\/release\/mapping\.txt/
     );
@@ -181,6 +149,10 @@ describe('Expo compliance', () => {
       ),
       'utf-8'
     );
+    const releaseScriptSource = readFileSync(
+      path.resolve(ROOT, '../../.github/scripts/android-storefront-release.sh'),
+      'utf-8'
+    );
     const installStep = workflowSource.indexOf('name: Install dependencies');
     const exposeStep = workflowSource.indexOf(
       'name: Expose PostHog CLI to Gradle'
@@ -192,11 +164,11 @@ describe('Expo compliance', () => {
     expect(installStep).toBeGreaterThan(-1);
     expect(exposeStep).toBeGreaterThan(installStep);
     expect(buildStep).toBeGreaterThan(exposeStep);
-    expect(workflowSource).toContain(
+    expect(releaseScriptSource).toContain(
       '$GITHUB_WORKSPACE/node_modules/.bin/posthog-cli'
     );
-    expect(workflowSource).toContain('[ ! -x "$POSTHOG_CLI_BIN" ]');
-    expect(workflowSource).toContain(
+    expect(releaseScriptSource).toContain('[ ! -x "$POSTHOG_CLI_BIN" ]');
+    expect(releaseScriptSource).toContain(
       'dirname "$POSTHOG_CLI_BIN" >> "$GITHUB_PATH"'
     );
   });

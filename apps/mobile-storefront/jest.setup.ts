@@ -1,4 +1,5 @@
 import '@testing-library/jest-native/extend-expect';
+import './jest.setup.safe-area';
 
 import { configure as configureReactNativeTestingLibrary } from '@testing-library/react-native';
 import React, { type ReactNode } from 'react';
@@ -87,6 +88,7 @@ jest.mock('expo-haptics', () => ({
 // Mock expo-router
 jest.mock('expo-router', () => ({
   usePathname: jest.fn(() => '/'),
+  useIsFocused: jest.fn(() => false),
   useRouter: jest.fn(() => ({
     push: jest.fn(),
     replace: jest.fn(),

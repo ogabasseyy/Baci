@@ -1,5 +1,10 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import { getCategoryPageDataCacheTag } from '@/lib/category-page-cache-tags';
+import {
+  applyCategoryGraphicsPredicate,
+  buildCategoryGraphicsJoin,
+  normalizeCategoryGraphicsValues,
+} from '@/lib/category-page-graphics-query';
 import { getPublicSupabaseClient } from '@/lib/public-supabase-client';
 
 export type SpecialCollectionSlug =
@@ -16,6 +21,10 @@ export type CachedCategoryPageProductScope =
 
 export const CATEGORY_PAGE_PRODUCT_ID_CAP = 2000;
 
+export interface CategoryPageProductFilters {
+  graphics?: string[];
+}
+
 type ActiveCategoryPageProductScope = Exclude<
   CachedCategoryPageProductScope,
   { kind: 'none' }
@@ -26,42 +35,67 @@ type RemotelyCachedCategoryPageProductScope = Exclude<
   { kind: 'legacy' }
 >;
 
+export {
+  MAX_CATEGORY_GRAPHICS_VALUE_LENGTH,
+  normalizeCategoryGraphicsValue,
+} from './category-page-graphics-query';
+
 function buildCategoryPageProductIdsQuery(
   supabase: ReturnType<typeof getPublicSupabaseClient>,
   merchantId: string,
   scope: ActiveCategoryPageProductScope,
-  selectOptions?: { count: 'exact'; head: boolean }
+  selectOptions?: { count: 'exact'; head: boolean },
+  filters?: CategoryPageProductFilters
 ) {
+  const graphics = normalizeCategoryGraphicsValues(filters?.graphics);
+  const graphicsJoin = buildCategoryGraphicsJoin(graphics);
+
   if (scope.kind === 'category') {
-    return supabase
-      .from('products')
-      .select('id, product_categories!inner(category_id)', selectOptions)
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .in('product_categories.category_id', scope.categoryIds)
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: true });
+    const query = applyCategoryGraphicsPredicate(
+      supabase
+        .from('products')
+        .select(
+          `id, product_categories!inner(category_id)${graphicsJoin}`,
+          selectOptions
+        )
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active')
+        .in('product_categories.category_id', scope.categoryIds)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true }),
+      graphics
+    );
+
+    return query;
   }
 
   if (scope.kind === 'legacy') {
     const sanitizedCategoryName = scope.categoryName.replace(/[,().]/g, '');
-    return supabase
-      .from('products')
-      .select('id', selectOptions)
-      .eq('merchant_id', merchantId)
-      .eq('status', 'active')
-      .or(
-        `category.ilike.%${sanitizedCategoryName}%,brand.ilike.%${sanitizedCategoryName}%,name.ilike.%${sanitizedCategoryName}%`
-      )
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: true });
+    const query = applyCategoryGraphicsPredicate(
+      supabase
+        .from('products')
+        .select(`id${graphicsJoin}`, selectOptions)
+        .eq('merchant_id', merchantId)
+        .eq('status', 'active')
+        .or(
+          `category.ilike.%${sanitizedCategoryName}%,brand.ilike.%${sanitizedCategoryName}%,name.ilike.%${sanitizedCategoryName}%`
+        )
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true }),
+      graphics
+    );
+
+    return query;
   }
 
-  let query = supabase
-    .from('products')
-    .select('id', selectOptions)
-    .eq('merchant_id', merchantId)
-    .eq('status', 'active');
+  let query = applyCategoryGraphicsPredicate(
+    supabase
+      .from('products')
+      .select(`id${graphicsJoin}`, selectOptions)
+      .eq('merchant_id', merchantId)
+      .eq('status', 'active'),
+    graphics
+  );
 
   switch (scope.collectionSlug) {
     case 'new-arrivals':
@@ -101,9 +135,11 @@ function extractCategoryPageProductIds(data: unknown): string[] {
  * category mutations propagate without evicting other merchants' entries.
  */
 async function getCachedCategoryPageProductIds({
+  filters,
   merchantId,
   scope,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   scope: RemotelyCachedCategoryPageProductScope;
 }): Promise<string[]> {
@@ -122,16 +158,20 @@ async function getCachedCategoryPageProductIds({
   const { data, error } = await buildCategoryPageProductIdsQuery(
     getPublicSupabaseClient(),
     merchantId,
-    scope
+    scope,
+    undefined,
+    filters
   ).limit(CATEGORY_PAGE_PRODUCT_ID_CAP);
   if (error) throw error;
   return extractCategoryPageProductIds(data);
 }
 
 async function getCachedLegacyCategoryPageProductIds({
+  filters,
   merchantId,
   scope,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   scope: Extract<CachedCategoryPageProductScope, { kind: 'legacy' }>;
 }): Promise<string[]> {
@@ -148,16 +188,20 @@ async function getCachedLegacyCategoryPageProductIds({
   const { data, error } = await buildCategoryPageProductIdsQuery(
     getPublicSupabaseClient(),
     merchantId,
-    scope
+    scope,
+    undefined,
+    filters
   ).limit(CATEGORY_PAGE_PRODUCT_ID_CAP);
   if (error) throw error;
   return extractCategoryPageProductIds(data);
 }
 
 async function getCachedCategoryPageProductTotalCount({
+  filters,
   merchantId,
   scope,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   scope: RemotelyCachedCategoryPageProductScope;
 }): Promise<number> {
@@ -177,16 +221,19 @@ async function getCachedCategoryPageProductTotalCount({
     getPublicSupabaseClient(),
     merchantId,
     scope,
-    { count: 'exact', head: true }
+    { count: 'exact', head: true },
+    filters
   );
   if (error) throw error;
   return count ?? 0;
 }
 
 async function getCachedLegacyCategoryPageProductTotalCount({
+  filters,
   merchantId,
   scope,
 }: {
+  filters?: CategoryPageProductFilters;
   merchantId: string;
   scope: Extract<CachedCategoryPageProductScope, { kind: 'legacy' }>;
 }): Promise<number> {
@@ -204,18 +251,21 @@ async function getCachedLegacyCategoryPageProductTotalCount({
     getPublicSupabaseClient(),
     merchantId,
     scope,
-    { count: 'exact', head: true }
+    { count: 'exact', head: true },
+    filters
   );
   if (error) throw error;
   return count ?? 0;
 }
 
 async function fetchCategoryPageProductIdWindow({
+  filters,
   from,
   merchantId,
   scope,
   to,
 }: {
+  filters?: CategoryPageProductFilters;
   from: number;
   merchantId: string;
   scope: CachedCategoryPageProductScope;
@@ -226,7 +276,9 @@ async function fetchCategoryPageProductIdWindow({
   const { data, error } = await buildCategoryPageProductIdsQuery(
     getPublicSupabaseClient(),
     merchantId,
-    scope
+    scope,
+    undefined,
+    filters
   ).range(from, to);
   if (error) throw error;
   return extractCategoryPageProductIds(data);

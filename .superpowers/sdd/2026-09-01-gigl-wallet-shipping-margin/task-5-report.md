@@ -1,0 +1,11 @@
+# Task 5 Fix Round 3 report
+
+- Base: `9172bd3ee0`
+- Commit: `74e3a135e8` (split route coverage; report updated in this commit).
+- Admin-order quoting now runs through the existing `/api/shipping/quotes` edge in an explicit header-gated mode. Authentication, CSRF, owner/fulfillment permission, and authoritative order/item/sender loading all precede `createAdminClient`.
+- The service-role-only `persist_admin_gigl_quote` RPC atomically inserts the quote and immutable attestation snapshot. Authenticated clients have no attestation table grants; an immutable trigger rejects post-attestation quote updates/deletes.
+- The authenticated binder accepts only quote ID plus receiver, locks order/quote/attestation/wallet rows, and exact-compares order, merchant, provider, rate identity, request snapshot, currency, pricing version, expiry, station flag, price, provider cost, and margin before binding.
+- The legacy order-scoped alias delegates to the existing quote edge and cannot establish trust or persist through the user client.
+- Focused tests: `pnpm --dir apps/web exec vitest run src/app/api/shipping/quotes/admin-order-gigl-quote.auth-order.test.ts src/app/api/shipping/quotes/admin-order-gigl-quote.provider-binding.test.ts src/app/api/shipping/quotes/admin-order-gigl-quote.auth.test.ts src/lib/admin-gigl-quote-attestation-model.test.ts src/lib/admin-gigl-quote-binding-migration.test.ts 'src/app/api/orders/[id]/shipping/gigl-quote/route.dispatcher.test.ts' 'src/app/api/orders/[id]/shipping/gigl-quote/route.test.ts' src/app/api/shipping/quotes/route.test.ts --reporter=dot` — 8 files, 69 tests passed. The Admin edge suite contains 32 behavioral route cases split across two files (both under 300 lines), plus an alias dispatcher integration case; the deterministic attestation model contains 18 executable contract cases (including forged provenance, missing attestation, immutable economics/rate/request snapshots, order concurrency, and rollback/no-mutation semantics). Web lint and typecheck pass for the touched files; `git diff --check` passed.
+- TypeScript command `NODE_OPTIONS=--max-old-space-size=8192 pnpm exec tsc --noEmit --pretty false -p apps/web/tsconfig.json` completed without diagnostics; the default-memory invocation OOMed on the monorepo.
+- No live provider, deploy, remote migration, or push was run.

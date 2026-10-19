@@ -28,6 +28,7 @@ const completionErrorSchema = z.object({
     'TRANSACTION_IN_UNEXPECTED_STATE',
     'ORDER_NOT_FOUND',
     'MERCHANT_INVOICE_PARTIAL_BALANCE_CHANGED',
+    'BALANCE_CHANGED',
   ]),
   transaction_status: z.string().nullish(),
 });

@@ -1,0 +1,6 @@
+CREATE INDEX IF NOT EXISTS uba_redvault_payment_attempts_application_id_idx
+  ON private.uba_redvault_payment_attempts(application_id);
+CREATE INDEX IF NOT EXISTS uba_redvault_refund_line_allocations_application_id_idx
+  ON private.uba_redvault_refund_line_allocations(application_id);
+CREATE INDEX IF NOT EXISTS uba_redvault_refund_line_allocations_order_item_id_idx
+  ON private.uba_redvault_refund_line_allocations(order_item_id);

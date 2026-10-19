@@ -2,7 +2,10 @@
 import z from 'zod';
 import { DEFAULT_ROOT_DOMAIN } from '@/lib/default-root-domain';
 import { normalizeEnvBoolean } from '@/lib/env-boolean';
+import { readHostedSavingsEnvironment } from '@/lib/hosted-savings-environment';
+import { isNonAgenticWorkerProfile } from '@/lib/is-non-agentic-worker-profile';
 import { buildLlmBearerAuthHeader } from '@/lib/llm-auth';
+import { isNegotiatedCheckoutProofSecretMissing } from '@/lib/quiz/negotiated-checkout-proof-env';
 import { supabaseAgenticJwtPrivateJwkStringSchema } from '@/schemas/supabase-agentic-jwt-private-jwk';
 
 /**
@@ -178,6 +181,7 @@ const serverSchema = z
       .min(1, 'SUPABASE_SERVICE_ROLE_KEY is required'),
     RECOVERY_CODE_PEPPER: recoveryCodePepperSchema,
     SUPABASE_JWT_SECRET: optionalTrimmedStringSchema,
+    SUPABASE_LEGACY_ANON_JWT: optionalTrimmedStringSchema,
     SUPABASE_AGENTIC_JWT_PRIVATE_JWK: supabaseAgenticJwtPrivateJwkStringSchema,
 
     // Blog
@@ -261,6 +265,9 @@ const serverSchema = z
     GEMINI_API_KEY: z.string().optional(),
     GOOGLE_MAPS_API_KEY: optionalTrimmedStringSchema,
     GOOGLE_PLACES_API_KEY: optionalTrimmedStringSchema,
+    GEOAPIFY_API_KEY: optionalTrimmedStringSchema,
+    ADDRESS_AUTOCOMPLETE_REDIS_REST_URL: optionalTrimmedUrlSchema,
+    ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN: optionalTrimmedStringSchema,
     AI_CHAT_MODEL: z.string().default('gemma4:e4b'),
     AI_CHAT_PROVIDER: aiChatProviderSchema,
 
@@ -275,6 +282,7 @@ const serverSchema = z
     // Internal
     JUICYWAY_BASE_URL: z.string().default('https://api.spendjuice.com'),
     MYCOVER_WEBHOOK_SECRET: z.string().optional(),
+    PIGGYVEST_SECRET_KEY: z.string().optional(),
     CRON_SECRET: z.string().optional(),
     INTERNAL_API_SECRET: z.string().optional(),
     // Cloudflare cache purge (edge in front of the storefront custom domains).
@@ -390,6 +398,14 @@ const serverSchema = z
     JUMIA_ENVIRONMENT: z.enum(['staging', 'production']).default('staging'),
     JUMIA_CLIENT_ID: z.string().optional(),
     JUMIA_CLIENT_SECRET: z.string().optional(),
+    JUMIA_AUTHORIZATION_ENCRYPTION_KEY: optionalTrimmedStringSchema.refine(
+      (value) =>
+        value === undefined || Buffer.from(value, 'base64').length === 32,
+      {
+        message:
+          'JUMIA_AUTHORIZATION_ENCRYPTION_KEY must be Base64-encoded 32 bytes',
+      }
+    ),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -399,12 +415,9 @@ const serverSchema = z
       Boolean(process.env.GITHUB_REPOSITORY);
     // These bounded VPS workers never sign agentic JWTs, so they should not
     // fail boot on unrelated signing material.
-    const isNonAgenticWorker = [
-      'ai-storefront-jobs',
-      'event-pipeline',
-      'petrock-reconciliation',
-      'quiz-finalization',
-    ].includes(process.env.BACI_WORKER_PROFILE ?? '');
+    const isNonAgenticWorker = isNonAgenticWorkerProfile(
+      process.env.BACI_WORKER_PROFILE
+    );
 
     if (
       value.NODE_ENV !== 'production' ||
@@ -429,6 +442,16 @@ const serverSchema = z
         code: z.ZodIssueCode.custom,
         message:
           'QUIZ_RPC_SERVER_SECRET is required when QUIZ_PHASE is production',
+        path: ['QUIZ_RPC_SERVER_SECRET'],
+      });
+    }
+  })
+  .superRefine((value, ctx) => {
+    if (isNegotiatedCheckoutProofSecretMissing(value)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'QUIZ_RPC_SERVER_SECRET is required in production for negotiated checkout proofs',
         path: ['QUIZ_RPC_SERVER_SECRET'],
       });
     }
@@ -506,6 +529,32 @@ const serverSchema = z
         path: ['LLM_SERVER_BEARER'],
       });
     }
+  })
+  .superRefine((value, ctx) => {
+    // A partial dedicated pair would fail closed at runtime after
+    // validation succeeded, so require both halves or neither.
+    if (
+      value.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL &&
+      !value.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN is required when ADDRESS_AUTOCOMPLETE_REDIS_REST_URL is set',
+        path: ['ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN'],
+      });
+    }
+    if (
+      value.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN &&
+      !value.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          'ADDRESS_AUTOCOMPLETE_REDIS_REST_URL is required when ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN is set',
+        path: ['ADDRESS_AUTOCOMPLETE_REDIS_REST_URL'],
+      });
+    }
   });
 
 const clientSchema = z.object({
@@ -566,8 +615,25 @@ const validateSanitizedModel = (
  * Throws an error in non-production environments if validation fails.
  * In production, it logs errors but might allow the app to crash downstream if critical keys are missing.
  */
-const getEnv = () => {
+const getEnv = (): Partial<z.infer<typeof serverSchema>> &
+  Pick<
+    z.infer<typeof serverSchema>,
+    | 'AI_CHAT_PROVIDER'
+    | 'AI_STOREFRONT_TRIGGER_TIMEOUT_MS'
+    | 'JUMIA_ENVIRONMENT'
+  > &
+  z.infer<typeof clientSchema> => {
   const isServer = typeof window === 'undefined';
+  const staging = isServer ? readHostedSavingsEnvironment(process.env) : null;
+  if (staging) {
+    return {
+      ...clientSchema.parse(staging),
+      NODE_ENV: staging.NODE_ENV,
+      AI_CHAT_PROVIDER: 'auto',
+      AI_STOREFRONT_TRIGGER_TIMEOUT_MS: 5000,
+      JUMIA_ENVIRONMENT: 'staging',
+    };
+  }
 
   // Explicitly map client variables to ensure they are available on the client
   // Next.js requires the full process.env.NEXT_PUBLIC_* string for bundling
@@ -591,6 +657,7 @@ const getEnv = () => {
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
         RECOVERY_CODE_PEPPER: process.env.RECOVERY_CODE_PEPPER,
         SUPABASE_JWT_SECRET: process.env.SUPABASE_JWT_SECRET,
+        SUPABASE_LEGACY_ANON_JWT: process.env.SUPABASE_LEGACY_ANON_JWT,
         SUPABASE_AGENTIC_JWT_PRIVATE_JWK:
           process.env.SUPABASE_AGENTIC_JWT_PRIVATE_JWK,
         BLOG_PREVIEW_SECRET: process.env.BLOG_PREVIEW_SECRET,
@@ -676,12 +743,18 @@ const getEnv = () => {
         GEMINI_API_KEY: process.env.GEMINI_API_KEY,
         GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
         GOOGLE_PLACES_API_KEY: process.env.GOOGLE_PLACES_API_KEY,
+        GEOAPIFY_API_KEY: process.env.GEOAPIFY_API_KEY,
+        ADDRESS_AUTOCOMPLETE_REDIS_REST_URL:
+          process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_URL,
+        ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN:
+          process.env.ADDRESS_AUTOCOMPLETE_REDIS_REST_TOKEN,
         AI_CHAT_MODEL: process.env.AI_CHAT_MODEL,
         AI_CHAT_PROVIDER: process.env.AI_CHAT_PROVIDER,
         CREDIT_DIRECT_PRIVATE_KEY: process.env.CREDIT_DIRECT_PRIVATE_KEY,
         NODE_ENV: process.env.NODE_ENV,
         JUICYWAY_BASE_URL: process.env.JUICYWAY_BASE_URL,
         MYCOVER_WEBHOOK_SECRET: process.env.MYCOVER_WEBHOOK_SECRET,
+        PIGGYVEST_SECRET_KEY: process.env.PIGGYVEST_SECRET_KEY,
         CRON_SECRET: process.env.CRON_SECRET,
         ASC_API_KEY_ID: process.env.ASC_API_KEY_ID,
         ASC_API_ISSUER_ID: process.env.ASC_API_ISSUER_ID,
@@ -708,6 +781,8 @@ const getEnv = () => {
         JUMIA_ENVIRONMENT: process.env.JUMIA_ENVIRONMENT,
         JUMIA_CLIENT_ID: process.env.JUMIA_CLIENT_ID,
         JUMIA_CLIENT_SECRET: process.env.JUMIA_CLIENT_SECRET,
+        JUMIA_AUTHORIZATION_ENCRYPTION_KEY:
+          process.env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY,
         INTERNAL_API_SECRET: process.env.INTERNAL_API_SECRET,
         CLOUDFLARE_API_TOKEN: process.env.CLOUDFLARE_API_TOKEN,
         CLOUDFLARE_ZONE_ID: process.env.CLOUDFLARE_ZONE_ID,
@@ -884,6 +959,17 @@ export const getSupabaseJwtSecret = (): string => {
   );
   if (!jwtSecret) throw new Error('SUPABASE_JWT_SECRET is not defined');
   return jwtSecret;
+};
+
+export const getSupabaseLegacyAnonJwt = (): string | undefined => {
+  if (isBrowserRuntime())
+    throw new Error(
+      'SUPABASE_LEGACY_ANON_JWT cannot be accessed on the client'
+    );
+  const legacyAnonJwt = trimSecret(
+    process.env.SUPABASE_LEGACY_ANON_JWT ?? env?.SUPABASE_LEGACY_ANON_JWT
+  );
+  return legacyAnonJwt || undefined;
 };
 
 export const getSupabaseAgenticJwtPrivateJwk = (): string | undefined => {
@@ -1067,6 +1153,15 @@ export const getImeiIdentifierEncryptionKey = () => {
   const key = trimSecret(
     process.env.IMEI_IDENTIFIER_ENCRYPTION_KEY ??
       env?.IMEI_IDENTIFIER_ENCRYPTION_KEY
+  );
+  return key || undefined;
+};
+
+export const getJumiaAuthorizationEncryptionKey = () => {
+  if (isBrowserRuntime()) return undefined;
+  const key = trimSecret(
+    process.env.JUMIA_AUTHORIZATION_ENCRYPTION_KEY ??
+      env?.JUMIA_AUTHORIZATION_ENCRYPTION_KEY
   );
   return key || undefined;
 };
@@ -1436,6 +1531,28 @@ export const getMyCoverWebhookSecret = (): string => {
       'MYCOVER_WEBHOOK_SECRET or MYCOVER_SECRET_KEY is not defined'
     );
   return webhookSecret;
+};
+
+export const getPiggyvestWebhookSecret = (): string | undefined => {
+  if (typeof window !== 'undefined')
+    throw new Error('PIGGYVEST_SECRET_KEY cannot be accessed on the client');
+  return (
+    env?.PIGGYVEST_SECRET_KEY?.trim() ||
+    process.env.PVB_SECRET_KEY?.trim() ||
+    undefined
+  );
+};
+
+export const getPiggyvestApiConfig = (): {
+  baseUrl?: string;
+  token: string;
+} | null => {
+  const token = getPiggyvestWebhookSecret();
+  if (!token) return null;
+  // Per the staging contract register, the secret key doubles as the Bearer
+  // token; only the base URL is separately overridable (sandbox/staging).
+  const baseUrl = process.env.PIGGYVEST_API_BASE_URL?.trim();
+  return baseUrl ? { baseUrl, token } : { token };
 };
 
 export const getMyCoverSecretKey = (): string | undefined => {

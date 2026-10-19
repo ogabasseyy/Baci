@@ -1,70 +1,19 @@
 import {
+  getPaystackDvaAccountNumberFromTransactions,
   MOBILE_ADMIN_ORDER_ITEMS_COLUMNS,
   type OrderFulfillmentDetails,
+  selectPreferredOrderPaymentAccount,
 } from '@baci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { getBranchScopeKey } from '@/lib/branch-scope-query';
 import { getEffectiveOrderPaymentSummary } from '@/lib/order-payment-summary';
 import { getOrderPaymentTransactionTotals } from '@/lib/order-payment-transaction-totals';
 import { ORDER_COLUMNS } from '@/lib/orders';
-import { normalizeVariantAttributes } from '@/lib/product-picker-variant-rows';
 import { supabase } from '@/lib/supabase';
-import { getJoinedRecord } from '@/lib/supabase-utils';
 import { ALL_BRANCH_SCOPE, type BranchScope } from '@/schemas/branch';
 import { useBranchScope } from '../useBranchScope';
 import { useMerchant } from '../useMerchant';
-
-interface OrderItemRow {
-  condition: string | null;
-  has_assurance: boolean | null;
-  id: string;
-  image_url: string | null;
-  item_description: string | null;
-  name: string | null;
-  price: number;
-  product_match_status: 'custom' | 'linked' | 'unreviewed' | null;
-  product_id: string | null;
-  products:
-    | {
-        categories:
-          | {
-              name: string | null;
-              slug: string | null;
-            }
-          | Array<{
-              name: string | null;
-              slug: string | null;
-            }>
-          | null;
-        category: string | null;
-        category_id: string | null;
-        condition: string | null;
-        images: string[] | null;
-        name: string;
-      }
-    | Array<{
-        categories:
-          | {
-              name: string | null;
-              slug: string | null;
-            }
-          | Array<{
-              name: string | null;
-              slug: string | null;
-            }>
-          | null;
-        category: string | null;
-        category_id: string | null;
-        condition: string | null;
-        images: string[] | null;
-        name: string;
-      }>
-    | null;
-  quantity: number;
-  variant_attributes: unknown;
-  variant_id: string | null;
-  variant_name: string | null;
-}
+import { mapOrderItems } from './useOrderDetails-helpers';
 
 function getFirstDisplayNamePart(value: string | null | undefined) {
   return value?.trim().split(/\s+/)[0] || null;
@@ -104,16 +53,18 @@ export async function fetchOrderById(
       .eq('order_id', orderId),
     supabase
       .from('transactions')
-      .select('amount, gateway')
+      .select('amount, gateway, created_at, metadata, status, transaction_type')
       .eq('order_id', orderId)
       .eq('merchant_id', merchantId)
       .eq('transaction_type', 'payment')
       .in('status', ['success', 'completed']),
     supabase
       .from('order_payment_accounts')
-      .select('account_number, bank_name, account_name')
+      .select(
+        'account_number, bank_name, account_name, provider, assignment_customer_email_source, created_at, assigned_at, expires_at'
+      )
       .eq('order_id', orderId)
-      .maybeSingle(),
+      .order('created_at', { ascending: false }),
   ]);
 
   if (itemsError) {
@@ -242,38 +193,18 @@ export async function fetchOrderById(
     balance,
     payment_status: paymentStatus,
     fulfillment_details: orderWithMeta.fulfillment_details ?? null,
-    items: ((items as OrderItemRow[] | null) ?? []).map((item) => {
-      const product = getJoinedRecord(item.products);
-      const productCategory = getJoinedRecord(product?.categories);
-      const itemName = item.name ?? product?.name ?? 'Unnamed item';
-      const categoryName =
-        productCategory?.name ?? product?.category ?? undefined;
-
-      return {
-        category: categoryName,
-        category_slug: productCategory?.slug ?? undefined,
-        condition: item.condition ?? undefined,
-        details: item.item_description ?? undefined,
-        display_condition: item.condition ?? product?.condition ?? undefined,
-        display_image_url: item.image_url ?? product?.images?.[0],
-        has_assurance: item.has_assurance ?? undefined,
-        id: item.id,
-        image_url: item.image_url ?? undefined,
-        name: itemName,
-        price: item.price,
-        product_id: item.product_id ?? null,
-        product_match_status: item.product_match_status ?? undefined,
-        product_name: itemName,
-        quantity: item.quantity,
-        variant_attributes:
-          normalizeVariantAttributes(item.variant_attributes) ?? undefined,
-        variant_id: item.variant_id ?? null,
-        variant_name: item.variant_name ?? undefined,
-      };
-    }),
+    items: mapOrderItems(items as Parameters<typeof mapOrderItems>[0]),
     recorded_by_name: recordedByName,
     staff_terminal: staffTerminal,
-    virtual_account: virtualAccount || null,
+    virtual_account:
+      selectPreferredOrderPaymentAccount(virtualAccount, new Date(), {
+        allowExpiredPaystackAccount: paymentStatus === 'paid',
+        preferredPaystackAccountNumber:
+          paymentStatus === 'paid'
+            ? getPaystackDvaAccountNumberFromTransactions(transactions)
+            : null,
+        allowDeviceClockSkew: true,
+      }) || null,
   };
 }
 

@@ -1,73 +1,34 @@
 'use client';
 
-import { ArrowRight, CheckCircle, Download, Loader2, Star } from 'lucide-react';
+import { ArrowRight, CheckCircle, Loader2, Star } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { GoogleCustomerReviews } from '@/components/analytics/google-customer-reviews';
+import { useStorefrontCustomerSession } from '@/components/storefront/ogabassey/pages/checkout/hooks/use-storefront-customer-session';
 import { useCurrencyWithCountry } from '@/hooks/use-currency';
 import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
 import { asRoute } from '@/lib/routes';
-
-interface OrderData {
-  id: string;
-  order_number: string;
-  short_id?: string;
-  tracking_token?: string;
-  customer_name?: string;
-  customer_email?: string;
-  customer_phone?: string;
-  shipping_address?: Record<string, unknown>;
-  payment_status?: string;
-  payment_method?: string;
-  shipping_status?: string;
-  merchant_id?: string;
-  items: Array<{
-    id: string;
-    product_name?: string;
-    name?: string;
-    gtin?: string | null;
-    price: number;
-    quantity: number;
-    product_images?: string[];
-  }>;
-  subtotal: number;
-  shipping_cost: number;
-  total: number;
-}
-
-import { GoogleCustomerReviews } from '@/components/analytics/google-customer-reviews';
-import { useAuthSafe } from '@/contexts/auth-context';
+import {
+  fetchStorefrontOrderData,
+  type StorefrontOrderData as OrderData,
+} from './fetch-storefront-order';
+import { OrderSuccessInvoiceCta } from './order-success-invoice-cta';
+import { OrderSuccessOrderSummary } from './order-success-order-summary';
+import { buildPayerHandoff } from './order-success-payer-handoff';
+import { OrderSuccessPayerHandoff } from './order-success-payer-handoff-view';
+import {
+  buildGoogleReviewProducts,
+  buildOrderSuccessCopy,
+  resolveInvoicePresentation,
+} from './order-success-presentation';
+import { useBnplSettlement } from './use-bnpl-settlement';
+import { useInvoiceGeneratedCapture } from './use-invoice-generated-capture';
+import { usePayformeHandoffRefresh } from './use-payforme-handoff-refresh';
 
 // Default to 5 days for delivery logic if not available
 const DELIVERY_ESTIMATE_MS = 5 * 24 * 60 * 60 * 1000;
-
-async function fetchOrderData(
-  orderId: string,
-  merchantSlug: string | undefined,
-  orderToken: string | null,
-  lookupEmail: string | null = null
-): Promise<OrderData | null> {
-  try {
-    const query = new URLSearchParams();
-    if (merchantSlug) query.set('merchant_slug', merchantSlug);
-    if (orderToken) query.set('token', orderToken);
-    if (!orderToken && lookupEmail) query.set('email', lookupEmail);
-    const url = query.toString()
-      ? `/api/storefront/orders/${orderId}?${query.toString()}`
-      : `/api/storefront/orders/${orderId}`;
-
-    // Use storefront endpoint (guest-accessible, token-based)
-    const res = await fetch(url);
-    if (res.ok) {
-      return (await res.json()) as OrderData;
-    }
-  } catch (err) {
-    console.error('Failed to fetch order', err);
-  }
-
-  return null;
-}
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
@@ -77,7 +38,7 @@ function OrderSuccessContent() {
   // Guest orders confirmed via email-only lookup (no tracking token) pass
   // the email through so the order fetch below can still authenticate.
   const lookupEmail = searchParams.get('email');
-  const _type = searchParams.get('type'); // Reserved for future use
+  const _type = searchParams.get('type');
   const merchantContext = useMerchantSafe();
   const basePath = merchantContext?.basePath;
   const merchant = merchantContext?.merchant;
@@ -85,11 +46,19 @@ function OrderSuccessContent() {
     merchant?.country,
     merchant?.payout_currency
   );
-  const auth = useAuthSafe();
-  const user = auth?.user;
+  // AuthContext (useAuthSafe) only mounts in dashboard/platform trees —
+  // it is always null on the storefront and cannot distinguish a guest
+  // from a signed-in customer. Resolve the storefront cookie session
+  // explicitly: invoice downloads render only for an authenticated
+  // customer, and guests deterministically get the email notice (the
+  // download endpoints still enforce ownership server-side).
+  const customerSession = useStorefrontCustomerSession(
+    merchant?.slug ?? undefined
+  );
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [payerDetailsCopied, setPayerDetailsCopied] = useState(false);
   const [estimatedDeliveryDate] = useState(
     () =>
       new Date(Date.now() + DELIVERY_ESTIMATE_MS).toISOString().split('T')[0]
@@ -106,44 +75,98 @@ function OrderSuccessContent() {
       return;
     }
 
-    fetchOrderData(orderId, merchant?.slug, orderToken, lookupEmail).then(
-      (data) => {
-        if (data) {
-          setOrder(data);
-        }
-        setLoading(false);
+    // Same-route navigation (order A → order B) reuses this component
+    // without remounting: clear the rendered order so A's details —
+    // especially the Pay for Me payer handoff — are never shown or
+    // copied under B's URL while B's lookup is in flight or fails.
+    setOrder(null);
+    setPayerDetailsCopied(false);
+    setLoading(true);
+    let cancelled = false;
+    fetchStorefrontOrderData(
+      orderId,
+      merchant?.slug,
+      orderToken,
+      lookupEmail
+    ).then((data) => {
+      // A superseded lookup resolving late must not overwrite the
+      // current identity's state (or suppress its loading UI).
+      if (cancelled) {
+        return;
       }
-    );
+      if (data) {
+        setOrder(data);
+      }
+      setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [orderId, merchant?.slug, orderToken, lookupEmail]);
+
+  useBnplSettlement({
+    checkoutType: _type,
+    orderId,
+    orderToken,
+    merchantSlug: merchant?.slug,
+    referenceParam: searchParams.get('reference'),
+    credpalRefParam: searchParams.get('credpalRef'),
+    loading,
+    order,
+    setOrder,
+  });
 
   // Without an order id there is nothing to fetch, so we are never loading.
   const isLoading = loading && Boolean(orderId);
   const hasValidatedOrder = Boolean(order);
   const hasRecoveryState = !isLoading && !hasValidatedOrder;
-  const isInvoice =
-    _type === 'invoice' ||
-    order?.payment_status === 'invoice' ||
-    order?.payment_method === 'invoice';
-
-  const heading = hasValidatedOrder
-    ? isInvoice
-      ? 'Invoice Generated!'
-      : 'Order Confirmed!'
-    : hasRecoveryState
-      ? 'We could not confirm this order yet'
-      : 'Finalizing your order';
-  const description = hasValidatedOrder
-    ? isInvoice
-      ? 'We have prepared your invoice and sent it to your email. Please check your inbox.'
-      : 'Thank you for your purchase. Your order has been received.'
-    : hasRecoveryState
-      ? 'We could not validate this order from the current link. You can return to checkout or keep shopping while we sort it out.'
-      : 'We are validating your order details now. This page will update as soon as your confirmation is ready.';
-  const googleCustomerReviewProducts =
-    order?.items
-      .map((item) => item.gtin?.trim())
-      .filter((gtin): gtin is string => Boolean(gtin))
-      .map((gtin) => ({ gtin })) ?? [];
+  const { isCancelled, isInvoice, isInvoiceMethod } =
+    resolveInvoicePresentation({
+      order,
+      type: _type,
+    });
+  const payerHandoff = buildPayerHandoff({
+    merchantCountry: merchant?.country,
+    order,
+    payerNameParam: searchParams.get('payerName'),
+    type: _type,
+  });
+  const { isPayForMeUnpaid, payerName } = payerHandoff;
+  // The retry-provisioned DVA can land after the first lookup (pre-response
+  // Paystack timeout → after() retry): refetch on a bounded lane while the
+  // handoff is unpaid and account-less so the bank details appear without
+  // a manual refresh.
+  usePayformeHandoffRefresh({
+    lookupEmail,
+    merchantSlug: merchant?.slug,
+    onOrder: setOrder,
+    orderId,
+    orderToken,
+    shouldRefresh:
+      isPayForMeUnpaid && !payerHandoff.payerTransferAccount && !loading,
+  });
+  // invoice_generated is captured only after the server confirms terminal
+  // artifact delivery (never optimistically at creation): the hook
+  // captures an already-delivered lookup immediately and otherwise
+  // refreshes on a bounded lane until the flag lands.
+  useInvoiceGeneratedCapture({
+    isProforma: isInvoice,
+    lookupEmail,
+    merchantSlug: merchant?.slug,
+    onOrder: setOrder,
+    order,
+    orderId,
+    orderToken,
+  });
+  const { description, heading } = buildOrderSuccessCopy({
+    hasRecoveryState,
+    hasValidatedOrder,
+    isDelivered: order?.notification_delivered ?? false,
+    isInvoice,
+    isPayForMeUnpaid,
+    payerName,
+  });
+  const googleCustomerReviewProducts = buildGoogleReviewProducts(order);
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 pt-10">
@@ -186,6 +209,17 @@ function OrderSuccessContent() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{heading}</h1>
           <p className="text-gray-500 mb-8">{description}</p>
 
+          {/* Payer handoff (Pay for Me only): copyable payment
+              instructions the requester forwards — amount plus transfer
+              details, with no bearer token, no link, and no PII. */}
+          {order && (
+            <OrderSuccessPayerHandoff
+              handoff={payerHandoff}
+              order={order}
+              payerDetailsCopied={payerDetailsCopied}
+              onCopied={setPayerDetailsCopied}
+            />
+          )}
           {isLoading && (
             <div className="inline-flex items-center gap-2 rounded-full bg-gray-100 px-4 py-2 text-sm text-gray-500 mb-8">
               <Loader2 className="size-4 animate-spin" />
@@ -194,36 +228,10 @@ function OrderSuccessContent() {
           )}
 
           {order && (
-            <div className="text-left bg-gray-50 rounded-2xl p-6 mb-8 border border-gray-100">
-              <div className="flex justify-between items-center mb-4 pb-4 border-b border-gray-200">
-                <span className="text-sm font-medium text-gray-500">
-                  Order Number
-                </span>
-                <span className="font-bold text-gray-900">
-                  #{order.order_number || order.id.slice(0, 8)}
-                </span>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between items-start">
-                  <span className="text-sm font-medium text-gray-500">
-                    Items ({order.items?.length || 0})
-                  </span>
-                  <span className="font-medium text-gray-900">
-                    {formatCurrency(order.total)}
-                  </span>
-                </div>
-                {order.customer_email && (
-                  <div className="flex justify-between items-start">
-                    <span className="text-sm font-medium text-gray-500">
-                      Email
-                    </span>
-                    <span className="font-medium text-gray-900 truncate max-w-[200px]">
-                      {order.customer_email}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
+            <OrderSuccessOrderSummary
+              formatCurrency={formatCurrency}
+              order={order}
+            />
           )}
 
           <div className="flex flex-col gap-3">
@@ -237,15 +245,20 @@ function OrderSuccessContent() {
               </Link>
             )}
 
-            {isInvoice && (
-              <Link
-                href={asRoute(getHref('/receipts'))}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-store-border bg-store-background px-6 py-4 font-bold text-store-background-text transition-colors hover:bg-store-secondary"
-              >
-                <Download size={18} />
-                Download Invoice PDF
-              </Link>
-            )}
+            {/* Cancelled orders are terminal and non-payable: no invoice
+                actions at all, even though the method is still invoice. */}
+            {isInvoiceMethod &&
+              !isCancelled &&
+              customerSession.status !== 'loading' && (
+                <OrderSuccessInvoiceCta
+                  archiveHref={asRoute(getHref('/receipts'))}
+                  isAuthed={customerSession.isAuthenticated}
+                  isDelivered={order?.notification_delivered ?? false}
+                  isInvoice={isInvoice}
+                  merchantSlug={merchant?.slug}
+                  order={order}
+                />
+              )}
 
             <Link
               href={asRoute(getHref('/'))}
@@ -259,7 +272,7 @@ function OrderSuccessContent() {
               <ArrowRight size={18} />
             </Link>
 
-            {hasValidatedOrder && user ? (
+            {hasValidatedOrder && customerSession.isAuthenticated ? (
               <Link
                 href={asRoute(getHref('/account/orders'))}
                 className="inline-flex items-center justify-center gap-2 px-6 py-4 bg-white text-gray-900 font-bold rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors w-full"

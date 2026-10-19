@@ -13,6 +13,12 @@ export interface ComparableProductKeySpecs {
   wireless_charging_watt?: number;
 }
 
+export { isAccessoryLikeCategory } from './spec-accessory-classifier';
+export { isCameraLikeCategory } from './spec-camera-classifier';
+export type { ProductSpecFamily } from './spec-family-classifier';
+export { getProductSpecFamily } from './spec-family-classifier';
+export { SUMMARY_SPEC_PRIORITIES } from './spec-summary-priorities';
+
 export interface SpecField {
   key: string;
   label: string;
@@ -34,7 +40,7 @@ export const KEY_SPEC_CATEGORIES: SpecCategory[] = [
       {
         key: 'has_5g',
         label: '5G Support',
-        transform: (v: unknown) => (v ? 'Yes' : 'No'),
+        transform: (v: unknown) => (v === true ? 'Yes' : 'No'),
       },
     ],
   },
@@ -96,7 +102,9 @@ export const KEY_SPEC_CATEGORIES: SpecCategory[] = [
         key: 'has_card_slot',
         label: 'Card Slot',
         transform: (_v: unknown, allSpecs: ComparableProductKeySpecs) =>
-          allSpecs.has_card_slot ? allSpecs.card_slot_type || 'Yes' : 'No',
+          allSpecs.has_card_slot === true
+            ? allSpecs.card_slot_type || 'Yes'
+            : 'No',
       },
       {
         key: 'storage_gb',
@@ -113,11 +121,11 @@ export const KEY_SPEC_CATEGORIES: SpecCategory[] = [
         key: 'main_camera_mp',
         label: 'Camera',
         dynamicLabel: (allSpecs: ComparableProductKeySpecs) =>
-          allSpecs.has_quad_camera
+          allSpecs.has_quad_camera === true
             ? 'Quad Camera'
-            : allSpecs.has_triple_camera
+            : allSpecs.has_triple_camera === true
               ? 'Triple Camera'
-              : allSpecs.has_dual_camera
+              : allSpecs.has_dual_camera === true
                 ? 'Dual Camera'
                 : 'Single Camera',
         transform: (v: unknown) => `${v}MP`,
@@ -145,12 +153,12 @@ export const KEY_SPEC_CATEGORIES: SpecCategory[] = [
         key: 'has_stereo_speakers',
         label: 'Loudspeaker',
         transform: (v: unknown) =>
-          v ? 'Yes, with stereo speakers' : 'Yes (mono)',
+          v === true ? 'Yes, with stereo speakers' : 'Yes (mono)',
       },
       {
         key: 'has_headphone_jack',
         label: '3.5mm Jack',
-        transform: (v: unknown) => (v ? 'Yes' : 'No'),
+        transform: (v: unknown) => (v === true ? 'Yes' : 'No'),
       },
     ],
   },
@@ -163,18 +171,18 @@ export const KEY_SPEC_CATEGORIES: SpecCategory[] = [
       {
         key: 'has_nfc',
         label: 'NFC',
-        transform: (v: unknown) => (v ? 'Yes' : 'No'),
+        transform: (v: unknown) => (v === true ? 'Yes' : 'No'),
       },
       {
         key: 'has_fm_radio',
         label: 'Radio',
-        transform: (v: unknown) => (v ? 'FM Radio' : 'No'),
+        transform: (v: unknown) => (v === true ? 'FM Radio' : 'No'),
       },
       {
         key: 'usb_type',
         label: 'USB',
         transform: (v: unknown, allSpecs: ComparableProductKeySpecs) =>
-          `${String(v)}${allSpecs.has_usb_otg ? ', OTG' : ''}`,
+          `${String(v)}${allSpecs.has_usb_otg === true ? ', OTG' : ''}`,
       },
     ],
   },
@@ -192,7 +200,7 @@ export const KEY_SPEC_CATEGORIES: SpecCategory[] = [
         key: 'battery_mah',
         label: 'Capacity',
         transform: (v: unknown, allSpecs: ComparableProductKeySpecs) =>
-          `${v}mAh${allSpecs.battery_removable ? ' (removable)' : ''}`,
+          `${v}mAh${allSpecs.battery_removable === true ? ' (removable)' : ''}`,
       },
       {
         key: 'charging_watt',
@@ -204,14 +212,14 @@ export const KEY_SPEC_CATEGORIES: SpecCategory[] = [
         label: 'Wireless Charging',
         transform: (v: unknown) => `${v}W`,
         condition: (allSpecs: ComparableProductKeySpecs) =>
-          Boolean(allSpecs.has_wireless_charging),
+          allSpecs.has_wireless_charging === true,
       },
       {
         key: 'has_reverse_charging',
         label: 'Reverse Charging',
         transform: () => 'Yes',
         condition: (allSpecs: ComparableProductKeySpecs) =>
-          Boolean(allSpecs.has_reverse_charging),
+          allSpecs.has_reverse_charging === true,
       },
     ],
   },
@@ -223,72 +231,3 @@ export const KEY_SPEC_CATEGORIES: SpecCategory[] = [
     ],
   },
 ];
-
-export const SUMMARY_SPEC_PRIORITIES = [
-  {
-    label: 'Display',
-    candidates: [
-      ['Key Specs', 'Display'],
-      ['Key Specs', 'Screen'],
-      ['Display', 'Size'],
-      ['Display', 'Screen Size'],
-      ['General', 'Display'],
-    ],
-  },
-  {
-    label: 'Processor',
-    candidates: [
-      ['Key Specs', 'Processor'],
-      ['Key Specs', 'Chipset'],
-      ['Platform', 'Chipset'],
-    ],
-  },
-  {
-    label: 'RAM',
-    candidates: [
-      ['Memory', 'RAM'],
-      ['General', 'RAM'],
-    ],
-  },
-  {
-    label: 'Storage',
-    candidates: [
-      ['Memory', 'Internal Storage'],
-      ['General', 'Storage'],
-    ],
-  },
-  {
-    label: 'Camera',
-    candidates: [
-      ['Key Specs', 'Camera'],
-      ['Main Camera', 'Quad Camera'],
-      ['Main Camera', 'Triple Camera'],
-      ['Main Camera', 'Dual Camera'],
-      ['Main Camera', 'Single Camera'],
-      ['General', 'Camera'],
-    ],
-  },
-  {
-    label: 'Battery',
-    candidates: [
-      ['Key Specs', 'Battery'],
-      ['Battery', 'Capacity'],
-      ['General', 'Battery'],
-    ],
-  },
-  {
-    label: 'SIM',
-    candidates: [
-      ['Body', 'SIM'],
-      ['General', 'SIM'],
-    ],
-  },
-  {
-    label: 'OS',
-    candidates: [
-      ['Key Specs', 'OS'],
-      ['Key Specs', 'Operating System'],
-      ['Platform', 'OS'],
-    ],
-  },
-] as const;

@@ -12,7 +12,7 @@ export function OrderCardDetails({
   formatCurrency,
 }: {
   order: Order;
-  formatCurrency: (amount: number) => string;
+  formatCurrency: (amount: number, currency?: string | null) => string;
 }) {
   const orderDetailsHref = getDashboardOrderDetailsHref(order);
 
@@ -45,7 +45,7 @@ export function OrderCardDetails({
                 <div className="shrink-0 text-right">
                   <p className="font-medium">x{item.quantity}</p>
                   <p className="text-xs text-muted-foreground">
-                    {formatCurrency(item.price)}
+                    {formatCurrency(item.price, order.currency)}
                   </p>
                 </div>
               </div>

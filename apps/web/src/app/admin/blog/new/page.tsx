@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation';
 import { BlogEditorClient } from '@/app/admin/blog/blog-editor-client';
-import { getPlatformAdminAuth } from '@/lib/platform-admin-auth';
+import { getPlatformAdminAuthForPermission } from '@/lib/platform-admin-auth';
 
 export default async function NewAdminBlogPostPage() {
-  const auth = await getPlatformAdminAuth();
+  const auth = await getPlatformAdminAuthForPermission('content.manage');
   if (auth.status === 'unauthenticated') {
     redirect('/login?redirect=%2Fadmin');
   }

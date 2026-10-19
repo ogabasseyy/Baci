@@ -6,21 +6,23 @@ interface GadgetPatternBackgroundProps {
   colorScheme: 'light' | 'dark';
   backgroundColor: string;
   height?: number;
+  opacity?: number;
 }
 
 export const PATTERN_HEIGHT = 1500;
 export const DARK_OPACITY = 0.04;
 export const LIGHT_OPACITY = 0.07;
-export const DARK_COLOR = '#ffffff';
+export const DARK_COLOR = BRAND.primary;
 export const LIGHT_COLOR = BRAND.primary;
 
 export function GadgetPatternBackground({
   colorScheme,
   backgroundColor,
   height = PATTERN_HEIGHT,
+  opacity,
 }: GadgetPatternBackgroundProps) {
   const isDark = colorScheme === 'dark';
-  const patternOpacity = isDark ? DARK_OPACITY : LIGHT_OPACITY;
+  const patternOpacity = opacity ?? (isDark ? DARK_OPACITY : LIGHT_OPACITY);
   const patternColor = isDark ? DARK_COLOR : LIGHT_COLOR;
 
   return (

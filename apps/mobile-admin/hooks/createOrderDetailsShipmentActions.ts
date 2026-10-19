@@ -13,6 +13,8 @@ import {
   shouldPersistFulfillmentDetails,
 } from '@/lib/order-shipment';
 import { completeOrderShipment } from './completeOrderShipment';
+import type { ProviderBookingErrorOutcome } from './handleOrderDetailsProviderBookingError';
+import { OrderStatusUpdateError } from './orders/order-status-update-error';
 
 interface SuccessModalState {
   actionLabel: string;
@@ -52,6 +54,11 @@ interface CreateOrderDetailsShipmentActionsParams {
     orderId: string;
     status: 'shipped';
   }) => Promise<unknown>;
+  onProviderBookingError?:
+    | ((error: unknown) => void)
+    | ((
+        error: unknown
+      ) => ProviderBookingErrorOutcome | Promise<ProviderBookingErrorOutcome>);
 }
 
 export function createOrderDetailsShipmentActions({
@@ -79,6 +86,7 @@ export function createOrderDetailsShipmentActions({
   shipmentFlowStep,
   showShipmentFlow,
   updateStatus,
+  onProviderBookingError,
 }: CreateOrderDetailsShipmentActionsParams) {
   const closeShipmentFlow = () => {
     setShowShipmentFlow(false);
@@ -212,8 +220,23 @@ export function createOrderDetailsShipmentActions({
     try {
       await finalizeShipmentCompletion('provider');
     } catch (error: unknown) {
+      try {
+        const outcome = await onProviderBookingError?.(error);
+        if (outcome === 'review_checkout_quote') return outcome;
+      } catch {
+        // Recovery refresh failures must not hide the original booking error.
+      }
+      const code =
+        error instanceof OrderStatusUpdateError ? error.code : undefined;
+      if (code === 'SHIPMENT_BOOKING_UNCONFIRMED') {
+        closeShipmentFlow();
+      }
       Alert.alert(
-        'Error',
+        code === 'MERCHANT_WALLET_QUOTE_RECONFIRM_REQUIRED'
+          ? 'Quote updated'
+          : code === 'SHIPMENT_BOOKING_UNCONFIRMED'
+            ? 'Check shipment status'
+            : 'Error',
         (error as Error).message || 'Failed to mark order as shipped'
       );
     }

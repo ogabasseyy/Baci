@@ -1,0 +1,15 @@
+{
+  "extends": "../../apps/web/tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true,
+    "plugins": [],
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "../../apps/web/src/lib/piggyvest/prefunded-card-reversal*.ts",
+    "../../apps/web/src/schemas/prefunded-card-reversal*.ts",
+    "prefunded-card-reversal.driver.ts"
+  ],
+  "exclude": ["../../node_modules"]
+}

@@ -6,6 +6,7 @@ export const STOREFRONT_AGENT_ROUTES = {
   agentNativeCommerce: '/.well-known/agent-native-commerce',
   agentSkillIndex: '/.well-known/agent-skills/index.json',
   agentSkillMarkdown: '/.well-known/agent-skills/baci-storefront/SKILL.md',
+  appAds: '/app-ads.txt',
   agenticApiBase: '/api/agentic',
   apiCatalog: '/.well-known/api-catalog',
   authDoc: '/auth.md',

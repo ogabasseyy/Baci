@@ -20,7 +20,11 @@ import type { ComponentType, ReactNode } from 'react';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import type { MerchantData } from '@/hooks/use-merchant';
 import type { Product } from '@/lib/products';
-import type { V2ThemeMode } from '@/components/storefront/ogabassey/providers/v2-theme-context';
+import type { TemplateBlogPageProps } from './template-blog-types';
+import type { TemplatePageProps } from './template-page-props';
+
+export type { BlogPostData, TemplateBlogPageProps } from './template-blog-types';
+export type { TemplatePageProps } from './template-page-props';
 
 /**
  * Template status - controls visibility and access
@@ -89,53 +93,6 @@ export interface TemplateComponents {
   DeleteAccount?: ComponentType<TemplatePageProps>;
   /** Blog listing page (optional, uses default if not provided) */
   Blog?: ComponentType<TemplateBlogPageProps>;
-}
-
-/**
- * Props for blog page components
- */
-export interface TemplateBlogPageProps extends TemplatePageProps {
-  posts?: BlogPostData[];
-
-  categories?: { name: string; slug: string }[];
-  /** Current category query if filtering by category */
-  category?: string;
-  /** Current search query if filtering by search */
-  searchQuery?: string;
-}
-
-/**
- * Blog post data structure for template components
- */
-export interface BlogPostData {
-  id: string | number;
-  title: string;
-  excerpt: string;
-  category: string;
-  author_name: string;
-  published_at: string;
-  featured_image_url: string;
-  reading_time_minutes: number;
-  slug: string;
-  featured?: boolean;
-}
-
-/**
- * Props passed to template page components
- */
-export interface TemplatePageProps {
-  /** Store slug for routing */
-  storeSlug?: string;
-  /** Merchant data (real or mock) */
-  merchant?: MerchantData;
-  /** Products (real or mock) */
-  products?: Product[];
-  /** Whether this is a preview mode */
-  isPreview?: boolean;
-  /** Initial theme for SSR consistency (Phase 1: Cookie-Based Theme) */
-  initialTheme?: V2ThemeMode;
-  /** Categories loaded from DB */
-  categories?: { name: string; slug: string }[];
 }
 
 /**
@@ -237,11 +194,11 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: true,
     },
     getComponents: async () => {
-      const { GadgetDefaultTemplate } = await import(
-        '@/components/storefront/templates/gadget-default-template'
+      const { ElectronicsTemplateHome } = await import(
+        './registry-client-homes'
       );
       return {
-        Home: GadgetDefaultTemplate as ComponentType<TemplatePageProps>,
+        Home: ElectronicsTemplateHome,
       };
     },
     mockData: {
@@ -277,11 +234,9 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: true,
     },
     getComponents: async () => {
-      const { PremiumDefaultTemplate } = await import(
-        '@/components/storefront/templates/premium-default'
-      );
+      const { FashionTemplateHome } = await import('./registry-client-homes');
       return {
-        Home: PremiumDefaultTemplate as ComponentType<TemplatePageProps>,
+        Home: FashionTemplateHome,
       };
     },
     mockData: {
@@ -317,8 +272,8 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { HomeGoodsHome } = await import('./home-goods');
-      return { Home: HomeGoodsHome };
+      const { HomeGoodsTemplateHome } = await import('./registry-client-homes');
+      return { Home: HomeGoodsTemplateHome };
     },
     mockData: {
       merchant: {
@@ -353,8 +308,10 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { FoodBeverageHome } = await import('./food-beverage');
-      return { Home: FoodBeverageHome };
+      const { FoodBeverageTemplateHome } = await import(
+        './registry-client-homes'
+      );
+      return { Home: FoodBeverageTemplateHome };
     },
     mockData: {
       merchant: {
@@ -389,8 +346,10 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { BeautyHome } = await import('./beauty');
-      return { Home: BeautyHome };
+      const { HealthBeautyTemplateHome } = await import(
+        './registry-client-homes'
+      );
+      return { Home: HealthBeautyTemplateHome };
     },
     mockData: {
       merchant: {
@@ -425,8 +384,10 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { HairExtensionsHome } = await import('./hair-extensions');
-      return { Home: HairExtensionsHome };
+      const { HairExtensionsTemplateHome } = await import(
+        './registry-client-homes'
+      );
+      return { Home: HairExtensionsTemplateHome };
     },
     mockData: {
       merchant: {
@@ -461,8 +422,10 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { PharmaceuticalHome } = await import('./pharmaceutical');
-      return { Home: PharmaceuticalHome };
+      const { PharmaceuticalsTemplateHome } = await import(
+        './registry-client-homes'
+      );
+      return { Home: PharmaceuticalsTemplateHome };
     },
     mockData: {
       merchant: {
@@ -508,11 +471,11 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     tags: ['gadgets', 'dark', 'modern', 'advanced'],
     updatedAt: '2024-12-05',
     getComponents: async () => {
-      const { GadgetUniverseTemplate } = await import(
-        '@/components/storefront/templates/gadget-universe'
+      const { GadgetUniverseTemplateHome } = await import(
+        './registry-client-homes'
       );
       return {
-        Home: GadgetUniverseTemplate as React.ComponentType<any>,
+        Home: GadgetUniverseTemplateHome,
       };
     },
     mockData: {
@@ -552,16 +515,12 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
         '@/components/storefront/ogabassey/home-product-feed'
       );
 
-      // Import optional pages
-      const { OgabasseyV2AboutUs } = await import('@/components/storefront/ogabassey/pages/about-us');
-      const { OgabasseyV2PrivacyPolicy } = await import('@/components/storefront/ogabassey/pages/privacy-policy');
-      const { OgabasseyV2LegalDispute } = await import('@/components/storefront/ogabassey/pages/legal-dispute');
-      const { OgabasseyV2Sustainability } = await import('@/components/storefront/ogabassey/pages/sustainability');
-      const { OgabasseyV2Repairs } = await import('@/components/storefront/ogabassey/pages/repairs');
-      const { OgabasseyV2Swap } = await import('@/components/storefront/ogabassey/pages/swap');
-      const { OgabasseyV2HelpSupport } = await import('@/components/storefront/ogabassey/pages/help-support');
-      const { OgabasseyV2Blog } = await import('@/components/storefront/ogabassey/pages/blog');
-
+      // NOTE: the optional info pages (About, Privacy, Legal, Terms,
+      // Sustainability, Repairs, Swap, Help, Contact, Blog) intentionally live
+      // OUTSIDE this registry: each content route imports exactly the page it
+      // renders. Referencing them here would pull them (and the sanitize-html
+      // toolchain) into the initial JS of every route that resolves template
+      // components, including the homepage.
       // Wrapper component
       const OgabasseyHome: React.ComponentType<TemplatePageProps> = (props) => {
         const homeProducts = props.products
@@ -577,25 +536,8 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
         );
       };
 
-      // Wrapper factory for pages
-      const createWrappedPage = <P extends TemplatePageProps>(Component: React.ComponentType<P>) => {
-        return (props: P) => (
-          <Component {...props} />
-        );
-      };
-
       return {
         Home: OgabasseyHome,
-        About: createWrappedPage(OgabasseyV2AboutUs),
-        Privacy: createWrappedPage(OgabasseyV2PrivacyPolicy),
-        Legal: createWrappedPage(OgabasseyV2LegalDispute), // Maps to Terms/Legal
-        Terms: createWrappedPage(OgabasseyV2LegalDispute),
-        Sustainability: createWrappedPage(OgabasseyV2Sustainability),
-        Repairs: createWrappedPage(OgabasseyV2Repairs),
-        Swap: createWrappedPage(OgabasseyV2Swap),
-        Help: createWrappedPage(OgabasseyV2HelpSupport),
-        Contact: createWrappedPage(OgabasseyV2HelpSupport),
-        Blog: createWrappedPage(OgabasseyV2Blog),
       };
     },
     mockData: {
@@ -635,11 +577,11 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { Home } = await import(
-        '@/components/storefront/new-template/home'
+      const { GadgetsProTemplateHome } = await import(
+        './registry-client-homes'
       );
       return {
-        Home: Home as ComponentType<TemplatePageProps>,
+        Home: GadgetsProTemplateHome,
       };
     },
     mockData: {
@@ -678,8 +620,8 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { HandmadeHome } = await import('./artisan');
-      return { Home: HandmadeHome };
+      const { HandmadeTemplateHome } = await import('./registry-client-homes');
+      return { Home: HandmadeTemplateHome };
     },
     mockData: {
       merchant: {

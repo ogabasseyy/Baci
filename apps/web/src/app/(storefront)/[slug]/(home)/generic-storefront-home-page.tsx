@@ -1,4 +1,4 @@
-import '@/app/(storefront)/storefront-full.css';
+import { StorefrontFullStyleLoader } from '@/app/(storefront)/storefront-full-style-loader';
 import { StorefrontPageContent } from '../storefront-page-content';
 
 export function GenericStorefrontHomePage({
@@ -6,5 +6,10 @@ export function GenericStorefrontHomePage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  return <StorefrontPageContent params={params} />;
+  return (
+    <>
+      <StorefrontFullStyleLoader />
+      <StorefrontPageContent params={params} />
+    </>
+  );
 }

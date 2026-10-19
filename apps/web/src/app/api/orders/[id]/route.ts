@@ -14,7 +14,7 @@ import {
 } from '@/lib/payments/ensure-paid-order-inventory-confirmed';
 import { fileInventoryConfirmationFailureReview } from '@/lib/payments/file-inventory-confirmation-review';
 import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/inventory-confirmation-response';
-import { bookOrderShipment } from '@/lib/shipping/book-order-shipment';
+import { isFundedCheckoutGiglAddressLocked } from '@/lib/shipping/is-funded-checkout-gigl-address-locked';
 import {
   claimOrderShipmentBooking,
   clearOrderShipmentBookingLock,
@@ -24,7 +24,15 @@ import {
   isShippingProviderCode,
   OrderShipmentBookingError,
 } from '@/lib/shipping/order-shipment-booking-utils';
+import { runClaimedOrderWalletOrCheckoutBooking } from '@/lib/shipping/run-claimed-order-wallet-or-checkout-booking';
 import { orderUpdateSchema } from '@/schemas/orders';
+import { appendCancelledStatusFences } from './append-cancelled-status-fences';
+import { createRacedCancellationRejection } from './create-raced-cancellation-rejection';
+import {
+  evaluateOrderCancelledTransition,
+  writesNonCancelledStatusValue,
+} from './evaluate-order-cancelled-transition';
+import { mapOrderPatchUpdateError } from './map-order-patch-update-error';
 
 function isPaidStatusUpdate(value: unknown): value is 'paid' | 'bnpl_approved' {
   return value === 'paid' || value === 'bnpl_approved';
@@ -151,7 +159,7 @@ export async function PATCH(
     const { data: existingOrder, error: checkError } = await supabase
       .from('orders')
       .select(
-        'id, order_number, shipping_status, payment_status, is_credit_order, customer_id, selected_quote_id, shipping_provider, tracking_number, shipment_id'
+        'id, order_number, shipping_status, payment_status, payment_method, is_credit_order, customer_id, selected_quote_id, shipping_provider, shipping_funding_source, shipping_address, tracking_number, shipment_id'
       )
       .eq('id', id)
       .eq('merchant_id', merchantId)
@@ -175,6 +183,33 @@ export async function PATCH(
         { status: 409 }
       );
     }
+
+    // Terminal states are terminal in both directions (policy lives in
+    // the extracted helper; see its header for the two-step bypass).
+    const cancelledRejection = evaluateOrderCancelledTransition({
+      existingPaymentStatus: existingOrder.payment_status,
+      existingShippingStatus: existingOrder.shipping_status,
+      requestedPaymentStatus: payment_status,
+      requestedShippingStatus: shipping_status,
+    });
+    if (cancelledRejection) {
+      return NextResponse.json(cancelledRejection, { status: 409 });
+    }
+
+    // The terminal-state predicates ride on the UPDATEs below so a
+    // cancellation committing after this read cannot be resurrected
+    // (fencing and raced-reread policy live in the extracted helpers).
+    const writesStatusValue = writesNonCancelledStatusValue({
+      paymentStatus: payment_status,
+      shippingStatus: shipping_status,
+    });
+    const racedCancellationRejection = createRacedCancellationRejection({
+      supabase,
+      merchantId,
+      orderId: id,
+      requestedPaymentStatus: payment_status,
+      requestedShippingStatus: shipping_status,
+    });
 
     // Validate: Cannot move to 'processing' unless paid or is_credit_order
     if (
@@ -237,6 +272,47 @@ export async function PATCH(
     }
     if (shipping_address !== undefined) {
       updates.shipping_address = shipping_address;
+      if (existingOrder.selected_quote_id) {
+        // A shipping quote is calculated for a specific destination. Any
+        // address edit invalidates that binding so a later wallet/provider
+        // booking cannot charge or dispatch using stale destination pricing.
+        if (shipping_status === 'shipped') {
+          return NextResponse.json(
+            {
+              error:
+                'Changing the shipping address requires a new shipping quote before shipping.',
+              code: 'SHIPPING_QUOTE_INVALIDATED',
+            },
+            { status: 409 }
+          );
+        }
+        // Settled checkout GIGL retention survives quote clears via DB
+        // triggers, and Admin cannot rebind away from checkout once settlement
+        // has retained shipping. Reject before clearing so prepaid shipping is
+        // not stranded without a quote. Lock on settled retention only —
+        // quote-time stamps (quiz_voucher / zero-retention) must stay editable.
+        if (
+          await isFundedCheckoutGiglAddressLocked(
+            supabase,
+            merchantId,
+            id,
+            existingOrder
+          )
+        ) {
+          return NextResponse.json(
+            {
+              error:
+                'This order already has prepaid checkout shipping. Change the address only through a settlement-safe reprice flow.',
+              code: 'FUNDED_CHECKOUT_ADDRESS_LOCKED',
+            },
+            { status: 409 }
+          );
+        }
+        updates.selected_quote_id = null;
+        if (existingOrder.shipping_funding_source === 'merchant_wallet') {
+          updates.shipping_funding_source = null;
+        }
+      }
     }
 
     const needsProviderShipmentBooking =
@@ -244,7 +320,8 @@ export async function PATCH(
       !existingOrder.tracking_number &&
       !existingOrder.shipment_id &&
       isShippingProviderCode(existingOrder.shipping_provider) &&
-      Boolean(existingOrder.selected_quote_id);
+      Boolean(existingOrder.selected_quote_id) &&
+      shipping_address === undefined;
 
     const needsPreUpdateInventoryConfirmation =
       isPaidStatusUpdate(updates.payment_status) &&
@@ -253,15 +330,30 @@ export async function PATCH(
 
     if (needsPreUpdateInventoryConfirmation) {
       const paidStatus = updates.payment_status;
-      const { error: paidUpdateError } = await supabase
+      // Atomic with the write: the terminal-state predicates ride on
+      // the UPDATE itself, so a cancellation that commits after the
+      // read above cannot be resurrected by this write (zero rows
+      // match instead of a stale-status update landing).
+      let paidUpdateQuery = supabase
         .from('orders')
         .update({ payment_status: paidStatus })
         .eq('id', id)
-        .eq('merchant_id', merchantId)
+        .eq('merchant_id', merchantId);
+      if (writesStatusValue) {
+        paidUpdateQuery = appendCancelledStatusFences(paidUpdateQuery);
+      }
+      const { error: paidUpdateError } = await paidUpdateQuery
         .select('id')
         .single();
 
       if (paidUpdateError) {
+        const racedRejection =
+          paidUpdateError.code === 'PGRST116'
+            ? await racedCancellationRejection()
+            : null;
+        if (racedRejection) {
+          return NextResponse.json(racedRejection, { status: 409 });
+        }
         logger.error({
           message:
             'PATCH orders/[id] failed to persist paid status before inventory confirmation',
@@ -353,7 +445,22 @@ export async function PATCH(
         shipmentBookingLockToken = bookingClaim.lockToken;
 
         try {
-          const booking = await bookOrderShipment(supabase, merchantId, id);
+          const booking = await runClaimedOrderWalletOrCheckoutBooking(
+            supabase,
+            merchantId,
+            id,
+            {
+              selected_quote_id: existingOrder.selected_quote_id,
+              shipping_funding_source: existingOrder.shipping_funding_source,
+              shipping_provider: existingOrder.shipping_provider,
+              payment_status: existingOrder.payment_status,
+              payment_method: existingOrder.payment_method,
+            },
+            {
+              paymentStatus: payment_status ?? existingOrder.payment_status,
+              lockToken: shipmentBookingLockToken,
+            }
+          );
           updates.shipping_provider = booking.provider;
           updates.selected_quote_id = booking.quoteId;
           updates.shipment_id = booking.shipmentId;
@@ -391,12 +498,17 @@ export async function PATCH(
       );
     }
 
-    // Update order
+    // Update order. Terminal-state predicates ride on the UPDATE (see
+    // the pre-update note): a cancellation racing this write matches
+    // zero rows instead of being overwritten back to an active state.
     let updateQuery = supabase
       .from('orders')
       .update(updates)
       .eq('id', id)
       .eq('merchant_id', merchantId);
+    if (writesStatusValue) {
+      updateQuery = appendCancelledStatusFences(updateQuery);
+    }
 
     if (shipmentBookingLockToken) {
       updateQuery = updateQuery.eq(
@@ -411,6 +523,17 @@ export async function PATCH(
 
     if (updateError) {
       console.error('Error updating order:', updateError);
+      // A raced cancellation owns the row now: answer the terminal 409
+      // BEFORE any rollback — restoring the stale pre-cancellation
+      // statuses here would reopen the cancelled order after its
+      // loyalty claim was already released.
+      const racedRejection =
+        updateError.code === 'PGRST116'
+          ? await racedCancellationRejection()
+          : null;
+      if (racedRejection) {
+        return NextResponse.json(racedRejection, { status: 409 });
+      }
       if (inventoryConfirmedBeforeOrderUpdate) {
         try {
           await rollbackOrderStatusAfterInventoryConfirmationFailure(
@@ -447,6 +570,10 @@ export async function PATCH(
             transactionId: null,
           });
         }
+      }
+      const mappedUpdateError = mapOrderPatchUpdateError(updateError);
+      if (mappedUpdateError) {
+        return mappedUpdateError;
       }
       return NextResponse.json(
         { error: 'Failed to update order' },
@@ -553,7 +680,11 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof OrderShipmentBookingError) {
       return NextResponse.json(
-        { error: error.message, code: error.code },
+        {
+          error: error.message,
+          code: error.code,
+          ...(error.details ?? {}),
+        },
         { status: error.status }
       );
     }

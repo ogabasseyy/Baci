@@ -1,3 +1,4 @@
+import { MutationObserver, QueryClient } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const queryClientMock = vi.hoisted(() => ({
@@ -147,7 +148,7 @@ describe('useUpdateOrderStatus', () => {
     );
   });
 
-  it('throws sanitized API errors from failed status updates', async () => {
+  it('preserves wallet booking codes from failed status updates', async () => {
     networkMock.getSession.mockResolvedValue({
       data: { session: { access_token: 'token-1' } },
     });
@@ -156,7 +157,13 @@ describe('useUpdateOrderStatus', () => {
       status: 409,
       statusText: 'Conflict',
       text: async () =>
-        JSON.stringify({ error: 'Cannot ship cancelled order' }),
+        JSON.stringify({
+          error: 'Insufficient merchant wallet balance.',
+          code: 'MERCHANT_WALLET_INSUFFICIENT',
+          availableBalance: 1200,
+          chargedAmount: 4500,
+          shortfall: 3300,
+        }),
     });
 
     const mutation = useUpdateOrderStatus() as unknown as {
@@ -168,10 +175,41 @@ describe('useUpdateOrderStatus', () => {
 
     await expect(
       mutation.mutationFn({ orderId: 'order-1', status: 'shipped' })
-    ).rejects.toThrow('Cannot ship cancelled order');
+    ).rejects.toMatchObject({
+      name: 'OrderStatusUpdateError',
+      code: 'MERCHANT_WALLET_INSUFFICIENT',
+      message: 'Insufficient merchant wallet balance.',
+    });
   });
 
-  it('maps aborted status updates to the timeout message', async () => {
+  it('throws sanitized API errors from failed status updates', async () => {
+    networkMock.getSession.mockResolvedValue({
+      data: { session: { access_token: 'token-1' } },
+    });
+    networkMock.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: 'Cannot ship cancelled order' }), {
+        status: 400,
+      })
+    );
+
+    const mutationOptions =
+      useUpdateOrderStatus() as unknown as ConstructorParameters<
+        typeof MutationObserver
+      >[1];
+    const mutation = new MutationObserver(
+      new QueryClient({
+        defaultOptions: { mutations: { retry: 3, retryDelay: 0 } },
+      }),
+      mutationOptions
+    );
+
+    await expect(
+      mutation.mutate({ orderId: 'order-1', status: 'shipped' })
+    ).rejects.toThrow('Cannot ship cancelled order');
+    expect(networkMock.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('treats aborted shipping updates as unconfirmed outcomes', async () => {
     networkMock.getSession.mockResolvedValue({
       data: { session: { access_token: 'token-1' } },
     });
@@ -188,9 +226,7 @@ describe('useUpdateOrderStatus', () => {
 
     await expect(
       mutation.mutationFn({ orderId: 'order-1', status: 'shipped' })
-    ).rejects.toThrow(
-      'Request timed out. Please check your connection and try again.'
-    );
+    ).rejects.toMatchObject({ code: 'SHIPMENT_BOOKING_UNCONFIRMED' });
   });
 
   it('optimistically updates and rolls back all scoped order detail caches', async () => {
@@ -276,6 +312,9 @@ describe('useUpdateOrderStatus', () => {
     });
     expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['transaction-review', 'merchant-1'],
+    });
+    expect(queryClientMock.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['monthly-transaction-count', 'merchant-1'],
     });
   });
 });

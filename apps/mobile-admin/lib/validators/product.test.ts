@@ -2,6 +2,49 @@ import { describe, expect, it } from 'vitest';
 import { ProductDbSchema } from '@/lib/validators/product';
 
 describe('ProductDbSchema', () => {
+  it('allows variant products to omit a parent SKU while preserving variant SKUs', () => {
+    const parsed = ProductDbSchema.parse({
+      name: 'Xiaomi Redmi A7',
+      price: 137900,
+      cost_price: 0,
+      stock_quantity: 0,
+      category_id: '',
+      manage_stock: true,
+      status: 'active',
+      images: [],
+      has_variants: true,
+      variant_attributes: [],
+      variants: [
+        {
+          attributes: [{ key: 'ram', value: '3GB' }],
+          condition: 'new',
+          price: 137900,
+          sku: 'XM-AZ-3-64-BLUE',
+          stock_quantity: 3,
+        },
+      ],
+    });
+
+    expect(parsed.sku).toBeNull();
+    expect(parsed.variants[0]?.sku).toBe('XM-AZ-3-64-BLUE');
+  });
+
+  it('rejects a blank SKU for non-variant products', () => {
+    expect(() =>
+      ProductDbSchema.parse({
+        name: 'Non-variant product',
+        sku: '   ',
+        price: 100,
+        stock_quantity: 0,
+        category_id: '',
+        manage_stock: true,
+        status: 'active',
+        images: [],
+        variant_attributes: [],
+      })
+    ).toThrow('SKU is required');
+  });
+
   it('keeps stock and stock_quantity in sync for inserts and updates', () => {
     const parsed = ProductDbSchema.parse({
       brand: 'Apple',

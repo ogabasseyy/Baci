@@ -102,7 +102,9 @@ describe('GET /blog/news-sitemap.xml', () => {
     expect(response.headers.get('content-type')).toBe(
       'application/xml; charset=utf-8'
     );
-    expect(response.headers.get('cache-control')).toContain('s-maxage=300');
+    expect(response.headers.get('cache-control')).toBe(
+      'public, s-maxage=1800, stale-while-revalidate=1800'
+    );
     expect(xml).toContain(
       'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"'
     );
@@ -117,7 +119,7 @@ describe('GET /blog/news-sitemap.xml', () => {
     expect(xml).not.toContain('test-post-agent-integration-working');
     expect(mockGte).toHaveBeenCalledWith(
       'published_at',
-      '2026-06-09T09:00:00.000Z'
+      '2026-06-09T10:05:00.000Z'
     );
     expect(mockOrder).toHaveBeenCalledWith('published_at', {
       ascending: false,

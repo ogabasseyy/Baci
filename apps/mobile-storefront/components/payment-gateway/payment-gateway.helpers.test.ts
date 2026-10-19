@@ -1,7 +1,9 @@
 import {
+  getPaymentRedirectReference,
   isPaymentCancellationRedirect,
   isPaymentCompletionRedirect,
   isPlainRecord,
+  isSessionPaymentCompletionRedirect,
   PAYMENT_GATEWAY_LABELS,
   PAYMENT_KINDS,
 } from './payment-gateway.helpers';
@@ -47,6 +49,51 @@ describe('payment-gateway.helpers', () => {
         'https://checkout.example.com/cancelled-order'
       )
     ).toBe(false);
+  });
+
+  it('extracts provider references from redirect urls', () => {
+    expect(
+      getPaymentRedirectReference('https://usebaci.com/orders?trxref=ref-123')
+    ).toBe('ref-123');
+    expect(
+      getPaymentRedirectReference(
+        'https://usebaci.com/order-success?reference=ref-456'
+      )
+    ).toBe('ref-456');
+    expect(
+      getPaymentRedirectReference('https://usebaci.com/order-success')
+    ).toBeUndefined();
+    expect(getPaymentRedirectReference('not-a-url')).toBeUndefined();
+  });
+
+  it('rejects completion redirects carrying a foreign reference', () => {
+    expect(
+      isSessionPaymentCompletionRedirect(
+        'https://usebaci.com/orders?trxref=ref-123',
+        'ref-123'
+      )
+    ).toBe(true);
+    expect(
+      isSessionPaymentCompletionRedirect(
+        'https://usebaci.com/orders?trxref=ref-999',
+        'ref-123'
+      )
+    ).toBe(false);
+    expect(
+      isSessionPaymentCompletionRedirect(
+        'https://usebaci.com/order-success',
+        'ref-123'
+      )
+    ).toBe(true);
+    expect(
+      isSessionPaymentCompletionRedirect(
+        'https://usebaci.com/orders?trxref=ref-999',
+        undefined
+      )
+    ).toBe(true);
+    expect(isSessionPaymentCompletionRedirect('not-a-url', 'ref-123')).toBe(
+      false
+    );
   });
 
   it('keeps completion and cancellation redirect matches mutually exclusive', () => {

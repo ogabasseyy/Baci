@@ -22,7 +22,9 @@ vi.mock('./completeOrderShipment', () => ({
   completeOrderShipment: vi.fn(),
 }));
 
+import { completeOrderShipment } from './completeOrderShipment';
 import { createOrderDetailsShipmentActions } from './createOrderDetailsShipmentActions';
+import { OrderStatusUpdateError } from './orders/order-status-update-error';
 
 function makeActions(
   overrides?: Partial<Parameters<typeof createOrderDetailsShipmentActions>[0]>
@@ -57,6 +59,30 @@ function makeActions(
 }
 
 describe('createOrderDetailsShipmentActions', () => {
+  it('closes the booking flow and asks the merchant to check status when the shipment outcome is unconfirmed', async () => {
+    const setShowShipmentFlow = vi.fn();
+    vi.mocked(completeOrderShipment).mockRejectedValueOnce(
+      new OrderStatusUpdateError(
+        'Check the order before booking again.',
+        'SHIPMENT_BOOKING_UNCONFIRMED'
+      )
+    );
+    const actions = makeActions({
+      order: { id: 'order-1' } as never,
+      pendingShipmentMode: 'provider',
+      providerBookingAvailable: true,
+      setShowShipmentFlow,
+    });
+
+    await actions.proceedFromShipmentMethod();
+
+    expect(setShowShipmentFlow).toHaveBeenCalledWith(false);
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Check shipment status',
+      'Check the order before booking again.'
+    );
+  });
+
   it('does nothing in openShipmentFlow when order is undefined', () => {
     const setShowShipmentFlow = vi.fn();
     const actions = makeActions({ setShowShipmentFlow });
@@ -146,5 +172,72 @@ describe('createOrderDetailsShipmentActions', () => {
 
     expect(setFulfillmentItemIndex).toHaveBeenCalledWith(1);
     expect(setShipmentFlowStep).not.toHaveBeenCalledWith('method');
+  });
+
+  it('notifies the caller before alerting on provider booking errors', async () => {
+    const onProviderBookingError = vi.fn();
+    vi.mocked(completeOrderShipment).mockRejectedValue(
+      new OrderStatusUpdateError(
+        'Insufficient merchant wallet balance.',
+        'MERCHANT_WALLET_INSUFFICIENT'
+      )
+    );
+    const actions = makeActions({
+      onProviderBookingError,
+      order: { id: 'order-1' } as never,
+      pendingShipmentMode: 'provider',
+    });
+
+    await actions.proceedFromShipmentMethod();
+
+    expect(onProviderBookingError).toHaveBeenCalledOnce();
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Error',
+      'Insufficient merchant wallet balance.'
+    );
+  });
+
+  it('still alerts the original booking error when recovery refresh fails', async () => {
+    const onProviderBookingError = vi
+      .fn()
+      .mockRejectedValue(new Error('wallet summary failed'));
+    vi.mocked(completeOrderShipment).mockRejectedValue(
+      new OrderStatusUpdateError(
+        'Insufficient merchant wallet balance.',
+        'MERCHANT_WALLET_INSUFFICIENT'
+      )
+    );
+    const actions = makeActions({
+      onProviderBookingError,
+      order: { id: 'order-1' } as never,
+      pendingShipmentMode: 'provider',
+    });
+
+    await actions.proceedFromShipmentMethod();
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Error',
+      'Insufficient merchant wallet balance.'
+    );
+  });
+
+  it('alerts that the quote was updated when reconfirmation is required', async () => {
+    vi.mocked(completeOrderShipment).mockRejectedValue(
+      new OrderStatusUpdateError(
+        'The shipping quote changed or expired.',
+        'MERCHANT_WALLET_QUOTE_RECONFIRM_REQUIRED'
+      )
+    );
+    const actions = makeActions({
+      order: { id: 'order-1' } as never,
+      pendingShipmentMode: 'provider',
+    });
+
+    await actions.proceedFromShipmentMethod();
+
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Quote updated',
+      'The shipping quote changed or expired.'
+    );
   });
 });

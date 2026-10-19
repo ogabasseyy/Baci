@@ -13,7 +13,10 @@ import {
 } from '@/components/checkout/checkout-station-pickup';
 import type { MerchantPickupLocation } from '@/components/checkout/merchant-pickup-location';
 import type { ShippingAddressInput } from '@/lib/validation';
-import { trackCheckoutStep } from '@/services/analytics';
+import {
+  trackCheckoutPaymentMethodSelected,
+  trackCheckoutStep,
+} from '@/services/analytics';
 import { trackCheckoutRoutePaymentInfo } from '@/services/tiktok-checkout-route-tracking';
 import {
   type UseCheckoutSubmitParams,
@@ -22,7 +25,9 @@ import {
 
 interface UseCheckoutStepActionsParams extends UseCheckoutSubmitParams {
   handleSubmit: UseFormHandleSubmit<ShippingAddressInput>;
+  isPrizeSimulation?: boolean;
   merchantPickupLocation?: MerchantPickupLocation;
+  onPrizeSimulationComplete?: () => void;
   resetPaymentSelection: () => void;
   setIsContactCollapsed: Dispatch<SetStateAction<boolean>>;
   setIsDeliveryCollapsed: Dispatch<SetStateAction<boolean>>;
@@ -32,7 +37,9 @@ interface UseCheckoutStepActionsParams extends UseCheckoutSubmitParams {
 
 export function useCheckoutStepActions({
   handleSubmit,
+  isPrizeSimulation = false,
   merchantPickupLocation,
+  onPrizeSimulationComplete,
   resetPaymentSelection,
   selectedPayment,
   setIsContactCollapsed,
@@ -48,12 +55,14 @@ export function useCheckoutStepActions({
     setStep,
   });
   const onAddressSubmit = (data: ShippingAddressInput) => {
-    trackCheckoutStep('shipping_info', {
-      state: data.state,
-      city: data.city,
-    });
+    if (!isPrizeSimulation) {
+      trackCheckoutStep('shipping_info', {
+        state: data.state,
+        city: data.city,
+      });
+    }
     resetPaymentSelection();
-    setStep('payment');
+    setStep(isPrizeSimulation ? 'review' : 'payment');
   };
   const handleAddressValidationError = (
     errors: FieldErrors<ShippingAddressInput>
@@ -141,18 +150,26 @@ export function useCheckoutStepActions({
       trackCheckoutStep('payment_method', {
         payment_method: selectedPayment,
       });
+      trackCheckoutPaymentMethodSelected(selectedPayment);
       void trackCheckoutRoutePaymentInfo(selectedPayment);
       setStep('review');
     }
   };
 
-  const handlePlaceOrder = handleSubmit(onCheckoutSubmit, () => {
-    Alert.alert(
-      'Incomplete Details',
-      'Please fill in all required fields (Address, City, Phone) to place your order.',
-      [{ text: 'OK' }]
-    );
-  });
+  const handlePlaceOrder = isPrizeSimulation
+    ? () => {
+        if (submitParams.isOrderInFlight.current || !onPrizeSimulationComplete)
+          return;
+        submitParams.isOrderInFlight.current = true;
+        onPrizeSimulationComplete();
+      }
+    : handleSubmit(onCheckoutSubmit, () => {
+        Alert.alert(
+          'Incomplete Details',
+          'Please fill in all required fields (Address, City, Phone) to place your order.',
+          [{ text: 'OK' }]
+        );
+      });
 
   return {
     handleAddressValidationError,

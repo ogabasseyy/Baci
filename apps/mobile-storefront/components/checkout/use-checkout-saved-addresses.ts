@@ -15,6 +15,17 @@ interface UseCheckoutSavedAddressesParams {
   merchantId: string;
   setCommittedAddress: (value: string) => void;
   setValue: UseFormSetValue<ShippingAddressInput>;
+  /**
+   * Settles contact to explicitly applied values. A saved address hydration
+   * is a deliberate selection whose recipient can differ from the account
+   * identity; without settling, prefilled checkout stays stuck with nothing
+   * left for the user to do.
+   */
+  settleContactTo?: (values: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+  }) => void;
 }
 
 export function useCheckoutSavedAddresses({
@@ -24,6 +35,7 @@ export function useCheckoutSavedAddresses({
   merchantId,
   setCommittedAddress,
   setValue,
+  settleContactTo,
 }: UseCheckoutSavedAddressesParams) {
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedSavedAddressId, setSelectedSavedAddressId] = useState<
@@ -72,6 +84,11 @@ export function useCheckoutSavedAddresses({
     setValue('address', checkoutValues.address, { shouldValidate: true });
     setValue('city', checkoutValues.city, { shouldValidate: true });
     setValue('state', checkoutValues.state, { shouldValidate: true });
+    settleContactTo?.({
+      firstName: checkoutValues.firstName,
+      lastName: checkoutValues.lastName,
+      phone: checkoutValues.phone,
+    });
     setCommittedAddress(checkoutValues.address);
     setSelectedSavedAddressId(savedAddress.id);
     setIsAddingNewAddress(false);

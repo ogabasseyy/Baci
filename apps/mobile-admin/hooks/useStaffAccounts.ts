@@ -12,6 +12,7 @@ import { BASE_URL } from '@/lib/api-client';
 import { createBranch as createBranchViaApi } from '@/lib/branch-api';
 import { supabase } from '@/lib/supabase';
 import { CreateBranchSchema } from '@/schemas/branch';
+import { getBranchesQueryKey } from './branch-query-key';
 import { useStaffMutationLifecycle } from './useStaffMutationLifecycle';
 
 // 2026 Best Practice: Dynamic imports for native modules
@@ -90,7 +91,7 @@ export function useStaffAccounts(callbacks: UseStaffAccountsCallbacks) {
     isError: branchesError,
     refetch: refetchBranches,
   } = useQuery({
-    queryKey: ['branches', merchantId],
+    queryKey: getBranchesQueryKey(merchantId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from('branches')
@@ -209,7 +210,10 @@ export function useStaffAccounts(callbacks: UseStaffAccountsCallbacks) {
     onSuccess: (_data, _variables, scope) => {
       if (!lifecycle.isCurrentScope(scope)) return;
       queryClient.invalidateQueries({
-        queryKey: ['branches', scope.merchantId],
+        queryKey: getBranchesQueryKey(scope.merchantId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getBranchesQueryKey(scope.merchantId, true),
       });
       queryClient.invalidateQueries({ queryKey: ['branch-scope'] });
       callbacks.onBranchCreated?.();

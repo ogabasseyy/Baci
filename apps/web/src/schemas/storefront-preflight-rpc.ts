@@ -10,10 +10,21 @@ export const STOREFRONT_BLOG_POST_STATUS_RPC =
   'get_storefront_blog_post_status';
 export const STOREFRONT_BLOG_LISTING_STATUS_RPC =
   'get_storefront_blog_listing_status';
+export const STOREFRONT_AUTH_MERCHANT_RPC = 'resolve_storefront_auth_merchant';
+
+/** Minimal publication projection for the compare hard-status fast path. */
+export const storefrontAuthMerchantRowSchema = z.object({
+  is_published: z.boolean(),
+});
+
+export type StorefrontAuthMerchantRow = z.infer<
+  typeof storefrontAuthMerchantRowSchema
+>;
 
 /**
  * Row contracts for the storefront preflight verdict RPCs
- * (`get_storefront_pdp_preflight`, `get_storefront_blog_post_status` —
+ * (`get_storefront_pdp_preflight`, `get_storefront_blog_post_status`, and the
+ * publication projection from `resolve_storefront_auth_merchant` —
  * supabase/migrations/20260706200000_add_storefront_preflight_rpcs.sql).
  *
  * PostgREST returns table-returning RPC results as an array of rows; both

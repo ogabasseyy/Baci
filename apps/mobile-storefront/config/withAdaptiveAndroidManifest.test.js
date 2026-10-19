@@ -47,6 +47,9 @@ describe('withAdaptiveAndroidManifest', () => {
     expect(manifest.manifest.$['xmlns:tools']).toBe(
       'http://schemas.android.com/tools'
     );
+    expect(manifest.manifest.application[0].profileable).toEqual([
+      { $: { 'android:shell': 'true' } },
+    ]);
     expect(findActivity(manifest, '.MainActivity').$).not.toHaveProperty(
       'android:screenOrientation'
     );
@@ -59,6 +62,37 @@ describe('withAdaptiveAndroidManifest', () => {
     expect(
       findActivity(manifest, ML_KIT_SCANNER_DELEGATE_ACTIVITY).$
     ).not.toHaveProperty('android:screenOrientation');
+  });
+
+  it('preserves profileable metadata while enabling shell tracing', () => {
+    const config = buildConfig([]);
+    config.modResults.manifest.application[0].profileable = [
+      { $: { 'android:shell': 'false', 'tools:targetApi': 'q' } },
+    ];
+
+    const application =
+      withAdaptiveAndroidManifest(config).modResults.manifest.application[0];
+
+    expect(application.profileable).toEqual([
+      {
+        $: {
+          'android:shell': 'true',
+          'tools:targetApi': 'q',
+        },
+      },
+    ]);
+  });
+
+  it('repairs empty profileable metadata produced by another manifest mod', () => {
+    const config = buildConfig([]);
+    config.modResults.manifest.application[0].profileable = [];
+
+    const application =
+      withAdaptiveAndroidManifest(config).modResults.manifest.application[0];
+
+    expect(application.profileable).toEqual([
+      { $: { 'android:shell': 'true' } },
+    ]);
   });
 
   it('removes orientation from a package-prefixed MainActivity', () => {

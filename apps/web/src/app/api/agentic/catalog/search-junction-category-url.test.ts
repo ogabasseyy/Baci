@@ -3,8 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import { POST } from './search/route';
 
+const mockReadAgenticQueryRequest = vi.hoisted(() => vi.fn());
+
 vi.mock('@/lib/agentic/auth', () => ({
   verifyAgenticApiKey: vi.fn(() => true),
+}));
+
+vi.mock('@/lib/agentic/mutation-request', () => ({
+  readAgenticQueryRequest: mockReadAgenticQueryRequest,
 }));
 
 vi.mock('@/lib/agentic/agent-request-controls', () => ({
@@ -35,8 +41,12 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 let query: {
   eq: ReturnType<typeof vi.fn>;
+  gte: ReturnType<typeof vi.fn>;
+  lte: ReturnType<typeof vi.fn>;
+  or: ReturnType<typeof vi.fn>;
   limit: ReturnType<typeof vi.fn>;
   order: ReturnType<typeof vi.fn>;
+  range: ReturnType<typeof vi.fn>;
 };
 
 function mockJunctionOnlyProduct() {
@@ -44,6 +54,7 @@ function mockJunctionOnlyProduct() {
     {
       id: 'product-1',
       name: 'Laptop',
+      price: 100,
       product_categories: [{ categories: { slug: 'laptops' } }],
       slug: 'thin-laptop',
       status: 'active',
@@ -51,8 +62,15 @@ function mockJunctionOnlyProduct() {
   ];
   query = {
     eq: vi.fn(() => query),
+    gte: vi.fn(() => query),
     limit: vi.fn(async () => ({ data: rows, error: null })),
+    lte: vi.fn(() => query),
     order: vi.fn(() => query),
+    or: vi.fn(() => query),
+    range: vi.fn(async (from: number, to: number) => ({
+      data: rows.slice(from, to + 1),
+      error: null,
+    })),
   };
   vi.mocked(createAgenticScopedSupabaseClient).mockReturnValue({
     from: vi.fn(() => ({ select: vi.fn(() => query) })),
@@ -62,6 +80,19 @@ function mockJunctionOnlyProduct() {
 describe('POST /api/agentic/catalog/search junction categories', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockReadAgenticQueryRequest.mockImplementation(
+      async ({ request }: { request: NextRequest }) => ({
+        agentId: null,
+        apiVersion: '2026-04-30',
+        body: await request.json(),
+        idempotencyKey: '',
+        method: request.method,
+        ok: true,
+        pathname: request.nextUrl.pathname,
+        rawBody: '',
+        requestId: 'catalog-request-1',
+      })
+    );
     mockJunctionOnlyProduct();
   });
 

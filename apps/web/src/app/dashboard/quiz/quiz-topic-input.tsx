@@ -37,7 +37,7 @@ export function QuizTopicInput({
       <label className="text-sm font-medium" htmlFor={inputId}>
         Topics
       </label>
-      <div className="flex min-h-11 flex-wrap items-center gap-2 rounded-md border bg-background p-2 focus-within:ring-2 focus-within:ring-ring">
+      <div className="flex min-h-11 flex-wrap items-center gap-2 rounded-md border bg-background p-2 focus-within:border-ring">
         {topics.map((topic) => (
           <span
             className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs"
@@ -57,7 +57,7 @@ export function QuizTopicInput({
           </span>
         ))}
         <input
-          className="min-w-52 flex-1 bg-transparent px-1 text-sm outline-none"
+          className="min-w-52 flex-1 bg-transparent px-1 text-sm outline-none focus-visible:outline-none"
           disabled={disabled}
           id={inputId}
           onBlur={addDraft}

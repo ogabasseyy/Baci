@@ -85,8 +85,14 @@ const mockOrder: {
   source: string;
   subtotal: string;
   shipping_fee: string;
+  gift_wrapping_fee: string;
+  tax_amount: string;
+  tax_basis: string;
+  discount_amount: string;
   total: string;
   currency?: string | null;
+  delivery_method?: string | null;
+  airport_type?: string | null;
   shipping_rate_id?: string | null;
   shipping_rate_name?: string | null;
   shipping_address: {
@@ -109,7 +115,11 @@ const mockOrder: {
   source: 'whatsapp',
   subtotal: '10000',
   shipping_fee: '1500',
-  total: '11500',
+  gift_wrapping_fee: '0',
+  tax_amount: '0',
+  tax_basis: 'exclusive',
+  discount_amount: '1000',
+  total: '10500',
   currency: 'NGN',
   shipping_address: {
     address: '123 Test St',
@@ -335,7 +345,7 @@ describe('resendOrderConfirmation', () => {
         orderNumber: '#ORD-001',
         customerName: 'John Doe',
         merchantName: 'TestShop',
-        total: 11500,
+        total: 10500,
         currency: 'NGN',
       })
     );
@@ -676,6 +686,29 @@ describe('getOrder', () => {
     );
     expect(order?.shipping_rate_id).toBe('rate-123');
     expect(order?.shipping_rate_name).toBe('Express Lagos');
+  });
+
+  it('selects and maps persisted delivery metadata for the detail page', async () => {
+    const { ordersSelect } = mockGetOrderQueries({
+      orderRows: [
+        {
+          ...mockOrder,
+          airport_type: 'delivery',
+          delivery_method: 'airport',
+        },
+      ],
+    });
+
+    const order = await getOrder(MERCHANT_ID, ORDER_ID);
+
+    expect(ordersSelect).toHaveBeenCalledWith(
+      expect.stringContaining('delivery_method')
+    );
+    expect(ordersSelect).toHaveBeenCalledWith(
+      expect.stringContaining('airport_type')
+    );
+    expect(order?.delivery_method).toBe('airport');
+    expect(order?.airport_type).toBe('delivery');
   });
 
   it('leaves the merchant shipping rate fields undefined for legacy orders', async () => {

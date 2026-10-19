@@ -1,14 +1,25 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import type { SharedCartOrderProofResult } from '@/lib/cart/order-proof';
+import {
+  buildOrderIdempotencyPayload,
+  hashOrderIdempotencyPayload,
+} from '@/lib/checkout/order-idempotency';
 import { generateOrderConfirmationEmail } from '@/lib/email-templates';
 import { logger } from '@/lib/logger';
+import { reservePaystackDvaAssignment } from '@/lib/payments/reserve-paystack-dva-assignment';
 import { createQuizVoucherToken } from '@/lib/quiz-voucher-token';
 import { POST } from './route';
+
+type PersistPaystackDvaAssignmentModule =
+  typeof import('@/lib/payments/persist-paystack-dva-assignment');
+type ServerModule = typeof import('next/server');
 
 // Hoisted mocks for fire-and-forget side effects so tests don't await emails / push.
 const {
   MockQuizProductionNotApprovedError,
+  mockNotifyNewInvoice,
   mockEnforcePrizeProductionGuard,
   mockNotifyNewOrder,
   mockNotifyPaymentReceived,
@@ -18,6 +29,7 @@ const {
   mockGenerateReceiptBlob,
   mockResolveReceiptLogoDataUri,
   mockCreateAdminClient,
+  mockCreateQuizRpcServerProof,
   mockRevalidateProducts,
   mockRevalidateProductSlugs,
 } = vi.hoisted(() => ({
@@ -30,6 +42,9 @@ const {
       this.name = 'QuizProductionNotApprovedError';
     }
   },
+  mockNotifyNewInvoice: vi.fn(() =>
+    Promise.resolve({ sent: 1, failed: 0, errors: [] })
+  ),
   mockEnforcePrizeProductionGuard: vi.fn(),
   mockNotifyNewOrder: vi.fn(() =>
     Promise.resolve({ sent: 1, failed: 0, errors: [] })
@@ -39,22 +54,57 @@ const {
   ),
   mockSendEmail: vi.fn(() => Promise.resolve({ success: true })),
   mockAfter: vi.fn((cb: () => unknown) => cb()),
-  mockGeneratePaymentAccount: vi.fn(() =>
-    Promise.resolve({
-      success: true,
-      data: {
-        bank_name: 'Wema Bank',
-        account_number: '1234567890',
-        account_name: 'OgaBassey-Test',
-        customer_code: 'CUS_mock',
-      },
-    })
+  mockGeneratePaymentAccount: vi.fn(
+    ():
+      | Promise<{
+          success: true;
+          data: {
+            bank_name: string;
+            account_number: string;
+            account_name: string;
+            customer_code: string;
+          };
+        }>
+      | Promise<{ success: false; error: string }> =>
+      Promise.resolve({
+        success: true,
+        data: {
+          bank_name: 'Wema Bank',
+          account_number: '1234567890',
+          account_name: 'OgaBassey-Test',
+          customer_code: 'CUS_mock',
+        },
+      })
   ),
   mockGenerateReceiptBlob: vi.fn(() => new Blob(['branded-invoice'])),
   mockResolveReceiptLogoDataUri: vi.fn(
     (): Promise<string | null> => Promise.resolve(null)
   ),
   mockCreateAdminClient: vi.fn(),
+  mockCreateQuizRpcServerProof: vi.fn(
+    ({
+      action,
+      payload,
+      subjectId,
+      userId,
+    }: {
+      action: string;
+      payload: Record<string, unknown>;
+      subjectId: string;
+      userId: string;
+    }) => ({
+      action,
+      issued_at: '2026-08-28T00:00:00.000Z',
+      payload,
+      payload_hash: 'a'.repeat(64),
+      proof_id: 'proof-test',
+      scope: 'quiz_phase1a',
+      signature: 'b'.repeat(64),
+      subject_id: subjectId,
+      user_id: userId,
+      version: 'quiz-rpc-proof:v1',
+    })
+  ),
   mockRevalidateProducts: vi.fn(),
   mockRevalidateProductSlugs: vi.fn(),
 }));
@@ -68,6 +118,26 @@ vi.mock('@/lib/paystack', () => ({
   generatePaymentAccount: mockGeneratePaymentAccount,
 }));
 
+const mockPersistPaystackDvaAssignment = vi.hoisted(() => vi.fn());
+vi.mock(
+  '@/lib/payments/persist-paystack-dva-assignment',
+  async (importOriginal) => {
+    const actual =
+      (await importOriginal()) as PersistPaystackDvaAssignmentModule;
+    // Default passthrough preserves the legacy RPC-less doubles every
+    // invoice test relies on; individual tests override per-case (e.g. the
+    // Pay for Me reservation, whose proof-bound RPC needs a live key).
+    mockPersistPaystackDvaAssignment.mockImplementation(
+      (...args: Parameters<typeof actual.persistPaystackDvaAssignment>) =>
+        actual.persistPaystackDvaAssignment(...args)
+    );
+    return {
+      ...actual,
+      persistPaystackDvaAssignment: mockPersistPaystackDvaAssignment,
+    };
+  }
+);
+
 vi.mock('@/lib/receipt-pdf-generator', () => ({
   generateReceiptBlob: mockGenerateReceiptBlob,
   resolveReceiptLogoDataUri: mockResolveReceiptLogoDataUri,
@@ -79,7 +149,10 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 // The route's stamped-currency read-back uses the service-role client (guest
 // checkouts cannot read orders under RLS), so every suite primes the admin
-// mock with a default NGN row; currency-aware fixtures override it.
+// mock with a default NGN row; currency-aware fixtures override it. The
+// immediate-notification claim rides the same client: fresh-order suites
+// default to won (preserving pre-claim delivery), while the idempotency
+// suite defaults to sent (the replayed first attempt already delivered).
 function primeAdminOrderCurrencyRead(currency: string | null = 'NGN') {
   mockCreateAdminClient.mockReturnValue({
     from: vi.fn(() => ({
@@ -90,6 +163,11 @@ function primeAdminOrderCurrencyRead(currency: string | null = 'NGN') {
         error: null,
       }),
     })),
+    // 04E: the route claims immediate-notification delivery on the
+    // request-scoped client with proof — never the admin client — so no
+    // claim RPC is served here. Only the stamped-currency read-back and a
+    // null default for any other service-role RPC remain.
+    rpc: vi.fn(async () => ({ data: null, error: null })),
   } as never);
 }
 
@@ -117,8 +195,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/server', async () => {
-  const actual =
-    await vi.importActual<typeof import('next/server')>('next/server');
+  const actual = await vi.importActual<ServerModule>('next/server');
   return { ...actual, after: mockAfter };
 });
 
@@ -128,6 +205,7 @@ vi.mock('@/lib/email-templates', () => ({
 }));
 
 vi.mock('@/lib/expo-push', () => ({
+  notifyNewInvoice: mockNotifyNewInvoice,
   notifyNewOrder: mockNotifyNewOrder,
   notifyPaymentReceived: mockNotifyPaymentReceived,
 }));
@@ -154,12 +232,61 @@ vi.mock('@/lib/quiz-compliance-gate', () => ({
   QuizProductionNotApprovedError: MockQuizProductionNotApprovedError,
 }));
 
+vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
+  createStorefrontOrderRpcClient: vi.fn(
+    ({ fallbackClient }: { fallbackClient: unknown }) => fallbackClient
+  ),
+}));
+
+vi.mock('@/lib/quiz-proof', () => ({
+  createQuizRpcServerProof: mockCreateQuizRpcServerProof,
+}));
+
+const mockVerifySharedCartOrderProof = vi.hoisted(() =>
+  vi.fn<() => SharedCartOrderProofResult>(() => ({
+    ok: true as const,
+    principalId: 'guest-principal-001',
+  }))
+);
+vi.mock('@/lib/cart/order-proof', () => ({
+  requestCarriesSharedCartSessionProof: vi.fn(() => false),
+  requestPresentsCartProofMaterial: vi.fn(() => false),
+  verifySharedCartOrderProof: mockVerifySharedCartOrderProof,
+}));
+
+// The invoice email flow persists the auto-generated DVA through the
+// proof-bound reserve RPC (round 3); the reservation proof needs a service
+// key unavailable in this suite, so stub the reservation boundary here.
+// The RPC itself is unit-covered in persist-paystack-dva-assignment.test.ts.
+vi.mock('@/lib/payments/reserve-paystack-dva-assignment', () => ({
+  reservePaystackDvaAssignment: vi.fn(async () => ({
+    data: 'inserted',
+    error: null,
+  })),
+}));
+
 vi.mock('@/lib/shipping/providers/gigl', () => ({
   giglProvider: { getLocations: vi.fn().mockResolvedValue([]) },
 }));
 
 vi.mock('@/lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+// Server-only completion proof: fixed in route tests (the HMAC vector
+// itself is pinned in notification-completion-proof.test.ts).
+vi.mock('@/lib/immediate-order/notification-completion-proof', () => ({
+  createImmediateNotificationCompletionProof: () => 'proof-route-1',
+}));
+
+// Provisioning retry: the loop sleeps on real timers, so route tests
+// pin the outcome (the loop itself is covered in
+// notification-completion-retry.test.ts).
+const retryMocks = vi.hoisted(() => ({
+  completeWithRetry: vi.fn(async () => ({ completed: true })),
+}));
+vi.mock('@/lib/immediate-order/notification-completion-retry', () => ({
+  completeNotificationWithProvisioningRetry: retryMocks.completeWithRetry,
 }));
 
 const MERCHANT_ID = '123e4567-e89b-12d3-a456-426614174000';
@@ -177,6 +304,7 @@ function mockAuthUser(id: string) {
 }
 
 interface RpcOverrides {
+  create_storefront_redvault_order?: { data: unknown; error: unknown };
   // Per-RPC return values. Default values mirror a minimal happy path.
   create_storefront_order?: { data: unknown; error: unknown };
   create_storefront_order_with_quiz_voucher?: {
@@ -188,13 +316,50 @@ interface RpcOverrides {
     data: unknown;
     error: unknown;
   };
+  create_storefront_order_with_cart_binding?: {
+    data: unknown;
+    error: unknown;
+  };
+  create_storefront_order_with_loyalty_code?: {
+    data: unknown;
+    error: unknown;
+  };
+  has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
+  get_loyalty_redemption_for_checkout?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
   redeem_savings_for_order?: { data: unknown; error: unknown };
   finalize_wallet_order_payment?: { data: unknown; error: unknown };
   finalize_store_credit_order_payment?: { data: unknown; error: unknown };
   finalize_quiz_voucher_order_payment?: { data: unknown; error: unknown };
   get_checkout_shipping_quote?: { data: unknown; error: unknown };
+  persist_storefront_order_delivery_metadata?: {
+    data: unknown;
+    error: unknown;
+  };
+  // Proof-bound immediate-notification claim/complete (04E: claimed on
+  // the request-scoped client with the creation tracking token — never
+  // the admin client). Defaults to claimed so delivery assertions keep
+  // proving the send path; replay/skip tests override per case.
+  claim_immediate_order_notification_with_proof?: {
+    data: unknown;
+    error: unknown;
+  };
+  complete_immediate_order_notification_with_proof?: {
+    data: unknown;
+    error: unknown;
+  };
+  mark_immediate_order_notification_started_with_proof?: {
+    data: unknown;
+    error: unknown;
+  };
+  // Proof-bound persisted invoice items (round 3: replaces the admin
+  // order_items reads). Accepts a read sequence to cover the
+  // retry-on-empty path.
+  get_invoice_artifact_order_items?:
+    | { data: unknown; error: unknown }
+    | Array<{ data: unknown; error: unknown }>;
+  insert_invoice_reminder?: { data: unknown; error: unknown };
 }
 
 function buildMockSupabase(
@@ -231,6 +396,9 @@ function buildMockSupabase(
     // The order row returned by the claimed-award reserved-order idempotency
     // lookup (`orders` where id = reserved_order_id / order_items.order_id).
     claimedReservedOrder?: Record<string, unknown> | null;
+    // Successive rows for repeated claimed-order lookups (e.g. the
+    // re-read after a replay finalizer call).
+    claimedReservedOrderSequence?: Array<Record<string, unknown> | null>;
     // Simulate a transient failure of the claimed-order (`orders`) lookup.
     claimedReservedOrderError?: boolean;
     // The order_id returned by the standard-path fallback lookup
@@ -338,6 +506,7 @@ function buildMockSupabase(
             subtotal: 1000,
             shipping_fee: 0,
             customer_id: CUSTOMER_ID,
+            tracking_token: 'track-default-1',
           },
         ],
         error: null,
@@ -351,6 +520,7 @@ function buildMockSupabase(
             subtotal: 1000,
             shipping_fee: 0,
             customer_id: CUSTOMER_ID,
+            tracking_token: 'track-default-1',
           },
         ],
         error: null,
@@ -361,11 +531,37 @@ function buildMockSupabase(
       finalize_wallet_order_payment: { data: null, error: null },
       finalize_store_credit_order_payment: { data: null, error: null },
       finalize_quiz_voucher_order_payment: { data: true, error: null },
+      has_storefront_order_idempotency_key: { data: false, error: null },
       // B3.5 round 7 (CodeRabbit High): the helper's variant lookup
       // now routes through this SECURITY DEFINER RPC.
       get_order_variant_overrides: { data: [], error: null },
       get_checkout_shipping_quote: {
         data: opts.shippingQuote ? [opts.shippingQuote] : null,
+        error: null,
+      },
+      persist_storefront_order_delivery_metadata: { data: false, error: null },
+      // 04E: the route claims immediate-notification delivery on the
+      // request-scoped client with the creation tracking token. Defaults
+      // to won so the existing delivery assertions keep proving the send
+      // path; replay/skip tests override per case.
+      claim_immediate_order_notification_with_proof: {
+        data: [
+          {
+            claimed: true,
+            claim_status: 'processing',
+            claim_token: 'lease-default-1',
+          },
+        ],
+        error: null,
+      },
+      complete_immediate_order_notification_with_proof: {
+        data: null,
+        error: null,
+      },
+      // The after() marks start as its first step: default to marked so
+      // the existing delivery assertions keep proving the send path.
+      mark_immediate_order_notification_started_with_proof: {
+        data: true,
         error: null,
       },
     };
@@ -411,6 +607,9 @@ function buildMockSupabase(
     }
   }
 
+  const claimedSequence = opts.claimedReservedOrderSequence
+    ? [...opts.claimedReservedOrderSequence]
+    : null;
   return {
     auth: { getUser: vi.fn() },
     from: vi.fn((table: string) => {
@@ -418,18 +617,21 @@ function buildMockSupabase(
       if (
         table === 'orders' &&
         (opts.claimedReservedOrder !== undefined ||
+          opts.claimedReservedOrderSequence !== undefined ||
           opts.claimedReservedOrderError)
       ) {
         return {
           ...sharedChainable,
-          maybeSingle: vi.fn().mockResolvedValue({
+          maybeSingle: vi.fn().mockImplementation(async () => ({
             data: opts.claimedReservedOrderError
               ? null
-              : opts.claimedReservedOrder,
+              : claimedSequence && claimedSequence.length > 0
+                ? claimedSequence.shift()
+                : opts.claimedReservedOrder,
             error: opts.claimedReservedOrderError
               ? { message: 'orders lookup blip' }
               : null,
-          }),
+          })),
         };
       }
       if (
@@ -464,7 +666,10 @@ function buildMockSupabase(
     rpc: vi.fn((name: string) => {
       const outcome = overrides[name as keyof RpcOverrides] ??
         defaultRpcOutcomes[name] ?? { data: null, error: null };
-      return Promise.resolve(outcome);
+      const resolved = Array.isArray(outcome)
+        ? (outcome.shift() ?? { data: null, error: null })
+        : outcome;
+      return Promise.resolve(resolved);
     }),
   };
 }
@@ -535,6 +740,460 @@ const baseOrderRow = {
   shipping_fee: 0,
   customer_id: CUSTOMER_ID,
 };
+
+describe('POST /api/orders REDVAULT integration', () => {
+  it.each([
+    null,
+    'ship',
+    'pickup',
+  ] as const)('forwards the Idempotency-Key and verified %s fulfillment to protected checkout', async (kind) => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const shipping = await import(
+      '@/lib/shipping/merchant-rates/verify-order-shipping-rate'
+    );
+    const shippingSpy = vi
+      .spyOn(shipping, 'verifyOrderShippingRate')
+      .mockResolvedValue({
+        ok: true,
+        amount: 0,
+        currency: 'NGN',
+        kind: kind ?? 'ship',
+        rateName: 'Verified rate',
+        pickupAddress: kind === 'pickup' ? { address: '1 Test Street' } : null,
+      } as never);
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          { order: { id: 'protected-order' } },
+          { status: 201 }
+        ) as never
+      );
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-enabled-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+            ...(kind
+              ? {
+                  shipping_rate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                  shipping_fee: 0,
+                  items: [
+                    {
+                      product_id: '11111111-1111-4111-8111-111111111111',
+                      name: 'Galaxy S24',
+                      price: 1000,
+                      quantity: 1,
+                    },
+                  ],
+                }
+              : {}),
+          }),
+        })
+      );
+      expect(await response.json()).toEqual({
+        order: { id: 'protected-order' },
+      });
+      expect(response.status).toBe(201);
+      expect(checkoutSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderRpcArgs: expect.objectContaining({
+            p_checkout_idempotency_key: 'redvault-enabled-checkout',
+            p_checkout_request_hash: expect.any(String),
+            ...(kind
+              ? {
+                  p_merchant_fulfillment: {
+                    provider:
+                      kind === 'pickup' ? 'MERCHANT_PICKUP' : 'MERCHANT',
+                    rate_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                    rate_name: 'Verified rate',
+                    pickup_details:
+                      kind === 'pickup' ? { address: '1 Test Street' } : null,
+                  },
+                }
+              : {}),
+          }),
+        })
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'create_storefront_order',
+        expect.anything()
+      );
+      // The REDVAULT draft reserves inventory, so the draft success path
+      // runs the same merchant and per-slug PDP cache revalidation.
+      expect(mockRevalidateProducts).toHaveBeenCalledWith(
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74'
+      );
+      expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(
+        '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+        ['galaxy-s24']
+      );
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      shippingSpy.mockRestore();
+    }
+  });
+
+  it('rejects shared-cart REDVAULT orders before any unbound draft', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const events = await import(
+      '@/lib/events/record-platform-order-created-event'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          {
+            order: {
+              created_at: '2026-09-21T11:00:00.000Z',
+              currency: 'NGN',
+              id: 'rv-order-1',
+              order_number: 'RV-1',
+              total: 1500,
+            },
+          },
+          { status: 201 }
+        ) as never
+      );
+    const eventSpy = vi.spyOn(events, 'recordPlatformOrderCreatedEvent');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-event-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+            shared_cart: {
+              cart_id: '22222222-2222-4222-8222-222222222222',
+              checkout_session_id: '33333333-3333-4333-8333-333333333333',
+              checkout_generation: 1,
+              cart_version: 3,
+            },
+          }),
+        })
+      );
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe(
+        'REDVAULT_COMBINATION_UNSUPPORTED'
+      );
+      expect(checkoutSpy).not.toHaveBeenCalled();
+      expect(eventSpy).not.toHaveBeenCalled();
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      eventSpy.mockRestore();
+    }
+  });
+
+  it('emits the platform order-created event for first-time REDVAULT orders', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const events = await import(
+      '@/lib/events/record-platform-order-created-event'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          {
+            order: {
+              created_at: '2026-09-21T11:00:00.000Z',
+              currency: 'NGN',
+              id: 'rv-order-1',
+              order_number: 'RV-1',
+              total: 1500,
+            },
+          },
+          { status: 201 }
+        ) as never
+      );
+    const eventSpy = vi.spyOn(events, 'recordPlatformOrderCreatedEvent');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-event-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+          }),
+        })
+      );
+      expect(response.status).toBe(201);
+      expect(eventSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          currency: 'NGN',
+          customerEmail: 'customer@example.com',
+          eventTimestamp: '2026-09-21T11:00:00.000Z',
+          merchantId: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          orderId: 'rv-order-1',
+          orderNumber: 'RV-1',
+          value: 1500,
+        })
+      );
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      eventSpy.mockRestore();
+    }
+  });
+
+  it('suppresses the platform event for replayed REDVAULT checkouts', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const events = await import(
+      '@/lib/events/record-platform-order-created-event'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          {
+            idempotency: { replayed: true },
+            order: { id: 'rv-order-1', total: 1500 },
+          },
+          {
+            headers: { 'x-idempotency-replayed': 'true' },
+            status: 200,
+          }
+        ) as never
+      );
+    const eventSpy = vi.spyOn(events, 'recordPlatformOrderCreatedEvent');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-event-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+          }),
+        })
+      );
+      expect(response.status).toBe(200);
+      expect(eventSpy).not.toHaveBeenCalled();
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      eventSpy.mockRestore();
+    }
+  });
+
+  it('rejects an unavailable offer without generic order/provider side effects', async () => {
+    vi.clearAllMocks();
+    const productRows = [
+      {
+        id: 'p-1',
+        name: 'Galaxy S24',
+        brand: 'Samsung',
+        condition: 'new',
+        price: 1000,
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+      },
+    ];
+    const supabase = buildMockSupabase(
+      {
+        create_storefront_redvault_order: {
+          data: null,
+          error: { message: 'redvault_disabled' },
+        },
+      },
+      { productRows }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+          payment_method: 'uba_redvault',
+        }),
+        headers: { 'Idempotency-Key': 'redvault-fixture' },
+      })
+    );
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe('REDVAULT_UNAVAILABLE');
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_redvault_order',
+      expect.anything()
+    );
+    expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+});
 
 async function readJson(response: Response) {
   return JSON.parse(await response.text());
@@ -1086,19 +1745,67 @@ describe('POST /api/orders — quiz voucher guard', () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it('replays an already-paid claimed voucher order without re-finalizing', async () => {
+  it.each([
+    'legacy',
+    'bound-invalid-proof',
+    'bound-valid-proof',
+    'bound-replay-success',
+  ] as const)('handles claimed voucher replay through the correct authority: %s', async (mode) => {
     // A voucher checkout that succeeded but lost its HTTP response leaves the
     // award claimed with a reserved (already paid) order. Retrying must NOT prune
     // the prize as an "invalid voucher" — return the existing order as a replayed
-    // success so the shopper reaches their order screen, and NOT touch any RPC.
+    // success. Bound retries must first verify the cart receipt in its RPC.
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'yes');
     vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'voucher-secret');
     const awardId = '11111111-1111-4111-8111-111111111111';
     const productId = '22222222-2222-4222-8222-222222222222';
     const reservedOrderId = '99999999-9999-4999-8999-999999999999';
+    const boundPaidOrder = {
+      ...baseOrderRow,
+      id: reservedOrderId,
+      order_number: 'ORD-PRIZE-1',
+      tracking_token: 'track-prize-1',
+      customer_id: CUSTOMER_ID,
+      customer_email: 'customer@example.com',
+      customer_name: 'Test Customer',
+      payment_status: 'paid',
+      shipping_status: 'pending',
+      payment_method: 'quiz_voucher',
+      merchant_id: MERCHANT_ID,
+      tax_basis: 'exclusive',
+      gift_wrapping_fee: 0,
+      shipping_fee: 0,
+      discount_amount: 0,
+      tax_amount: 0,
+      subtotal: 0,
+      total: 0,
+      idempotency_replayed: true,
+    };
+    const boundReceipt = {
+      ok: true,
+      code: null,
+      replayed: true,
+      order: boundPaidOrder,
+      binding: {
+        cartId: '223e4567-e89b-12d3-a456-426614174000',
+        cartVersionReviewed: 3,
+        checkout_generation: 1,
+        merchantId: MERCHANT_ID,
+        sessionId: '323e4567-e89b-12d3-a456-426614174000',
+        variant: 'quiz_voucher',
+      },
+    };
     const supabase = buildMockSupabase(
-      {},
+      {
+        create_storefront_order_with_cart_binding: {
+          data: mode === 'bound-replay-success' ? boundReceipt : null,
+          error:
+            mode === 'bound-replay-success'
+              ? null
+              : { code: 'P0001', message: 'cart_order_unauthorized' },
+        },
+      },
       {
         quizAwardOverrides: {
           [awardId]: {
@@ -1139,10 +1846,26 @@ describe('POST /api/orders — quiz voucher guard', () => {
       secret: 'voucher-secret',
     });
 
+    if (mode !== 'legacy')
+      mockVerifySharedCartOrderProof.mockReturnValueOnce(
+        mode === 'bound-invalid-proof'
+          ? { ok: false }
+          : { ok: true, principalId: 'owner-a' }
+      );
     const request = new NextRequest('http://localhost/api/orders', {
       method: 'POST',
       body: JSON.stringify({
         ...baseOrderPayload,
+        ...(mode !== 'legacy'
+          ? {
+              shared_cart: {
+                cart_id: '223e4567-e89b-12d3-a456-426614174000',
+                cart_version: 3,
+                checkout_generation: 1,
+                checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+              },
+            }
+          : {}),
         items: [
           {
             ...baseOrderPayload.items[0],
@@ -1158,6 +1881,44 @@ describe('POST /api/orders — quiz voucher guard', () => {
     const response = await POST(request);
     const body = await readJson(response);
 
+    if (mode === 'bound-replay-success') {
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.order.id).toBe(reservedOrderId);
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        'create_storefront_order_with_cart_binding',
+        expect.objectContaining({ p_variant: 'quiz_voucher' })
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'finalize_quiz_voucher_order_payment',
+        expect.anything()
+      );
+      return;
+    }
+    if (mode !== 'legacy') {
+      expect(response.status, JSON.stringify(body)).toBe(
+        mode === 'bound-invalid-proof' ? 401 : 403
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'finalize_quiz_voucher_order_payment',
+        expect.anything()
+      );
+      if (mode === 'bound-invalid-proof') {
+        expect(body.code).toBe('SHARED_CART_PROOF_REQUIRED');
+        expect(supabase.rpc).not.toHaveBeenCalledWith(
+          'create_storefront_order_with_cart_binding',
+          expect.anything()
+        );
+      } else {
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          'create_storefront_order_with_cart_binding',
+          expect.objectContaining({
+            p_variant: 'quiz_voucher',
+            p_args: expect.objectContaining({ p_cart_principal_id: 'owner-a' }),
+          })
+        );
+      }
+      return;
+    }
     expect(response.status).toBe(200);
     expect(response.headers.get('x-idempotency-replayed')).toBe('true');
     expect(body.idempotency).toEqual({ replayed: true });
@@ -1276,6 +2037,24 @@ describe('POST /api/orders — quiz voucher guard', () => {
           shipping_status: 'pending',
           total: 0,
         },
+        claimedReservedOrderSequence: [
+          {
+            id: orderId,
+            order_number: 'ORD-PRIZE-3',
+            customer_id: CUSTOMER_ID,
+            payment_status: 'unpaid',
+            shipping_status: 'pending',
+            total: 0,
+          },
+          {
+            id: orderId,
+            order_number: 'ORD-PRIZE-3',
+            customer_id: CUSTOMER_ID,
+            payment_status: 'paid',
+            shipping_status: 'pending',
+            total: 0,
+          },
+        ],
       }
     );
     const supabaseMod = await import('@/lib/supabase/server');
@@ -1322,6 +2101,77 @@ describe('POST /api/orders — quiz voucher guard', () => {
     expect(response.status).toBe(200);
     expect(body.order).toMatchObject({ payment_status: 'paid' });
     // The finalizer was retried for the still-unpaid order.
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'finalize_quiz_voucher_order_payment',
+      { p_award_id: awardId, p_order_id: orderId }
+    );
+  });
+
+  it('returns a non-pruning 503 when the replay finalizer succeeds without transitioning the order', async () => {
+    vi.stubEnv('QUIZ_PHASE', 'production');
+    vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'yes');
+    vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'voucher-secret');
+    const awardId = '11111111-1111-4111-8111-111111111111';
+    const productId = '22222222-2222-4222-8222-222222222222';
+    const orderId = '99999999-9999-4999-8999-999999999999';
+    const unpaidRow = {
+      id: orderId,
+      order_number: 'ORD-PRIZE-5',
+      customer_id: CUSTOMER_ID,
+      payment_status: 'unpaid',
+      shipping_status: 'pending',
+      total: 0,
+    };
+    const supabase = buildMockSupabase(
+      {},
+      {
+        quizAwardOverrides: {
+          [awardId]: { status: 'claimed', reserved_order_id: orderId },
+        },
+        claimedReservedOrder: unpaidRow,
+        claimedReservedOrderSequence: [unpaidRow, unpaidRow],
+      }
+    );
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: mockAuthUser(AUTH_USER_ID),
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+    const token = createQuizVoucherToken({
+      payload: {
+        awardId,
+        condition: 'new',
+        expiresAt: '2099-05-22T12:00:00.000Z',
+        productId,
+        userId: AUTH_USER_ID,
+        variantId: null,
+      },
+      secret: 'voucher-secret',
+    });
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          items: [
+            {
+              ...baseOrderPayload.items[0],
+              condition: 'new',
+              product_id: productId,
+              price: 0,
+              voucher_token: token,
+            },
+          ],
+        }),
+      })
+    );
+    expect(response.status).toBe(503);
+    const body = await readJson(response);
+    expect(body.code).toBe('QUIZ_VOUCHER_LOOKUP_FAILED');
     expect(supabase.rpc).toHaveBeenCalledWith(
       'finalize_quiz_voucher_order_payment',
       { p_award_id: awardId, p_order_id: orderId }
@@ -1543,7 +2393,17 @@ describe('POST /api/orders — quiz voucher guard', () => {
     vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'voucher-secret');
     const supabase = buildMockSupabase({
       create_storefront_order_with_quiz_voucher: {
-        data: [{ ...baseOrderRow, subtotal: 0, total: 0 }],
+        // The proof-bound notification claim needs the creation tracking
+        // token; without it delivery is (correctly) skipped and the email
+        // assertion below would fail.
+        data: [
+          {
+            ...baseOrderRow,
+            subtotal: 0,
+            total: 0,
+            tracking_token: 'track-quiz-1',
+          },
+        ],
         error: null,
       },
     });
@@ -2733,7 +3593,7 @@ describe('POST /api/orders — non-NGN currency guards', () => {
 describe('POST /api/orders — checkout idempotency', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
-    primeAdminOrderCurrencyRead();
+    primeAdminOrderCurrencyRead('NGN');
     vi.mocked(authenticateApiRequest).mockResolvedValue({
       user: null,
       error: 'Not authenticated',
@@ -2793,8 +3653,15 @@ describe('POST /api/orders — checkout idempotency', () => {
                 payment_method: 'credit_direct',
                 payment_status: 'bnpl_pending',
                 total: 300,
+                tracking_token: 'track-replay-sent-1',
               },
             ],
+            error: null,
+          },
+          // Replays observe the first attempt's sent claim and skip
+          // redelivery (claimed on the request client with proof).
+          claim_immediate_order_notification_with_proof: {
+            data: [{ claimed: false, claim_status: 'sent' }],
             error: null,
           },
           redeem_wallet_for_order: {
@@ -2837,6 +3704,124 @@ describe('POST /api/orders — checkout idempotency', () => {
     expect(mockSendEmail).not.toHaveBeenCalled();
     expect(mockNotifyNewOrder).not.toHaveBeenCalled();
     expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
+  });
+
+  it('resumes an unfinished wallet-paid notification on replay when nothing was sent', async () => {
+    // The first attempt died before after() delivery (no sent claim): the
+    // replay wins the atomic claim and sends the payment document instead
+    // of suppressing it forever. Merchant creation pings stay fresh-only.
+    primeAdminOrderCurrencyRead('NGN');
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () =>
+        buildMockSupabase({
+          create_storefront_order: {
+            data: [
+              {
+                ...baseOrderRow,
+                idempotency_replayed: true,
+                payment_method: 'credit_direct',
+                payment_status: 'bnpl_pending',
+                total: 300,
+                tracking_token: 'track-replay-resume-1',
+              },
+            ],
+            error: null,
+          },
+          // The replay wins the atomic proof claim (request client) and
+          // delivers the unfinished wallet-paid notification.
+          claim_immediate_order_notification_with_proof: {
+            data: [
+              {
+                claimed: true,
+                claim_status: 'processing',
+                claim_token: 'lease-resume-1',
+              },
+            ],
+            error: null,
+          },
+          redeem_wallet_for_order: {
+            data: [
+              {
+                success: true,
+                redeemed_amount: 300,
+                new_balance: 200,
+                transaction_id: '99999999-aaaa-bbbb-cccc-dddddddddddd',
+              },
+            ],
+            error: null,
+          },
+        }) as unknown as never
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          payment_method: 'credit_direct',
+          use_wallet_credit: true,
+          wallet_amount: 300,
+        }),
+      })
+    );
+    const body = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(body.idempotency).toEqual({ replayed: true });
+    expect(mockSendEmail).toHaveBeenCalled();
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+    expect(mockNotifyPaymentReceived).not.toHaveBeenCalled();
+  });
+
+  it('replays a metadata-free provider order after its quote was deleted', async () => {
+    const rpcSpy = vi.fn();
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase({
+        has_storefront_order_idempotency_key: { data: true, error: null },
+        get_checkout_shipping_quote: { data: null, error: null },
+        create_storefront_order: {
+          data: [{ ...baseOrderRow, idempotency_replayed: true }],
+          error: null,
+        },
+      });
+      const originalRpc = sb.rpc;
+      sb.rpc = vi.fn((name: string, params?: unknown) => {
+        rpcSpy(name, params);
+        return originalRpc(name);
+      });
+      return sb;
+    }) as unknown as never);
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'metadata-free-provider-retry' },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          shipping_fee: 18_500,
+          selected_quote_id: '11111111-1111-4111-8111-111111111111',
+          shipping_provider: 'GIGL',
+        }),
+      })
+    );
+    const body = await readJson(response);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-idempotency-replayed')).toBe('true');
+    expect(body.idempotency).toEqual({ replayed: true });
+    expect(body.order.id).toBe(baseOrderRow.id);
+    expect(rpcSpy).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({
+        p_checkout_idempotency_key: 'metadata-free-provider-retry',
+        p_selected_quote_id: '11111111-1111-4111-8111-111111111111',
+        p_shipping_provider: 'GIGL',
+        p_shipping_fee: 18_500,
+      })
+    );
   });
 
   it('passes checkout idempotency params through the savings wrapper RPC', async () => {
@@ -3078,6 +4063,34 @@ describe('POST /api/orders — product cache revalidation after order creation',
   });
 
   it('revalidates the merchant product caches once after a successful order', async () => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(() => {
+      const supabase = buildMockSupabase();
+      const originalFrom = supabase.from;
+      supabase.from = vi.fn((table: string) => {
+        const original = originalFrom(table);
+        if (table !== 'products') {
+          return original;
+        }
+        // Success path: the enrichment lookup resolves (no rows), so the
+        // rejection-only broad hard-expire below must not fire.
+        const enrichmentOutcome = Promise.resolve({
+          data: [],
+          error: null,
+        });
+        const select = vi.fn((columns: string) => {
+          if (columns.startsWith('id, slug, name')) {
+            return {
+              eq: vi.fn(() => ({ in: vi.fn(() => enrichmentOutcome) })),
+            };
+          }
+          return original.select(columns);
+        });
+        return { ...original, select };
+      });
+      return supabase as unknown as never;
+    });
+
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
@@ -3123,21 +4136,35 @@ describe('POST /api/orders — product cache revalidation after order creation',
         if (table !== 'products') {
           return original;
         }
-        // Only the slug-revalidation lookup selects exactly 'slug' — the
-        // pre-existing tax/negotiation product lookup selects other columns
-        // and must keep resolving via the default chain.
-        const select = vi.fn((columns: string) =>
-          columns === 'slug'
-            ? {
-                eq: vi.fn().mockReturnThis(),
-                in: vi.fn().mockReturnThis(),
-                returns: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: { message: 'db down' },
-                }),
-              }
-            : original.select(columns)
-        );
+        // The cache-revalidation lookup selects the compact id/slug/policy
+        // projection; the pre-existing tax/negotiation product lookup selects
+        // other columns and must keep resolving via the default chain.
+        // The enrichment lookup (long projection) fails the same way — a db
+        // outage affects both reads — so it resolves a realistic `{ error }`
+        // instead of the default chain's bare-await undefined: enrichment
+        // fails open to caller hints without rejecting.
+        const enrichmentOutcome = Promise.resolve({
+          data: null,
+          error: { message: 'db down' },
+        });
+        const select = vi.fn((columns: string) => {
+          if (columns.startsWith('id, slug, manage_stock')) {
+            return {
+              eq: vi.fn().mockReturnThis(),
+              in: vi.fn().mockReturnThis(),
+              returns: vi.fn().mockResolvedValue({
+                data: null,
+                error: { message: 'db down' },
+              }),
+            };
+          }
+          if (columns.startsWith('id, slug, name')) {
+            return {
+              eq: vi.fn(() => ({ in: vi.fn(() => enrichmentOutcome) })),
+            };
+          }
+          return original.select(columns);
+        });
         return { ...original, select };
       });
       return supabase as unknown as never;
@@ -3152,7 +4179,14 @@ describe('POST /api/orders — product cache revalidation after order creation',
 
     expect(response.status).toBe(201);
     expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
-    expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
+    // Fail-closed: the route-level slug lookup failed, but the known-ids blog
+    // purge fallback still hard-expires the per-slug Next tags from the caller
+    // hints so a later edge purge cannot refill from stale snapshots.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
+      MERCHANT_ID,
+      ['p-1'],
+      { expireImmediately: true }
+    );
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Failed to resolve product slugs for PDP cache revalidation',
@@ -3354,10 +4388,30 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     );
   });
 
-  it('allows selected GIGL international quotes to keep quoted physical metadata when product metadata is absent', async () => {
+  it.each([
+    false,
+    true,
+  ])('preserves GIGL quote metadata and attaches pins only on new orders (replay=%s)', async (isReplay) => {
+    const destinationModule = await import(
+      '@/lib/shipping/order-quote-destination'
+    );
+    const enrichSpy = vi.spyOn(
+      destinationModule,
+      'enrichShippingAddressWithQuoteDestination'
+    );
     const supabaseMod = await import('@/lib/supabase/server');
     const supabase = buildMockSupabase(
-      {},
+      {
+        has_storefront_order_idempotency_key: { data: isReplay, error: null },
+        ...(isReplay
+          ? {
+              create_storefront_order: {
+                data: [{ ...baseOrderRow, idempotency_replayed: true }],
+                error: null,
+              },
+            }
+          : {}),
+      },
       {
         productRows: [
           {
@@ -3386,6 +4440,8 @@ describe('POST /api/orders — selected shipping quote validation', () => {
               country: 'Canada',
               countryCode: 'CA',
               postalCode: 'M5V 3L9',
+              latitude: 43.65,
+              longitude: -79.38,
             },
             items: [
               {
@@ -3410,6 +4466,7 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
+        headers: { 'Idempotency-Key': 'gigl-attested-coordinate-test' },
         body: JSON.stringify({
           ...baseOrderPayload,
           items: [
@@ -3431,17 +4488,44 @@ describe('POST /api/orders — selected shipping quote validation', () => {
             country: 'Canada',
             countryCode: 'CA',
             postalCode: 'M5V 3L9',
+            latitude: 0,
+            longitude: 0,
           },
         }),
       })
     );
 
+    expect(enrichSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      '11111111-1111-4111-8111-111111111111',
+      expect.anything(),
+      expect.anything(),
+      { persistAttestedCoordinates: !isReplay }
+    );
+    enrichSpy.mockRestore();
+    if (isReplay) {
+      // Preserve the existing fail-closed provider-context contract for an
+      // extant quote replay. No destination is written in this branch.
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: 'INTERNATIONAL_QUOTE_PROVIDER_MISMATCH',
+      });
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'create_storefront_order',
+        expect.anything()
+      );
+      return;
+    }
     expect(response.status).toBe(201);
     expect(supabase.rpc).toHaveBeenCalledWith(
       'create_storefront_order',
       expect.objectContaining({
         p_selected_quote_id: '11111111-1111-4111-8111-111111111111',
         p_shipping_provider: 'GIGL',
+        p_shipping_address: expect.objectContaining({
+          latitude: 43.65,
+          longitude: -79.38,
+        }),
       })
     );
   });
@@ -3839,49 +4923,6 @@ describe('POST /api/orders — per-line eligible discount enforcement', () => {
     expect(response.status).toBe(201);
     expect(rpcSpy).toHaveBeenCalledWith(
       expect.objectContaining({ p_discount_amount: 0 })
-    );
-  });
-
-  it('applies mobile negotiated discounts while omitting expected_total until tax is canonical', async () => {
-    const { rpcSpy } = await setupOrdersDiscountMock([
-      {
-        id: 'p-mac',
-        brand: 'Apple',
-        name: 'MacBook Air M1',
-        price: 1000,
-        vat_category_code: 'S',
-        vat_rate: 7.5,
-      },
-    ]);
-
-    const request = new NextRequest('http://localhost/api/orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        ...baseOrderPayload,
-        source: 'mobile_app',
-        items: [
-          {
-            product_id: 'p-mac',
-            quantity: 1,
-            price: 980,
-            name: 'MacBook Air M1',
-            has_assurance: true,
-          },
-        ],
-        subtotal: 980,
-        tax_amount: 73.5,
-      }),
-    });
-
-    await POST(request);
-
-    expect(rpcSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        p_discount_amount: 21.5,
-        p_expected_total: null,
-        p_source: 'mobile_app',
-        p_tax_amount: 75,
-      })
     );
   });
 
@@ -4720,7 +5761,7 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     );
   });
 
-  it('preserves legacy negotiation entitlement fallback when plan_tier is missing', async () => {
+  it('derives no discount for a legacy premium slug when plan_tier is missing', async () => {
     const rpcSpy = vi.fn().mockResolvedValue({
       data: [
         {
@@ -4840,11 +5881,13 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     });
     await POST(request);
 
-    // Per-line: catalog 1000, client 980 → reduction 20 (= 2% cap),
-    // + 7.5% VAT on the reduction = 1.5 → discount 21.5.
+    // Regression: the route used to grant negotiation to a hardcoded premium
+    // slug allowlist whenever plan_tier was null, so this merchant received a
+    // 21.5 auto-discount. plan_tier is now NOT NULL and authoritative, so an
+    // absent tier fails closed and the slug confers nothing.
     expect(rpcSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        p_discount_amount: 21.5,
+        p_discount_amount: 0,
         p_expected_total: 1053.5,
         p_tax_amount: 75,
       })
@@ -4974,7 +6017,7 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     );
   });
 
-  it('does not apply legacy negotiation fallback when plan_tier is malformed', async () => {
+  it('derives no discount when plan_tier is malformed', async () => {
     const rpcSpy = vi.fn().mockResolvedValue({
       data: null,
       error: {
@@ -5578,6 +6621,18 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       eq: vi.fn(() => orderItemsQuery),
       order: orderItemsOrder,
     };
+    // 04E: the route claims on the request-scoped client with proof, so
+    // the service-role client no longer serves the claim. Kept as a null
+    // default for any other background RPC.
+    const notificationClaimRpc = vi.fn(async (name: string) => {
+      if (name === 'claim_immediate_order_notification_with_proof') {
+        return {
+          data: [{ claimed: true, claim_status: 'processing' }],
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    });
     const backgroundSupabase = {
       from: vi.fn((table: string) => {
         // Serves the route's stamped-currency read-back (service-role client).
@@ -5607,11 +6662,13 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
           insert: vi.fn().mockResolvedValue({ error: null }),
         };
       }),
+      rpc: notificationClaimRpc,
     };
 
     return {
       accountUpsert,
       backgroundSupabase,
+      notificationClaimRpc,
       orderItemsOrder,
       orderItemsQuery,
       reminderInsert,
@@ -5638,37 +6695,54 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('generates a branded PDF invoice and attaches it to the confirmation email when payment method is invoice', async () => {
-    const supabase = buildMockSupabase();
-    const { accountUpsert, backgroundSupabase, orderItemsOrder } =
-      createBackgroundSupabaseMock({
-        orderItemsResponses: [
-          { data: [], error: null },
+    // Round 3 reads persisted invoice items through the proof-bound
+    // get_invoice_artifact_order_items RPC (tracking token authorizes the
+    // read): empty first read exercises the retry, the second serves the
+    // canonical snapshot.
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
           {
-            data: [
-              {
-                id: 'order-item-1',
-                product_id: 'p-1',
-                variant_id: null,
-                variant_attributes: null,
-                variant_name: null,
-                name: 'Widget',
-                quantity: 1,
-                price: 1000,
-                has_assurance: true,
-                assurance_fee: 50,
-                item_description: null,
-                line_extension_amount: 1050,
-                vat_category_code: 'S',
-                vat_rate: 7.5,
-                vat_amount: 0,
-                sellers_item_id: null,
-                unit_code: 'EA',
-              },
-            ],
-            error: null,
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
           },
         ],
-      });
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     supabase.from = vi.fn((_table: string) => {
@@ -5751,7 +6825,31 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
       timeout: 1000,
     });
-    expect(orderItemsOrder).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(mockNotifyNewInvoice).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    expect(mockNotifyNewInvoice).toHaveBeenCalledWith(
+      MERCHANT_ID,
+      'order-id',
+      'ORD-123',
+      'Test Customer',
+      1000,
+      {
+        currency: 'NGN',
+        preferenceClient: supabase,
+      }
+    );
+    expect(mockNotifyNewOrder).not.toHaveBeenCalled();
+    // The canonical snapshot loads through the proof-bound RPC, authorized
+    // by the creation tracking token — never the admin order_items read.
+    const artifactReads = (
+      supabase.rpc.mock.calls as unknown as [string, unknown][]
+    ).filter(([name]) => name === 'get_invoice_artifact_order_items');
+    expect(artifactReads).toHaveLength(2);
+    expect(artifactReads[0]?.[1]).toEqual({
+      p_order_id: 'order-id',
+      p_tracking_token: 'track-invoice-1',
+    });
 
     // Assert sendEmail was called with the branded invoice attachment. The
     // checkout payload does not currently collect a buyer Peppol endpoint, so
@@ -5759,15 +6857,37 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
-        subject: expect.stringContaining('Invoice Generated'),
+        subject: expect.stringContaining('Proforma Invoice Generated'),
         attachments: [
           expect.objectContaining({
-            name: expect.stringMatching(/^invoice-ORD-.*\.pdf$/),
+            name: expect.stringMatching(/^proforma-ORD-.*\.pdf$/),
             mime_type: 'application/pdf',
             content: expect.any(String), // base64 string
           }),
         ],
       })
+    );
+    // The body must match the proforma subject: quotation semantics, not
+    // confirmed-order copy (the template module is mocked here, so assert
+    // the wiring; copy is covered in order-confirmation.test.ts).
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ documentKind: 'proforma' })
+    );
+    // The tracking link cannot take payment, so the provisioned DVA must
+    // reach the email body as bank-transfer payment instructions.
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        virtualAccount: {
+          accountName: 'OgaBassey-Test',
+          accountNumber: '1234567890',
+          bankName: 'Wema Bank',
+        },
+      })
+    );
+    // Transfer instructions charge the outstanding balance (no credit
+    // applied in this fixture, so the full order total).
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ amountDue: 1000 })
     );
 
     // Assert DVA generation was automatically triggered
@@ -5795,7 +6915,8 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       }),
       expect.objectContaining({
         complianceNote: undefined,
-        documentKind: 'invoice',
+        documentKind: 'proforma_invoice',
+        invoiceTypeCode: '325',
         invoiceNotes: undefined,
         logoDataUri: 'data:image/png;base64,AA==',
         paymentTerms: undefined,
@@ -5832,32 +6953,1106 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       pdfOptions.documentDate.getTime() + 14 * 24 * 60 * 60 * 1000
     );
 
-    // Assert the auto-generated DVA was persisted with the shared upsert/expiry contract.
-    expect(backgroundSupabase.from).toHaveBeenCalledWith(
-      'order_payment_accounts'
-    );
-    expect(accountUpsert).toHaveBeenCalledWith(
+    // Assert the auto-generated DVA was reserved through the proof-bound
+    // RPC with the shared expiry contract (round 3: no admin upsert).
+    expect(vi.mocked(reservePaystackDvaAssignment)).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({
-        order_id: 'order-id',
-        account_number: '1234567890',
-        bank_name: 'Wema Bank',
-        account_name: 'OgaBassey-Test',
-        provider: 'paystack',
-        expires_at: expect.any(String),
-      }),
-      { onConflict: 'order_id,provider' }
+        orderId: 'order-id',
+        accountNumber: '1234567890',
+        bankName: 'Wema Bank',
+        accountName: 'OgaBassey-Test',
+        expiresAt: expect.any(String),
+      })
     );
-    expect(
-      Date.parse(
-        (accountUpsert.mock.calls[0]?.[0] as { expires_at: string }).expires_at
-      )
-    ).toBe(pdfOptions.dueDate.getTime());
-    expect(backgroundSupabase.from).toHaveBeenCalledWith('order_reminders');
+    const reservationAssignment = vi.mocked(reservePaystackDvaAssignment).mock
+      .calls[0]?.[1] as { expiresAt: string };
+    expect(Date.parse(reservationAssignment.expiresAt)).toBe(
+      pdfOptions.dueDate.getTime()
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'insert_invoice_reminder',
+      expect.objectContaining({
+        p_order_id: 'order-id',
+        p_tracking_token: 'track-invoice-1',
+      })
+    );
     expect(supabase.from).not.toHaveBeenCalledWith('order_payment_accounts');
   });
 
-  it('still sends the base invoice email when attachment generation cannot load persisted items', async () => {
+  it('emails a commercial invoice with Peppol XML when wallet credit partially covers an invoice order', async () => {
+    // Wallet credit leaves the persisted status unpaid, but the accepted
+    // value must keep the immediate email commercial (380) with its
+    // Peppol artifact — never a 325 proforma.
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+      redeem_wallet_for_order: {
+        data: [
+          {
+            success: true,
+            redeemed_amount: 400,
+            new_balance: 1600,
+            transaction_id: 'txn-wallet-1',
+          },
+        ],
+        error: null,
+      },
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+        use_wallet_credit: true,
+        wallet_amount: 400,
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // Commercial copy with the outstanding balance (1000 total minus
+    // 400 wallet credit), not a quotation.
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ documentKind: 'confirmation' })
+    );
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ amountDue: 600 })
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.stringContaining('Invoice Generated'),
+      })
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.not.stringContaining('Proforma'),
+      })
+    );
+    expect(mockGenerateReceiptBlob).toHaveBeenCalledWith(
+      expect.objectContaining({ payment_status: 'unpaid' }),
+      expect.anything(),
+      expect.objectContaining({
+        documentKind: 'invoice',
+        invoiceTypeCode: '380',
+      })
+    );
+  });
+
+  it('skips invoice DVA provisioning for foreign-currency orders', async () => {
+    // The canonical snapshot loads through the proof-bound RPC (tracking
+    // token authorizes the read) — never the admin order_items read.
+    const supabase = buildMockSupabase({
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock({
+      orderItemsResponses: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    // The stamped order currency is USD: Paystack DVAs settle in NGN
+    // only, so provisioning must be skipped even though the helper
+    // itself would succeed.
+    const baseFrom = backgroundSupabase.from;
+    backgroundSupabase.from = vi.fn((table: string) => {
+      if (table === 'orders') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi
+            .fn()
+            .mockResolvedValue({ data: { currency: 'USD' }, error: null }),
+        };
+      }
+      return baseFrom(table);
+    });
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // No NGN account is provisioned for the USD quote, so the email body
+    // falls back to merchant-contact instructions — and no DVA rows are
+    // persisted for the order.
+    expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentKind: 'proforma',
+        virtualAccount: undefined,
+      })
+    );
+    expect(backgroundSupabase.from).not.toHaveBeenCalledWith(
+      'order_payment_accounts'
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.stringContaining('Proforma Invoice Generated'),
+      })
+    );
+  });
+
+  it('skips invoice DVA provisioning when a discounted order has zero due', async () => {
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 0,
+            subtotal: 0,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      // The canonical snapshot loads through the proof-bound RPC (tracking
+      // token authorizes the read) — never the admin order_items read.
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock({
+      orderItemsResponses: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // A 100%-discounted invoice has nothing due: no DVA is provisioned
+    // or persisted, so the PDF and receipt carry no transfer instructions
+    // for an impossible payment.
+    expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentKind: 'proforma',
+        amountDue: 0,
+        virtualAccount: undefined,
+      })
+    );
+    expect(backgroundSupabase.from).not.toHaveBeenCalledWith(
+      'order_payment_accounts'
+    );
+  });
+
+  it('dispatches a payment request email with transfer details for payforme orders', async () => {
+    // DVA-focused: stub the unrelated checkout blog-purge scheduler so the
+    // after() ordering assertions below observe only the DVA flow.
+    const blogPurgeMod = await import(
+      '@/lib/checkout/schedule-checkout-product-blog-purge'
+    );
+    const blogPurgeStub = vi
+      .spyOn(blogPurgeMod, 'scheduleCheckoutProductBlogPurge')
+      .mockResolvedValue(undefined);
     const supabase = buildMockSupabase();
+    const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock({
+      orderItemsResponses: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+    // The proof-bound reservation RPC needs a live service key, so stand
+    // in a successful reservation and assert the client it was given.
+    mockPersistPaystackDvaAssignment.mockResolvedValueOnce(null);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'payforme',
+      }),
+    });
+
+    const response = await POST(request);
+    blogPurgeStub.mockRestore();
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // Pay for Me keeps its stored method yet still dispatches: the
+    // requester gets a payment-request email with transfer details to
+    // forward to their payer (their own document kind, never proforma).
+    expect(mockGeneratePaymentAccount).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-id' })
+    );
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentKind: 'payment_request',
+        virtualAccount: {
+          accountName: 'OgaBassey-Test',
+          accountNumber: '1234567890',
+          bankName: 'Wema Bank',
+        },
+      })
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'customer@example.com',
+        subject: expect.stringContaining('Payment Request - #'),
+      })
+    );
+    // Service-role boundary: the DVA reservation goes through the
+    // request-scoped client (proof-bound RPC in production), never the
+    // admin client — and the invoice-only artifacts are skipped.
+    expect(mockPersistPaystackDvaAssignment).toHaveBeenCalledWith(
+      supabase,
+      expect.objectContaining({ orderId: 'order-id' })
+    );
+    // Pre-response provisioning: the DVA exists before after() is even
+    // scheduled, so the success page's immediate lookup carries the bank
+    // account — and the post-response branch reuses it instead of
+    // provisioning a second account for the same order.
+    expect(mockGeneratePaymentAccount).toHaveBeenCalledTimes(1);
+    expect(mockPersistPaystackDvaAssignment).toHaveBeenCalledTimes(1);
+    expect(mockGeneratePaymentAccount.mock.invocationCallOrder[0]).toBeLessThan(
+      mockAfter.mock.invocationCallOrder[0]
+    );
+    expect(accountUpsert).not.toHaveBeenCalled();
+    expect(backgroundSupabase.from).not.toHaveBeenCalledWith('order_items');
+    expect(backgroundSupabase.from).not.toHaveBeenCalledWith('order_reminders');
+  });
+
+  it('retries Pay for Me DVA provisioning post-response after a handled provider failure', async () => {
+    // DVA-focused: stub the unrelated checkout blog-purge scheduler so the
+    // after() ordering assertions below observe only the DVA flow.
+    const retryBlogPurgeMod = await import(
+      '@/lib/checkout/schedule-checkout-product-blog-purge'
+    );
+    const retryBlogPurgeStub = vi
+      .spyOn(retryBlogPurgeMod, 'scheduleCheckoutProductBlogPurge')
+      .mockResolvedValue(undefined);
+    // paystackRequest converts HTTP errors and fetch rejections into
+    // { success: false }: the pre-response attempt must report retryable
+    // (not suppress the fallback), so the committed request email still
+    // carries transfer details after the post-response retry.
+    mockGeneratePaymentAccount.mockResolvedValueOnce({
+      success: false,
+      error: 'transient provider outage',
+    });
+    const supabase = buildMockSupabase();
+    const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock({
+      orderItemsResponses: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+    mockPersistPaystackDvaAssignment.mockResolvedValueOnce(null);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'payforme',
+      }),
+    });
+
+    const response = await POST(request);
+    retryBlogPurgeStub.mockRestore();
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // The handled pre-response failure retried post-response: the email
+    // carries transfer details from the second provisioning.
+    expect(mockGeneratePaymentAccount).toHaveBeenCalledTimes(2);
+    expect(mockPersistPaystackDvaAssignment).toHaveBeenCalledTimes(1);
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentKind: 'payment_request',
+        virtualAccount: {
+          accountName: 'OgaBassey-Test',
+          accountNumber: '1234567890',
+          bankName: 'Wema Bank',
+        },
+      })
+    );
+    // First attempt pre-response, retry inside after(): only one account
+    // persisted for the order despite two provider calls.
+    expect(mockGeneratePaymentAccount.mock.invocationCallOrder[0]).toBeLessThan(
+      mockAfter.mock.invocationCallOrder[0]
+    );
+    expect(
+      mockPersistPaystackDvaAssignment.mock.invocationCallOrder[0]
+    ).toBeGreaterThan(mockAfter.mock.invocationCallOrder[0]);
+    expect(accountUpsert).not.toHaveBeenCalled();
+  });
+
+  it('skips Pay for Me DVA provisioning when a discounted order has zero due', async () => {
+    // 100%-discounted order: unpaid with a zero balance. Provisioning
+    // would persist a virtual account that receipt rendering shows as
+    // transfer instructions for an impossible payment.
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 0,
+            subtotal: 0,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            // Proof-bound claim needs the creation tracking token.
+            tracking_token: 'track-payforme-1',
+          },
+        ],
+        error: null,
+      },
+    });
+    const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock(
+      {}
+    );
+
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    supabase.from = vi.fn((_table: string) => {
+      return {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        single: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        maybeSingle: vi.fn().mockResolvedValue({
+          data: {
+            id: MERCHANT_ID,
+            business_name: 'Test Merchant',
+            country: 'NG',
+            slug: 'test-merchant',
+            support_email: 'support@example.com',
+            email_sender_name: 'Test Store',
+            email: 'merchant@example.com',
+            vat_registration_status: 'registered',
+            vat_rate: 7.5,
+          },
+          error: null,
+        }),
+        in: vi.fn().mockReturnThis(),
+        returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+        overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+        insert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn().mockReturnThis(),
+        // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+        then: (resolve: any) => Promise.resolve().then(resolve),
+      };
+    }) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'payforme',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    expect(mockGeneratePaymentAccount).not.toHaveBeenCalled();
+    expect(mockPersistPaystackDvaAssignment).not.toHaveBeenCalled();
+    expect(accountUpsert).not.toHaveBeenCalled();
+    expect(generateOrderConfirmationEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        documentKind: 'payment_request',
+        amountDue: 0,
+      })
+    );
+    const emailInput = vi.mocked(generateOrderConfirmationEmail).mock
+      .calls[0][0];
+    expect(emailInput.virtualAccount).toBeUndefined();
+  });
+
+  it('emails a paid commercial invoice when wallet covers an invoice-method order in full', async () => {
+    const finalizeSpy = vi.fn(() =>
+      Promise.resolve({ data: null, error: null })
+    );
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+      redeem_wallet_for_order: {
+        data: [
+          {
+            success: true,
+            redeemed_amount: 2000,
+            new_balance: 500,
+            transaction_id: 'tx-wallet-full',
+          },
+        ],
+        error: null,
+      },
+    });
+    const originalRpc = supabase.rpc;
+    supabase.rpc = vi.fn((name: string) => {
+      if (name === 'finalize_wallet_order_payment') {
+        return finalizeSpy();
+      }
+      return originalRpc(name);
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock({});
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    supabase.from = vi.fn((_table: string) => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Merchant',
+          country: 'NG',
+          slug: 'test-merchant',
+          support_email: 'support@example.com',
+          email_sender_name: 'Test Store',
+          email: 'merchant@example.com',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+        },
+        error: null,
+      }),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Merchant',
+          country: 'NG',
+          slug: 'test-merchant',
+          support_email: 'support@example.com',
+          email_sender_name: 'Test Store',
+          email: 'merchant@example.com',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+        },
+        error: null,
+      }),
+      in: vi.fn().mockReturnThis(),
+      returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+      overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+      insert: vi.fn().mockResolvedValue({ error: null }),
+      update: vi.fn().mockReturnThis(),
+      // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+      then: (resolve: any) => Promise.resolve().then(resolve),
+    })) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            ...baseOrderPayload.items[0],
+            has_assurance: true,
+          },
+        ],
+        payment_method: 'invoice',
+        use_wallet_credit: true,
+        wallet_amount: 2000,
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await readJson(response);
+    expect(response.status).toBe(201);
+    // The create-RPC row still carries the pre-coverage status, but the
+    // response already presents the finalized paid wallet order.
+    expect(body.amountDueToGateway).toBe(0);
+    expect(body.order.payment_status).toBe('paid');
+    expect(body.order.payment_method).toBe('wallet');
+    expect(finalizeSpy).toHaveBeenCalledTimes(1);
+
+    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
+      timeout: 1000,
+    });
+    // Paid commercial-invoice artifacts: no proforma subject, no
+    // proforma-prefixed attachment, commercial Peppol type code.
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'customer@example.com',
+        subject: expect.stringContaining('Invoice Generated'),
+        attachments: [
+          expect.objectContaining({
+            name: expect.stringMatching(/^invoice-ORD-.*\.pdf$/),
+            mime_type: 'application/pdf',
+          }),
+        ],
+      })
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subject: expect.not.stringContaining('Proforma'),
+      })
+    );
+    expect(mockGenerateReceiptBlob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_status: 'paid',
+      }),
+      expect.anything(),
+      expect.objectContaining({
+        documentKind: 'invoice',
+        invoiceTypeCode: '380',
+      })
+    );
+  });
+
+  it('leaves the invoice email unsent when persisted items cannot load so a replay retries', async () => {
+    // The persisted-items read fails through the proof-bound RPC (tracking
+    // token authorizes the read) — never the admin order_items read — so
+    // the base invoice email still sends without attachments.
+    const supabase = buildMockSupabase({
+      get_invoice_artifact_order_items: {
+        data: null,
+        error: { message: 'order_items unavailable' },
+      },
+    });
     const { backgroundSupabase } = createBackgroundSupabaseMock({
       orderItems: [],
       orderItemsError: { message: 'order_items unavailable' },
@@ -5925,50 +8120,121 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     const response = await POST(request);
 
     expect(response.status).toBe(201);
-    await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
-      timeout: 1000,
-    });
-    expect(mockGenerateReceiptBlob).not.toHaveBeenCalled();
-    expect(mockSendEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: 'customer@example.com',
-        subject: expect.stringContaining('Invoice Generated'),
-        attachments: undefined,
-      })
+    // Unavailable persisted items reject the invoice artifacts (04L): the
+    // claim completes failed — never sent — so the next replay reclaims
+    // and retries instead of the shopper receiving an attachment-less
+    // message marked delivered.
+    await vi.waitFor(
+      () => {
+        expect(retryMocks.completeWithRetry).toHaveBeenCalledWith(
+          expect.anything(),
+          'order-id',
+          'track-default-1',
+          false,
+          'lease-default-1'
+        );
+        // Gate on the artifacts error log alongside the failed
+        // completion — only the failed-artifacts path emits it.
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message:
+              'Persisted order items unavailable for invoice email; skipping non-canonical invoice artifacts',
+            orderId: 'order-id',
+          })
+        );
+      },
+      { timeout: 1000 }
     );
-    expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'Failed to generate invoice PDF or log initial reminder',
-        orderId: 'order-id',
-      })
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockGenerateReceiptBlob).not.toHaveBeenCalled();
+  });
+
+  it('marks the won claim started before delivery artifacts build', async () => {
+    // The after() fires the start marker first (fire-and-forget) so
+    // the claim holds the full 5-minute crash window while artifacts
+    // build; a never-started claim keeps the short reclaim grace.
+    const supabase = buildMockSupabase({});
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+    await vi.waitFor(
+      () =>
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          'mark_immediate_order_notification_started_with_proof',
+          {
+            p_order_id: 'order-id',
+            p_tracking_token: 'track-default-1',
+            p_claim_token: 'lease-default-1',
+          }
+        ),
+      { timeout: 1000 }
     );
   });
 
   it('renders invoice attachments from persisted canonical order items', async () => {
-    const supabase = buildMockSupabase();
-    const { backgroundSupabase } = createBackgroundSupabaseMock({
-      orderItems: [
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
         {
-          id: 'order-item-1',
-          product_id: 'p-1',
-          variant_id: null,
-          variant_attributes: null,
-          variant_name: 'Matte Black',
-          name: 'Canonical Widget',
-          quantity: 1,
-          price: 1250,
-          has_assurance: false,
-          assurance_fee: 0,
-          item_description: null,
-          line_extension_amount: 1250,
-          vat_category_code: 'S',
-          vat_rate: 7.5,
-          vat_amount: 0,
-          sellers_item_id: 'SKU-CANONICAL',
-          unit_code: 'EA',
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: 'Matte Black',
+              name: 'Canonical Widget',
+              quantity: 1,
+              price: 1250,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 1250,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: 'SKU-CANONICAL',
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
         },
       ],
     });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     supabase.from = vi.fn((_table: string) => ({
@@ -6061,31 +8327,50 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('passes persisted item condition without fabricating a raw variant label when variant_name is empty', async () => {
-    const supabase = buildMockSupabase();
-    const { backgroundSupabase } = createBackgroundSupabaseMock({
-      orderItems: [
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
         {
-          id: 'order-item-1',
-          product_id: 'p-1',
-          variant_id: null,
-          variant_attributes: null,
-          variant_name: null,
-          condition: 'used',
-          name: 'Samsung Galaxy S22 Ultra',
-          quantity: 1,
-          price: 750000,
-          has_assurance: false,
-          assurance_fee: 0,
-          item_description: null,
-          line_extension_amount: 750000,
-          vat_category_code: 'S',
-          vat_rate: 7.5,
-          vat_amount: 0,
-          sellers_item_id: null,
-          unit_code: 'EA',
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              condition: 'used',
+              name: 'Samsung Galaxy S22 Ultra',
+              quantity: 1,
+              price: 750000,
+              has_assurance: false,
+              assurance_fee: 0,
+              item_description: null,
+              line_extension_amount: 750000,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
         },
       ],
     });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     const supabaseMod = await import('@/lib/supabase/server');
@@ -6143,7 +8428,48 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('sends the invoice email with fallback branding when logo resolution fails', async () => {
-    const supabase = buildMockSupabase();
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
     const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
     mockResolveReceiptLogoDataUri.mockRejectedValueOnce(
@@ -6219,7 +8545,8 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({
-        documentKind: 'invoice',
+        documentKind: 'proforma_invoice',
+        invoiceTypeCode: '325',
         logoDataUri: null,
       })
     );
@@ -6238,13 +8565,61 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     );
   });
 
-  it('still sends the invoice email when background DVA persistence fails', async () => {
-    const supabase = buildMockSupabase();
-    const { accountUpsert, backgroundSupabase, reminderInsert } =
-      createBackgroundSupabaseMock({
-        accountError: { message: 'insert failed' },
-        reminderError: { message: 'reminder failed' },
-      });
+  it('still sends the invoice email when invoice DVA reservation fails', async () => {
+    // Round 3 persists through proof-bound RPCs: fail the reservation and
+    // the reminder inserts while the email (with its PDF, minus the virtual
+    // account) must still go out.
+    vi.mocked(reservePaystackDvaAssignment).mockResolvedValueOnce({
+      data: null,
+      error: { message: 'insert failed' },
+    });
+    const supabase = buildMockSupabase({
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+      insert_invoice_reminder: {
+        data: null,
+        error: { message: 'reminder failed' },
+      },
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
 
     supabase.from = vi.fn((_table: string) => ({
@@ -6313,24 +8688,20 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     expect(mockGeneratePaymentAccount).toHaveBeenCalled();
-    expect(accountUpsert).toHaveBeenCalledWith(
+    expect(vi.mocked(reservePaystackDvaAssignment)).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({
-        order_id: 'order-id',
-        account_number: '1234567890',
-        expires_at: expect.any(String),
-      }),
-      { onConflict: 'order_id,provider' }
-    );
-    expect(reminderInsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        order_id: 'order-id',
-        channel: 'email',
+        orderId: 'order-id',
+        accountNumber: '1234567890',
       })
     );
-    expect(backgroundSupabase.from).toHaveBeenCalledWith(
-      'order_payment_accounts'
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'insert_invoice_reminder',
+      expect.objectContaining({
+        p_order_id: 'order-id',
+        p_channel: 'email',
+      })
     );
-    expect(backgroundSupabase.from).toHaveBeenCalledWith('order_reminders');
     expect(mockSendEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         attachments: expect.arrayContaining([
@@ -6372,6 +8743,46 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
         ],
         error: null,
       },
+      create_storefront_order: {
+        data: [
+          {
+            id: 'order-id',
+            order_number: 'ORD-123',
+            total: 1000,
+            subtotal: 1000,
+            shipping_fee: 0,
+            customer_id: CUSTOMER_ID,
+            tracking_token: 'track-invoice-1',
+          },
+        ],
+        error: null,
+      },
+      get_invoice_artifact_order_items: [
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
     });
     const { backgroundSupabase } = createBackgroundSupabaseMock();
     mockCreateAdminClient.mockReturnValue(backgroundSupabase);
@@ -6451,6 +8862,150 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
       expect.any(Object),
       expect.any(Object)
     );
+  });
+
+  it('leaves the invoice email unsent when DVA provisioning throws so a replay retries', async () => {
+    const supabase = buildMockSupabase({
+      redeem_wallet_for_order: {
+        data: [
+          {
+            success: true,
+            redeemed_amount: 300,
+            new_balance: 700,
+            transaction_id: 'wallet-tx-1',
+          },
+        ],
+        error: null,
+      },
+      // The canonical snapshot loads through the proof-bound RPC (tracking
+      // token authorizes the read) — never the admin order_items read.
+      get_invoice_artifact_order_items: [
+        { data: [], error: null },
+        {
+          data: [
+            {
+              id: 'order-item-1',
+              product_id: 'p-1',
+              variant_id: null,
+              variant_attributes: null,
+              variant_name: null,
+              name: 'Widget',
+              quantity: 1,
+              price: 1000,
+              has_assurance: true,
+              assurance_fee: 50,
+              item_description: null,
+              line_extension_amount: 1050,
+              vat_category_code: 'S',
+              vat_rate: 7.5,
+              vat_amount: 0,
+              sellers_item_id: null,
+              unit_code: 'EA',
+            },
+          ],
+          error: null,
+        },
+      ],
+    });
+    const { backgroundSupabase } = createBackgroundSupabaseMock();
+    mockCreateAdminClient.mockReturnValue(backgroundSupabase);
+    // DVA provisioning throws (rather than returning a failure): the
+    // catch still renders the email, which must instruct 700 outstanding
+    // — not the full 1000 despite 300 of wallet credit applied.
+    mockGeneratePaymentAccount.mockRejectedValueOnce(
+      new Error('dva provider down')
+    );
+
+    supabase.from = vi.fn((_table: string) => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValue({
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Merchant',
+          country: 'NG',
+          slug: 'test-merchant',
+          support_email: 'support@example.com',
+          email_sender_name: 'Test Store',
+          email: 'merchant@example.com',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+        },
+        error: null,
+      }),
+      maybeSingle: vi.fn().mockResolvedValue({
+        data: {
+          id: MERCHANT_ID,
+          business_name: 'Test Merchant',
+          country: 'NG',
+          slug: 'test-merchant',
+          support_email: 'support@example.com',
+          email_sender_name: 'Test Store',
+          email: 'merchant@example.com',
+          vat_registration_status: 'registered',
+          vat_rate: 7.5,
+        },
+        error: null,
+      }),
+      in: vi.fn().mockReturnThis(),
+      returns: vi.fn().mockResolvedValue({ data: [], error: null }),
+      overrideTypes: vi.fn().mockResolvedValue({ data: [], error: null }),
+      insert: vi.fn().mockResolvedValue({ error: null }),
+      update: vi.fn().mockReturnThis(),
+      // biome-ignore lint/suspicious/noThenProperty: simulated thenable mock
+      then: (resolve: any) => Promise.resolve().then(resolve),
+    })) as any;
+
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        payment_method: 'invoice',
+        use_wallet_credit: true,
+        wallet_amount: 300,
+      }),
+    });
+
+    const response = await POST(request);
+    expect(response.status).toBe(201);
+
+    // A provider throw (unlike a reservation failure outcome, which
+    // degrades locally) rejects the invoice artifacts (04L): the claim
+    // completes failed — never sent — so the next replay reclaims and
+    // retries instead of sending a DVA-less message marked delivered.
+    // The credited-balance math stays covered by 'counts wallet credit
+    // as paid in generated invoice emails', which does send.
+    // Gate on the after() catch log alongside the failed completion —
+    // only the failed-artifacts path emits it.
+    await vi.waitFor(
+      () => {
+        expect(retryMocks.completeWithRetry).toHaveBeenCalledWith(
+          expect.anything(),
+          'order-id',
+          'track-default-1',
+          false,
+          'lease-default-1'
+        );
+        expect(logger.error).toHaveBeenCalledWith(
+          expect.objectContaining({
+            message: 'Error sending order confirmation email',
+          })
+        );
+      },
+      { timeout: 1000 }
+    );
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(generateOrderConfirmationEmail).not.toHaveBeenCalled();
   });
 });
 
@@ -6739,7 +9294,7 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
         maybeSingle: vi.fn().mockResolvedValue({
-          data: { currency: 'NGN' },
+          data: { id: 'existing-order', currency: 'NGN' },
           error: null,
         }),
         update,
@@ -7419,6 +9974,81 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
     expect(hashA).not.toBe(hashB);
   });
 
+  it('bugfix: keeps merchant-rate idempotency hash on pre-repair state while persisting Lagos', async () => {
+    // Arrange — postal-code state that this PR repairs to Lagos for zone
+    // verification/persistence. Pre-deploy orders hashed the original
+    // "100001"; hashing the repaired state would break Idempotency-Key retries.
+    const malformedShippingAddress = {
+      address: '2 Olaide Tomori Street, Ikeja, Lagos 100001, Nigeria',
+      city: 'Ikeja',
+      state: '100001',
+      country: 'Nigeria',
+      countryCode: 'NG',
+    };
+    primeAdminShippingRateClient(shippingRatesRpcPayload());
+    const supabase = await primeStorefrontClient();
+
+    // Act
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'malformed-state-retry-key' },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          shipping_address: malformedShippingAddress,
+          shipping_rate_id: LAGOS_RATE_ID,
+          shipping_fee: 1500,
+        }),
+      })
+    );
+    const body = await readJson(response);
+
+    // Assert
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({ order: { id: 'order-id' } });
+    const createCall = (
+      supabase.rpc as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls.find(([name]) => name === 'create_storefront_order');
+    const rpcParams = createCall?.[1] as
+      | {
+          p_checkout_request_hash?: string;
+          p_shipping_address?: { state?: string };
+        }
+      | undefined;
+
+    expect(rpcParams?.p_shipping_address?.state).toBe('Lagos');
+    const normalizedHash = hashOrderIdempotencyPayload(
+      buildOrderIdempotencyPayload({
+        ...baseOrderPayload,
+        shipping_address: { ...malformedShippingAddress, state: 'Lagos' },
+        shipping_fee: 1500,
+        shipping_provider: null,
+        selected_quote_id: null,
+        shipping_rate_id: LAGOS_RATE_ID,
+        discount_amount: 0,
+        discount_code: null,
+        gift_wrapping_fee: 0,
+      })
+    );
+    expect(rpcParams?.p_checkout_request_hash).toBeDefined();
+    expect(rpcParams?.p_checkout_request_hash).not.toBe(normalizedHash);
+    expect(rpcParams?.p_checkout_request_hash).toBe(
+      hashOrderIdempotencyPayload(
+        buildOrderIdempotencyPayload({
+          ...baseOrderPayload,
+          shipping_address: malformedShippingAddress,
+          shipping_fee: 1500,
+          shipping_provider: null,
+          selected_quote_id: null,
+          shipping_rate_id: LAGOS_RATE_ID,
+          discount_amount: 0,
+          discount_code: null,
+          gift_wrapping_fee: 0,
+        })
+      )
+    );
+  });
+
   const ROW_RATE_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
   // A ship/pickup rate on the rest-of-world (country-level) zone. It verifies
@@ -7755,5 +10385,356 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
       shipping_rate_name: 'Nationwide Delivery',
       shipping_pickup_details: null,
     });
+  });
+});
+
+describe('POST /api/orders — shared cart binding', () => {
+  const SHARED_CART = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+  const BOUND_ORDER = {
+    ...baseOrderRow,
+    customer_email: 'customer@example.com',
+    customer_name: 'Test Customer',
+    customer_phone: '08012345678',
+    discount_amount: 0,
+    gift_wrapping_fee: 0,
+    idempotency_replayed: false,
+    merchant_id: MERCHANT_ID,
+    payment_method: 'paystack',
+    payment_status: 'unpaid',
+    shipping_address: null,
+    shipping_status: 'pending',
+    tax_amount: 0,
+    tax_basis: 'exclusive',
+    tracking_token: 'tok-123',
+  };
+  const BOUND_RECEIPT = {
+    binding: {
+      cartId: SHARED_CART.cart_id,
+      cartVersionReviewed: 3,
+      checkout_generation: 1,
+      merchantId: MERCHANT_ID,
+      sessionId: SHARED_CART.checkout_session_id,
+      variant: 'base',
+    },
+    code: null,
+    ok: true,
+    order: BOUND_ORDER,
+    replayed: false,
+  };
+
+  async function setupBinding(overrides: RpcOverrides) {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const supabase = buildMockSupabase(overrides, {
+      productRows: [{ id: 'p-1', price: 1000 }],
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: mockAuthUser(AUTH_USER_ID),
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+    return supabase;
+  }
+
+  function bindingRequest(extra: Record<string, unknown> = {}) {
+    return new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        shared_cart: SHARED_CART,
+        ...extra,
+      }),
+    });
+  }
+
+  it('rejects a bound submit without the preparing principal proof', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+    mockVerifySharedCartOrderProof.mockReturnValueOnce({
+      ok: false as const,
+    } as never);
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(401);
+    expect((await response.json()).code).toBe('SHARED_CART_PROOF_REQUIRED');
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
+  it('submits a bound base order through the binding RPC', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      {
+        p_args: expect.objectContaining({
+          p_cart_id: SHARED_CART.cart_id,
+          p_cart_principal_id: 'guest-principal-001',
+          p_cart_version: SHARED_CART.cart_version,
+          p_merchant_id: MERCHANT_ID,
+          p_customer_email: 'customer@example.com',
+        }),
+        p_generation: 1,
+        p_session_id: SHARED_CART.checkout_session_id,
+        p_variant: 'base',
+      }
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('maps a binding transport failure to a retryable 503', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { message: 'connection reset by peer' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe(
+      'SHARED_CART_TEMPORARILY_UNAVAILABLE'
+    );
+  });
+
+  it('submits a bound savings order with the redemption payload', async () => {
+    const savingsReceipt = {
+      ...BOUND_RECEIPT,
+      binding: { ...BOUND_RECEIPT.binding, variant: 'savings' },
+      order: {
+        ...BOUND_ORDER,
+        savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        savings_goal_status: 'paused',
+        savings_redeemed_amount: 500,
+        savings_redemption_id: '77777777-aaaa-bbbb-cccc-dddddddddddd',
+        savings_redemption_success: true,
+      },
+    };
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: savingsReceipt,
+        error: null,
+      },
+    });
+
+    const response = await POST(
+      bindingRequest({
+        savings_amount: 500,
+        savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        use_savings_credit: true,
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_savings_amount: 500,
+          p_savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        }),
+        p_variant: 'savings',
+      })
+    );
+    const body = (await response.json()) as {
+      savings: {
+        amountUsed: number;
+        goalId: string;
+        redemptionId: string;
+      } | null;
+    };
+    expect(body.savings).toEqual({
+      amountUsed: 500,
+      goalId: '123e4567-e89b-12d3-a456-426614174555',
+      redemptionId: '77777777-aaaa-bbbb-cccc-dddddddddddd',
+    });
+  });
+
+  it('forwards cart line ids into the bound items payload', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+
+    const response = await POST(
+      bindingRequest({
+        items: [
+          {
+            cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+            name: 'Widget',
+            price: 1000,
+            product_id: 'p-1',
+            quantity: 1,
+          },
+        ],
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_items: expect.arrayContaining([
+            expect.objectContaining({
+              cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+              product_id: 'p-1',
+            }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('keeps the direct path when no binding is sent', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order: { data: [baseOrderRow], error: null },
+    });
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(baseOrderPayload),
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
+  it('maps a stale binding to 409 with a refresh code', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_checkout_stale' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(409);
+    expect((await readJson(response)).code).toBe('SHARED_CART_STALE');
+  });
+
+  it('maps an expired session to 409', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_checkout_expired' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(409);
+    expect((await readJson(response)).code).toBe('SHARED_CART_SESSION_EXPIRED');
+  });
+
+  it('maps a binding authorization failure to 403', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_order_unauthorized' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(403);
+    expect((await readJson(response)).code).toBe(
+      'SHARED_CART_BINDING_FORBIDDEN'
+    );
+  });
+
+  it('maps a binding invalid-variant failure to 400, not a server fault', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_order_invalid_variant' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(400);
+  });
+
+  it('keeps legacy mapping for inner order rejections on the bound path', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'order_total_mismatch' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(400);
+    expect(await readJson(response)).toMatchObject({
+      details: 'order_total_mismatch',
+      error: 'Failed to create order',
+    });
+  });
+
+  it('accepts a replayed binding as the same order', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: {
+          ...BOUND_RECEIPT,
+          order: { ...BOUND_ORDER, idempotency_replayed: true },
+          replayed: true,
+        },
+        error: null,
+      },
+    });
+
+    const response = await POST(bindingRequest());
+    const payload = await readJson(response);
+
+    // Replays answer 200 (not 201): the receipt's idempotency flag flows
+    // through the same replay branch as direct idempotent replays.
+    expect(response.status).toBe(200);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({ p_variant: 'base' })
+    );
+    expect(payload.order?.id ?? payload.id).toBe('order-id');
   });
 });

@@ -1,12 +1,13 @@
-import Ionicons from '@react-native-vector-icons/ionicons';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import type { ExpenseBranchOption } from '@/components/expenses/ExpenseBranchSelector';
+import { ExpenseBranchSelector } from '@/components/expenses/ExpenseBranchSelector';
+import { ExpenseCoreFields } from '@/components/expenses/ExpenseCoreFields';
+import { ExpenseGroupSelector } from '@/components/expenses/ExpenseGroupSelector';
+import { ExpenseMetadataFields } from '@/components/expenses/ExpenseMetadataFields';
+import { ExpenseReceiptField } from '@/components/expenses/ExpenseReceiptField';
 import type { ExpenseCategory } from '@/components/expenses/expense-categories';
-import { expenseFormStyles } from '@/components/expenses/expense-form.styles';
-import SafeImage from '@/components/ui/SafeImage';
-import { useCurrency } from '@/hooks/useCurrency';
-import { useTheme } from '@/hooks/useTheme';
-
-const CATEGORY_PLACEHOLDER = 'Select a category';
+import type { ExpenseReceiptChange } from '@/hooks/useExpenseFormState';
+import { expenseDateCodec } from '@/lib/expense-date';
+import type { ExpenseGroup } from '@/schemas/expense-group';
 
 interface ExpenseFormFieldsProps {
   amount: string;
@@ -16,179 +17,129 @@ interface ExpenseFormFieldsProps {
   onOpenCategorySheet: () => void;
   onReceiptPress: () => void;
   receiptUri: string | null;
-  selectedCategory: ExpenseCategory | '' | null;
+  receiptError?: Error | null;
+  receiptLoading?: boolean;
+  selectedCategory: ExpenseCategory | string | null;
+  activeGroups?: ExpenseGroup[];
+  branches?: ExpenseBranchOption[];
+  canEditGroups?: boolean;
+  date?: string;
+  disabled?: boolean;
+  existingReceiptUri?: string | null;
+  hasExistingReceipt?: boolean;
+  onBranchChange?: (branchId: string) => void;
+  onDateChange?: (value: string) => void;
+  onGroupChange?: (groupId: string | null) => void;
+  onManageGroups?: () => void;
+  onPaymentMethodChange?: (value: string) => void;
+  onReceiptRemove?: () => void;
+  onReceiptRestore?: () => void;
+  onReferenceChange?: (value: string) => void;
+  onVendorNameChange?: (value: string) => void;
+  paymentMethod?: string;
+  receiptChange?: ExpenseReceiptChange;
+  reference?: string;
+  selectedBranchId?: string | null;
+  selectedGroupId?: string | null;
+  vendorName?: string;
 }
 
 export function ExpenseFormFields({
+  activeGroups,
   amount,
+  branches,
+  canEditGroups = false,
+  date,
   description,
+  disabled = false,
+  existingReceiptUri = null,
+  hasExistingReceipt,
   onAmountChange,
+  onBranchChange,
+  onDateChange,
   onDescriptionChange,
+  onGroupChange,
+  onManageGroups,
   onOpenCategorySheet,
+  onPaymentMethodChange,
   onReceiptPress,
+  onReceiptRemove,
+  onReceiptRestore,
+  onReferenceChange,
+  onVendorNameChange,
+  paymentMethod = '',
+  receiptChange,
   receiptUri,
+  receiptError,
+  receiptLoading,
+  reference = '',
+  selectedBranchId,
   selectedCategory,
+  selectedGroupId,
+  vendorName = '',
 }: ExpenseFormFieldsProps) {
-  const { colors } = useTheme();
-  const { symbol } = useCurrency();
-  const formattedAmount = amount
-    ? amount.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-    : '';
-  const selectedCategoryLabel =
-    typeof selectedCategory === 'string' && selectedCategory.trim().length > 0
-      ? selectedCategory
-      : CATEGORY_PLACEHOLDER;
-  const hasSelectedCategory = selectedCategoryLabel !== CATEGORY_PLACEHOLDER;
-
+  const resolvedDate = date ?? expenseDateCodec.toDateOnly(new Date());
+  const resolvedReceiptChange: ExpenseReceiptChange =
+    receiptChange ??
+    (receiptUri
+      ? { kind: 'replace', localUri: receiptUri }
+      : { kind: 'unchanged' });
   return (
     <>
-      <View style={expenseFormStyles.section}>
-        <Text
-          style={[expenseFormStyles.label, { color: colors.textSecondary }]}
-        >
-          Amount <Text style={{ color: colors.error }}>*</Text>
-        </Text>
-        <View
-          style={[
-            expenseFormStyles.amountContainer,
-            { borderColor: colors.border },
-          ]}
-        >
-          <Text
-            style={[expenseFormStyles.currencyPrefix, { color: colors.text }]}
-          >
-            {symbol}
-          </Text>
-          <TextInput
-            accessibilityLabel="Expense amount"
-            keyboardType="decimal-pad"
-            onChangeText={onAmountChange}
-            placeholder="0.00"
-            placeholderTextColor={colors.textMuted}
-            style={[expenseFormStyles.amountInput, { color: colors.text }]}
-            value={formattedAmount}
-          />
-        </View>
-      </View>
-
-      <View style={expenseFormStyles.section}>
-        <Text
-          style={[expenseFormStyles.label, { color: colors.textSecondary }]}
-        >
-          Category <Text style={{ color: colors.error }}>*</Text>
-        </Text>
-        <Pressable
-          accessibilityLabel="Select expense category"
-          accessibilityRole="button"
-          onPress={onOpenCategorySheet}
-          style={[
-            expenseFormStyles.selector,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          <Text
-            style={[
-              expenseFormStyles.optionText,
-              {
-                color: hasSelectedCategory ? colors.text : colors.textSecondary,
-              },
-            ]}
-          >
-            {selectedCategoryLabel}
-          </Text>
-          <Ionicons name="chevron-down" size={20} color={colors.textMuted} />
-        </Pressable>
-      </View>
-
-      <View style={expenseFormStyles.section}>
-        <Text
-          style={[expenseFormStyles.label, { color: colors.textSecondary }]}
-        >
-          Description (Optional)
-        </Text>
-        <TextInput
-          accessibilityLabel="Expense description"
-          multiline
-          onChangeText={onDescriptionChange}
-          placeholder="What was this for?"
-          placeholderTextColor={colors.textMuted}
-          style={[
-            expenseFormStyles.input,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              color: colors.text,
-            },
-          ]}
-          value={description}
+      {branches && onBranchChange && selectedBranchId !== undefined ? (
+        <ExpenseBranchSelector
+          branches={branches}
+          disabled={disabled}
+          onSelect={onBranchChange}
+          selectedBranchId={selectedBranchId ?? null}
         />
-      </View>
-
-      <View style={expenseFormStyles.section}>
-        <Text
-          style={[expenseFormStyles.label, { color: colors.textSecondary }]}
-        >
-          Receipt
-        </Text>
-        <Pressable
-          accessibilityLabel="Add expense receipt"
-          accessibilityRole="button"
-          onPress={onReceiptPress}
-          style={[
-            expenseFormStyles.imageUpload,
-            { backgroundColor: colors.card, borderColor: colors.border },
-            receiptUri ? null : { borderStyle: 'dashed' },
-          ]}
-        >
-          {receiptUri ? (
-            <>
-              <SafeImage
-                accessibilityLabel="Receipt preview"
-                contentFit="cover"
-                source={{ uri: receiptUri }}
-                style={expenseFormStyles.receiptPreview}
-                transition={200}
-              />
-              <View
-                style={[
-                  expenseFormStyles.changeImageBadge,
-                  { backgroundColor: 'rgba(0,0,0,0.6)' },
-                ]}
-              >
-                <Ionicons
-                  name="camera"
-                  size={20}
-                  color={colors.textOnPrimary}
-                />
-                <Text
-                  style={[
-                    expenseFormStyles.changeImageText,
-                    { color: colors.textOnPrimary },
-                  ]}
-                >
-                  Change
-                </Text>
-              </View>
-            </>
-          ) : (
-            <View style={expenseFormStyles.uploadPlaceholder}>
-              <Ionicons
-                color={colors.primary}
-                name="camera-outline"
-                size={32}
-              />
-              <Text
-                style={[
-                  expenseFormStyles.uploadText,
-                  { color: colors.primary },
-                ]}
-              >
-                Add Receipt Photo
-              </Text>
-            </View>
-          )}
-        </Pressable>
-      </View>
+      ) : null}
+      <ExpenseCoreFields
+        amount={amount}
+        date={resolvedDate}
+        description={description}
+        disabled={disabled}
+        onAmountChange={onAmountChange}
+        onDateChange={onDateChange}
+        onDescriptionChange={onDescriptionChange}
+        onOpenCategorySheet={onOpenCategorySheet}
+        selectedCategory={selectedCategory}
+      />
+      {onPaymentMethodChange && onReferenceChange && onVendorNameChange ? (
+        <ExpenseMetadataFields
+          disabled={disabled}
+          onPaymentMethodChange={onPaymentMethodChange}
+          onReferenceChange={onReferenceChange}
+          onVendorNameChange={onVendorNameChange}
+          paymentMethod={paymentMethod}
+          reference={reference}
+          vendorName={vendorName}
+        />
+      ) : null}
+      {activeGroups &&
+      onGroupChange &&
+      onManageGroups &&
+      selectedGroupId !== undefined ? (
+        <ExpenseGroupSelector
+          activeGroups={activeGroups}
+          canEdit={canEditGroups}
+          disabled={disabled}
+          onManage={onManageGroups}
+          onSelect={onGroupChange}
+          selectedGroupId={selectedGroupId ?? null}
+        />
+      ) : null}
+      <ExpenseReceiptField
+        disabled={disabled}
+        existingReceiptUri={existingReceiptUri}
+        hasExistingReceipt={hasExistingReceipt}
+        onRemoveReceipt={onReceiptRemove}
+        onRestoreReceipt={onReceiptRestore}
+        onSelectReceipt={onReceiptPress}
+        receiptChange={resolvedReceiptChange}
+        receiptError={receiptError}
+        receiptLoading={receiptLoading}
+      />
     </>
   );
 }

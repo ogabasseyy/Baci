@@ -10,8 +10,10 @@ on:
       - 'package.json'
       - 'pnpm-workspace.yaml'
       - '.npmrc'
+      # Patch/lockfile changes rebuild ReactAndroid from source.
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
     tags:
-      # Tag pushes bypass the paths filter above (GitHub Actions behaviour).
       - "v*-storefront"
   workflow_dispatch:
     inputs:
@@ -43,6 +45,8 @@ permissions:
   contents: read
 
 env:
+  EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
+  BACI_MOBILE_BUILD_PLATFORM: android
   JAVA_VERSION: "21"
   NODE_VERSION: "24"
   ANDROID_NODE_OPTIONS: "--no-experimental-strip-types --max-old-space-size=2048"
@@ -61,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -72,26 +76,29 @@ jobs:
           rm -f "apps/mobile-storefront/android/sentry.properties"
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
         id: setup_pnpm
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           dest: ${{ runner.temp }}/setup-pnpm-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Setup Java
-        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5.6.0
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.1.12297006
+
+      - name: Link cmdline-tools latest for Hermes builds
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" link-cmdline-tools-latest
 
       - name: Configure pnpm store directory
         uses: ./.github/actions/setup-pnpm-store
@@ -100,7 +107,7 @@ jobs:
           pnpm-bin-dir: ${{ steps.setup_pnpm.outputs.bin_dest }}
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-provider: basic
 
@@ -123,25 +130,13 @@ jobs:
 
       - name: Expose PostHog CLI to Gradle
         shell: bash
-        run: |
-          POSTHOG_CLI_BIN="$GITHUB_WORKSPACE/node_modules/.bin/posthog-cli"
-          if [ ! -x "$POSTHOG_CLI_BIN" ]; then
-            echo "::error::PostHog CLI is missing or not executable at $POSTHOG_CLI_BIN"
-            exit 1
-          fi
-          dirname "$POSTHOG_CLI_BIN" >> "$GITHUB_PATH"
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" expose-posthog-cli
 
       - name: Fix Hermes compiler path
         # RN 0.83+ ships hermesc in the hermes-compiler package, but
         # Gradle still resolves it via react-native/sdks/hermesc/.
         # Create a symlink so the build finds the binary.
-        run: |
-          HERMESC_SRC="$GITHUB_WORKSPACE/node_modules/hermes-compiler/hermesc"
-          HERMESC_DST="$GITHUB_WORKSPACE/node_modules/react-native/sdks/hermesc"
-          if [ -d "$HERMESC_SRC" ] && [ ! -e "$HERMESC_DST" ]; then
-            ln -s "$HERMESC_SRC" "$HERMESC_DST"
-            chmod +x "$HERMESC_DST/linux64-bin/hermesc" 2>/dev/null || true
-          fi
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" fix-hermes
 
       - name: Resolve version code
         id: version
@@ -153,29 +148,7 @@ jobs:
           GH_RUN_NUMBER: ${{ github.run_number }}
           VERSION_CODE_INPUT: ${{ inputs.version_code }}
           VERSION_CODE_BASE: ${{ env.VERSION_CODE_BASE }}
-        run: |
-          if [ "$GH_EVENT_NAME" = "workflow_dispatch" ] && [ -n "$VERSION_CODE_INPUT" ]; then
-            VERSION_CODE="$VERSION_CODE_INPUT"
-          elif [ "$GH_REF_TYPE" = "tag" ]; then
-            VERSION_CODE="${GH_REF_NAME#v}"
-            VERSION_CODE="${VERSION_CODE%-storefront}"
-          else
-            # Auto-bump: run_number + base offset to avoid collisions with
-            # previously uploaded version codes (EAS builds, earlier CI runs).
-            VERSION_CODE=$(( GH_RUN_NUMBER + VERSION_CODE_BASE ))
-          fi
-
-          if ! [[ "$VERSION_CODE" =~ ^[1-9][0-9]*$ ]]; then
-            echo "::error::Invalid version code '$VERSION_CODE'. Use a positive integer (>=1)."
-            exit 1
-          fi
-          if [ "$VERSION_CODE" -gt 2100000000 ]; then
-            echo "::error::Invalid version code '$VERSION_CODE'. Must be a positive integer <= 2100000000."
-            exit 1
-          fi
-
-          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_ENV"
-          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" resolve-version
 
       - name: Generate Android project via Expo prebuild
         working-directory: ${{ env.WORKING_DIR }}
@@ -192,6 +165,31 @@ jobs:
           EXPO_PUBLIC_POSTHOG_HOST: ${{ secrets.EXPO_PUBLIC_POSTHOG_HOST }}
           EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
           EXPO_PUBLIC_SENTRY_ENVIRONMENT: production
+          EXPO_PUBLIC_ENV: production
+          EXPO_PUBLIC_QUIZ_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID != '' && 'true' || 'false' }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_MOBILE_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_MOBILE_ADS_ENABLED }}
+          EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID }}
+          STOREFRONT_ADMOB_ANDROID_APP_ID: ${{ secrets.STOREFRONT_ADMOB_ANDROID_APP_ID }}
+          STOREFRONT_ADMOB_IOS_APP_ID: ${{ secrets.STOREFRONT_ADMOB_IOS_APP_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_FORCE_ENV_TOKEN: '1'
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -199,7 +197,9 @@ jobs:
           SENTRY_URL: ${{ secrets.SENTRY_URL }}
           STOREFRONT_FACEBOOK_APP_ID: ${{ secrets.STOREFRONT_FACEBOOK_APP_ID }}
           STOREFRONT_FACEBOOK_CLIENT_TOKEN: ${{ secrets.STOREFRONT_FACEBOOK_CLIENT_TOKEN }}
-        run: pnpm exec expo prebuild --platform android --clean
+        run: |
+          pnpm exec expo config --type public --json | node ../../.github/scripts/sentry-storefront-provenance.mjs android
+          pnpm exec expo prebuild --platform android --clean
 
       - name: Fix splash screen resource reference
         # expo-splash-screen adds a windowSplashScreenAnimatedIcon style item
@@ -208,27 +208,13 @@ jobs:
         # (withNoSplashImage.js) removes it from styles.xml, but if Expo
         # regenerates it during prebuild, strip it here as a safety net.
         working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          STYLES="android/app/src/main/res/values/styles.xml"
-          if [ -f "$STYLES" ] && grep -q "splashscreen_logo" "$STYLES"; then
-            sed -i '/@drawable\/splashscreen_logo/d' "$STYLES"
-            echo "Removed splashscreen_logo reference from styles.xml"
-          fi
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" fix-splash
 
       - name: Decode keystore
         working-directory: ${{ env.WORKING_DIR }}
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_STOREFRONT_KEYSTORE_BASE64 }}
-        run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::ANDROID_STOREFRONT_KEYSTORE_BASE64 secret is empty or not set"
-            exit 1
-          fi
-          KEYSTORE_PATH="$(mktemp "${RUNNER_TEMP}/storefront-release-keystore.XXXXXX")"
-          umask 077
-          echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
-          chmod 600 "$KEYSTORE_PATH"
-          echo "ANDROID_STOREFRONT_KEYSTORE_FILE=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" decode-keystore
 
       - name: Build Android App Bundle (storefront)
         working-directory: ${{ env.WORKING_DIR }}/android
@@ -251,6 +237,31 @@ jobs:
           POSTHOG_CLI_HOST: ${{ secrets.POSTHOG_CLI_HOST || 'https://eu.posthog.com' }}
           EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
           EXPO_PUBLIC_SENTRY_ENVIRONMENT: production
+          EXPO_PUBLIC_ENV: production
+          EXPO_PUBLIC_QUIZ_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID != '' && 'true' || 'false' }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_ANDROID_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_QUIZ_ADMOB_IOS_REWARDED_UNIT_ID }}
+          EXPO_PUBLIC_MOBILE_ADS_ENABLED: ${{ secrets.EXPO_PUBLIC_MOBILE_ADS_ENABLED }}
+          EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_QUIZ_START_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_QUIZ_START_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_HOME_STRIP_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_HOME_STRIP_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_IN_FEED_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_IN_FEED_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_PRODUCT_GRID_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_PRODUCT_GRID_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_CART_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_CART_MPU_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_ORDER_SUCCESS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_ORDER_SUCCESS_BANNER_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_FOOTER_ANCHOR_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_FOOTER_ANCHOR_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_ANDROID_POST_ORDER_INTERSTITIAL_UNIT_ID }}
+          EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID: ${{ secrets.EXPO_PUBLIC_ADMOB_IOS_POST_ORDER_INTERSTITIAL_UNIT_ID }}
+          STOREFRONT_ADMOB_ANDROID_APP_ID: ${{ secrets.STOREFRONT_ADMOB_ANDROID_APP_ID }}
+          STOREFRONT_ADMOB_IOS_APP_ID: ${{ secrets.STOREFRONT_ADMOB_IOS_APP_ID }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_FORCE_ENV_TOKEN: '1'
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -258,13 +269,10 @@ jobs:
           SENTRY_URL: ${{ secrets.SENTRY_URL }}
           STOREFRONT_FACEBOOK_APP_ID: ${{ secrets.STOREFRONT_FACEBOOK_APP_ID }}
           STOREFRONT_FACEBOOK_CLIENT_TOKEN: ${{ secrets.STOREFRONT_FACEBOOK_CLIENT_TOKEN }}
-        run: |
-          GRADLE_ARGS="app:bundleRelease -x lint -x lintVitalAnalyzeRelease -x test --configure-on-demand --build-cache --max-workers=2 --no-daemon --stacktrace"
-          # shellcheck disable=SC2086
-          ./gradlew $GRADLE_ARGS
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" build
 
       - name: Upload AAB artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: storefront-app-release-${{ github.sha }}
           path: |
@@ -275,19 +283,7 @@ jobs:
       - name: Guard Google Play upload against stale main builds
         if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
         id: upload_guard
-        run: |
-          CURRENT_MAIN_SHA="$(git ls-remote origin refs/heads/main | cut -f1)"
-          if [ -z "$CURRENT_MAIN_SHA" ]; then
-            echo "::error::Unable to determine current main HEAD"
-            exit 1
-          fi
-
-          if [ "${GITHUB_SHA}" = "$CURRENT_MAIN_SHA" ]; then
-            echo "allow_upload=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "allow_upload=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping Google Play upload because this run is not for the current main HEAD."
-          fi
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" upload-guard
         env:
           GITHUB_SHA: ${{ github.sha }}
 
@@ -325,23 +321,7 @@ jobs:
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
-        run: |
-          if [ -z "$VERCEL_TOKEN" ] || [ -z "$VERCEL_PROJECT_ID" ]; then
-            echo "::warning::Vercel credentials missing — skipping update-gate sync"
-            exit 0
-          fi
-          TEAM_QS=""
-          if [ -n "$VERCEL_ORG_ID" ]; then TEAM_QS="&teamId=${VERCEL_ORG_ID}"; fi
-          HTTP_CODE=$(curl -sS -o /tmp/vercel_env.json -w '%{http_code}' -X POST \
-            "https://api.vercel.com/v10/projects/${VERCEL_PROJECT_ID}/env?upsert=true${TEAM_QS}" \
-            -H "Authorization: Bearer ${VERCEL_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "{\"key\":\"MOBILE_STOREFRONT_ANDROID_LATEST_BUILD\",\"value\":\"${VERSION_CODE}\",\"type\":\"encrypted\",\"target\":[\"production\"]}")
-          if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-            echo "Synced MOBILE_STOREFRONT_ANDROID_LATEST_BUILD=${VERSION_CODE} (HTTP ${HTTP_CODE})"
-          else
-            echo "::warning::Vercel env sync failed (HTTP ${HTTP_CODE}): $(cat /tmp/vercel_env.json)"
-          fi
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" sync-update-gate
 
       - name: Reconcile storefront Android live-build update gate
         if: >-
@@ -352,23 +332,8 @@ jobs:
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           ANDROID_LIVE_BUILD_SYNC_URL: https://usebaci.com/api/cron/android-live-build-sync?app=storefront
-        run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "::warning::CRON_SECRET is missing; skipping non-fatal storefront Android live-build gate reconciliation"
-            exit 0
-          fi
-
-          if ! curl --fail-with-body --retry 3 --retry-all-errors --retry-delay 10 \
-            --connect-timeout 10 \
-            --max-time 60 \
-            -H "Authorization: Bearer $CRON_SECRET" \
-            "$ANDROID_LIVE_BUILD_SYNC_URL"; then
-            echo "::warning::Storefront Android live-build gate reconciliation failed after Play upload; release remains published"
-          fi
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" reconcile-live-build
 
       - name: Clean up release credentials
         if: always()
-        run: |
-          rm -f "${{ env.ANDROID_STOREFRONT_KEYSTORE_FILE }}"
-          rm -f "apps/mobile-storefront/android/app/google-services.json"
-          rm -f "apps/mobile-storefront/android/sentry.properties"
+        run: bash "${{ github.workspace }}/.github/scripts/android-storefront-release.sh" cleanup

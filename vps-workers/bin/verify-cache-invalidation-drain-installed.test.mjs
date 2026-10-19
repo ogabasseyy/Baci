@@ -32,7 +32,10 @@ function runVerifier(crontab) {
   try {
     mkdirSync(binDirectory);
     mkdirSync(join(remoteDirectory, 'jobs'), { recursive: true });
-    writeFileSync(join(remoteDirectory, 'jobs', 'run-web-cron.mjs'), '');
+    writeFileSync(
+      join(remoteDirectory, 'jobs', 'run-cache-invalidation-cron.mjs'),
+      ''
+    );
     writeExecutable(
       join(binDirectory, 'crontab'),
       `#!/usr/bin/env bash
@@ -60,7 +63,7 @@ printf '%s\n' "\${TEST_INSTALLED_CRONTAB:-}"
 }
 
 function drainEntry(remoteDirectory = '__REMOTE_DIR__') {
-  return `*/2 * * * * flock -n ${remoteDirectory}/locks/cache-invalidations.lock bash -lc 'cd ${remoteDirectory} && /usr/bin/node ${remoteDirectory}/jobs/run-web-cron.mjs /api/cron/drain-cache-invalidations' >> ${remoteDirectory}/logs/cache-invalidations.log 2>&1`;
+  return `*/2 * * * * flock -n ${remoteDirectory}/locks/cache-invalidations.lock bash -lc 'export CACHE_INVALIDATION_STATE_FILE=${remoteDirectory}/state/cache-invalidations.json && cd ${remoteDirectory} && /usr/bin/node ${remoteDirectory}/jobs/run-cache-invalidation-cron.mjs' >> ${remoteDirectory}/logs/cache-invalidations.log 2>&1`;
 }
 
 describe('cache-invalidation drain rollout readiness', () => {
@@ -91,6 +94,21 @@ describe('cache-invalidation drain rollout readiness', () => {
     assert.match(
       result.stderr,
       /Expected exactly one active two-minute cache-invalidation drain; found 2/
+    );
+  });
+
+  it('rejects a suffixed disabled runner path', () => {
+    const result = runVerifier(
+      drainEntry().replace(
+        'run-cache-invalidation-cron.mjs',
+        'run-cache-invalidation-cron.mjs.disabled'
+      )
+    );
+
+    assert.equal(result.status, 1);
+    assert.match(
+      result.stderr,
+      /Expected exactly one active two-minute cache-invalidation drain; found 0/
     );
   });
 });

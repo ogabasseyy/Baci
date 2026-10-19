@@ -7,6 +7,7 @@ import {
   recordPushAttempt,
   sendPushNotifications,
 } from './expo-push';
+import { preparePushNotificationPayload } from './prepare-push-notification-payload';
 
 const UPDATE_NUDGE_STAMP_CHUNK_SIZE = 100;
 
@@ -89,11 +90,11 @@ export async function notifyStorefrontUpdateAvailable(
     now.getTime() - throttleDays * 24 * 60 * 60 * 1000
   ).toISOString();
 
-  const data: Record<string, unknown> = {
+  const data = preparePushNotificationPayload({
     type: 'mobile_update_available',
     platform,
     storeUrl,
-  };
+  });
 
   const recordSkip = async (
     result: StorefrontUpdateNudgeResult
@@ -177,14 +178,23 @@ export async function notifyStorefrontUpdateAvailable(
   let okTokenIds: string[] = [];
   let stampFailed = false;
   try {
-    const tickets = await sendPushNotifications(messages);
-    okTokenIds = tokens
-      .filter((_, i) => tickets[i]?.status === 'ok')
-      .map((t) => t.id);
+    const { deliveryUncertain, tickets } =
+      await sendPushNotifications(messages);
+    // Uncertain dispatch may have delivered: throttle the whole batch
+    // so possibly-nudged devices are not immediately reselected and
+    // duplicated. Definitively-bad tokens are deactivated by ticket
+    // processing regardless, so the stamp only delays (never strands)
+    // tokens whose send never started.
+    okTokenIds = (
+      deliveryUncertain
+        ? tokens
+        : tokens.filter((_, i) => tickets[i]?.status === 'ok')
+    ).map((t) => t.id);
     sendResult = await processTickets(tickets, tokens, supabase, {
       appType,
       channel: 'general',
       notificationType: 'mobile_update_available',
+      deliveryUncertain,
     });
   } catch (err) {
     sendResult = {

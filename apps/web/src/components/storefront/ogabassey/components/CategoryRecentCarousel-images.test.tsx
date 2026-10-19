@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/hooks/use-merchant-client', () => ({
   useMerchantSafe: () => ({ basePath: '' }),
 }));
-vi.mock('@/lib/seo-utils', () => ({
+vi.mock('@/lib/product-url', () => ({
   getProductUrl: (product: { slug?: string }) => `/p/${product.slug}`,
 }));
 vi.mock('next/image', () => ({
@@ -253,10 +253,15 @@ describe('CategoryRecentCarousel image handling', () => {
 
     // No carousel (no product slides), but the category artwork banner shows.
     expect(screen.queryByTestId('launch-carousel')).not.toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Smartphones' })).toHaveAttribute(
+    const banner = screen.getByRole('img', { name: 'Smartphones' });
+    expect(banner).toHaveAttribute(
       'src',
       'https://cdn.ogabassey.com/category-smartphones.avif'
     );
+    expect(banner).toHaveAttribute('loading', 'eager');
+    expect(
+      banner.getAttribute('fetchPriority') ?? banner.getAttribute('fetchpriority')
+    ).toBe('high');
   });
 
   it('ignores a placeholder category image in the fallback', () => {

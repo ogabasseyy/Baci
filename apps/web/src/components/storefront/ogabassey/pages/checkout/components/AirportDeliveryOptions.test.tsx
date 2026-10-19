@@ -1,0 +1,112 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import type { ShippingQuote } from '../types';
+import { AirportDeliveryOptions } from './AirportDeliveryOptions';
+
+const airQuote: ShippingQuote = {
+  id: 'air-quote',
+  provider: 'GIGL',
+  serviceTier: 'GoFaster',
+  carrierName: 'GIGL',
+  displayName: 'GIGL Air Cargo',
+  estimatedDays: 1,
+  price: 18_500,
+  currency: 'NGN',
+  pickupIncluded: false,
+  insuranceIncluded: false,
+};
+
+function renderAirportOptions(
+  overrides: Partial<ComponentProps<typeof AirportDeliveryOptions>> = {},
+) {
+  return render(
+    <AirportDeliveryOptions
+      airportType="delivery"
+      city="Ibadan"
+      state="Oyo"
+      selectedQuoteId=""
+      selectedQuoteMatchesDeliveryMethod={false}
+      airDeliveryQuotes={[]}
+      onSelectAirportType={vi.fn()}
+      onSelectQuote={vi.fn()}
+      {...overrides}
+    />,
+  );
+}
+
+describe('AirportDeliveryOptions', () => {
+  it('shows the fixed airport delivery and pickup prices', () => {
+    renderAirportOptions();
+
+    expect(screen.getByText('₦35,000')).toBeInTheDocument();
+    expect(screen.getByText('₦20,000')).toBeInTheDocument();
+    expect(screen.getByText('Ibadan Airport Delivery')).toBeInTheDocument();
+  });
+
+  it('notifies the parent when the airport type changes', async () => {
+    const user = userEvent.setup();
+    const onSelectAirportType = vi.fn();
+    renderAirportOptions({ onSelectAirportType });
+
+    await user.click(screen.getByRole('radio', { name: /airport pickup/i }));
+
+    expect(onSelectAirportType).toHaveBeenCalledWith('pickup');
+  });
+
+  it('checks the selected provider quote instead of either fixed airport option', () => {
+    renderAirportOptions({
+      airDeliveryQuotes: [airQuote],
+      selectedQuoteId: airQuote.id,
+      selectedQuoteMatchesDeliveryMethod: true,
+    });
+
+    expect(
+      screen.getByRole('radio', { name: /gigl air cargo/i })
+    ).toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: /airport delivery/i })
+    ).not.toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: /airport pickup/i })
+    ).not.toBeChecked();
+  });
+
+  it('does not check a stale provider quote after switching to a local airport option', () => {
+    renderAirportOptions({
+      airDeliveryQuotes: [airQuote],
+      selectedQuoteId: airQuote.id,
+      selectedQuoteMatchesDeliveryMethod: false,
+    });
+
+    expect(
+      screen.getByRole('radio', { name: /gigl air cargo/i })
+    ).not.toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: /airport delivery/i })
+    ).toBeChecked();
+  });
+
+  it('renders and selects provider GoFaster quotes', async () => {
+    const user = userEvent.setup();
+    const onSelectAirportType = vi.fn();
+    const onSelectQuote = vi.fn();
+    renderAirportOptions({
+      airDeliveryQuotes: [airQuote],
+      onSelectAirportType,
+      onSelectQuote,
+    });
+
+    expect(screen.getByText('GIGL Air Cargo')).toBeInTheDocument();
+    await user.click(screen.getByRole('radio', { name: /gigl air cargo/i }));
+
+    expect(onSelectAirportType).toHaveBeenCalledWith('delivery');
+    expect(onSelectQuote).toHaveBeenCalledWith('air-quote');
+  });
+});
+
+it('does not silently select a local fee while restoring a provider airport quote', () => {
+  renderAirportOptions({ requiresProviderQuote: true });
+  for (const radio of screen.getAllByRole('radio')) expect(radio).not.toBeChecked();
+});

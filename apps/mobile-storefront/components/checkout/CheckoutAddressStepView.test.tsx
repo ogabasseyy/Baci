@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { render } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
 import type { ComponentProps, ReactNode } from 'react';
 import { CheckoutAddressStepView } from './CheckoutAddressStepView';
 import type { ShippingQuote } from './types';
@@ -121,6 +121,7 @@ function createProps(
     isLoadingLocations: false,
     isLoadingQuotes: false,
     isLoadingSavedAddresses: false,
+    showLocationPickers: true,
     merchantPickupLocation: {
       address: '2 Olaide Tomori St, Ikeja, Lagos',
       city: 'Ikeja',
@@ -130,6 +131,7 @@ function createProps(
     onAddressSelected: jest.fn() as AddressStepProps['onAddressSelected'],
     onAddressTextChanged: jest.fn() as AddressStepProps['onAddressTextChanged'],
     onChangeAccountPassword: jest.fn(),
+    onContactEmailSettled: jest.fn(),
     onOpenCityPicker: jest.fn(),
     onOpenNewAddressEditor: jest.fn(),
     onOpenStatePicker: jest.fn(),
@@ -252,5 +254,17 @@ describe('CheckoutAddressStepView station pickup quotes', () => {
     expect(screen.queryByText('delivery method card')).toBeNull();
     expect(mockDeliveryMethodCard).not.toHaveBeenCalled();
     expect(mockShippingQuotesCard).not.toHaveBeenCalled();
+  });
+
+  it('keeps delivery details hidden until contact details are complete', () => {
+    render(
+      <CheckoutAddressStepView
+        {...createProps({ hasContactIdentity: false })}
+      />
+    );
+
+    expect(screen.queryByText('delivery card')).toBeNull();
+    expect(screen.queryByText('delivery method card')).toBeNull();
+    expect(screen.queryByText('shipping quotes card')).toBeNull();
   });
 });

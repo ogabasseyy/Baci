@@ -20,9 +20,90 @@ export interface UcpCartSessionRecord {
   expires_at?: string;
   merchant_id: string;
   metadata: JsonRecord;
+  migratedToCartId?: string | null;
   shipping_address: JsonRecord | null;
   status: UcpCartInternalStatus;
   updated_at?: string;
+}
+
+/**
+ * Thrown when a UCP cart has migrated to the shared canonical cart. Safe
+ * and retryable: the caller refreshes onto the canonical cart instead of
+ * writing the retired row.
+ */
+export class UcpCartMigratedError extends Error {
+  override readonly name = 'UcpCartMigratedError';
+  readonly code = 'refresh_required' as const;
+  readonly retryable = true;
+  readonly cartId: string | null;
+  constructor(cartId?: string | null) {
+    super('Agent cart moved to the shared cart; refresh to continue');
+    this.cartId = cartId ?? null;
+  }
+}
+
+/** Guards a UCP write path against retired (migrated) carts. */
+export function assertUcpCartNotMigrated(record: {
+  migratedToCartId?: string | null;
+}): void {
+  if (record.migratedToCartId) {
+    throw new UcpCartMigratedError(record.migratedToCartId);
+  }
+}
+
+/**
+ * Shared-ownership gate for platform writes: once a cart migrates, its
+ * canonical owner is the shared cart, so platform replacement/cancel
+ * receives the version-appropriate refresh outcome instead of writing.
+ */
+export function migratedCartRefreshOutcome(record: {
+  migratedToCartId?: string | null;
+}): {
+  body: { cart_id: string | null; code: string; error: string };
+  status: 409;
+} | null {
+  if (!record.migratedToCartId) return null;
+  const migrated = new UcpCartMigratedError(record.migratedToCartId);
+  return {
+    body: {
+      cart_id: migrated.cartId,
+      code: migrated.code,
+      error: migrated.message,
+    },
+    status: 409,
+  };
+}
+
+/**
+ * A platform cart stays scoped to its creating caller until explicit
+ * handoff/linking. Missing owners cannot establish caller authority: hide
+ * legacy ownerless rows until their identity is explicitly backfilled.
+ */
+export function ucpCartCallerMismatch(
+  record: { agent_id?: string | null },
+  agentId?: string | null,
+  _options?: { mutation?: boolean }
+): boolean {
+  return !record.agent_id || !agentId || record.agent_id !== agentId;
+}
+
+/**
+ * Maps a database fence violation to the migrated error so late writers
+ * get refresh_required; every other error passes through untouched.
+ */
+export function mapUcpCartWriteError(error: unknown): unknown {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof (error as { message: unknown }).message === 'string' &&
+    (error as { message: string }).message.includes(
+      'migrated cart is read-only'
+    )
+  ) {
+    return new UcpCartMigratedError();
+  }
+  return error;
 }
 
 export function buildUcpCartInsert({
@@ -122,7 +203,26 @@ export function coerceUcpCartItems(value: unknown): CheckoutItem[] {
       return [];
     }
 
-    return [{ id: id.trim(), quantity }];
+    const variantAttributes =
+      isRecord(item.variant_attributes) &&
+      Object.values(item.variant_attributes).every(
+        (value) => typeof value === 'string'
+      )
+        ? (item.variant_attributes as Record<string, string>)
+        : undefined;
+    return [
+      {
+        id: id.trim(),
+        quantity,
+        ...(typeof item.variant_id === 'string' && item.variant_id
+          ? { variant_id: item.variant_id }
+          : {}),
+        ...(typeof item.condition === 'string' && item.condition
+          ? { condition: item.condition }
+          : {}),
+        ...(variantAttributes ? { variant_attributes: variantAttributes } : {}),
+      },
+    ];
   });
 }
 

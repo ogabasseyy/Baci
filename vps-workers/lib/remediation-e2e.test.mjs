@@ -60,7 +60,7 @@ function createFakeTools(directory) {
   const ghLog = join(directory, 'fake-gh.json');
   writeExecutable(
     codex,
-    `#!/usr/bin/env node\nimport { writeFileSync } from 'node:fs';\nwriteFileSync('remediation-e2e-fix.txt', 'fixed by fixture\\n');\nconsole.log('{"type":"turn.completed"}');\n`
+    `#!/usr/bin/env node\nimport{writeFileSync}from'node:fs';const a=process.argv.slice(2),r=a.includes('--read-only')||a[a.indexOf('--sandbox')+1]==='read-only'||a.includes('--sandbox=read-only');if(r)console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'RESEARCH_SUMMARY: the fixture failure is isolated to the generated worktree.\\nROOT_CAUSE_CONFIDENCE: high\\nOPTIONS_CONSIDERED:\\n- apply the smallest fixture change\\n- make an operational-only change\\nSELECTED_FIX: apply the smallest fixture change\\nVALIDATION_PLAN: run the focused fixture verification command'}}));else writeFileSync('remediation-e2e-fix.txt','fixed by fixture\\n');console.log(JSON.stringify({type:'turn.completed'}));\n`
   );
   writeExecutable(
     gh,
@@ -83,6 +83,10 @@ function createPathSentinels(directory) {
       `#!/usr/bin/env node\nimport { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(hitPath)}, 'unexpected literal ${name} call');\nprocess.exit(97);\n`
     );
   }
+  writeExecutable(
+    join(sentinelDir, 'pnpm'),
+    `#!/usr/bin/env node\nimport{existsSync}from'node:fs';process.exit(existsSync('remediation-e2e-fix.txt')?0:98);\n`
+  );
   return { codexHit, ghHit, sentinelDir };
 }
 

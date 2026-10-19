@@ -32,6 +32,13 @@ const bookingLockTimeoutRepairMigration = readFileSync(
   ),
   'utf8'
 );
+const shipmentQuoteRecoveryMigration = readFileSync(
+  resolve(
+    currentDir,
+    '../../../../../supabase/migrations/20260825154500_persist_shipment_shipping_quote.sql'
+  ),
+  'utf8'
+);
 
 function tableDefinition(tableName: string): string {
   const start = baselineMigration.indexOf(
@@ -109,6 +116,18 @@ describe('shipping database contract', () => {
     );
     expect(bookingLockTimeoutRepairMigration).toContain(
       'pg_catalog.make_interval'
+    );
+  });
+
+  it('persists the effective shipping quote used by a booked shipment', () => {
+    expect(shipmentQuoteRecoveryMigration).toContain(
+      'ADD COLUMN IF NOT EXISTS shipping_quote_id uuid'
+    );
+    expect(shipmentQuoteRecoveryMigration).toContain(
+      'ADD CONSTRAINT shipments_shipping_quote_id_fkey'
+    );
+    expect(shipmentQuoteRecoveryMigration).toContain(
+      'CREATE INDEX IF NOT EXISTS idx_shipments_shipping_quote_id'
     );
   });
 });

@@ -217,6 +217,138 @@ describe('checkout order builders', () => {
     expect(request.shipping_address.state).toBe('Rivers');
   });
 
+  it('serializes merchant delivery rates without a carrier quote id', () => {
+    const rateId = '5ec1bd0e-7838-4379-a9e6-d47167f1d0c9';
+    const itemsSnapshot = [
+      {
+        id: 'line-1',
+        product_id: 'product-1',
+        slug: 'iphone-13',
+        name: 'iPhone 13',
+        price: 500000,
+        quantity: 1,
+      },
+    ];
+
+    const request = buildCheckoutOrderRequest({
+      address,
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '08012345678',
+      deliveryMethod: 'door',
+      itemsSnapshot,
+      paymentMethodForOrder: 'paystack',
+      selectedQuote: {
+        id: `mrate_${rateId}`,
+        displayName: 'Lagos delivery',
+        price: 1500,
+        provider: 'MERCHANT',
+      },
+      shippingProvider: 'MERCHANT',
+      snapshot: createCheckoutSnapshot(itemsSnapshot, 1500, 0),
+    });
+
+    expect(request.selected_quote_id).toBeUndefined();
+    expect(request.shipping_provider).toBeUndefined();
+    expect(request.shipping_rate_id).toBe(rateId);
+
+    const payload = buildOrderPayload({
+      merchantId: 'merchant-1',
+      request: CreateOrderRequestSchema.parse(request),
+    });
+    expect(payload).toMatchObject({
+      selected_quote_id: null,
+      shipping_provider: null,
+      shipping_rate_id: rateId,
+    });
+  });
+
+  it('serializes UUIDv7 merchant delivery rates through order validation', () => {
+    const rateId = '018f3f20-2d7a-7cc0-8c4f-3c82a742d8c4';
+    const itemsSnapshot = [
+      {
+        id: 'line-1',
+        product_id: 'product-1',
+        slug: 'iphone-13',
+        name: 'iPhone 13',
+        price: 500000,
+        quantity: 1,
+      },
+    ];
+
+    const request = buildCheckoutOrderRequest({
+      address,
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '08012345678',
+      deliveryMethod: 'door',
+      itemsSnapshot,
+      paymentMethodForOrder: 'paystack',
+      selectedQuote: {
+        id: `mrate_${rateId}`,
+        displayName: 'Lagos delivery',
+        price: 1500,
+        provider: 'MERCHANT',
+      },
+      shippingProvider: 'MERCHANT',
+      snapshot: createCheckoutSnapshot(itemsSnapshot, 1500, 0),
+    });
+
+    expect(request).toMatchObject({
+      selected_quote_id: undefined,
+      shipping_provider: undefined,
+      shipping_rate_id: rateId,
+    });
+
+    const payload = buildOrderPayload({
+      merchantId: 'merchant-1',
+      request: CreateOrderRequestSchema.parse(request),
+    });
+    expect(payload).toMatchObject({
+      selected_quote_id: null,
+      shipping_provider: null,
+      shipping_rate_id: rateId,
+    });
+  });
+
+  it.each([
+    'mrate_not-a-uuid',
+    'merchant-rate-without-prefix',
+  ])('rejects malformed merchant rate %s instead of submitting it', (quoteId) => {
+    const itemsSnapshot = [
+      {
+        id: 'line-1',
+        product_id: 'product-1',
+        slug: 'iphone-13',
+        name: 'iPhone 13',
+        price: 500000,
+        quantity: 1,
+      },
+    ];
+
+    expect(() =>
+      buildCheckoutOrderRequest({
+        address,
+        customerEmail: 'ada@example.com',
+        customerName: 'Ada Lovelace',
+        customerPhone: '08012345678',
+        deliveryMethod: 'door',
+        itemsSnapshot,
+        paymentMethodForOrder: 'paystack',
+        selectedQuote: {
+          id: quoteId,
+          displayName: 'Lagos delivery',
+          price: 1500,
+          provider: 'MERCHANT',
+        },
+        shippingProvider: 'MERCHANT',
+        snapshot: createCheckoutSnapshot(itemsSnapshot, 1500, 0),
+      })
+    ).toThrow(
+      'The selected merchant delivery option is invalid. Please refresh shipping options.'
+    );
+  });
+
   it('does not serialize a stale station-pickup quote on door orders', () => {
     const request = buildCheckoutOrderRequest({
       address,
@@ -261,40 +393,6 @@ describe('checkout order builders', () => {
 
     expect(request.selected_quote_id).toBeUndefined();
     expect(request.shipping_address.address).toBe(address.address);
-  });
-
-  it('serializes a provider-backed GoFaster quote for airport orders', () => {
-    const itemsSnapshot = [
-      {
-        id: 'line-1',
-        product_id: 'product-1',
-        slug: 'iphone-13',
-        name: 'iPhone 13',
-        price: 500000,
-        quantity: 1,
-      },
-    ];
-    const request = buildCheckoutOrderRequest({
-      address,
-      customerEmail: 'ada@example.com',
-      customerName: 'Ada Lovelace',
-      customerPhone: '08012345678',
-      deliveryMethod: 'airport',
-      itemsSnapshot,
-      paymentMethodForOrder: 'paystack',
-      selectedQuote: {
-        id: 'gofaster-quote',
-        displayName: 'GIG Logistics - GoFaster',
-        price: 18500,
-        provider: 'GIGL',
-        serviceTier: 'GoFaster',
-      },
-      shippingProvider: 'GIGL',
-      snapshot: createCheckoutSnapshot(itemsSnapshot, 18500, 0),
-    });
-
-    expect(request.selected_quote_id).toBe('gofaster-quote');
-    expect(request.shipping_provider).toBe('GIGL');
   });
 
   it('uses the merchant pickup address when no provider station quote is selected', () => {
@@ -390,5 +488,50 @@ describe('checkout order builders', () => {
       '11111111-1111-4111-8111-111111111111'
     );
     expect(payload.items[0].condition).toBe('new');
+  });
+
+  it('preserves minor-unit cent precision for bound assurance fees and checkout snapshot totals', () => {
+    const itemsSnapshot = [
+      {
+        id: 'line-insured',
+        product_id: 'prod-insured',
+        slug: 'screen-guard',
+        name: 'Screen Guard',
+        price: 101,
+        quantity: 1,
+        hasAssurance: true,
+        assuranceRate: 0.05,
+      },
+    ];
+    const snapshot = createCheckoutSnapshot(itemsSnapshot, 0, 0);
+
+    expect(snapshot.assuranceFee).toBe(5.05);
+    expect(snapshot.subtotal).toBe(101);
+    expect(snapshot.total).toBe(106.05);
+
+    const request = buildCheckoutOrderRequest({
+      address,
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '08012345678',
+      deliveryMethod: 'door',
+      itemsSnapshot,
+      paymentMethodForOrder: 'card',
+      selectedQuote: undefined,
+      shippingProvider: undefined,
+      snapshot,
+      sharedCartBinding: {
+        cart_id: '22222222-2222-4222-8222-222222222222',
+        cart_version: 1,
+        checkout_generation: 1,
+        checkout_session_id: '44444444-4444-4444-8444-444444444444',
+      },
+    });
+
+    expect(request.items[0]).toMatchObject({
+      cart_line_id: 'line-insured',
+      has_assurance: true,
+      assurance_fee: 5.05,
+    });
   });
 });

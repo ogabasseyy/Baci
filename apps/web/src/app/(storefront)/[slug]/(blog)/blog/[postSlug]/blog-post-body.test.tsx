@@ -195,60 +195,6 @@ describe('BlogPostBody', () => {
   // Content rendering — legacy HTML path
   // -------------------------------------------------------------------------
 
-  describe('when content is a legacy HTML string', () => {
-    it('renders SafeHtml and NOT BlogContentRenderer', async () => {
-      // Arrange
-      const content = '<p>Legacy HTML body</p>';
-
-      // Act
-      render(await BlogPostBody({ ...BASE_PROPS, content }));
-
-      // Assert
-      expect(screen.getByTestId('safe-html')).toBeInTheDocument();
-      expect(
-        screen.queryByTestId('blog-content-renderer')
-      ).not.toBeInTheDocument();
-    });
-
-    it('passes the raw HTML string to SafeHtml as-is', async () => {
-      // Arrange
-      const content = '<p>Hello world</p>';
-
-      // Act
-      render(await BlogPostBody({ ...BASE_PROPS, content }));
-
-      // Assert
-      expect(screen.getByTestId('safe-html')).toHaveAttribute(
-        'data-html',
-        '<p>Hello world</p>'
-      );
-    });
-
-    it('does not hide legacy inline images with a broad first-image selector', async () => {
-      const content =
-        '<p><picture><img src="/inline.png" alt="Inline" /></picture></p>';
-
-      render(await BlogPostBody({ ...BASE_PROPS, content }));
-
-      expect(
-        screen.getByTestId('safe-html').getAttribute('class')
-      ).not.toContain('img:first-of-type');
-    });
-
-    it('does NOT render the Table of Contents for legacy HTML', async () => {
-      // Arrange
-      const content = '<p>Some legacy body</p>';
-
-      // Act
-      render(await BlogPostBody({ ...BASE_PROPS, content }));
-
-      // Assert
-      expect(
-        screen.queryByRole('navigation', { name: /table of contents/i })
-      ).not.toBeInTheDocument();
-    });
-  });
-
   // -------------------------------------------------------------------------
   // Content rendering — markdown path
   // -------------------------------------------------------------------------

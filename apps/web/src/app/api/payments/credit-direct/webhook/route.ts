@@ -23,6 +23,7 @@ import { buildInventoryConfirmationFailurePayload } from '@/lib/payments/invento
 import { resolveCreditDirectConfirmationReview } from '@/lib/payments/resolve-credit-direct-confirmation-review';
 import { escapeHtmlText } from '@/lib/sanitize';
 import { createServiceClient } from '@/lib/supabase/service';
+import { respondCustomerInventoryFailure } from './customer-inventory-failure';
 
 function readNoteString(value: unknown) {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -499,21 +500,18 @@ export async function POST(request: NextRequest) {
             order.id
           );
         } catch (inventoryError) {
-          logger.error({
-            message:
-              'Credit-direct webhook customer branch failed to confirm inventory',
+          // Roll the bnpl_approved flip back (fenced): without this
+          // the order keeps a confirming status with unconfirmed
+          // inventory, and the status poll treats it as confirmed.
+          return respondCustomerInventoryFailure({
+            supabase,
+            merchantId: order.merchant_id,
             orderId: order.id,
-            error: inventoryError,
+            previousPaymentStatus: order.payment_status ?? null,
+            previousShippingStatus: order.shipping_status ?? null,
+            gatewayReference: payload.checkoutTransactionId ?? null,
+            inventoryError,
           });
-          return NextResponse.json(
-            {
-              error:
-                inventoryError instanceof Error
-                  ? inventoryError.message
-                  : 'Inventory confirmation failed',
-            },
-            { status: 409 }
-          );
         }
 
         logger.info({
@@ -629,18 +627,26 @@ export async function POST(request: NextRequest) {
           // BNPL states. 'partially_paid' is a legitimate source state: a
           // Credit Direct RESIDUAL settles the remainder after a manual or
           // deposit payment (amount_paid above completes the total).
-          // 'cancelled' stays allowed so the prevent_cancelled_order_reopen
-          // trigger can still clamp the reopen attempt (handled below);
-          // 'refunded' is intentionally excluded — nothing clamps a refunded
-          // order back, so without this guard a late webhook could stomp it
-          // back to 'paid'.
+          // 'cancelled' is excluded: a payment-only cancellation does
+          // not trip prevent_cancelled_order_reopen (it clamps only
+          // shipping-cancelled rows), and migration 20261010000014
+          // already released the order's loyalty claim, so letting
+          // this update flip it to paid could reopen an order whose
+          // code another order has claimed. Cancelled captures are
+          // recorded and filed for review in the re-read branch below.
+          // 'refunded' is intentionally excluded for the same reason.
           .in('payment_status', [
             'pending',
             'partially_paid',
             'bnpl_pending',
             'bnpl_approved',
-            'cancelled',
           ])
+          // A shipping-axis cancellation (either spelling) is just as
+          // terminal: its loyalty claim was released too, and neither
+          // the reopen trigger nor the clamped check recognizes the
+          // US spelling, so fence it out of the paid write here.
+          .neq('shipping_status', 'cancelled')
+          .neq('shipping_status', 'canceled')
           .select('id, payment_status, shipping_status, cancelled_at')
           .maybeSingle();
 
@@ -663,7 +669,7 @@ export async function POST(request: NextRequest) {
           const { data: currentOrder, error: currentOrderError } =
             await supabase
               .from('orders')
-              .select('payment_status, notes')
+              .select('payment_status, notes, shipping_status, cancelled_at')
               .eq('id', order.id)
               .maybeSingle();
           if (currentOrderError || !currentOrder) {
@@ -751,6 +757,69 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({
               received: true,
               message: 'Order was refunded; payment filed for review',
+            });
+          }
+
+          if (
+            currentOrder.payment_status === 'cancelled' ||
+            currentOrder.payment_status === 'canceled' ||
+            // The paid update's shipping fences also exclude a
+            // shipping-only cancellation (either spelling): route it
+            // through the same captured-payment reconciliation instead
+            // of acking with no durable transaction trail.
+            isOrderClampedAsCancelled({
+              id: order.id,
+              cancelled_at: currentOrder.cancelled_at,
+              shipping_status: currentOrder.shipping_status,
+            })
+          ) {
+            // Record the disbursed money and file it for ops review,
+            // mirroring the refunded branch: the loyalty claim was
+            // already released, so this order must not reopen.
+            const cancelledTxResult = await recordCreditDirectTransaction({
+              amount: totalAmount,
+              gatewayReference: payload.checkoutTransactionId,
+              gatewayResponse: payload,
+              merchantId: order.merchant_id,
+              merchantAmount,
+              orderId: order.id,
+              platformFee,
+              supabase,
+            });
+            if (cancelledTxResult.kind === 'error') {
+              return NextResponse.json(
+                { error: 'Failed to record transaction' },
+                { status: 500 }
+              );
+            }
+            const cancelReviewFiled = await handlePaymentForCancelledOrder({
+              gatewayReference: payload.checkoutTransactionId,
+              order: { id: order.id },
+              reason:
+                'Credit Direct merchant payout captured for an order already cancelled',
+              transactionId: cancelledTxResult.transactionId,
+            });
+            if (!cancelReviewFiled) {
+              return NextResponse.json(
+                { error: 'Payment reconciliation review unavailable' },
+                { status: 500 }
+              );
+            }
+            if (
+              !(await resolveCreditDirectConfirmationReview({
+                orderId: order.id,
+                providerReference: payload.checkoutTransactionId,
+                supabase,
+              }))
+            ) {
+              return NextResponse.json(
+                { error: 'Payment reconciliation review unavailable' },
+                { status: 500 }
+              );
+            }
+            return NextResponse.json({
+              received: true,
+              message: 'Order was cancelled; payment filed for review',
             });
           }
 

@@ -10,23 +10,19 @@ export function useGadgetPatternAttribution(
   rendered: boolean,
   variant: 'default' | 'tabbar'
 ): void {
-  const recorded = useRef(false);
   const instanceId = useRef(`gadget_pattern_${nextGadgetPatternId++}`);
 
   useEffect(() => {
     if (!rendered) return;
 
-    if (!recorded.current) {
-      recorded.current = true;
-      recordPerformanceSurface('gadget_pattern', {
-        api_level:
-          Platform.OS === 'android' ? Number(Platform.Version) : undefined,
-        instance_id: instanceId.current,
-        os: Platform.OS,
-        renderer: 'raster_gradient',
-        variant,
-      });
-    }
+    const endTrace = recordPerformanceSurface('gadget_pattern', {
+      api_level:
+        Platform.OS === 'android' ? Number(Platform.Version) : undefined,
+      instance_id: instanceId.current,
+      os: Platform.OS,
+      renderer: 'raster_gradient',
+      variant,
+    });
 
     const details = {
       api_level:
@@ -36,6 +32,7 @@ export function useGadgetPatternAttribution(
       variant,
     };
     return () => {
+      endTrace?.();
       recordCrashBreadcrumb(`gadget_pattern:unmounted:${instanceId.current}`, {
         ...details,
         instance_id: instanceId.current,

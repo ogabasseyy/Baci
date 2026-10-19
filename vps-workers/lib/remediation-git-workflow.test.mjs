@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { REMEDIATION_VERIFY_COMMAND } from './remediation-codex-command.mjs';
 import { runRemediationAutofix } from './remediation-git-workflow.mjs';
 import { remediationGitWorkflowTestFixtures } from './remediation-git-workflow.test-helpers.mjs';
 
@@ -24,6 +25,7 @@ describe('remediation git workflow', () => {
         GIT_COMMITTER_NAME: 'Baci Remediator',
         SSH_AUTH_SOCK: '/run/agent.sock',
         SENTRY_REMEDIATION_AUTH_TOKEN: 'must-not-reach-child-processes',
+        POSTHOG_REMEDIATION_PERSONAL_API_KEY: 'must-not-reach-child-processes',
       },
       prompt: 'Fix this production error.',
       runner,
@@ -72,6 +74,14 @@ describe('remediation git workflow', () => {
       environments.some(
         ({ command, env }) =>
           command === 'codex' && 'SENTRY_REMEDIATION_AUTH_TOKEN' in env
+      ),
+      false
+    );
+    assert.equal(
+      environments.some(
+        ({ command, env }) =>
+          ['codex', 'git'].includes(command) &&
+          'POSTHOG_REMEDIATION_PERSONAL_API_KEY' in env
       ),
       false
     );
@@ -161,8 +171,9 @@ describe('remediation git workflow', () => {
       true
     );
     assert.ok(
-      calls.findIndex((call) => call.join(' ') === 'bash -lc pnpm turbo lint') <
-        calls.findIndex((call) => call.includes('push'))
+      calls.findIndex(
+        (call) => call.join(' ') === `bash -lc ${REMEDIATION_VERIFY_COMMAND}`
+      ) < calls.findIndex((call) => call.includes('push'))
     );
     assert.equal(
       calls.some(

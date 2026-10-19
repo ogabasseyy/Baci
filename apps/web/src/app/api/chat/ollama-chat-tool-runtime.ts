@@ -8,6 +8,7 @@ import {
   handleSearchProducts,
 } from '@/ai/chat-tool-handlers';
 import {
+  CHECKOUT_TOOL_NAMES,
   cancelOrderSchema,
   checkPaymentStatusSchema,
   createVirtualAccountSchema,
@@ -26,6 +27,8 @@ const AGENTIC_CHAT_TOOL_NAME_LIST = [
 ] as const;
 
 type AgenticChatToolName = (typeof AGENTIC_CHAT_TOOL_NAME_LIST)[number];
+
+const CHECKOUT_TOOL_NAME_SET: Set<string> = new Set(CHECKOUT_TOOL_NAMES);
 
 const AGENTIC_CHAT_TOOL_NAMES = new Set<AgenticChatToolName>(
   AGENTIC_CHAT_TOOL_NAME_LIST
@@ -90,10 +93,15 @@ function executeAgenticChatTool(
 export async function executeAgenticChatToolForOllama(
   name: string,
   rawArguments: unknown,
-  sessionId: string
+  sessionId: string,
+  agenticCheckoutEnabled: boolean
 ): Promise<string> {
   if (!isAgenticChatToolName(name)) {
     return JSON.stringify({ error: `Unknown tool: ${name}` });
+  }
+
+  if (agenticCheckoutEnabled === false && CHECKOUT_TOOL_NAME_SET.has(name)) {
+    return JSON.stringify({ error: 'Agentic checkout disabled' });
   }
 
   try {

@@ -12,13 +12,11 @@
 
 import z from 'zod';
 import { logger } from './logger';
+import { paystackRequest } from './paystack-request';
 
 // =============================================================================
 // Configuration
 // =============================================================================
-
-const PAYSTACK_BASE_URL = 'https://api.paystack.co';
-const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || '';
 
 // Platform fee percentage (2%) capped at ₦2,050
 const PLATFORM_FEE_PERCENTAGE = 2;
@@ -29,7 +27,15 @@ const PLATFORM_FEE_CAP_KOBO = PLATFORM_FEE_CAP_NAIRA * 100;
 // Type Definitions
 // =============================================================================
 
-const PAYMENT_STATUSES = ['success', 'failed', 'abandoned', 'pending'] as const;
+// Paystack also reports provider-reversed transactions; the wallet
+// top-up confirm flow already treats `reversed` as terminal.
+const PAYMENT_STATUSES = [
+  'success',
+  'failed',
+  'abandoned',
+  'pending',
+  'reversed',
+] as const;
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
 const PAYMENT_CHANNELS = [
@@ -111,7 +117,7 @@ const AuthorizationSchema = z.object({
   account_name: z.string().nullable().optional(),
 });
 
-const PaymentVerificationSchema = z.object({
+export const PaymentVerificationSchema = z.object({
   id: z.number(),
   status: z.enum(PAYMENT_STATUSES),
   reference: z.string(),
@@ -248,70 +254,6 @@ export interface WalletDedicatedAccountInput {
 export type PaystackResult<T> =
   | { success: true; data: T }
   | { success: false; error: string; code?: string };
-
-// =============================================================================
-// API Client
-// =============================================================================
-
-interface PaystackApiResponse<T> {
-  status: boolean;
-  message: string;
-  data: T;
-}
-
-async function paystackRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<PaystackResult<T>> {
-  const url = `${PAYSTACK_BASE_URL}${endpoint}`;
-
-  if (!PAYSTACK_SECRET_KEY) {
-    return {
-      success: false,
-      error: 'PAYSTACK_SECRET_KEY is not configured',
-      code: 'CONFIG_ERROR',
-    };
-  }
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
-        ...options.headers,
-      },
-    });
-
-    const data: PaystackApiResponse<T> = await response.json();
-
-    logger.info({
-      message: 'Paystack API Response',
-      endpoint,
-      status: response.status,
-      success: data.status,
-    });
-
-    if (!response.ok || !data.status) {
-      logger.error({
-        message: 'Paystack API Error',
-        status: response.status,
-        error: data.message,
-      });
-      return {
-        success: false,
-        error: data.message || `API request failed: ${response.status}`,
-        code: `HTTP_${response.status}`,
-      };
-    }
-
-    return { success: true, data: data.data };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Network error';
-    logger.error({ message: 'Paystack request failed', error: message });
-    return { success: false, error: message, code: 'NETWORK_ERROR' };
-  }
-}
 
 // =============================================================================
 // Bank Functions
@@ -509,41 +451,7 @@ export async function initializeTransaction(
   return result.data;
 }
 
-/**
- * Verify a Paystack transaction
- */
-export async function verifyTransaction(
-  reference: string
-): Promise<PaystackResult<PaymentVerificationResponse>> {
-  // Validate reference format to prevent SSRF attacks
-  // Paystack references are typically alphanumeric with some special chars
-  if (!reference || !/^[A-Za-z0-9_-]{1,100}$/.test(reference)) {
-    return {
-      success: false,
-      error: 'Invalid transaction reference format',
-      code: 'VALIDATION_ERROR',
-    };
-  }
-
-  const result = await paystackRequest<PaymentVerificationResponse>(
-    `/transaction/verify/${encodeURIComponent(reference)}`
-  );
-
-  if (!result.success) {
-    return result;
-  }
-
-  // Validate response
-  const parsed = PaymentVerificationSchema.safeParse(result.data);
-  if (!parsed.success) {
-    logger.warn({
-      message: 'Payment verification response validation warning',
-      issues: parsed.error.issues,
-    });
-  }
-
-  return { success: true, data: result.data };
-}
+export { verifyTransaction } from './verify-paystack-transaction';
 
 export async function chargeAuthorization(
   payload: ChargeAuthorizationData
@@ -577,67 +485,6 @@ export async function chargeAuthorization(
   }
 
   return { success: true, data: result.data };
-}
-
-/**
- * Initiate a refund for a Paystack transaction
- * @param transaction - Transaction reference or ID
- * @param amount - Amount to refund in kobo (optional, defaults to full amount)
- * @param reason - Reason for refund (optional)
- */
-export async function initiateRefund(
-  transaction: string,
-  amount?: number,
-  reason?: string
-): Promise<
-  PaystackResult<{
-    id: number;
-    status: string;
-    transaction: { reference: string };
-  }>
-> {
-  // Validate transaction reference format
-  if (!transaction || !/^[A-Za-z0-9_-]{1,100}$/.test(transaction)) {
-    return {
-      success: false,
-      error: 'Invalid transaction reference format',
-      code: 'VALIDATION_ERROR',
-    };
-  }
-
-  const payload: Record<string, unknown> = { transaction };
-  if (amount !== undefined && amount > 0) {
-    payload.amount = amount;
-  }
-  if (reason) {
-    payload.customer_note = reason;
-  }
-
-  const result = await paystackRequest<{
-    id: number;
-    status: string;
-    transaction: { reference: string };
-  }>('/refund', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-
-  if (!result.success) {
-    logger.error({
-      message: 'Paystack refund failed',
-      transaction,
-      error: result.error,
-    });
-  } else {
-    logger.info({
-      message: 'Paystack refund initiated',
-      transaction,
-      refundId: result.data?.id,
-      status: result.data?.status,
-    });
-  }
-
-  return result;
 }
 
 // =============================================================================
@@ -767,7 +614,8 @@ export interface PaystackCustomer {
  * Required before creating a DVA
  */
 export async function createOrGetCustomer(
-  data: CustomerData
+  data: CustomerData,
+  init?: { signal?: AbortSignal }
 ): Promise<PaystackResult<PaystackCustomer>> {
   if (!data.email) {
     return {
@@ -779,6 +627,7 @@ export async function createOrGetCustomer(
 
   const result = await paystackRequest<PaystackCustomer>('/customer', {
     method: 'POST',
+    ...(init?.signal ? { signal: init.signal } : {}),
     body: JSON.stringify({
       email: data.email,
       first_name: data.first_name,
@@ -805,6 +654,8 @@ export async function createDedicatedAccount(
     phone?: string;
     firstName?: string;
     lastName?: string;
+    metadata?: Record<string, unknown>;
+    signal?: AbortSignal;
   } = {}
 ): Promise<PaystackResult<DedicatedAccountResponse>> {
   // Validate customer code format
@@ -816,18 +667,27 @@ export async function createDedicatedAccount(
     };
   }
 
-  const { preferredBank = 'wema-bank', phone, firstName, lastName } = options;
+  const {
+    preferredBank = 'wema-bank',
+    phone,
+    firstName,
+    lastName,
+    metadata,
+    signal,
+  } = options;
 
   const result = await paystackRequest<DedicatedAccountResponse>(
     '/dedicated_account',
     {
       method: 'POST',
+      ...(signal ? { signal } : {}),
       body: JSON.stringify({
         customer: customerCode,
         preferred_bank: preferredBank,
         ...(phone && { phone }),
         ...(firstName && { first_name: firstName }),
         ...(lastName && { last_name: lastName }),
+        ...(metadata && { metadata }),
       }),
     }
   );
@@ -842,8 +702,7 @@ export async function createDedicatedAccount(
     logger.info({
       message: 'DVA created successfully',
       customerCode,
-      accountNumber: result.data.account_number,
-      bank: result.data.bank.name,
+      outcome: 'account_assigned',
     });
   }
 
@@ -963,7 +822,8 @@ export async function createDedicatedAccountForWallet(
  * Fetch existing DVAs for a customer
  */
 export async function getDedicatedAccounts(
-  customerCode: string
+  customerCode: string,
+  init?: { signal?: AbortSignal }
 ): Promise<PaystackResult<DedicatedAccountResponse[]>> {
   if (!customerCode?.startsWith('CUS_')) {
     return {
@@ -974,7 +834,8 @@ export async function getDedicatedAccounts(
   }
 
   const result = await paystackRequest<DedicatedAccountResponse[]>(
-    `/dedicated_account?customer=${encodeURIComponent(customerCode)}`
+    `/dedicated_account?customer=${encodeURIComponent(customerCode)}`,
+    init?.signal ? { signal: init.signal } : undefined
   );
 
   return result;
@@ -1032,6 +893,7 @@ export async function generatePaymentAccount(data: {
   lastName?: string;
   phone?: string;
   orderId?: string;
+  signal?: AbortSignal;
 }): Promise<
   PaystackResult<{
     bank_name: string;
@@ -1041,13 +903,16 @@ export async function generatePaymentAccount(data: {
   }>
 > {
   // Step 1: Create or get customer
-  const customerResult = await createOrGetCustomer({
-    email: data.email,
-    first_name: data.firstName,
-    last_name: data.lastName,
-    phone: data.phone,
-    metadata: data.orderId ? { order_id: data.orderId } : undefined,
-  });
+  const customerResult = await createOrGetCustomer(
+    {
+      email: data.email,
+      first_name: data.firstName,
+      last_name: data.lastName,
+      phone: data.phone,
+      metadata: data.orderId ? { order_id: data.orderId } : undefined,
+    },
+    data.signal ? { signal: data.signal } : undefined
+  );
 
   if (!customerResult.success) {
     return customerResult;
@@ -1056,7 +921,10 @@ export async function generatePaymentAccount(data: {
   const customerCode = customerResult.data.customer_code;
 
   // Step 2: Check for existing DVA
-  const existingResult = await getDedicatedAccounts(customerCode);
+  const existingResult = await getDedicatedAccounts(
+    customerCode,
+    data.signal ? { signal: data.signal } : undefined
+  );
   if (existingResult.success && existingResult.data.length > 0) {
     const existing = existingResult.data[0];
     return {
@@ -1075,6 +943,7 @@ export async function generatePaymentAccount(data: {
     phone: data.phone,
     firstName: data.firstName,
     lastName: data.lastName,
+    ...(data.signal ? { signal: data.signal } : {}),
   });
   if (!dvaResult.success) {
     return dvaResult;
@@ -1251,7 +1120,7 @@ export function getPublicKey(): string {
  * Check if Paystack is properly configured
  */
 export function isPaystackConfigured(): boolean {
-  return Boolean(PAYSTACK_SECRET_KEY);
+  return Boolean(process.env.PAYSTACK_SECRET_KEY || '');
 }
 
 /**

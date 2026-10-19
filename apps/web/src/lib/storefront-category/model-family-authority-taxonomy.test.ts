@@ -23,6 +23,15 @@ describe('model family authority taxonomy', () => {
     expect(unsupportedEntry).toBeNull();
   });
 
+  it('keeps the Infinix HOT family eligible with two distinct active models', () => {
+    expect(
+      modelFamilyAuthorityTaxonomy.getEntry('smartphones', 'infinix', 'hot')
+    ).toMatchObject({ minimumProducts: 2 });
+    expect(
+      modelFamilyAuthorityTaxonomy.getEntry('smartphones', 'infinix', 'note')
+    ).toMatchObject({ minimumProducts: 3 });
+  });
+
   it('matches distinct Xiaomi and Redmi families without overlap', () => {
     // Arrange
     const entries = modelFamilyAuthorityTaxonomy.getEntries(

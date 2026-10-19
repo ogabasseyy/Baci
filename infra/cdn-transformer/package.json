@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check server.mjs && node --check config.mjs && node --check http-helpers.mjs && node --check request-parser.mjs && node --check transform-cache.mjs && python3 -m py_compile install-nginx-route.py && node --test *.test.mjs && python3 -m unittest install_nginx_route_test",
+    "check": "node --check server.mjs && node --check config.mjs && node --check http-helpers.mjs && node --check request-parser.mjs && node --check transform-cache.mjs && for f in pilot/*.mjs pilot/fixtures/*.mjs; do node --check \"$f\" || exit 1; done && python3 -m py_compile install-nginx-route.py && node --test *.test.mjs pilot/*.test.mjs pilot/fixtures/*.test.mjs && python3 -m unittest install_nginx_route_test",
     "start": "node server.mjs",
-    "test": "node --test *.test.mjs && python3 -m unittest install_nginx_route_test"
+    "test": "node --test *.test.mjs pilot/*.test.mjs pilot/fixtures/*.test.mjs && python3 -m unittest install_nginx_route_test"
   },
   "dependencies": {
-    "sharp": "0.35.3",
+    "sharp": "0.35.5",
     "zod": "^3.25.76"
   }
 }

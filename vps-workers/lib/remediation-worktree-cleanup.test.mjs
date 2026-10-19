@@ -71,6 +71,37 @@ describe('remediation worktree cleanup', () => {
     assert.deepEqual(calls, []);
   });
 
+  it('removes a retained run store without unregistering the worktree', () => {
+    const calls = [];
+    const runner = (command, args, options) => {
+      calls.push({ args, command, options });
+      if (args.join(' ') === 'worktree list --porcelain') {
+        return {
+          status: 0,
+          stdout: 'worktree /worktrees/committed\n',
+          stderr: '',
+        };
+      }
+      return { status: 0, stdout: '', stderr: '' };
+    };
+
+    cleanupRemediationWorktree({
+      childEnv: {},
+      removeWorktree: false,
+      repoDir: '/repo',
+      runner,
+      worktreeDir: '/worktrees/committed',
+    });
+
+    assert.deepEqual(
+      calls.map(({ command, args }) => `${command} ${args.join(' ')}`),
+      [
+        'git worktree list --porcelain',
+        'rm -rf -- /worktrees/committed-pnpm-store',
+      ]
+    );
+  });
+
   it('does not remove an explicit worktree after its first cleanup unregisters it', () => {
     const calls = [];
     let registered = true;

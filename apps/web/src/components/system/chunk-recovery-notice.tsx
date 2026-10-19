@@ -60,10 +60,6 @@ export function ChunkRecoveryNotice({
 
   return (
     <html lang="en">
-      <head>
-        <title>Updating…</title>
-        <meta content="width=device-width, initial-scale=1" name="viewport" />
-      </head>
       <body style={{ margin: 0 }}>{notice}</body>
     </html>
   );

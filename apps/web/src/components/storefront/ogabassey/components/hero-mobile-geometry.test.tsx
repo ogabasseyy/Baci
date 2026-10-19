@@ -105,12 +105,25 @@ describe('permanent hero mobile geometry', () => {
     );
   });
 
-  it('omits the controls row for a single slide', () => {
+  it('reserves the controls row slot invisibly for a single slide', () => {
+    // Contract change (Codex round-2 CLS decision): the streaming reserve
+    // fallback always bets on a multi-slide hero and paints the 52px
+    // controls row, so a resolved single-slide hero keeps the same slot
+    // (empty but sized) instead of omitting it — otherwise the
+    // fallback-to-content swap shifts everything below the hero up by the
+    // missing row on every mobile load. The slot must therefore match the
+    // live row geometry, stay hidden, and expose no interactive controls.
     const carousel = render(
       <HeroMobileCarousel slides={[SLIDES[0]]} />
     ).container;
 
-    expect(carousel.querySelector('.mt-2.flex.items-center')).toBeNull();
+    const row = carousel.querySelector('.mt-2.flex.items-center');
+    expect(row).not.toBeNull();
+    expect((row as HTMLElement).className).toBe(
+      `${HERO_MOBILE_CONTROLS_ROW_CLASSES} invisible`
+    );
+    expect(row?.getAttribute('aria-hidden')).toBe('true');
+    expect(row?.querySelector('button, a')).toBeNull();
   });
 
   it('renders slide 0 with the cached shell image URL', () => {

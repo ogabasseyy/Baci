@@ -1,147 +1,117 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Keyboard, Pressable, Text, View } from 'react-native';
+import { Keyboard, Text, View } from 'react-native';
 import type { CountryCode } from 'react-native-country-picker-modal';
 import { SheetTextInput } from '@/components/ui/SheetTextInput';
 import type { ThemeColors } from '@/constants/theme';
+import { fetchGoogleAddressDetails } from './google-address-details';
+import { NewCustomerAddressDetailsRecovery } from './NewCustomerAddressDetailsRecovery';
+import { NewCustomerAddressSuggestions } from './NewCustomerAddressSuggestions';
+import { NewCustomerManualAddressFallback } from './NewCustomerManualAddressFallback';
 import { customerCreateStyles as customerStyles } from './NewOrderCustomerCreateView.styles';
-import {
-  type AddressSuggestion,
-  assertGoogleAutocompleteResponse,
-  buildGoogleAutocompleteUrl,
-  type GoogleAutocompleteResponse,
-  toAddressSuggestions,
-} from './new-customer-address-autocomplete';
+import type { AddressSuggestion } from './new-customer-address-autocomplete';
 import type { NewCustomerDraft } from './new-order.types';
+import { useNewCustomerAddressSuggestions } from './useNewCustomerAddressSuggestions';
 
 interface NewCustomerAddressInputProps {
   address: string;
+  city?: string;
   colors: ThemeColors;
   googleMapsApiKey: string | undefined;
   onAddressBlur?: () => void;
+  onAddressDetailsPendingChange?: (pending: boolean) => void;
   onAddressFocus?: () => void;
   selectedCountryCode: CountryCode;
   setNewCustomer: Dispatch<SetStateAction<NewCustomerDraft>>;
+  state?: string;
 }
+
+const DETAILS_RECOVERY_ERROR =
+  'Could not load full address details. Enter city and state to continue.';
 
 export function NewCustomerAddressInput({
   address,
+  city = '',
   colors,
   googleMapsApiKey,
   onAddressBlur,
+  onAddressDetailsPendingChange,
   onAddressFocus,
   selectedCountryCode,
   setNewCustomer,
+  state = '',
 }: NewCustomerAddressInputProps) {
   const hasGoogleMapsApiKey = Boolean(googleMapsApiKey);
   const [isFocused, setIsFocused] = useState(false);
-  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [detailsRecovery, setDetailsRecovery] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
   const blurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const requestSequenceRef = useRef(0);
-
-  useEffect(() => {
-    if (!(hasGoogleMapsApiKey && googleMapsApiKey) || !isFocused) {
-      requestSequenceRef.current += 1;
-      setSuggestions([]);
-      return;
-    }
-
-    const trimmedAddress = address.trim();
-    if (trimmedAddress.length < 2) {
-      requestSequenceRef.current += 1;
-      setSuggestions([]);
-      return;
-    }
-
-    const requestSequence = requestSequenceRef.current + 1;
-    requestSequenceRef.current = requestSequence;
-    const abortController = new AbortController();
-
-    const timeout = setTimeout(() => {
-      const autocompleteUrl = buildGoogleAutocompleteUrl({
-        googleMapsApiKey,
-        input: trimmedAddress,
-        selectedCountryCode,
-      });
-
-      fetch(autocompleteUrl, { signal: abortController.signal })
-        .then(async (response) => {
-          if (!response.ok) {
-            throw new Error(`Google Places returned ${response.status}`);
-          }
-          const data = (await response.json()) as GoogleAutocompleteResponse;
-          assertGoogleAutocompleteResponse(data);
-          return data;
-        })
-        .then((data) => {
-          if (requestSequenceRef.current !== requestSequence) {
-            return;
-          }
-
-          const nextSuggestions = toAddressSuggestions(data);
-          setSuggestions(nextSuggestions);
-        })
-        .catch((error: unknown) => {
-          if (requestSequenceRef.current === requestSequence) {
-            if (
-              typeof __DEV__ !== 'undefined' &&
-              __DEV__ &&
-              !(
-                error instanceof Error &&
-                error.name.toLowerCase() === 'aborterror'
-              )
-            ) {
-              console.warn('[NewCustomerAddressInput] Places lookup failed', {
-                error,
-              });
-            }
-            setSuggestions([]);
-          }
-        });
-    }, 300);
-
-    return () => {
-      clearTimeout(timeout);
-      abortController.abort();
-      requestSequenceRef.current += 1;
-    };
-  }, [
-    address,
-    googleMapsApiKey,
-    hasGoogleMapsApiKey,
-    isFocused,
-    selectedCountryCode,
-  ]);
+  const selectionSequenceRef = useRef(0);
+  const { requestSequenceRef, setSuggestions, suggestions } =
+    useNewCustomerAddressSuggestions({
+      address,
+      googleMapsApiKey,
+      hasGoogleMapsApiKey,
+      isFocused,
+      selectedCountryCode,
+    });
 
   useEffect(() => {
     return () => {
-      if (blurTimerRef.current) {
-        clearTimeout(blurTimerRef.current);
-      }
+      if (blurTimerRef.current) clearTimeout(blurTimerRef.current);
+      // Invalidate in-flight place-details callbacks so unmount cannot repopulate
+      // the next customer draft after resetNewCustomerForm.
+      selectionSequenceRef.current += 1;
     };
   }, []);
 
+  useEffect(() => {
+    if (!detailsRecovery) return;
+    onAddressDetailsPendingChange?.(!(city.trim() && state.trim()));
+  }, [city, detailsRecovery, onAddressDetailsPendingChange, state]);
+
   const handleAddressChange = (text: string) => {
-    setNewCustomer((previous) => ({ ...previous, address: text }));
-  };
-
-  const handleAddressFocus = () => {
-    if (blurTimerRef.current) {
-      clearTimeout(blurTimerRef.current);
-      blurTimerRef.current = null;
+    selectionSequenceRef.current += 1;
+    setDetailsRecovery(false);
+    setDetailsError(null);
+    onAddressDetailsPendingChange?.(false);
+    if (!hasGoogleMapsApiKey) {
+      setNewCustomer((previous) => ({
+        ...previous,
+        address: text,
+        latitude: undefined,
+        longitude: undefined,
+      }));
+      return;
     }
-    setIsFocused(true);
-    onAddressFocus?.();
+    setNewCustomer((previous) => ({
+      ...previous,
+      address: text,
+      city: '',
+      state: '',
+      country: '',
+      countryCode: '',
+      postalCode: '',
+      latitude: undefined,
+      longitude: undefined,
+    }));
   };
 
-  const handleAddressBlur = () => {
-    blurTimerRef.current = setTimeout(() => {
-      requestSequenceRef.current += 1;
-      setIsFocused(false);
-      setSuggestions([]);
-      onAddressBlur?.();
-    }, 150);
+  // Recovery edits must keep the locality gate active until city+state are set.
+  const handleRecoveryAddressChange = (text: string) => {
+    setNewCustomer((previous) => ({
+      ...previous,
+      address: text,
+      latitude: undefined,
+      longitude: undefined,
+    }));
+  };
+
+  const beginDetailsRecovery = () => {
+    setDetailsError(DETAILS_RECOVERY_ERROR);
+    setDetailsRecovery(true);
+    onAddressDetailsPendingChange?.(true);
   };
 
   const handleSuggestionPress = (suggestion: AddressSuggestion) => {
@@ -153,10 +123,51 @@ export function NewCustomerAddressInput({
     setSuggestions([]);
     setIsFocused(false);
     Keyboard.dismiss();
+    const selectionSequence = selectionSequenceRef.current + 1;
+    selectionSequenceRef.current = selectionSequence;
+    setDetailsRecovery(false);
+    setDetailsError(null);
     setNewCustomer((previous) => ({
       ...previous,
       address: suggestion.description,
+      city: '',
+      state: '',
+      country: '',
+      countryCode: '',
+      postalCode: '',
+      latitude: undefined,
+      longitude: undefined,
     }));
+    if (googleMapsApiKey && suggestion.placeId) {
+      onAddressDetailsPendingChange?.(true);
+      fetchGoogleAddressDetails({
+        googleMapsApiKey,
+        placeId: suggestion.placeId,
+      })
+        .then((details) => {
+          if (selectionSequenceRef.current !== selectionSequence) return;
+          if (details) {
+            setNewCustomer((previous) => ({ ...previous, ...details }));
+            const missingLocality = !(
+              details.city.trim() && details.state.trim()
+            );
+            if (missingLocality) {
+              beginDetailsRecovery();
+              return;
+            }
+            onAddressDetailsPendingChange?.(false);
+            return;
+          }
+          beginDetailsRecovery();
+        })
+        .catch(() => {
+          if (selectionSequenceRef.current === selectionSequence) {
+            beginDetailsRecovery();
+          }
+        });
+    } else {
+      beginDetailsRecovery();
+    }
     onAddressBlur?.();
   };
 
@@ -185,9 +196,23 @@ export function NewCustomerAddressInput({
           />
           <SheetTextInput
             accessibilityLabel="Customer address"
-            onBlur={handleAddressBlur}
+            onBlur={() => {
+              blurTimerRef.current = setTimeout(() => {
+                requestSequenceRef.current += 1;
+                setIsFocused(false);
+                setSuggestions([]);
+                onAddressBlur?.();
+              }, 150);
+            }}
             onChangeText={handleAddressChange}
-            onFocus={handleAddressFocus}
+            onFocus={() => {
+              if (blurTimerRef.current) {
+                clearTimeout(blurTimerRef.current);
+                blurTimerRef.current = null;
+              }
+              setIsFocused(true);
+              onAddressFocus?.();
+            }}
             placeholder="Search Address"
             placeholderTextColor={colors.textMuted}
             style={[
@@ -206,83 +231,34 @@ export function NewCustomerAddressInput({
             ]}
             value={address}
           />
-          {isFocused && suggestions.length > 0 ? (
-            <View
-              accessibilityLabel="Address suggestions"
-              accessibilityRole="list"
-              style={{
-                backgroundColor: colors.card,
-                borderColor: colors.border,
-                borderRadius: 12,
-                borderWidth: 1,
-                marginTop: 8,
-                overflow: 'hidden',
-              }}
-            >
-              {suggestions.map((suggestion) => (
-                <Pressable
-                  accessibilityLabel={`Use address ${suggestion.description}`}
-                  accessibilityRole="button"
-                  key={suggestion.placeId}
-                  onPress={() => handleSuggestionPress(suggestion)}
-                  style={({ pressed }) => [
-                    {
-                      borderBottomColor: colors.border,
-                      borderBottomWidth: 1,
-                      paddingHorizontal: 14,
-                      paddingVertical: 12,
-                    },
-                    pressed && { backgroundColor: colors.backgroundLight },
-                  ]}
-                >
-                  <Text
-                    numberOfLines={1}
-                    style={{ color: colors.text, fontWeight: '600' }}
-                  >
-                    {suggestion.mainText}
-                  </Text>
-                  {suggestion.secondaryText ? (
-                    <Text
-                      numberOfLines={1}
-                      style={{ color: colors.textSecondary, marginTop: 2 }}
-                    >
-                      {suggestion.secondaryText}
-                    </Text>
-                  ) : null}
-                </Pressable>
-              ))}
-              <View
-                style={{
-                  alignItems: 'center',
-                  flexDirection: 'row',
-                  justifyContent: 'center',
-                  paddingVertical: 10,
-                }}
-              >
-                <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
-                  Powered by Google
-                </Text>
-              </View>
-            </View>
+          {isFocused ? (
+            <NewCustomerAddressSuggestions
+              colors={colors}
+              onSelect={handleSuggestionPress}
+              suggestions={suggestions}
+            />
+          ) : null}
+          {detailsRecovery && detailsError ? (
+            <NewCustomerAddressDetailsRecovery
+              address={address}
+              city={city}
+              colors={colors}
+              error={detailsError}
+              onAddressChange={handleRecoveryAddressChange}
+              setNewCustomer={setNewCustomer}
+              state={state}
+            />
           ) : null}
         </View>
       ) : (
-        <View
-          style={[
-            customerStyles.field,
-            { backgroundColor: colors.inputBg, borderColor: colors.border },
-          ]}
-        >
-          <Ionicons color={colors.error} name="map-outline" size={18} />
-          <SheetTextInput
-            accessibilityLabel="Customer address"
-            onChangeText={handleAddressChange}
-            placeholder="Enter address"
-            placeholderTextColor={colors.textMuted}
-            style={[customerStyles.fieldInput, { color: colors.text }]}
-            value={address}
-          />
-        </View>
+        <NewCustomerManualAddressFallback
+          address={address}
+          city={city}
+          colors={colors}
+          onAddressChange={handleAddressChange}
+          setNewCustomer={setNewCustomer}
+          state={state}
+        />
       )}
     </View>
   );

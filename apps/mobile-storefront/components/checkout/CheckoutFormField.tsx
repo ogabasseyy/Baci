@@ -1,5 +1,5 @@
 import React from 'react';
-import { type Control, Controller, type FieldErrors } from 'react-hook-form';
+import { type Control, type FieldErrors, useController } from 'react-hook-form';
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { BRAND } from '@/constants/Colors';
+import { useNativeInputDraft } from '@/hooks/use-native-input-draft';
 import type { ShippingAddressInput } from '@/lib/validation';
 import {
   CHECKOUT_FIELD_AUTO_COMPLETE,
@@ -38,6 +39,7 @@ type CheckoutFormFieldProps = {
   containerStyle?: ViewStyle;
   returnKeyType?: 'next' | 'done' | 'go';
   onSubmitEditing?: () => void;
+  onBlur?: () => void;
   transformText?: (value: string, previous: string) => string;
   maxLength?: number;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
@@ -56,11 +58,20 @@ export function CheckoutFormField({
   containerStyle,
   returnKeyType = 'next',
   onSubmitEditing,
+  onBlur: onFieldBlur,
   transformText,
   maxLength,
   autoCapitalize,
 }: CheckoutFormFieldProps) {
   const [isFocused, setIsFocused] = React.useState(false);
+  const {
+    field: { onChange, onBlur, value },
+  } = useController({ control, name });
+  const stringValue = typeof value === 'string' ? value : '';
+  const { displayValue, setDraft, clearDraft } =
+    useNativeInputDraft(stringValue);
+  const hasError = Boolean(errors[name]);
+  const isComplete = stringValue.trim().length > 0 && !hasError && !isFocused;
   const accessibilityLabel = label || humanizeCheckoutFieldName(name);
 
   return (
@@ -70,71 +81,64 @@ export function CheckoutFormField({
           {label}
         </Text>
       ) : null}
-      <Controller
-        control={control}
-        name={name}
-        render={({ field: { onChange, onBlur, value } }) => {
-          const stringValue = typeof value === 'string' ? value : '';
-          const hasError = Boolean(errors[name]);
-          // "Complete" = filled, valid, and no longer being edited → settle to a
-          // defined dark fill. While focused it wears the red selection accent.
-          const isComplete =
-            stringValue.trim().length > 0 && !hasError && !isFocused;
-
-          return (
-            <TextInput
-              accessibilityHint={`Enter your ${accessibilityLabel}`}
-              accessibilityLabel={accessibilityLabel}
-              autoCapitalize={autoCapitalize}
-              autoComplete={CHECKOUT_FIELD_AUTO_COMPLETE[name]}
-              blurOnSubmit={!multiline}
-              keyboardType={keyboardType}
-              maxLength={maxLength}
-              multiline={multiline}
-              numberOfLines={multiline ? 2 : 1}
-              onBlur={() => {
-                setIsFocused(false);
-                onBlur();
-              }}
-              onChangeText={(text) => {
-                const processed = transformText
-                  ? transformText(text, stringValue)
-                  : text;
-                onChange(processed);
-              }}
-              onFocus={() => setIsFocused(true)}
-              onSubmitEditing={onSubmitEditing}
-              placeholder={placeholder}
-              placeholderTextColor={colors.placeholder}
-              returnKeyType={multiline ? 'default' : returnKeyType}
-              style={[
-                styles.input,
-                multiline && styles.multilineInput,
-                {
-                  // Focused → red "selected" accent (like the chosen payment
-                  // method). Complete → a settled, defined dark fill. Otherwise
-                  // a quiet resting fill.
-                  backgroundColor: isFocused
-                    ? BRAND.primaryAlpha06
-                    : isDark
-                      ? isComplete
-                        ? 'rgba(255, 255, 255, 0.08)'
-                        : 'rgba(255, 255, 255, 0.04)'
-                      : colors.muted,
-                  borderColor: hasError
-                    ? colors.error
-                    : isFocused
-                      ? BRAND.primary
-                      : colors.border,
-                  color: colors.text,
-                },
-              ]}
-              textContentType={CHECKOUT_FIELD_TEXT_CONTENT_TYPES[name]}
-              value={stringValue}
-            />
-          );
+      <TextInput
+        accessibilityHint={`Enter your ${accessibilityLabel}`}
+        accessibilityLabel={accessibilityLabel}
+        autoCapitalize={autoCapitalize}
+        autoComplete={CHECKOUT_FIELD_AUTO_COMPLETE[name]}
+        blurOnSubmit={!multiline}
+        keyboardType={keyboardType}
+        maxLength={maxLength}
+        multiline={multiline}
+        numberOfLines={multiline ? 2 : 1}
+        onBlur={() => {
+          setIsFocused(false);
+          clearDraft();
+          onBlur();
+          onFieldBlur?.();
         }}
+        onChangeText={(text) => {
+          const processed = transformText
+            ? transformText(text, stringValue)
+            : text;
+          // UIKit autofill can synchronously wait on its keyboard task queue
+          // when an active field's attributed text is rewritten. Echo the
+          // native edit unchanged; keep normalized data in the form and
+          // settle the displayed text only after the input resigns focus.
+          if (transformText) setDraft(text, processed);
+          onChange(processed);
+        }}
+        onFocus={() => setIsFocused(true)}
+        onSubmitEditing={onSubmitEditing}
+        placeholder={placeholder}
+        placeholderTextColor={colors.placeholder}
+        returnKeyType={multiline ? 'default' : returnKeyType}
+        style={[
+          styles.input,
+          multiline && styles.multilineInput,
+          {
+            // Focused → red "selected" accent (like the chosen payment
+            // method). Complete → a settled, defined dark fill. Otherwise
+            // a quiet resting fill.
+            backgroundColor: isFocused
+              ? BRAND.primaryAlpha06
+              : isDark
+                ? isComplete
+                  ? 'rgba(255, 255, 255, 0.08)'
+                  : 'rgba(255, 255, 255, 0.04)'
+                : colors.muted,
+            borderColor: hasError
+              ? colors.error
+              : isFocused
+                ? BRAND.primary
+                : colors.border,
+            color: colors.text,
+          },
+        ]}
+        textContentType={CHECKOUT_FIELD_TEXT_CONTENT_TYPES[name]}
+        value={displayValue}
       />
+
       {errors[name] ? (
         <Text
           style={[styles.fieldError, { color: colors.error }]}

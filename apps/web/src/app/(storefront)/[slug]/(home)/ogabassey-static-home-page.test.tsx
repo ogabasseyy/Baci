@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { use } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 const {
@@ -23,10 +24,21 @@ vi.mock('@/app/(storefront)/storefront-home-critical.css', () => {
 });
 
 vi.mock(
+  '@/app/(storefront)/ogabassey/ogabassey-home-static-shell-head',
+  () => ({
+    OgabasseyHomeStaticShellHead: () => (
+      <span data-testid="ogabassey-home-static-shell-head" />
+    ),
+  })
+);
+
+vi.mock(
   '@/app/(storefront)/ogabassey/ogabassey-static-home-page-content',
   () => ({
-    OgabasseyStaticHomePageContent: ({ pathPrefix }: { pathPrefix: string }) =>
-      mockOgabasseyStaticHomePageContent({ pathPrefix }),
+    OgabasseyStaticHomePageContent: (props: {
+      omitCommittedHero?: boolean;
+      pathPrefix: string;
+    }) => mockOgabasseyStaticHomePageContent(props),
   })
 );
 
@@ -39,8 +51,8 @@ const { OgabasseyStaticHomePage } = await import(
 );
 
 describe('OgabasseyStaticHomePage', () => {
-  it('owns the OgaBassey homepage critical stylesheet', () => {
-    expect(mockCriticalHomeCssImport).toHaveBeenCalledOnce();
+  it('does not statically import homepage critical CSS onto first paint', () => {
+    expect(mockCriticalHomeCssImport).not.toHaveBeenCalled();
   });
 
   it('renders the static resource hints and path-prefixed home shell', () => {
@@ -48,10 +60,40 @@ describe('OgabasseyStaticHomePage', () => {
 
     expect(mockOgabasseyStaticResourceHints).toHaveBeenCalledOnce();
     expect(mockOgabasseyStaticHomePageContent).toHaveBeenCalledWith({
+      omitCommittedHero: true,
       pathPrefix: '/ogabassey',
     });
     expect(
       screen.getByText('OgaBassey static home /ogabassey')
     ).toBeInTheDocument();
+  });
+
+  it('reserves hero geometry while the async content suspends', () => {
+    // The content awaits the hero-shell lookup before it returns its own
+    // inner Suspense; without this outer boundary the route's
+    // fallback={null} would reserve nothing on a cold/slow lookup and the
+    // streamed hero would shift layout.
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({ matches: false }))
+    );
+    mockOgabasseyStaticHomePageContent.mockImplementationOnce(() => {
+      // Suspend on every render attempt (a one-time thrown promise lets
+      // React's render retry commit the default instead of the fallback).
+      use(new Promise<never>(() => {}));
+      // Unreachable: the hook above suspends on every render attempt.
+      return <div />;
+    });
+    render(<OgabasseyStaticHomePage pathPrefix="/ogabassey" />);
+
+    expect(
+      screen.getByTestId('ogabassey-home-static-shell-head')
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector(
+        '[data-ogabassey-home-hero-reserve-fallback="true"]'
+      )
+    ).toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 });

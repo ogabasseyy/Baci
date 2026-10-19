@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCanonicalCompareCategories,
+  buildCompareIndexDescription,
   normalizeCompareProduct,
   sortCompareSections,
   toRequestRelativeHref,
 } from './compare-page-content-helpers';
 
 describe('compare page content helpers', () => {
+  it('builds compare hub intro copy with a merchant name or generic fallback', () => {
+    expect(buildCompareIndexDescription('Ogabassey')).toBe(
+      'Browse Ogabassey product comparison pages by category and open side-by-side guides for eligible products.'
+    );
+    expect(buildCompareIndexDescription(null)).toBe(
+      'Browse this store product comparison pages by category and open side-by-side guides for eligible products.'
+    );
+    expect(buildCompareIndexDescription('   ')).toBe(
+      'Browse this store product comparison pages by category and open side-by-side guides for eligible products.'
+    );
+  });
+
   it('keeps platform paths scoped to the merchant slug without double-prefixing development URLs', () => {
     expect(
       toRequestRelativeHref(

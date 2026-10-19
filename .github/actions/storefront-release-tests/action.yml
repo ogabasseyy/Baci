@@ -1,0 +1,10 @@
+name: Storefront release helper tests
+description: Run the platform release helper regression scripts.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: bash .github/scripts/android-storefront-release.test.sh
+    - shell: bash
+      run: bash .github/scripts/ios-storefront-release.test.sh

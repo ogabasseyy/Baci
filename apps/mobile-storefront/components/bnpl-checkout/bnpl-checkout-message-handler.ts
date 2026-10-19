@@ -13,6 +13,17 @@ export function logBNPLCheckoutDebug(eventName: string, details: unknown) {
 interface BNPLWebViewMessageHandlerOptions {
   onCloseMessage?: () => void;
   onNavigationMessage?: (url: string) => void;
+  onProviderOpenedMessage?: (input: {
+    gateway?: string;
+    orderId?: string;
+    reference?: string;
+  }) => void;
+  onProviderErrorMessage?: (input: {
+    gateway?: string;
+    orderId?: string;
+    message?: string;
+    reference?: string;
+  }) => void;
 }
 
 function isProviderCloseSummary(summary: unknown) {
@@ -69,11 +80,42 @@ export function createBNPLWebViewMessageHandler(
         payload.type === 'bnpl_error_log' ||
         payload.type === 'bnpl_success' ||
         payload.type === 'bnpl_error' ||
-        payload.type === 'bnpl_close'
+        payload.type === 'bnpl_close' ||
+        payload.type === 'bnpl_provider_opened' ||
+        payload.type === 'bnpl_provider_error'
       ) {
         logBNPLCheckoutDebug('webview message', payload);
         if (isBNPLCloseMessage(payload)) {
           options.onCloseMessage?.();
+        }
+        if (payload.type === 'bnpl_provider_opened') {
+          const gateway =
+            typeof payload.gateway === 'string' ? payload.gateway : undefined;
+          const orderId =
+            typeof payload.orderId === 'string' ? payload.orderId : undefined;
+          const reference =
+            typeof payload.reference === 'string'
+              ? payload.reference
+              : undefined;
+          options.onProviderOpenedMessage?.({ gateway, orderId, reference });
+        }
+        if (payload.type === 'bnpl_provider_error') {
+          const gateway =
+            typeof payload.gateway === 'string' ? payload.gateway : undefined;
+          const orderId =
+            typeof payload.orderId === 'string' ? payload.orderId : undefined;
+          const message =
+            typeof payload.message === 'string' ? payload.message : undefined;
+          const reference =
+            typeof payload.reference === 'string'
+              ? payload.reference
+              : undefined;
+          options.onProviderErrorMessage?.({
+            gateway,
+            orderId,
+            message,
+            reference,
+          });
         }
       }
     } catch {

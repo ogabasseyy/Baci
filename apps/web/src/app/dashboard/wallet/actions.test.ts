@@ -27,6 +27,7 @@ vi.mock('@/lib/supabase/server', () => ({
 const { getTransactions, getWalletData, updateWalletSettings } = await import(
   './actions'
 );
+const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
 function createQuery<TData>(result: { data: TData; error?: unknown }) {
   const query = {
@@ -49,6 +50,7 @@ function createQuery<TData>(result: { data: TData; error?: unknown }) {
 describe('wallet actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    consoleError.mockClear();
     mocks.cookies.mockResolvedValue({});
     mocks.getUser.mockResolvedValue({
       data: { user: { id: 'user-1' } },
@@ -112,7 +114,7 @@ describe('wallet actions', () => {
     });
 
     const result = await updateWalletSettings('merchant-1', {
-      autoPayoutDay: 'FRIDAY',
+      autoPayoutEnabled: false,
       minPayoutAmount: 5000,
     });
 
@@ -120,10 +122,98 @@ describe('wallet actions', () => {
     expect(merchantQuery.eq).toHaveBeenCalledWith('id', 'merchant-1');
     expect(merchantQuery.eq).toHaveBeenCalledWith('user_id', 'user-1');
     expect(walletQuery.update).toHaveBeenCalledWith({
-      auto_payout_day: 'friday',
+      auto_payout_enabled: false,
       min_payout_amount: 5000,
     });
     expect(walletUpdateEq).toHaveBeenCalledWith('merchant_id', 'merchant-1');
     expect(mocks.revalidatePath).toHaveBeenCalledWith('/dashboard/wallet');
+  });
+
+  it('reads merchant history from wallet_transactions using its actual column contract', async () => {
+    const merchantQuery = createQuery({ data: { id: 'merchant-1' } });
+    const transactionsQuery = createQuery({
+      data: [
+        {
+          id: 'wallet-transaction-1',
+          type: 'credit',
+          amount: '1200.50',
+          balance_after: '5000.50',
+          status: 'completed',
+          description: null,
+          created_at: null,
+        },
+      ],
+    });
+
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'merchants') return merchantQuery;
+      if (table === 'wallet_transactions') return transactionsQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    const result = await getTransactions('merchant-1');
+
+    expect(mocks.from).toHaveBeenCalledWith('wallet_transactions');
+    expect(transactionsQuery.select).toHaveBeenCalledWith(
+      'id, type, amount, balance_after, status, description, created_at'
+    );
+    expect(result).toEqual([
+      {
+        id: 'wallet-transaction-1',
+        type: 'credit',
+        amount: 1200.5,
+        balanceAfter: 5000.5,
+        status: 'completed',
+        description: '',
+        createdAt: '',
+      },
+    ]);
+  });
+
+  it('returns no history when the wallet transaction query fails', async () => {
+    const merchantQuery = createQuery({ data: { id: 'merchant-1' } });
+    const transactionsQuery = createQuery({
+      data: null,
+      error: { message: 'wallet query failed' },
+    });
+
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'merchants') return merchantQuery;
+      if (table === 'wallet_transactions') return transactionsQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    await expect(getTransactions('merchant-1')).resolves.toEqual([]);
+    expect(consoleError).toHaveBeenCalledWith(
+      'Failed to fetch wallet transactions:',
+      { message: 'wallet query failed' }
+    );
+  });
+
+  it('preserves refund and processing ledger semantics', async () => {
+    const merchantQuery = createQuery({ data: { id: 'merchant-1' } });
+    const transactionsQuery = createQuery({
+      data: [
+        {
+          id: 'wallet-refund-1',
+          type: 'refund',
+          amount: '700.00',
+          balance_after: '5700.50',
+          status: 'processing',
+          description: 'Order refund',
+          created_at: '2026-08-05T10:00:00.000Z',
+        },
+      ],
+    });
+
+    mocks.from.mockImplementation((table: string) => {
+      if (table === 'merchants') return merchantQuery;
+      if (table === 'wallet_transactions') return transactionsQuery;
+      throw new Error(`Unexpected table: ${table}`);
+    });
+
+    await expect(getTransactions('merchant-1')).resolves.toEqual([
+      expect.objectContaining({ type: 'refund', status: 'processing' }),
+    ]);
   });
 });

@@ -1,90 +1,33 @@
 import type { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { checkCsrfProtection } from '@/lib/csrf';
+import { createClient } from '@/lib/supabase/server';
 
-const mockCheckCsrfProtection = vi.fn();
-vi.mock('@/lib/csrf', () => ({
-  checkCsrfProtection: (...args: unknown[]) => mockCheckCsrfProtection(...args),
-}));
+const MERCHANT_ID = '123e4567-e89b-12d3-a456-426614174001';
+const USER_ID = '123e4567-e89b-12d3-a456-426614174002';
 
-const mockHasPermission = vi.fn();
-vi.mock('@/lib/api-auth', () => ({
-  hasPermission: (...args: unknown[]) => mockHasPermission(...args),
-}));
-
-const MERCHANT_ID = 'merchant-123';
-const USER_ID = 'user-123';
-
-let authUser: { id: string } | null = { id: USER_ID };
-let merchantContext: {
-  merchantId: string;
-  staffAccess: {
-    isStaff: boolean;
-    isOwner: boolean;
-    role: null;
-    permissions: Record<string, unknown>;
-  };
-} | null = {
-  merchantId: MERCHANT_ID,
-  staffAccess: {
-    isStaff: false,
-    isOwner: true,
-    role: null,
-    permissions: { full_access: { all: true } },
-  },
-};
-let updateError: unknown = null;
-let mockUpdateNotifications = vi.fn();
-let mockEqMerchant = vi.fn();
-let mockIsReadAt = vi.fn();
-
-const mockGetMerchantForApiRequest = vi.fn();
-const mockToUserAccess = vi.fn();
+vi.mock('@/lib/csrf', () => ({ checkCsrfProtection: vi.fn() }));
+vi.mock('@/lib/api-auth', () => ({ hasPermission: vi.fn(() => true) }));
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: (...args: unknown[]) =>
-    mockGetMerchantForApiRequest(...args),
-  toUserAccess: (...args: unknown[]) => mockToUserAccess(...args),
-}));
-
-vi.mock('next/headers', () => ({
-  cookies: vi.fn().mockResolvedValue({
-    get: vi.fn(),
-    set: vi.fn(),
+  getMerchantForApiRequest: vi.fn().mockResolvedValue({
+    merchantId: MERCHANT_ID,
+    staffAccess: {},
   }),
+  toUserAccess: vi.fn(() => ({ role: 'owner' })),
 }));
-
-vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(() => ({
-    auth: {
-      getUser: vi.fn(() =>
-        Promise.resolve({
-          data: { user: authUser },
-          error: authUser ? null : { message: 'Not authenticated' },
-        })
-      ),
-    },
-    from: vi.fn((table: string) => {
-      if (table === 'merchant_notifications') {
-        return {
-          update: mockUpdateNotifications.mockReturnValue({
-            eq: mockEqMerchant.mockReturnValue({
-              is: mockIsReadAt.mockImplementation(() =>
-                Promise.resolve({ error: updateError })
-              ),
-            }),
-          }),
-        };
-      }
-      return {
-        update: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        is: vi.fn().mockReturnThis(),
-      };
-    }),
-  })),
+vi.mock('next/headers', () => ({
+  cookies: vi.fn().mockResolvedValue({ get: vi.fn(), set: vi.fn() }),
 }));
+vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
 
 describe('PATCH /api/notifications/mark-all-read', () => {
-  const createRequest = () =>
+  let authUser: { id: string } | null;
+  let rpcResult: {
+    data: { remaining_unread_count: number; updated_count: number } | null;
+    error: { message: string } | null;
+  };
+  let rpc: ReturnType<typeof vi.fn>;
+  const request = () =>
     new Request('http://localhost/api/notifications/mark-all-read', {
       method: 'PATCH',
     }) as unknown as NextRequest;
@@ -92,118 +35,81 @@ describe('PATCH /api/notifications/mark-all-read', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authUser = { id: USER_ID };
-    merchantContext = {
-      merchantId: MERCHANT_ID,
-      staffAccess: {
-        isStaff: false,
-        isOwner: true,
-        role: null,
-        permissions: { full_access: { all: true } },
-      },
+    rpcResult = {
+      data: { updated_count: 2, remaining_unread_count: 0 },
+      error: null,
     };
-    updateError = null;
-    mockCheckCsrfProtection.mockResolvedValue({ valid: true, response: null });
-    mockHasPermission.mockReturnValue(true);
-    mockGetMerchantForApiRequest.mockResolvedValue(merchantContext);
-    mockUpdateNotifications = vi.fn();
-    mockEqMerchant = vi.fn();
-    mockIsReadAt = vi.fn();
-    mockToUserAccess.mockReturnValue({
-      merchantId: MERCHANT_ID,
-      isStaff: false,
-      isOwner: true,
-      role: 'owner',
-      permissions: { full_access: { all: true } },
-    });
+    rpc = vi.fn(() => ({ single: vi.fn().mockResolvedValue(rpcResult) }));
+    vi.mocked(checkCsrfProtection).mockResolvedValue({ valid: true });
+    vi.mocked(createClient).mockReturnValue({
+      auth: {
+        getUser: vi.fn(() => Promise.resolve({ data: { user: authUser } })),
+      },
+      rpc,
+    } as unknown as ReturnType<typeof createClient>);
   });
 
-  it('returns 403 with fallback when csrf is invalid and no response is provided', async () => {
-    const { PATCH } = await import('./route');
-    mockCheckCsrfProtection.mockResolvedValue({
-      valid: false,
-      response: undefined,
-    });
-
-    const res = await PATCH(createRequest());
-    const json = await res.json();
-
-    expect(res.status).toBe(403);
-    expect(json.error).toBe('Invalid or missing CSRF token');
-  });
-
-  it('returns custom csrf response when provided by middleware', async () => {
-    const { PATCH } = await import('./route');
-    mockCheckCsrfProtection.mockResolvedValue({
-      valid: false,
-      response: new Response(JSON.stringify({ error: 'CSRF blocked' }), {
-        status: 419,
-      }),
-    });
-
-    const res = await PATCH(createRequest());
-    const json = await res.json();
-
-    expect(res.status).toBe(419);
-    expect(json.error).toBe('CSRF blocked');
-  });
-
-  it('returns 401 when unauthenticated', async () => {
-    const { PATCH } = await import('./route');
+  it('returns 401 before evaluating CSRF for unauthenticated callers', async () => {
     authUser = null;
-
-    const res = await PATCH(createRequest());
-    const json = await res.json();
-
-    expect(res.status).toBe(401);
-    expect(json.error).toBe('Unauthorized');
-  });
-
-  it('returns 404 when merchant is not found', async () => {
-    const { PATCH } = await import('./route');
-    merchantContext = null;
-    mockGetMerchantForApiRequest.mockResolvedValue(merchantContext);
-
-    const res = await PATCH(createRequest());
-    const json = await res.json();
-
-    expect(res.status).toBe(404);
-    expect(json.error).toBe('Merchant not found');
-  });
-
-  it('returns 403 when permission is denied', async () => {
-    const { PATCH } = await import('./route');
-    mockHasPermission.mockReturnValue(false);
-
-    const res = await PATCH(createRequest());
-    const json = await res.json();
-
-    expect(res.status).toBe(403);
-    expect(json.error).toBe('Permission denied');
-  });
-
-  it('returns 500 when update fails', async () => {
-    const { PATCH } = await import('./route');
-    updateError = { message: 'DB error' };
-
-    const res = await PATCH(createRequest());
-    const json = await res.json();
-
-    expect(res.status).toBe(500);
-    expect(json.error).toBe('Failed to mark all notifications as read');
-  });
-
-  it('returns success payload when mark-all update succeeds', async () => {
     const { PATCH } = await import('./route');
 
-    const res = await PATCH(createRequest());
-    const json = await res.json();
+    const response = await PATCH(request());
 
-    expect(res.status).toBe(200);
-    expect(json).toEqual({ success: true, unread_count: 0 });
-    expect(mockUpdateNotifications).toHaveBeenCalledWith(
-      expect.objectContaining({ read_at: expect.any(String) })
+    expect(response.status).toBe(401);
+    expect(checkCsrfProtection).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('evaluates CSRF after merchant permission and before the RPC', async () => {
+    vi.mocked(checkCsrfProtection).mockResolvedValue({ valid: false });
+    const { PATCH } = await import('./route');
+
+    const response = await PATCH(request());
+
+    expect(response.status).toBe(403);
+    expect(checkCsrfProtection).toHaveBeenCalledOnce();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('returns the RPC remaining count without materializing recipient rows', async () => {
+    const { PATCH } = await import('./route');
+
+    const response = await PATCH(request());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      updated_count: 2,
+      unread_count: 0,
+    });
+    expect(rpc).toHaveBeenCalledWith(
+      'mark_all_visible_merchant_notifications_read_v1',
+      { p_merchant_id: MERCHANT_ID }
     );
-    expect(mockEqMerchant).toHaveBeenCalledWith('merchant_id', MERCHANT_ID);
-    expect(mockIsReadAt).toHaveBeenCalledWith('read_at', null);
+  });
+
+  it('does not truncate a merchant with more than the default 1000 rows', async () => {
+    rpcResult = {
+      data: { updated_count: 1001, remaining_unread_count: 0 },
+      error: null,
+    };
+    const { PATCH } = await import('./route');
+
+    const response = await PATCH(request());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      updated_count: 1001,
+      unread_count: 0,
+    });
+  });
+
+  it('returns 500 when the atomic RPC fails', async () => {
+    rpcResult = { data: null, error: { message: 'rpc failure' } };
+    const { PATCH } = await import('./route');
+
+    const response = await PATCH(request());
+
+    expect(response.status).toBe(500);
   });
 });

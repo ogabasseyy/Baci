@@ -12,12 +12,31 @@ describe('analytics delivery authority verifier', () => {
     ).toEqual([]);
     expect(
       analyzeTemporaryAuthorityExpiry(
-        new Date('2026-09-16T00:00:00.000Z'),
+        new Date('2026-09-30T00:00:00.000Z'),
         false
       )
     ).toEqual([
-      'temporary event-pipeline analytics authority expired at 2026-09-16T00:00:00.000Z',
+      'temporary event-pipeline analytics authority expired at 2026-09-30T00:00:00.000Z',
     ]);
+  });
+
+  it('accepts the historical expiry only after the platform edge is retired', () => {
+    expect(
+      analyzeTemporaryAuthorityExpiry(
+        new Date('2026-09-30T00:00:00.000Z'),
+        false,
+        false
+      )
+    ).toEqual([]);
+    expect(
+      analyzeTemporaryAuthorityExpiry(
+        new Date('2026-09-30T00:00:00.000Z'),
+        false,
+        true
+      )
+    ).toContain(
+      'temporary event-pipeline analytics authority expired at 2026-09-30T00:00:00.000Z'
+    );
   });
 
   it('fails closed as soon as queue-only delivery is activated', () => {
@@ -25,6 +44,15 @@ describe('analytics delivery authority verifier', () => {
       analyzeTemporaryAuthorityExpiry(
         new Date('2026-07-18T00:00:00.000Z'),
         true
+      )
+    ).toEqual([
+      'temporary event-pipeline analytics authority expired because queue-only delivery is active',
+    ]);
+    expect(
+      analyzeTemporaryAuthorityExpiry(
+        new Date('2026-07-18T00:00:00.000Z'),
+        true,
+        false
       )
     ).toEqual([
       'temporary event-pipeline analytics authority expired because queue-only delivery is active',

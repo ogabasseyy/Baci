@@ -1,0 +1,12 @@
+{
+  "nativeStagingPush": {
+    "projectId": null,
+    "iosBundleIdentifier": null,
+    "androidPackage": null,
+    "allowedOrigins": [
+      "https://staging.ogabassey.com",
+      "https://staging-auth.ogabassey.com",
+      "https://exp.host"
+    ]
+  }
+}

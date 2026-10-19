@@ -66,6 +66,7 @@ export interface QuizPrizeVariantRow {
   created_at?: string | null;
   id: string;
   images: Array<string | { url?: string | null }> | null;
+  is_inventory_anchor?: boolean | null;
   merchant_id: string;
   price_override: number | string | null;
   primary_image: string | null;

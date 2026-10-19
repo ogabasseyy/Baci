@@ -141,6 +141,35 @@ describe('storefrontShippingRatesPayloadSchema', () => {
     expect(result.merchantPayoutCurrency).toBeUndefined();
     expect(result.merchantCountry).toBeUndefined();
   });
+
+  it('normalizes and filters merchant-enabled carrier providers', () => {
+    const result = storefrontShippingRatesPayloadSchema.parse({
+      ...validPayload,
+      shipping_providers: ['gigl', ' TOPSHIP ', 'shiip', 'gigl', 42],
+    });
+
+    expect(result.enabledProviderCodes).toEqual(['GIGL', 'TOPSHIP']);
+  });
+
+  it('keeps an explicit empty provider list distinct from a legacy payload', () => {
+    const disabled = storefrontShippingRatesPayloadSchema.parse({
+      ...validPayload,
+      shipping_providers: [],
+    });
+    const legacy = storefrontShippingRatesPayloadSchema.parse(validPayload);
+
+    expect(disabled.enabledProviderCodes).toEqual([]);
+    expect(legacy.enabledProviderCodes).toBeUndefined();
+  });
+
+  it('fails closed when the provider setting has a malformed shape', () => {
+    const result = storefrontShippingRatesPayloadSchema.parse({
+      ...validPayload,
+      shipping_providers: 'gigl,topship',
+    });
+
+    expect(result.enabledProviderCodes).toEqual([]);
+  });
 });
 
 describe('parseStorefrontShippingRatesPayload', () => {

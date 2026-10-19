@@ -4,9 +4,9 @@ export interface ValidCartStore {
   items: CartItem[];
   itemCount: () => number;
   subtotal: () => number;
-  updateQuantity: (itemId: string, quantity: number) => void;
-  removeItem: (itemId: string) => void;
-  clearCart: () => void;
+  updateQuantity: (itemId: string, quantity: number) => void | Promise<void>;
+  removeItem: (itemId: string) => void | Promise<void>;
+  clearCart: () => void | Promise<void>;
   toggleAssurance: (itemId: string) => void;
 }
 
@@ -42,7 +42,7 @@ function isValidCartItemShape(item: unknown): item is CartItem {
 
   if (
     cartItem.negotiatedPrice !== undefined &&
-    (!isFiniteNumber(cartItem.negotiatedPrice) || cartItem.negotiatedPrice <= 0)
+    (!isFiniteNumber(cartItem.negotiatedPrice) || cartItem.negotiatedPrice < 0)
   ) {
     return false;
   }

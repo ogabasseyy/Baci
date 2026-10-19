@@ -5,7 +5,7 @@ const mockBlogEditorClient = vi.fn((_props: unknown) => (
   <div>Blog editor client</div>
 ));
 const mockCreateClient = vi.fn();
-const mockGetPlatformAdminAuth = vi.fn();
+const mockGetPlatformAdminAuthForPermission = vi.fn();
 const mockNotFound = vi.fn(() => {
   throw new Error('NEXT_NOT_FOUND');
 });
@@ -22,8 +22,8 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 vi.mock('@/lib/platform-admin-auth', () => ({
-  getPlatformAdminAuth: (...args: unknown[]) =>
-    mockGetPlatformAdminAuth(...args),
+  getPlatformAdminAuthForPermission: (...args: unknown[]) =>
+    mockGetPlatformAdminAuthForPermission(...args),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -49,7 +49,7 @@ import EditAdminBlogPostPage from './page';
 describe('/admin/blog/[id]/edit page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetPlatformAdminAuth.mockResolvedValue({
+    mockGetPlatformAdminAuthForPermission.mockResolvedValue({
       status: 'authenticated',
       user: { email: 'admin@example.com', id: 'admin-1' },
     });
@@ -80,6 +80,9 @@ describe('/admin/blog/[id]/edit page', () => {
       })
     );
     expect(mockSupabase.eq).toHaveBeenCalledWith('id', 'post-1');
+    expect(mockGetPlatformAdminAuthForPermission).toHaveBeenCalledWith(
+      'content.manage'
+    );
   });
 
   it('calls notFound when post lookup fails', async () => {
@@ -111,7 +114,7 @@ describe('/admin/blog/[id]/edit page', () => {
   });
 
   it('redirects unauthenticated users to login', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValueOnce({
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
       status: 'unauthenticated',
     });
 
@@ -124,8 +127,10 @@ describe('/admin/blog/[id]/edit page', () => {
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 
-  it('redirects forbidden users to dashboard', async () => {
-    mockGetPlatformAdminAuth.mockResolvedValueOnce({ status: 'forbidden' });
+  it('redirects non-content roles to dashboard', async () => {
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({
+      status: 'forbidden',
+    });
 
     await expect(
       EditAdminBlogPostPage({
@@ -133,6 +138,9 @@ describe('/admin/blog/[id]/edit page', () => {
       })
     ).rejects.toThrow('NEXT_REDIRECT:/dashboard');
     expect(mockRedirect).toHaveBeenCalledWith('/dashboard');
+    expect(mockGetPlatformAdminAuthForPermission).toHaveBeenCalledWith(
+      'content.manage'
+    );
     expect(mockCreateClient).not.toHaveBeenCalled();
   });
 });

@@ -16,7 +16,12 @@ interface SmokeModule {
 }
 
 const smokeModulePath = './builder-ai-json-transport-worker';
-const provider = { model: { id: 'cerebras-model' }, name: 'cerebras:model' };
+const provider = {
+  model: { id: 'google-model' },
+  name: 'google:gemma-4-31b-it',
+};
+const expectedPrompt =
+  'Return exactly this JSON object and no other content: {"status":"proposed","summary":"Smoke checked","operations":[{"kind":"update_component","componentId":"smoke-hero","patch":{"componentType":"Hero","title":"Smoke checked"}}]}';
 const validOutput = {
   operations: [
     {
@@ -37,9 +42,7 @@ describe('runProviderSmoke transport adapter', () => {
   it('describes the complete closed JSON shape while keeping AI SDK schema-free', async () => {
     const { BUILDER_AI_JSON_SMOKE_PROMPT } = await loadSmokeModule();
 
-    expect(BUILDER_AI_JSON_SMOKE_PROMPT).toBe(
-      'Return only JSON with status "proposed", a summary string, and exactly one update_component operation for componentId "smoke-hero". Its patch must contain only componentType "Hero" and title "Smoke checked". Do not return markdown, extra keys, code, HTML, or explanations.'
-    );
+    expect(BUILDER_AI_JSON_SMOKE_PROMPT).toBe(expectedPrompt);
   });
 
   it('forwards valid generated output with the shared provider-safe output cap', async () => {
@@ -56,8 +59,7 @@ describe('runProviderSmoke transport adapter', () => {
       maxRetries: 0,
       model: provider.model,
       output: 'json-output',
-      prompt:
-        'Return only JSON with status "proposed", a summary string, and exactly one update_component operation for componentId "smoke-hero". Its patch must contain only componentType "Hero" and title "Smoke checked". Do not return markdown, extra keys, code, HTML, or explanations.',
+      prompt: expectedPrompt,
     });
   });
 

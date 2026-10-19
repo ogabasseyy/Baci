@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
-import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
 
-export const MAX_JSONL_READ_BYTES = 32 * 1024 * 1024;
+export {
+  MAX_JSONL_READ_BYTES,
+  MAX_JSONL_ROTATED_FILES,
+} from './vercel-error-events-limits.mjs';
+export { readJsonlLogEvents } from './vercel-error-events-reader.mjs';
 
 const ERROR_LEVELS = new Set(['error', 'fatal', 'panic']);
 const ERROR_MESSAGE_RE =
@@ -241,60 +244,4 @@ export function selectRemediationCandidates(
       },
       source: 'vercel',
     }));
-}
-
-export function readJsonlLogEvents(path) {
-  const descriptor = openSync(path, 'r');
-  let content;
-  let size;
-  try {
-    ({ size } = fstatSync(descriptor));
-    const start = Math.max(0, size - MAX_JSONL_READ_BYTES);
-    const bytesToRead = size - start;
-    const buffer = Buffer.allocUnsafe(bytesToRead);
-    let bytesRead = 0;
-    while (bytesRead < bytesToRead) {
-      const count = readSync(
-        descriptor,
-        buffer,
-        bytesRead,
-        bytesToRead - bytesRead,
-        start + bytesRead
-      );
-      if (count === 0) {
-        break;
-      }
-      bytesRead += count;
-    }
-    content = buffer.toString('utf8', 0, bytesRead);
-    if (start > 0) {
-      const previousByte = Buffer.alloc(1);
-      readSync(descriptor, previousByte, 0, 1, start - 1);
-      if (previousByte[0] === 0x0a) {
-        content = `\n${content}`;
-      }
-    }
-  } finally {
-    closeSync(descriptor);
-  }
-  if (size > MAX_JSONL_READ_BYTES) {
-    if (!content.startsWith('\n')) {
-      const firstNewline = content.indexOf('\n');
-      content = firstNewline === -1 ? '' : content.slice(firstNewline + 1);
-    }
-  }
-  const events = [];
-  for (const [index, line] of content.split(/\r?\n/).entries()) {
-    if (!line.trim()) {
-      continue;
-    }
-    try {
-      events.push(JSON.parse(line));
-    } catch (error) {
-      throw new Error(
-        `Invalid JSONL at ${path} (tail line ${index + 1}): ${error.message}`
-      );
-    }
-  }
-  return events;
 }

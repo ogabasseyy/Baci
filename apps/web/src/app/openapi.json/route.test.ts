@@ -28,6 +28,7 @@ describe('GET /openapi.json', () => {
     expect(body.servers).toEqual([{ url: 'https://ogabassey.com' }]);
     expect(body.paths).toMatchObject({
       '/api/agentic/catalog/search': expect.any(Object),
+      '/api/agentic/catalog/lookup': expect.any(Object),
       '/api/agentic/catalog/product': expect.any(Object),
       '/api/agentic/checkout-sessions': expect.any(Object),
       '/api/agentic/checkout-sessions/{id}': expect.any(Object),
@@ -36,6 +37,15 @@ describe('GET /openapi.json', () => {
     });
     expect(body.paths).not.toHaveProperty('/api/shipping/quote');
     expect(body.paths).not.toHaveProperty('/api/shipping/quotes');
+    expect(body.paths['/api/agentic/catalog/search'].post.security).toEqual([
+      { agenticBearerHmac: [] },
+    ]);
+    expect(body.paths['/api/agentic/catalog/lookup'].post.security).toEqual([
+      { agenticBearerHmac: [] },
+    ]);
+    expect(body.paths['/api/agentic/catalog/product'].post.security).toEqual([
+      { agenticBearerHmac: [] },
+    ]);
     expect(
       body.paths['/api/agentic/checkout-sessions/{id}/complete'].post
     ).toMatchObject({

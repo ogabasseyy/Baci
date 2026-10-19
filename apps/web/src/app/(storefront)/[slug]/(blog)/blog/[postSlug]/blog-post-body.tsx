@@ -110,7 +110,7 @@ export async function BlogPostBody({
             )}
             headingLevelOffset={1}
             normalizeSeoAnchors={true}
-            className="prose dark:prose-invert prose-baci max-w-none w-full [&_a]:text-blue-600!"
+            className="prose dark:prose-invert prose-baci max-w-none w-full"
           />
         )}
       </div>

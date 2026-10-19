@@ -15,9 +15,15 @@ from remediation_cron_transition_crontab import transition_crontab
 TARGETS = (
     ('vercel-error-remediator', '*/15 * * * *', '-n'),
     ('sentry-mobile-error-remediator', '*/5 *  * * *', '-n'),
+    ('posthog-error-remediator', '7-59/15 * * * *', '-n'),
     ('remediation-codex-canary', '22 4   * * *', '-w 600'),
 )
-BARRIER_FILES = ('lib/remediation-global-lock.mjs', *(f'jobs/{name}.mjs' for name, _, _ in TARGETS))
+BARRIER_FILES = (
+    'lib/remediation-global-lock.mjs',
+    'lib/remediation-readonly-seccomp.mjs',
+    'config/codex-readonly-seccomp.json',
+    *(f'jobs/{name}.mjs' for name, _, _ in TARGETS),
+)
 BLOCK_START = '# >>> baci-remediation-transition >>>'
 BLOCK_END = '# <<< baci-remediation-transition <<<'
 SAFE_NODE_FLAGS = frozenset({'--no-warnings', '--enable-source-maps', '--trace-warnings'})

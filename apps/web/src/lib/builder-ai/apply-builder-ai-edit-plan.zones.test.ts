@@ -69,6 +69,57 @@ describe('applyBuilderAiEditPlan zones', () => {
     ).toEqual(['zone-text', 'zone-insert']);
   });
 
+  it('rejects root and unknown zone collections instead of treating them as content', () => {
+    const config: BuilderData = {
+      content: [block('Header', 'header-1'), block('Footer', 'footer-1')],
+      root: { title: 'Home' },
+      zones: { aside: [] },
+    };
+    const insert = (collection: string) =>
+      applyBuilderAiEditPlan(
+        config,
+        plan([
+          {
+            initialContent: { componentType: 'Text', content: 'Bounded copy' },
+            kind: 'insert_component',
+            placement: { collection, position: 'first_content' },
+          },
+        ]),
+        () => 'zone-insert'
+      );
+
+    expect(() => insert('root')).toThrow(
+      'Placement is not allowed by manifest'
+    );
+    expect(() => insert('unknown-zone')).toThrow(
+      'Placement is not allowed by manifest'
+    );
+  });
+
+  it('validates an after destination against the target zone policy', () => {
+    const result = applyBuilderAiEditPlan(
+      {
+        content: [block('Header', 'header-1'), block('Footer', 'footer-1')],
+        root: { title: 'Home' },
+        zones: { aside: [block('Text', 'aside-anchor')] },
+      },
+      plan([
+        {
+          initialContent: { componentType: 'Button', text: 'Shop now' },
+          kind: 'insert_component',
+          placement: { componentId: 'aside-anchor', position: 'after' },
+        },
+      ]),
+      () => 'aside-button'
+    );
+
+    expect(
+      (result.candidateConfig.zones?.aside as BuilderData['content']).map(
+        (item) => item.props.id
+      )
+    ).toEqual(['aside-anchor', 'aside-button']);
+  });
+
   it('keeps a ProductGrid that exists only in a zone', () => {
     const config: BuilderData = {
       content: [block('Header', 'header-1'), block('Footer', 'footer-1')],

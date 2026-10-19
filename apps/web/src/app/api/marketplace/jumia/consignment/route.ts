@@ -1,7 +1,6 @@
 /**
  * Jumia Consignment (Express) API Route
  *
- * GET  — Retrieve consignment stock for a SKU
  * POST — Create a consignment order (send stock to Jumia warehouse)
  * PATCH — Update a consignment order (mark shipped, add tracking)
  */
@@ -22,158 +21,19 @@ import {
 } from '@/lib/jumia/client';
 import {
   createConsignmentOrder,
-  getConsignmentStock,
   updateConsignmentOrder,
 } from '@/lib/jumia/consignment';
 import { logger } from '@/lib/logger';
 import { requireMerchantFeatureAccess } from '@/lib/merchant-feature-gates';
 import { sanitizeText } from '@/lib/sanitize-core';
 import { createClient } from '@/lib/supabase/server';
+import {
+  jumiaConsignmentCreateSchema,
+  jumiaConsignmentUpdateSchema,
+} from '@/schemas/jumia/consignment-api';
+import { resolveJumiaConsignmentBusinessClientCode } from './resolve-jumia-consignment-business-client-code';
 
-/* ------------------------------------------------------------------ */
-/*  Schemas                                                           */
-/* ------------------------------------------------------------------ */
-
-const GetQuerySchema = z.object({
-  integrationId: z.uuid('integrationId must be a valid UUID'),
-  sku: z.string().trim().min(1, 'sku is required'),
-  businessClientCode: z
-    .string()
-    .trim()
-    .min(1, 'businessClientCode is required'),
-});
-
-const ConsignmentProductSchema = z.object({
-  sku: z.string().trim().min(1, 'sku is required'),
-  quantity: z.int().positive('quantity must be a positive integer'),
-  labelCode: z.string().trim().min(1, 'labelCode must not be empty').optional(),
-});
-
-/** Validates that a YYYY-MM-DD string is a real calendar date (rejects 2024-02-31, etc.) */
-const strictDateString = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format')
-  .refine(
-    (val) => {
-      const d = new Date(`${val}T00:00:00Z`);
-      return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(val);
-    },
-    {
-      error: 'Invalid calendar date',
-    }
-  );
-
-const CreateConsignmentSchema = z.object({
-  integrationId: z.uuid('integrationId must be a valid UUID'),
-  businessClientCode: z
-    .string()
-    .trim()
-    .min(1, 'businessClientCode is required'),
-  shippingDate: strictDateString,
-  products: z
-    .array(ConsignmentProductSchema)
-    .min(1, 'At least one product is required'),
-  comment: z.string().optional(),
-});
-
-const UpdateConsignmentSchema = z.object({
-  integrationId: z.uuid('integrationId must be a valid UUID'),
-  purchaseOrderNumber: z
-    .string()
-    .trim()
-    .min(1, 'purchaseOrderNumber is required'),
-  isShipped: z.boolean().optional(),
-  trackingNumber: z.string().optional(),
-  actualDepartureDate: strictDateString.optional(),
-  estimatedArrivalDate: strictDateString.optional(),
-  deliveryAgentPhoneNumber: z.string().optional(),
-  thirdPartyLogisticsName: z.string().optional(),
-});
-
-/* ------------------------------------------------------------------ */
-/*  GET — Retrieve consignment stock for a SKU                        */
-/* ------------------------------------------------------------------ */
-
-export async function GET(request: NextRequest) {
-  try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
-    if (!merchantContext) {
-      return NextResponse.json(
-        { error: 'Merchant not found' },
-        { status: 404 }
-      );
-    }
-
-    const access = toUserAccess(merchantContext);
-    if (!hasPermission(access, 'integrations', 'view')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const parsed = GetQuerySchema.safeParse({
-      integrationId: searchParams.get('integrationId'),
-      sku: searchParams.get('sku'),
-      businessClientCode: searchParams.get('businessClientCode'),
-    });
-
-    if (!parsed.success) {
-      return NextResponse.json(
-        {
-          error: 'Invalid query parameters',
-          details: z.flattenError(parsed.error),
-        },
-        { status: 400 }
-      );
-    }
-
-    const { integrationId, sku, businessClientCode } = parsed.data;
-    const merchantId = merchantContext.merchantId;
-
-    const featureGateResponse = await requireMerchantFeatureAccess(
-      supabase,
-      merchantId,
-      'marketplace_sync'
-    );
-    if (featureGateResponse) {
-      return featureGateResponse;
-    }
-
-    const jumiaClient = await JumiaClient.forIntegration(
-      supabase,
-      merchantId,
-      integrationId
-    );
-
-    const stock = await getConsignmentStock(
-      jumiaClient,
-      businessClientCode,
-      sku
-    );
-
-    return NextResponse.json(stock);
-  } catch (error: unknown) {
-    if (error instanceof JumiaApiError) {
-      return jumiaErrorResponse(error);
-    }
-    logger.error({ message: 'Jumia Consignment GET Error', error });
-    return NextResponse.json(
-      { error: 'Failed to fetch consignment stock' },
-      { status: 500 }
-    );
-  }
-}
+export { getJumiaConsignmentStock as GET } from './get-jumia-consignment-stock';
 
 /* ------------------------------------------------------------------ */
 /*  POST — Create a consignment order                                 */
@@ -221,7 +81,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const parsed = CreateConsignmentSchema.safeParse(body);
+    const parsed = jumiaConsignmentCreateSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'Invalid input', details: z.flattenError(parsed.error) },
@@ -252,10 +112,24 @@ export async function POST(request: NextRequest) {
       merchantId,
       integrationId
     );
+    const resolvedBusinessClientCode =
+      resolveJumiaConsignmentBusinessClientCode(
+        jumiaClient.marketplaceKey,
+        businessClientCode
+      );
+    if (!resolvedBusinessClientCode.ok) {
+      return NextResponse.json(
+        {
+          error:
+            'businessClientCode does not match the selected Jumia marketplace',
+        },
+        { status: 400 }
+      );
+    }
 
     const result = await createConsignmentOrder(jumiaClient, {
       shopId: jumiaClient.shopId,
-      businessClientCode,
+      businessClientCode: resolvedBusinessClientCode.businessClientCode,
       shippingDate,
       products,
       comment: comment ? sanitizeText(comment, 500) : undefined,
@@ -322,7 +196,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
-    const parsed = UpdateConsignmentSchema.safeParse(body);
+    const parsed = jumiaConsignmentUpdateSchema.safeParse(body);
     if (!parsed.success) {
       return NextResponse.json(
         { error: 'Invalid input', details: z.flattenError(parsed.error) },

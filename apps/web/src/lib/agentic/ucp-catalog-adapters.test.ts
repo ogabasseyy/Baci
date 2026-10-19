@@ -7,6 +7,16 @@ import {
   UCP_CATALOG_LOOKUP_CAPABILITY,
 } from './ucp-catalog-adapters';
 
+function expectMappedProduct(
+  product: ReturnType<typeof mapUcpCatalogProductRow>
+) {
+  expect(product).not.toBeNull();
+  if (!product) {
+    throw new Error('Expected a mapped UCP catalog product');
+  }
+  return product;
+}
+
 describe('ucp catalog adapters', () => {
   it('maps a storefront product into a UCP catalog product', () => {
     const product = mapStorefrontProductToUcpCatalogProduct({
@@ -59,7 +69,7 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product).toMatchObject({
+    expect(expectMappedProduct(product)).toMatchObject({
       id: 'product-2',
       media: [
         {
@@ -96,7 +106,9 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product.url).toBe('https://ogabassey.com/smartphones/pixel-10');
+    expect(expectMappedProduct(product).url).toBe(
+      'https://ogabassey.com/smartphones/pixel-10'
+    );
   });
 
   it('uses a junction category for legacy rows with no direct category', () => {
@@ -116,7 +128,9 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product.url).toBe('https://ogabassey.com/laptops/legacy-laptop');
+    expect(expectMappedProduct(product).url).toBe(
+      'https://ogabassey.com/laptops/legacy-laptop'
+    );
   });
 
   it('keeps an active junction category ahead of legacy text without a direct join', () => {
@@ -137,7 +151,7 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product.url).toBe(
+    expect(expectMappedProduct(product).url).toBe(
       'https://ogabassey.com/featured-laptops/legacy-category-laptop'
     );
   });
@@ -168,7 +182,7 @@ describe('ucp catalog adapters', () => {
       },
     });
 
-    expect(product.url).toBe(
+    expect(expectMappedProduct(product).url).toBe(
       'https://ogabassey.com/a-category/multi-category-product'
     );
   });
@@ -199,7 +213,9 @@ describe('ucp catalog adapters', () => {
     });
 
     expect(rows).toHaveLength(1);
-    expect(product.variants[0]?.availability).toEqual({ available: true });
+    expect(expectMappedProduct(product).variants[0]?.availability).toEqual({
+      available: true,
+    });
   });
 
   it('builds a UCP capability envelope for product detail responses', () => {

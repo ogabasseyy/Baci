@@ -4,6 +4,7 @@ import {
   OGABASSEY_SHELL_BANNER_INLINE_SRC,
   OGABASSEY_SHELL_BANNER_INLINE_WIDTH,
 } from '@/config/ogabassey-shell-banner-inline';
+import { HeroMobileControlsSkeleton } from './hero-mobile-controls-skeleton';
 
 // Permanent, product-agnostic geometry for a published store whose launch feed
 // is empty. The inline AVIF is a large first-flush LCP candidate (zero network)
@@ -39,6 +40,9 @@ export function OgabasseyEmptyMobileHero() {
           </div>
         </div>
       </div>
+      {/* The streaming reserve fallback bets on a multi-slide hero: keep its
+          controls-row slot (empty but sized) so the swap moves nothing. */}
+      <HeroMobileControlsSkeleton invisible />
     </div>
   );
 }

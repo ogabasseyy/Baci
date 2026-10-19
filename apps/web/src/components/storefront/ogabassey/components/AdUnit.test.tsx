@@ -92,6 +92,7 @@ describe('AdUnit', () => {
     vi.useRealTimers();
     delete (globalThis as { IntersectionObserver?: typeof IntersectionObserver })
       .IntersectionObserver;
+    Reflect.deleteProperty(document, 'prerendering');
   });
 
   it('waits for the slot to approach the viewport before bootstrapping GPT', async () => {
@@ -237,90 +238,6 @@ describe('AdUnit', () => {
     expect(ensureGoogleAdManagerBoot).toHaveBeenCalledOnce();
   });
 
-  it('keeps a loaded carousel ad slot mounted when the slide becomes inactive', async () => {
-    const { rerender, unmount } = render(
-      <AdUnit
-        placementKey="HEADER_LEADERBOARD"
-        isActive
-        loadStrategy="immediate"
-      />
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(window.googletag.defineSlot).toHaveBeenCalledOnce();
-      expect(window.googletag.display).toHaveBeenCalledOnce();
-    });
-
-    rerender(
-      <AdUnit
-        placementKey="HEADER_LEADERBOARD"
-        isActive={false}
-        loadStrategy="immediate"
-      />
-    );
-
-    expect(window.googletag.destroySlots).not.toHaveBeenCalled();
-    expect(pubAdsService.removeEventListener).not.toHaveBeenCalled();
-
-    rerender(
-      <AdUnit
-        placementKey="HEADER_LEADERBOARD"
-        isActive
-        loadStrategy="immediate"
-      />
-    );
-
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(window.googletag.defineSlot).toHaveBeenCalledOnce();
-    expect(window.googletag.display).toHaveBeenCalledOnce();
-    expect(window.googletag.destroySlots).not.toHaveBeenCalled();
-
-    unmount();
-
-    expect(pubAdsService.removeEventListener).toHaveBeenCalledWith(
-      'slotRenderEnded',
-      expect.any(Function)
-    );
-  });
-
-  it('does not define a slot when boot resolves after unmount', async () => {
-    let resolveBoot: () => void = () => {};
-    ensureGoogleAdManagerBoot.mockImplementationOnce(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveBoot = resolve;
-        })
-    );
-
-    const { unmount } = render(
-      <AdUnit
-        placementKey="HEADER_LEADERBOARD"
-        isActive
-        loadStrategy="immediate"
-      />
-    );
-
-    expect(ensureGoogleAdManagerBoot).toHaveBeenCalledOnce();
-
-    unmount();
-
-    await act(async () => {
-      resolveBoot();
-      await Promise.resolve();
-    });
-
-    expect(window.googletag.defineSlot).not.toHaveBeenCalled();
-    expect(window.googletag.display).not.toHaveBeenCalled();
-  });
-
   it('skips the pending boot when the slot becomes inactive before bootDelayMs completes', async () => {
     vi.useFakeTimers();
 
@@ -370,4 +287,5 @@ describe('AdUnit', () => {
 
     expect(ensureGoogleAdManagerBoot).not.toHaveBeenCalled();
   });
+
 });

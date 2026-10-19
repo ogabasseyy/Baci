@@ -9,6 +9,7 @@ import { runRemediationJobWithGlobalLock } from '../lib/remediation-global-lock.
 import { runRemediationWorker } from '../lib/remediation-worker.mjs';
 import {
   groupErrorEvents,
+  MAX_JSONL_ROTATED_FILES,
   readJsonlLogEvents,
   selectRemediationCandidates,
 } from '../lib/vercel-error-events.mjs';
@@ -29,7 +30,12 @@ export async function runVercelErrorRemediator({
       if (!logPath) {
         throw new Error('VERCEL_ERROR_LOG_PATH is required');
       }
-      const rawEvents = readJsonlLogEvents(logPath);
+      const rawEvents = readJsonlLogEvents(logPath, {
+        maxRotatedFiles: readPositiveInt(
+          env.VERCEL_ERROR_LOG_MAX_ROTATED_FILES,
+          MAX_JSONL_ROTATED_FILES
+        ),
+      });
       const groups = groupErrorEvents(rawEvents);
       return selectRemediationCandidates(groups, {
         minOccurrences: readPositiveInt(

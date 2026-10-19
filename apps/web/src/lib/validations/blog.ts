@@ -1,4 +1,5 @@
 import z from 'zod';
+import { BLOG_INTENTS } from '@/config/blog-intent';
 import { sanitizeHtml } from '@/lib/sanitize';
 
 const featuredImageVariantsSchema = z
@@ -13,6 +14,7 @@ const featuredImageDimensionSchema = z
   .number()
   .int()
   .positive()
+  .max(2_147_483_647, 'Image dimensions exceed the database integer range')
   .nullable()
   .optional();
 
@@ -46,6 +48,8 @@ export const blogPostSchema = z.object({
   featured_image_height: featuredImageDimensionSchema,
   featured_image_variants: featuredImageVariantsSchema.optional(),
   featured_image_alt: z.string().max(200).optional().nullable(),
+  intent: z.enum(BLOG_INTENTS).optional().nullable(),
+  intent_source: z.string().max(100).optional().nullable(),
   category: z.string().max(100).optional().nullable(),
   tags: z.array(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
@@ -97,6 +101,8 @@ export const createPostSchema = z.object({
   featured_image_height: featuredImageDimensionSchema,
   featured_image_variants: featuredImageVariantsSchema.optional(),
   featured_image_alt: z.string().max(200).optional(),
+  intent: z.enum(BLOG_INTENTS).optional().nullable(),
+  intent_source: z.string().max(100).optional().nullable(),
   category: z.string().max(100).optional(),
   tags: z.array(z.string()).optional(),
   keywords: z.array(z.string()).optional(),
@@ -107,7 +113,7 @@ export const createPostSchema = z.object({
   status: z.enum(['draft', 'published', 'archived']).optional(),
   seo_title: z.string().max(70).optional(),
   seo_description: z.string().max(160).optional(),
-  focus_keyword: z.string().max(50).optional(),
+  focus_keyword: z.string().max(50).optional().nullable(),
   embedded_products: embeddedProductIdsSchema.optional(),
 });
 
@@ -126,6 +132,16 @@ export function sanitizeBlogPostData(
     (data.featured_image_url === null ||
       (typeof data.featured_image_url === 'string' &&
         data.featured_image_url.trim() === ''));
+  // Provenance without an intent is an orphan: the client drops intent_source
+  // whenever the effective intent is nullish, so enforce the same
+  // pair-consistency for direct API calls. Only an explicitly supplied
+  // nullish intent triggers this — a missing key means "leave the stored
+  // pair alone" on PATCH.
+  const shouldClearIntentSource =
+    Object.hasOwn(data, 'intent') &&
+    (data.intent === null ||
+      data.intent === undefined ||
+      (typeof data.intent === 'string' && data.intent.trim() === ''));
 
   for (const [key, value] of Object.entries(data)) {
     if (
@@ -167,6 +183,8 @@ export function sanitizeBlogPostData(
           'seo_title',
           'seo_description',
           'focus_keyword',
+          'intent',
+          'intent_source',
         ];
         sanitized[key] = nullableFields.includes(key) ? null : undefined;
       } else {
@@ -194,6 +212,10 @@ export function sanitizeBlogPostData(
     sanitized.featured_image_width = null;
     sanitized.featured_image_height = null;
     sanitized.featured_image_variants = {};
+  }
+
+  if (shouldClearIntentSource) {
+    sanitized.intent_source = null;
   }
 
   return sanitized;

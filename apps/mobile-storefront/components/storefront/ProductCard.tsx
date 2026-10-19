@@ -18,6 +18,7 @@ import {
   getProductCardImageAttempt,
   normalizeProductImages,
 } from '@/lib/product-normalization';
+import { createSafeBoundedImageSource } from '@/lib/safe-bounded-image-source';
 import { selectCartQuantities, useCartStore } from '@/stores/cart-store';
 import { selectSavedProductIds, useSavedStore } from '@/stores/saved-store';
 import type { Product } from '@/types/product';
@@ -158,6 +159,8 @@ export function ProductCard({
     contentFit: 'cover' as const,
     recyclingKey: product.id,
     allowDownscaling: true,
+    enforceEarlyResizing: true,
+    autoplay: false,
     onError: () => {
       if (imageAttempt < imageCandidates.length) {
         setImageAttempt((current) => current + 1);
@@ -168,11 +171,26 @@ export function ProductCard({
     },
   };
 
-  const imageSource = {
-    uri: getProductCardImageAttempt(imageCandidates, imageAttempt),
-  };
+  const imageWidth =
+    variant === 'list'
+      ? 100
+      : variant === 'editorial'
+        ? screenWidth - 32
+        : gridWidth;
+  const imageAttemptUri = getProductCardImageAttempt(
+    imageCandidates,
+    imageAttempt
+  );
+  const imageSource = createSafeBoundedImageSource({
+    fit: 'cover',
+    height: variant === 'editorial' ? imageWidth / 0.8 : imageWidth,
+    uri: imageAttemptUri,
+    width: imageWidth,
+  });
   const quickAddImageUrl = resolveCartItemImageUrl({
-    displayedImageUrl: imageSource.uri,
+    // Persist the source asset, not the card's cover-cropped display transform.
+    // Cart and order surfaces apply their own bounded dimensions.
+    displayedImageUrl: imageAttemptUri,
     variantImageUrl: defaultVariantSelection?.variant.image,
     variantImages: defaultVariantSelection?.variant.images,
     fallbackImageUrl: product.image,

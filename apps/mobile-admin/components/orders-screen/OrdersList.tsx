@@ -1,6 +1,6 @@
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { FlashList, type FlashListProps } from '@shopify/flash-list';
-import type { ComponentType } from 'react';
+import type { ComponentType, RefObject } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -33,6 +33,9 @@ interface OrdersListProps {
   listViewState: OrdersViewState;
   renderItem: OrdersListRenderItem;
   onScroll?: OrdersListOnScroll;
+  scrollRef?: RefObject<{
+    scrollToOffset: (options: { offset: number; animated?: boolean }) => void;
+  } | null>;
   onRefresh: () => void;
   onEndReached: () => void;
 }
@@ -45,11 +48,13 @@ export function OrdersList({
   listViewState,
   renderItem,
   onScroll,
+  scrollRef,
   onRefresh,
   onEndReached,
 }: OrdersListProps) {
   return (
     <AnimatedFlashList
+      ref={scrollRef as never}
       data={data}
       renderItem={renderItem}
       getItemType={(item) => item.type}

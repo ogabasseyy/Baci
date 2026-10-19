@@ -9,6 +9,10 @@ type NotificationsPermissionModule = Partial<
     'getPermissionsAsync' | 'requestPermissionsAsync'
   >
 >;
+type MaybeNotificationsPermissionModule =
+  | NotificationsPermissionModule
+  | null
+  | undefined;
 
 interface PermissionState {
   // Track last request time for cool-down logic
@@ -24,28 +28,29 @@ interface PermissionState {
 }
 
 export const PERMISSION_SOFT_ASK_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-let notificationsModulePromise: Promise<
-  typeof import('expo-notifications')
-> | null = null;
+let notificationsModulePromise: Promise<NotificationsPermissionModule | null> | null =
+  null;
+type NotificationsModuleLoader =
+  () => PromiseLike<NotificationsPermissionModule>;
 
 function hasNotificationStatusApi(
-  notifications: NotificationsPermissionModule
+  notifications: MaybeNotificationsPermissionModule
 ): notifications is NotificationsPermissionModule & {
   getPermissionsAsync: NonNullable<
     NotificationsPermissionModule['getPermissionsAsync']
   >;
 } {
-  return typeof notifications.getPermissionsAsync === 'function';
+  return typeof notifications?.getPermissionsAsync === 'function';
 }
 
 function hasNotificationRequestApi(
-  notifications: NotificationsPermissionModule
+  notifications: MaybeNotificationsPermissionModule
 ): notifications is NotificationsPermissionModule & {
   requestPermissionsAsync: NonNullable<
     NotificationsPermissionModule['requestPermissionsAsync']
   >;
 } {
-  return typeof notifications.requestPermissionsAsync === 'function';
+  return typeof notifications?.requestPermissionsAsync === 'function';
 }
 
 function warnNotificationsPermissionApiUnavailable(method: string) {
@@ -60,7 +65,7 @@ function warnNotificationsPermissionApiFailed(method: string, error: unknown) {
 }
 
 export async function getNotificationPermissionStatus(
-  notifications: NotificationsPermissionModule
+  notifications: MaybeNotificationsPermissionModule
 ): Promise<string | null> {
   if (!hasNotificationStatusApi(notifications)) {
     warnNotificationsPermissionApiUnavailable('getPermissionsAsync');
@@ -77,7 +82,7 @@ export async function getNotificationPermissionStatus(
 }
 
 export async function requestNotificationPermissionStatus(
-  notifications: NotificationsPermissionModule
+  notifications: MaybeNotificationsPermissionModule
 ): Promise<boolean> {
   if (!hasNotificationRequestApi(notifications)) {
     warnNotificationsPermissionApiUnavailable('requestPermissionsAsync');
@@ -93,13 +98,35 @@ export async function requestNotificationPermissionStatus(
   }
 }
 
-function loadNotifications() {
-  notificationsModulePromise ??= import('expo-notifications').catch(
-    (error: unknown) => {
-      notificationsModulePromise = null;
-      throw error;
-    }
-  );
+export async function loadNotificationsModule(
+  loadModule: NotificationsModuleLoader = () => import('expo-notifications')
+): Promise<NotificationsPermissionModule | null> {
+  try {
+    // Expo SDK 57's native asyncRequire returns a thenable without .catch or
+    // .finally. Await assimilates it without relying on those Promise methods.
+    return await loadModule();
+  } catch (error) {
+    warnNotificationsPermissionApiFailed('expo-notifications', error);
+    return null;
+  }
+}
+
+export function loadNotifications(
+  loadModule: NotificationsModuleLoader = () => import('expo-notifications')
+) {
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = loadNotificationsModule(loadModule).then(
+      (notifications) => {
+        // A synchronous native loader failure is caught before
+        // loadNotificationsModule() returns its promise. Reset here, after
+        // the cache has been assigned, so the next request can retry.
+        if (notifications === null) {
+          notificationsModulePromise = null;
+        }
+        return notifications;
+      }
+    );
+  }
   return notificationsModulePromise;
 }
 

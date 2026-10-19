@@ -55,7 +55,6 @@ describe('product variant attributes', () => {
     ).toEqual([
       { key: 'condition', label: 'Condition', value: 'new' },
       { key: 'color', label: 'Color', value: 'Silver' },
-      { key: 'specs.storage', label: 'Specs Storage', value: '512GB' },
     ]);
   });
 
@@ -84,8 +83,7 @@ describe('product variant attributes', () => {
       )
     ).toEqual({
       condition: 'new',
-      display_type: 'FHD Touchscreen',
-      storage_capacity: '512GB',
+      storage: '512GB',
     });
   });
 });

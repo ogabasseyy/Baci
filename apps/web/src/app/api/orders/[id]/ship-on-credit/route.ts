@@ -1,5 +1,4 @@
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import {
   authenticateApiRequest,
   getMerchantIdForApiUser,
@@ -10,12 +9,8 @@ import {
   handlePaymentForCancelledOrder,
   isOrderClampedAsCancelled,
 } from '@/lib/payments/handle-payment-for-cancelled-order';
-import { generatePaymentAccount } from '@/lib/paystack';
-
-const shipOnCreditBodySchema = z.object({
-  credit_notes: z.string().trim().max(2000).optional(),
-  notes: z.string().trim().max(2000).optional(),
-});
+import { shipOnCreditBodySchema } from '@/schemas/ship-on-credit-schema';
+import { provisionCreditOrderDva } from './provision-credit-order-dva';
 
 /**
  * POST /api/orders/[id]/ship-on-credit
@@ -92,7 +87,7 @@ export async function POST(
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .select(
-        'id, order_number, total, customer_name, customer_email, payment_status, shipping_status, cancelled_at'
+        'id, order_number, total, customer_name, customer_email, payment_status, shipping_status, cancelled_at, payment_due_date'
       )
       .eq('id', orderId)
       .eq('merchant_id', merchantId)
@@ -182,9 +177,7 @@ export async function POST(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
-    // The prevent_cancelled_order_reopen trigger clamped this: the order was
-    // cancelled by the customer and cannot be shipped on credit. File a
-    // reconciliation row and reject without creating a DVA.
+    // Reject a customer-cancelled order clamped by the database trigger.
     if (isOrderClampedAsCancelled(updatedOrder)) {
       await handlePaymentForCancelledOrder({
         gatewayReference: null,
@@ -203,89 +196,14 @@ export async function POST(
       );
     }
 
-    // 7. Create Paystack DVA for payment collection (optional but recommended)
-    //    Uses generatePaymentAccount which handles existing customer DVAs idempotently
     let virtualAccount = null;
-    try {
-      const nameParts = (order.customer_name || 'Customer').trim().split(' ');
-      const dvaResult = await generatePaymentAccount({
-        email: order.customer_email || `${orderId}@orders.usebaci.com`,
-        firstName: nameParts[0] || 'Customer',
-        lastName: nameParts.slice(1).join(' ') || 'User',
-        phone: '',
-        orderId,
-      });
-
-      if (dvaResult.success) {
-        const { error: insertError } = await supabase
-          .from('order_payment_accounts')
-          .insert({
-            order_id: orderId,
-            account_number: dvaResult.data.account_number,
-            bank_name: dvaResult.data.bank_name,
-            account_name: dvaResult.data.account_name,
-            provider: 'paystack',
-          });
-
-        if (insertError) {
-          // Handle duplicate key conflicts as idempotent success
-          const { data: existingAccount, error: existingAccountError } =
-            await supabase
-              .from('order_payment_accounts')
-              .select('account_number, bank_name, account_name')
-              .eq('order_id', orderId)
-              .eq('provider', 'paystack')
-              .maybeSingle();
-
-          if (existingAccountError) {
-            logger.error({
-              message: 'Database error fetching existing payment account',
-              error: existingAccountError,
-              orderId,
-            });
-            return NextResponse.json(
-              { error: 'Failed to create or fetch payment account' },
-              { status: 500 }
-            );
-          }
-
-          if (existingAccount) {
-            logger.info({
-              message:
-                'Order payment account already exists, treating as idempotent success',
-              orderId,
-            });
-            virtualAccount = {
-              account_number: existingAccount.account_number,
-              bank_name: existingAccount.bank_name,
-              account_name: existingAccount.account_name,
-            };
-          } else {
-            logger.error({
-              message: 'Failed to insert order payment account',
-              error: insertError,
-              orderId,
-            });
-            return NextResponse.json(
-              { error: 'Failed to create payment account' },
-              { status: 500 }
-            );
-          }
-        } else {
-          virtualAccount = {
-            account_number: dvaResult.data.account_number,
-            bank_name: dvaResult.data.bank_name,
-            account_name: dvaResult.data.account_name,
-          };
-        }
-      }
-    } catch (vaError) {
-      // Non-blocking: Log but don't fail the request
-      logger.warn({
-        message: 'Could not create DVA for credit order',
-        error: vaError,
-      });
-    }
+    virtualAccount = await provisionCreditOrderDva({
+      customerEmail: order.customer_email,
+      customerName: order.customer_name,
+      orderId,
+      paymentDueDate: order.payment_due_date,
+      supabase,
+    });
 
     return NextResponse.json({
       success: true,

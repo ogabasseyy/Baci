@@ -6,14 +6,15 @@ import { useRouter } from 'next/navigation';
 import { Cart } from '@/components/cart';
 import { Logo } from '@/components/logo';
 import { ThemedButton } from '@/components/themed';
-import { CartIcon } from '@/components/ui/animated-icons';
 import { Button } from '@/components/ui/button';
+import { CartIcon } from '@/components/ui/cart-icon';
 import { Sheet, SheetTrigger } from '@/components/ui/sheet';
 import { OGABASSEY_TEMPLATE_ID } from '@/config/templates';
 import { useStorefront } from '@/contexts/storefront-context';
 import { useCart } from '@/hooks/use-cart';
 import { useMerchant } from '@/hooks/use-merchant-client';
 import { asRoute, routes } from '@/lib/routes';
+import { recordSearchSubmission } from '@/lib/search-submission';
 
 import { SearchAutocomplete } from './search-autocomplete';
 
@@ -96,6 +97,9 @@ export function StorefrontHeader() {
             merchantId={merchant.id}
             value={searchQuery}
             onChange={setSearchQuery}
+            onPopularSearchSelect={(query) =>
+              recordSearchSubmission(query, basePath, 'popular-search')
+            }
             onSelectProduct={handleProductSelect}
             placeholder="Search products..."
             className="w-full max-w-md"

@@ -62,6 +62,9 @@ describe('builderAiStructuredPropProjectionDetails', () => {
         },
       ],
     });
+  });
+
+  it('keeps Features.features[].icon explicitly optional', () => {
     expect(
       builderAiStructuredPropProjectionDetails['Features.features']
     ).toMatchObject({

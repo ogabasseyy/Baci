@@ -36,6 +36,7 @@ export function CheckoutDeliveryCard({
   savedAddresses,
   selectedSavedAddress,
   selectedSavedAddressId,
+  showLocationPickers,
 }: CheckoutDeliveryCardProps) {
   const showCollapseAction =
     hasSavedAddresses || Boolean(currentDeliverySummary);
@@ -105,30 +106,32 @@ export function CheckoutDeliveryCard({
                 />
               )}
             />
-            <View style={styles.row}>
-              <CheckoutDeliveryLocationPicker
-                colors={colors}
-                control={control}
-                error={errors.city?.message}
-                isDark={isDark}
-                isLoading={isLoadingCities}
-                label="City"
-                onPress={onOpenCityPicker}
-                placeholder="Select city"
-                valueName="city"
-              />
-              <CheckoutDeliveryLocationPicker
-                colors={colors}
-                control={control}
-                error={errors.state?.message}
-                isDark={isDark}
-                isLoading={isLoadingLocations}
-                label="State"
-                onPress={onOpenStatePicker}
-                placeholder="Select state"
-                valueName="state"
-              />
-            </View>
+            {showLocationPickers ? (
+              <View style={styles.row}>
+                <CheckoutDeliveryLocationPicker
+                  colors={colors}
+                  control={control}
+                  error={errors.city?.message}
+                  isDark={isDark}
+                  isLoading={isLoadingCities}
+                  label="City"
+                  onPress={onOpenCityPicker}
+                  placeholder="Select city"
+                  valueName="city"
+                />
+                <CheckoutDeliveryLocationPicker
+                  colors={colors}
+                  control={control}
+                  error={errors.state?.message}
+                  isDark={isDark}
+                  isLoading={isLoadingLocations}
+                  label="State"
+                  onPress={onOpenStatePicker}
+                  placeholder="Select state"
+                  valueName="state"
+                />
+              </View>
+            ) : null}
             {isAuthenticated ? (
               <CheckoutDeliveryDefaultCheckbox
                 checked={saveAsDefaultAddress}

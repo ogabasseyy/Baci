@@ -11,6 +11,7 @@ vi.mock('@/lib/cached-storefront-product-index', () => ({
 
 import { OGABASSEY_DOMAIN, OGABASSEY_MERCHANT_ID } from '@/config/ogabassey';
 import {
+  OGABASSEY_PREVIEW_PRERENDER_PRODUCT_LIMIT,
   PRERENDER_PLACEHOLDER_PRODUCT_SLUG,
   PRERENDER_PLACEHOLDER_STORE_SLUG,
   resolveProductStaticParams,
@@ -202,5 +203,68 @@ describe('resolveProductStaticParams', () => {
     const params = await resolveProductStaticParams();
 
     expect(params).toEqual([PRERENDER_PLACEHOLDER]);
+  });
+
+  it('pins the preview product sample below one index page', () => {
+    // Priority PDP + sample must fit in a single index page (200) so preview
+    // builds walk exactly one page.
+    expect(OGABASSEY_PREVIEW_PRERENDER_PRODUCT_LIMIT).toBe(11);
+    expect(OGABASSEY_PREVIEW_PRERENDER_PRODUCT_LIMIT).toBeLessThan(200);
+  });
+
+  it('caps preview builds to the priority PDP plus a small newest sample', async () => {
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    try {
+      const fullPage = Array.from({ length: 200 }, (_, index) => ({
+        slug: `product-${index}`,
+        category_slug: 'smartphones',
+      }));
+      mockGetCachedStorefrontProductIndex.mockResolvedValue({
+        hasError: false,
+        products: fullPage,
+      });
+
+      const params = await resolveProductStaticParams();
+
+      // One index page walked, then sliced: priority + 11 newest. The full
+      // catalog would emit ~183k cold files that never finish the preview
+      // finalize step; branch previews only need a representative sample.
+      expect(mockGetCachedStorefrontProductIndex).toHaveBeenCalledTimes(1);
+      expect(params).toHaveLength(12);
+      expect(params[0]).toEqual({
+        slug: OGABASSEY_DOMAIN,
+        category: 'gaming-laptops',
+        productSlug: 'dell-alienware-m18-r3-rtx-5080',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('walks the full index when VERCEL_ENV is production', async () => {
+    vi.stubEnv('VERCEL_ENV', 'production');
+    try {
+      const fullPage = (tag: string) =>
+        Array.from({ length: 200 }, (_, index) => ({
+          slug: `${tag}-${index}`,
+          category_slug: 'smartphones',
+        }));
+      mockGetCachedStorefrontProductIndex.mockImplementation(
+        async (...args: unknown[]) => {
+          const page = (args[1] as { page: number }).page;
+          if (page <= 2)
+            return { hasError: false, products: fullPage(`p${page}`) };
+          return { hasError: false, products: [] };
+        }
+      );
+
+      const params = await resolveProductStaticParams();
+
+      // Production must never see the preview cap: full walk, every product.
+      expect(mockGetCachedStorefrontProductIndex).toHaveBeenCalledTimes(3);
+      expect(params).toHaveLength(401);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

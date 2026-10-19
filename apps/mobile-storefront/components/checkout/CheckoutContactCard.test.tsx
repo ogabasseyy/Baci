@@ -56,6 +56,7 @@ function CheckoutContactCardHarness({
   isAuthenticated = false,
   isCollapsed = false,
   onChangeAccountPassword = jest.fn(),
+  onContactEmailSettled = jest.fn(),
   onToggleCollapsed = jest.fn(),
   onToggleSaveDetails = jest.fn(),
   saveDetails = false,
@@ -67,6 +68,7 @@ function CheckoutContactCardHarness({
   isAuthenticated?: boolean;
   isCollapsed?: boolean;
   onChangeAccountPassword?: (value: string) => void;
+  onContactEmailSettled?: () => void;
   onToggleCollapsed?: () => void;
   onToggleSaveDetails?: () => void;
   saveDetails?: boolean;
@@ -92,6 +94,7 @@ function CheckoutContactCardHarness({
       isCollapsed={isCollapsed}
       isDark={false}
       onChangeAccountPassword={onChangeAccountPassword}
+      onContactEmailSettled={onContactEmailSettled}
       onToggleCollapsed={onToggleCollapsed}
       onToggleSaveDetails={onToggleSaveDetails}
       phone={phone}
@@ -122,13 +125,30 @@ describe('CheckoutContactCard', () => {
     expect(onToggleSaveDetails).toHaveBeenCalledTimes(1);
   });
 
-  it('strips whitespace from the email as the user types', () => {
+  it('preserves autofilled email text until the keyboard releases the field', () => {
     render(<CheckoutContactCardHarness />);
 
     const emailInput = screen.getByPlaceholderText('john@example.com');
     fireEvent.changeText(emailInput, ' ja ne@ example.com ');
 
+    expect(emailInput.props.value).toBe(' ja ne@ example.com ');
+    fireEvent(emailInput, 'blur');
     expect(emailInput.props.value).toBe('jane@example.com');
+  });
+
+  it('settles the current email on blur and keyboard submission', () => {
+    const onContactEmailSettled = jest.fn();
+    render(
+      <CheckoutContactCardHarness
+        onContactEmailSettled={onContactEmailSettled}
+      />
+    );
+
+    const emailInput = screen.getByPlaceholderText('john@example.com');
+    fireEvent(emailInput, 'blur');
+    fireEvent(emailInput, 'submitEditing');
+
+    expect(onContactEmailSettled).toHaveBeenCalledTimes(2);
   });
 
   it('shows account creation details and password validation for guests saving details', () => {
@@ -183,6 +203,19 @@ describe('CheckoutContactCard', () => {
     fireEvent.press(screen.getByRole('button', { name: 'Edit Contact' }));
 
     expect(onToggleCollapsed).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses a neutral summary label when a guest contact form is collapsed', () => {
+    render(
+      <CheckoutContactCardHarness
+        hasContactIdentity
+        isCollapsed
+        onToggleCollapsed={jest.fn()}
+      />
+    );
+
+    expect(screen.getByText('Contact details')).toBeTruthy();
+    expect(screen.queryByText('Signed in')).toBeNull();
   });
 
   it('shows the done action and hides guest save-details when an authenticated contact is expanded', () => {

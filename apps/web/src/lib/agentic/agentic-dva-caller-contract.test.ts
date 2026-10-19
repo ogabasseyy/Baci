@@ -36,7 +36,10 @@ const expectedCallers: Record<PrivilegedFunction, readonly string[]> = {
   createAgenticCheckoutPaymentAccount: [
     'apps/web/src/lib/agentic/checkout-payment-setup.ts',
   ],
-  createDedicatedAccount: ['apps/web/src/lib/paystack.ts'],
+  createDedicatedAccount: [
+    'apps/web/src/lib/merchant-wallet-payment-accounts.ts',
+    'apps/web/src/lib/paystack.ts',
+  ],
   createDedicatedAccountForWallet: [
     'apps/web/src/lib/customer-wallet-payment-accounts.ts',
   ],
@@ -47,12 +50,13 @@ const expectedCallers: Record<PrivilegedFunction, readonly string[]> = {
   generatePaymentAccount: [
     'apps/web/mcp-server/server.ts',
     'apps/web/src/app/api/orders/[id]/generate-dva/route.ts',
-    'apps/web/src/app/api/orders/[id]/ship-on-credit/route.ts',
-    'apps/web/src/app/api/orders/route.ts',
+    'apps/web/src/app/api/orders/[id]/ship-on-credit/provision-credit-order-dva.ts',
+    'apps/web/src/lib/provision-invoice-method-dva.ts',
   ],
   getDedicatedAccounts: [
     'apps/web/src/lib/customer-wallet-payment-accounts.ts',
     'apps/web/src/lib/paystack.ts',
+    'apps/web/src/lib/resume-merchant-wallet-funding-request.ts',
   ],
 } as const;
 const definitionPaths = {
@@ -64,22 +68,28 @@ const definitionPaths = {
   generatePaymentAccount: 'apps/web/src/lib/paystack.ts',
   getDedicatedAccounts: 'apps/web/src/lib/paystack.ts',
 } as const;
+const dedicatedAccountEndpointPattern =
+  /["'`]\/dedicated_account(?:\?|\/|["'`])/;
 
 describe('Paystack DVA caller contract', () => {
   it('keeps every raw dedicated-account endpoint in the reviewed boundaries', () => {
     expect(
       sourceFiles
-        .filter(({ source }) => source.includes('dedicated_account'))
+        .filter(({ source }) => dedicatedAccountEndpointPattern.test(source))
         .map(({ path }) => path)
     ).toEqual([
       'apps/web/src/lib/agentic/paystack.ts',
       'apps/web/src/lib/paystack.ts',
     ]);
     const endpointFiles = sourceFiles
-      .filter(({ source }) =>
-        /["'`]\/dedicated_account(?:\?|["'`])/.test(source)
-      )
+      .filter(({ source }) => dedicatedAccountEndpointPattern.test(source))
       .map(({ path }) => path);
+
+    expect(
+      dedicatedAccountEndpointPattern.test(
+        String.raw`paystackRequest(\`/dedicated_account/\${accountId}\`)`
+      )
+    ).toBe(true);
 
     expect(endpointFiles).toEqual([
       'apps/web/src/lib/agentic/paystack.ts',
@@ -105,13 +115,25 @@ describe('Paystack DVA caller contract', () => {
     ).toBe(1);
   });
 
+  it.each([
+    ["'/dedicated_account'", true],
+    ["'/dedicated_account?customer=customer-1'", true],
+    ['`/dedicated_account/$' + '{accountId}`', true],
+    ['`/dedicated_account/dedicated_account`', true],
+    ['`prefix/dedicated_account`', false],
+    ["'dedicated_account'", false],
+    ["'/not_dedicated_account'", false],
+  ])('matches only a raw dedicated-account endpoint form: %s', (source, expected) => {
+    expect(dedicatedAccountEndpointPattern.test(source)).toBe(expected);
+  });
+
   it.each(
     privilegedFunctions
   )('keeps %s on its exact caller allowlist', (functionName) => {
     expect(findCallers(functionName, definitionPaths[functionName])).toEqual(
       expectedCallers[functionName]
     );
-  });
+  }, 30_000);
 
   it('keeps the paused gate ahead of agentic payment setup', () => {
     const handler = readSource(

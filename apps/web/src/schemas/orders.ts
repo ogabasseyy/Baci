@@ -6,6 +6,7 @@ import {
   sanitizeText,
   sanitizeUrl,
 } from '@/lib/sanitize-core';
+import { orderDeliveryMetadataSchema } from './checkout-delivery-metadata';
 
 const optionalHttpUrlSchema = z.preprocess(
   (value) => {
@@ -158,6 +159,10 @@ const orderCreateSchemaBase = z
             voucherToken: optionalVoucherTokenSchema,
             voucher_award_id: optionalVoucherTokenSchema,
             voucher_token: optionalVoucherTokenSchema,
+            // Shared-cart line provenance for bound orders. The binding
+            // RPC revalidates the cart version; this id is traceability,
+            // never authorization.
+            cart_line_id: z.uuid().optional(),
           })
           .refine((data) => data.product_id || data.productId || data.id, {
             error:
@@ -264,14 +269,19 @@ const orderCreateSchemaBase = z
     savings_goal_id: z.uuid().optional(),
     savings_amount: z.number().positive().optional(),
     user_id: z.uuid().optional(),
-    // Shipping metadata.
-    //
-    // B3 (plan §5 B3): pickup/airport flows send `shipping_provider:
-    // null` instead of fabricating a label like 'Pickup'/'Airport' that
-    // would trip the RPC's `shipping_quote_required` guard. The schemas
-    // accept both undefined and null; the route normalizes `?? null`
-    // before passing to the RPC.
-    selected_quote_id: z.uuid().nullable().optional(),
+    // Shared server cart binding (Task 11A). Present only when checkout
+    // reviewed a shared cart: the orders route submits through the
+    // bound-create RPC, which revalidates the session, generation and
+    // reviewed version inside the final order transaction. Absent for
+    // legacy checkouts, which keep the direct order path.
+    shared_cart: z
+      .object({
+        cart_id: z.uuid(),
+        checkout_session_id: z.uuid(),
+        checkout_generation: z.int().positive(),
+        cart_version: z.int().positive(),
+      })
+      .optional(),
     // Merchant-configured shipping rate (merchant_shipping_rates.id). Sent by
     // checkout when the shopper picks a merchant rate (an `mrate_` quote).
     // The orders route re-verifies the rate against the merchant's zone
@@ -297,6 +307,7 @@ const orderCreateSchemaBase = z
       .optional()
       .transform((val) => (val ? sanitizeText(val) : val)),
   })
+  .and(orderDeliveryMetadataSchema)
   .superRefine((data, ctx) => {
     if (!data.use_savings_credit) {
       return;

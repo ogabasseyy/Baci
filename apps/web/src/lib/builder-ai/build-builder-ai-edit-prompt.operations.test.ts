@@ -71,10 +71,14 @@ describe('buildBuilderAiEditPrompt operation guidance', () => {
 
     expect(guide.specialOperations).toEqual({
       updateCarouselSlide: {
-        ctaLink: { maximumLength: 512 },
-        ctaText: { maximumLength: 120 },
-        subtitle: { maximumLength: 2000 },
-        title: { maximumLength: 120 },
+        ctaLink: { maximumLength: 512, type: 'safe-link' },
+        ctaText: { maximumLength: 120, required: true, type: 'string' },
+        mediaMutation: {
+          message: 'Requires an asset pipeline review.',
+          refusalCode: 'media-review',
+        },
+        subtitle: { maximumLength: 2000, type: 'string' },
+        title: { maximumLength: 120, required: true, type: 'string' },
       },
       updateRoot: { title: { maximumLength: 120 } },
     });

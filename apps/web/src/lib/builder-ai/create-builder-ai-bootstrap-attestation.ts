@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import {
-  BUILDER_AI_CEREBRAS_MODEL,
+  BUILDER_AI_GOOGLE_MODEL,
   BUILDER_AI_GROQ_MODEL,
   type BuilderAiProviderEnvironment,
 } from './builder-ai-provider-catalog';
@@ -8,7 +8,7 @@ import { createBuilderAiProviderBindingTag } from './create-builder-ai-provider-
 import type { BuilderAiAttestationEnvironment } from './vercel-builder-ai-bootstrap';
 
 const deploymentTier = 'provider-tier-unverified';
-const CEREBRAS_ACCOUNT_REF = 'deployment:baci-production:cerebras';
+const GOOGLE_ACCOUNT_REF = 'deployment:baci-production:google';
 const GROQ_ACCOUNT_REF = 'deployment:baci-production:groq';
 
 type Environment = Readonly<Record<string, string | undefined>>;
@@ -25,17 +25,17 @@ export function createBuilderAiBootstrapAttestation(
   environment: BuilderAiProviderEnvironment;
   values: BuilderAiAttestationEnvironment;
 } | null {
-  const cerebrasKey = configured(environment.CEREBRAS_API_KEY);
+  const googleKey = configured(environment.GOOGLE_GENAI_API_KEY);
   const groqKey = configured(environment.GROQ_API_KEY);
-  if (!cerebrasKey || !groqKey) return null;
+  if (!googleKey || !groqKey) return null;
   const releaseAttestedAt = now.toISOString();
   const pepper = randomBytes(32).toString('base64url');
-  const cerebras = {
-    accountRef: CEREBRAS_ACCOUNT_REF,
-    approvedModel: BUILDER_AI_CEREBRAS_MODEL,
+  const google = {
+    accountRef: GOOGLE_ACCOUNT_REF,
+    approvedModel: BUILDER_AI_GOOGLE_MODEL,
     deploymentTier,
-    key: cerebrasKey,
-    providerName: 'cerebras',
+    key: googleKey,
+    providerName: 'google',
     releaseAttestedAt,
   };
   const groq = {
@@ -46,16 +46,16 @@ export function createBuilderAiBootstrapAttestation(
     providerName: 'groq',
     releaseAttestedAt,
   };
-  const cerebrasTag = createBuilderAiProviderBindingTag(cerebras, pepper);
+  const googleTag = createBuilderAiProviderBindingTag(google, pepper);
   const groqTag = createBuilderAiProviderBindingTag(groq, pepper);
-  if (!cerebrasTag || !groqTag) return null;
+  if (!googleTag || !groqTag) return null;
   const values = {
     BUILDER_AI_PROVIDER_BINDING_PEPPER: pepper,
-    CEREBRAS_BUILDER_ACCOUNT_REF: cerebras.accountRef,
-    CEREBRAS_BUILDER_APPROVED_MODEL: cerebras.approvedModel,
-    CEREBRAS_BUILDER_CREDENTIAL_BINDING_TAG: cerebrasTag,
-    CEREBRAS_BUILDER_DEPLOYMENT_TIER: cerebras.deploymentTier,
-    CEREBRAS_BUILDER_RELEASE_ATTESTED_AT: releaseAttestedAt,
+    GOOGLE_BUILDER_ACCOUNT_REF: google.accountRef,
+    GOOGLE_BUILDER_APPROVED_MODEL: google.approvedModel,
+    GOOGLE_BUILDER_CREDENTIAL_BINDING_TAG: googleTag,
+    GOOGLE_BUILDER_DEPLOYMENT_TIER: google.deploymentTier,
+    GOOGLE_BUILDER_RELEASE_ATTESTED_AT: releaseAttestedAt,
     GROQ_BUILDER_ACCOUNT_REF: groq.accountRef,
     GROQ_BUILDER_APPROVED_MODEL: groq.approvedModel,
     GROQ_BUILDER_CREDENTIAL_BINDING_TAG: groqTag,
@@ -66,7 +66,7 @@ export function createBuilderAiBootstrapAttestation(
     environment: {
       ...environment,
       ...values,
-      CEREBRAS_API_KEY: cerebrasKey,
+      GOOGLE_GENAI_API_KEY: googleKey,
       GROQ_API_KEY: groqKey,
     },
     values,

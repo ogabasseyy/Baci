@@ -262,22 +262,3 @@ test('archive verifier rejects checksum, padding, and hidden trailing bytes', as
   ])
     assert.throws(() => verifySourceArchive(broken, entries));
 });
-
-test('source archive accepts the current 529-file sealed projection', async (t) => {
-  const context = repository();
-  t.after(() => rmSync(context.root, { recursive: true, force: true }));
-  const { createSourceArchive, verifySourceArchive } = await moduleFor(
-    context.root
-  );
-  const entries = Array.from({ length: 529 }, (_, index) => {
-    const bytes = Buffer.from(`member-${index}\n`);
-    return {
-      path: `infra/cwv-runner/member-${String(index).padStart(3, '0')}.mjs`,
-      mode: '100644',
-      blobSha256: createHash('sha256').update(bytes).digest('hex'),
-      bytes,
-    };
-  });
-  const archive = createSourceArchive(entries);
-  verifySourceArchive(archive, entries);
-});

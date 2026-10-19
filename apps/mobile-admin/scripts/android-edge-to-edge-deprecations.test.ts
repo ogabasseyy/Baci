@@ -1,18 +1,21 @@
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+const require = createRequire(import.meta.url);
+const reactNativeRoot = path.dirname(require.resolve('react-native/package.json'));
 const reactNativeAndroidRoot = path.resolve(
-  __dirname,
-  '../../../node_modules/react-native/ReactAndroid/src/main/java/com/facebook/react'
+  reactNativeRoot,
+  'ReactAndroid/src/main/java/com/facebook/react'
 );
 const androidSettingsPath = path.resolve(
   __dirname,
   '../android/settings.gradle'
 );
 const reactNativeAndroidBuildPath = path.resolve(
-  __dirname,
-  '../../../node_modules/react-native/ReactAndroid/build.gradle.kts'
+  reactNativeRoot,
+  'ReactAndroid/build.gradle.kts'
 );
 
 function readReactNativeSource(relativePath: string) {
@@ -35,7 +38,7 @@ describe('mobile admin Android edge-to-edge dependency guard', () => {
     const reactNativeBuild = readFileSync(reactNativeAndroidBuildPath, 'utf8');
 
     expect(reactNativeBuild).toContain(
-      'compileOnly("com.facebook.hermes:hermes-android:250829098.0.14")'
+      'compileOnly("com.facebook.hermes:hermes-android:250829098.0.16")'
     );
     expect(reactNativeBuild).not.toContain(
       'compileOnly(project(":packages:react-native:ReactAndroid:hermes-engine"))'

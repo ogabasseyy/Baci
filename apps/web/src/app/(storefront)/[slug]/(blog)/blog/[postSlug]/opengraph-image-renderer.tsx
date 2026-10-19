@@ -2,7 +2,6 @@ import type { ReactElement } from 'react';
 import {
   getMerchantBlogOgImageData,
   getMerchantBlogOgMetadataData,
-  type RemoteImageLoadStatus,
 } from '@/app/(storefront)/[slug]/(blog)/blog/[postSlug]/opengraph-image-data';
 import {
   renderGenericFallback,
@@ -17,20 +16,14 @@ export const size = {
 };
 export const contentType = 'image/png';
 type ImageProps = { params: Promise<{ slug: string; postSlug: string }> };
-type ImageResponseFallback = { element: ReactElement; noStore: boolean };
-
-function isTransientImageStatus(status: RemoteImageLoadStatus): boolean {
-  return !['source_missing', 'source_disallowed', 'loaded'].includes(status);
-}
+type ImageResponseFallback = { element: ReactElement };
 
 function createImageResponse(
   element: ReactElement,
-  noStore = false,
   fallback?: ImageResponseFallback
 ) {
   return createBlogOgImageResponse(element, {
     size,
-    noStore,
     fallback,
   });
 }
@@ -59,37 +52,29 @@ export default async function Image({ params }: ImageProps) {
     data = await getMerchantBlogOgImageData(slug, postSlug);
   } catch (error) {
     console.error('Failed to resolve merchant blog OG image', { error });
-    return createImageResponse(renderGenericFallback('Post Not Found'), true);
+    return createImageResponse(renderGenericFallback('Post Not Found'));
   }
 
   if (!data) {
-    return createImageResponse(renderGenericFallback('Post Not Found'), true);
+    return createImageResponse(renderGenericFallback('Post Not Found'));
   }
 
   if (!data.post) {
-    return createImageResponse(
-      renderMerchantFallback(data, 'Post Not Found'),
-      false,
-      {
-        element: renderGenericFallback('Post Not Found'),
-        noStore: true,
-      }
-    );
+    return createImageResponse(renderMerchantFallback(data, 'Post Not Found'), {
+      element: renderGenericFallback('Post Not Found'),
+    });
   }
 
   if (!data.featuredDataUri) {
     return createImageResponse(
       renderMerchantFallback(data, data.post.title || 'Blog post'),
-      isTransientImageStatus(data.featuredImageStatus),
       {
         element: renderGenericFallback(data.post.title || 'Blog post'),
-        noStore: true,
       }
     );
   }
 
-  return createImageResponse(renderPrimaryCard(data), false, {
+  return createImageResponse(renderPrimaryCard(data), {
     element: renderMerchantFallback(data, data.post.title || 'Blog post'),
-    noStore: true,
   });
 }

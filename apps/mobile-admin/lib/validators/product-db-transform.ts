@@ -95,6 +95,7 @@ export function mapProductFormToProductDb(data: ProductFormValues) {
     has_variants,
     manage_stock: rest.manage_stock,
     price: nextPrice,
+    sku: rest.sku.trim() || null,
     stock: nextStock,
     stock_quantity: nextStock,
     variant_model: variantModel,

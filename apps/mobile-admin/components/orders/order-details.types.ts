@@ -23,11 +23,13 @@ export interface OrderDetailsItem {
 export interface OrderDetailsRecord {
   amount_paid: number;
   balance: number;
+  cancelled_at?: string | null;
   created_at: string;
   currency?: string | null;
   customer_email: string;
   customer_name: string;
   customer_phone: string | null;
+  delivery_method?: string | null;
   discount_amount: number;
   fulfillment_details?: OrderFulfillmentDetails | null;
   id: string;
@@ -50,6 +52,8 @@ export interface OrderDetailsRecord {
     | string
     | null;
   shipping_fee?: number | null;
+  shipping_funding_source?: 'customer_checkout' | 'merchant_wallet' | null;
+  airport_type?: string | null;
   shipping_provider?: string | null;
   shipping_status: ShippingStatus;
   source?: string | null;
@@ -64,11 +68,18 @@ export interface OrderDetailsRecord {
   tax_exclusive_amount?: number | null;
   tax_inclusive_amount?: number | null;
   total: number;
+  transaction_date?: string | null;
+  invoice_issue_date?: string | null;
   updated_at: string;
   virtual_account?: {
+    assignment_customer_email_source?: string | null;
     account_name: string;
     account_number: string;
     bank_name: string;
+    assigned_at?: string | null;
+    created_at?: string | null;
+    expires_at?: string | null;
+    provider?: string | null;
   } | null;
 }
 

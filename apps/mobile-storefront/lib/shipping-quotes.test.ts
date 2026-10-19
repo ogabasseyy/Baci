@@ -34,8 +34,28 @@ describe('shipping quote helpers', () => {
     const key = buildShippingQuoteContextKey('Lagos', 'Ikeja', items);
 
     expect(key).toBe(
-      'lagos::ikeja::::["prod-1","var-1",2,1000]|["prod-2","",1,450]'
+      'lagos::ikeja::::["prod-1","var-1",2,1000,""]|["prod-2","",1,450,""]'
     );
+  });
+
+  it('changes the context key when assurance is toggled', () => {
+    const withoutAssurance = buildShippingQuoteContextKey(
+      'Lagos',
+      'Ikeja',
+      items
+    );
+    const withAssurance = buildShippingQuoteContextKey('Lagos', 'Ikeja', [
+      { ...items[0], hasAssurance: true },
+      items[1],
+    ]);
+    const withCustomRate = buildShippingQuoteContextKey('Lagos', 'Ikeja', [
+      { ...items[0], hasAssurance: true, assuranceRate: 0.07 },
+      items[1],
+    ]);
+
+    expect(withAssurance).not.toBe(withoutAssurance);
+    expect(withCustomRate).not.toBe(withAssurance);
+    expect(withAssurance).toContain('"default"');
   });
 
   it('includes a normalized address segment in the key', () => {
@@ -46,7 +66,7 @@ describe('shipping quote helpers', () => {
       '  Apt 2B  '
     );
     expect(key).toBe(
-      'lagos::ikeja::apt 2b::["prod-1","var-1",2,1000]|["prod-2","",1,450]'
+      'lagos::ikeja::apt 2b::["prod-1","var-1",2,1000,""]|["prod-2","",1,450,""]'
     );
   });
 
@@ -79,7 +99,7 @@ describe('shipping quote helpers', () => {
       },
     ]);
 
-    expect(key).toContain('["prod:1|x","var:1|y",1,1000]');
+    expect(key).toContain('["prod:1|x","var:1|y",1,1000,""]');
   });
 
   it('keeps the previous quote selection when it still exists', () => {

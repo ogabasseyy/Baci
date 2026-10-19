@@ -1,169 +1,175 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mockCookies = vi.fn();
-const mockGetMerchantForApiRequest = vi.fn();
-const mockCreateClient = vi.fn();
-const mockCreateAdminClient = vi.fn();
+const mockGetPlatformAdminAuthForPermission = vi.fn();
+const mockRpc = vi.fn();
 
-vi.mock('next/headers', () => ({
-  cookies: vi.fn(async () => mockCookies()),
-}));
-
-vi.mock('@/lib/get-merchant-for-api-request', () => ({
-  getMerchantForApiRequest: (...args: unknown[]) =>
-    mockGetMerchantForApiRequest(...args),
+vi.mock('@/lib/platform-admin-auth', () => ({
+  getPlatformAdminAuthForPermission: (...args: unknown[]) =>
+    mockGetPlatformAdminAuthForPermission(...args),
 }));
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: (...args: unknown[]) => mockCreateClient(...args),
+  createClient: vi.fn(async () => ({ rpc: mockRpc })),
 }));
-
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: (...args: unknown[]) => mockCreateAdminClient(...args),
-}));
-
-function createQueryBuilder(result: { data?: unknown; error?: unknown }) {
-  const builder = {
-    data: result.data ?? null,
-    error: result.error ?? null,
-    eq: vi.fn(() => builder),
-    limit: vi.fn(() => builder),
-    maybeSingle: vi.fn(async () => result),
-    select: vi.fn(() => builder),
-  };
-
-  return builder;
-}
-
-function createMockSupabase(
-  options: {
-    user?: { id: string } | null;
-    adminCheck?: { is_platform_admin: boolean } | null;
-    indexRecommendations?: unknown;
-    missingIndexesError?: unknown;
-  } = {}
-) {
-  const { user = { id: 'user-1' } } = options;
-  const merchantsBuilder = createQueryBuilder({
-    data: options.adminCheck ?? { is_platform_admin: true },
-    error: null,
-  });
-  const indexRecsBuilder = createQueryBuilder({
-    data: options.indexRecommendations ?? [],
-    error: null,
-  });
-
-  return {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({ data: { user }, error: null }),
-    },
-    from: vi.fn((table: string) => {
-      if (table === 'merchants') {
-        return merchantsBuilder;
-      }
-      if (table === 'index_recommendations') {
-        return indexRecsBuilder;
-      }
-      return createQueryBuilder({ data: null, error: null });
-    }),
-    rpc: vi.fn().mockResolvedValue({
-      data: [],
-      error: options.missingIndexesError ?? null,
-    }),
-  };
-}
-
-let mockSupabase = createMockSupabase();
-let mockAdminRpc = vi.fn().mockResolvedValue({ data: [], error: null });
 
 import { GET } from './route';
+
+const healthPayload = {
+  checkedAt: '2026-08-05T15:00:00.000Z',
+  health: [
+    {
+      check_name: 'Database query',
+      details: { server_time: '2026-08-05T15:00:00.000Z' },
+      message: 'PostgreSQL responded.',
+      status: 'healthy',
+    },
+  ],
+  indexRecommendations: [],
+  missingIndexes: [],
+};
+
+const workerHealthPayload = {
+  check_name: 'Scheduled notification worker',
+  details: { probe: 'worker_heartbeat_and_delivery_state' },
+  message: 'Scheduled notification worker is active.',
+  status: 'healthy',
+};
 
 describe('GET /api/admin/db-health', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockSupabase = createMockSupabase();
-    mockCookies.mockReturnValue(new Map());
-    mockCreateClient.mockReturnValue(mockSupabase);
-    mockAdminRpc = vi.fn().mockResolvedValue({ data: [], error: null });
-    mockCreateAdminClient.mockReturnValue({ rpc: mockAdminRpc });
-    mockGetMerchantForApiRequest.mockResolvedValue({
-      merchantId: 'merchant-1',
-      staffAccess: { isStaff: false },
+    mockGetPlatformAdminAuthForPermission.mockResolvedValue({
+      context: { permissions: ['operations.read'], role: 'owner' },
+      status: 'authenticated',
+      user: { email: 'admin@example.com', id: 'admin-1' },
     });
-  });
-
-  it('returns 401 when the user is not authenticated', async () => {
-    mockSupabase = createMockSupabase({ user: null });
-    mockCreateClient.mockReturnValue(mockSupabase);
-
-    const response = await GET();
-    const body = await response.json();
-
-    expect(response.status).toBe(401);
-    expect(body.error).toBe('Unauthorized');
-  });
-
-  it('returns 404 when the user has no merchant', async () => {
-    mockGetMerchantForApiRequest.mockResolvedValueOnce(null);
-
-    const response = await GET();
-    const body = await response.json();
-
-    expect(response.status).toBe(404);
-    expect(body.error).toBe('Merchant not found');
-  });
-
-  it('returns 403 when the caller is staff (not owner)', async () => {
-    mockGetMerchantForApiRequest.mockResolvedValueOnce({
-      merchantId: 'merchant-1',
-      staffAccess: { isStaff: true },
-    });
-
-    const response = await GET();
-    const body = await response.json();
-
-    expect(response.status).toBe(403);
-    expect(body.error).toBe('Permission denied');
-  });
-
-  it('returns 403 when the caller is not a platform admin', async () => {
-    mockSupabase = createMockSupabase({
-      adminCheck: { is_platform_admin: false },
-    });
-    mockCreateClient.mockReturnValue(mockSupabase);
-
-    const response = await GET();
-    const body = await response.json();
-
-    expect(response.status).toBe(403);
-    expect(body.error).toBe('Forbidden - Admin access required');
-  });
-
-  it('returns 200 with health metrics for a platform admin', async () => {
-    mockAdminRpc.mockResolvedValueOnce({
-      data: [{ check: 'connections', status: 'ok' }],
-      error: null,
-    });
-
-    const response = await GET();
-    const body = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(body.health).toEqual([{ check: 'connections', status: 'ok' }]);
-    // The route uses the admin client (service-role) for check_database_health
-    // because the function is locked to service_role per migration 20260428071421.
-    expect(mockAdminRpc).toHaveBeenCalledWith('check_database_health');
-  });
-
-  it('returns 500 when an unexpected error is thrown', async () => {
-    mockGetMerchantForApiRequest.mockRejectedValueOnce(
-      new Error('database is down')
+    mockRpc.mockImplementation((name: string) =>
+      Promise.resolve({
+        data:
+          name === 'get_scheduled_notification_worker_health_v1'
+            ? workerHealthPayload
+            : healthPayload,
+        error: null,
+      })
     );
+  });
+
+  it('authenticates and authorizes before reading database health', async () => {
+    const response = await GET();
+
+    expect(mockGetPlatformAdminAuthForPermission).toHaveBeenCalledWith(
+      'operations.read'
+    );
+    expect(mockRpc).toHaveBeenCalledWith('get_admin_system_health_v1');
+    expect(mockRpc).toHaveBeenCalledWith(
+      'get_scheduled_notification_worker_health_v1'
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it.each([
+    ['unauthenticated', 401, 'Unauthorized'],
+    ['forbidden', 403, 'Forbidden'],
+  ] as const)('returns the correct boundary for %s callers', async (status, expectedStatus, expectedError) => {
+    mockGetPlatformAdminAuthForPermission.mockResolvedValueOnce({ status });
 
     const response = await GET();
-    const body = await response.json();
+
+    expect(response.status).toBe(expectedStatus);
+    await expect(response.json()).resolves.toEqual({ error: expectedError });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('fails visibly when the database check errors', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: {
+        code: '42501',
+        message: 'provider diagnostic must not reach application logs',
+      },
+    });
+
+    const response = await GET();
 
     expect(response.status).toBe(500);
-    expect(body.error).toBe('Failed to check database health');
+    await expect(response.json()).resolves.toEqual({
+      error: 'Failed to check database health',
+    });
+    expect(errorLog).toHaveBeenCalledWith('[Admin system health] RPC failed', {
+      code: '42501',
+    });
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(
+      'provider diagnostic'
+    );
+    errorLog.mockRestore();
+  });
+
+  it('rejects malformed data instead of returning false healthy empties', async () => {
+    mockRpc.mockResolvedValueOnce({ data: { health: [] }, error: null });
+
+    const response = await GET();
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Invalid database health response',
+    });
+  });
+
+  it('adds a critical health check when the notification-worker probe fails', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockRpc
+      .mockResolvedValueOnce({ data: healthPayload, error: null })
+      .mockResolvedValueOnce({
+        data: null,
+        error: {
+          code: '42883',
+          message: 'worker implementation detail must not reach logs',
+        },
+      });
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      health: expect.arrayContaining([
+        expect.objectContaining({
+          check_name: 'Scheduled notification worker',
+          status: 'critical',
+        }),
+      ]),
+    });
+    expect(errorLog).toHaveBeenCalledWith(
+      '[Admin system health] Notification worker probe failed',
+      { code: '42883' }
+    );
+    expect(JSON.stringify(errorLog.mock.calls)).not.toContain(
+      'worker implementation detail'
+    );
+    errorLog.mockRestore();
+  });
+
+  it('adds a critical health check when the notification-worker probe is malformed', async () => {
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockRpc
+      .mockResolvedValueOnce({ data: healthPayload, error: null })
+      .mockResolvedValueOnce({ data: { status: 'healthy' }, error: null });
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      health: expect.arrayContaining([
+        expect.objectContaining({
+          check_name: 'Scheduled notification worker',
+          status: 'critical',
+        }),
+      ]),
+    });
+    expect(errorLog).toHaveBeenCalledWith(
+      '[Admin system health] Notification worker probe returned invalid response'
+    );
+    errorLog.mockRestore();
   });
 });

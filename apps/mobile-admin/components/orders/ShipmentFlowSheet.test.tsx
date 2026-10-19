@@ -8,6 +8,28 @@ const runtimeState = vi.hoisted(() => ({
   isIos: true,
 }));
 
+vi.mock('./CheckoutShippingRecoveryPanel', () => ({
+  CheckoutShippingRecoveryPanel: ({
+    onBlockingChange,
+    onBusyChange,
+  }: {
+    onBlockingChange: (value: boolean) => void;
+    onBusyChange: (value: boolean) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() => {
+        onBlockingChange(true);
+        onBusyChange(true);
+      }}
+    >
+      Start recovery preview
+    </button>
+  ),
+}));
+
+vi.mock('expo-clipboard', () => ({ setStringAsync: vi.fn() }));
+
 vi.mock('@/config/runtime-platform', () => ({
   isRuntimePlatform: (platform: string) =>
     platform === 'ios' ? runtimeState.isIos : false,
@@ -210,5 +232,24 @@ describe('ShipmentFlowSheet', () => {
     rerender(<ShipmentFlowSheet {...defaultProps} visible={true} />);
 
     expect(screen.queryByTestId('identifier-scanner')).not.toBeInTheDocument();
+  });
+  it('blocks booking and dismissing while recovery is in flight', () => {
+    render(
+      <ShipmentFlowSheet
+        {...defaultProps}
+        step="method"
+        selectedMode="provider"
+        recoveryOrder={{ id: 'o' } as never}
+      />
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Start recovery preview' })
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Book with Topship' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Cancel shipment flow' })
+    );
+    expect(defaultProps.onContinueFromMethod).not.toHaveBeenCalled();
+    expect(defaultProps.onClose).not.toHaveBeenCalled();
   });
 });

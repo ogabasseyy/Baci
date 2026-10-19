@@ -1,17 +1,36 @@
 import {
-  MAX_AI_COPY_LENGTH,
-  MAX_AI_LABEL_LENGTH,
-  MAX_AI_URL_LENGTH,
+  type BuilderDesignCapabilityManifest,
+  builderDesignCapabilities,
 } from '@baci/shared/contracts';
 
-export function getBuilderAiSpecialOperationGuidance() {
+function projectProps(
+  manifest: BuilderDesignCapabilityManifest,
+  componentType: string,
+  operation: string
+) {
+  const props =
+    manifest.components.find(
+      (capability) => capability.componentType === componentType
+    )?.specialOperations?.[operation] ?? {};
+  return Object.fromEntries(
+    Object.entries(props).map(([property, descriptor]) => [
+      property,
+      { ...descriptor },
+    ])
+  );
+}
+
+export function getBuilderAiSpecialOperationGuidance(
+  manifest: BuilderDesignCapabilityManifest = builderDesignCapabilities
+) {
   return {
     updateCarouselSlide: {
-      ctaLink: { maximumLength: MAX_AI_URL_LENGTH },
-      ctaText: { maximumLength: MAX_AI_LABEL_LENGTH },
-      subtitle: { maximumLength: MAX_AI_COPY_LENGTH },
-      title: { maximumLength: MAX_AI_LABEL_LENGTH },
+      ...projectProps(manifest, 'HeroCarousel', 'updateCarouselSlide'),
+      mediaMutation: {
+        message: manifest.refusalCodes['media-review'],
+        refusalCode: 'media-review',
+      },
     },
-    updateRoot: { title: { maximumLength: MAX_AI_LABEL_LENGTH } },
+    updateRoot: { title: { maximumLength: 120 } },
   };
 }

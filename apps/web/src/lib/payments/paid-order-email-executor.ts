@@ -85,14 +85,20 @@ function validateRichPaidOrder(order: RichPaidOrder) {
 
 export function buildEmailExecutor({
   actor,
+  emailMaxAttemptsPerSender,
+  fallbackDeadlineMs,
   merchantDetails,
   merchantFetchError,
   order,
+  signal,
 }: {
   actor: string;
+  emailMaxAttemptsPerSender?: number;
+  fallbackDeadlineMs?: number;
   merchantDetails: MerchantDetails | null;
   merchantFetchError: { code?: string; message?: string } | null;
   order: RichPaidOrder;
+  signal?: AbortSignal;
 }): StepExecutor {
   return async () => {
     if (
@@ -141,6 +147,13 @@ export function buildEmailExecutor({
       subtotal: toNumber(validatedOrder.subtotal, 'order subtotal'),
       total: toNumber(validatedOrder.total, 'order total'),
     };
+    if (signal?.aborted) {
+      // The pass budget died before dispatch (slow finalizer DB ops
+      // can consume the shared timeout): nothing was sent, so this
+      // is a retryable definite non-send — not the indeterminate
+      // outcome an abort after dispatch would be.
+      throw new Error('paid_email_aborted_before_dispatch');
+    }
     const result = await sendEmail({
       auditContext: {
         customerId: validatedOrder.customer_id ?? null,
@@ -150,18 +163,36 @@ export function buildEmailExecutor({
       },
       clientReference: `order:${validatedOrder.id}:paid_email`,
       emailType: 'orders',
+      // Short passes cap the loop so the send fits their budget; unset
+      // keeps the default four attempts and the next sweep retries.
+      ...(emailMaxAttemptsPerSender !== undefined && {
+        maxAttemptsPerSender: emailMaxAttemptsPerSender,
+      }),
+      fallbackDeadlineMs,
       fromName: getFromName(validatedMerchantDetails),
       htmlContent: generateOrderConfirmationEmail(emailData),
       replyTo: resolveMerchantReplyTo({
         merchantDetails: validatedMerchantDetails,
         rootDomain,
       }),
+      signal,
       subject: `Order Confirmation - #${emailData.orderNumber}`,
       textContent: generateOrderConfirmationText(emailData),
       to: validatedOrder.customer_email,
       toName: validatedOrder.customer_name ?? undefined,
     });
     if (!result.success) {
+      if (result.deliveryOutcome === 'unknown') {
+        // The send may have reached ZeptoMail (e.g. the pass deadline
+        // aborted it after dispatch): retrying could duplicate the order
+        // confirmation, so persist the indeterminate outcome as terminal
+        // instead of a retryable failure. The ZeptoMail audit trail
+        // (client_reference order:<id>:paid_email) is the source of truth.
+        return {
+          delivery_uncertain: true,
+          error: result.error || result.errorCode || 'email_failed',
+        };
+      }
       throw new Error(result.error || result.errorCode || 'email_failed');
     }
     return { messageId: result.messageId };

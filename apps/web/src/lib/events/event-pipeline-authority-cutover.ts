@@ -4,5 +4,7 @@
  */
 export const eventPipelineAuthorityCutover = {
   queueOnlyDeliveryActivated: false,
-  temporaryAuthorityExpiresAt: '2026-09-16T00:00:00.000Z',
+  merchantAuthorityExpiresAt: '2026-09-16T00:00:00.000Z',
+  // Only the platform edge was renewed; this is not merchant authorization.
+  temporaryAuthorityExpiresAt: '2026-09-30T00:00:00.000Z',
 } as const;

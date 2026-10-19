@@ -7,10 +7,30 @@ const candidate = {
   },
 };
 
+const defaultResearchResult = {
+  status: 0,
+  stdout:
+    '{"type":"item.completed","item":{"type":"agent_message","text":"RESEARCH_SUMMARY: traced the failure to the reported boundary.\\nROOT_CAUSE_CONFIDENCE: medium\\nOPTIONS_CONSIDERED:\\n- smallest code fix\\n- operational mitigation\\nSELECTED_FIX: smallest code fix\\nVALIDATION_PLAN: run the focused regression suite"}}\n{"type":"turn.completed"}\n',
+  stderr: '',
+};
+const defaultImplementationResult = {
+  status: 0,
+  stdout: '{"type":"turn.completed"}\n',
+  stderr: '',
+};
+
+const isResearchInvocation = (command, args) =>
+  (command === 'codex' &&
+    args.includes('--sandbox') &&
+    args.includes('read-only')) ||
+  (command === 'docker' && args.includes('--read-only'));
+
 function makeRunner({
   changedFiles,
   cleanupResult,
   remediationResult,
+  researchResult,
+  implementationResult,
   statusOutput,
   verificationResult,
 } = {}) {
@@ -76,13 +96,10 @@ function makeRunner({
         };
       }
       if (command === 'codex') {
-        return (
-          remediationResult ?? {
-            status: 0,
-            stdout: '{"type":"turn.completed"}\n',
-            stderr: '',
-          }
-        );
+        if (remediationResult) return remediationResult;
+        return args.includes('--sandbox') && args.includes('read-only')
+          ? (researchResult ?? defaultResearchResult)
+          : (implementationResult ?? defaultImplementationResult);
       }
       if (command === 'bash') {
         return verificationResult ?? { status: 0, stdout: '', stderr: '' };
@@ -91,17 +108,20 @@ function makeRunner({
         if (args[0] === 'rm') {
           return cleanupResult ?? { status: 0, stdout: '', stderr: '' };
         }
-        return args.includes('--dangerously-bypass-approvals-and-sandbox')
-          ? (remediationResult ?? {
-              status: 0,
-              stdout: '{"type":"turn.completed"}\n',
-              stderr: '',
-            })
-          : (verificationResult ?? { status: 0, stdout: '', stderr: '' });
+        if (args.includes('--read-only'))
+          return researchResult ?? defaultResearchResult;
+        if (args.includes('--dangerously-bypass-approvals-and-sandbox'))
+          return implementationResult ?? defaultImplementationResult;
+        return verificationResult ?? { status: 0, stdout: '', stderr: '' };
       }
       return { status: 0, stdout: '', stderr: '' };
     },
   };
 }
 
-export const remediationGitWorkflowTestFixtures = { candidate, makeRunner };
+export const remediationGitWorkflowTestFixtures = {
+  candidate,
+  defaultResearchResult,
+  isResearchInvocation,
+  makeRunner,
+};

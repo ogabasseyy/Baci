@@ -163,4 +163,23 @@ describe('OrderCard', () => {
 
     expect(onSelect).toHaveBeenCalledWith('ORD-001', true);
   });
+
+  it('passes the order currency to the total formatter', () => {
+    const formatCurrency = vi.fn(
+      (amount: number, currency?: string | null) => `${currency}:${amount}`
+    );
+
+    render(
+      <OrderCard
+        order={makeOrder({ source: 'jumia', currency: 'KES' })}
+        isSelected={false}
+        onSelect={vi.fn()}
+        onStatusUpdate={vi.fn()}
+        formatCurrency={formatCurrency}
+      />
+    );
+
+    expect(formatCurrency).toHaveBeenCalledWith(25000, 'KES');
+    expect(screen.getByText('KES:25000')).toBeInTheDocument();
+  });
 });

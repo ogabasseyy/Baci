@@ -2,6 +2,7 @@
 
 import { Gift, ShoppingCart, Sparkles, User } from 'lucide-react';
 import type React from 'react';
+import { AgentUiEventRenderer } from './agent-ui-event-renderer';
 import type { ChatMessage } from './types';
 import { renderMarkdown } from './markdown-renderer';
 
@@ -78,6 +79,10 @@ export const ChatMessageBubble: React.FC<ChatMessageBubbleProps> = ({
           }`}
         >
           {renderMarkdown(message.text)}
+
+          {message.role === 'model' && message.uiEvents && (
+            <AgentUiEventRenderer events={message.uiEvents} />
+          )}
 
           {/* Santa Wish Granted - Add to Cart Button */}
           {santaActions.length > 0 && (

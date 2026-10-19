@@ -11,6 +11,7 @@ import type {
   ReactNode,
 } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { platformAdminRolePermissions } from '@/config/platform-admin-rbac';
 
 const mockPush = vi.fn();
 const mockRefresh = vi.fn();
@@ -112,6 +113,11 @@ vi.mock('@/lib/supabase/client', () => ({
 
 import { AdminShell } from './admin-shell';
 
+const ownerContext = {
+  permissions: [...platformAdminRolePermissions.owner],
+  role: 'owner' as const,
+};
+
 describe('AdminShell', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -120,7 +126,7 @@ describe('AdminShell', () => {
 
   it('renders admin navigation, account identity, and page content', () => {
     render(
-      <AdminShell adminEmail="admin@example.com">
+      <AdminShell adminContext={ownerContext} adminEmail="admin@example.com">
         <div>Merchant operations</div>
       </AdminShell>
     );
@@ -134,6 +140,7 @@ describe('AdminShell', () => {
       within(adminNavigation).getByRole('link', { name: /Merchants/i })
     ).toHaveAttribute('aria-current', 'page');
     expect(screen.getByText('admin@example.com')).toBeInTheDocument();
+    expect(screen.getByText('owner')).toBeInTheDocument();
     expect(screen.getByText('Merchant operations')).toBeInTheDocument();
     expect(
       screen.getByRole('link', { name: /Skip to main content/i })
@@ -142,7 +149,7 @@ describe('AdminShell', () => {
 
   it('signs out through Supabase and returns to login', async () => {
     render(
-      <AdminShell adminEmail="admin@example.com">
+      <AdminShell adminContext={ownerContext} adminEmail="admin@example.com">
         <div>Merchant operations</div>
       </AdminShell>
     );
@@ -154,5 +161,67 @@ describe('AdminShell', () => {
     });
     expect(mockPush).toHaveBeenCalledWith('/login');
     expect(mockRefresh).toHaveBeenCalledOnce();
+  });
+
+  it('routes eligible admins to platform settings instead of merchant settings', () => {
+    render(
+      <AdminShell adminContext={ownerContext} adminEmail="admin@example.com">
+        <div>Merchant operations</div>
+      </AdminShell>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Platform Settings/i }));
+
+    expect(mockPush).toHaveBeenCalledWith('/admin/settings');
+    expect(mockPush).not.toHaveBeenCalledWith('/dashboard/settings');
+  });
+
+  it('hides navigation the current role is not permitted to use', () => {
+    render(
+      <AdminShell
+        adminContext={{
+          permissions: [...platformAdminRolePermissions.viewer],
+          role: 'viewer',
+        }}
+        adminEmail="viewer@example.com"
+      >
+        <div>Read-only operations</div>
+      </AdminShell>
+    );
+
+    const adminNavigation = screen.getByRole('navigation', {
+      name: 'Admin navigation',
+    });
+
+    expect(
+      within(adminNavigation).getByRole('link', { name: /Analytics/i })
+    ).toBeInTheDocument();
+    expect(
+      within(adminNavigation).queryByRole('link', { name: /Access/i })
+    ).not.toBeInTheDocument();
+    expect(
+      within(adminNavigation).queryByRole('link', {
+        name: /Reconciliation/i,
+      })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Platform Settings/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('routes the brand link to the first page permitted for content-only admins', () => {
+    render(
+      <AdminShell
+        adminContext={{ permissions: ['content.manage'], role: 'content' }}
+        adminEmail="content@example.com"
+      >
+        <div>Content operations</div>
+      </AdminShell>
+    );
+
+    expect(screen.getAllByRole('link', { name: /Logo/i })[0]).toHaveAttribute(
+      'href',
+      '/admin/blog'
+    );
   });
 });

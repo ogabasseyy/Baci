@@ -44,6 +44,12 @@ export function renderBankDetailsHtml({
   if (isPaid) {
     return '';
   }
+  // Nothing remains due (fully discounted or fully credited): transfer
+  // instructions would describe an impossible payment, even when a stale
+  // virtual account is still attached to the order.
+  if (order.balance <= 0) {
+    return '';
+  }
 
   const parts: string[] = [];
 

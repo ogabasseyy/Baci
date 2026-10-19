@@ -103,7 +103,7 @@ BEGIN
     exemption_reason = EXCLUDED.exemption_reason,
     exemption_reason_code = EXCLUDED.exemption_reason_code;
 
-  PERFORM public.update_admin_order(
+  PERFORM public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     v_payload || jsonb_build_object(
       'items', v_existing_items || jsonb_build_array(v_new_line)
@@ -141,7 +141,7 @@ BEGIN
       'items', v_existing_items || jsonb_build_array(v_omitted_line)
     );
 
-  PERFORM public.update_admin_order(v_order_id, v_omitted_payload);
+  PERFORM public.update_admin_order_with_transaction_discount_metadata(v_order_id, v_omitted_payload);
   IF NOT EXISTS (
     SELECT 1 FROM public.orders
     WHERE id = v_order_id AND branch_id = v_branch_id
@@ -152,7 +152,7 @@ BEGIN
   END IF;
   v_existing_items := v_existing_items || jsonb_build_array(v_omitted_line);
 
-  PERFORM public.update_admin_order(
+  PERFORM public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     v_omitted_payload || jsonb_build_object(
       'branch_id', null,
@@ -183,7 +183,7 @@ BEGIN
   SET vat_category_code = 'Z', vat_rate = 0, vat_amount = 0
   WHERE order_id = v_order_id;
 
-  PERFORM public.update_admin_order(
+  PERFORM public.update_admin_order_with_transaction_discount_metadata(
     v_order_id,
     v_omitted_payload || jsonb_build_object(
       'tax_amount', 1250,

@@ -1,62 +1,16 @@
 'use client';
-
-import { useEffect, useState } from 'react';
-
-interface LoyaltyReward {
-  id: string;
-  name: string;
-  description: string;
-  points_required: number;
-  reward_type:
-    | 'discount'
-    | 'free_shipping'
-    | 'free_product'
-    | 'exclusive_access';
-  discount_type?: 'percentage' | 'fixed';
-  discount_value?: number;
-  min_tier?: string;
-  active: boolean;
-}
-
-interface PointsTransaction {
-  id: string;
-  points: number;
-  type: 'purchase' | 'bonus' | 'referral' | 'redemption' | 'adjustment';
-  description: string;
-  created_at: string;
-}
-
-interface LoyaltySettings {
-  points_per_naira: number;
-  naira_per_point: number;
-  welcome_bonus: number;
-  referral_bonus_referrer: number;
-  referral_bonus_referee: number;
-}
-
-interface LoyaltyData {
-  enrolled: boolean;
-  points_balance: number;
-  lifetime_points: number;
-  tier: 'bronze' | 'silver' | 'gold' | 'platinum';
-  next_tier: string | null;
-  points_to_next_tier: number;
-  tier_thresholds: {
-    bronze: number;
-    silver: number;
-    gold: number;
-    platinum: number;
-  };
-  available_rewards: LoyaltyReward[];
-  redeemable_rewards: LoyaltyReward[];
-  recent_transactions: PointsTransaction[];
-  settings: LoyaltySettings;
-}
+import { useEffect, useRef, useState } from 'react';
+import { buildCsrfHeaders } from '@/lib/csrf';
+import { type LoyaltyData, loadLoyaltyData } from '@/lib/loyalty-data-client';
+import { redemptionIdempotencyKeys } from '@/lib/loyalty-redemption-keys';
+import { getLoyaltyTierInfo } from '@/lib/loyalty-tier-info';
 
 interface RedemptionResult {
   success: boolean;
   redemption_code?: string;
   reward_name?: string;
+  reward_type?: string;
+  discount_value?: number;
   points_spent?: number;
   new_balance?: number;
   expires_at?: string;
@@ -71,113 +25,35 @@ interface EnrollmentResult {
   referral_code?: string;
   error?: string;
 }
-
-interface LoyaltyStateHandlers {
-  setData: (data: LoyaltyData | null) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
-}
-
-// Mock data for preview/demo merchants. Built fresh per call so consumers
-// never share a mutable reference.
-function buildPreviewLoyaltyData(): LoyaltyData {
-  return {
-    enrolled: true,
-    points_balance: 150,
-    lifetime_points: 500,
-    tier: 'silver',
-    next_tier: 'gold',
-    points_to_next_tier: 350,
-    tier_thresholds: {
-      bronze: 0,
-      silver: 100,
-      gold: 500,
-      platinum: 1000,
-    },
-    available_rewards: [],
-    redeemable_rewards: [],
-    recent_transactions: [],
-    settings: {
-      points_per_naira: 1,
-      naira_per_point: 1,
-      welcome_bonus: 50,
-      referral_bonus_referrer: 50,
-      referral_bonus_referee: 50,
-    },
-  };
-}
-
-// Module-scope helper so the try/finally + throw stay outside the hook body
-// (React Compiler cannot lower try/finally inside components/hooks yet).
-async function loadLoyaltyData(
-  merchantId: string | undefined,
-  customerId: string | undefined,
-  { setData, setLoading, setError }: LoyaltyStateHandlers,
-  signal?: AbortSignal
-): Promise<void> {
-  if (signal?.aborted) return;
-
-  if (!merchantId || !customerId) {
-    setData(null);
-    setError(null);
-    setLoading(false);
-    return;
-  }
-
-  if (merchantId.endsWith('-preview') || merchantId.startsWith('demo-')) {
-    setData(buildPreviewLoyaltyData());
-    setError(null);
-    setLoading(false);
-    return;
-  }
-
-  try {
-    setLoading(true);
-    const params = new URLSearchParams({
-      merchant_id: merchantId,
-      customer_id: customerId,
-    });
-
-    const response = await fetch(`/api/storefront/loyalty?${params}`, {
-      signal,
-    });
-    if (signal?.aborted) return;
-    if (!response.ok) {
-      if (response.status === 404) {
-        // Loyalty program not available or customer not enrolled
-        setData(null);
-        setError(null);
-        return;
-      }
-      throw new Error('Failed to fetch loyalty data');
-    }
-
-    const loyaltyData = await response.json();
-    if (signal?.aborted) return;
-    setData(loyaltyData);
-    setError(null);
-  } catch (err) {
-    if (signal?.aborted) return;
-    console.error('Error fetching loyalty data:', err);
-    setError(err instanceof Error ? err.message : 'Unknown error');
-    setData(null);
-  } finally {
-    if (!signal?.aborted) {
-      setLoading(false);
-    }
-  }
-}
-
 export function useLoyalty(merchantId?: string, customerId?: string) {
   const [data, setData] = useState<LoyaltyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchLoyaltyData = () =>
-    loadLoyaltyData(merchantId, customerId, { setData, setLoading, setError });
+  // One in-flight load per instance: a refetch (or identity change)
+  // aborts the previous request so a slow first response cannot
+  // overwrite fresher data or clear its loading state.
+  const controllerRef = useRef<AbortController | null>(null);
+  // A post-mutation refresh runs only while the mutation's identity is
+  // still current, so a slow enroll/redeem cannot abort the new load.
+  const identityRef = useRef({ merchantId, customerId });
+  const fetchLoyaltyData = () => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    return loadLoyaltyData(
+      merchantId,
+      customerId,
+      { setData, setLoading, setError },
+      controller.signal
+    );
+  };
 
   useEffect(() => {
+    identityRef.current = { merchantId, customerId };
+    controllerRef.current?.abort();
     const controller = new AbortController();
+    controllerRef.current = controller;
     void loadLoyaltyData(
       merchantId,
       customerId,
@@ -195,9 +71,7 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     try {
       const response = await fetch('/api/storefront/loyalty/enroll', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: buildCsrfHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           merchant_id: merchantId,
           customer_id: customerId,
@@ -211,8 +85,13 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
         return { success: false, error: result.error };
       }
 
-      // Refresh loyalty data after enrollment
-      await fetchLoyaltyData();
+      // Refresh loyalty data after enrollment (skipped if superseded)
+      if (
+        identityRef.current.merchantId === merchantId &&
+        identityRef.current.customerId === customerId
+      ) {
+        await fetchLoyaltyData();
+      }
 
       return {
         success: true,
@@ -235,11 +114,24 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     }
 
     try {
+      // Stable per-reward key: a timeout retry reuses the failed
+      // attempt's key so the RPC replays instead of re-spending. The key
+      // clears only on success (a 4xx validation failure keeps it: fixing
+      // the cause and retrying replays nothing since failures never store).
+      // Key acquisition is inside the try: it deliberately rejects when
+      // browser storage cannot durably persist the key, and callers
+      // only handle resolved failure results.
+      const idempotencyKey = await redemptionIdempotencyKeys.forReward(
+        merchantId,
+        customerId,
+        rewardId
+      );
       const response = await fetch('/api/storefront/loyalty/redeem', {
         method: 'POST',
-        headers: {
+        headers: buildCsrfHeaders({
           'Content-Type': 'application/json',
-        },
+          'Idempotency-Key': idempotencyKey,
+        }),
         body: JSON.stringify({
           merchant_id: merchantId,
           customer_id: customerId,
@@ -253,13 +145,27 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
         return { success: false, error: result.error };
       }
 
-      // Refresh loyalty data after redemption
-      await fetchLoyaltyData();
+      redemptionIdempotencyKeys.clearForReward(
+        merchantId,
+        customerId,
+        rewardId,
+        idempotencyKey
+      );
+
+      // Refresh loyalty data after redemption (skipped if superseded)
+      if (
+        identityRef.current.merchantId === merchantId &&
+        identityRef.current.customerId === customerId
+      ) {
+        await fetchLoyaltyData();
+      }
 
       return {
         success: true,
         redemption_code: result.data.redemption_code,
         reward_name: result.data.reward_name,
+        reward_type: result.data.reward_type,
+        discount_value: result.data.discount_value,
         points_spent: result.data.points_spent,
         new_balance: result.data.new_balance,
         expires_at: result.data.expires_at,
@@ -286,58 +192,8 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     return points * data.settings.naira_per_point;
   };
 
-  // Get tier display info
-  const getTierInfo = (tier: string) => {
-    const tierColors = {
-      bronze: {
-        bg: 'bg-amber-100',
-        text: 'text-amber-800',
-        border: 'border-amber-300',
-      },
-      silver: {
-        bg: 'bg-gray-100',
-        text: 'text-gray-800',
-        border: 'border-gray-300',
-      },
-      gold: {
-        bg: 'bg-yellow-100',
-        text: 'text-yellow-800',
-        border: 'border-yellow-400',
-      },
-      platinum: {
-        bg: 'bg-purple-100',
-        text: 'text-purple-800',
-        border: 'border-purple-400',
-      },
-    };
-
-    const tierBenefits = {
-      bronze: ['Earn 1 point per ₦100 spent', 'Access to basic rewards'],
-      silver: [
-        'Earn 1.5x points',
-        'Early access to sales',
-        'Free shipping on orders over ₦20,000',
-      ],
-      gold: [
-        'Earn 2x points',
-        'Priority customer support',
-        'Exclusive discounts',
-        'Free shipping',
-      ],
-      platinum: [
-        'Earn 3x points',
-        'VIP support',
-        'Exclusive products',
-        'Free express shipping',
-      ],
-    };
-
-    return {
-      colors: tierColors[tier as keyof typeof tierColors] || tierColors.bronze,
-      benefits:
-        tierBenefits[tier as keyof typeof tierBenefits] || tierBenefits.bronze,
-    };
-  };
+  // Get tier display info (policy in @/lib/loyalty-tier-info)
+  const getTierInfo = (tier: string) => getLoyaltyTierInfo(data?.tiers, tier);
 
   return {
     data,
@@ -348,6 +204,7 @@ export function useLoyalty(merchantId?: string, customerId?: string) {
     tier: data?.tier ?? 'bronze',
     nextTier: data?.next_tier,
     pointsToNextTier: data?.points_to_next_tier ?? 0,
+    maxRedemptionPercentage: data?.settings?.max_redemption_percentage ?? null,
     availableRewards: data?.available_rewards ?? [],
     redeemableRewards: data?.redeemable_rewards ?? [],
     recentTransactions: data?.recent_transactions ?? [],

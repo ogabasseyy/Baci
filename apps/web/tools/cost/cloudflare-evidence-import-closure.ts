@@ -4,16 +4,23 @@ import {
   dirname,
   extname,
   isAbsolute,
+  join,
   relative,
   resolve,
   sep,
 } from 'node:path';
-import ts from '@typescript/typescript6';
+import { fileURLToPath } from 'node:url';
+import type * as TypeScript from '@typescript/typescript6';
 import {
   type EvidenceDependencyIntegrityManifest,
   verifyEvidenceDependencyFile,
 } from './cloudflare-evidence-dependency-integrity';
 import { verifyReviewedEvidenceFile } from './cloudflare-evidence-runner-modules';
+
+const appRequire = createRequire(
+  join(dirname(fileURLToPath(import.meta.url)), '../../package.json')
+);
+const ts = appRequire('@typescript/typescript6') as typeof TypeScript;
 
 const MODULE_EXTENSIONS = [
   '',
@@ -35,7 +42,7 @@ function staticImportSpecifiers(source: string, filePath: string) {
     ts.ScriptKind.TS
   );
   const specifiers: string[] = [];
-  const visit = (node: ts.Node) => {
+  const visit = (node: TypeScript.Node) => {
     const moduleSpecifier =
       (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) &&
       node.moduleSpecifier &&

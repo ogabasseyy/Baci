@@ -169,6 +169,18 @@ describe('loadComparePage', () => {
     vi.unstubAllEnvs();
   });
 
+  it('rejects a decoded self-comparison before loading the cached compare model', async () => {
+    const result = await loadComparePage({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+      comparisonSlug: 'iphone-17-pro-max-vs-iphone-17-pro-max',
+    });
+
+    expect(result).toBeNull();
+    expect(mockGetCachedCompareCategoryInventory).not.toHaveBeenCalled();
+    expect(mockGetCachedProductWithDetails).not.toHaveBeenCalled();
+  });
+
   it('returns a canonical product-vs-product page model for eligible products', async () => {
     mockGetCachedProductWithDetails.mockResolvedValueOnce({
       ...categoryPageData.products[0],
@@ -785,8 +797,7 @@ describe('loadComparePage', () => {
 
       expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
         'merchant-1',
-        'smartphones',
-        'ogabassey'
+        'smartphones'
       );
     });
 
@@ -799,8 +810,7 @@ describe('loadComparePage', () => {
 
       expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
         'merchant-1',
-        'smartphones',
-        'ogabassey'
+        'smartphones'
       );
       expect(result?.kind).toBe('brand');
     });
@@ -853,8 +863,7 @@ describe('loadComparePage', () => {
     expect(mockGetMerchantByIdentifier).toHaveBeenCalledWith('ogabassey.com');
     expect(mockGetCachedCompareCategoryInventory).toHaveBeenCalledWith(
       merchant.id,
-      'smartphones',
-      'ogabassey.com'
+      'smartphones'
     );
     expect(result?.kind).toBe('brand');
   });

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  STOREFRONT_AUTH_MERCHANT_RPC,
   STOREFRONT_BLOG_LISTING_STATUS_RPC,
   STOREFRONT_BLOG_POST_STATUS_RPC,
   STOREFRONT_PDP_PREFLIGHT_RPC,
+  storefrontAuthMerchantRowSchema,
   storefrontBlogListingStatusRowSchema,
   storefrontBlogPostStatusRowSchema,
   storefrontPdpPreflightRowSchema,
@@ -106,6 +108,21 @@ describe('storefrontPdpPreflightRowSchema', () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe('storefrontAuthMerchantRowSchema', () => {
+  it('accepts the minimal publication projection', () => {
+    expect(
+      storefrontAuthMerchantRowSchema.safeParse({ is_published: true }).success
+    ).toBe(true);
+  });
+
+  it('rejects a non-boolean publication flag', () => {
+    expect(
+      storefrontAuthMerchantRowSchema.safeParse({ is_published: 'true' })
+        .success
+    ).toBe(false);
   });
 });
 
@@ -243,6 +260,9 @@ describe('RPC name constants', () => {
     );
     expect(STOREFRONT_BLOG_LISTING_STATUS_RPC).toBe(
       'get_storefront_blog_listing_status'
+    );
+    expect(STOREFRONT_AUTH_MERCHANT_RPC).toBe(
+      'resolve_storefront_auth_merchant'
     );
   });
 });

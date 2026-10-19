@@ -1,11 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { AgenticCheckoutBuyer } from '@/lib/agentic/checkout-completion-response';
+import {
+  type AgenticCheckoutOrderResult,
+  submitSharedCartBindingOrder,
+} from '@/lib/agentic/checkout-order-binding';
+import {
+  buildAgenticOrderItems,
+  buildAgenticOrderRpcArgs,
+} from '@/lib/agentic/checkout-order-rpc-args';
 import {
   computeAgenticOrderTax,
   isTaxComputeUuidError,
 } from '@/lib/agentic/checkout-order-tax';
-import { sendAgenticWebhook } from '@/lib/agentic/webhooks';
-import { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+import { OrderConditionUnavailableError } from '@/lib/checkout/order-condition-prices';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 import { orderCreateSchema } from '@/schemas/orders';
@@ -14,6 +20,9 @@ const CLIENT_ORDER_ERROR_CODES = new Set([
   'invalid_items',
   'invalid_quantity',
   'invalid_variant',
+  'invalid_condition_offer',
+  'condition_offer_price_changed',
+  'insufficient_condition_offer_stock',
   'insufficient_stock',
   'insufficient_variant_stock',
   'merchant_not_found',
@@ -46,18 +55,19 @@ const CLIENT_ORDER_ERROR_CODES = new Set([
   '22P02',
 ]);
 
-export interface AgenticCheckoutOrderResult {
-  data: Record<string, unknown>;
-  error?: string;
-  ok: boolean;
-  orderId?: string;
-  status: number;
-  statusText: string;
-}
+export type { AgenticCheckoutOrderResult } from '@/lib/agentic/checkout-order-binding';
 
 export async function createAgenticCheckoutOrder(
   orderPayload: Record<string, unknown>,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options?: {
+    /**
+     * Preparing principal of the bound checkout session, resolved from
+     * the server-side session record by the caller. The binding RPC
+     * requires it on every submit; omitting it fails closed there.
+     */
+    boundPrincipalId?: string | null;
+  }
 ): Promise<AgenticCheckoutOrderResult> {
   const parseResult = orderCreateSchema.safeParse(orderPayload);
   if (!parseResult.success) {
@@ -72,24 +82,7 @@ export async function createAgenticCheckoutOrder(
   }
 
   const body = parseResult.data;
-  const orderItemsPayload = body.items.map((item) => {
-    const itemPrice = item.negotiatedPrice ?? item.price;
-    const hasAssurance = item.has_assurance || false;
-
-    return {
-      assurance_fee: hasAssurance
-        ? calculateAssuranceFee(itemPrice, item.quantity)
-        : 0,
-      condition: item.condition,
-      has_assurance: hasAssurance,
-      image_url: item.imageUrl ?? item.image_url ?? null,
-      product_id: item.product_id || item.productId || item.id,
-      quantity: item.quantity,
-      variant_attributes:
-        item.variantAttributes || item.variant_attributes || {},
-      variant_id: item.variantId || item.variant_id,
-    };
-  });
+  const orderItemsPayload = buildAgenticOrderItems(body);
 
   if (orderItemsPayload.some((item) => !item.product_id)) {
     return {
@@ -120,6 +113,7 @@ export async function createAgenticCheckoutOrder(
   // Wrap the call so a failure surfaces as a 500 the GPT-agent
   // caller can retry — distinct from the validation-shaped 400s
   // the RPC itself produces.
+  const sharedCartBinding = body.shared_cart ?? null;
   let computedTaxAmount: number;
   try {
     // CodeRabbit High (PR #1622 round 7): use the caller-supplied
@@ -133,14 +127,28 @@ export async function createAgenticCheckoutOrder(
       supabase,
     });
   } catch (taxError) {
-    // Codex P2 (PR #1622 round 7): a malformed product_id /
-    // variant_id from the agentic caller cascades into Postgres
-    // 22P02 inside the helper. Mirror the storefront route — map
-    // UUID parse errors to a 400 with `invalid_items` (already
-    // in `CLIENT_ORDER_ERROR_CODES` and the agentic spec) so the
-    // GPT agent fixes its payload instead of treating this as
-    // an outage.
-    if (isTaxComputeUuidError(taxError)) {
+    if (taxError instanceof OrderConditionUnavailableError) {
+      if (!sharedCartBinding)
+        return {
+          data: { error: 'invalid_condition_offer' },
+          error: 'invalid_condition_offer',
+          ok: false,
+          status: 400,
+          statusText: 'Bad Request',
+        };
+      // A committed bound order must still replay when the offer has
+      // since been deactivated or changed: the binding path
+      // revalidates authoritatively in SQL, so fall through with the
+      // request tax and let it replay or fail closed there instead of
+      // refusing the retry at this mutable catalog read.
+      computedTaxAmount =
+        typeof body.tax_amount === 'number' ? body.tax_amount : 0;
+    } else if (isTaxComputeUuidError(taxError)) {
+      // A malformed product_id / variant_id from the agentic caller
+      // cascades into Postgres 22P02 inside the helper. Mirror the
+      // storefront route — map UUID parse errors to a 400 with
+      // `invalid_items` (already in CLIENT_ORDER_ERROR_CODES and
+      // the agentic spec) so the GPT agent fixes its payload.
       logger.warn({
         error: sanitizeForLog(taxError),
         message: 'Agentic checkout received malformed item identifier',
@@ -153,74 +161,40 @@ export async function createAgenticCheckoutOrder(
         status: 400,
         statusText: 'Bad Request',
       };
+    } else {
+      logger.error({
+        error: sanitizeForLog(taxError),
+        message: 'Agentic checkout VAT recompute failed',
+      });
+      return {
+        data: { error: 'Unable to compute order tax' },
+        error: 'Unable to compute order tax',
+        ok: false,
+        orderId: undefined,
+        status: 500,
+        statusText: 'Internal Server Error',
+      };
     }
-    logger.error({
-      error: sanitizeForLog(taxError),
-      message: 'Agentic checkout VAT recompute failed',
-    });
-    return {
-      data: { error: 'Unable to compute order tax' },
-      error: 'Unable to compute order tax',
-      ok: false,
-      orderId: undefined,
-      status: 500,
-      statusText: 'Internal Server Error',
-    };
   }
 
-  const { data: orderRows, error: orderError } = await supabase.rpc(
-    'create_storefront_order',
-    {
-      p_ad_tracking: body.ad_tracking ?? null,
-      p_customer_email: body.customer_email,
-      p_customer_name: body.customer_name,
-      p_customer_phone: body.customer_phone ?? null,
-      p_discount_amount: body.discount_amount,
-      p_items: orderItemsPayload,
-      p_merchant_id: body.merchant_id,
-      p_notes: body.notes ?? null,
-      p_payment_method: body.payment_method,
-      p_payment_status: body.payment_status,
-      p_selected_quote_id: body.selected_quote_id || null,
-      p_shipping_address: body.shipping_address || null,
-      p_shipping_fee: body.shipping_fee,
-      p_shipping_provider: body.shipping_provider ?? null,
-      p_shipping_status: body.shipping_status,
-      p_source: body.source,
-      p_tax_amount: computedTaxAmount,
-      // Codex P1 (PR #1622 round 7): forward `p_gift_wrapping_fee`
-      // through to the RPC. The agentic
-      // `calculateCheckoutSession` doesn't quote gift wrapping
-      // today, so `body.gift_wrapping_fee` is currently the Zod
-      // default 0 — but the schema accepts the field, and
-      // omitting it from the RPC call left a silent
-      // under-quote path waiting for the first agentic flow that
-      // does pass it. The RPC's `gift_wrapping_fee_negative`
-      // guard + the column's CHECK `>= 0` jointly clamp invalid
-      // input.
-      p_gift_wrapping_fee: body.gift_wrapping_fee,
-      // Codex P1 (PR #1622 round 8): forward
-      // `body.expected_total` to enable the RPC's
-      // `order_total_mismatch` parity guard for agentic flows.
-      // Today `calculateCheckoutSession` doesn't quote VAT, so
-      // the agentic completion payload never includes
-      // `expected_total` and this is `null` (parity check
-      // skipped — matches existing behavior; fabricating a
-      // value from the VAT-exclusive quote would break every
-      // VAT-registered agentic checkout with a mismatch the
-      // agent can't recover from until session calc learns
-      // VAT). When `calculateCheckoutSession` is upgraded to
-      // emit a VAT-inclusive total (deferred follow-up tracked
-      // separately), `buildOrderRpcPayload` will start setting
-      // `expected_total` and this wiring activates the parity
-      // guard automatically — no second round trip here.
-      p_expected_total:
-        typeof body.expected_total === 'number' ? body.expected_total : null,
-      p_tracking_number: body.tracking_number ?? null,
-      // Agentic checkout is API-key scoped, not tied to a customer auth session.
-      p_user_id: null,
-    }
+  const orderRpcArgs = buildAgenticOrderRpcArgs(
+    body,
+    orderItemsPayload,
+    computedTaxAmount
   );
+
+  const bindingOutcome = sharedCartBinding
+    ? await submitSharedCartBindingOrder({
+        boundPrincipalId: options?.boundPrincipalId ?? null,
+        orderRpcArgs: orderRpcArgs as Record<string, unknown>,
+        sharedCart: sharedCartBinding,
+        supabase,
+      })
+    : null;
+  if (bindingOutcome?.kind === 'failure') return bindingOutcome.result;
+  const { data: orderRows, error: orderError } = bindingOutcome
+    ? { data: bindingOutcome.data, error: bindingOutcome.error }
+    : await supabase.rpc('create_storefront_order', orderRpcArgs);
 
   const order = Array.isArray(orderRows) ? orderRows[0] : orderRows;
   if (orderError || !order) {
@@ -233,7 +207,9 @@ export async function createAgenticCheckoutOrder(
       (code ? CLIENT_ORDER_ERROR_CODES.has(code) : false) ||
       CLIENT_ORDER_ERROR_CODES.has(message);
     const safeError = isClientError
-      ? (code ?? message)
+      ? code && CLIENT_ORDER_ERROR_CODES.has(code)
+        ? code
+        : message
       : 'Unable to create order';
 
     logger.error({
@@ -285,63 +261,10 @@ export async function createAgenticCheckoutOrder(
   };
 }
 
-export function sendAgenticOrderCreatedWebhook({
-  buyer,
-  currency,
-  orderId,
-  sessionId,
-  total,
-}: {
-  buyer: AgenticCheckoutBuyer;
-  currency: string;
-  orderId: string;
-  sessionId: string;
-  total?: number | string;
-}) {
-  sendAgenticWebhook('order.created', {
-    id: orderId,
-    currency,
-    total,
-    status: 'pending',
-    buyer,
-  }).catch((err) =>
-    logger.error({
-      message: 'Webhook trigger failed',
-      error: sanitizeForLog(err),
-      sessionId,
-    })
-  );
-}
-
-export async function markAgenticCheckoutOrderCanceled({
-  merchantId,
-  orderId,
-  supabase,
-}: {
-  merchantId: string;
-  orderId: string;
-  sessionId: string;
-  supabase: SupabaseClient;
-}) {
-  const { data, error } = await supabase
-    .from('orders')
-    .update({
-      payment_status: 'cancelled',
-      shipping_status: 'cancelled',
-    })
-    .eq('id', orderId)
-    .eq('merchant_id', merchantId)
-    .in('payment_status', ['pending', 'unpaid'])
-    .in('shipping_status', ['pending'])
-    .select('id')
-    .maybeSingle();
-
-  return { error, updated: !error && !!data };
-}
-
-function calculateAssuranceFee(itemPrice: number, quantity: number) {
-  return Math.round(itemPrice * quantity * DEFAULT_ASSURANCE_RATE * 100) / 100;
-}
+export {
+  markAgenticCheckoutOrderCanceled,
+  sendAgenticOrderCreatedWebhook,
+} from '@/lib/agentic/checkout-order-lifecycle';
 
 function isFiniteAmountLike(value: unknown) {
   return (

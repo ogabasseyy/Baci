@@ -1,5 +1,7 @@
-import { TOOL_DESCRIPTIONS } from '@/ai/chat-tools';
+import { CHECKOUT_TOOL_NAMES, TOOL_DESCRIPTIONS } from '@/ai/chat-tools';
 import type { OllamaChatTool } from '@/lib/ollama-chat';
+
+const CHECKOUT_TOOL_NAME_SET: Set<string> = new Set(CHECKOUT_TOOL_NAMES);
 
 const STRING_SCHEMA = { type: 'string' } as const;
 const NUMBER_SCHEMA = { type: 'number' } as const;
@@ -20,8 +22,14 @@ export const ollamaAgenticChatTools: OllamaChatTool[] = [
               'Search query for products, for example iPhone 15 or gaming laptop',
           },
           category: { ...STRING_SCHEMA, description: 'Optional category' },
-          maxPrice: { ...NUMBER_SCHEMA, description: 'Maximum price in Naira' },
-          minPrice: { ...NUMBER_SCHEMA, description: 'Minimum price in Naira' },
+          maxPrice: {
+            ...NUMBER_SCHEMA,
+            description: 'Maximum price in the storefront currency',
+          },
+          minPrice: {
+            ...NUMBER_SCHEMA,
+            description: 'Minimum price in the storefront currency',
+          },
         },
       },
     },
@@ -52,7 +60,10 @@ export const ollamaAgenticChatTools: OllamaChatTool[] = [
         type: 'object',
         required: ['amount', 'customerEmail', 'customerName', 'items'],
         properties: {
-          amount: { ...NUMBER_SCHEMA, description: 'Total amount in Naira' },
+          amount: {
+            ...NUMBER_SCHEMA,
+            description: 'Total amount in the storefront currency',
+          },
           customerEmail: {
             ...STRING_SCHEMA,
             description: 'Customer email address',
@@ -147,3 +158,15 @@ export const ollamaAgenticChatTools: OllamaChatTool[] = [
     },
   },
 ];
+
+export function getOllamaAgenticChatTools(
+  agenticCheckoutEnabled: boolean
+): OllamaChatTool[] {
+  if (agenticCheckoutEnabled) {
+    return ollamaAgenticChatTools;
+  }
+
+  return ollamaAgenticChatTools.filter(
+    (tool) => !CHECKOUT_TOOL_NAME_SET.has(tool.function.name)
+  );
+}

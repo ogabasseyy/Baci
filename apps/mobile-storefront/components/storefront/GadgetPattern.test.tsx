@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react-native';
 import * as ReactNative from 'react-native';
 import { Image, StyleSheet } from 'react-native';
+import Svg from 'react-native-svg';
 import { GadgetPattern } from './GadgetPattern';
 
 jest.mock('expo-linear-gradient', () => {
@@ -15,14 +16,15 @@ describe('GadgetPattern', () => {
     jest.restoreAllMocks();
   });
 
-  it('renders one gradient and one raster accent for the static backdrop', () => {
-    const { getAllByTestId, UNSAFE_getAllByType } = render(
+  it('keeps the Android backdrop free of the SVG tree implicated in ANRs', () => {
+    const { getAllByTestId, UNSAFE_getAllByType, UNSAFE_queryByType } = render(
       <GadgetPattern height={1500} />
     );
 
     expect(getAllByTestId('tech-backdrop-gradient')).toHaveLength(1);
     expect(UNSAFE_getAllByType(Image)).toHaveLength(1);
     expect(UNSAFE_getAllByType(Image)[0]?.props.resizeMode).toBe('contain');
+    expect(UNSAFE_queryByType(Svg)).toBeNull();
   });
 
   it('uses light gradient stops for the light color scheme', () => {

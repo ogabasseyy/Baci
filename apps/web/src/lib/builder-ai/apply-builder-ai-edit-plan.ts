@@ -30,6 +30,7 @@ import {
 } from './get-builder-ai-content-collections';
 import { getBuilderAiDestinationIndex } from './get-builder-ai-destination-index';
 import { getBuilderAiFirstContentDestination } from './get-builder-ai-first-content-destination';
+import { getBuilderAiInsertDestination } from './get-builder-ai-insert-destination';
 import { getBuilderAiInsertOffset } from './get-builder-ai-insert-offset';
 import { getBuilderAiRawPlanMediaWarning } from './get-builder-ai-raw-plan-media-warning';
 import { getBuilderAiValidCandidate } from './get-builder-ai-valid-candidate';
@@ -115,17 +116,13 @@ function applyOperation(
         componentType,
         sanitized.props
       );
-      const destinationContent =
-        operation.placement.position === 'after'
-          ? (findBuilderAiComponent(
-              config,
-              operation.placement.componentId ?? ''
-            )?.content ?? config.content)
-          : getBuilderAiFirstContentDestination(
-              config,
-              operation.placement.collection,
-              BuilderAiEditPlanError
-            );
+      const destination = getBuilderAiInsertDestination(
+        config,
+        componentType,
+        operation.placement,
+        BuilderAiEditPlanError
+      );
+      const destinationContent = destination.content;
       const insertionIndex = getBuilderAiDestinationIndex(
         config,
         destinationContent,

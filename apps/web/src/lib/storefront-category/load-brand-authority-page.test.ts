@@ -140,6 +140,31 @@ describe('loadBrandAuthorityPage', () => {
     );
   });
 
+  it('links the Infinix HOT family when two current models are available', async () => {
+    mockGetCachedBrandAuthorityProducts.mockResolvedValue([
+      { ...makeProduct(1, 'Infinix'), name: 'Infinix Hot 70' },
+      { ...makeProduct(2, 'Infinix'), name: 'Infinix Hot 70 Pro' },
+      { ...makeProduct(3, 'Infinix'), name: 'Infinix Note 60' },
+      { ...makeProduct(4, 'Infinix'), name: 'Infinix Note 60 Pro' },
+      { ...makeProduct(5, 'Infinix'), name: 'Infinix Smart 20' },
+    ]);
+    const { brandAuthorityPageLoader } = await import(
+      './load-brand-authority-page'
+    );
+
+    const page = await brandAuthorityPageLoader.load({
+      merchantSlug: 'ogabassey',
+      categorySlug: 'smartphones',
+      brandSlug: 'infinix',
+    });
+
+    expect(page?.familyLinks).toContainEqual({
+      href: 'https://ogabassey.com/smartphones/brands/infinix/families/hot',
+      label: 'Infinix HOT phones',
+      productCount: 2,
+    });
+  });
+
   it('rejects uncurated and thin brand pages', async () => {
     const { brandAuthorityPageLoader } = await import(
       './load-brand-authority-page'

@@ -3,6 +3,78 @@ import type { ExpoConfig } from 'expo/config';
 import { createExpoPlugins } from './expo-plugins';
 
 describe('createExpoPlugins', () => {
+  it('compiles the patched iOS renderer instead of shipping the unpatched prebuilt core', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    expect(plugins).toContainEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        ios: expect.objectContaining({ buildReactNativeFromSource: true }),
+      }),
+    ]);
+  });
+  it('opts into the UIKit scene lifecycle required by iOS 27 builds', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    expect(plugins).toContainEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        ios: expect.objectContaining({ enableSceneSupport: true }),
+      }),
+    ]);
+  });
+
+  it('builds iOS Expo consumers from source to prevent the build575 JSI ABI mismatch', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    const buildProperties = plugins.find(
+      (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties'
+    );
+
+    expect(buildProperties).toEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        ios: expect.objectContaining({ usePrecompiledModules: false }),
+      }),
+    ]);
+  });
+
+  it('leaves Android source-build wiring to the idempotent includeBuild plugin', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    const buildPropertiesPlugin = plugins.find(
+      (plugin): plugin is [string, Record<string, unknown>] =>
+        Array.isArray(plugin) &&
+        plugin[0] === 'expo-build-properties' &&
+        typeof plugin[1] === 'object' &&
+        plugin[1] !== null &&
+        !Array.isArray(plugin[1])
+    );
+    const androidValue = buildPropertiesPlugin?.[1]?.android;
+    const android =
+      typeof androidValue === 'object' &&
+      androidValue !== null &&
+      !Array.isArray(androidValue)
+        ? (androidValue as Record<string, unknown>)
+        : undefined;
+
+    expect(android).toBeDefined();
+    expect(android).not.toHaveProperty('buildReactNativeFromSource');
+    expect(plugins).toContain('./config/withReactNativeFromSource.js');
+  });
+
   it('configures minification, resource shrinking, and class repackaging for Android release builds', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,
@@ -18,9 +90,18 @@ describe('createExpoPlugins', () => {
       android: {
         enableMinifyInReleaseBuilds: true,
         enableShrinkResourcesInReleaseBuilds: true,
+        useLegacyPackaging: true,
         extraProguardRules: expect.stringContaining('-repackageclasses'),
       },
     });
+    expect(buildPropertiesPlugin?.[1]).toMatchObject({
+      android: {
+        extraProguardRules: expect.stringContaining(
+          '-keep class com.google.android.gms.internal.consent_sdk.** { *; }'
+        ),
+      },
+    });
+    expect(plugins).toContain('expo-audio');
   });
 
   it('includes supplied conditional plugins and omits them when unconfigured', () => {

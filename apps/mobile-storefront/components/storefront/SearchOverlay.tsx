@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { MIN_SEARCH_QUERY_LENGTH } from '@/constants/search';
 import { useCategories, useDebounce, useProducts } from '@/hooks';
 import { useSearchStorage } from '@/hooks/use-search-storage';
 import type { Product } from '@/types/product';
@@ -46,7 +47,7 @@ export function SearchOverlay({
   const [query, setQuery] = useState(initialQuery);
   const debouncedQuery = useDebounce(query, 300);
   const activeSearchQuery = debouncedQuery.trim();
-  const hasSearchQuery = activeSearchQuery.length >= 2;
+  const hasSearchQuery = activeSearchQuery.length >= MIN_SEARCH_QUERY_LENGTH;
 
   const { recentSearches, saveSearch, clearHistory } = useSearchStorage();
   const { products, isLoading } = useProducts({
@@ -67,7 +68,7 @@ export function SearchOverlay({
   }, [isVisible]);
 
   const handleSearchSubmit = () => {
-    if (query.trim().length >= 2) {
+    if (query.trim().length >= MIN_SEARCH_QUERY_LENGTH) {
       saveSearch(query.trim());
       Keyboard.dismiss();
     }

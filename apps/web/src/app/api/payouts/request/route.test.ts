@@ -1,202 +1,238 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  authGetUser: vi.fn(),
   checkCsrfProtection: vi.fn(),
+  from: vi.fn(),
   getMerchantForApiRequest: vi.fn(),
   hasPermission: vi.fn(),
   loggerError: vi.fn(),
-  loggerInfo: vi.fn(),
-  sendPayout: vi.fn(),
-  updateRecords: [] as Array<{
-    filters: [string, unknown][];
-    payload: Record<string, unknown>;
-    table: string;
-  }>,
+  payoutHistory: [] as Record<string, unknown>[],
+  payoutHistoryError: null as { code: string; message: string } | null,
+  selectedFields: '',
 }));
 
-vi.mock('nanoid', () => ({
-  nanoid: () => 'fixed-ref-12',
-}));
-
-vi.mock('next/headers', () => ({
-  cookies: vi.fn().mockResolvedValue({}),
-}));
-
+vi.mock('next/headers', () => ({ cookies: vi.fn().mockResolvedValue({}) }));
 vi.mock('@/lib/api-auth', () => ({
   hasPermission: (...args: unknown[]) => mocks.hasPermission(...args),
 }));
-
 vi.mock('@/lib/csrf', () => ({
   checkCsrfProtection: (...args: unknown[]) =>
     mocks.checkCsrfProtection(...args),
 }));
-
 vi.mock('@/lib/get-merchant-for-api-request', () => ({
   getMerchantForApiRequest: (...args: unknown[]) =>
     mocks.getMerchantForApiRequest(...args),
   toUserAccess: vi.fn(() => ({ role: 'owner' })),
 }));
+vi.mock('@/lib/logger', () => ({ logger: { error: mocks.loggerError } }));
 
-vi.mock('@/lib/korapay', () => ({
-  sendPayout: (...args: unknown[]) => mocks.sendPayout(...args),
-}));
-
-vi.mock('@/lib/logger', () => ({
-  logger: {
-    error: (...args: unknown[]) => mocks.loggerError(...args),
-    info: (...args: unknown[]) => mocks.loggerInfo(...args),
-  },
-}));
-
-interface MockUpdateQuery {
-  error: null;
-  eq(column: string, value: unknown): MockUpdateQuery;
-}
-
-function createUpdateQuery(table: string, payload: Record<string, unknown>) {
-  const record = { table, payload, filters: [] as [string, unknown][] };
-  mocks.updateRecords.push(record);
-
-  const builder: MockUpdateQuery = {
-    error: null,
-    eq(column: string, value: unknown) {
-      record.filters.push([column, value]);
-      return builder;
-    },
-  };
-
-  return builder;
-}
-
-function createPayoutRequestsTable() {
-  return {
-    insert: vi.fn(() => ({
-      select: vi.fn(() => ({
-        single: vi.fn().mockResolvedValue({
-          data: { id: 'payout-request-1' },
-          error: null,
-        }),
-      })),
-    })),
-    update: vi.fn((payload: Record<string, unknown>) =>
-      createUpdateQuery('payout_requests', payload)
+function createPayoutHistoryQuery() {
+  const query = {
+    eq: vi.fn(() => query),
+    order: vi.fn().mockImplementation(() =>
+      Promise.resolve({
+        data: mocks.payoutHistory,
+        error: mocks.payoutHistoryError,
+      })
     ),
-    select: vi.fn(() => ({
-      eq: vi.fn(() => ({
-        order: vi.fn().mockResolvedValue({ data: [], error: null }),
-      })),
-    })),
   };
-}
-
-function createMerchantsTable() {
-  return {
-    select: vi.fn(() => ({
-      eq: vi.fn(() => ({
-        single: vi.fn().mockResolvedValue({
-          data: { email: 'merchant@example.com' },
-          error: null,
-        }),
-      })),
-    })),
-  };
-}
-
-function createTransactionsTable() {
-  return {
-    insert: vi.fn().mockResolvedValue({ error: null }),
-  };
-}
-
-function createSupabaseMock() {
-  return {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({
-        data: { user: { id: 'user-1' } },
-        error: null,
-      }),
-    },
-    from: vi.fn((table: string) => {
-      if (table === 'merchants') return createMerchantsTable();
-      if (table === 'payout_requests') return createPayoutRequestsTable();
-      if (table === 'transactions') return createTransactionsTable();
-      throw new Error(`Unexpected table: ${table}`);
-    }),
-    rpc: vi.fn().mockResolvedValue({ data: 25_000, error: null }),
-  };
+  return query;
 }
 
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(() => createSupabaseMock()),
+  createClient: vi.fn(() => ({
+    auth: { getUser: mocks.authGetUser },
+    from: mocks.from,
+  })),
 }));
 
-const { POST } = await import('./route');
+const { GET, POST } = await import('./route');
 
-function createRequest() {
+function postRequest() {
   return new NextRequest('http://localhost/api/payouts/request', {
-    body: JSON.stringify({
-      amount: 10_000,
-      currency: 'NGN',
-      bank_code: '044',
-      account_number: '0123456789',
-    }),
+    body: JSON.stringify({ amount: 10_000 }),
     method: 'POST',
   });
 }
 
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.payoutHistory = [];
+  mocks.payoutHistoryError = null;
+  mocks.selectedFields = '';
+  mocks.from.mockImplementation(() => ({
+    select: vi.fn((fields: string) => {
+      mocks.selectedFields = fields;
+      return createPayoutHistoryQuery();
+    }),
+  }));
+  mocks.authGetUser.mockResolvedValue({
+    data: { user: { id: 'user-1' } },
+    error: null,
+  });
+  mocks.checkCsrfProtection.mockResolvedValue({ valid: true });
+  mocks.getMerchantForApiRequest.mockResolvedValue({
+    businessName: 'Scoped Merchant',
+    merchantId: 'merchant-1',
+    staffAccess: { isStaff: false, isOwner: true, permissions: {} },
+  });
+  mocks.hasPermission.mockReturnValue(true);
+});
+
 describe('POST /api/payouts/request', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.updateRecords.length = 0;
-    mocks.checkCsrfProtection.mockResolvedValue({ valid: true });
-    mocks.getMerchantForApiRequest.mockResolvedValue({
-      businessName: 'Scoped Merchant',
-      merchantId: 'merchant-1',
+  it('authenticates before CSRF or merchant database work', async () => {
+    mocks.authGetUser.mockResolvedValue({
+      data: { user: null },
+      error: null,
     });
-    mocks.hasPermission.mockReturnValue(true);
-    mocks.sendPayout.mockResolvedValue({
-      success: true,
-      data: { status: 'success', provider_reference: 'korapay-1' },
-    });
+
+    const response = await POST(postRequest());
+
+    expect(response.status).toBe(401);
+    expect(mocks.checkCsrfProtection).not.toHaveBeenCalled();
+    expect(mocks.getMerchantForApiRequest).not.toHaveBeenCalled();
   });
 
-  it('scopes the successful payout request update to the merchant', async () => {
-    const response = await POST(createRequest());
+  it('rejects invalid CSRF tokens after authentication', async () => {
+    mocks.checkCsrfProtection.mockResolvedValue({
+      valid: false,
+      response: NextResponse.json({ error: 'Invalid CSRF' }, { status: 403 }),
+    });
 
-    expect(response.status).toBe(200);
-    expect(mocks.updateRecords).toEqual([
-      expect.objectContaining({
-        table: 'payout_requests',
-        filters: [
-          ['id', 'payout-request-1'],
-          ['merchant_id', 'merchant-1'],
-        ],
-        payload: expect.objectContaining({ status: 'completed' }),
-      }),
-    ]);
+    const response = await POST(postRequest());
+
+    expect(response.status).toBe(403);
+    expect(mocks.getMerchantForApiRequest).not.toHaveBeenCalled();
   });
 
-  it('scopes the failed payout request update to the merchant', async () => {
-    mocks.sendPayout.mockRejectedValueOnce(new Error('Korapay unavailable'));
-
-    const response = await POST(createRequest());
+  it('keeps manual payout dispatch fail-closed for authorized merchants', async () => {
+    const response = await POST(postRequest());
     const body = await response.json();
 
+    expect(mocks.authGetUser).toHaveBeenCalledTimes(1);
+    expect(mocks.checkCsrfProtection).toHaveBeenCalledTimes(1);
+    expect(mocks.getMerchantForApiRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      'user-1'
+    );
+    expect(mocks.hasPermission).toHaveBeenCalledWith(
+      { role: 'owner' },
+      'settings',
+      'edit'
+    );
+    expect(response.status).toBe(503);
+    expect(body).toEqual({
+      code: 'payouts_unavailable',
+      error: 'Manual payouts are temporarily unavailable',
+    });
+  });
+
+  it('does not disclose payout availability to unauthorized staff', async () => {
+    mocks.hasPermission.mockReturnValue(false);
+
+    const response = await POST(postRequest());
+
+    expect(response.status).toBe(403);
+  });
+});
+
+describe('GET /api/payouts/request', () => {
+  it('returns the unauthorized contract without querying payout history', async () => {
+    mocks.authGetUser.mockResolvedValue({
+      data: { user: null },
+      error: null,
+    });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/payouts/request')
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
+    expect(mocks.getMerchantForApiRequest).not.toHaveBeenCalled();
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('returns the missing-merchant contract without querying payout history', async () => {
+    mocks.getMerchantForApiRequest.mockResolvedValue(null);
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/payouts/request')
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Merchant not found',
+    });
+    expect(mocks.from).not.toHaveBeenCalled();
+  });
+
+  it('uses real columns and never exposes the full bank account number', async () => {
+    mocks.payoutHistory = [
+      {
+        id: 'payout-1',
+        amount: 10_000,
+        currency: 'NGN',
+        status: 'completed',
+        bank_name: 'Access Bank',
+        bank_account_name: 'Baci Merchant',
+        bank_account_number: '0123456789',
+        korapay_reference: 'PAYOUT-1',
+        requested_at: '2026-08-05T10:00:00.000Z',
+        processed_at: '2026-08-05T10:01:00.000Z',
+        completed_at: '2026-08-05T10:01:00.000Z',
+        created_at: '2026-08-05T10:00:00.000Z',
+      },
+    ];
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/payouts/request')
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(mocks.selectedFields).toContain('bank_account_number');
+    expect(mocks.selectedFields).toContain('korapay_reference');
+    expect(body.payouts[0]).toMatchObject({
+      bankAccountNumber: '••••6789',
+      reference: 'PAYOUT-1',
+    });
+    expect(JSON.stringify(body)).not.toContain('0123456789');
+    expect(JSON.stringify(body)).not.toContain('merchant_id');
+  });
+
+  it('fails closed when payout history cannot be read', async () => {
+    mocks.payoutHistoryError = {
+      code: '42501',
+      message: 'read failed',
+    };
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/payouts/request')
+    );
+
     expect(response.status).toBe(500);
-    expect(body.error).toBe('Failed to process payout');
-    expect(mocks.updateRecords).toEqual([
-      expect.objectContaining({
-        table: 'payout_requests',
-        filters: [
-          ['id', 'payout-request-1'],
-          ['merchant_id', 'merchant-1'],
-        ],
-        payload: expect.objectContaining({
-          failure_reason: 'Korapay unavailable',
-          status: 'failed',
-        }),
-      }),
-    ]);
+    expect(mocks.loggerError).toHaveBeenCalledWith({
+      message: 'Failed to fetch payouts',
+      merchantId: 'merchant-1',
+      errorCode: '42501',
+      errorMessage: 'read failed',
+    });
+  });
+
+  it('rejects staff payout history instead of returning an owner-RLS empty ledger', async () => {
+    mocks.getMerchantForApiRequest.mockResolvedValue({
+      merchantId: 'merchant-1',
+      staffAccess: { isStaff: true, isOwner: false, permissions: {} },
+    });
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/payouts/request')
+    );
+
+    expect(response.status).toBe(403);
+    expect(mocks.from).not.toHaveBeenCalled();
   });
 });

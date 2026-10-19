@@ -8,7 +8,7 @@ function isSafeStorefrontUrl(value: string): boolean {
     if (code <= 31 || code === 127) return false;
   }
   if (value.startsWith('/')) return !value.startsWith('//');
-  if (value.startsWith('#')) return value.length > 1;
+  if (value.startsWith('#')) return true;
   if (!value.toLowerCase().startsWith('https://')) return false;
   try {
     const parsed = new URL(value);

@@ -6,6 +6,7 @@ import {
   type AgenticMerchantContext,
   resolveAgenticMerchantContext,
 } from '@/lib/agentic/merchant-context';
+import { readAgenticQueryRequest } from '@/lib/agentic/mutation-request';
 import { createAgenticScopedSupabaseClient } from '@/lib/agentic/scoped-supabase';
 import {
   buildUcpCatalogProductsResponse,
@@ -27,11 +28,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await readJsonBody(request);
-  if (!body.ok) {
-    return body.response;
+  const signedRequest = await readAgenticQueryRequest({ request });
+  if (!signedRequest.ok) {
+    return signedRequest.response;
   }
-  const parsed = ucpCatalogLookupRequestSchema.safeParse(body.value);
+  const parsed = ucpCatalogLookupRequestSchema.safeParse(signedRequest.body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: 'Invalid request body', details: parsed.error.flatten() },
@@ -79,10 +80,14 @@ export async function POST(request: NextRequest) {
       })
     );
 
+  const publishableProducts = products.filter(
+    (product): product is NonNullable<typeof product> => product !== null
+  );
+
   return NextResponse.json(
     buildUcpCatalogProductsResponse({
       capability: UCP_CATALOG_LOOKUP_CAPABILITY,
-      products,
+      products: publishableProducts,
     })
   );
 }
@@ -128,22 +133,4 @@ async function resolveCatalogContext(
       merchantSlug: merchant.slug,
     }),
   };
-}
-
-async function readJsonBody(
-  request: NextRequest
-): Promise<
-  { ok: true; value: unknown } | { ok: false; response: NextResponse }
-> {
-  try {
-    return { ok: true, value: await request.json() };
-  } catch {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      ),
-    };
-  }
 }

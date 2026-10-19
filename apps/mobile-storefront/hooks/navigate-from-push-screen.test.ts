@@ -92,6 +92,30 @@ describe('navigateFromPushScreen', () => {
     });
   });
 
+  it('forwards the reminder goal to the savings wallet panel', () => {
+    navigateFromPushScreen('wallet', {
+      action: 'savings',
+      savingsGoalId: 'goal-older',
+    });
+
+    expect(push).toHaveBeenCalledWith({
+      pathname: '/wallet',
+      params: { action: 'savings', savingsGoalId: 'goal-older' },
+    });
+  });
+
+  it('drops a blank reminder goal before opening the savings panel', () => {
+    navigateFromPushScreen('wallet', {
+      action: 'savings',
+      savingsGoalId: '   ',
+    });
+
+    expect(push).toHaveBeenCalledWith({
+      pathname: '/wallet',
+      params: { action: 'savings' },
+    });
+  });
+
   it('opens the plain wallet for non-savings wallet actions', () => {
     navigateFromPushScreen('wallet', {});
 
@@ -170,27 +194,6 @@ describe('navigateFromPushScreen', () => {
     expect(push).toHaveBeenCalledTimes(2);
   });
 
-  it('consumes a returnTo-less credit intent before opening the bare wallet', async () => {
-    let resolveIntent: ((value: '/checkout') => void) | undefined;
-    consumeIntent.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveIntent = resolve;
-        })
-    );
-
-    navigateFromPushScreen('wallet', { credited: 'true' });
-    await flushIntentRead();
-
-    expect(push).not.toHaveBeenCalled();
-
-    resolveIntent?.('/checkout');
-    await flushIntentRead();
-
-    expect(push).toHaveBeenNthCalledWith(1, '/wallet');
-    expect(push).toHaveBeenNthCalledWith(2, '/checkout');
-  });
-
   it('stays on the wallet when no funding intent is stored', async () => {
     navigateFromPushScreen('wallet', { credited: 'true' });
     await flushIntentRead();
@@ -233,7 +236,10 @@ describe('navigateFromPushScreen', () => {
     navigateFromPushScreen('wallet', { credited: 'true' });
     await flushIntentRead();
 
-    expect(consumeIntent).toHaveBeenCalledWith('customer-2');
+    expect(consumeIntent).toHaveBeenCalledWith(
+      'customer-2',
+      expect.any(Function)
+    );
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith('/wallet');
   });

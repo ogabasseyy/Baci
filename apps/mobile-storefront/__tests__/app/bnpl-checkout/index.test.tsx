@@ -222,8 +222,11 @@ jest.mock('@/lib/api-url', () => ({
 }));
 
 jest.mock('@/stores/cart-store', () => ({
-  useCartStore: (selector: (state: { clearCart: () => void }) => unknown) =>
-    selector({ clearCart: mockClearCart }),
+  useCartStore: Object.assign(
+    (selector: (state: { clearCart: () => void }) => unknown) =>
+      selector({ clearCart: mockClearCart }),
+    { getState: () => ({ items: [] }) }
+  ),
 }));
 
 const mockRequestCameraPermissionsAsync = jest.mocked(
@@ -628,9 +631,11 @@ describe('BNPLCheckoutScreen', () => {
     jest.useFakeTimers();
     await renderReadyBNPLCheckoutScreen();
 
-    fireEvent.press(
-      screen.getByLabelText('mock-bnpl-native-success-navigation')
-    );
+    await act(async () => {
+      fireEvent.press(
+        screen.getByLabelText('mock-bnpl-native-success-navigation')
+      );
+    });
 
     expect(mockClearCart).toHaveBeenCalledTimes(1);
 

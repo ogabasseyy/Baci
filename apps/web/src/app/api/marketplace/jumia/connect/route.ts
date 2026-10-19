@@ -4,11 +4,12 @@
  */
 
 import crypto from 'node:crypto';
-import { createJumiaMobileReturnUrl } from '@baci/shared';
-import { cookies } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-import { getConfiguredAppUrl, getJumiaClientId } from '@/env';
+import {
+  getConfiguredAppUrl,
+  getJumiaAuthorizationEncryptionKey,
+  getJumiaClientId,
+} from '@/env';
 import { authenticateApiRequest, hasPermission } from '@/lib/api-auth';
 import { checkCsrfProtection } from '@/lib/csrf';
 import {
@@ -17,203 +18,22 @@ import {
 } from '@/lib/get-merchant-for-api-request';
 import { getJumiaAuthUrl, getJumiaRedirectUri } from '@/lib/jumia/helpers';
 import { jumiaOAuthDiagnostic } from '@/lib/jumia/oauth-diagnostic';
+import { purgeOrphanedJumiaAuthorization } from '@/lib/jumia/purge-orphaned-jumia-authorization';
 import {
   getMerchantFeatureAccess,
   merchantFeatureUpgradeResponse,
 } from '@/lib/merchant-feature-gates';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
 import { deleteJumiaConnectionQuerySchema } from '@/schemas/marketplace';
+import { getJumiaConnections } from './get-jumia-connections';
+import { handleJumiaMobileTicket } from './mobile-ticket';
 import { jumiaOAuthInitiationDiagnostic } from './oauth-diagnostic';
+import { createJumiaConnectPost } from './post';
 
-const _jumiaConnectSchema = z.discriminatedUnion('connectionType', [
-  z.object({
-    connectionType: z.literal('self_authorization'),
-    refreshToken: z.string().min(1, 'Refresh token is required'),
-    shopId: z.string().optional(),
-    shopName: z.string().optional(),
-    countryCode: z.string().length(2).optional(),
-  }),
-  z.object({
-    connectionType: z.literal('oauth'),
-  }),
-]);
-
-export async function POST(request: NextRequest) {
-  try {
-    // CSRF validation
-    const csrf = await checkCsrfProtection(request);
-    if (!csrf.valid) {
-      return (
-        csrf.response ??
-        NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-      );
-    }
-
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
-
-    const { searchParams } = new URL(request.url);
-    const connectionType = searchParams.get('connectionType');
-
-    // Verify authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      if (
-        connectionType === 'oauth' &&
-        searchParams.get('platform') === 'mobile'
-      ) {
-        const loginUrl = new URL('/login', request.url);
-        loginUrl.searchParams.set('redirectTo', request.url);
-        return NextResponse.redirect(loginUrl);
-      }
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Get merchant for this user
-    const merchantContext = await getMerchantForApiRequest(supabase, user.id);
-    if (!merchantContext) {
-      return NextResponse.json(
-        { error: 'Merchant not found' },
-        { status: 404 }
-      );
-    }
-
-    const access = toUserAccess(merchantContext);
-    if (!hasPermission(access, 'integrations', 'manage')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const merchantId = merchantContext.merchantId;
-    const featureAccess = await getMerchantFeatureAccess(
-      supabase,
-      merchantId,
-      'marketplace_sync'
-    );
-    if (featureAccess.error) {
-      console.error(
-        '[Jumia Connect] Feature access lookup failed:',
-        featureAccess.error
-      );
-      return NextResponse.json(
-        { error: 'Failed to verify merchant plan' },
-        { status: 500 }
-      );
-    }
-    if (!featureAccess.allowed) {
-      return merchantFeatureUpgradeResponse('marketplace_sync');
-    }
-
-    const rawBody = await request.json();
-    const parsed = _jumiaConnectSchema.safeParse(rawBody);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: z.flattenError(parsed.error) },
-        { status: 400 }
-      );
-    }
-    const body = parsed.data;
-
-    // Check connection type
-    if (body.connectionType === 'self_authorization') {
-      // Self Authorization: Merchant provides their refresh token directly
-      // This is for machine-to-machine connections
-      const { refreshToken, shopId, shopName, countryCode } = body;
-
-      // Store the integration with refresh token
-      const { data: integration, error: insertError } = await supabase
-        .from('marketplace_integrations')
-        .upsert(
-          {
-            merchant_id: merchantId,
-            platform: 'jumia',
-            shop_id: shopId || 'default',
-            shop_name: shopName || 'My Jumia Shop',
-            country_code: countryCode || 'NG',
-            refresh_token: refreshToken,
-            is_active: true,
-            sync_config: { products: true, orders: true, stock: true },
-          },
-          {
-            onConflict: 'merchant_id,platform,shop_id',
-          }
-        )
-        .select('id, shop_id, shop_name')
-        .single();
-
-      if (insertError) {
-        console.error('[Jumia Connect] Database error:', insertError);
-        return NextResponse.json(
-          { error: 'Failed to save integration' },
-          { status: 500 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: 'Jumia account connected successfully',
-        integration: {
-          id: integration.id,
-          shopId: integration.shop_id,
-          shopName: integration.shop_name,
-        },
-      });
-    } else {
-      // OAuth flow: Redirect to Jumia authorization
-      const jumiaClientId = getJumiaClientId();
-      const appUrl = getConfiguredAppUrl();
-      if (!jumiaClientId || !appUrl) {
-        return NextResponse.json(
-          { error: 'Jumia OAuth not configured' },
-          { status: 500 }
-        );
-      }
-      const jumiaRedirectUri = getJumiaRedirectUri(appUrl);
-
-      // Generate state for CSRF protection
-      const state = crypto.randomBytes(16).toString('hex');
-      const redirectUrl = getJumiaAuthUrl({
-        clientId: jumiaClientId,
-        redirectUri: jumiaRedirectUri,
-        state,
-      });
-
-      // Store state in cookie for verification on callback
-      const response = NextResponse.json({
-        success: true,
-        redirectUrl,
-      });
-
-      jumiaOAuthInitiationDiagnostic.applyResponse({
-        diagnosticRequested: false,
-        merchantId,
-        platform: null,
-        redirectUrl,
-        response,
-        state,
-      });
-
-      return response;
-    }
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message.includes('prerendering') ||
-        error.message.includes('dynamic server usage'))
-    ) {
-      throw error;
-    }
-    console.error('[Jumia Connect] Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
+export const POST = createJumiaConnectPost({
+  getAppUrl: getConfiguredAppUrl,
+  getClientId: getJumiaClientId,
+  getEncryptionKey: getJumiaAuthorizationEncryptionKey,
+});
 
 /**
  * GET: Check current Jumia connection status
@@ -233,89 +53,11 @@ export async function GET(request: NextRequest) {
       return diagnosticPreAuthResponse;
     }
 
-    // --- Mobile ticket flow (runs before cookie auth) ---
-    const ticket = searchParams.get('ticket');
-    if (
-      ticket &&
-      connectionType === 'oauth' &&
-      searchParams.get('platform') === 'mobile'
-    ) {
-      const ticketParsed = z.uuid().safeParse(ticket);
-      if (!ticketParsed.success) {
-        return NextResponse.redirect(
-          createJumiaMobileReturnUrl({ error: 'invalid_ticket' })
-        );
-      }
-
-      // Check OAuth config BEFORE consuming the ticket so we never
-      // waste a one-time ticket when configuration is missing.
-      const jumiaClientId = getJumiaClientId();
-      const appUrl = getConfiguredAppUrl();
-      if (!jumiaClientId || !appUrl) {
-        return NextResponse.redirect(
-          createJumiaMobileReturnUrl({ error: 'oauth_not_configured' })
-        );
-      }
-
-      // Generate state up-front so we can bind it atomically with redemption
-      const state = crypto.randomBytes(16).toString('hex');
-
-      // Atomically redeem the ticket AND bind the OAuth state in a single UPDATE
-      const adminClient = createAdminClient();
-      const { data: ticketData, error: ticketError } = await adminClient
-        .from('oauth_handoff_tickets')
-        .update({
-          status: 'redeemed',
-          redeemed_at: new Date().toISOString(),
-          oauth_state: state,
-          expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        })
-        .eq('id', ticketParsed.data)
-        .eq('status', 'pending')
-        .gt('expires_at', new Date().toISOString())
-        .select('merchant_id')
-        .single();
-
-      if (ticketError || !ticketData) {
-        return NextResponse.redirect(
-          createJumiaMobileReturnUrl({ error: 'ticket_invalid' })
-        );
-      }
-
-      const redirectUrl = getJumiaAuthUrl({
-        clientId: jumiaClientId,
-        redirectUri: getJumiaRedirectUri(appUrl),
-        state,
-      });
-
-      const response = NextResponse.redirect(redirectUrl);
-      response.cookies.set('jumia_oauth_state', state, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 10, // 10 minutes
-      });
-      response.cookies.set('jumia_merchant_id', ticketData.merchant_id, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 10, // 10 minutes
-      });
-      response.cookies.set('jumia_oauth_platform', 'mobile', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 10, // 10 minutes
-      });
-      response.cookies.set('jumia_ticket_id', ticketParsed.data, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 10, // 10 minutes
-      });
-
-      return response;
-    }
+    const mobileTicketResponse = await handleJumiaMobileTicket(
+      request,
+      searchParams
+    );
+    if (mobileTicketResponse) return mobileTicketResponse;
 
     // --- Shared cookie/bearer auth flow ---
     const auth = await authenticateApiRequest(request);
@@ -354,6 +96,10 @@ export async function GET(request: NextRequest) {
 
     // Handle OAuth Redirect Flow
     if (connectionType === 'oauth') {
+      if (!hasPermission(access, 'integrations', 'manage')) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+
       const initiationContext = await jumiaOAuthInitiationDiagnostic.getContext(
         {
           apiUserId: auth.user.id,
@@ -424,33 +170,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: Check connection status
-    const { data: integrations, error: integrationsError } = await auth.supabase
-      .from('marketplace_integrations')
-      .select(
-        'id, shop_id, shop_name, country_code, is_active, last_sync_at, sync_error'
-      )
-      .eq('merchant_id', merchantId)
-      .eq('platform', 'jumia')
-      .eq('is_active', true);
-
-    if (integrationsError) {
-      console.error(
-        '[Jumia Connect] Failed to fetch connection status:',
-        integrationsError
-      );
-      return NextResponse.json(
-        {
-          error:
-            integrationsError.message || 'Failed to fetch connection status',
-        },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      connected: integrations && integrations.length > 0,
-      integrations: integrations || [],
-    });
+    return getJumiaConnections(auth.supabase, merchantId);
   } catch (error) {
     if (
       error instanceof Error &&
@@ -540,9 +260,40 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    let cleanupPending = false;
+    try {
+      const purgeStatus = await purgeOrphanedJumiaAuthorization(
+        auth.supabase,
+        merchantContext.merchantId,
+        integrationId
+      );
+      if (purgeStatus === 'reactivated') {
+        // A concurrent reconnect won the shop lock after our deactivation:
+        // the integration is live again, so report the conflict instead of
+        // a success toast for a disconnect that did not take effect.
+        return NextResponse.json(
+          {
+            error:
+              'Integration was reconnected during disconnect; try again if you still want to disconnect',
+          },
+          { status: 409 }
+        );
+      }
+      cleanupPending = purgeStatus === 'failed';
+    } catch (cleanupError) {
+      cleanupPending = true;
+      console.error(
+        '[Jumia Disconnect] Disconnected; credential cleanup deferred:',
+        cleanupError
+      );
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Jumia account disconnected',
+      message: cleanupPending
+        ? 'Jumia account disconnected; credential cleanup is pending'
+        : 'Jumia account disconnected',
+      cleanupPending,
     });
   } catch (error) {
     if (

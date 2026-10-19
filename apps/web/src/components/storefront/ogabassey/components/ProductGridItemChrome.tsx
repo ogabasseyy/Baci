@@ -9,7 +9,7 @@ import Link from 'next/link';
 import type React from 'react';
 import type { Product } from '../types';
 import { asRoute } from '@/lib/routes';
-import { getProductUrl } from '@/lib/seo-utils';
+import { getProductUrl } from '@/lib/product-url';
 import { requiresOgabasseyProductSelection } from '../product-selection';
 import { ProductRatingRow } from './ProductRatingRow';
 

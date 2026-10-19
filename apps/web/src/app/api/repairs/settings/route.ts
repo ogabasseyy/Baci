@@ -3,6 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { merchantFeatureSettingsDefaults } from '@/lib/merchant-feature-settings-defaults';
 import { authorizeRepairsRequest } from '@/lib/repairs/catalog-admin-auth';
 import { createClient } from '@/lib/supabase/admin';
+import { isMergedRepairPickupPhoneValid } from '@/schemas/is-merged-repair-pickup-phone-valid';
 import { repairSettingsSchema } from '@/schemas/merchant-features';
 
 // Private repair-center settings (pickup address + contact). Auth-first
@@ -101,6 +102,20 @@ export async function PATCH(request: NextRequest) {
         ...removeUndefinedFields(parsed.data),
       }
     : removeUndefinedFields(parsed.data);
+
+  if (!isMergedRepairPickupPhoneValid(nextRepairSettings)) {
+    return NextResponse.json(
+      {
+        error: 'Invalid input',
+        details: {
+          fieldErrors: {
+            contact_phone: ['Enter a valid repair-center phone number.'],
+          },
+        },
+      },
+      { status: 400 }
+    );
+  }
 
   const writeError = existing
     ? (

@@ -49,24 +49,63 @@ describe('checkout idempotency key storage', () => {
     );
   });
 
-  it('stores the fingerprint hash, key, and createdAt in local storage', async () => {
+  it('keeps every active fingerprint key instead of overwriting', async () => {
+    // Two code-bearing checkouts in one browser: starting B must not
+    // destroy A's recovery key, or A's retry cannot replay its order.
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+    await expect(getCheckoutIdempotencyKey('fingerprint-b')).resolves.toBe(
+      '22222222-2222-4222-8222-222222222222'
+    );
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+  });
+
+  it('adopts a legacy single-entry stored key for its fingerprint', async () => {
+    window.localStorage.setItem(
+      CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
+      JSON.stringify({
+        checkoutFingerprintHash: await sha256Hex('fingerprint-a'),
+        createdAt: 1_000,
+        key: '11111111-1111-4111-8111-111111111111',
+      })
+    );
+
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
+      '11111111-1111-4111-8111-111111111111'
+    );
+  });
+
+  it('stores each fingerprint in its own storage slot', async () => {
     await getCheckoutIdempotencyKey('fingerprint-a');
 
+    // Per-fingerprint slots: concurrent tabs never rewrite one shared
+    // map, so one tab cannot clobber another tab's recovery key.
+    const hash = await sha256Hex('fingerprint-a');
     const stored = JSON.parse(
-      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
+      window.localStorage.getItem(`${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hash}`) ||
+        '{}'
     );
 
     expect(stored).toEqual({
-      checkoutFingerprintHash: await sha256Hex('fingerprint-a'),
       createdAt: 1_000,
       key: '11111111-1111-4111-8111-111111111111',
     });
-    expect(stored).not.toHaveProperty('checkoutFingerprint');
     expect(
-      JSON.parse(
-        window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
-      ).checkoutFingerprintHash
-    ).not.toBe('fingerprint-a');
+      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY)
+    ).toBeNull();
+  });
+
+  it('keeps one fingerprint key when another tab stores a different checkout', async () => {
+    const keyA = await getCheckoutIdempotencyKey('fingerprint-a');
+    // A second tab begins a different checkout while A is in flight.
+    const keyB = await getCheckoutIdempotencyKey('fingerprint-b');
+
+    expect(keyB).not.toBe(keyA);
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(keyA);
+    await expect(getCheckoutIdempotencyKey('fingerprint-b')).resolves.toBe(keyB);
   });
 
   it('recovers from malformed stored JSON by replacing it with a fresh key', async () => {
@@ -75,12 +114,14 @@ describe('checkout idempotency key storage', () => {
     await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
       '11111111-1111-4111-8111-111111111111'
     );
+    const hash = await sha256Hex('fingerprint-a');
     expect(
       JSON.parse(
-        window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
+        window.localStorage.getItem(
+          `${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hash}`
+        ) || '{}'
       )
     ).toEqual({
-      checkoutFingerprintHash: await sha256Hex('fingerprint-a'),
       createdAt: 1_000,
       key: '11111111-1111-4111-8111-111111111111',
     });
@@ -99,51 +140,47 @@ describe('checkout idempotency key storage', () => {
     await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
       '11111111-1111-4111-8111-111111111111'
     );
+    const hash = await sha256Hex('fingerprint-a');
     const stored = JSON.parse(
-      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
+      window.localStorage.getItem(`${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hash}`) ||
+        '{}'
     );
 
     expect(stored).toEqual({
-      checkoutFingerprintHash: await sha256Hex('fingerprint-a'),
       createdAt: 1_000,
       key: '11111111-1111-4111-8111-111111111111',
     });
-    expect(
-      JSON.parse(
-        window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY) || '{}'
-      ).checkoutFingerprint
-    ).toBeUndefined();
   });
 
-  it('returns a key when storage reads fail', async () => {
+  it('blocks another order when storage reads fail', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('storage read failed');
     });
 
-    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
-      '11111111-1111-4111-8111-111111111111'
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).rejects.toThrow(
+      'Unable to read checkout recovery'
     );
   });
 
-  it('returns a key when storage writes fail', async () => {
+  it('blocks initiation when recovery cannot be saved', async () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('storage write failed');
     });
 
-    await expect(getCheckoutIdempotencyKey('fingerprint-a')).resolves.toBe(
-      '11111111-1111-4111-8111-111111111111'
+    await expect(getCheckoutIdempotencyKey('fingerprint-a')).rejects.toThrow(
+      'Unable to save checkout recovery'
     );
     expect(
       window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY)
     ).toBeNull();
   });
 
-  it('returns a transient key without storage access for blank fingerprints', async () => {
+  it('rejects blank fingerprints without creating an untraceable attempt', async () => {
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem');
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
 
-    await expect(getCheckoutIdempotencyKey('   ')).resolves.toBe(
-      '11111111-1111-4111-8111-111111111111'
+    await expect(getCheckoutIdempotencyKey('   ')).rejects.toThrow(
+      'Unable to preserve checkout recovery'
     );
     expect(getItemSpy).not.toHaveBeenCalled();
     expect(setItemSpy).not.toHaveBeenCalled();
@@ -164,16 +201,15 @@ describe('checkout idempotency key storage', () => {
   });
 
   it('clears only the matching stored fingerprint', async () => {
+    const hashA = await sha256Hex('fingerprint-a');
+    const slotA = `${CHECKOUT_IDEMPOTENCY_STORAGE_KEY}:${hashA}`;
     await getCheckoutIdempotencyKey('fingerprint-a');
+    await getCheckoutIdempotencyKey('fingerprint-b');
     await clearCheckoutIdempotencyKey('fingerprint-b');
-    expect(
-      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY)
-    ).not.toBeNull();
+    expect(window.localStorage.getItem(slotA)).not.toBeNull();
 
     await clearCheckoutIdempotencyKey('fingerprint-a');
-    expect(
-      window.localStorage.getItem(CHECKOUT_IDEMPOTENCY_STORAGE_KEY)
-    ).toBeNull();
+    expect(window.localStorage.getItem(slotA)).toBeNull();
   });
 
   it('does not throw when clearing fails because storage is unavailable', async () => {

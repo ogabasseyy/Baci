@@ -1,3 +1,4 @@
+import '@/app/(storefront)/storefront-core.css';
 import type { ReactNode } from 'react';
 
 // The prior `await connection()` here forced the whole PDP route group

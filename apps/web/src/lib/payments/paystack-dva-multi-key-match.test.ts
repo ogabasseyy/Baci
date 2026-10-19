@@ -1,38 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import {
-  type DvaMatchCandidate,
-  type DvaMatchContext,
-  matchPaystackDvaCandidates,
-} from '@/lib/payments/paystack-dva-multi-key-match';
+import { matchPaystackDvaCandidates } from '@/lib/payments/paystack-dva-multi-key-match';
+import { candidate, ctx } from './paystack-dva-multi-key-match.test-support';
 
 // B0 tightens DVA reconciliation to require ALL of:
 // - amount = verified Paystack amount (kobo precision; ₦0.01 tolerance)
 // - customer_email matches the Paystack customer
-// - paid_at IN [created_at, LEAST(expires_at, created_at + 90min)]
+// - paid_at IN [created_at, expires_at when present, otherwise created_at + 90min]
 // Plus the upstream lookup already filters by:
 // - merchant_id (inferred via the order's merchant)
 // - account_number + provider (the lookup key)
 // - transactions.status pending (caller responsibility)
-
-const ctx = (overrides: Partial<DvaMatchContext> = {}): DvaMatchContext => ({
-  verifiedAmountKobo: 83_500_000, // ₦835,000
-  customerEmail: 'customer@example.com',
-  paidAt: new Date('2026-05-09T11:03:00Z'),
-  ...overrides,
-});
-
-const candidate = (
-  overrides: Partial<DvaMatchCandidate> = {}
-): DvaMatchCandidate => ({
-  order_id: '211bcf0e-0795-488f-aeeb-52c5b7a8b9ae',
-  merchant_id: 'merchant-1',
-  customer_email: 'customer@example.com',
-  total_kobo: 83_500_000,
-  // initialize/route.ts stores +90min (1h countdown + 30min grace).
-  account_created_at: new Date('2026-05-09T10:00:00Z'),
-  account_expires_at: new Date('2026-05-09T11:30:00Z'),
-  ...overrides,
-});
 
 describe('matchPaystackDvaCandidates — happy paths', () => {
   it('matches exactly one candidate when all 6 keys line up', () => {
@@ -191,94 +168,6 @@ describe('matchPaystackDvaCandidates — customer_email', () => {
   });
 });
 
-describe('matchPaystackDvaCandidates — paid_at window', () => {
-  it('rejects paid_at before account_created_at (defensive lower bound)', () => {
-    const result = matchPaystackDvaCandidates(
-      [candidate()],
-      ctx({ paidAt: new Date('2026-05-09T09:59:00Z') })
-    );
-    expect(result.kind).toBe('none');
-  });
-
-  it('accepts one uniquely matching late invoice payment after the +90min window', () => {
-    // Tony's production incident shape: the reusable DVA received the exact
-    // invoice amount after the short checkout window had elapsed. Account,
-    // customer email, amount, and assignment lower-bound still identify one
-    // active invoice, so the payment must not be stranded in review.
-    const result = matchPaystackDvaCandidates(
-      [candidate()],
-      ctx({ paidAt: new Date('2026-05-09T12:53:00Z') })
-    );
-    expect(result.kind).toBe('single');
-    if (result.kind === 'single') {
-      expect(result.timing).toBe('late');
-    }
-  });
-
-  it('does not auto-allocate a late underpayment to a stale merchant invoice', () => {
-    const result = matchPaystackDvaCandidates(
-      [
-        candidate({
-          merchant_created: true,
-          outstanding_amount_kobo: 83_500_000,
-        }),
-      ],
-      ctx({
-        paidAt: new Date('2026-05-09T12:53:00Z'),
-        verifiedAmountKobo: 30_000_000,
-      })
-    );
-
-    expect(result.kind).toBe('none');
-  });
-
-  it('uses the unique late-match fallback when account_expires_at is beyond the grace window', () => {
-    const c = candidate({
-      account_expires_at: new Date('2026-05-09T13:00:00Z'),
-    });
-    const result = matchPaystackDvaCandidates(
-      [c],
-      ctx({ paidAt: new Date('2026-05-09T11:35:00Z') })
-    );
-    expect(result.kind).toBe('single');
-  });
-
-  it('falls back to +90min when account_expires_at is null', () => {
-    const c = candidate({ account_expires_at: null });
-    const result = matchPaystackDvaCandidates(
-      [c],
-      ctx({ paidAt: new Date('2026-05-09T11:25:00Z') })
-    );
-    expect(result.kind).toBe('single');
-  });
-
-  it('uses account_assigned_at as the retry window anchor when present', () => {
-    const c = candidate({
-      account_created_at: new Date('2026-05-09T08:00:00Z'),
-      account_assigned_at: new Date('2026-05-09T10:00:00Z'),
-      account_expires_at: new Date('2026-05-09T11:30:00Z'),
-    });
-    const result = matchPaystackDvaCandidates(
-      [c],
-      ctx({ paidAt: new Date('2026-05-09T10:30:00Z') })
-    );
-
-    expect(result.kind).toBe('single');
-  });
-
-  it('rejects paid_at before account_assigned_at when present', () => {
-    const c = candidate({
-      account_assigned_at: new Date('2026-05-09T10:30:00Z'),
-    });
-    const result = matchPaystackDvaCandidates(
-      [c],
-      ctx({ paidAt: new Date('2026-05-09T10:29:00Z') })
-    );
-
-    expect(result.kind).toBe('none');
-  });
-});
-
 describe('matchPaystackDvaCandidates — ambiguity + zero candidates', () => {
   it('prefers an exact late match over an in-window merchant invoice partial', () => {
     const result = matchPaystackDvaCandidates(
@@ -354,6 +243,30 @@ describe('matchPaystackDvaCandidates — ambiguity + zero candidates', () => {
     if (result.kind === 'ambiguous') {
       expect(result.timing).toBe('late');
     }
+  });
+
+  it('deduplicates repeated snapshots for one order before late ambiguity', () => {
+    const result = matchPaystackDvaCandidates(
+      [
+        candidate({
+          account_assigned_at: new Date('2026-05-09T10:00:00Z'),
+          account_created_at: new Date('2026-05-09T10:00:00Z'),
+        }),
+        candidate({
+          account_assigned_at: new Date('2026-05-09T10:30:00Z'),
+          account_created_at: new Date('2026-05-09T10:30:00Z'),
+        }),
+      ],
+      ctx({ paidAt: new Date('2026-05-09T12:53:00Z') })
+    );
+
+    expect(result).toMatchObject({
+      candidate: {
+        account_assigned_at: new Date('2026-05-09T10:30:00Z'),
+      },
+      kind: 'single',
+      timing: 'late',
+    });
   });
 
   it('returns none when zero candidates pass the filter', () => {

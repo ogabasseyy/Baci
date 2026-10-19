@@ -1,6 +1,7 @@
 import type { MutableRefObject } from 'react';
 import { useState } from 'react';
 import { Alert } from 'react-native';
+import { trackCheckoutPaymentStarted } from '@/services/analytics';
 import { OrderError } from '@/services/orders';
 import {
   CHECKOUT_API_BASE_URL,
@@ -139,6 +140,24 @@ async function runCryptoPaymentInitialization({
       );
     }
 
+    // The provider initialized with a wallet address: record the start now,
+    // stamped with the initialized reference (payment ID fallback) so a
+    // retry on another network or coin reconciles to its own attempt
+    // instead of blending into an indistinguishable same-order start.
+    await trackCheckoutPaymentStarted({
+      orderId: order.id,
+      orderNumber: order.order_number || order.id.slice(0, 8).toUpperCase(),
+      paymentMethod: 'juicyway',
+      reference: initData.reference || payment.payment_id || undefined,
+      // Revenue is the canonical full order total, not the residual due
+      // at the gateway after wallet/savings credit — matching the
+      // standard gateway path, order_created, and the eventual
+      // completion. amountDueToGateway stays on the provider init above,
+      // which is what the provider actually charges.
+      value: order.total,
+      // Stamped creation currency: absent values keep the NGN default.
+      ...(order.currency ? { currency: order.currency } : {}),
+    });
     setIsProcessing(false);
     setShowCryptoSelection(false);
     isOrderInFlight.current = false;
@@ -151,7 +170,12 @@ async function runCryptoPaymentInitialization({
       amount: payment.amount || orderResponse.amountDueToGateway,
       cryptoAmount: payment.crypto_amount || '',
       confirmationTime: payment.confirmation_time || '',
-      reference: initData.reference || '',
+      // Canonical provider-attempt reference, shared by the start event
+      // above and the completion handoff: when initialization returns a
+      // payment ID but no top-level reference, the payment ID is the
+      // attempt identity — without it settlement polling could emit the
+      // completion but never reconcile it to its start.
+      reference: initData.reference || payment.payment_id || '',
       paymentId: payment.payment_id || '',
       trackingToken,
     });

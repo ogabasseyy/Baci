@@ -50,6 +50,25 @@ vi.mock('@/lib/supabase/admin', () => ({
 
 vi.mock('@/lib/payments/ensure-paid-order-inventory-confirmed', () => ({
   ensurePaidOrderInventoryConfirmed: vi.fn().mockResolvedValue(undefined),
+  rollbackOrderStatusAfterInventoryConfirmationFailure: vi
+    .fn()
+    .mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/payments/file-inventory-confirmation-review', () => ({
+  fileInventoryConfirmationFailureReview: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('@/lib/payments/inventory-confirmation-response', () => ({
+  buildInventoryConfirmationFailurePayload: vi.fn((error: unknown) => ({
+    code:
+      error instanceof Error &&
+      error.message === 'serialized_inventory_unavailable'
+        ? 'serialized_inventory_unavailable'
+        : 'INVENTORY_CONFIRMATION_FAILED',
+    error:
+      error instanceof Error ? error.message : 'Inventory confirmation failed',
+  })),
 }));
 
 vi.mock('@/lib/payments/resolve-credit-direct-confirmation-review', () => ({
@@ -84,8 +103,12 @@ const actualCreditDirect = await vi.importActual<
 >('@/lib/credit-direct');
 const { createServiceClient } = await import('@/lib/supabase/service');
 const { logger } = await import('@/lib/logger');
-const { ensurePaidOrderInventoryConfirmed } = await import(
-  '@/lib/payments/ensure-paid-order-inventory-confirmed'
+const {
+  ensurePaidOrderInventoryConfirmed,
+  rollbackOrderStatusAfterInventoryConfirmationFailure,
+} = await import('@/lib/payments/ensure-paid-order-inventory-confirmed');
+const { fileInventoryConfirmationFailureReview } = await import(
+  '@/lib/payments/file-inventory-confirmation-review'
 );
 const { resolveCreditDirectConfirmationReview } = await import(
   '@/lib/payments/resolve-credit-direct-confirmation-review'
@@ -191,6 +214,7 @@ function createMockSupabaseClient() {
     update: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     ilike: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data: null, error: null }),
@@ -866,6 +890,120 @@ describe('POST /api/payments/credit-direct/webhook', () => {
       });
     });
 
+    it('rolls back the approval when customer-branch inventory confirmation fails', async () => {
+      vi.mocked(parseWebhookPayload).mockReturnValue(customerPaymentPayload);
+      vi.mocked(ensurePaidOrderInventoryConfirmed).mockRejectedValueOnce(
+        new Error('serialized_inventory_unavailable')
+      );
+
+      const supabaseMock = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
+
+      let fromCallCount = 0;
+      supabaseMock.from.mockImplementation((table: string) => {
+        fromCallCount++;
+        if (fromCallCount === 1) {
+          const orderLookupChain = {
+            ...createMockSupabaseClient().from('orders'),
+          };
+          orderLookupChain.select = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.eq = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.ilike = vi.fn().mockResolvedValue({
+            data: [mockOrder],
+            error: null,
+          });
+          return orderLookupChain;
+        }
+        const updateChain = { ...createMockSupabaseClient().from(table) };
+        updateChain.update = vi.fn().mockReturnValue(updateChain);
+        updateChain.eq = vi.fn().mockReturnValue(updateChain);
+        updateChain.in = vi.fn().mockReturnValue(updateChain);
+        updateChain.select = vi.fn().mockReturnValue(updateChain);
+        updateChain.maybeSingle = vi
+          .fn()
+          .mockResolvedValue({ data: { id: 'order_abc' }, error: null });
+        return updateChain;
+      });
+
+      const request = createMockRequest(customerPaymentPayload);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(409);
+      expect(data.code).toBe('serialized_inventory_unavailable');
+      // The bnpl_approved flip rolls back to the pre-webhook statuses
+      // (the customer branch sets no amount_paid) so the status poll
+      // cannot confirm an order with unconfirmed inventory. The restore
+      // is fenced to rows still in bnpl_approved so a concurrent
+      // merchant webhook that settled the order is never corrupted.
+      expect(
+        rollbackOrderStatusAfterInventoryConfirmationFailure
+      ).toHaveBeenCalledWith(
+        supabaseMock,
+        'merchant_123',
+        'order_abc',
+        {
+          payment_status: 'pending',
+          shipping_status: null,
+        },
+        { onlyIfPaymentStatus: ['bnpl_approved'] }
+      );
+      expect(fileInventoryConfirmationFailureReview).not.toHaveBeenCalled();
+    });
+
+    it('files a reconciliation review when customer-branch rollback also fails', async () => {
+      vi.mocked(parseWebhookPayload).mockReturnValue(customerPaymentPayload);
+      vi.mocked(ensurePaidOrderInventoryConfirmed).mockRejectedValueOnce(
+        new Error('boom')
+      );
+      vi.mocked(
+        rollbackOrderStatusAfterInventoryConfirmationFailure
+      ).mockRejectedValueOnce(new Error('rollback boom'));
+
+      const supabaseMock = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
+
+      let fromCallCount = 0;
+      supabaseMock.from.mockImplementation((table: string) => {
+        fromCallCount++;
+        if (fromCallCount === 1) {
+          const orderLookupChain = {
+            ...createMockSupabaseClient().from('orders'),
+          };
+          orderLookupChain.select = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.eq = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.ilike = vi.fn().mockResolvedValue({
+            data: [mockOrder],
+            error: null,
+          });
+          return orderLookupChain;
+        }
+        const updateChain = { ...createMockSupabaseClient().from(table) };
+        updateChain.update = vi.fn().mockReturnValue(updateChain);
+        updateChain.eq = vi.fn().mockReturnValue(updateChain);
+        updateChain.in = vi.fn().mockReturnValue(updateChain);
+        updateChain.select = vi.fn().mockReturnValue(updateChain);
+        updateChain.maybeSingle = vi
+          .fn()
+          .mockResolvedValue({ data: { id: 'order_abc' }, error: null });
+        return updateChain;
+      });
+
+      const request = createMockRequest(customerPaymentPayload);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.code).toBe('INVENTORY_CONFIRMATION_CLEANUP_FAILED');
+      expect(fileInventoryConfirmationFailureReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: 'order_abc',
+          merchantId: 'merchant_123',
+          transactionId: null,
+        })
+      );
+    });
+
     it('returns 500 when order update fails for customer payment', async () => {
       vi.mocked(parseWebhookPayload).mockReturnValue(customerPaymentPayload);
 
@@ -977,6 +1115,15 @@ describe('POST /api/payments/credit-direct/webhook', () => {
 
       expect(response.status).toBe(200);
       expect(data).toEqual({ received: true });
+
+      // The paid write fences shipping-axis cancellations in both
+      // spellings: neither the reopen trigger nor the clamped check
+      // recognizes the US spelling, so the update must exclude it.
+      expect(mockChain.neq).toHaveBeenCalledWith(
+        'shipping_status',
+        'cancelled'
+      );
+      expect(mockChain.neq).toHaveBeenCalledWith('shipping_status', 'canceled');
 
       // Verify from() was called for orders (twice) and transactions (twice)
       expect(supabaseMock.from).toHaveBeenCalledWith('orders');
@@ -2260,6 +2407,189 @@ describe('POST /api/payments/credit-direct/webhook', () => {
           issue_type: 'payment_received_after_refund',
           order_id: 'order_abc',
           txn_id: 'refund-tx-1',
+        })
+      );
+    });
+
+    it('keeps a payment-cancelled order cancelled but records and files the disbursed payout', async () => {
+      const cancelledOrder = { ...mockOrder, payment_status: 'cancelled' };
+      const transactionInsert = vi.fn().mockReturnThis();
+
+      vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
+
+      const supabaseMock = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
+
+      const mockChain = supabaseMock.from('orders');
+      let fromCallCount = 0;
+      supabaseMock.from.mockImplementation((_table: string) => {
+        fromCallCount++;
+        if (fromCallCount === 1) {
+          const orderLookupChain = { ...mockChain };
+          orderLookupChain.select = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.eq = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.ilike = vi.fn().mockResolvedValue({
+            data: [cancelledOrder],
+            error: null,
+          });
+          return orderLookupChain;
+        }
+        if (fromCallCount === 2) {
+          // The .in(payment_status) guard excludes 'cancelled', so the
+          // update matches 0 rows — a payment-only cancellation never
+          // trips the shipping-axis reopen clamp.
+          const updateChain = { ...mockChain };
+          updateChain.update = vi.fn().mockReturnValue(updateChain);
+          updateChain.eq = vi.fn().mockReturnValue(updateChain);
+          updateChain.in = vi.fn().mockReturnValue(updateChain);
+          updateChain.select = vi.fn().mockReturnValue(updateChain);
+          updateChain.maybeSingle = vi
+            .fn()
+            .mockResolvedValue({ data: null, error: null });
+          return updateChain;
+        }
+        if (fromCallCount === 3) {
+          const rereadChain = { ...mockChain };
+          rereadChain.select = vi.fn().mockReturnValue(rereadChain);
+          rereadChain.eq = vi.fn().mockReturnValue(rereadChain);
+          rereadChain.maybeSingle = vi.fn().mockResolvedValue({
+            data: { payment_status: 'cancelled' },
+            error: null,
+          });
+          return rereadChain;
+        }
+        if (fromCallCount === 4) {
+          const txCheckChain = { ...mockChain };
+          txCheckChain.select = vi.fn().mockReturnValue(txCheckChain);
+          txCheckChain.eq = vi.fn().mockReturnValue(txCheckChain);
+          txCheckChain.single = vi
+            .fn()
+            .mockResolvedValue({ data: null, error: null });
+          return txCheckChain;
+        }
+        if (fromCallCount === 5) {
+          const txInsertChain = { ...mockChain };
+          txInsertChain.insert = transactionInsert;
+          txInsertChain.select = vi.fn().mockReturnValue(txInsertChain);
+          txInsertChain.single = vi
+            .fn()
+            .mockResolvedValue({ data: { id: 'cancel-tx-1' }, error: null });
+          return txInsertChain;
+        }
+        throw new Error(`Unexpected from() call ${fromCallCount}`);
+      });
+
+      const request = createMockRequest(merchantPaymentPayload);
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toEqual({
+        received: true,
+        message: 'Order was cancelled; payment filed for review',
+      });
+      expect(mockReconciliationInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issue_type: 'payment_received_after_cancellation',
+          order_id: 'order_abc',
+          txn_id: 'cancel-tx-1',
+        })
+      );
+    });
+
+    it('records and files a payout captured after a shipping-only cancellation', async () => {
+      const shippingCancelledOrder = {
+        ...mockOrder,
+        shipping_status: 'canceled',
+        cancelled_at: null,
+      };
+      const transactionInsert = vi.fn().mockReturnThis();
+
+      vi.mocked(parseWebhookPayload).mockReturnValue(merchantPaymentPayload);
+
+      const supabaseMock = createMockSupabaseClient();
+      vi.mocked(createServiceClient).mockReturnValue(supabaseMock as never);
+
+      const mockChain = supabaseMock.from('orders');
+      let fromCallCount = 0;
+      supabaseMock.from.mockImplementation((_table: string) => {
+        fromCallCount++;
+        if (fromCallCount === 1) {
+          const orderLookupChain = { ...mockChain };
+          orderLookupChain.select = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.eq = vi.fn().mockReturnValue(orderLookupChain);
+          orderLookupChain.ilike = vi.fn().mockResolvedValue({
+            data: [shippingCancelledOrder],
+            error: null,
+          });
+          return orderLookupChain;
+        }
+        if (fromCallCount === 2) {
+          // The shipping fences exclude the row, so the update matches
+          // 0 rows even though payment is still pending.
+          const updateChain = { ...mockChain };
+          updateChain.update = vi.fn().mockReturnValue(updateChain);
+          updateChain.eq = vi.fn().mockReturnValue(updateChain);
+          updateChain.in = vi.fn().mockReturnValue(updateChain);
+          updateChain.select = vi.fn().mockReturnValue(updateChain);
+          updateChain.maybeSingle = vi
+            .fn()
+            .mockResolvedValue({ data: null, error: null });
+          return updateChain;
+        }
+        if (fromCallCount === 3) {
+          const rereadChain = { ...mockChain };
+          rereadChain.select = vi.fn().mockReturnValue(rereadChain);
+          rereadChain.eq = vi.fn().mockReturnValue(rereadChain);
+          rereadChain.maybeSingle = vi.fn().mockResolvedValue({
+            data: {
+              payment_status: 'pending',
+              shipping_status: 'canceled',
+              cancelled_at: null,
+              notes: '{}',
+            },
+            error: null,
+          });
+          return rereadChain;
+        }
+        if (fromCallCount === 4) {
+          const txCheckChain = { ...mockChain };
+          txCheckChain.select = vi.fn().mockReturnValue(txCheckChain);
+          txCheckChain.eq = vi.fn().mockReturnValue(txCheckChain);
+          txCheckChain.single = vi
+            .fn()
+            .mockResolvedValue({ data: null, error: null });
+          return txCheckChain;
+        }
+        if (fromCallCount === 5) {
+          const txInsertChain = { ...mockChain };
+          txInsertChain.insert = transactionInsert;
+          txInsertChain.select = vi.fn().mockReturnValue(txInsertChain);
+          txInsertChain.single = vi.fn().mockResolvedValue({
+            data: { id: 'ship-cancel-tx-1' },
+            error: null,
+          });
+          return txInsertChain;
+        }
+        throw new Error(`Unexpected from() call ${fromCallCount}`);
+      });
+
+      const request = createMockRequest(merchantPaymentPayload);
+      const response = await POST(request);
+      const data = await response.json();
+
+      // The captured BNPL money gets a durable transaction record and
+      // an ops reconciliation row instead of a bare warning ack.
+      expect(response.status).toBe(200);
+      expect(data).toEqual({
+        received: true,
+        message: 'Order was cancelled; payment filed for review',
+      });
+      expect(mockReconciliationInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          issue_type: 'payment_received_after_cancellation',
+          order_id: 'order_abc',
+          txn_id: 'ship-cancel-tx-1',
         })
       );
     });

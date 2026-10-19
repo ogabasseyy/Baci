@@ -4,7 +4,7 @@ set -euo pipefail
 real_pnpm="${BACI_REAL_PNPM:?BACI_REAL_PNPM is unset}"
 scripts_dir=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd -P)
 
-if sh "$scripts_dir/is-sparse-checkout.sh"; then
+if sh "$scripts_dir/is-dep-less-worktree.sh"; then
   case "${1:-}" in
     install|i|add)
       exec "$real_pnpm" --config.allowUnusedPatches=true "$@"

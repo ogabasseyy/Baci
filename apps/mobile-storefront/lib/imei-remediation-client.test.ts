@@ -1,9 +1,10 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 import { createImeiRemediationClient } from './imei-remediation-client';
 
 describe('createImeiRemediationClient', () => {
   it('requests server-approved eligibility with storefront bearer auth', async () => {
-    const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    const fetchImpl = jest.fn<FetchImplementation>().mockResolvedValue({
       json: () =>
         Promise.resolve({
           assessmentId: '22222222-2222-4222-8222-222222222222',
@@ -47,7 +48,7 @@ describe('createImeiRemediationClient', () => {
   });
 
   it('lists customer-safe unlock orders', async () => {
-    const fetchImpl = jest.fn<typeof fetch>().mockResolvedValue({
+    const fetchImpl = jest.fn<FetchImplementation>().mockResolvedValue({
       json: () =>
         Promise.resolve({ orders: [{ id: 'order-1' }], success: true }),
       ok: true,

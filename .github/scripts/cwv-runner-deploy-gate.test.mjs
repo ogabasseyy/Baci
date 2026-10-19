@@ -77,6 +77,7 @@ test('runs CWV contracts and production deployment for runner-only main changes'
   }
 
   assert.ok(deployProduction.needs.includes('cwv-runner-contracts'));
+  assert.equal(deployProduction['runs-on'], 'ubuntu-24.04');
   assert.match(
     deployProduction.if,
     /needs\.cwv-runner-contracts\.result == 'success' \|\| needs\.cwv-runner-contracts\.result == 'skipped'/,

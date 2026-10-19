@@ -57,6 +57,32 @@ jest.mock('expo-router', () => ({
   },
 }));
 
+jest.mock('expo-image', () => {
+  const { View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+
+  return {
+    Image: ({
+      autoplay,
+      accessibilityLabel,
+      testID,
+    }: {
+      autoplay?: boolean;
+      accessibilityLabel?: string;
+      testID?: string;
+    }) => {
+      const viewProps = {
+        testID: testID ?? 'saved-tab-product-image',
+        accessibilityLabel: accessibilityLabel ?? 'saved tab product image',
+        accessibilityRole: 'image' as const,
+        autoplay,
+      } as unknown as React.ComponentProps<typeof View>;
+      return <View {...viewProps} />;
+    },
+  };
+});
+
 jest.mock('@shopify/flash-list', () => ({
   FlashList: ({
     data = [],
@@ -225,6 +251,29 @@ describe('SavedTabScreen', () => {
     fireEvent.press(screen.getByLabelText('View Test Product'));
 
     expect(mockRouterPush).toHaveBeenCalledWith('/product/test-product');
+  });
+
+  describe('bugfix: animated catalog images on saved tab', () => {
+    it('does not autoplay product images in the saved tab list', () => {
+      mockSavedStore.mockReturnValue([
+        {
+          id: 'saved-1',
+          image: 'https://example.com/image.gif',
+          name: 'Test Product',
+          price: 2500,
+          product_id: 'product-1',
+          slug: 'test-product',
+          savedAt: Date.now(),
+        },
+      ]);
+
+      render(<SavedTabScreen />);
+
+      // Nested under a Pressable button, so role queries hide the image.
+      expect(screen.getByTestId('saved-tab-product-image').props.autoplay).toBe(
+        false
+      );
+    });
   });
 
   it('skips navigation when a saved item is missing its slug', () => {

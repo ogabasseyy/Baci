@@ -26,6 +26,7 @@ required_paths=(
   pnpm-lock.yaml
   pnpm-workspace.yaml
   .npmrc
+  .dockerignore
   apps/web/package.json
   apps/web/tsconfig.json
   apps/web/mcp-server

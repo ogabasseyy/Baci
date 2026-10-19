@@ -1,67 +1,53 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import {
+  a27,
+  mockExpoImageModule,
+  mockImage,
+  mockPush,
+  mockReactNativeModule,
+  mockSkeletonModule,
+  mockThemeModule,
+  mockUseMobileAdsReadiness,
+  mockUsePinned,
+  mockUseProducts,
+  setupCarouselMocks,
+  xiaomi,
+} from './JustLaunchedCarousel-test-harness';
 
-const mockPush = jest.fn();
-const mockUseProducts = jest.fn();
-const mockUsePinned = jest.fn();
-
-jest.mock('expo-image', () => ({ Image: () => null }));
+jest.mock('@/hooks/use-mobile-ads-readiness', () => ({
+  useMobileAdsReadiness: mockUseMobileAdsReadiness,
+}));
+jest.mock('@/services/analytics-core', () => ({
+  trackEvent: jest.fn(),
+}));
+jest.mock('react-native-google-mobile-ads', () => ({
+  BannerAd: 'BannerAd',
+  BannerAdSize: {
+    ANCHORED_ADAPTIVE_BANNER: 'anchored-adaptive-banner',
+  },
+}));
+jest.mock('expo-image', () => mockExpoImageModule());
+jest.mock('react-native', () => mockReactNativeModule());
 jest.mock('expo-router', () => ({
   router: { push: (path: string) => mockPush(path) },
+  useIsFocused: () => true,
 }));
-jest.mock('@/hooks/useTheme', () => ({
-  useTheme: () => ({
-    colors: {
-      card: '#ffffff',
-      background: '#ffffff',
-      text: '#000000',
-      textSecondary: '#666666',
-      primary: '#d62027',
-      border: '#cccccc',
-    },
-  }),
-}));
+jest.mock('@/hooks/useTheme', () => mockThemeModule());
 jest.mock('@/hooks/use-products', () => ({
   useProducts: () => mockUseProducts(),
 }));
 jest.mock('@/hooks/use-pinned-launch-products', () => ({
   usePinnedLaunchProducts: () => mockUsePinned(),
 }));
-jest.mock('@/components/ui/Skeleton', () => {
-  const { View } =
-    jest.requireActual<typeof import('react-native')>('react-native');
-  return {
-    Skeleton: () => <View accessibilityRole="progressbar" accessible />,
-  };
-});
+jest.mock('@/components/ui/Skeleton', () => mockSkeletonModule());
 
 import { PRODUCT_PLACEHOLDER_IMAGE } from '@/lib/product-normalization';
 import { JustLaunchedCarousel } from './JustLaunchedCarousel';
 
-const a27 = {
-  id: 'a27',
-  name: 'Samsung Galaxy A27 5G Preorder',
-  slug: 'samsung-galaxy-a27-5g',
-  price: 50000,
-  image: 'https://cdn.ogabassey.com/core-assets/products/a27.avif',
-};
-const xiaomi = {
-  id: 'xiaomi',
-  name: 'Xiaomi 17T',
-  slug: 'xiaomi-17t',
-  price: 800000,
-  image: 'https://cdn.ogabassey.com/core-assets/products/xiaomi.avif',
-};
-
 describe('JustLaunchedCarousel', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockUsePinned.mockReturnValue({ data: [], isLoading: false });
-    mockUseProducts.mockReturnValue({
-      products: [],
-      isLoading: false,
-      isError: false,
-    });
+    setupCarouselMocks();
   });
 
   it('renders pinned-first slides and navigates to the product on press', () => {
@@ -83,6 +69,27 @@ describe('JustLaunchedCarousel', () => {
       screen.getByRole('button', { name: /Samsung Galaxy A27 5G Preorder/ })
     );
     expect(mockPush).toHaveBeenCalledWith('/product/samsung-galaxy-a27-5g');
+  });
+
+  it('bounds Android decoding and requests iOS early resizing for launch images', () => {
+    mockUseProducts.mockReturnValue({
+      products: [xiaomi],
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JustLaunchedCarousel />);
+
+    expect(mockImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enforceEarlyResizing: true,
+        source: {
+          height: 304,
+          uri: 'https://cdn.ogabassey.com/image/width=244,height=304,quality=82,format=webp/core-assets/products/xiaomi.avif',
+          width: 244,
+        },
+      })
+    );
   });
 
   it('uses the shared cutoff-adjusted launch order when newer arrivals exist', () => {

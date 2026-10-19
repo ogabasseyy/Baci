@@ -1,0 +1,77 @@
+name: iOS RuntimeScheduler PR Gate
+
+# PR-time Xcode 26 check for the expo-modules-jsi SWIFT_RETURNS_RETAINED patch.
+# Full storefront release still re-runs this on macos-26; this gate catches
+# patch regressions before merge without waiting for the post-main release job.
+
+on:
+  pull_request:
+    paths:
+      - 'patches/expo-modules-jsi@*'
+      - 'patches/expo-modules-core@*'
+      - 'patches/expo-web-browser@*'
+      - 'patches/expo-apple-authentication@*'
+      - 'patches/expo-print@*'
+      - 'apps/mobile-storefront/config/ios-scene-*.test.mjs'
+      - 'apps/mobile-admin/app.config.ts'
+      - 'apps/mobile-admin/ios/Podfile.properties.json'
+      - 'apps/mobile-storefront/app.config.ts'
+      - 'apps/mobile-storefront/ios/Podfile.properties.json'
+      - 'apps/mobile-storefront/ios/Ogabassey/AppDelegate.swift'
+      - 'apps/mobile-storefront/ios/Ogabassey/Info.plist'
+      - '.github/scripts/ios-scene-presentation.test.mjs'
+      - 'patches/expo-linear-gradient@*'
+      - 'patches/react-native@*'
+      - 'apps/mobile-storefront/scripts/native-regressions/**'
+      - 'apps/mobile-storefront/config/sentry-native-diagnostics*'
+      - 'apps/mobile-storefront/config/withSentryNativeDiagnostics.js'
+      - 'apps/mobile-storefront/config/expo-plugins.js'
+      - 'apps/mobile-storefront/services/error-monitoring*'
+      - 'apps/mobile-storefront/config/ios-gradient-layer.test.mjs'
+      - '.github/scripts/ios-runtime-scheduler.test.mjs'
+      - '.github/workflows/ios-runtime-scheduler-pr.yml'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-runtime-scheduler-pr-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  XCODE_VERSION: '26.2'
+
+jobs:
+  runtime-scheduler:
+    name: Swift RuntimeScheduler compatibility
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+
+      - name: Install JS deps
+        uses: ./.github/actions/pnpm-install-cached
+
+      - name: Verify Swift RuntimeScheduler compatibility
+        run: pnpm exec node --test .github/scripts/ios-runtime-scheduler.test.mjs
+
+      - name: Verify native gradient composition
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh
+
+      - name: Verify native clipping geometry and traversal work
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-clipping-views.sh
+
+      - name: Verify native Sentry breadcrumb policy and MetricKit integration
+        run: |
+          node --test apps/mobile-storefront/config/sentry-native-diagnostics.test.mjs
+          bash apps/mobile-storefront/scripts/native-regressions/check-sentry-diagnostics.sh
+
+      - name: Verify scene presentation Swift and legacy window fallback
+        run: node --test .github/scripts/ios-scene-presentation.test.mjs apps/mobile-storefront/config/ios-scene-presentation.test.mjs

@@ -164,9 +164,9 @@ describe('calculateDeliveryCost', () => {
     expect(cost).toBe(0);
   });
 
-  it('returns 25000 for airport delivery', () => {
+  it('returns 35000 for airport delivery', () => {
     const cost = calculateDeliveryCost('airport', '', mockQuotes, 'delivery');
-    expect(cost).toBe(25000);
+    expect(cost).toBe(35000);
   });
 
   it('returns 20000 for airport pickup', () => {

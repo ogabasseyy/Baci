@@ -12,8 +12,22 @@ function renderOpenModal() {
   );
 }
 
+/** Installs a trivial in-process Web Locks stand-in for the mint runner. */
+function installTestLockManager(): void {
+  Object.defineProperty(globalThis.navigator, 'locks', {
+    configurable: true,
+    writable: true,
+    value: {
+      request: async (_name: string, callback: () => unknown) => callback(),
+    },
+  });
+}
+
 describe('UtilityModal', () => {
   beforeEach(() => {
+    // Locks first (R152 P1): completing a purchase mints under the
+    // runner, which fails closed in a lockless jsdom browser.
+    installTestLockManager();
     harness.reset();
   });
 
@@ -69,32 +83,16 @@ describe('UtilityModal', () => {
     });
   });
 
-  it('shows available wallet credit as a selected payment method', () => {
+  it('shows available wallet credit as the only payment method', () => {
     renderOpenModal();
 
     expect(
       screen.getByRole('radio', { name: /pay with wallet/i })
     ).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByText(/₦500 available/i)).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /pay with card/i })).toBeInTheDocument();
-  });
-
-  it('reports the payment method when the customer selects card', () => {
-    renderOpenModal();
-
-    fireEvent.click(screen.getByRole('radio', { name: /pay with card/i }));
-
-    expect(harness.captureEvent).toHaveBeenCalledTimes(1);
-    expect(harness.captureEvent).toHaveBeenCalledWith(
-      'utility_payment_method_selected',
-      expect.objectContaining({
-        method: 'card',
-        can_use_wallet: true,
-        wallet_balance: 500,
-        merchant_slug: 'ogabassey',
-        customer_id: 'customer-1',
-      })
-    );
+    expect(
+      screen.queryByRole('radio', { name: /pay with card/i })
+    ).not.toBeInTheDocument();
   });
 
   it('reports the payment method when the customer selects wallet', () => {
@@ -153,7 +151,7 @@ describe('UtilityModal', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('hides the bank-transfer CTA when the customer has no phone and no DVA yet', () => {
+  it('offers the bank-transfer CTA when the customer has no phone and needs a DVA', () => {
     harness.useAuth.mockReturnValue({
       customer: {
         id: 'customer-1',
@@ -182,8 +180,47 @@ describe('UtilityModal', () => {
     renderOpenModal();
 
     expect(
-      screen.queryByRole('button', { name: /pay with bank transfer/i })
-    ).not.toBeInTheDocument();
+      screen.getByRole('button', { name: /pay with bank transfer/i })
+    ).toBeInTheDocument();
+  });
+
+  it('shows an assigned DVA even when the customer has no phone', () => {
+    harness.useAuth.mockReturnValue({
+      customer: {
+        id: 'customer-1',
+        email: 'customer@example.com',
+        first_name: 'Test',
+        last_name: 'Customer',
+        phone: null,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      user: { email: 'customer@example.com', id: 'user-1', role: 'customer' },
+    });
+    harness.useWallet.mockReturnValue({
+      fundingAccount: {
+        accountName: 'OGB / TEST',
+        accountNumber: '9099887766',
+        bankName: 'Wema Bank',
+        provider: 'paystack',
+      },
+      payWithWallet: false,
+      refreshWallet: vi.fn(),
+      requiresFundingAccountConsent: false,
+      setFundingAccount: vi.fn(),
+      setPayWithWallet: vi.fn(),
+      setWalletBalance: vi.fn(),
+      walletBalance: 0,
+      walletDvaEnabled: true,
+      walletLoading: false,
+    });
+
+    renderOpenModal();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /pay with bank transfer/i })
+    );
+    expect(screen.getByText('9099887766')).toBeInTheDocument();
   });
 
   it('collapses an open funding panel when the customer switches mid-session', () => {

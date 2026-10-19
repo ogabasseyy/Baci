@@ -7,6 +7,7 @@ import {
   jest,
 } from '@jest/globals';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 
 type AuthStoreSnapshot = {
   merchantId: string | null;
@@ -14,6 +15,10 @@ type AuthStoreSnapshot = {
 };
 
 type AuthStoreSelector = (state: AuthStoreSnapshot) => unknown;
+let mockAuthSnapshot: AuthStoreSnapshot = {
+  merchantId: 'merchant-1',
+  user: { id: 'user-1' },
+};
 
 const mockNotificationListenerRemove = jest.fn();
 const mockResponseListenerRemove = jest.fn();
@@ -25,10 +30,6 @@ const mockSavePushTokenToServer =
   jest.fn<
     (token: string, userId: string, merchantId?: string) => Promise<boolean>
   >();
-const mockRouterPush = jest.fn();
-let mockNotificationResponseCallback:
-  | ((response: Record<string, unknown>) => void)
-  | null = null;
 
 const mockEnsureAndroidNotificationChannels = jest.fn<() => Promise<void>>();
 
@@ -40,24 +41,16 @@ const mockIsPushOptedOut = jest.fn<(userId: string) => Promise<boolean>>();
 const mockSetPushOptOut =
   jest.fn<(userId: string, optOut: boolean) => Promise<void>>();
 
-jest.mock('expo-router', () => ({
-  router: {
-    push: mockRouterPush,
-  },
-}));
-
 jest.mock('expo-notifications', () => ({
+  getPermissionsAsync: jest
+    .fn<() => Promise<{ status: 'granted' }>>()
+    .mockResolvedValue({ status: 'granted' }),
   addNotificationReceivedListener: jest.fn(() => ({
     remove: mockNotificationListenerRemove,
   })),
-  addNotificationResponseReceivedListener: jest.fn(
-    (callback: (response: Record<string, unknown>) => void) => {
-      mockNotificationResponseCallback = callback;
-      return {
-        remove: mockResponseListenerRemove,
-      };
-    }
-  ),
+  addNotificationResponseReceivedListener: jest.fn(() => ({
+    remove: mockResponseListenerRemove,
+  })),
   getLastNotificationResponseAsync: jest
     .fn<() => Promise<null>>()
     .mockResolvedValue(null),
@@ -67,9 +60,9 @@ jest.mock('@/services/push-notification-channels', () => ({
   ensureAndroidNotificationChannels: mockEnsureAndroidNotificationChannels,
 }));
 
+jest.mock('@/services/analytics', () => ({ trackError: jest.fn() }));
+
 jest.mock('@/services/push-notifications', () => ({
-  clearBadge: jest.fn(),
-  handleNotificationResponse: jest.fn(),
   registerForPushNotifications: mockRegisterForPushNotifications,
   removePushTokenFromServer: mockRemovePushTokenFromServer,
   savePushTokenToServer: mockSavePushTokenToServer,
@@ -81,38 +74,39 @@ jest.mock('@/lib/push-token-storage', () => ({
   clearStoredPushToken: mockClearStoredPushToken,
   isPushOptedOut: mockIsPushOptedOut,
   setPushOptOut: mockSetPushOptOut,
+  getRegisteredPushToken: jest.fn(async () => null),
+  setRegisteredPushToken: jest.fn(async () => {}),
+  clearRegisteredPushToken: jest.fn(async () => {}),
 }));
 
 jest.mock('@/stores/auth-store', () => ({
-  useAuthStore: jest.fn(),
+  useAuthStore: Object.assign(jest.fn(), {
+    getState: () => mockAuthSnapshot,
+  }),
 }));
 
 const mockedUseAuthStore = (
   jest.requireMock('@/stores/auth-store') as {
-    useAuthStore: jest.MockedFunction<(selector: AuthStoreSelector) => unknown>;
+    useAuthStore: jest.MockedFunction<
+      (selector: AuthStoreSelector) => unknown
+    > & {
+      getState: () => AuthStoreSnapshot;
+    };
   }
 ).useAuthStore;
 
 const { usePushNotifications } =
   require('./use-push-notifications') as typeof import('./use-push-notifications');
-const { handleNotificationResponse } = jest.requireMock(
-  '@/services/push-notifications'
-) as {
-  handleNotificationResponse: jest.MockedFunction<
-    typeof import('@/services/push-notifications')['handleNotificationResponse']
-  >;
-};
 
 describe('usePushNotifications', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    handleNotificationResponse.mockReset();
-    mockNotificationResponseCallback = null;
+    mockAuthSnapshot = {
+      merchantId: 'merchant-1',
+      user: { id: 'user-1' },
+    };
     mockedUseAuthStore.mockImplementation((selector) =>
-      selector({
-        merchantId: 'merchant-1',
-        user: { id: 'user-1' },
-      })
+      selector(mockAuthSnapshot)
     );
     mockRegisterForPushNotifications.mockResolvedValue(
       'ExponentPushToken[fresh]'
@@ -251,6 +245,40 @@ describe('usePushNotifications', () => {
     expect(result.current.pushToken).toBe('ExponentPushToken[fresh]');
   });
 
+  it('retries a failed authenticated registration when the app returns to foreground', async () => {
+    let onAppStateChange: ((state: AppStateStatus) => void) | undefined;
+    const addListener = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_event, listener) => {
+        onAppStateChange = listener;
+        return { remove: jest.fn() };
+      });
+    mockSavePushTokenToServer
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValue(true);
+
+    const { result } = renderHook(() => usePushNotifications());
+    await act(async () => {
+      await result.current.register('user-1', 'merchant-1');
+    });
+
+    expect(result.current.isRegistered).toBe(false);
+    expect(onAppStateChange).toBeDefined();
+
+    await act(async () => {
+      onAppStateChange?.('active');
+    });
+
+    await waitFor(() => expect(result.current.isRegistered).toBe(true));
+    expect(mockSavePushTokenToServer).toHaveBeenLastCalledWith(
+      'ExponentPushToken[fresh]',
+      'user-1',
+      'merchant-1'
+    );
+    addListener.mockRestore();
+  });
+
   it('treats registration as user-scoped when the signed-in user changes', async () => {
     const { result, rerender } = renderHook(() => usePushNotifications());
 
@@ -258,11 +286,9 @@ describe('usePushNotifications', () => {
       await result.current.register('user-1', 'merchant-1');
     });
 
+    mockAuthSnapshot = { merchantId: 'merchant-1', user: { id: 'user-2' } };
     mockedUseAuthStore.mockImplementation((selector) =>
-      selector({
-        merchantId: 'merchant-1',
-        user: { id: 'user-2' },
-      })
+      selector(mockAuthSnapshot)
     );
 
     rerender(undefined);
@@ -375,8 +401,9 @@ describe('usePushNotifications', () => {
   it('hydrates token from AsyncStorage on mount without setting registeredUserId', async () => {
     // Unauthenticated user — token is loaded from storage but cannot be synced
     // to server yet (no userId). registeredUserId must stay null.
+    mockAuthSnapshot = { merchantId: null, user: null };
     mockedUseAuthStore.mockImplementation((selector) =>
-      selector({ merchantId: null, user: null })
+      selector(mockAuthSnapshot)
     );
     mockGetStoredPushToken.mockResolvedValue('ExponentPushToken[hydrated]');
 
@@ -404,57 +431,6 @@ describe('usePushNotifications', () => {
     expect(result.current.pushToken).toBeNull();
     expect(result.current.registeredUserId).toBeNull();
     expect(result.current.isRegistered).toBe(false);
-  });
-
-  it('routes token-ready notification taps to utility history', async () => {
-    handleNotificationResponse.mockImplementation(
-      (
-        _response: unknown,
-        navigate: (screen: string, params?: Record<string, string>) => void
-      ) => {
-        navigate('utility-history', { type: 'power' });
-      }
-    );
-
-    renderHook(() => usePushNotifications());
-
-    await waitFor(() => {
-      expect(mockNotificationResponseCallback).not.toBeNull();
-    });
-
-    act(() => {
-      mockNotificationResponseCallback?.({});
-    });
-
-    expect(mockRouterPush).toHaveBeenCalledWith(
-      '/utilities/history?type=power'
-    );
-  });
-
-  it('routes savings reminder notification taps to the wallet savings action', async () => {
-    handleNotificationResponse.mockImplementation(
-      (
-        _response: unknown,
-        navigate: (screen: string, params?: Record<string, string>) => void
-      ) => {
-        navigate('wallet', { action: 'savings' });
-      }
-    );
-
-    renderHook(() => usePushNotifications());
-
-    await waitFor(() => {
-      expect(mockNotificationResponseCallback).not.toBeNull();
-    });
-
-    act(() => {
-      mockNotificationResponseCallback?.({});
-    });
-
-    expect(mockRouterPush).toHaveBeenCalledWith({
-      pathname: '/wallet',
-      params: { action: 'savings' },
-    });
   });
 
   // --- unregister() tests ---
@@ -542,8 +518,9 @@ describe('usePushNotifications', () => {
     expect(result.current.registeredUserId).toBe('user-1');
 
     // Simulate sign-out
+    mockAuthSnapshot = { merchantId: null, user: null };
     mockedUseAuthStore.mockImplementation((selector) =>
-      selector({ merchantId: null, user: null })
+      selector(mockAuthSnapshot)
     );
 
     act(() => {
@@ -555,8 +532,9 @@ describe('usePushNotifications', () => {
   });
 
   it('does not fire sign-out effect on initial mount when user starts as null', async () => {
+    mockAuthSnapshot = { merchantId: null, user: null };
     mockedUseAuthStore.mockImplementation((selector) =>
-      selector({ merchantId: null, user: null })
+      selector(mockAuthSnapshot)
     );
 
     const { result } = renderHook(() => usePushNotifications());

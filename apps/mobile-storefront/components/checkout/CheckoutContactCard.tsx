@@ -10,9 +10,8 @@ import { CheckoutFormField } from './CheckoutFormField';
 import { CheckoutGuestSaveDetails } from './CheckoutGuestSaveDetails';
 import { CollapsibleCheckoutCard } from './selection/CollapsibleCheckoutCard';
 
-// Email addresses can't contain whitespace; strip it as the user types so a
-// stray space (common on mobile keyboards after autocomplete) can't produce a
-// validation error they have to hunt for.
+// Normalize form data immediately, while CheckoutFormField preserves the native
+// editing draft until blur so autofill does not trigger an active text rewrite.
 function stripEmailWhitespace(value: string): string {
   return value.replace(/\s+/g, '');
 }
@@ -40,6 +39,7 @@ type CheckoutContactCardProps = {
   isCollapsed: boolean;
   isDark: boolean;
   onChangeAccountPassword: (value: string) => void;
+  onContactEmailSettled?: () => void;
   onToggleCollapsed: () => void;
   onToggleSaveDetails: () => void;
   phone?: string;
@@ -63,13 +63,13 @@ export function CheckoutContactCard({
   isCollapsed,
   isDark,
   onChangeAccountPassword,
+  onContactEmailSettled,
   onToggleCollapsed,
   onToggleSaveDetails,
   phone,
   saveDetails,
 }: CheckoutContactCardProps) {
-  const showCollapseAction =
-    isAuthenticated && (isCollapsed || hasContactIdentity);
+  const showCollapseAction = hasContactIdentity;
 
   return (
     <CollapsibleCheckoutCard
@@ -87,6 +87,7 @@ export function CheckoutContactCard({
           colors={colors}
           contactSummary={contactSummary}
           email={email}
+          isAuthenticated={isAuthenticated}
           phone={phone}
         />
       }
@@ -106,6 +107,7 @@ export function CheckoutContactCard({
                 isDark={isDark}
                 label=""
                 name={field.name}
+                onBlur={onContactEmailSettled}
                 placeholder={field.placeholder}
               />
             </View>
@@ -127,7 +129,10 @@ export function CheckoutContactCard({
             <PhoneInput
               containerStyle={styles.compactInputGroup}
               error={errors.phone?.message}
-              onBlur={onBlur}
+              onBlur={() => {
+                onBlur();
+                onContactEmailSettled?.();
+              }}
               onChangeText={onChange}
               value={value}
             />
@@ -148,6 +153,9 @@ export function CheckoutContactCard({
           label=""
           name="email"
           placeholder="john@example.com"
+          onBlur={onContactEmailSettled}
+          onSubmitEditing={onContactEmailSettled}
+          returnKeyType="done"
           transformText={stripEmailWhitespace}
         />
 
@@ -169,10 +177,11 @@ function ContactSummary({
   colors,
   contactSummary,
   email,
+  isAuthenticated,
   phone,
 }: Pick<
   CheckoutContactCardProps,
-  'colors' | 'contactSummary' | 'email' | 'phone'
+  'colors' | 'contactSummary' | 'email' | 'isAuthenticated' | 'phone'
 >) {
   return (
     <View
@@ -203,7 +212,7 @@ function ContactSummary({
           <Text
             style={[styles.summaryMetaLabel, { color: colors.textSecondary }]}
           >
-            Signed in
+            {isAuthenticated ? 'Signed in' : 'Contact details'}
           </Text>
           <Text style={[styles.summaryTitle, { color: colors.text }]}>
             {contactSummary || 'Contact details'}

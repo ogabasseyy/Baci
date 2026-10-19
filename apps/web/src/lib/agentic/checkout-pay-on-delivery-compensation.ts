@@ -48,6 +48,7 @@ export async function compensatePayOnDeliveryFinalizationFailure({
   orderId,
   sessionId,
   supabase,
+  bound,
 }: {
   finalizationClaim: string;
   merchantId: string;
@@ -56,7 +57,35 @@ export async function compensatePayOnDeliveryFinalizationFailure({
   orderId: string;
   sessionId: string;
   supabase: SupabaseClient;
+  /**
+   * A bound order creation atomically completed the cart and stored
+   * the binding replay receipt: canceling the order would strand the
+   * checkout (the completed cart can only replay that canceled
+   * order), so bound failures only release the finalization claim.
+   */
+  bound?: boolean;
 }) {
+  if (bound) {
+    const releaseSucceeded = await releasePayOnDeliveryClaimSafely({
+      finalizationClaim,
+      merchantId,
+      metadata,
+      orderError,
+      sessionId,
+      supabase,
+    });
+    logger.error({
+      error: {
+        orderError: sanitizeForLog(orderError),
+        releaseSucceeded,
+      },
+      message:
+        'Pay-on-delivery finalization failed after bound order creation; order preserved',
+      orderId: sanitizeForLog(orderId),
+      sessionId: sanitizeForLog(sessionId),
+    });
+    return;
+  }
   let cancellationError: unknown = null;
   let cancellationUpdated = false;
   let releaseSucceeded: boolean | null = null;

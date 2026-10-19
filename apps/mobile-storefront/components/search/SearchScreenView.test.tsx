@@ -1,29 +1,40 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ComponentProps } from 'react';
 import Colors from '@/constants/Colors';
-import type { Category } from '@/types/product';
+import type { Category, Product } from '@/types/product';
 import SearchScreenView from './SearchScreenView';
 
-jest.mock('@/components/storefront/FilterBar', () => ({
-  FilterBar: function MockFilterBar() {
-    return null;
-  },
+jest.mock('./SearchResultsEmptyState', () => ({
+  __esModule: true,
+  default: () => null,
 }));
 
-jest.mock('@/components/storefront/ProductCard', () => ({
-  ProductCard: function MockProductCard() {
-    return null;
-  },
-}));
+jest.mock('./SearchResultsList', () => {
+  const { Text, View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
 
-jest.mock('@shopify/flash-list', () => ({
-  FlashList: function MockFlashList() {
-    return null;
-  },
-}));
+  return {
+    __esModule: true,
+    default: function MockSearchResultsList({
+      listError,
+      resultsKey,
+    }: {
+      listError?: string | null;
+      resultsKey?: string;
+    }) {
+      return (
+        <View testID="mock-results-list">
+          <Text>{listError ?? 'no-list-error'}</Text>
+          <Text testID="mock-results-key">{resultsKey ?? 'no-key'}</Text>
+        </View>
+      );
+    },
+  };
+});
 
 const categories: Category[] = [
-  { id: 'phones', name: 'Phones', slug: 'phones' },
+  { id: 'cat-1', name: 'Phones', slug: 'phones' },
 ];
 
 function renderView(
@@ -34,9 +45,13 @@ function renderView(
     categories,
     categoryNames: ['All', 'Phones'],
     colors: Colors.light,
+    committedQuery: '',
     hasSearchQuery: false,
     isLoading: false,
+    isLoadingMore: false,
+    isNextPageError: false,
     isOnline: true,
+    isRetrying: false,
     maxPrice: 0,
     minPrice: 0,
     minRating: 0,
@@ -44,10 +59,13 @@ function renderView(
     onCategoryPress: jest.fn(),
     onCategorySelect: jest.fn(),
     onClearQuery: jest.fn(),
+    onEndReached: jest.fn(),
     onPriceChange: jest.fn(),
     onProductPress: jest.fn(),
     onQueryChange: jest.fn(),
     onRecentSearch: jest.fn(),
+    onRetry: jest.fn(),
+    onRetryNextPage: jest.fn(),
     onSelectBrand: jest.fn(),
     onSelectCondition: jest.fn(),
     onSelectRating: jest.fn(),
@@ -56,54 +74,27 @@ function renderView(
     products: [],
     query: '',
     recentSearches: ['iPhone 15 Pro'],
+    searchError: null,
     selectedBrand: 'All',
     selectedCategory: 'All',
     selectedCondition: 'All',
+    totalCount: 0,
     viewMode: 'grid',
     ...overrides,
   };
 
-  return { props, ...render(<SearchScreenView {...props} />) };
+  return render(<SearchScreenView {...props} />);
 }
 
 describe('SearchScreenView', () => {
-  it('supports search header actions without automatically focusing input', () => {
-    const onBack = jest.fn();
-    const onClearQuery = jest.fn();
-    const onQueryChange = jest.fn();
-    const onSubmitQuery = jest.fn();
-
-    renderView({
-      onBack,
-      onClearQuery,
-      onQueryChange,
-      onSubmitQuery,
-      query: 'phone',
-    });
-
-    const input = screen.getByLabelText('Search products');
-    expect(input.props.autoFocus).toBeFalsy();
-    fireEvent.changeText(input, 'laptop');
-    fireEvent(input, 'submitEditing');
-    fireEvent.press(screen.getByRole('button', { name: 'Clear search' }));
-    fireEvent.press(screen.getByRole('button', { name: 'Go back' }));
-
-    expect(onQueryChange).toHaveBeenCalledWith('laptop');
-    expect(onSubmitQuery).toHaveBeenCalledTimes(1);
-    expect(onClearQuery).toHaveBeenCalledTimes(1);
-    expect(onBack).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders recent searches and popular categories as actions', () => {
-    const onCategoryPress = jest.fn();
+  it('renders recent searches and categories when idle', () => {
     const onRecentSearch = jest.fn();
+    const onCategoryPress = jest.fn();
 
-    renderView({ onCategoryPress, onRecentSearch });
+    renderView({ onRecentSearch, onCategoryPress });
 
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Recent search: iPhone 15 Pro' })
-    );
-    fireEvent.press(screen.getByRole('button', { name: 'Category: Phones' }));
+    fireEvent.press(screen.getByText('iPhone 15 Pro'));
+    fireEvent.press(screen.getByText('Phones'));
 
     expect(onRecentSearch).toHaveBeenCalledWith('iPhone 15 Pro');
     expect(onCategoryPress).toHaveBeenCalledWith('phones');
@@ -116,5 +107,101 @@ describe('SearchScreenView', () => {
     expect(
       screen.getByText('Connect to the internet to search products')
     ).toBeTruthy();
+  });
+
+  it('renders a retryable error state instead of no-results copy', () => {
+    const onRetry = jest.fn();
+
+    renderView({
+      committedQuery: 'iphone',
+      hasSearchQuery: true,
+      onRetry,
+      query: 'iphone',
+      searchError: 'Search failed',
+    });
+
+    expect(screen.getByText("Couldn't load results")).toBeTruthy();
+    expect(screen.queryByText('No results found')).toBeNull();
+
+    fireEvent.press(screen.getByRole('button', { name: 'Retry search' }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps loaded products visible when the next page fails', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+
+    renderView({
+      committedQuery: 'iphone',
+      hasSearchQuery: true,
+      products,
+      query: 'iphone',
+      searchError: 'Search failed',
+      totalCount: 45,
+    });
+
+    expect(screen.queryByText("Couldn't load results")).toBeNull();
+    expect(screen.getByTestId('mock-results-list')).toBeTruthy();
+    expect(screen.getByText('Search failed')).toBeTruthy();
+  });
+
+  it('rekeys the results list when the committed query changes', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+    const base = {
+      hasSearchQuery: true,
+      products,
+      totalCount: 1,
+    };
+
+    const first = renderView({ ...base, committedQuery: 'iphone' });
+    const iphoneKey = screen.getByTestId('mock-results-key').props.children;
+    expect(iphoneKey).toContain('iphone');
+    first.unmount();
+
+    // A new committed query remounts the list at the top instead of
+    // inheriting the previous query's scroll offset.
+    renderView({ ...base, committedQuery: 'galaxy' });
+    const galaxyKey = screen.getByTestId('mock-results-key').props.children;
+    expect(galaxyKey).not.toBe(iphoneKey);
+    expect(galaxyKey).toContain('galaxy');
+  });
+
+  it('rekeys the results list when a refinement changes', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+    const base = {
+      committedQuery: 'iphone',
+      hasSearchQuery: true,
+      products,
+      totalCount: 1,
+    };
+
+    const first = renderView(base);
+    const unrefinedKey = screen.getByTestId('mock-results-key').props.children;
+    first.unmount();
+
+    renderView({ ...base, selectedBrand: 'Apple' });
+    const refinedKey = screen.getByTestId('mock-results-key').props.children;
+    expect(refinedKey).not.toBe(unrefinedKey);
+    expect(refinedKey).toContain('Apple');
+  });
+
+  it('keeps the results list identity stable for the same result set', () => {
+    const products = [{ id: 'product-1', name: 'iPhone 16' }] as Product[];
+    const base = {
+      committedQuery: 'iphone',
+      hasSearchQuery: true,
+      products,
+      totalCount: 1,
+    };
+
+    const first = renderView(base);
+    const beforeKey = screen.getByTestId('mock-results-key').props.children;
+    first.unmount();
+
+    // Returning from a product re-renders the same query and refinements:
+    // the identity (and scroll position) must not reset.
+    renderView(base);
+    expect(screen.getByTestId('mock-results-key').props.children).toBe(
+      beforeKey
+    );
   });
 });

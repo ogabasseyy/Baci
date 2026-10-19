@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSearchProductsV2RpcArgs,
+  POST_FILTER_RESULT_PAGE_SIZE,
   orderRowsByRankedProductIds,
 } from './search-products-ranking';
 import { toRankedSearchProductRows } from './search-products-query-helpers';
@@ -86,6 +87,18 @@ describe('MCP search_products ranking helpers', () => {
     ).toMatchObject({
       result_limit: 100,
     });
+  });
+
+  it('uses the bounded post-filter buffer for price-sensitive option searches', () => {
+    expect(
+      buildSearchProductsV2RpcArgs({
+        args: { sort: 'relevance' },
+        forcePostFilterBuffer: true,
+        limit: 10,
+        merchantId: '123e4567-e89b-12d3-a456-426614174000',
+        sanitizedQuery: 'iphone',
+      })
+    ).toMatchObject({ result_limit: POST_FILTER_RESULT_PAGE_SIZE });
   });
 
   it('uses the post-filter result buffer when brand and category are present', () => {

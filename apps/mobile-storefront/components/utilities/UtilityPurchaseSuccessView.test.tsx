@@ -13,12 +13,18 @@ jest.mock('expo-router', () => ({
   },
 }));
 
-const mockBackfilledVoucherPin = jest.fn<() => string | null>(() => null);
+const mockBackfillResult = jest.fn<
+  () => {
+    pin: string | null;
+    status: 'successful' | 'failed' | null;
+    refundConfirmed?: boolean;
+  }
+>(() => ({ pin: null, status: null }));
 
 jest.mock('@/hooks/use-vtu-voucher-pin-backfill', () => ({
   useVtuVoucherPinBackfill: (input: unknown) => {
     mockLastBackfillInput = input;
-    return mockBackfilledVoucherPin();
+    return mockBackfillResult();
   },
 }));
 
@@ -33,6 +39,7 @@ jest.mock('@/components/utilities/PurchaseSuccess', () => {
       customerIdentifier,
       isAuthenticated,
       onCreateAccount,
+      refundConfirmed,
       status,
       txReference,
       type,
@@ -43,6 +50,7 @@ jest.mock('@/components/utilities/PurchaseSuccess', () => {
       customerIdentifier?: string;
       isAuthenticated: boolean;
       onCreateAccount: () => void;
+      refundConfirmed?: boolean;
       status?: string;
       txReference: string;
       type: string;
@@ -54,6 +62,7 @@ jest.mock('@/components/utilities/PurchaseSuccess', () => {
         <Text>{`Customer ${customerIdentifier ?? 'none'}`}</Text>
         <Text>{`Reference ${txReference}`}</Text>
         <Text>{`Status ${status ?? 'successful'}`}</Text>
+        <Text>{`Refund ${String(refundConfirmed ?? 'none')}`}</Text>
         <Text>{`Voucher ${voucherPin ?? 'none'}`}</Text>
         <Text>{`Cashback ${cashback?.amount ?? 'none'}`}</Text>
         <Text>{isAuthenticated ? 'Authenticated' : 'Guest'}</Text>
@@ -73,7 +82,7 @@ describe('UtilityPurchaseSuccessView', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLastBackfillInput = null;
-    mockBackfilledVoucherPin.mockReturnValue(null);
+    mockBackfillResult.mockReturnValue({ pin: null, status: null });
   });
 
   it('hides the native header and passes purchase data to the success view', () => {
@@ -141,7 +150,7 @@ describe('UtilityPurchaseSuccessView', () => {
   });
 
   it('falls back to a backfilled voucher pin when the route param is missing', () => {
-    mockBackfilledVoucherPin.mockReturnValue('9999-0000');
+    mockBackfillResult.mockReturnValue({ pin: '9999-0000', status: null });
 
     render(
       <UtilityPurchaseSuccessView
@@ -186,6 +195,177 @@ describe('UtilityPurchaseSuccessView', () => {
       reference: 'ref-processing',
       utilityType: 'power',
     });
+  });
+
+  it('shows the backfilled terminal status instead of stale processing', () => {
+    mockBackfillResult.mockReturnValue({ pin: null, status: 'successful' });
+
+    render(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 500,
+          customerIdentifier: '08031234567',
+          reference: 'ref-telco',
+          status: 'processing',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+
+    expect(screen.getByText('Status successful')).toBeOnTheScreen();
+  });
+
+  it('notifies once when polling settles a processing purchase', () => {
+    mockBackfillResult.mockReturnValue({
+      pin: null,
+      refundConfirmed: true,
+      status: 'failed',
+    });
+    const onBackfillSettled = jest.fn();
+
+    render(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 500,
+          customerIdentifier: '08031234567',
+          reference: 'ref-telco-fail',
+          status: 'processing',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onBackfillSettled={onBackfillSettled}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+
+    expect(screen.getByText('Status failed')).toBeOnTheScreen();
+    // The refund proof travels with the status — the failed copy gates
+    // on it rather than trusting `failed` alone.
+    expect(screen.getByText('Refund true')).toBeOnTheScreen();
+    expect(onBackfillSettled).toHaveBeenCalledTimes(1);
+    expect(onBackfillSettled).toHaveBeenCalledWith('failed');
+  });
+
+  it('notifies exactly once across re-renders with an inline callback', () => {
+    mockBackfillResult.mockReturnValue({ pin: null, status: 'successful' });
+    const onBackfillSettled = jest.fn();
+    // Mirror the parent: a fresh arrow identity on every render.
+    const renderView = (reference: string) =>
+      render(
+        <UtilityPurchaseSuccessView
+          bottomPadding={32}
+          colors={Colors.light}
+          data={{
+            amount: 500,
+            customerIdentifier: '08031234567',
+            reference,
+            status: 'processing',
+          }}
+          headerOffset={20}
+          isAuthenticated={true}
+          onBackfillSettled={(status) => onBackfillSettled(status)}
+          onCreateAccount={jest.fn()}
+          type="airtime"
+        />
+      );
+
+    const { rerender } = renderView('ref-once');
+    expect(onBackfillSettled).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 500,
+          customerIdentifier: '08031234567',
+          reference: 'ref-once',
+          status: 'processing',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onBackfillSettled={(status) => onBackfillSettled(status)}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+    expect(onBackfillSettled).toHaveBeenCalledTimes(1);
+  });
+
+  it('notifies again for a buy-again purchase in the same mounted view', () => {
+    mockBackfillResult.mockReturnValue({ pin: null, status: 'successful' });
+    const onBackfillSettled = jest.fn();
+
+    const { rerender } = render(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 500,
+          customerIdentifier: '08031234567',
+          reference: 'ref-first',
+          status: 'processing',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onBackfillSettled={onBackfillSettled}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+    expect(onBackfillSettled).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 700,
+          customerIdentifier: '08031234567',
+          reference: 'ref-second',
+          status: 'processing',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onBackfillSettled={onBackfillSettled}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+    expect(onBackfillSettled).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not notify when the backfill status matches the purchase', () => {
+    mockBackfillResult.mockReturnValue({ pin: null, status: 'successful' });
+    const onBackfillSettled = jest.fn();
+
+    render(
+      <UtilityPurchaseSuccessView
+        bottomPadding={32}
+        colors={Colors.light}
+        data={{
+          amount: 500,
+          customerIdentifier: '08031234567',
+          reference: 'ref-already',
+          status: 'successful',
+        }}
+        headerOffset={20}
+        isAuthenticated={true}
+        onBackfillSettled={onBackfillSettled}
+        onCreateAccount={jest.fn()}
+        type="airtime"
+      />
+    );
+
+    expect(onBackfillSettled).not.toHaveBeenCalled();
   });
 
   it('disables voucher backfill when the route already has a voucher pin', () => {

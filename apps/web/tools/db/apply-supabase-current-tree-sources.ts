@@ -124,6 +124,24 @@ const replaySourceReplacements = new Map<string, ReplaySourceReplacement>([
         '2a1d2341ec3631c74b9d44043db1f67f80b51012a796aea6477231bedfab98ef',
     },
   ],
+  [
+    'supabase/migrations/20260815103000_capture_private_expense_receipt_cleanup.sql',
+    {
+      replacementPath:
+        'supabase/migrations/20260815220000_repair_capture_private_expense_receipt_cleanup.sql',
+      sourceSha256:
+        '64530e9b7d94d9e2f832a8464593af977cb0af18c727a1a1b54c62310550997b',
+    },
+  ],
+  [
+    'supabase/migrations/20260921100200_enforce_merchant_shipping_provider_policy.sql',
+    {
+      replacementPath:
+        'supabase/migrations/20260926130000_repair_shipping_provider_policy_audit.sql',
+      sourceSha256:
+        'c89fb79e44148fe68caf65d99aed81de7a1ffd0d42b6ff85fbd41d9d98eceda3',
+    },
+  ],
 ]);
 
 const replaySourceSupersessions = new Map<string, ReplaySourceSupersession>([

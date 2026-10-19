@@ -1,0 +1,65 @@
+import { eventPipelineAdsServicePaths } from '@/lib/events/event-pipeline-ads-service-paths';
+import { eventPipelineJumiaServicePaths } from '@/lib/events/event-pipeline-jumia-service-paths';
+
+export const eventPipelineAuthorityServicePaths = [
+  ...eventPipelineAdsServicePaths,
+  ...eventPipelineJumiaServicePaths,
+  // Only the HMAC-authenticated PiggyVest webhook may drive the branded
+  // intake client (see server-intake-client.ts boundary doc).
+  [
+    'apps/web/src/app/api/webhooks/piggyvest/route.ts',
+    'apps/web/src/lib/piggyvest/server-intake-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
+    'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/cron/provision-immediate-notification-completion-hmac/route.ts',
+    'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
+  ],
+  [
+    'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+    'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+  ],
+  [
+    'apps/web/src/lib/shipping/run-claimed-order-wallet-or-checkout-booking.ts',
+    'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+    'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/orders/[id]/route.ts',
+    'apps/web/src/lib/shipping/run-claimed-order-wallet-or-checkout-booking.ts',
+    'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+    'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+  ],
+  [
+    'apps/web/src/lib/shipping/book-order-shipment.ts',
+    'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+    'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/orders/[id]/route.ts',
+    'apps/web/src/lib/shipping/book-order-shipment.ts',
+    'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+    'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/shipping/book/load-direct-booking-context.ts',
+    'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+    'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+  ],
+  [
+    'apps/web/src/app/api/shipping/book/route.ts',
+    'apps/web/src/app/api/shipping/book/load-direct-booking-context.ts',
+    'apps/web/src/lib/shipping/shipping-quote-booking-economics.ts',
+    'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+  ],
+  // Only the public search-submissions endpoint may drive the branded
+  // search-analytics ingestion edge (#3581, owner-approved temporary
+  // exception recorded in AGENTS.md; expires 2027-01-07).
+  [
+    'apps/web/src/app/api/search/submissions/route.ts',
+    'apps/web/src/lib/search/server-analytics-client.ts',
+  ],
+] as const;

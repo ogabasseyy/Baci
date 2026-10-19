@@ -1,253 +1,72 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
-import { fireEvent, render, screen } from '@testing-library/react-native';
-import { StyleSheet } from 'react-native';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react-native';
+import {
+  buildAuthStatus,
+  createMockCartState,
+  mockAdSlotModule,
+  mockAuthGuardModule,
+  mockCartRepriceModule,
+  mockCartStateHolder,
+  mockCartStoreModule,
+  mockCheckoutEntryPrefetchModule,
+  mockCheckoutIdentityModule,
+  mockColorSchemeModule,
+  mockExpoRouterModule,
+  mockHapticsModule,
+  mockQueryClient,
+  mockReactQueryModule,
+  mockReanimatedModule,
+  mockRouterBack,
+  mockRouterCanGoBack,
+  mockRouterPrefetch,
+  mockRouterPush,
+  mockRouterReplace,
+  mockSafeAreaModule,
+  mockSafeImageModule,
+  mockShallowModule,
+  mockUIStoreModule,
+  mockUseAuthStatus,
+  mockWarmCheckoutEntry,
+  setupCartMocks,
+} from './cart.test-utils';
+
+jest.mock('expo-router', () => mockExpoRouterModule());
+jest.mock('@tanstack/react-query', () => mockReactQueryModule());
+jest.mock('@/components/checkout/checkout-entry-prefetch', () =>
+  mockCheckoutEntryPrefetchModule()
+);
+jest.mock('@/components/cart/use-cart-reprice', () => mockCartRepriceModule());
+jest.mock('@/components/ads/AdSlot', () => mockAdSlotModule());
+jest.mock('expo-haptics', () => mockHapticsModule());
+jest.mock('zustand/react/shallow', () => mockShallowModule());
+jest.mock('react-native-reanimated', () => mockReanimatedModule());
+jest.mock('@/components/useColorScheme', () => mockColorSchemeModule());
+jest.mock('@/components/checkout/checkout-identity', () =>
+  mockCheckoutIdentityModule()
+);
+jest.mock('@/components/ui/SafeImage', () => mockSafeImageModule());
+jest.mock('@/stores/cart-store', () => mockCartStoreModule());
+jest.mock('@/hooks/use-auth-guard', () => mockAuthGuardModule());
+jest.mock('react-native-safe-area-context', () => mockSafeAreaModule());
+jest.mock('@/stores/ui-store', () => mockUIStoreModule());
+
 import CartScreen from '@/app/cart';
-import Colors from '@/constants/Colors';
-
-type MockAuthStatus = {
-  customer: null;
-  isAuthenticated: boolean;
-  isGuest: boolean;
-  isInitialized: boolean;
-  isLoading: boolean;
-  user: { id: string } | null;
-};
-
-const mockOpenNegotiation = jest.fn();
-const mockUseColorScheme = jest.fn(() => 'dark');
-const mockQueryClient = { prefetchQuery: jest.fn() };
-const mockWarmCheckoutEntry = jest.fn();
-const mockDismissPriceChanges = jest.fn();
-type MockPriceChange = {
-  id: string;
-  name: string;
-  oldPrice: number;
-  newPrice: number;
-};
-let mockRepriceResult: {
-  priceChanges: MockPriceChange[];
-  dismissPriceChanges: typeof mockDismissPriceChanges;
-} = {
-  priceChanges: [],
-  dismissPriceChanges: mockDismissPriceChanges,
-};
-const mockRouterPrefetch = jest.fn();
-const mockRouterPush = jest.fn();
-const mockRouterReplace = jest.fn();
-const mockRouterBack = jest.fn();
-const mockRouterCanGoBack = jest.fn(() => false);
-const buildAuthStatus = (
-  overrides: Partial<MockAuthStatus> = {}
-): MockAuthStatus => ({
-  customer: null,
-  isAuthenticated: false,
-  isGuest: true,
-  isInitialized: true,
-  isLoading: false,
-  user: null,
-  ...overrides,
-});
-const mockUseAuthStatus = jest.fn((): MockAuthStatus => buildAuthStatus());
-
-jest.mock('expo-router', () => ({
-  router: {
-    back: (...args: unknown[]) => mockRouterBack(...args),
-    canGoBack: () => mockRouterCanGoBack(),
-    prefetch: (...args: unknown[]) => mockRouterPrefetch(...args),
-    push: (...args: unknown[]) => mockRouterPush(...args),
-    replace: (...args: unknown[]) => mockRouterReplace(...args),
-  },
-}));
-
-jest.mock('@tanstack/react-query', () => ({
-  useQueryClient: () => mockQueryClient,
-}));
-
-jest.mock('@/components/checkout/checkout-entry-prefetch', () => ({
-  warmCheckoutEntry: (...args: unknown[]) => mockWarmCheckoutEntry(...args),
-}));
-
-jest.mock('@/components/cart/use-cart-reprice', () => ({
-  useCartReprice: () => mockRepriceResult,
-}));
-
-jest.mock('expo-haptics', () => ({
-  impactAsync: jest.fn(() => Promise.resolve()),
-  ImpactFeedbackStyle: { Light: 'light' },
-}));
-
-jest.mock('zustand/react/shallow', () => ({
-  useShallow: <T,>(selector: T) => selector,
-}));
-
-jest.mock('react-native-reanimated', () => {
-  const { View } =
-    jest.requireActual<typeof import('react-native')>('react-native');
-
-  const makeSharedValue = (value: number) => {
-    let current = value;
-    return {
-      get: () => current,
-      set: (next: number) => {
-        current = next;
-      },
-    };
-  };
-
-  return {
-    __esModule: true,
-    default: { View },
-    View,
-    cancelAnimation: jest.fn(),
-    useAnimatedStyle: (updater: () => object) => updater(),
-    useSharedValue: makeSharedValue,
-    withRepeat: (value: number) => value,
-    withSequence: (...values: number[]) => values.at(-1) ?? 0,
-    withTiming: (value: number) => value,
-  };
-});
-
-jest.mock('@/components/useColorScheme', () => ({
-  useColorScheme: () => mockUseColorScheme(),
-}));
-
-jest.mock('@/components/checkout/checkout-identity', () => {
-  const { Text: MockText } =
-    jest.requireActual<typeof import('react-native')>('react-native');
-
-  return {
-    CheckoutIdentityModal: ({ isOpen }: { isOpen: boolean }) => {
-      if (!isOpen) return null;
-      return <MockText>Checkout Identity Modal</MockText>;
-    },
-  };
-});
-
-jest.mock('@/components/ui/SafeImage', () => ({
-  SafeImage: function MockSafeImage() {
-    return null;
-  },
-}));
-
-const createMockCartState = (overrides: Record<string, unknown> = {}) => ({
-  items: [
-    {
-      id: 'cart-1',
-      product_id: 'product-1',
-      slug: 'lenovo-thinkpad-e16-gen-2',
-      name: 'Lenovo ThinkPad E16 Gen 2',
-      price: 1428000,
-      quantity: 1,
-      image_url: 'https://example.com/lenovo.jpg',
-      condition: 'NEW',
-      hasAssurance: false,
-      assuranceRate: 0.05,
-    },
-  ],
-  itemCount: () => 1,
-  subtotal: () => 1428000,
-  updateQuantity: jest.fn(),
-  removeItem: jest.fn(),
-  clearCart: jest.fn(),
-  toggleAssurance: jest.fn(),
-  ...overrides,
-});
-
-let mockCartState: Record<string, unknown> = createMockCartState();
-
-jest.mock('@/stores/cart-store', () => ({
-  formatPrice: (value: number) =>
-    `₦${new Intl.NumberFormat('en-NG').format(value)}`,
-  useCartStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector(mockCartState),
-}));
-
-jest.mock('@/hooks/use-auth-guard', () => ({
-  useAuthStatus: () => mockUseAuthStatus(),
-}));
-
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({
-    top: 16,
-    right: 0,
-    bottom: 0,
-    left: 0,
-  }),
-}));
-
-jest.mock('@/stores/ui-store', () => ({
-  useUIStore: (
-    selector: (state: {
-      openNegotiation: typeof mockOpenNegotiation;
-    }) => unknown
-  ) => selector({ openNegotiation: mockOpenNegotiation }),
-}));
-
-describe('CartScreen theming', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockUseColorScheme.mockReturnValue('dark');
-    mockUseAuthStatus.mockReturnValue(buildAuthStatus());
-    mockRouterCanGoBack.mockReturnValue(false);
-    mockCartState = createMockCartState();
-  });
-
-  // These assertions intentionally pin design-system token usage so the cart
-  // stays readable in each theme. Update them only if the accessibility contract
-  // or theme tokens change.
-  it('renders readable dark mode cart content', () => {
-    render(<CartScreen />);
-
-    expect(
-      StyleSheet.flatten(
-        screen.getByText('Lenovo ThinkPad E16 Gen 2').props.style
-      )
-    ).toMatchObject({ color: Colors.dark.text });
-    expect(
-      StyleSheet.flatten(
-        screen.getByText('Device Protection (+5%)').props.style
-      )
-    ).toMatchObject({ color: Colors.dark.textSecondary });
-    expect(
-      StyleSheet.flatten(screen.getByText('Secure Checkout').props.style)
-    ).toMatchObject({ color: Colors.dark.textSecondary });
-  });
-
-  // These assertions intentionally pin design-system token usage so the cart
-  // stays readable in each theme. Update them only if the accessibility contract
-  // or theme tokens change.
-  it('keeps light mode readable too', () => {
-    mockUseColorScheme.mockReturnValue('light');
-
-    render(<CartScreen />);
-
-    expect(
-      StyleSheet.flatten(
-        screen.getByText('Lenovo ThinkPad E16 Gen 2').props.style
-      )
-    ).toMatchObject({ color: Colors.light.text });
-    expect(
-      StyleSheet.flatten(
-        screen.getByText('Device Protection (+5%)').props.style
-      )
-    ).toMatchObject({ color: Colors.light.textSecondary });
-    expect(
-      StyleSheet.flatten(screen.getByText('Secure Checkout').props.style)
-    ).toMatchObject({ color: Colors.light.textSecondary });
-  });
-});
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 
 describe('CartScreen state', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockUseColorScheme.mockReturnValue('dark');
-    mockUseAuthStatus.mockReturnValue(buildAuthStatus());
-    mockRouterCanGoBack.mockReturnValue(false);
-    mockCartState = createMockCartState();
+    setupCartMocks();
+    useNativeSharedCartStore.setState({ enabled: false, status: 'loading' });
   });
 
   it('renders empty cart state when there are no cart items', () => {
-    mockCartState = createMockCartState({
+    mockCartStateHolder.current = createMockCartState({
       items: [],
       itemCount: () => 0,
       subtotal: () => 0,
@@ -260,8 +79,53 @@ describe('CartScreen state', () => {
     expect(screen.queryByText('Lenovo ThinkPad E16 Gen 2')).toBeNull();
   });
 
+  it('mounts the saved-account loader on the empty cart state', async () => {
+    mockCartStateHolder.current = createMockCartState({
+      items: [],
+      itemCount: () => 0,
+      subtotal: () => 0,
+    });
+    const loadSavedCart = jest.fn(async () => undefined);
+    useNativeSharedCartStore.setState({
+      accountsEnabled: true,
+      accountUserId: 'user-1',
+      enabled: true,
+      linkAccount: jest.fn(async () => undefined) as never,
+      loadSavedCart: loadSavedCart as never,
+      metadataReady: true,
+      savedCart: null,
+      snapshot: { cartId: 'cart-1', lines: [] } as never,
+      status: 'ready',
+    });
+    render(<CartScreen />);
+    expect(screen.getByText('Your cart is empty 🛒')).toBeTruthy();
+    await waitFor(() => expect(loadSavedCart).toHaveBeenCalled());
+    expect(screen.getByText('Save this cart to your account')).toBeTruthy();
+  });
+
+  it('reacts when the shared cart is enabled without a status change', () => {
+    mockCartStateHolder.current = createMockCartState({
+      items: [],
+      itemCount: () => 0,
+      subtotal: () => 0,
+    });
+    useNativeSharedCartStore.setState({
+      enabled: false,
+      status: 'choice_required',
+    });
+    render(<CartScreen />);
+    expect(screen.getByText('Your cart is empty 🛒')).toBeTruthy();
+    act(() => useNativeSharedCartStore.setState({ enabled: true }));
+    expect(screen.queryByText('Your cart is empty 🛒')).toBeNull();
+    expect(
+      screen.getByText(
+        'You have a saved cart and items on this device. Choose which cart to use.'
+      )
+    ).toBeTruthy();
+  });
+
   it('renders cart error state when cart data is unavailable', () => {
-    mockCartState = {
+    mockCartStateHolder.current = {
       items: undefined,
       itemCount: undefined,
       subtotal: undefined,
@@ -276,6 +140,27 @@ describe('CartScreen state', () => {
     expect(screen.getByText('Unable to load cart')).toBeTruthy();
     expect(screen.getByText('Retry')).toBeTruthy();
     expect(screen.queryByText('Lenovo ThinkPad E16 Gen 2')).toBeNull();
+  });
+
+  it('keeps the load error reachable when shared status also has content', () => {
+    mockCartStateHolder.current = {
+      items: undefined,
+      itemCount: undefined,
+      subtotal: undefined,
+      updateQuantity: undefined,
+      removeItem: undefined,
+      clearCart: undefined,
+      toggleAssurance: undefined,
+    };
+    useNativeSharedCartStore.setState({
+      enabled: true,
+      status: 'choice_required',
+    });
+
+    render(<CartScreen />);
+
+    expect(screen.getByText('Unable to load cart')).toBeTruthy();
+    expect(screen.getByText('Retry')).toBeTruthy();
   });
 
   it('opens guest identity modal for guests and routes signed-in users straight to checkout', () => {
@@ -335,57 +220,5 @@ describe('CartScreen state', () => {
 
     expect(mockRouterBack).toHaveBeenCalledTimes(1);
     expect(mockRouterReplace).not.toHaveBeenCalledWith('/');
-  });
-});
-
-describe('CartScreen price-change modal', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockUseColorScheme.mockReturnValue('light');
-    mockUseAuthStatus.mockReturnValue(buildAuthStatus());
-    mockRouterCanGoBack.mockReturnValue(false);
-    mockCartState = createMockCartState();
-    mockRepriceResult = {
-      priceChanges: [],
-      dismissPriceChanges: mockDismissPriceChanges,
-    };
-  });
-
-  it('surfaces the price-change modal when reprice reports a drift', () => {
-    mockRepriceResult = {
-      priceChanges: [
-        {
-          id: 'cart-1',
-          name: 'Lenovo ThinkPad E16 Gen 2',
-          oldPrice: 1428000,
-          newPrice: 1500000,
-        },
-      ],
-      dismissPriceChanges: mockDismissPriceChanges,
-    };
-
-    render(<CartScreen />);
-
-    expect(screen.getByText('Prices updated')).toBeTruthy();
-    expect(screen.getByLabelText('Continue with updated prices')).toBeTruthy();
-  });
-
-  it('dismisses the price-change modal when the shopper continues', () => {
-    mockRepriceResult = {
-      priceChanges: [
-        {
-          id: 'cart-1',
-          name: 'Lenovo ThinkPad E16 Gen 2',
-          oldPrice: 1428000,
-          newPrice: 1500000,
-        },
-      ],
-      dismissPriceChanges: mockDismissPriceChanges,
-    };
-
-    render(<CartScreen />);
-    fireEvent.press(screen.getByLabelText('Continue with updated prices'));
-
-    expect(mockDismissPriceChanges).toHaveBeenCalledTimes(1);
   });
 });

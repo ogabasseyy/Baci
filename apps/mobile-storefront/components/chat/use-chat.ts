@@ -1,4 +1,4 @@
-import { parseSantaActions, stripSantaActions } from '@baci/shared/lib';
+import { stripSantaActions } from '@baci/shared/lib';
 import type { FlashListRef } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
@@ -11,11 +11,17 @@ import {
 } from 'react';
 import { Platform, type TextInput } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
+import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
 import { useUIStore } from '@/stores/ui-store';
-import { API_BASE_URL, CHAT_REQUEST_TIMEOUT_MS } from './constants';
+import {
+  API_BASE_URL,
+  CHAT_REQUEST_TIMEOUT_MS,
+  SANTA_MERCHANT_SLUG_HEADER,
+  STOREFRONT_MERCHANT_SLUG_HEADER,
+} from './constants';
 import { readChatResponseText } from './read-chat-response';
-import { addSantaWishToCart } from './santa-cart';
+import { fulfilSantaCartActions } from './santa-cart';
 import type { ChatMessage } from './types';
 import { resolveSuggestionRoute, SUGGESTIONS } from './types';
 
@@ -82,6 +88,7 @@ async function requestChatReply({
             'Content-Type': 'application/json',
             Accept: 'text/plain',
             'Cache-Control': 'no-cache',
+            [STOREFRONT_MERCHANT_SLUG_HEADER]: CONFIG.MERCHANT_SLUG.trim(),
           },
           signal: controller.signal,
           body: JSON.stringify(requestBody),
@@ -92,33 +99,41 @@ async function requestChatReply({
         }
 
         const text = await readChatResponseText(response);
+        const merchantSlug = response.headers
+          .get(SANTA_MERCHANT_SLUG_HEADER)
+          ?.trim();
         log.info('Chat response received', {
           endpoint,
           status: response.status,
           length: text.length,
         });
 
-        return text;
+        return { merchantSlug, text };
       };
 
-      let aiResponseText = await sendRequest();
+      let chatReply = await sendRequest();
 
-      if (!aiResponseText) {
+      if (!chatReply.text) {
         log.warn('Empty chat response, retrying once', { endpoint });
-        aiResponseText = await sendRequest();
+        chatReply = await sendRequest();
       }
 
-      if (!aiResponseText) {
+      if (!chatReply.text) {
         throw new Error('Empty chat response');
       }
+      const aiResponseText = chatReply.text;
 
       // In Santa mode, fulfil any ADD_TO_CART wish before the directive is
       // stripped from the displayed text. Fire-and-forget so the reply renders
-      // immediately; addSantaWishToCart surfaces its own success/error toast.
+      // immediately; fulfilSantaCartActions surfaces its own success/error
+      // toast and ignores replies resolved for another storefront.
       if (santaMode) {
-        for (const action of parseSantaActions(aiResponseText)) {
-          void addSantaWishToCart(action, controller.signal);
-        }
+        void fulfilSantaCartActions({
+          expectedMerchantSlug: CONFIG.MERCHANT_SLUG.trim(),
+          resolvedMerchantSlug: chatReply.merchantSlug,
+          signal: controller.signal,
+          text: aiResponseText,
+        });
       }
 
       // Clean response text (sanitizeHtml not needed — RN <Text> doesn't execute HTML)

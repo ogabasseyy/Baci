@@ -109,6 +109,123 @@ describe('GET /api/feed/tiktok', () => {
     expect(text).not.toContain('<image_link></image_link>');
   });
 
+  it('excludes offer-claimed images from TikTok catalog images', async () => {
+    mockGetCachedGoogleMerchantFeedData.mockResolvedValue({
+      custom_domain: 'ogabassey.com',
+      slug: 'ogabassey',
+      products: [
+        {
+          id: 'product-1',
+          name: 'Redmi A7',
+          description: '<p>Budget phone</p>',
+          slug: 'redmi-a7',
+          price: 120_540,
+          brand: 'Redmi',
+          stock: 5,
+          stock_quantity: 5,
+          manage_stock: true,
+          category: 'Smartphones',
+          offers: [
+            {
+              id: 'offer-used',
+              condition: 'used',
+              price: 100_000,
+              images: ['https://cdn.example.com/redmi-a7-side.jpg'],
+            },
+          ],
+        },
+      ],
+      imageManifest: {
+        'product-1': [
+          {
+            variant_id: 'variant-1',
+            verified_url: 'https://cdn.example.com/redmi-a7-variant.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+          {
+            verified_url: 'https://cdn.example.com/redmi-a7-front.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: false,
+            position: 1,
+          },
+          {
+            verified_url: 'https://cdn.example.com/redmi-a7-side.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: false,
+            position: 2,
+          },
+        ],
+      },
+    });
+    const { GET } = await import('./route');
+    const response = await GET(
+      makeRequest('/api/feed/tiktok?merchant_slug=ogabassey')
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).toContain(
+      '<image_link>https://cdn.example.com/redmi-a7-front.jpg</image_link>'
+    );
+    expect(text).not.toContain('redmi-a7-side.jpg');
+    expect(text).not.toContain('redmi-a7-variant.jpg');
+  });
+
+  it('ignores image claims from non-emittable offers', async () => {
+    mockGetCachedGoogleMerchantFeedData.mockResolvedValue({
+      custom_domain: 'ogabassey.com',
+      slug: 'ogabassey',
+      products: [
+        {
+          id: 'product-1',
+          name: 'Redmi A7',
+          description: '<p>Budget phone</p>',
+          slug: 'redmi-a7',
+          price: 120_540,
+          brand: 'Redmi',
+          stock: 5,
+          stock_quantity: 5,
+          manage_stock: true,
+          category: 'Smartphones',
+          offers: [
+            {
+              id: 'offer-zero',
+              condition: 'used',
+              price: 0,
+              images: ['https://cdn.example.com/redmi-a7-front.jpg'],
+            },
+          ],
+        },
+      ],
+      imageManifest: {
+        'product-1': [
+          {
+            verified_url: 'https://cdn.example.com/redmi-a7-front.jpg',
+            verified_format: 'jpeg',
+            status: 'verified',
+            is_primary: true,
+            position: 0,
+          },
+        ],
+      },
+    });
+    const { GET } = await import('./route');
+    const response = await GET(
+      makeRequest('/api/feed/tiktok?merchant_slug=ogabassey')
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(text).toContain(
+      '<image_link>https://cdn.example.com/redmi-a7-front.jpg</image_link>'
+    );
+  });
+
   it('emits the resolved merchant currency (not a hardcoded default) in item prices', async () => {
     mockResolveFeedMerchant.mockResolvedValue({
       id: 'merchant-1',

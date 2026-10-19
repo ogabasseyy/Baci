@@ -8,6 +8,7 @@ import {
 import { maybeNotifyActivateProtection } from '@/lib/insurance/notify-activate-protection';
 import { logger } from '@/lib/logger';
 import type { Database } from '@/types/supabase';
+import { buildGiglTrackingMerchantPushPayload } from './build-gigl-tracking-merchant-push-payload';
 import { copyFor } from './gigl-tracking-notification-copy';
 
 const claimedNotificationSchema = z.object({
@@ -15,7 +16,11 @@ const claimedNotificationSchema = z.object({
   id: z.uuid(),
   merchant_id: z.uuid(),
   notification_kind: z.string().min(1),
-  order_id: z.uuid(),
+  // Repair-pickup outbox rows may be orderless; shipment_id is the durable key.
+  order_id: z.uuid().nullable(),
+  // Projected by claim_shipment_tracking_notifications for orderless pickups.
+  repair_id: z.uuid().nullable().optional(),
+  shipment_id: z.uuid(),
   tracking_event_id: z.uuid(),
 });
 
@@ -66,8 +71,7 @@ async function processNotification(
     throw eventError ?? new Error('Tracking event missing');
 
   const copy = copyFor(notification.notification_kind, event.description);
-  const payload = { orderId: notification.order_id, type: 'shipment_tracking' };
-  if (notification.notification_kind === 'delivered') {
+  if (notification.notification_kind === 'delivered' && notification.order_id) {
     await notifyDeliveredProtectionActivation(
       notification.order_id,
       notification.merchant_id
@@ -97,6 +101,7 @@ async function processNotification(
     );
   };
   if (notification.audience === 'merchant') {
+    const payload = buildGiglTrackingMerchantPushPayload(notification);
     const result = await notifyMerchant(
       notification.merchant_id,
       copy.title,
@@ -119,6 +124,16 @@ async function processNotification(
     );
   }
 
+  if (!notification.order_id) {
+    await complete(
+      supabase,
+      notification.id,
+      workerId,
+      'skipped',
+      'orderless_repair_pickup'
+    );
+    return 'skipped' as const;
+  }
   const { data: order, error: orderError } = await supabase
     .from('orders')
     .select('customer_id')
@@ -151,6 +166,10 @@ async function processNotification(
     );
     return 'skipped' as const;
   }
+  const payload = {
+    orderId: notification.order_id,
+    type: 'shipment_tracking',
+  };
   const result = await notifyCustomer(
     customer.user_id,
     copy.title,

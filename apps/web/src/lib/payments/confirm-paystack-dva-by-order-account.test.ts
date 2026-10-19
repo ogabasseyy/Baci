@@ -54,6 +54,34 @@ describe('confirmPaystackDvaByOrderAccount — matching', () => {
     expect(state.insertCalls[0]).toMatchObject({ amount: '350000' });
   });
 
+  it('rejects a legacy-untrusted alias instead of matching the current order email', async () => {
+    const { supabase, state } = createSupabaseMock({
+      accountRows: [
+        {
+          ...baseAccountRow,
+          assignment_customer_email: null,
+          assignment_customer_email_source: 'legacy_untrusted',
+          orders: {
+            ...baseAccountRow.orders,
+            customer_email: 'new@example.com',
+          },
+        },
+      ],
+    });
+
+    const result = await confirmPaystackDvaByOrderAccount({
+      supabase: supabase as never,
+      ...ctxBase,
+      paystackResponse: {
+        customer: { email: 'new@example.com' },
+        paid_at: '2026-05-09T10:30:00Z',
+      },
+    });
+
+    expect(result).toEqual({ kind: 'none' });
+    expect(state.insertCalls).toHaveLength(0);
+  });
+
   it('matches unpaid generated invoices inside their active DVA window', async () => {
     const { supabase } = createSupabaseMock({
       accountRows: [
@@ -203,7 +231,7 @@ describe('confirmPaystackDvaByOrderAccount — matching', () => {
         dva_account_number: ctxBase.accountNumber,
         dva_lookup_path: 'order_payment_accounts',
         order_payment_allocation: 'merchant_invoice_partial',
-        order_payment_outstanding_before: 535_000,
+        order_payment_outstanding_before: 835_000,
       },
     });
     expect(supabase.rpc).toHaveBeenCalledWith(
@@ -239,6 +267,13 @@ describe('confirmPaystackDvaByOrderAccount — matching', () => {
     expect(result.kind).toBe('match');
     expect(state.insertCalls[0]?.metadata).not.toHaveProperty(
       'order_payment_allocation'
+    );
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_payment_transaction',
+      expect.objectContaining({
+        p_merchant_amount: 532_950,
+        p_platform_fee: 2050,
+      })
     );
   });
 });

@@ -1,0 +1,16 @@
+49c905d14d337585566a7257d57e85d57e8ea63e39d91c6004fe20b3d060e167  apps/web/src/schemas/prefunded-card-transfer-verification.ts
+78a9792b1d51e99ebaf2478fe26823b61bc4b85ef1213db82479ac789621b025  apps/web/src/schemas/prefunded-card-transfer-verification.test.ts
+5e8dbbbb6a7ece6fb24e83e480a7706eeadb779e9bbf638c3b00e45847fec7ef  apps/web/src/lib/piggyvest/normalize-prefunded-card-transfer.ts
+4d24f6cc626f4ab9960183df7630eeb83af27e65da8b6939fec376a8380b17b7  apps/web/src/lib/piggyvest/normalize-prefunded-card-transfer.test.ts
+742d5ed8cd60391f7d82f45c7174950320c62288cd74b07ea7de4b6d2f6b0cc5  apps/web/src/lib/piggyvest/collect-prefunded-card-transfer-proof.ts
+842828e6c2a579c3900b17e35cd3290e24d49fcc2a6ac69b92c7726d62755d46  apps/web/src/lib/piggyvest/collect-prefunded-card-transfer-proof.test.ts
+b44b327e9bd842359f0b7da47828cd7d6e06fbe3fce5a883e5487d964e3d354d  apps/web/src/lib/piggyvest/prefunded-card-provider.ts
+02e587d466791506dd4830f84733f395dffc87a3f1a97b4deb6d525cde48c21b  apps/web/src/lib/piggyvest/prefunded-card-execution.ts
+d5c549c410682b90627b3ec2169e6b5699ea7489ae5d6019d9ffbb20db12a8f2  apps/web/src/lib/piggyvest/prefunded-card-transfer-execution.test.ts
+e9d6f3f0147bb1ddf8931060be962f1cd41eb2f9568fd69c01a81dd4fc17e285  apps/web/src/lib/piggyvest/prefunded-card-transfer-provider.test.ts
+5cd652765078118b96f2f6e5e0a34632982e6e8bc0ec7991ff9b5791a2e05cf1  apps/web/src/lib/piggyvest/prefunded-card-transfer-verification.test-fixture.ts
+94e6330af1275f7e66bed35e08941142b4f84e4c3d33b02f794217917617b449  tools/staging/prefunded-card/reviewed-transfer-proof/collector.ts
+96eeb31917239f1e37bcfe751481c4e389e27ce10c6950ca6c645d4814ed0a7d  tools/staging/prefunded-card/reviewed-transfer-proof/collector.test.ts
+b7f38314d3ab619b6a82bce70efd7b70359ab6826aa4c88703f291cf015bfdcb  tools/staging/prefunded-card/reviewed-transfer-proof/constants.ts
+5133099939bb262921ee3547f7571ee2523b21d6585c9d7c17248ec7dc4a6d10  tools/staging/prefunded-card/reviewed-transfer-proof/HANDOFF.md
+d8a2f74058cc26f35d5cf26d12b17ea18af6a581c12b8ae552afb8e3e966abb1  tools/staging/prefunded-card/reviewed-transfer-proof/VALIDATION.md

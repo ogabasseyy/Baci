@@ -42,6 +42,8 @@ export function cleanupRemediationWorktree({
   branch,
   childEnv,
   repoDir,
+  removeBranch = false,
+  removeWorktree = true,
   runner,
   worktreeDir,
 }) {
@@ -66,6 +68,7 @@ export function cleanupRemediationWorktree({
     env: childEnv,
     runner,
   });
+  if (!removeWorktree) return resolvedWorktreeDir;
   runRemediationChecked(
     'git',
     ['worktree', 'remove', '--force', resolvedWorktreeDir],
@@ -76,5 +79,19 @@ export function cleanupRemediationWorktree({
     env: childEnv,
     runner,
   });
+  if (removeBranch && branch) {
+    const localBranch = runRemediationChecked(
+      'git',
+      ['branch', '--list', '--', branch],
+      { cwd: repoDir, env: childEnv, runner }
+    );
+    if (localBranch.trim()) {
+      runRemediationChecked('git', ['branch', '-D', '--', branch], {
+        cwd: repoDir,
+        env: childEnv,
+        runner,
+      });
+    }
+  }
   return resolvedWorktreeDir;
 }

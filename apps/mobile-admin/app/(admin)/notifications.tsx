@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { FollowUpAlertsSetting } from '@/components/notifications/FollowUpAlertsSetting';
 import { styles } from '@/components/notifications/notifications.styles';
 import { ScreenSkeleton } from '@/components/ui/ScreenSkeleton';
 import { useAuth } from '@/hooks/useAuth';
@@ -22,6 +23,7 @@ interface NotificationPreferences {
   merchant_id: string;
   in_app_enabled: boolean;
   banner_enabled: boolean;
+  follow_up_notifications_enabled: boolean;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
 }
@@ -59,7 +61,7 @@ export default function NotificationsScreen() {
       const { data, error } = await supabase
         .from('notification_preferences')
         .select(
-          'merchant_id, in_app_enabled, banner_enabled, quiet_hours_start, quiet_hours_end'
+          'merchant_id, in_app_enabled, banner_enabled, follow_up_notifications_enabled, quiet_hours_start, quiet_hours_end'
         )
         .eq('merchant_id', merchant?.id)
         .maybeSingle();
@@ -72,6 +74,7 @@ export default function NotificationsScreen() {
           merchant_id: merchant?.id,
           in_app_enabled: true,
           banner_enabled: true,
+          follow_up_notifications_enabled: true,
           quiet_hours_start: null,
           quiet_hours_end: null,
         } as NotificationPreferences;
@@ -89,7 +92,6 @@ export default function NotificationsScreen() {
 
       const { error } = await supabase.from('notification_preferences').upsert({
         merchant_id: merchant.id,
-        ...preferences,
         ...updates,
         updated_at: new Date().toISOString(),
       });
@@ -263,6 +265,20 @@ export default function NotificationsScreen() {
                   }
                 />
               </View>
+
+              <View
+                style={[styles.divider, { backgroundColor: colors.border }]}
+              />
+
+              <FollowUpAlertsSetting
+                colors={colors}
+                enabled={preferences?.follow_up_notifications_enabled ?? true}
+                onValueChange={(value) =>
+                  updatePreferencesMutation.mutate({
+                    follow_up_notifications_enabled: value,
+                  })
+                }
+              />
             </View>
           </View>
 

@@ -2,7 +2,8 @@
 'use client';
 
 import type React from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { runWhenPageActivated } from '@/lib/dom/run-when-page-activated';
 import { AD_CONFIG } from '../config/ads';
 import { AdSlotShell } from './ad-slot-shell';
 import {
@@ -13,6 +14,12 @@ import {
   ensureGoogleAdManagerBoot,
   ensureGoogleTag,
 } from './google-ad-bootstrap';
+
+// GPT teardown must run before React removes the slot element, but this client
+// component is also pre-rendered by Next.js. Keep the ordering guarantee in
+// the browser without making server rendering call useLayoutEffect.
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 export interface AdUnitProps {
   placementKey: keyof typeof AD_CONFIG;
@@ -45,6 +52,7 @@ export const AdUnit: React.FC<AdUnitProps> = ({
   const isActiveRef = useRef(isActive);
   const listenerCleanupsRef = useRef<Array<() => void>>([]);
   const slotLifecycleRef = useRef(0);
+  const slotRestoreNeededRef = useRef(false);
   const [isAdLoaded, setIsAdLoaded] = useState(false);
   const [shouldLoadSlot, setShouldLoadSlot] = useState(
     loadStrategy === 'immediate'
@@ -52,6 +60,7 @@ export const AdUnit: React.FC<AdUnitProps> = ({
   const [hasBootDelayElapsed, setHasBootDelayElapsed] = useState(
     bootDelayMs <= 0
   );
+  const [slotRestoreNonce, setSlotRestoreNonce] = useState(0);
 
   // Reset slot/boot state during render when the placement or strategy props
   // change (render-phase prev-compare instead of a setState-in-effect).
@@ -138,20 +147,9 @@ export const AdUnit: React.FC<AdUnitProps> = ({
       return;
     }
 
-    void ensureGoogleAdManagerBoot()
-      .then(() => {
-        if (
-          isDisposed ||
-          lifecycle !== slotLifecycleRef.current ||
-          !isActiveRef.current ||
-          definedSlots.has(id)
-        ) {
-          return;
-        }
-
-        const googletag = ensureGoogleTag();
-
-        googletag.cmd.push(() => {
+    const cancelActivationGate = runWhenPageActivated(() => {
+      void ensureGoogleAdManagerBoot()
+        .then(() => {
           if (
             isDisposed ||
             lifecycle !== slotLifecycleRef.current ||
@@ -161,64 +159,86 @@ export const AdUnit: React.FC<AdUnitProps> = ({
             return;
           }
 
-          // Define the slot
-          // We implement basic size mapping for responsiveness if mobile dims exist
-          let slot;
+          const googletag = ensureGoogleTag();
 
-          if (mobileWidth && mobileHeight) {
-            const mapping = googletag.sizeMapping()
-              .addSize([768, 0], [width, height]) // Desktop
-              .addSize([0, 0], [mobileWidth, mobileHeight]) // Mobile
-              .build();
+          googletag.cmd.push(() => {
+            if (
+              isDisposed ||
+              lifecycle !== slotLifecycleRef.current ||
+              !isActiveRef.current ||
+              definedSlots.has(id)
+            ) {
+              return;
+            }
 
-            slot = googletag
-              .defineSlot(slotPath, [width, height], id)
-              ?.defineSizeMapping(mapping)
-              .addService(googletag.pubads());
-          } else {
-            slot = googletag
-              .defineSlot(slotPath, [width, height], id)
-              ?.addService(googletag.pubads());
-          }
+            // Define the slot
+            // We implement basic size mapping for responsiveness if mobile dims exist
+            let slot;
 
-          if (slot) {
-            // Track this slot as defined
-            definedSlots.add(id);
-            slotRef.current = slot;
+            if (mobileWidth && mobileHeight) {
+              const mapping = googletag.sizeMapping()
+                .addSize([768, 0], [width, height]) // Desktop
+                .addSize([0, 0], [mobileWidth, mobileHeight]) // Mobile
+                .build();
 
-            googletag.display(id);
+              slot = googletag
+                .defineSlot(slotPath, [width, height], id)
+                ?.defineSizeMapping(mapping)
+                .addService(googletag.pubads());
+            } else {
+              slot = googletag
+                .defineSlot(slotPath, [width, height], id)
+                ?.addService(googletag.pubads());
+            }
 
-            // Listen for render events to hide placeholder if needed
-            const slotRenderEndedHandler = (event: unknown) => {
-              const renderEvent = event as GoogleSlotRenderEndedEvent;
-              if (renderEvent.slot === slot) {
-                setIsAdLoaded(!renderEvent.isEmpty);
-              }
-            };
-            listenerCleanupsRef.current.push(
-              registerPubAdsSlotRenderListener(
-                googletag.pubads(),
-                slotRenderEndedHandler
-              )
-            );
-          }
+            if (slot) {
+              // Track this slot as defined
+              definedSlots.add(id);
+              slotRef.current = slot;
+
+              googletag.display(id);
+
+              // Listen for render events to hide placeholder if needed
+              const slotRenderEndedHandler = (event: unknown) => {
+                const renderEvent = event as GoogleSlotRenderEndedEvent;
+                if (renderEvent.slot === slot) {
+                  setIsAdLoaded(!renderEvent.isEmpty);
+                }
+              };
+              listenerCleanupsRef.current.push(
+                registerPubAdsSlotRenderListener(
+                  googletag.pubads(),
+                  slotRenderEndedHandler
+                )
+              );
+            }
+          });
+        })
+        .catch(() => {
+          setIsAdLoaded(false);
         });
-      })
-      .catch(() => {
-        setIsAdLoaded(false);
-      });
+    });
 
     return () => {
       isDisposed = true;
+      cancelActivationGate();
     };
-  }, [config, hasBootDelayElapsed, isActive, shouldLoadSlot]);
+  }, [config, hasBootDelayElapsed, isActive, shouldLoadSlot, slotRestoreNonce]);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!config) return;
+
+    if (slotRestoreNeededRef.current) {
+      slotRestoreNeededRef.current = false;
+      setIsAdLoaded(false);
+      setSlotRestoreNonce((nonce) => nonce + 1);
+    }
+
     const slotId = config.id;
 
     return () => {
       slotLifecycleRef.current += 1;
+      slotRestoreNeededRef.current = true;
       // Cleanup only on unmount or placement changes. Carousel visibility changes
       // should keep an already loaded GPT slot mounted.
       const slotToDestroy = slotRef.current;

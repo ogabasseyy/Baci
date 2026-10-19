@@ -112,7 +112,7 @@ describe('sendPushNotifications', () => {
       { status: 'ok', id: 'ticket-2' },
     ]);
 
-    const tickets = await sendPushNotifications(messages);
+    const { tickets } = await sendPushNotifications(messages);
 
     // Only valid tokens should be sent
     expect(mockChunkPushNotifications).toHaveBeenCalledWith([
@@ -135,7 +135,7 @@ describe('sendPushNotifications', () => {
       { status: 'ok', id: 'ticket-abc' },
     ]);
 
-    const tickets = await sendPushNotifications(messages);
+    const { tickets } = await sendPushNotifications(messages);
 
     expect(mockChunkPushNotifications).toHaveBeenCalled();
     expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith(messages);
@@ -151,13 +151,17 @@ describe('sendPushNotifications', () => {
       .mockResolvedValueOnce([{ status: 'ok', id: 't1' }])
       .mockResolvedValueOnce([{ status: 'ok', id: 't2' }]);
 
-    const tickets = await sendPushNotifications([msg1, msg2]);
+    const { deliveryUncertain, tickets } = await sendPushNotifications([
+      msg1,
+      msg2,
+    ]);
 
     expect(mockSendPushNotificationsAsync).toHaveBeenCalledTimes(2);
     expect(tickets).toEqual([
       { status: 'ok', id: 't1' },
       { status: 'ok', id: 't2' },
     ]);
+    expect(deliveryUncertain).toBe(false);
   });
 
   it('returns error tickets on SDK exception', async () => {
@@ -170,11 +174,13 @@ describe('sendPushNotifications', () => {
       new Error('Network failure')
     );
 
-    const tickets = await sendPushNotifications(messages);
+    const { deliveryUncertain, tickets } =
+      await sendPushNotifications(messages);
 
     expect(tickets).toHaveLength(1);
     expect(tickets[0].status).toBe('error');
     expect(tickets[0]).toHaveProperty('message', 'Network failure');
+    expect(deliveryUncertain).toBe(true);
   });
 
   it('falls back to per-message sends when Expo rejects a mixed-project chunk', async () => {
@@ -191,7 +197,10 @@ describe('sendPushNotifications', () => {
       .mockResolvedValueOnce([{ status: 'ok', id: 'ticket-a' }])
       .mockResolvedValueOnce([{ status: 'ok', id: 'ticket-b' }]);
 
-    const tickets = await sendPushNotifications([msg1, msg2]);
+    const { deliveryUncertain, tickets } = await sendPushNotifications([
+      msg1,
+      msg2,
+    ]);
 
     expect(mockSendPushNotificationsAsync).toHaveBeenNthCalledWith(1, [
       msg1,
@@ -203,6 +212,7 @@ describe('sendPushNotifications', () => {
       { status: 'ok', id: 'ticket-a' },
       { status: 'ok', id: 'ticket-b' },
     ]);
+    expect(deliveryUncertain).toBe(false);
   });
 
   it('returns a synthesized error ticket when a per-message fallback send fails', async () => {
@@ -219,7 +229,10 @@ describe('sendPushNotifications', () => {
       .mockResolvedValueOnce([{ status: 'ok', id: 'ticket-a' }])
       .mockRejectedValueOnce(new Error('Per-message send failed'));
 
-    const tickets = await sendPushNotifications([msg1, msg2]);
+    const { deliveryUncertain, tickets } = await sendPushNotifications([
+      msg1,
+      msg2,
+    ]);
 
     expect(mockSendPushNotificationsAsync).toHaveBeenNthCalledWith(1, [
       msg1,
@@ -235,11 +248,16 @@ describe('sendPushNotifications', () => {
         details: { error: 'ExpoError' },
       },
     ]);
+    expect(deliveryUncertain).toBe(true);
   });
 
-  it('returns empty array for empty messages', async () => {
-    const tickets = await sendPushNotifications([]);
-    expect(tickets).toEqual([]);
+  it('returns empty delivery for empty messages', async () => {
+    const delivery = await sendPushNotifications([]);
+    expect(delivery).toEqual({
+      deliveryUncertain: false,
+      syntheticTicketIndexes: new Set(),
+      tickets: [],
+    });
     expect(mockSendPushNotificationsAsync).not.toHaveBeenCalled();
   });
 });
@@ -321,7 +339,12 @@ describe('notifyMerchant', () => {
     expect(mockChain.eq).toHaveBeenCalledWith('is_active', true);
     expect(mockChain.eq).toHaveBeenCalledWith('app_type', 'admin');
 
-    expect(result).toEqual({ sent: 2, failed: 0, errors: [] });
+    expect(result).toEqual({
+      sent: 2,
+      failed: 0,
+      errors: [],
+      succeededTokens: ['ExponentPushToken[m1]', 'ExponentPushToken[m2]'],
+    });
   });
 
   it('returns zeros when no tokens found', async () => {
@@ -626,44 +649,167 @@ describe('notifyMerchant', () => {
     });
   });
 
-  it('records a failed attempt when push sending throws before ticket processing', async () => {
-    const selectChain = createChainableMock([
+  it('skips excluded tokens so retries never duplicate delivered alerts', async () => {
+    const mockChain = createChainableMock([
       { token: 'ExponentPushToken[m1]' },
       { token: 'ExponentPushToken[m2]' },
     ]);
-    const attemptInsertChain = createChainableMock();
 
     vi.mocked(createAdminClient).mockReturnValue({
-      from: vi
-        .fn()
-        .mockReturnValueOnce(selectChain)
-        .mockReturnValueOnce(attemptInsertChain),
+      from: vi.fn().mockReturnValue(mockChain),
     } as never);
 
-    mockChunkPushNotifications.mockImplementationOnce(() => {
-      throw new Error('Chunking failed');
+    mockSendPushNotificationsAsync.mockResolvedValueOnce([
+      { status: 'ok', id: 'ticket-2' },
+    ]);
+
+    const result = await notifyMerchant(
+      'merchant-123',
+      'Test',
+      'Body',
+      {},
+      'orders',
+      {
+        excludeTokens: ['ExponentPushToken[m1]'],
+      }
+    );
+
+    expect(mockSendPushNotificationsAsync).toHaveBeenCalledTimes(1);
+    expect(mockSendPushNotificationsAsync).toHaveBeenCalledWith([
+      expect.objectContaining({ to: 'ExponentPushToken[m2]' }),
+    ]);
+    expect(result).toEqual({
+      sent: 1,
+      failed: 0,
+      errors: [],
+      succeededTokens: ['ExponentPushToken[m2]'],
     });
+  });
+
+  it('persists delivered tokens on the attempt for per-token retries', async () => {
+    const mockChain = createChainableMock([
+      { token: 'ExponentPushToken[m1]' },
+      { token: 'ExponentPushToken[m2]' },
+    ]);
+
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(mockChain),
+    } as never);
+
+    mockSendPushNotificationsAsync.mockResolvedValueOnce([
+      { status: 'ok', id: 'ticket-1' },
+      {
+        status: 'error',
+        message: 'bad token',
+        details: { error: 'UnknownError' },
+      },
+    ]);
 
     const result = await notifyMerchant('merchant-123', 'Test', 'Body', {
       type: 'new_order',
+      jumia_order_id: 'order-1',
     });
 
-    expect(result).toEqual({
-      sent: 0,
-      failed: 2,
-      errors: ['Chunking failed'],
-    });
-    expect(attemptInsertChain.insert).toHaveBeenCalledWith(
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(mockChain.insert).toHaveBeenCalledWith(
       expect.objectContaining({
-        merchant_id: 'merchant-123',
-        title: 'Test',
-        body: 'Body',
-        payload: { type: 'new_order' },
-        token_count: 2,
-        failed_count: 2,
-        status: 'failed',
+        status: 'partial_failure',
+        payload: {
+          type: 'new_order',
+          jumia_order_id: 'order-1',
+          delivered_tokens: ['ExponentPushToken[m1]'],
+        },
       })
     );
+  });
+
+  it('retries the attempt insert when the first write fails', async () => {
+    const mockChain = createChainableMock([
+      { token: 'ExponentPushToken[m1]' },
+      { token: 'ExponentPushToken[m2]' },
+    ]);
+    const insertMock = vi
+      .fn()
+      .mockResolvedValueOnce({ error: { message: 'transient write failure' } })
+      .mockResolvedValueOnce({ error: null });
+
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn((table: string) =>
+        table === 'push_notification_attempts'
+          ? { insert: insertMock }
+          : mockChain
+      ),
+    } as never);
+
+    mockSendPushNotificationsAsync.mockResolvedValueOnce([
+      { status: 'ok', id: 'ticket-1' },
+      {
+        status: 'error',
+        message: 'bad token',
+        details: { error: 'UnknownError' },
+      },
+    ]);
+
+    const result = await notifyMerchant('merchant-123', 'Test', 'Body', {
+      type: 'new_order',
+      jumia_order_id: 'order-1',
+    });
+
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(1);
+    expect(insertMock).toHaveBeenCalledTimes(2);
+    expect(insertMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'partial_failure',
+        payload: expect.objectContaining({
+          delivered_tokens: ['ExponentPushToken[m1]'],
+        }),
+      })
+    );
+  });
+
+  it('still resolves delivery when the attempt insert keeps failing', async () => {
+    const mockChain = createChainableMock([{ token: 'ExponentPushToken[m1]' }]);
+    const insertMock = vi
+      .fn()
+      .mockResolvedValue({ error: { message: 'database unavailable' } });
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      vi.mocked(createAdminClient).mockReturnValue({
+        from: vi.fn((table: string) =>
+          table === 'push_notification_attempts'
+            ? { insert: insertMock }
+            : mockChain
+        ),
+      } as never);
+
+      mockSendPushNotificationsAsync.mockResolvedValueOnce([
+        { status: 'ok', id: 'ticket-1' },
+      ]);
+
+      const result = await notifyMerchant('merchant-123', 'Test', 'Body', {
+        type: 'new_order',
+      });
+
+      // Failing a delivered batch would park it for retry with an empty
+      // exclusion set and duplicate alerts on every device.
+      expect(result).toEqual({
+        sent: 1,
+        failed: 0,
+        errors: [],
+        succeededTokens: ['ExponentPushToken[m1]'],
+      });
+      expect(insertMock).toHaveBeenCalledTimes(3);
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to store push attempt:',
+        expect.objectContaining({ message: 'database unavailable' }),
+        expect.objectContaining({ deliveredTokenCount: 1 })
+      );
+    } finally {
+      consoleSpy.mockRestore();
+    }
   });
 });
 
@@ -692,7 +838,12 @@ describe('notifyCustomer', () => {
       expect.anything()
     );
 
-    expect(result).toEqual({ sent: 1, failed: 0, errors: [] });
+    expect(result).toEqual({
+      sent: 1,
+      failed: 0,
+      errors: [],
+      succeededTokens: ['ExponentPushToken[c1]'],
+    });
   });
 
   it('scopes token lookup to the merchant when options.merchantId is provided', async () => {
@@ -781,41 +932,6 @@ describe('notifyCustomer', () => {
     expect(result.sent).toBe(0);
     expect(result.failed).toBe(1);
   });
-
-  it('persists title, body, and payload for successful customer sends', async () => {
-    const selectChain = createChainableMock([
-      { token: 'ExponentPushToken[c1]' },
-    ]);
-    const ticketInsertChain = createChainableMock();
-    const attemptInsertChain = createChainableMock();
-
-    vi.mocked(createAdminClient).mockReturnValue({
-      from: vi
-        .fn()
-        .mockReturnValueOnce(selectChain)
-        .mockReturnValueOnce(ticketInsertChain)
-        .mockReturnValueOnce(attemptInsertChain),
-    } as never);
-
-    mockSendPushNotificationsAsync.mockResolvedValueOnce([
-      { status: 'ok', id: 'ticket-c1' },
-    ]);
-
-    await notifyCustomer('user-456', 'Order Update', 'Your order moved', {
-      type: 'order_update',
-      order_id: 'ord-1',
-    });
-
-    expect(attemptInsertChain.insert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        user_id: 'user-456',
-        title: 'Order Update',
-        body: 'Your order moved',
-        payload: { type: 'order_update', order_id: 'ord-1' },
-        status: 'sent',
-      })
-    );
-  });
 });
 
 describe('notifyAdminUserDevices', () => {
@@ -835,7 +951,12 @@ describe('notifyAdminUserDevices', () => {
     expect(mockChain.eq).toHaveBeenCalledWith('user_id', 'user-123');
     expect(mockChain.eq).toHaveBeenCalledWith('is_active', true);
     expect(mockChain.eq).toHaveBeenCalledWith('app_type', 'admin');
-    expect(result).toEqual({ sent: 1, failed: 0, errors: [] });
+    expect(result).toEqual({
+      sent: 1,
+      failed: 0,
+      errors: [],
+      succeededTokens: ['ExponentPushToken[a1]'],
+    });
   });
 
   it('returns zeroed result and skips send when no tokens are found', async () => {

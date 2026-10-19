@@ -4,10 +4,16 @@ import { useCreditDirectVerification } from './use-credit-direct-verification';
 
 const fetchMock = vi.fn();
 
-function orderResponse(paymentStatus: string | null) {
+function orderResponse(
+  paymentStatus: string | null,
+  inventoryConfirmed = false
+) {
   return {
     ok: true,
-    json: async () => ({ payment_status: paymentStatus }),
+    json: async () => ({
+      payment_status: paymentStatus,
+      inventory_confirmed: inventoryConfirmed,
+    }),
   };
 }
 
@@ -59,10 +65,10 @@ describe('useCreditDirectVerification', () => {
     );
   });
 
-  it('confirms once the payment status flips to bnpl_approved', async () => {
+  it('confirms once the payment status flips to bnpl_approved with inventory proof', async () => {
     fetchMock
       .mockResolvedValueOnce(orderResponse('bnpl_pending'))
-      .mockResolvedValueOnce(orderResponse('bnpl_approved'));
+      .mockResolvedValueOnce(orderResponse('bnpl_approved', true));
 
     const { result } = renderHook(() =>
       useCreditDirectVerification(baseOptions),
@@ -77,13 +83,71 @@ describe('useCreditDirectVerification', () => {
     expect(result.current.phase).toBe('confirmed');
   });
 
-  it('confirms when the payment status is already paid', async () => {
-    fetchMock.mockResolvedValue(orderResponse('paid'));
+  it('confirms when the payment status is already paid with inventory proof', async () => {
+    fetchMock.mockResolvedValue(orderResponse('paid', true));
 
     const { result } = renderHook(() =>
       useCreditDirectVerification(baseOptions),
     );
     await act(async () => {});
+
+    expect(result.current.phase).toBe('confirmed');
+  });
+
+  it('keeps polling while approved without inventory proof', async () => {
+    // The webhook writes approval before inventory confirmation lands
+    // (and rolls it back on failure): approval without the server
+    // proof must never confirm, no matter how many reads observe it.
+    fetchMock.mockResolvedValue(orderResponse('bnpl_approved', false));
+
+    const { result } = renderHook(() =>
+      useCreditDirectVerification(baseOptions),
+    );
+    await act(async () => {});
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30);
+    });
+
+    expect(result.current.phase).toBe('polling');
+  });
+
+  it('keeps polling when approval rolls back after consecutive approved reads', async () => {
+    // Slow inventory spanning poll intervals: two approved reads
+    // arrive before the webhook fails and rolls the order back to
+    // pending. None of the approved reads carries proof, so the
+    // hook never confirms.
+    fetchMock
+      .mockResolvedValueOnce(orderResponse('bnpl_approved', false))
+      .mockResolvedValueOnce(orderResponse('bnpl_approved', false))
+      .mockResolvedValue(orderResponse('pending', false));
+
+    const { result } = renderHook(() =>
+      useCreditDirectVerification(baseOptions),
+    );
+    await act(async () => {});
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40);
+    });
+
+    expect(result.current.phase).toBe('polling');
+  });
+
+  it('confirms once the proof lands after unproven approved reads', async () => {
+    fetchMock
+      .mockResolvedValueOnce(orderResponse('bnpl_approved', false))
+      .mockResolvedValue(orderResponse('bnpl_approved', true));
+
+    const { result } = renderHook(() =>
+      useCreditDirectVerification(baseOptions),
+    );
+    await act(async () => {});
+    expect(result.current.phase).toBe('polling');
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
 
     expect(result.current.phase).toBe('confirmed');
   });
@@ -102,7 +166,7 @@ describe('useCreditDirectVerification', () => {
   it('keeps polling through transient fetch failures', async () => {
     fetchMock
       .mockRejectedValueOnce(new Error('network down'))
-      .mockResolvedValueOnce(orderResponse('bnpl_approved'));
+      .mockResolvedValue(orderResponse('bnpl_approved', true));
 
     const { result } = renderHook(() =>
       useCreditDirectVerification(baseOptions),
@@ -166,7 +230,7 @@ describe('useCreditDirectVerification', () => {
     });
     expect(result.current.phase).toBe('timeout');
 
-    fetchMock.mockResolvedValue(orderResponse('bnpl_approved'));
+    fetchMock.mockResolvedValue(orderResponse('bnpl_approved', true));
     await act(async () => {
       result.current.restart();
     });

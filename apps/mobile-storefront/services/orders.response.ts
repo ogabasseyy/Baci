@@ -3,6 +3,14 @@ import { trackError } from '@/services/analytics';
 import { OrderError } from './orders.errors';
 import { type OrderResponse, OrderResponseSchema } from './orders.schemas';
 
+export type CreateOrderResult = OrderResponse & {
+  // The generation the payload was frozen and submitted under. Rollback
+  // paths must capture and restore this value — not the caller's possibly
+  // stale snapshot — so a retry replays the created order instead of
+  // forking the idempotency key.
+  effectiveCheckoutGeneration: string;
+};
+
 type Logger = ReturnType<typeof createLogger>;
 
 function getResponseOrderId(data: unknown): string | undefined {

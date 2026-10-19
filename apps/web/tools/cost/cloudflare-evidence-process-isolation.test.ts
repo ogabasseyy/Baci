@@ -40,7 +40,9 @@ describe('spawnIsolatedCloudflareEvidenceProcess', () => {
   beforeEach(async () => {
     releaseWorkspaceLock =
       await holdCloudflareEvidenceWorkspaceTestLock(workspaceRoot);
-  }, 30_000);
+    // The credentialed isolation suite shares this cross-process lock and can
+    // spend about a minute verifying its private dependency closures.
+  }, 120_000);
   afterEach(async () => {
     try {
       await releaseWorkspaceLock?.();
@@ -216,5 +218,5 @@ describe('spawnIsolatedCloudflareEvidenceProcess', () => {
         reviewedPrepareInput
       )
     ).rejects.toThrow('active');
-  }, 30_000);
+  }, 120_000);
 });

@@ -190,8 +190,13 @@ describe('NewOrderDetailsSection address behavior', () => {
     ).toEqual({
       address: '12 Allen Avenue, Lagos',
       city: '',
+      country: '',
+      countryCode: '',
+      latitude: undefined,
+      longitude: undefined,
       name: '',
       phone: '',
+      postalCode: '',
       state: '',
     });
   });

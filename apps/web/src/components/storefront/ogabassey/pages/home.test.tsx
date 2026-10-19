@@ -1,5 +1,5 @@
-import { render, screen, within } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { isValidElement, type ReactNode, Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Product } from '../types';
 
@@ -70,24 +70,38 @@ describe('OgabasseyHomePage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders core sections: hero, ad unit, and product grid', () => {
+  it('renders core sections: hero, ad unit, and product grid', async () => {
     render(<OgabasseyHomePage products={[]} categories={[]} />);
 
     expect(
       screen.getByRole('region', { name: /launch hero/i })
     ).toBeInTheDocument();
     expect(screen.getByText(/^Ad unit/)).toBeInTheDocument();
-    expect(screen.getByText(/^Product grid/)).toBeInTheDocument();
+    // The grid arrives through the viewport gate (async module load once the
+    // section activates), so await it; the static fallback holds its place.
+    // jsdom never fires LCP/intersection, so drive the gate's designed
+    // shopper-interaction trigger directly.
+    fireEvent(window, new window.Event('pointerdown'));
+    // Complete the press: the gate holds the fallback mounted while a press
+    // is in flight so the tap lands on the pressed link — a bare
+    // pointerdown with no completing click would hold the fallback forever.
+    fireEvent(window, new window.Event('click'));
+    expect(await screen.findByText(/^Product grid/)).toBeInTheDocument();
   });
 
-  it('can omit the hero when the route shell renders it outside dynamic content', () => {
+  it('can omit the hero when the route shell renders it outside dynamic content', async () => {
     render(
       <OgabasseyHomePage products={[]} categories={[]} renderHero={false} />
     );
 
     expect(screen.queryByText(/^Hero/)).not.toBeInTheDocument();
     expect(screen.getByText(/^Ad unit/)).toBeInTheDocument();
-    expect(screen.getByText(/^Product grid/)).toBeInTheDocument();
+    fireEvent(window, new window.Event('pointerdown'));
+    // Complete the press: the gate holds the fallback mounted while a press
+    // is in flight so the tap lands on the pressed link — a bare
+    // pointerdown with no completing click would hold the fallback forever.
+    fireEvent(window, new window.Event('click'));
+    expect(await screen.findByText(/^Product grid/)).toBeInTheDocument();
   });
 
   it('joins a slug route base path into the hero launch deep-links', () => {
@@ -132,7 +146,7 @@ describe('OgabasseyHomePage', () => {
     );
   });
 
-  it('passes products to the home product grid', () => {
+  it('passes products to the home product grid', async () => {
     const testProducts: Product[] = [
       {
         id: 'p-1',
@@ -160,14 +174,24 @@ describe('OgabasseyHomePage', () => {
       />
     );
 
-    expect(mockHomeProductGrid).toHaveBeenCalledWith(
-      expect.objectContaining({
-        storeSlug: 'test-store',
-        products: testProducts,
-        initialDisplayCount: 8,
-        inlineAdBreakpoints: [12, 24],
-      })
-    );
+    // The gate loads the grid module asynchronously after activation.
+    // jsdom never fires LCP/intersection, so drive the gate's designed
+    // shopper-interaction trigger directly.
+    fireEvent(window, new window.Event('pointerdown'));
+    // Complete the press: the gate holds the fallback mounted while a press
+    // is in flight so the tap lands on the pressed link — a bare
+    // pointerdown with no completing click would hold the fallback forever.
+    fireEvent(window, new window.Event('click'));
+    await waitFor(() => {
+      expect(mockHomeProductGrid).toHaveBeenCalledWith(
+        expect.objectContaining({
+          storeSlug: 'test-store',
+          products: testProducts,
+          initialDisplayCount: 8,
+          inlineAdBreakpoints: [12, 24],
+        })
+      );
+    });
   });
 
   it('falls back to the product feed for the hero when launchProducts is omitted', () => {
@@ -222,5 +246,39 @@ describe('OgabasseyHomePage', () => {
     expect(
       (homepageStripCall?.[0] as { fallback?: unknown }).fallback
     ).toBeUndefined();
+  });
+
+  it('gives the Suspense boundary around HomeProductGridGate an explicit 1200px inline-styled fallback', () => {
+    type ReserveProps = {
+      children?: ReactNode;
+      'data-ogabassey-grid-gate-reserve'?: string;
+      fallback?: ReactNode;
+      style?: React.CSSProperties;
+    };
+    const element = OgabasseyHomePage({
+      products: [],
+      categories: [],
+      renderHero: false,
+    });
+    expect(isValidElement<ReserveProps>(element)).toBe(true);
+    if (!isValidElement<ReserveProps>(element)) return;
+
+    const children = Array.isArray(element.props.children)
+      ? element.props.children
+      : [];
+    const suspenseChild = children.find(
+      (child): child is React.ReactElement<ReserveProps> =>
+        isValidElement<ReserveProps>(child) && child.type === Suspense
+    );
+    const fallback = suspenseChild?.props.fallback;
+    expect(isValidElement<ReserveProps>(fallback)).toBe(true);
+    if (!isValidElement<ReserveProps>(fallback)) return;
+
+    expect(fallback.props['data-ogabassey-grid-gate-reserve']).toBe('true');
+    const inner = fallback.props.children;
+    expect(isValidElement<ReserveProps>(inner)).toBe(true);
+    if (isValidElement<ReserveProps>(inner)) {
+      expect(inner.props.style).toEqual({ minHeight: '1200px' });
+    }
   });
 });

@@ -42,7 +42,7 @@ export const BRANCH_DETAIL_COLUMNS = `
   )
 `.trim();
 
-export function parseRequestedMerchantId(request: NextRequest) {
+export function parseRequestedMerchantId(request: Request) {
   const value = request.headers.get('x-baci-merchant-id');
   if (!value) {
     return { merchantId: null, response: null };

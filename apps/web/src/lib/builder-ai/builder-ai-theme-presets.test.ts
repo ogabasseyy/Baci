@@ -1,3 +1,7 @@
+import {
+  builderDesignCapabilities,
+  createBuilderAiModelOperationSchema,
+} from '@baci/shared/contracts';
 import { describe, expect, it } from 'vitest';
 import { getContrastRatio } from '@/lib/color-utils';
 import { defaultTheme } from '@/lib/theme-config';
@@ -38,6 +42,57 @@ describe('applyBuilderAiTheme', () => {
         colors: { background: '#ffffff', foreground: '#eeeeee' },
       })
     ).toThrow();
+  });
+
+  it('applies only manifest-authorized theme tokens from an injected policy', () => {
+    const themeTokenKeys = [
+      ...builderDesignCapabilities.themeTokenKeys,
+      'surface',
+    ];
+    const result = applyBuilderAiTheme(
+      defaultTheme,
+      { colors: { surface: '#123456' } },
+      themeTokenKeys
+    );
+
+    expect((result.theme.colors as Record<string, unknown>).surface).toBe(
+      '#123456'
+    );
+    expect(() =>
+      applyBuilderAiTheme(
+        defaultTheme,
+        { colors: { undeclared: '#123456' } },
+        themeTokenKeys
+      )
+    ).toThrow('Unknown or invalid base color token');
+  });
+
+  it('parses and applies a manifest-added token while rejecting undeclared tokens', () => {
+    const manifest = structuredClone(builderDesignCapabilities);
+    manifest.themeTokenKeys.push('surface');
+    const schema = createBuilderAiModelOperationSchema(manifest);
+
+    expect(
+      schema.safeParse({
+        colors: { surface: '#123456' },
+        kind: 'update_theme',
+      }).success
+    ).toBe(true);
+    expect(
+      schema.safeParse({
+        colors: { undeclared: '#123456' },
+        kind: 'update_theme',
+      }).success
+    ).toBe(false);
+    expect(
+      (
+        applyBuilderAiTheme(
+          defaultTheme,
+          { colors: { surface: '#123456' } },
+          manifest.themeTokenKeys
+        ).theme.colors as Record<string, unknown>
+      ).surface
+    ).toBe('#123456');
   });
 
   it('derives dependent colors instead of accepting model-owned button or footer colors', () => {

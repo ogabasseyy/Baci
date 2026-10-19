@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import { buildRemediationCodexCommand } from './remediation-codex-command.mjs';
+
+const testContainerIdentity = { gid: 1001, uid: 1001 };
 
 describe('remediation Codex command', () => {
   it('uses the native workspace sandbox by default', () => {
@@ -23,7 +25,7 @@ describe('remediation Codex command', () => {
     assert.equal(result.args.includes('--json'), true);
   });
 
-  it('omits search for the native read-only canary command', () => {
+  it('enables search for a native read-only research command', () => {
     const result = buildRemediationCodexCommand({
       codexBin: 'codex',
       env: { HOME: '/home/worker' },
@@ -33,9 +35,23 @@ describe('remediation Codex command', () => {
       worktreeDir: '/repo',
     });
 
-    assert.equal(result.args.includes('--search'), false);
+    assert.equal(result.args.includes('--search'), true);
     assert.equal(result.args.includes('--sandbox'), true);
     assert.equal(result.args.includes('read-only'), true);
+  });
+
+  it('allows the read-only canary to disable web search explicitly', () => {
+    const result = buildRemediationCodexCommand({
+      codexBin: 'codex',
+      enableSearch: false,
+      env: { HOME: '/home/worker' },
+      prompt: 'Return a canary response only.',
+      readOnly: true,
+      repoDir: '/repo',
+      worktreeDir: '/repo',
+    });
+
+    assert.equal(result.args.includes('--search'), false);
   });
 
   it('isolates VPS Codex inside a capability-free Docker container', () => {
@@ -62,7 +78,7 @@ describe('remediation Codex command', () => {
       '--rm',
       '--name',
       'baci-remediation-worktree',
-      '--cap-drop',
+      '--entrypoint',
     ]);
     assert.equal(result.args.includes('ALL'), true);
     assert.equal(result.args.includes('no-new-privileges'), true);
@@ -110,12 +126,14 @@ describe('remediation Codex command', () => {
   it('builds a read-only Docker canary command from the remediation builder', () => {
     const result = buildRemediationCodexCommand({
       codexBin: '/opt/host/codex',
+      containerIdentity: testContainerIdentity,
       env: {
         BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
         BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
         CODEX_HOME: '/home/worker/.codex',
         HOME: '/home/worker',
       },
+      enableSearch: false,
       prompt: 'Return a canary response only.',
       readOnly: true,
       repoDir: '/repo',
@@ -125,22 +143,67 @@ describe('remediation Codex command', () => {
     assert.equal(result.args.includes('--read-only'), true);
     assert.equal(result.args.includes('--search'), false);
     assert.equal(result.args.includes('--sandbox'), true);
-    assert.equal(result.args.includes('workspace-write'), true);
+    assert.equal(result.args.includes('read-only'), true);
     assert.equal(
       result.args.includes('--dangerously-bypass-approvals-and-sandbox'),
       false
     );
-    assert.equal(result.args.includes('use_legacy_landlock'), false);
+    assert.equal(result.args.includes('--enable'), true);
+    assert.equal(result.args.includes('use_legacy_landlock'), true);
+    assert.equal(result.args.includes('workspace-write'), false);
     assert.equal(
       result.args.includes('type=bind,src=/repo,dst=/repo,readonly'),
       true
     );
     assert.equal(
       result.args.includes(
-        'type=bind,src=/home/worker/.codex/auth.json,dst=/codex-auth/auth.json,readonly'
+        'type=bind,src=/home/worker/.codex/auth.json,dst=/codex-auth/source-auth.json,readonly'
       ),
       true
     );
+  });
+
+  it('uses the configured seccomp profile only for read-only Docker commands', () => {
+    const root = mkdtempSync(join(tmpdir(), 'baci-codex-seccomp-'));
+    const profile = join(root, 'profile.json');
+    writeFileSync(profile, '{}');
+    try {
+      const result = buildRemediationCodexCommand({
+        codexBin: '/opt/host/codex',
+        containerIdentity: testContainerIdentity,
+        env: {
+          BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
+          BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
+          BACI_CODEX_READONLY_SECCOMP_PROFILE: profile,
+          CODEX_HOME: '/home/worker/.codex',
+          HOME: '/home/worker',
+        },
+        prompt: 'Inspect safely.',
+        readOnly: true,
+        repoDir: '/repo',
+        worktreeDir: '/repo',
+      });
+
+      assert.equal(result.args.includes(`seccomp=${profile}`), true);
+
+      const writeResult = buildRemediationCodexCommand({
+        codexBin: '/opt/host/codex',
+        env: {
+          BACI_CODEX_CONTAINER_BIN: '/opt/host/codex-native',
+          BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',
+          BACI_CODEX_READONLY_SECCOMP_PROFILE: profile,
+          CODEX_HOME: '/home/worker/.codex',
+          HOME: '/home/worker',
+        },
+        prompt: 'Implement safely.',
+        repoDir: '/repo',
+        worktreeDir: '/worktree',
+      });
+
+      assert.equal(writeResult.args.includes(`seccomp=${profile}`), false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('mounts native Codex resources when the pinned binary has siblings', () => {
@@ -152,6 +215,7 @@ describe('remediation Codex command', () => {
       mkdirSync(join(resources, 'zsh', 'bin'), { recursive: true });
       const result = buildRemediationCodexCommand({
         codexBin: '/opt/host/codex',
+        containerIdentity: testContainerIdentity,
         env: {
           BACI_CODEX_CONTAINER_BIN: binary,
           BACI_CODEX_DOCKER_IMAGE: 'baci-codex-remediator:local',

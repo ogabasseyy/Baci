@@ -1,17 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { createAdminClient } from '@/lib/supabase/admin';
 import {
+  VOUCHER_PIN_BACKFILL_ATTEMPT_INTERVAL_MS,
+  VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY,
+  VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY,
+  VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY,
+} from '@/lib/vtu-backfill-pacing';
+import {
   extractMetadataField,
-  hasRecentBackfillSchedule,
+  isReferenceLessProcessingTransaction,
   isString,
-  MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS,
   normalizeMetadata,
   scheduleVoucherPinBackfill,
   shouldBackfillForStatus,
   shouldBackfillForType,
-  TOKEN_BACKFILL_DEDUPE_WINDOW_MS,
-  VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY,
-  VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY,
 } from '@/lib/vtu-voucher-backfill';
 
 const mocks = vi.hoisted(() => ({
@@ -114,43 +116,88 @@ describe('vtu-voucher-backfill', () => {
     ).toBe(null);
   });
 
-  it('detects token-backed types and recent schedule windows', () => {
+  it('detects token-backed types and eligible statuses', () => {
     expect(shouldBackfillForType('electricity')).toBe(true);
     expect(shouldBackfillForType('cable_tv')).toBe(true);
     expect(shouldBackfillForType('airtime')).toBe(false);
     expect(shouldBackfillForStatus('successful')).toBe(true);
     expect(shouldBackfillForStatus('processing')).toBe(true);
     expect(shouldBackfillForStatus('failed')).toBe(false);
+  });
 
+  it('flags only processing rows with neither provider reference nor response', () => {
     expect(
-      hasRecentBackfillSchedule({
-        [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: new Date(
-          Date.now() - TOKEN_BACKFILL_DEDUPE_WINDOW_MS + 1000
-        ).toISOString(),
+      isReferenceLessProcessingTransaction({
+        error_message: null,
+        status: 'processing',
+        transaction_id: null,
       })
     ).toBe(true);
     expect(
-      hasRecentBackfillSchedule({
-        [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: new Date(
-          Date.now() - TOKEN_BACKFILL_DEDUPE_WINDOW_MS - 1000
-        ).toISOString(),
+      isReferenceLessProcessingTransaction({
+        error_message: null,
+        status: 'processing',
+        transaction_id: 'kuda-ref-1',
+      })
+    ).toBe(false);
+    expect(
+      isReferenceLessProcessingTransaction({
+        error_message: 'Accepted',
+        status: 'processing',
+        transaction_id: null,
+      })
+    ).toBe(false);
+    expect(
+      isReferenceLessProcessingTransaction({
+        error_message: null,
+        status: 'successful',
+        transaction_id: null,
       })
     ).toBe(false);
   });
 
-  it('reports a recent schedule when attempt cap is reached regardless of timestamp', () => {
-    expect(
-      hasRecentBackfillSchedule({
-        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS,
-      })
-    ).toBe(true);
-    // One below the cap is still allowed
-    expect(
-      hasRecentBackfillSchedule({
-        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]:
-          MAX_VOUCHER_PIN_BACKFILL_ATTEMPTS - 1,
-      })
-    ).toBe(false);
+  it('skips scheduling while a successful attempt is still paced', async () => {
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      metadata: {
+        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: new Date(
+          Date.now() - VOUCHER_PIN_BACKFILL_ATTEMPT_INTERVAL_MS + 1000
+        ).toISOString(),
+      },
+      originalMetadata: {},
+      supabase,
+      transaction: createTransaction(),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+  });
+
+  it('schedules again once the pacing interval elapses', async () => {
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      metadata: {
+        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: new Date(
+          Date.now() - VOUCHER_PIN_BACKFILL_ATTEMPT_INTERVAL_MS - 1000
+        ).toISOString(),
+      },
+      originalMetadata: {},
+      supabase,
+      transaction: createTransaction(),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(true);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(mocks.after).toHaveBeenCalledTimes(1);
   });
 
   it('marks metadata (with attempt counter) and defers voucher-pin backfill for eligible transactions', async () => {
@@ -175,6 +222,7 @@ describe('vtu-voucher-backfill', () => {
         alpha: 'first',
         [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: '2026-04-29T12:00:00.000Z',
         [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: '2026-04-29T12:00:00.000Z',
       },
     });
     expect(updateQuery.eq).toHaveBeenCalledWith('id', 'tx-1');
@@ -207,6 +255,7 @@ describe('vtu-voucher-backfill', () => {
         alpha: 'first',
         [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: '2026-04-29T12:00:00.000Z',
         [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: '2026-04-29T12:00:00.000Z',
       },
       supabase,
       transactionId: 'tx-1',
@@ -216,7 +265,46 @@ describe('vtu-voucher-backfill', () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
-  it('clears the scheduled timestamp when backfill returns no pin so the next poll can retry', async () => {
+  it('runs the provider poll inline with deferPoll: false and registers no after() (Muse R151 M1)', async () => {
+    // History GET already runs inside its own after(): the mark and
+    // the poll both execute here so the schedule stays a single
+    // layer — nothing nests.
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+    mocks.backfillVtuVoucherPin.mockResolvedValue({
+      voucherPin: '1234-5678',
+      units: undefined,
+    });
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      deferPoll: false,
+      metadata: { alpha: 'first' },
+      originalMetadata: { zeta: 'last', alpha: 'first' },
+      supabase,
+      transaction: createTransaction(),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(true);
+    expect(mocks.after).not.toHaveBeenCalled();
+    expect(mocks.backfillVtuVoucherPin).toHaveBeenCalledWith({
+      billRequestRef: 'REQ-123',
+      billResponseReference: 'RESP-123',
+      metadata: {
+        alpha: 'first',
+        [VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY]: '2026-04-29T12:00:00.000Z',
+        [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: '2026-04-29T12:00:00.000Z',
+      },
+      supabase,
+      transactionId: 'tx-1',
+    });
+
+    // Pin was found — mark only, no timestamp clear
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the scheduled timestamp but keeps pacing state so retries spread across the window', async () => {
     const updateQuery = createUpdateQueryMock();
     const { supabase, update } = createSupabaseMock(updateQuery);
     mocks.backfillVtuVoucherPin.mockResolvedValue({
@@ -247,6 +335,14 @@ describe('vtu-voucher-backfill', () => {
     expect(update).toHaveBeenLastCalledWith({
       metadata: expect.objectContaining({
         [VOUCHER_PIN_BACKFILL_ATTEMPTS_KEY]: 1,
+      }),
+    });
+    // The pacing marker survives the clear: an immediate next poll
+    // must NOT schedule (that would burn the 10-lookup budget in
+    // ~30s of a ~6min window).
+    expect(update).toHaveBeenLastCalledWith({
+      metadata: expect.objectContaining({
+        [VOUCHER_PIN_BACKFILL_LAST_ATTEMPT_AT_KEY]: '2026-04-29T12:00:00.000Z',
       }),
     });
 
@@ -324,6 +420,59 @@ describe('vtu-voucher-backfill', () => {
     expect(JSON.parse(clearFilterArg)).toHaveProperty(
       VOUCHER_PIN_BACKFILL_SCHEDULED_AT_KEY
     );
+  });
+
+  it('skips reference-less processing rows: no pin can resolve and scheduling would postpone recovery', async () => {
+    // The reconciliation claim declines without a provider reference
+    // or response, so fulfill can never resolve a pin here — and
+    // every schedule/clear cycle bumps updated_at, postponing the
+    // 5-minute pre-vend staleness gate indefinitely while history
+    // polling continues (Codex R42 rm5ao).
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      metadata: { alpha: 'first' },
+      originalMetadata: { alpha: 'first' },
+      supabase,
+      transaction: createTransaction({
+        status: 'processing',
+        transaction_id: null,
+      }),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+    expect(mocks.after).not.toHaveBeenCalled();
+    expect(mocks.fulfillPendingVtuTransaction).not.toHaveBeenCalled();
+  });
+
+  it('still schedules processing rows carrying a provider response message', async () => {
+    // A provider response lets the reconciliation claim proceed, so
+    // scheduling stays useful (may resolve a pin via fulfill).
+    const updateQuery = createUpdateQueryMock();
+    const { supabase, update } = createSupabaseMock(updateQuery);
+    mocks.fulfillPendingVtuTransaction.mockResolvedValue({
+      amount: 1000,
+      reference: 'REQ-123',
+      status: 'processing',
+    });
+
+    const scheduled = await scheduleVoucherPinBackfill({
+      metadata: { alpha: 'first' },
+      originalMetadata: { alpha: 'first' },
+      supabase,
+      transaction: createTransaction({
+        error_message: 'ACCEPTED',
+        status: 'processing',
+        transaction_id: null,
+      }),
+      voucherPin: null,
+    });
+
+    expect(scheduled).toBe(true);
+    expect(update).toHaveBeenCalled();
   });
 
   it('uses a null metadata comparison when the original metadata is absent', async () => {

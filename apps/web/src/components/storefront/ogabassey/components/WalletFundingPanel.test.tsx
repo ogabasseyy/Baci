@@ -163,6 +163,44 @@ describe('WalletFundingPanel', () => {
     expect(mockFetchWithCsrf).not.toHaveBeenCalled();
   });
 
+  it('collects a missing phone before creating a new DVA', async () => {
+    const user = userEvent.setup();
+    const onUpdateCustomerPhone = vi.fn().mockResolvedValue({ success: true });
+    mockFetchWithCsrf.mockResolvedValue({
+      ok: true,
+      json: async () => ({ account, requiresConsent: false }),
+    });
+
+    render(
+      <WalletFundingPanel
+        account={null}
+        autoCreate
+        customerPhone={null}
+        merchantSlug="ogabassey"
+        onAccountCreated={vi.fn()}
+        onUpdateCustomerPhone={onUpdateCustomerPhone}
+        requiresConsent={true}
+        surface="utility_modal"
+      />
+    );
+
+    expect(
+      screen.getByRole('textbox', { name: /phone number/i })
+    ).toBeInTheDocument();
+    expect(mockFetchWithCsrf).not.toHaveBeenCalled();
+
+    await user.type(
+      screen.getByRole('textbox', { name: /phone number/i }),
+      '08012345678'
+    );
+    await user.click(screen.getByRole('button', { name: /save and continue/i }));
+
+    await waitFor(() => {
+      expect(onUpdateCustomerPhone).toHaveBeenCalledWith('08012345678');
+      expect(mockFetchWithCsrf).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('maps the order-reservation conflict to actionable retry copy', async () => {
     const user = userEvent.setup();
     mockFetchWithCsrf.mockResolvedValue({

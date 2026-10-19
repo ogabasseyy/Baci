@@ -19,6 +19,7 @@ export { createSourceArchive, verifySourceArchive } from './source-archive.mjs';
 
 const PREFIX = 'infra/cwv-runner/';
 export const TASK9_SOURCE_MANIFEST_MAX_BYTES = 16_777_216;
+export const MAX_GIT_OBJECT_BATCH_BYTES = 64 * 1024 * 1024;
 const LIMITS = { archive: TASK9_SOURCE_MANIFEST_MAX_BYTES, members: 1024, member: 1_048_576 };
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const fail = (message) => {
@@ -26,10 +27,37 @@ const fail = (message) => {
 };
 const pathCompare = (left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right));
 const rowIdentity = (row) => row.rawIdentity ?? `${row.rawPath ? 'raw:' : 'utf8:'}${row.path}`;
+export function chunkGitObjectIdsBySize(objectIds, sizes, maxBytes = MAX_GIT_OBJECT_BATCH_BYTES) {
+  const batches = [];
+  let batch = [];
+  let batchBytes = 0;
+  for (const objectId of [...new Set(objectIds)]) {
+    const size = sizes.get(objectId)?.size;
+    if (!Number.isSafeInteger(size) || size < 0) fail('missing Git object size');
+    const estimatedBytes = size + objectId.length + 256;
+    if (estimatedBytes > maxBytes) fail('Git object exceeds batch size limit');
+    if (batch.length && batchBytes + estimatedBytes > maxBytes) {
+      batches.push(batch);
+      batch = [];
+      batchBytes = 0;
+    }
+    batch.push(objectId);
+    batchBytes += estimatedBytes;
+  }
+  if (batch.length) batches.push(batch);
+  return batches;
+}
+
 function verifyGitObjectsChunked(cwd, objectIds, options) {
+  const ids = [...new Set(objectIds)];
+  if (!ids.length) return new Map();
+  if (options?.includeBytes === false) return verifyGitObjects(cwd, ids, options);
+  const sizes = new Map(
+    [...verifyGitObjects(cwd, ids, { ...options, includeBytes: false })].map(([, value], index) => [ids[index], value])
+  );
   const verified = new Map();
-  for (let offset = 0; offset < objectIds.length; offset += 256)
-    for (const [key, value] of verifyGitObjects(cwd, objectIds.slice(offset, offset + 256), options)) verified.set(key, value);
+  for (const batch of chunkGitObjectIdsBySize(ids, sizes))
+    for (const [key, value] of verifyGitObjects(cwd, batch, options)) verified.set(key, value);
   return verified;
 }
 
@@ -44,12 +72,12 @@ function checkedSha(value, field) {
   return value;
 }
 
-function blobEntry(cwd, row, verified) {
+function blobEntry(cwd, row, verified, maxBytes = LIMITS.member) {
   if (row.rawPath) fail('non-UTF-8 source path');
   if (row.mode !== '100644' && row.mode !== '100755') fail('unsupported Git tree mode');
   const bytes = verified?.get(`${cwd}\0${row.objectId}`)?.bytes;
   if (!bytes) fail('invalid Git blob');
-  if (bytes.length > LIMITS.member) fail('source member exceeds size limit');
+  if (bytes.length > maxBytes) fail('source member exceeds size limit');
   return { path: row.path, mode: row.mode, blobSha256: sha256(bytes), bytes };
 }
 
@@ -92,7 +120,7 @@ function changedEntries(cwd, baseSha, reviewedHeadSha, mergeSha) {
     changed.flatMap(({ merged, reviewed }) => [reviewed.objectId, merged.objectId])
   );
   for (const { merged, path, reviewed, status } of changed) {
-    const entry = blobEntry(cwd, reviewed, verifiedBlobs);
+    const entry = blobEntry(cwd, reviewed, verifiedBlobs, LIMITS.archive);
     const mergedBytes = verifiedBlobs.get(`${cwd}\0${merged.objectId}`)?.bytes;
     if (!mergedBytes) fail('invalid Git blob');
     if (entry.mode !== merged.mode || entry.blobSha256 !== sha256(mergedBytes)) fail('merge tree differs from reviewed path');

@@ -4,15 +4,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareModalContainer } from '@/components/ui/KeyboardAwareModalContainer';
 import { isRuntimePlatform } from '@/config/runtime-platform';
 import { useTheme } from '@/hooks/useTheme';
-import type {
-  ShipmentCompletionMode,
-  ShipmentFlowStep,
-  ShipmentFulfillmentDetails,
-} from '@/lib/order-shipment';
+import { CheckoutShippingRecoveryPanel } from './CheckoutShippingRecoveryPanel';
 import { ShipmentFlowFooter } from './ShipmentFlowFooter';
+import { ShipmentFlowGiglPanel } from './ShipmentFlowGiglPanel';
 import { ShipmentFlowHeader } from './ShipmentFlowHeader';
 import { ShipmentFlowProgress } from './ShipmentFlowProgress';
 import { styles } from './ShipmentFlowSheet.styles';
+import type { ShipmentFlowSheetProps } from './ShipmentFlowSheet.types';
 import {
   ShipmentFlowDetailsStep,
   ShipmentFlowMethodStep,
@@ -20,44 +18,14 @@ import {
 } from './ShipmentFlowSheetSections';
 import { ShipmentIdentifierScanner } from './ShipmentIdentifierScanner';
 
-// With behavior="padding", a larger keyboardVerticalOffset lifts the sheet
-// HIGHER above the keyboard. Keep iOS at 0 so the sheet rests directly on top
-// of the keyboard (breathing room comes from the content's bottom padding).
 const IOS_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 0;
 const DEFAULT_SHIPMENT_KEYBOARD_VERTICAL_OFFSET = 24;
-
-interface ShipmentFlowSheetProps {
-  canUseProvider: boolean;
-  fulfillmentDetails: ShipmentFulfillmentDetails;
-  fulfillmentItemIndex: number;
-  hasExistingFulfillment: boolean;
-  isSubmitting: boolean;
-  onClose: () => void;
-  onContinueFromDetails: () => void;
-  onContinueFromMethod: () => void;
-  onConfirmSelfFulfillment: () => void;
-  onFulfillmentDetailsChange: (
-    field: 'imei' | 'serialNumber',
-    value: string
-  ) => void;
-  onModeChange: (mode: ShipmentCompletionMode) => void;
-  onRiderPhoneChange: (value: string) => void;
-  onSelectSavedRider: (phone: string) => void;
-  onStepBack: () => void;
-  orderNumber: string;
-  providerLabel: string | null;
-  requiresFulfillment: boolean;
-  riderPhone: string;
-  savedRiders: string[];
-  selectedMode: ShipmentCompletionMode;
-  step: ShipmentFlowStep;
-  visible: boolean;
-}
-
 export function ShipmentFlowSheet({
+  recoveryOrder,
   canUseProvider,
   fulfillmentDetails,
   fulfillmentItemIndex,
+  giglShipping,
   hasExistingFulfillment,
   isSubmitting,
   onClose,
@@ -80,6 +48,18 @@ export function ShipmentFlowSheet({
 }: ShipmentFlowSheetProps) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const [recoveryRequiredOrderId, setRecoveryRequiredOrderId] = useState<
+    string | null
+  >(null);
+  const recoveryRequired = Boolean(
+    recoveryOrder && recoveryRequiredOrderId === recoveryOrder.id
+  );
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
+  const [recoveryBlocking, setRecoveryBlocking] = useState(false);
+  const isRecoveryBlocking =
+    step === 'method' &&
+    (recoveryRequired ? selectedMode === 'provider' : recoveryBlocking);
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
   const [activeScanField, setActiveScanField] = useState<
     'imei' | 'serialNumber' | null
   >(null);
@@ -112,38 +92,39 @@ export function ShipmentFlowSheet({
       : step === 'method'
         ? selectedMode === 'self_fulfillment'
           ? 'Continue to Rider'
-          : providerLabel
-            ? `Book with ${providerLabel}`
-            : 'Use Shipping Provider'
+          : `Book with ${providerLabel || (giglShipping?.quote ? 'GIG Logistics' : 'Shipping Provider')}`
         : 'Mark Shipped';
-
   useEffect(() => {
     if (!visible) {
       setActiveScanField(null);
     }
   }, [visible]);
-
-  if (!visible) {
-    return null;
-  }
-
+  if (!visible) return null;
   const handleRequestClose = () => {
-    if (isSubmitting) return;
+    if (isSubmitting || recoveryBusy) return;
     onClose();
   };
-
   const handleBack = () => {
-    if (isSubmitting) return;
+    if (isSubmitting || recoveryBusy) return;
     onStepBack();
   };
-
-  const handlePrimaryAction =
-    step === 'details'
-      ? onContinueFromDetails
-      : step === 'method'
-        ? onContinueFromMethod
-        : onConfirmSelfFulfillment;
-
+  const handlePrimaryAction = async () => {
+    if (isRecoveryBlocking) return;
+    if (step === 'details') return onContinueFromDetails();
+    if (step === 'rider') return onConfirmSelfFulfillment();
+    if (
+      selectedMode === 'provider' &&
+      giglShipping &&
+      !(await giglShipping.ensureFreshQuoteForConfirmation())
+    ) {
+      return;
+    }
+    const outcome = await onContinueFromMethod();
+    if (outcome === 'review_checkout_quote' && recoveryOrder) {
+      setRecoveryAttempt((attempt) => attempt + 1);
+      setRecoveryRequiredOrderId(recoveryOrder.id);
+    }
+  };
   return (
     <Modal
       animationType="slide"
@@ -161,8 +142,8 @@ export function ShipmentFlowSheet({
           <Pressable
             accessibilityLabel="Cancel shipment flow"
             accessibilityRole="button"
-            accessibilityState={{ disabled: isSubmitting }}
-            disabled={isSubmitting}
+            accessibilityState={{ disabled: isSubmitting || recoveryBusy }}
+            disabled={isSubmitting || recoveryBusy}
             onPress={handleRequestClose}
             style={styles.dismissRegion}
           />
@@ -178,20 +159,19 @@ export function ShipmentFlowSheet({
           >
             <ShipmentFlowHeader
               colors={colors}
-              isSubmitting={isSubmitting}
+              isSubmitting={isSubmitting || recoveryBusy}
               onClose={handleRequestClose}
               orderNumber={orderNumber}
               step={step}
             />
-
             <ShipmentFlowProgress
               colors={colors}
               currentStepIndex={currentStepIndex}
               steps={steps}
             />
-
             <ScrollView
               bounces={false}
+              keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
               style={styles.content}
             >
@@ -204,16 +184,53 @@ export function ShipmentFlowSheet({
                   onScanIdentifier={setActiveScanField}
                 />
               ) : null}
-
               {step === 'method' ? (
                 <ShipmentFlowMethodStep
                   canUseProvider={canUseProvider}
-                  onModeChange={onModeChange}
+                  giglPanel={
+                    !giglShipping ? undefined : (
+                      <ShipmentFlowGiglPanel
+                        addressDraft={giglShipping.addressDraft}
+                        error={giglShipping.error}
+                        fundingAccount={giglShipping.fundingAccount}
+                        missingFields={giglShipping.missingFields}
+                        onAddressFieldChange={giglShipping.updateAddressField}
+                        onFundWallet={() => void giglShipping.startFunding()}
+                        onRefreshFundingAccount={() =>
+                          void giglShipping.refreshFundingAccount()
+                        }
+                        onModeChange={() => {
+                          if (!recoveryBusy) onModeChange('provider');
+                        }}
+                        onRetryQuote={() => void giglShipping.requestQuote()}
+                        onTransferred={giglShipping.startTransferPoll}
+                        quote={giglShipping.quote}
+                        selected={selectedMode === 'provider'}
+                        state={giglShipping.state}
+                        wallet={giglShipping.wallet}
+                      />
+                    )
+                  }
+                  onModeChange={(mode) => {
+                    if (!recoveryBusy) onModeChange(mode);
+                  }}
                   providerLabel={providerLabel}
                   selectedMode={selectedMode}
                 />
               ) : null}
-
+              {step === 'method' &&
+              !isSubmitting &&
+              recoveryOrder &&
+              (!recoveryRequired || selectedMode === 'provider') ? (
+                <CheckoutShippingRecoveryPanel
+                  key={`${recoveryOrder.id}:${recoveryAttempt}`}
+                  order={recoveryOrder}
+                  required={recoveryRequired}
+                  onConfirmed={() => setRecoveryRequiredOrderId(null)}
+                  onBlockingChange={setRecoveryBlocking}
+                  onBusyChange={setRecoveryBusy}
+                />
+              ) : null}
               {step === 'rider' ? (
                 <ShipmentFlowRiderStep
                   onRiderPhoneChange={onRiderPhoneChange}
@@ -223,12 +240,23 @@ export function ShipmentFlowSheet({
                 />
               ) : null}
             </ScrollView>
-
             <ShipmentFlowFooter
               colors={colors}
-              isSubmitting={isSubmitting}
+              isSubmitting={isSubmitting || recoveryBusy}
+              isPrimaryDisabled={
+                isRecoveryBlocking ||
+                (step === 'method' &&
+                  selectedMode === 'provider' &&
+                  (giglShipping
+                    ? !giglShipping.wallet?.canBook ||
+                      giglShipping.state === 'loading' ||
+                      giglShipping.state === 'funding' ||
+                      giglShipping.state === 'funding_pending' ||
+                      giglShipping.state === 'polling'
+                    : !canUseProvider))
+              }
               onBack={handleBack}
-              onPrimaryAction={handlePrimaryAction}
+              onPrimaryAction={() => void handlePrimaryAction()}
               primaryActionLabel={primaryActionLabel}
               selectedMode={selectedMode}
               showBack={showBack}

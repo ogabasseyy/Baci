@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "evidenceSha256": null,
+  "sourceClosureSha256": null,
+  "rollbackSqlSha256": null,
+  "expectedFunctionsSha256": null,
+  "permanentMetadataSha256": null,
+  "tableRowsSha256": null,
+  "restoredSnapshotSha256": null,
+  "rolledBack": false,
+  "postflightPassed": false,
+  "rollbackVerified": false,
+  "independentlyReviewed": false,
+  "reviewedAt": null
+}

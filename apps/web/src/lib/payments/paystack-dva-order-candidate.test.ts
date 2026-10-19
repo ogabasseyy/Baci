@@ -53,7 +53,7 @@ describe('paystack DVA order candidate', () => {
     ).toBeNull();
   });
 
-  it('normalizes a partially-paid merchant invoice to its current balance', () => {
+  it('prefers the refreshed payable balance over a stale amount_paid value', () => {
     expect(
       normalizePaystackDvaOrderCandidate({
         ...row,
@@ -66,8 +66,64 @@ describe('paystack DVA order candidate', () => {
       })
     ).toMatchObject({
       merchant_created: true,
-      outstanding_amount_kobo: 53_500_000,
+      outstanding_amount_kobo: 35_000_000,
     });
+  });
+
+  it('caps a stale storefront snapshot at the current remaining balance', () => {
+    expect(
+      normalizePaystackDvaOrderCandidate({
+        ...row,
+        payable_amount: '835000',
+        orders: {
+          ...row.orders,
+          amount_paid: '300000',
+          payment_status: 'partially_paid',
+          recorded_by_user_id: null,
+        },
+      })
+    ).toMatchObject({
+      merchant_created: false,
+      outstanding_amount_kobo: 53_500_000,
+      payable_amount_kobo: 83_500_000,
+    });
+  });
+
+  it('preserves the assignment-time balance for a delayed historical transfer', () => {
+    expect(
+      normalizePaystackDvaOrderCandidate({
+        ...row,
+        orders: {
+          ...row.orders,
+          amount_paid: '600000',
+          payment_status: 'partially_paid',
+          recorded_by_user_id: 'merchant-user-1',
+        },
+      })
+    ).toMatchObject({
+      outstanding_amount_kobo: 35_000_000,
+    });
+  });
+
+  it('uses the assignment-time email after the order email changes', () => {
+    expect(
+      normalizePaystackDvaOrderCandidate({
+        ...row,
+        assignment_customer_email: 'old@example.com',
+        orders: { ...row.orders, customer_email: 'new@example.com' },
+      })
+    ).toMatchObject({ customer_email: 'old@example.com' });
+  });
+
+  it('rejects legacy-untrusted aliases instead of falling back to the current order email', () => {
+    expect(
+      normalizePaystackDvaOrderCandidate({
+        ...row,
+        assignment_customer_email: null,
+        assignment_customer_email_source: 'legacy_untrusted',
+        orders: { ...row.orders, customer_email: 'new@example.com' },
+      })
+    ).toBeNull();
   });
 
   it.each([

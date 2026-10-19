@@ -41,7 +41,7 @@ const EXPECTED = Object.freeze({
   'source-manifest-tree.mjs':
     '713f0bfd672807f3d94488917df78022e9793d9e2cfdeb68ebf9b59dec46b321',
   'source-manifest.mjs':
-    '7662a7e469fc57b936999c9eeba2a0dbf75f41d33861cffa5467c3439329fab4',
+    '241af37ada8179b2db5144a9a3eafc03b3db78d1d1f53b35cc0e2286f309043c',
   'task9-authority-receipt.mjs':
     '703424cafb594b4d1a5050578969f84bbf50e1b5ca2c4fd032dac2dbda947c04',
   'task9-bootstrap-bundle-cli.mjs':

@@ -236,7 +236,10 @@ describe('GiglProvider booking requests', () => {
           state: 'Delta',
         },
       })
-    ).rejects.toThrow('No GIGL station found for pickup location');
+    ).rejects.toMatchObject({
+      code: 'GIGL_STATION_RESOLUTION_FAILED',
+      message: 'No GIGL station found for pickup location',
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 

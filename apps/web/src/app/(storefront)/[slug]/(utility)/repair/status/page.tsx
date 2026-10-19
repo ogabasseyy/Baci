@@ -13,6 +13,7 @@ import { RepairStatusLookup } from './repair-status-lookup';
 
 interface RepairStatusPageProps {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ ticket?: string | string[] }>;
 }
 
 // Slug is validated BEFORE it reaches the `'use cache'` merchant lookups so
@@ -48,8 +49,14 @@ export async function generateMetadata({
 
 export default async function RepairStatusPage({
   params,
+  searchParams,
 }: RepairStatusPageProps) {
   const { slug } = await params;
+  const query = searchParams ? await searchParams : {};
+  const initialTicket =
+    typeof query.ticket === 'string' && /^\d{1,10}$/.test(query.ticket)
+      ? query.ticket
+      : undefined;
   const merchant = await getStatusMerchant(slug);
   if (!merchant) {
     notFound();
@@ -68,7 +75,10 @@ export default async function RepairStatusPage({
         <div className="rounded-xl border border-store-border bg-store-background-text/5 p-6 shadow-sm">
           {/* Pass the URL slug straight through: the lookup route resolves it
               (subdomain or custom domain) exactly as this page did. */}
-          <RepairStatusLookup slug={slug.toLowerCase()} />
+          <RepairStatusLookup
+            initialTicket={initialTicket}
+            slug={slug.toLowerCase()}
+          />
         </div>
       </div>
     </div>

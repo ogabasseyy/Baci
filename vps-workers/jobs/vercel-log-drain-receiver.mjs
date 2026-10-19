@@ -4,16 +4,22 @@
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { config } from 'dotenv';
+import { withDrainFileLock } from '../lib/drain-file-lock.mjs';
+import {
+  DEFAULT_DRAIN_MAX_BYTES,
+  DEFAULT_DRAIN_MAX_ROTATED_FILES,
+} from '../lib/vercel-error-events-limits.mjs';
 
 const DEFAULT_HOST = '127.0.0.1';
 const DEFAULT_PATH = '/__baci/vercel-log-drain';
 const DEFAULT_PORT = 8787;
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
+export const DEFAULT_MAX_LOG_BYTES = DEFAULT_DRAIN_MAX_BYTES;
+export const DEFAULT_MAX_ROTATED_LOGS = DEFAULT_DRAIN_MAX_ROTATED_FILES;
 
 function readPositiveInt(value, fallback) {
   const parsed = Number(value);
@@ -86,12 +92,36 @@ export function normalizeDrainBody(body) {
   }
 }
 
-function appendDrainLines({ lines, logPath }) {
+function rotateDrainLog({ logPath, maxLogBytes, maxRotatedLogs }) {
+  let size;
+  try {
+    size = statSync(logPath).size;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return;
+    throw error;
+  }
+  if (size <= maxLogBytes) return;
+
+  for (let index = maxRotatedLogs; index >= 1; index -= 1) {
+    const source = index === 1 ? logPath : `${logPath}.${index - 1}`;
+    const destination = `${logPath}.${index}`;
+    try {
+      renameSync(source, destination);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+  }
+}
+
+function appendDrainLines({ lines, logPath, maxLogBytes, maxRotatedLogs }) {
   if (lines.length === 0) {
     return;
   }
   mkdirSync(dirname(logPath), { recursive: true });
-  appendFileSync(logPath, `${lines.join('\n')}\n`, { mode: 0o600 });
+  withDrainFileLock(`${logPath}.lock`, () => {
+    rotateDrainLog({ logPath, maxLogBytes, maxRotatedLogs });
+    appendFileSync(logPath, `${lines.join('\n')}\n`, { mode: 0o600 });
+  });
 }
 
 async function readRequestBody(request, maxBytes) {
@@ -121,6 +151,8 @@ export function createVercelLogDrainServer({
   drainPath = DEFAULT_PATH,
   logPath,
   logger = console,
+  maxLogBytes = DEFAULT_MAX_LOG_BYTES,
+  maxRotatedLogs = DEFAULT_MAX_ROTATED_LOGS,
   maxBytes = DEFAULT_MAX_BYTES,
   secret,
 } = {}) {
@@ -155,7 +187,7 @@ export function createVercelLogDrainServer({
       }
 
       const lines = normalizeDrainBody(body);
-      appendDrainLines({ lines, logPath });
+      appendDrainLines({ lines, logPath, maxLogBytes, maxRotatedLogs });
       respond(response, 204);
     } catch (error) {
       if (error?.code === 'PAYLOAD_TOO_LARGE') {
@@ -182,10 +214,20 @@ export function runVercelLogDrainReceiver({
     env.VERCEL_LOG_DRAIN_MAX_BYTES,
     DEFAULT_MAX_BYTES
   );
+  const maxLogBytes = readPositiveInt(
+    env.VERCEL_ERROR_LOG_MAX_BYTES,
+    DEFAULT_MAX_LOG_BYTES
+  );
+  const maxRotatedLogs = readPositiveInt(
+    env.VERCEL_ERROR_LOG_MAX_ROTATED_FILES,
+    DEFAULT_MAX_ROTATED_LOGS
+  );
   const server = createVercelLogDrainServer({
     drainPath,
     logPath: env.VERCEL_ERROR_LOG_PATH,
     logger,
+    maxLogBytes,
+    maxRotatedLogs,
     maxBytes,
     secret: env.VERCEL_LOG_DRAIN_SECRET,
   });
@@ -197,7 +239,8 @@ export function runVercelLogDrainReceiver({
   return server;
 }
 
-function main() {
+async function main() {
+  const { config } = await import('dotenv');
   config({ path: new URL('../.env', import.meta.url) });
   runVercelLogDrainReceiver();
 }
@@ -206,5 +249,5 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  main();
+  await main();
 }

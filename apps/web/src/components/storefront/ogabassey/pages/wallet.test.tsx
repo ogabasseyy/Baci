@@ -14,6 +14,7 @@ const usdtFundingPanelProps = vi.hoisted(
 
 vi.mock('@/contexts/customer-auth-context', () => ({
   useCustomerAuth: mockUseCustomerAuth,
+  useOptionalCustomerAuth: mockUseCustomerAuth,
 }));
 
 vi.mock('@/hooks/use-merchant-client', () => ({
@@ -200,12 +201,14 @@ describe('OgabasseyV2Wallet', () => {
     });
   });
 
-  it('withholds consent when the customer has no phone (create would 400)', async () => {
+  it('passes a missing phone through so the panel can collect it at point of need', async () => {
     const user = userEvent.setup();
+    const updateCustomer = vi.fn().mockResolvedValue({ success: true });
     mockUseCustomerAuth.mockReturnValue({
       customer: { id: 'customer-1', phone: null },
       isAuthenticated: true,
       isLoading: false,
+      updateCustomer,
       user: { id: 'user-1' },
     });
     vi.mocked(fetch).mockResolvedValue({
@@ -227,8 +230,17 @@ describe('OgabasseyV2Wallet', () => {
 
     expect(fundingPanelProps.current).toMatchObject({
       account: null,
-      requiresConsent: false,
+      customerPhone: null,
+      requiresConsent: true,
     });
+    const onUpdateCustomerPhone = fundingPanelProps.current
+      ?.onUpdateCustomerPhone as (phone: string) => Promise<{
+      success: boolean;
+    }>;
+    await expect(onUpdateCustomerPhone('08012345678')).resolves.toEqual({
+      success: true,
+    });
+    expect(updateCustomer).toHaveBeenCalledWith({ phone: '08012345678' });
   });
 
   it('refetches the wallet when the funding panel requests a balance refresh', async () => {

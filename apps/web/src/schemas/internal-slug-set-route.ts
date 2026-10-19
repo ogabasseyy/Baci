@@ -64,6 +64,15 @@ export const internalCompareHubStatusQuerySchema = z.object({
   category: z.string().trim().min(1).max(255),
 });
 
+/** Query params for a category compare-pair hard-status resolution. */
+export const internalComparePageStatusQuerySchema = z.object({
+  category: z.string().trim().min(1).max(255),
+  // A comparison slug is two bounded product keys plus `-vs-`; allow the
+  // encoded-key form without making the internal endpoint an unbounded input
+  // sink. The resolver applies per-key slug-safety gates before any cache key.
+  comparison: z.string().trim().min(1).max(1024),
+});
+
 /**
  * Response body contract for `GET /api/internal/compare-hub-status/[identifier]`
  * — shared by the route and the proxy's empty-hub preflight so a shape change
@@ -77,4 +86,18 @@ export const internalCompareHubStatusBodySchema = z.object({
 
 export type InternalCompareHubStatusBody = z.infer<
   typeof internalCompareHubStatusBodySchema
+>;
+
+/**
+ * Response body for the compare-pair preflight. `hasError` is an explicit
+ * fail-open bit: `{ present: false, hasError: true }` must never become a
+ * proxy 404.
+ */
+export const internalComparePageStatusBodySchema = z.object({
+  hasError: z.boolean(),
+  present: z.boolean(),
+});
+
+export type InternalComparePageStatusBody = z.infer<
+  typeof internalComparePageStatusBodySchema
 >;

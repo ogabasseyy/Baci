@@ -46,10 +46,9 @@ describe('remediation git workflow reconciliation', () => {
     assert.equal(retried.type, 'pr_opened');
     assert.equal(retried.prUrl, 'https://github.com/ogabasseyy/Baci/pull/999');
     assert.equal(retried.branch, createdBranches[0]);
-    assert.equal(calls.filter((call) => call.includes('codex')).length, 1);
+    assert.equal(calls.filter((call) => call.includes('codex')).length, 2);
     assert.equal(createdBranches.length, 1);
   });
-
   it('reuses the retained worktree after Codex or verification fails for the same observation', () => {
     for (const failedCommand of ['codex', 'bash']) {
       const { calls, runner: baseRunner } = makeRunner();
@@ -95,6 +94,7 @@ describe('remediation git workflow reconciliation', () => {
         return baseRunner(command, args, options);
       };
       const env = {
+        BACI_REMEDIATION_RETAIN_FAILED_WORKTREE: '1',
         BACI_REMEDIATION_RUN_ID: 'retry-run',
         BACI_REMEDIATION_VERIFY_COMMAND: 'pnpm turbo lint',
         BACI_REPO_DIR: '/repo',
@@ -108,7 +108,7 @@ describe('remediation git workflow reconciliation', () => {
 
       assert.equal(retried.type, 'pr_opened');
       assert.equal(retried.branch, retainedWorktree.branch);
-      assert.equal(codexAttempts, 2);
+      assert.equal(codexAttempts, failedCommand === 'codex' ? 3 : 4);
       assert.equal(
         calls.filter((call) => call.join(' ').startsWith('git worktree add'))
           .length,
@@ -120,7 +120,6 @@ describe('remediation git workflow reconciliation', () => {
       );
     }
   });
-
   it('cleans a retained worktree after no-change or policy-blocked retries', () => {
     for (const [statusOutput, type] of [
       ['', 'no_changes'],
@@ -189,6 +188,7 @@ describe('remediation git workflow reconciliation', () => {
         runRemediationAutofix({
           candidate,
           env: {
+            BACI_REMEDIATION_RETAIN_FAILED_WORKTREE: '1',
             BACI_REMEDIATION_VERIFY_COMMAND: 'pnpm turbo lint',
             BACI_REPO_DIR: '/repo',
             BACI_REMEDIATION_WORKTREE_ROOT: '/worktrees',
@@ -291,7 +291,7 @@ describe('remediation git workflow reconciliation', () => {
     });
 
     assert.notEqual(first.branch, recurrence.branch);
-    assert.equal(calls.filter((call) => call.includes('codex')).length, 2);
+    assert.equal(calls.filter((call) => call.includes('codex')).length, 4);
     assert.equal(
       calls.filter((call) => call.join(' ').includes('pr create')).length,
       2

@@ -1,8 +1,14 @@
 import { z } from 'zod';
+import { cartCheckoutBindingSchema } from '@/schemas/cart-checkout-binding';
+import {
+  type RedvaultCheckout,
+  RedvaultCheckoutSchema,
+} from '@/schemas/redvault-checkout';
 
 const MAX_SAVINGS_CREDIT_AMOUNT = 10_000_000;
 
 const OrderItemSchema = z.object({
+  cart_line_id: z.uuid().optional(),
   id: z.string(),
   condition: z.string().optional(),
   product_id: z.string().optional(),
@@ -34,7 +40,8 @@ const OrderItemSchema = z.object({
     .optional(),
 });
 
-export const CreateOrderRequestSchema = z.object({
+const createOrderRequestSchemaBase = z.object({
+  shared_cart: cartCheckoutBindingSchema.optional(),
   customer_email: z.email('Invalid email address'),
   customer_name: z.string().min(1, 'Name is required'),
   customer_phone: z.string().min(10, 'Valid phone number required'),
@@ -59,7 +66,10 @@ export const CreateOrderRequestSchema = z.object({
     notes: z.string().optional(),
   }),
   selected_quote_id: z.uuid().optional(),
+  shipping_rate_id: z.uuid().optional(),
   shipping_provider: z.string().optional(),
+  delivery_method: z.enum(['door', 'airport', 'pickup_station']).optional(),
+  airport_type: z.enum(['delivery', 'pickup']).optional(),
   source: z.string().default('mobile_app'),
   use_wallet_credit: z.boolean().optional(),
   wallet_amount: z.number().nonnegative().optional(),
@@ -72,12 +82,72 @@ export const CreateOrderRequestSchema = z.object({
     .optional(),
 });
 
-export const OrderResponseSchema = z.object({
+export const CreateOrderRequestSchema =
+  createOrderRequestSchemaBase.superRefine((data, ctx) => {
+    if (data.shared_cart) {
+      const lineIds = new Set<string>();
+      data.items.forEach((item, index) => {
+        if (!item.cart_line_id || lineIds.has(item.cart_line_id))
+          ctx.addIssue({
+            code: 'custom',
+            path: ['items', index, 'cart_line_id'],
+            message:
+              'Every shared-cart line must have a unique canonical line ID',
+          });
+        if (item.cart_line_id) lineIds.add(item.cart_line_id);
+      });
+    }
+    if (
+      data.payment_method === 'uba_redvault' &&
+      (data.discount_code ||
+        (data.discount_amount ?? 0) > 0 ||
+        data.use_wallet_credit ||
+        (data.wallet_amount ?? 0) > 0 ||
+        data.use_savings_credit ||
+        (data.savings_amount ?? 0) > 0 ||
+        data.items.some((item) => item.voucher_token))
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'UBA payment cannot be combined with other discounts or store credit',
+        path: ['payment_method'],
+      });
+    }
+    if (
+      data.delivery_method === 'airport' &&
+      !data.selected_quote_id &&
+      data.airport_type === undefined
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Airport type is required for local airport delivery',
+        path: ['airport_type'],
+      });
+    }
+
+    if (data.delivery_method !== 'airport' && data.airport_type !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Airport type is only valid for airport delivery',
+        path: ['airport_type'],
+      });
+    }
+  });
+
+const OrdinaryOrderResponseSchema = z.object({
   order: z.object({
     id: z.string(),
     order_number: z.string().nullable(),
     total: z.number(),
     payment_status: z.string(),
+    // Authoritative method after server-side coverage (wallet, store_credit,
+    // savings, quiz_voucher) is applied. Optional: older responses omit it
+    // and callers fall back to the UI selection.
+    payment_method: z.string().nullish(),
+    // Stamped order currency for funnel attribution. Optional: older
+    // responses omit it and callers keep the NGN default.
+    currency: z.string().nullish(),
     shipping_status: z.string(),
     created_at: z.string().default(() => new Date().toISOString()),
     tracking_token: z.string().nullable().optional(),
@@ -98,8 +168,30 @@ export const OrderResponseSchema = z.object({
     .nullable()
     .optional(),
   amountDueToGateway: z.number(),
+  idempotency: z
+    .object({
+      replayed: z.literal(true),
+    })
+    .optional(),
 });
 
+export const OrderResponseSchema = z.union([
+  RedvaultCheckoutSchema.transform((response) => ({
+    ...response,
+    order: {
+      ...response.order,
+      order_number: null,
+      shipping_status: 'pending',
+      created_at: '',
+    },
+    wallet: null,
+    amountDueToGateway: response.order.total,
+  })),
+  OrdinaryOrderResponseSchema.extend({ redvault: z.never().optional() }),
+]);
+
 export type CreateOrderRequest = z.infer<typeof CreateOrderRequestSchema>;
-export type OrderResponse = z.infer<typeof OrderResponseSchema>;
+export type OrderResponse = z.infer<typeof OrdinaryOrderResponseSchema> & {
+  redvault?: RedvaultCheckout['redvault'];
+};
 export type OrderItem = z.infer<typeof OrderItemSchema>;

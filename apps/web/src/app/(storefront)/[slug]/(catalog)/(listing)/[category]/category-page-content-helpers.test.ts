@@ -4,7 +4,6 @@ import type { RawDbProduct } from '@/lib/normalize-product';
 import {
   buildCategoryPageHubModel,
   getCategoryPageProductSlots,
-  hasMaintainedCategoryCompareHubLink,
   isCategoryPageProductSlot,
   normalizeCategoryPageProducts,
 } from './category-page-content-helpers';
@@ -219,6 +218,30 @@ describe('normalizeCategoryPageProducts', () => {
     expect(result.price).toContain('₦');
     expect(result.price).not.toContain('$');
   });
+
+  it('surfaces the GPU spec as the category graphics filter value', () => {
+    const [result] = normalizeCategoryPageProducts(
+      [
+        {
+          id: 'prod-7',
+          name: 'Gaming Laptop',
+          slug: 'gaming-laptop',
+          description: 'RTX laptop',
+          price: 1750000,
+          condition: 'used',
+          stock: 0,
+          images: ['https://cdn.example.com/gaming-laptop.png'],
+          categories: [{ name: 'Gaming Laptops', slug: 'gaming-laptops' }],
+          product_key_specs: {
+            gpu: 'NVIDIA RTX 4070',
+          },
+        },
+      ],
+      'gaming-laptops'
+    );
+
+    expect(result.graphics).toBe('NVIDIA RTX 4070');
+  });
 });
 
 describe('buildCategoryPageHubModel', () => {
@@ -267,39 +290,5 @@ describe('buildCategoryPageHubModel', () => {
         label: 'Compare Alpha with Beta',
       },
     ]);
-  });
-});
-
-describe('hasMaintainedCategoryCompareHubLink', () => {
-  it('detects category compare hub links across absolute and prefixed hrefs', () => {
-    expect(
-      hasMaintainedCategoryCompareHubLink(
-        [
-          {
-            href: 'https://ogabassey.com/smartphones/compare',
-            label: 'View all smartphones comparisons',
-          },
-          {
-            href: '/ogabassey/laptops/compare',
-            label: 'View laptop comparisons',
-          },
-        ],
-        'laptops'
-      )
-    ).toBe(true);
-  });
-
-  it('ignores product comparison links that are not the maintained hub', () => {
-    expect(
-      hasMaintainedCategoryCompareHubLink(
-        [
-          {
-            href: '/smartphones/compare/google-pixel-8-vs-xiaomi-13t',
-            label: 'Compare Google Pixel 8 with Xiaomi 13T',
-          },
-        ],
-        'smartphones'
-      )
-    ).toBe(false);
   });
 });

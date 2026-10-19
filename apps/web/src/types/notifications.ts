@@ -15,6 +15,12 @@ export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 export type TargetType = 'all' | 'specific' | 'segment';
 export type NotificationChannel = 'in_app' | 'banner' | 'push';
 export type TargetSegment = 'new' | 'active' | 'at_risk';
+export type NotificationDeliveryState =
+  | 'pending'
+  | 'processing'
+  | 'sent'
+  | 'expired'
+  | 'failed';
 
 // ============================================================================
 // DATABASE MODELS
@@ -40,6 +46,9 @@ export interface Notification {
   expires_at: string | null;
   created_by: string;
   created_at: string;
+  delivery_attempts: number;
+  delivery_last_error: string | null;
+  delivery_state: NotificationDeliveryState;
   sent_at: string | null;
   is_system: boolean;
 }
@@ -71,8 +80,10 @@ export interface NotificationPreferences {
   merchant_id: string;
   in_app_enabled: boolean;
   banner_enabled: boolean;
+  follow_up_notifications_enabled: boolean;
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
+  quiet_hours_time_zone: string;
   updated_at: string;
 }
 
@@ -123,8 +134,10 @@ export interface UpdateNotificationInput {
 export interface UpdatePreferencesInput {
   in_app_enabled?: boolean;
   banner_enabled?: boolean;
+  follow_up_notifications_enabled?: boolean;
   quiet_hours_start?: string | null;
   quiet_hours_end?: string | null;
+  quiet_hours_time_zone?: string;
 }
 
 /**
@@ -145,6 +158,7 @@ export interface UpdateMerchantNotificationInput {
  */
 export interface NotificationStats {
   total_sent: number;
+  total_push_sent?: number;
   total_read: number;
   total_dismissed: number;
   read_rate: number;
@@ -173,29 +187,6 @@ export interface ActiveBanner {
 }
 
 // ============================================================================
-// REALTIME BROADCAST TYPES
-// ============================================================================
-
-/**
- * Payload sent via Supabase Broadcast when a new notification arrives
- */
-export interface NotificationBroadcastPayload {
-  event: 'new_notification';
-  merchant_notification_id: string;
-  notification: {
-    id: string;
-    title: string;
-    message: string;
-    notification_type: NotificationType;
-    priority: NotificationPriority;
-    channels: NotificationChannel[];
-    action_url: string | null;
-    action_label: string | null;
-  };
-  created_at: string;
-}
-
-// ============================================================================
 // COMPONENT PROPS TYPES
 // ============================================================================
 
@@ -207,7 +198,14 @@ export interface NotificationBroadcastPayload {
  * Filters for admin notification list
  */
 export interface AdminNotificationFilters {
-  status?: 'all' | 'sent' | 'scheduled' | 'draft';
+  status?:
+    | 'all'
+    | 'sent'
+    | 'scheduled'
+    | 'queued'
+    | 'processing'
+    | 'failed'
+    | 'expired';
   type?: NotificationType;
   priority?: NotificationPriority;
   date_from?: string;

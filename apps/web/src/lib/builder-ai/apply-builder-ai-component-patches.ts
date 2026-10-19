@@ -2,7 +2,9 @@ import type {
   BuilderAiModelOperation,
   BuilderData,
 } from '@baci/shared/contracts';
+import { builderDesignCapabilityAdapter } from '@baci/shared/contracts';
 import { areBuilderAiPropValuesEqual } from './are-builder-ai-prop-values-equal';
+import { hasDuplicateCarouselSlideTitle } from './has-duplicate-carousel-slide-title';
 import { sanitizeBuilderAiProps } from './sanitize-builder-ai-props';
 
 type BuilderComponent = BuilderData['content'][number];
@@ -42,24 +44,28 @@ export function applyBuilderAiCarouselPatch(
   if (!slide || typeof slide !== 'object' || Array.isArray(slide)) {
     throw createError('Carousel slide was not found');
   }
+  const operationFields = operation as Record<string, unknown>;
+  const specialProps =
+    builderDesignCapabilityAdapter.getSpecialProps(
+      'HeroCarousel',
+      'updateCarouselSlide'
+    ) ?? {};
   const patch = Object.fromEntries(
-    ['ctaLink', 'ctaText', 'subtitle', 'title'].flatMap((key) =>
-      operation[key as keyof typeof operation] === undefined
-        ? []
-        : [[key, operation[key as keyof typeof operation]]]
+    Object.keys(specialProps).flatMap((key) =>
+      operationFields[key] === undefined ? [] : [[key, operationFields[key]]]
     )
   );
-  const sanitized = sanitizeBuilderAiProps('Hero', patch);
+  const sanitized = sanitizeBuilderAiProps(
+    'HeroCarousel',
+    patch,
+    'updateCarouselSlide'
+  );
   const nextTitle = sanitized.props.title;
   if (
-    typeof nextTitle === 'string' &&
-    component.props.slides.some(
-      (item, index) =>
-        index !== operation.slideIndex &&
-        item &&
-        typeof item === 'object' &&
-        !Array.isArray(item) &&
-        (item as Record<string, unknown>).title === nextTitle
+    hasDuplicateCarouselSlideTitle(
+      component.props.slides,
+      operation.slideIndex,
+      nextTitle
     )
   ) {
     throw createError('Carousel slide title must be unique');

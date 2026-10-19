@@ -4,58 +4,59 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import { useShallow } from 'zustand/react/shallow';
 import { CheckoutBottomAction } from '@/components/checkout/CheckoutBottomAction';
-import { CheckoutCryptoPaymentModal } from '@/components/checkout/CheckoutCryptoPaymentModal';
 import { CheckoutHeader } from '@/components/checkout/CheckoutHeader';
 import { CheckoutStepContent } from '@/components/checkout/CheckoutStepContent';
 import {
   type CheckoutStep,
   CheckoutStepper,
 } from '@/components/checkout/CheckoutStepper';
-import { CryptoSelectionModal } from '@/components/checkout/CryptoSelectionModal';
 import { PatternedBackground } from '@/components/storefront/PatternedBackground';
 import AppKeyboardContainer from '@/components/ui/AppKeyboardContainer';
 import { AddressSuggestionsProvider } from '@/components/ui/address-suggestions-portal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
+import { useCartCheckoutSnapshot } from '@/hooks/use-cart-checkout-snapshot';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
-import { useCartStore } from '@/stores/cart-store';
-import { CheckoutLocationPickerOverlays } from './CheckoutLocationPickerOverlays';
+import { CartCheckoutReviewNotice } from './CartCheckoutReviewNotice';
+import { CheckoutOverlays } from './CheckoutOverlays';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
-import { calculateCheckoutAssuranceFee } from './checkout-order-builders';
-import {
-  CHECKOUT_MERCHANT_ID,
-  CHECKOUT_MERCHANT_SLUG,
-} from './checkout-screen.constants';
-import { type AppliedDiscount, DiscountCodeInput } from './DiscountCodeInput';
+import { CheckoutSimulationBanner } from './CheckoutSimulationBanner';
+import type { CheckoutScreenViewProps } from './checkout-prize-simulation.types';
+import type { AppliedDiscount } from './DiscountCodeInput';
+import { isCheckoutContinueReady } from './is-checkout-address-continue-ready';
 import { getMerchantPickupLocation } from './merchant-pickup-location';
+import { CheckoutDiscount } from './redvault/CheckoutDiscount';
+import {
+  discountedCheckoutTotal,
+  getRedvaultCompatibleDiscount,
+} from './redvault/get-redvault-compatible-discount';
 import { useCheckoutAddressState } from './use-checkout-address-state';
 import { useCheckoutCryptoPayment } from './use-checkout-crypto-payment';
 import { useCheckoutCtaAnimation } from './use-checkout-cta-animation';
+import { useCheckoutDisplayCart } from './use-checkout-display-cart';
 import { useCheckoutNavigation } from './use-checkout-navigation';
-import { useCheckoutPaymentController } from './use-checkout-payment-controller';
+import { useCheckoutScreenPayment } from './use-checkout-screen-payment';
 import { useCheckoutStepActions } from './use-checkout-step-actions';
+import { useRedvaultReview } from './use-redvault-review';
 
-export function CheckoutScreenView() {
+export function CheckoutScreenView({
+  prizeSimulation,
+}: CheckoutScreenViewProps = {}) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = (colorScheme ?? 'light') === 'dark';
   const insets = useSafeAreaInsets();
-
-  const { items, subtotal, clearCart } = useCartStore(
-    useShallow((state) => ({
-      items: state.items,
-      subtotal: state.subtotal(),
-      clearCart: state.clearCart,
-    }))
-  );
+  const { clearCart, items, subtotal } =
+    useCheckoutDisplayCart(prizeSimulation);
+  // Canonical preparation/review for shared-cart devices; preparation
+  // never submits an order, and the submit path refuses stale reviews.
+  const cartReview = useCartCheckoutSnapshot();
   const { customer, isAuthenticated, user } = useAuthStatus();
   const { data: merchant } = useMerchant();
   const merchantPickupLocation = getMerchantPickupLocation(merchant);
-
   const [step, setStep] = React.useState<CheckoutStep>('address');
   const [isProcessing, setIsProcessing] = React.useState(false);
   const [appliedDiscount, setAppliedDiscount] =
@@ -64,8 +65,8 @@ export function CheckoutScreenView() {
   const mobileCheckoutIdempotencyRef =
     useRef<MobileCheckoutIdempotencyState | null>(null);
   const animatedCtaArrowStyle = useCheckoutCtaAnimation(isProcessing);
-
   const addressState = useCheckoutAddressState({
+    analyticsEnabled: !prizeSimulation,
     customer,
     isAuthenticated,
     items,
@@ -78,6 +79,7 @@ export function CheckoutScreenView() {
     saveDetails,
     savedAddresses: savedAddressState,
     shipping,
+    isAddressComplete,
     watchedCity,
     watchedState,
   } = addressState;
@@ -86,6 +88,7 @@ export function CheckoutScreenView() {
     currentShippingQuoteContextKey,
     deliveryFee,
     deliveryMethod,
+    isCurrentQuoteContext,
     isLoadingQuotes,
     resolvedShippingQuoteContextKey,
     requiresShippingQuote,
@@ -98,31 +101,18 @@ export function CheckoutScreenView() {
     setIsContactCollapsed,
     setIsDeliveryCollapsed,
   } = savedAddressState;
-
   const { handleBack } = useCheckoutNavigation({
     isOrderInFlight,
+    isPrizeSimulation: Boolean(prizeSimulation),
     setStep,
     step,
   });
-
-  const assuranceFee = calculateCheckoutAssuranceFee(items);
-
-  const paymentController = useCheckoutPaymentController({
-    assuranceFee,
-    customerId: customer?.id,
-    customerPhone: customer?.phone,
-    deliveryFee,
-    isAuthenticated,
-    items,
-    merchantId: CHECKOUT_MERCHANT_ID,
-    merchantSlug: CHECKOUT_MERCHANT_SLUG,
-    step,
-    subtotal,
-  });
   const {
+    assuranceFee,
     availablePaymentMethods,
     displayTotal,
     orderTotals,
+    paymentController,
     paymentSettings,
     paymentTab,
     resetPaymentSelection,
@@ -131,24 +121,37 @@ export function CheckoutScreenView() {
     total,
     walletBalance,
     walletSelection,
-  } = paymentController;
+  } = useCheckoutScreenPayment({
+    customerId: customer?.id,
+    customerPhone: customer?.phone,
+    deliveryFee,
+    isAuthenticated,
+    items,
+    merchantId: merchant?.id,
+    step,
+    subtotal,
+    userId: user?.id,
+  });
   const { getLiveSavingsSelection } = savings;
-  const {
-    cryptoPayment,
-    handleCryptoConfirm,
-    setCryptoPayment,
-    setPendingOrder,
-    setShowCryptoSelection,
-    showCryptoSelection,
-  } = useCheckoutCryptoPayment({
+  const { closeRedvaultReview, openRedvaultReview, redvaultReview } =
+    useRedvaultReview({
+      resetPaymentSelection,
+      setStep,
+    });
+  const crypto = useCheckoutCryptoPayment({
     isOrderInFlight,
     setIsProcessing,
     total,
   });
-
+  const { setPendingOrder, setShowCryptoSelection } = crypto;
+  const compatibleDiscount = getRedvaultCompatibleDiscount(
+    selectedPayment,
+    appliedDiscount
+  );
   const { handleContinue, handlePlaceOrder } = useCheckoutStepActions({
+    onRedvaultOrder: openRedvaultReview,
     accountPassword,
-    appliedDiscountCode: appliedDiscount?.code ?? null,
+    appliedDiscountCode: compatibleDiscount?.code ?? null,
     availablePaymentMethods,
     clearCart,
     currentShippingQuoteContextKey,
@@ -161,8 +164,10 @@ export function CheckoutScreenView() {
     isLoadingQuotes,
     isOrderInFlight,
     isProcessing,
+    isPrizeSimulation: Boolean(prizeSimulation),
     mobileCheckoutIdempotencyRef,
     merchantPickupLocation,
+    onPrizeSimulationComplete: prizeSimulation?.onComplete,
     orderTotals,
     paymentSettings,
     paymentTab,
@@ -189,31 +194,34 @@ export function CheckoutScreenView() {
     setValue,
     step,
   });
-
   return (
     <AddressSuggestionsProvider>
-      {/* headerShown: false lives in the stack REGISTRATION
-          (RootStackScreens.tsx) — setting it here applied a frame late and
-          made the screen mount low, then jump up on iOS. */}
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <PatternedBackground
           backgroundColor={colors.background}
           isDark={isDark}
         />
-
         <CheckoutHeader colors={colors} onBack={handleBack} />
-
         <AppKeyboardContainer
           style={[styles.contentShell, { backgroundColor: 'transparent' }]}
         >
+          {prizeSimulation ? (
+            <CheckoutSimulationBanner colors={colors} />
+          ) : null}
+          <CartCheckoutReviewNotice
+            status={cartReview.status}
+            review={cartReview.review}
+            onRetry={cartReview.retry}
+            textColor={colors.text}
+          />
           <CheckoutStepper
             step={step}
             setStep={setStep}
             itemCount={items.reduce((acc, item) => acc + item.quantity, 0)}
             colors={colors}
             isDark={isDark}
+            isPrizeSimulation={Boolean(prizeSimulation)}
           />
-
           <CheckoutStepContent
             addressState={addressState}
             assuranceFee={assuranceFee}
@@ -224,28 +232,39 @@ export function CheckoutScreenView() {
             items={items}
             merchantPickupLocation={merchantPickupLocation}
             paymentController={paymentController}
+            prizeSimulation={Boolean(prizeSimulation)}
             setStep={setStep}
             step={step}
             subtotal={subtotal}
           />
-
-          {step === 'payment' ? (
-            <DiscountCodeInput
-              merchantId={CHECKOUT_MERCHANT_ID}
-              cartTotal={subtotal}
-              productIds={items.map((item) => item.product_id)}
-              appliedDiscount={appliedDiscount}
-              onApply={setAppliedDiscount}
-              onRemove={() => setAppliedDiscount(null)}
-            />
-          ) : null}
-
+          <CheckoutDiscount
+            visible={
+              step === 'payment' &&
+              !prizeSimulation &&
+              selectedPayment !== 'uba_redvault'
+            }
+            subtotal={subtotal}
+            productIds={items.map((item) => item.product_id)}
+            appliedDiscount={appliedDiscount}
+            onChange={setAppliedDiscount}
+          />
           <CheckoutBottomAction
             animatedCtaArrowStyle={animatedCtaArrowStyle}
+            canContinue={isCheckoutContinueReady({
+              step,
+              selectedPayment,
+              hasSelectedShippingQuote: Boolean(selectedQuote),
+              hasContactIdentity: addressState.hasContactIdentity,
+              isAddressComplete,
+              isCurrentQuoteContext,
+              isLoadingQuotes,
+              isPickupStation: deliveryMethod === 'pickup_station',
+              requiresShippingQuote,
+            })}
             colors={colors}
-            displayTotal={Math.max(
-              0,
-              displayTotal - (appliedDiscount?.discountAmount ?? 0)
+            displayTotal={discountedCheckoutTotal(
+              displayTotal,
+              compatibleDiscount
             )}
             insetsBottom={insets.bottom}
             isProcessing={isProcessing}
@@ -253,40 +272,24 @@ export function CheckoutScreenView() {
             onContinue={handleContinue}
             onPlaceOrder={handlePlaceOrder}
             selectedPayment={selectedPayment}
+            prizeSimulation={Boolean(prizeSimulation)}
             step={step}
-            total={Math.max(0, total - (appliedDiscount?.discountAmount ?? 0))}
+            total={discountedCheckoutTotal(total, compatibleDiscount)}
           />
         </AppKeyboardContainer>
       </SafeAreaView>
-
-      <CheckoutLocationPickerOverlays
+      <CheckoutOverlays
+        redvaultReview={redvaultReview}
+        closeRedvaultReview={closeRedvaultReview}
         colors={colors}
         isDark={isDark}
-        removeClippedSubviews={Platform.OS === 'android'}
         shipping={shipping}
         watchedCity={watchedCity}
         watchedState={watchedState}
-      />
-
-      <CryptoSelectionModal
-        visible={showCryptoSelection}
-        onClose={() => setShowCryptoSelection(false)}
-        onConfirm={(chain, currency) => {
-          // Cast string types to strict union types is handled by internal logic or just pass string if API accepts string
-          handleCryptoConfirm(chain, currency);
-        }}
-        isProcessing={isProcessing}
-      />
-
-      <CheckoutCryptoPaymentModal
+        crypto={crypto}
         clearCart={clearCart}
-        colors={colors}
-        cryptoPayment={cryptoPayment}
-        onChangeSelection={() => {
-          setCryptoPayment(null);
-          setShowCryptoSelection(true);
-        }}
-        onClosePayment={() => setCryptoPayment(null)}
+        isProcessing={isProcessing}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
     </AddressSuggestionsProvider>
   );

@@ -40,7 +40,7 @@ export const facebookCAPI = {
         value,
         currency,
         orderId,
-        contentType: 'product',
+        contentType: 'product_group',
         contentIds: products.map((product) => product.id),
         contents: products.map((product) => ({
           id: product.id,
@@ -80,7 +80,7 @@ export const facebookCAPI = {
       {
         value,
         currency,
-        contentType: 'product',
+        contentType: 'product_group',
         contentIds: products.map((product) => product.id),
         numItems: products.reduce(
           (total, product) => total + product.quantity,
@@ -117,7 +117,7 @@ export const facebookCAPI = {
         value,
         currency,
         contentName: productName,
-        contentType: 'product',
+        contentType: 'product_group',
         contentIds: [productId],
       },
       eventSourceUrl,
@@ -152,7 +152,7 @@ export const facebookCAPI = {
         currency,
         contentName: productName,
         contentCategory: category,
-        contentType: 'product',
+        contentType: 'product_group',
         contentIds: [productId],
       },
       eventSourceUrl,

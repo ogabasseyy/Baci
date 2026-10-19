@@ -1,22 +1,6 @@
-import { z } from 'zod';
+import { quizLeaderboardResponseSchema } from '@/schemas/quiz-schemas';
 import { requestQuizV2 } from './quiz';
 import type { QuizLeaderboard, QuizServiceOptions } from './quiz-types';
-
-const leaderboardEntrySchema = z.strictObject({
-  displayName: z.string().trim().min(1),
-  isCurrentCustomer: z.boolean(),
-  rank: z.number().int().positive(),
-  score: z.number().int().nonnegative(),
-  status: z.string().min(1),
-  submittedAt: z.string().nullable(),
-  totalTimeSeconds: z.number().nonnegative().nullable(),
-});
-
-const leaderboardSchema = z.strictObject({
-  currentPlayer: leaderboardEntrySchema.nullable(),
-  entries: z.array(leaderboardEntrySchema).max(100),
-  status: z.enum(['published', 'live', 'live_hidden', 'unavailable']),
-});
 
 export interface FetchQuizLeaderboardInput extends QuizServiceOptions {
   eventId: string;
@@ -32,7 +16,7 @@ export function fetchQuizLeaderboard({
   return requestQuizV2(
     `/api/quiz/leaderboard?${query}`,
     { method: 'GET' },
-    leaderboardSchema,
+    quizLeaderboardResponseSchema,
     { baseUrl, expectedUserId }
   );
 }

@@ -1,4 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { Suspense } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -6,9 +10,27 @@ import {
   getRequestScopedMerchant,
 } from '@/lib/cached-data';
 
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    prefetch: _prefetch,
+    ...props
+  }: {
+    children: ReactNode;
+    href: string;
+    prefetch?: boolean;
+  }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
+}));
+
 type CategoryPageProps = {
   params: Promise<{ category: string; slug: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+  titleHeading?: 'h1' | 'h2';
 };
 
 const { mockCategoryPageRoute, mockComparePageContent } = vi.hoisted(() => ({
@@ -100,7 +122,11 @@ const categories = [
   },
 ] satisfies CachedCategories;
 
-const { default: CompareIndexPage } = await import('./page');
+const {
+  CompareIndexRuntime,
+  default: CompareIndexPage,
+  generateStaticParams,
+} = await import('./page');
 
 describe('compare index page runtime', () => {
   beforeEach(() => {
@@ -117,13 +143,21 @@ describe('compare index page runtime', () => {
       <div>Compare category content</div>
     ));
     mockConnection.mockReset();
+    mockConnection.mockResolvedValue(undefined);
     mockNotFound.mockClear();
   });
 
-  it('defers compare index first paint to the route loader while content is pending', () => {
+  it('prerenders both OgaBassey host identifiers so the hub intro can land in the static shell', () => {
+    expect(generateStaticParams()).toEqual([
+      { slug: 'ogabassey.com' },
+      { slug: 'ogabassey' },
+    ]);
+  });
+
+  it('paints the compare hub heading while compare content is pending', () => {
     mockComparePageContent.mockImplementation(() => {
       throw new Promise(() => {
-        // Keep content suspended behind the catalog loader.
+        // Keep content suspended behind the compare-hub LCP intro.
       });
     });
 
@@ -134,8 +168,114 @@ describe('compare index page runtime', () => {
     );
 
     expect(
-      screen.getByRole('status', { name: 'Loading product listing' })
+      screen.getByRole('heading', { name: 'Compare products' })
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('navigation', { name: 'Breadcrumb' })
+    ).toHaveTextContent('Home / Compare products');
+    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute(
+      'href',
+      '.'
+    );
+    const main = screen.getByRole('main');
+    expect(main).toContainElement(
+      screen.getByRole('navigation', { name: 'Breadcrumb' })
+    );
+    expect(main).toContainElement(
+      screen.getByRole('heading', { name: 'Compare products' })
+    );
+    expect(
+      screen.queryByRole('status', { name: 'Loading product listing' })
+    ).not.toBeInTheDocument();
     expect(screen.queryByText('Compare index content')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-compare-hub-chrome]')).not.toBeNull();
+  });
+
+  it('streams the merchant name into the committed compare hub intro', () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
+      'utf8'
+    );
+
+    expect(source).toContain('<CompareHubIntro');
+    expect(source).toContain('<CompareHubIntroDescription');
+    expect(source).toContain('omitIntro');
+  });
+
+  it('keeps Home on the storefront origin for slug-prefixed compare URLs', () => {
+    expect(new URL('.', 'https://baci.app/ogabassey/compare').pathname).toBe(
+      '/ogabassey/'
+    );
+    expect(new URL('..', 'https://baci.app/ogabassey/compare').pathname).toBe(
+      '/'
+    );
+  });
+
+  it('marks a real compare category so first-paint CSS can hide the hub shell', async () => {
+    vi.mocked(getCachedCategories).mockResolvedValue([
+      {
+        ...categories[0],
+        name: 'Compare',
+        slug: 'compare',
+      },
+    ]);
+
+    render(
+      await CompareIndexRuntime({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(screen.getByText('Compare category content')).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-compare-category-page]')
+    ).not.toBeNull();
+    expect(
+      mockCategoryPageRoute.mock.calls[0]?.[0].titleHeading
+    ).toBeUndefined();
+  });
+
+  it('renders a compare category outside the hub max-width container', async () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'page.tsx'),
+      'utf8'
+    );
+    const hubChrome = source.indexOf('data-compare-hub-chrome');
+    const hubMainClose = source.indexOf('</main>', hubChrome);
+    const runtime = source.indexOf('<CompareIndexRuntime');
+
+    expect(hubChrome).toBeGreaterThan(-1);
+    expect(runtime).toBeGreaterThan(hubMainClose);
+
+    vi.mocked(getCachedCategories).mockResolvedValue([
+      {
+        ...categories[0],
+        name: 'Compare',
+        slug: 'compare',
+      },
+    ]);
+
+    render(
+      await CompareIndexRuntime({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    const category = screen.getByText('Compare category content');
+    expect(category.closest('.max-w-\\[1400px\\]')).toBeNull();
+    expect(
+      document.querySelector('[data-compare-category-page]')
+    ).not.toBeNull();
+  });
+
+  it('does not mark the hub as a category page when compare is not a category', async () => {
+    render(
+      await CompareIndexRuntime({
+        params: Promise.resolve({ slug: 'ogabassey' }),
+      })
+    );
+
+    expect(screen.getByText('Compare index content')).toBeInTheDocument();
+    expect(document.querySelector('[data-compare-category-page]')).toBeNull();
   });
 });

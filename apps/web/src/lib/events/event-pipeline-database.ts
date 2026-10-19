@@ -1,9 +1,32 @@
 import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authority-paths';
+import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
+import { eventPipelineCartCredentialPaths } from '@/lib/events/event-pipeline-cart-credential-paths';
+import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
-import { frozenEventPipelineAuthoritySources } from '@/lib/events/event-pipeline-frozen-authority-sources';
+import {
+  eventPipelineFrozenRoutes,
+  frozenEventPipelineAuthoritySources,
+} from '@/lib/events/event-pipeline-frozen-authority-sources';
+import { EVENT_PIPELINE_FUNCTION_NAMES } from '@/lib/events/event-pipeline-function-names';
+import { eventPipelineGatewayCronAdminPaths } from '@/lib/events/event-pipeline-gateway-cron-admin-paths';
+import { eventPipelineGatewayCronCredentialPaths } from '@/lib/events/event-pipeline-gateway-cron-credential-paths';
+import { eventPipelineImmediateOrderCredentialPaths } from '@/lib/events/event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from '@/lib/events/event-pipeline-jumia-credential-paths';
 import { eventPipelineLegacySdkImporters } from '@/lib/events/event-pipeline-legacy-sdk-importers';
+import { eventPipelinePaystackRefundCredentialPaths } from '@/lib/events/event-pipeline-paystack-refund-credential-paths';
+import { eventPipelinePiggyvestCredentialPaths } from '@/lib/events/event-pipeline-piggyvest-credential-paths';
+import { eventPipelineRedvaultCredentialPaths } from '@/lib/events/event-pipeline-redvault-credential-paths';
+import { eventPipelineRepairPickupCredentialPaths } from '@/lib/events/event-pipeline-repair-pickup-credential-paths';
+import { eventPipelineShippingCredentialPaths } from '@/lib/events/event-pipeline-shipping-credential-paths';
+import {
+  eventPipelineAdminAdjacentFunctions,
+  eventPipelineExpenseCleanupAdjacentFunctions,
+  eventPipelineVpsRuntimeCallers,
+} from '@/lib/events/event-pipeline-vps-runtime-callers';
+import { eventPipelineVtuReplayAdminPaths } from '@/lib/events/event-pipeline-vtu-replay-admin-paths';
 import type { Database, Json } from '@/types/supabase';
+
+export { EVENT_PIPELINE_FUNCTION_NAMES };
 export function toEventPipelineJson(
   value: unknown,
   ancestors = new WeakSet<object>()
@@ -83,46 +106,11 @@ export function validateEventPipelineSelection(
       findings.push(`${path}: unauthorized ${table} column ${name}`);
   }
 }
-export const EVENT_PIPELINE_FUNCTION_NAMES = [
-  'claim_event_deliveries_v1',
-  'cleanup_domain_event_pipeline_v1',
-  'dead_letter_ingress_event_v1',
-  'enqueue_domain_event_v1',
-  'finish_event_delivery_v1',
-  'get_domain_event_queue_metrics_v1',
-  'get_event_pipeline_operations_v1',
-  'is_event_ingress_capability_v1',
-  'list_event_pipeline_deliveries_v1',
-  'list_event_pipeline_ingress_failures_v1',
-  'read_domain_events_v1',
-  'record_analytics_domain_event_v1',
-  'record_event_worker_heartbeat_v1',
-  'record_platform_domain_event_v1',
-  'replay_event_deliveries_batch_v1',
-  'replay_event_delivery_v1',
-  'replay_ingress_dead_letter_v1',
-  'route_domain_event_v1',
-  'select_event_pipeline_replay_ids_v1',
-] as const satisfies readonly (keyof Database['public']['Functions'])[];
-const frozenRoutes = {
-  'apps/web/src/app/api/analytics/ads/route.ts':
-    'b714f0bedeed7bded973fbe743c74517622ea8e0069dfca35051752dc45571dd',
-  'apps/web/src/app/api/analytics/facebook-capi/route.ts':
-    'f41e1de587645b8fdb2af8af180eb581b2bfeecae688670d7b5c7a80088b7c32',
-  'apps/web/src/app/api/analytics/ga4/route.ts':
-    '9e9b8c3edb1636d2f27e9551568d5036778fce6ab54272f1fd3b77cfd0f88c9f',
-  'apps/web/src/app/api/analytics/snapchat/route.ts':
-    '1a7898d59038b6a37e057e74da3907f4a42da9c25c7236e9d324d7b1516e4cd3',
-  'apps/web/src/app/api/analytics/tiktok/route.ts':
-    '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
-  'apps/web/src/app/api/platform/events/route.ts':
-    'bb3b5ea163f7029bd8a90523ac7944c9e126b2aebc0ce673f82c4e0c48d00161',
-} as const;
 const columns = (value: string) => value.split(' ');
 // biome-ignore format: compact RPC ownership map preserves the 300-line verifier gate.
 const runtimeCallers = {
   'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts': ['claim_cache_invalidations', 'finish_cache_invalidation', 'has_cache_invalidation_dead_letters'],
-  'apps/web/src/app/api/admin/event-pipeline/dead-letters/route.ts': ['get_event_pipeline_operations_v1', 'list_event_pipeline_deliveries_v1', 'list_event_pipeline_ingress_failures_v1'],
+  'apps/web/src/app/api/admin/event-pipeline/dead-letters/route.ts': ['get_event_pipeline_operations_admin_v3', 'list_event_pipeline_deliveries_admin_v3', 'list_event_pipeline_ingress_failures_admin_v3'],
   'apps/web/src/app/api/admin/event-pipeline/replay/route.ts': ['replay_event_deliveries_batch_v1', 'replay_ingress_dead_letter_v1', 'select_event_pipeline_replay_ids_v1'],
   'apps/web/src/lib/events/enqueue-paid-order-domain-event.ts': ['enqueue_domain_event_v1'],
   'apps/web/src/lib/events/record-analytics-domain-event.ts': ['record_analytics_domain_event_v1'],
@@ -131,7 +119,7 @@ const runtimeCallers = {
   'apps/web/src/scripts/domain-event-worker.ts': ['read_domain_events_v1', 'record_event_worker_heartbeat_v1'],
   'apps/web/src/scripts/event-delivery-worker.ts': ['claim_event_deliveries_v1', 'record_event_worker_heartbeat_v1'],
   'apps/web/src/scripts/process-claimed-event-delivery.ts': ['finish_event_delivery_v1'],
-  'vps-workers/jobs/supabase-retention-cleanup.mjs': ['cleanup_domain_event_pipeline_v1'],
+  ...eventPipelineVpsRuntimeCallers,
 } as const;
 export const EVENT_PIPELINE_BOUNDARY = {
   allFunctions: EVENT_PIPELINE_FUNCTION_NAMES,
@@ -140,20 +128,22 @@ export const EVENT_PIPELINE_BOUNDARY = {
     'cleanup_database_retention',
     'finish_cache_invalidation',
     'has_cache_invalidation_dead_letters',
+    ...eventPipelineAdminAdjacentFunctions,
+    ...eventPipelineExpenseCleanupAdjacentFunctions,
   ],
   authority: {
     adminImporters: eventPipelineAdminImporters,
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths],
     bareClientImporters: [
-      ...Object.keys(frozenRoutes),
+      ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
       'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts',
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
-    credentialPaths: [
-      ...eventPipelineCredentialPaths,
-      ...eventPipelineJumiaCredentialPaths,
-    ],
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
       'apps/web/src/lib/supabase/server.ts',
@@ -161,7 +151,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
     ],
     legacySdkImporters: eventPipelineLegacySdkImporters,
     serverImporters: [
-      ...Object.keys(frozenRoutes),
+      ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/(platform)/onboarding/actions.ts',
       'apps/web/src/app/api/admin/event-pipeline/dead-letters/route.ts',
       'apps/web/src/app/api/admin/event-pipeline/replay/route.ts',
@@ -170,16 +160,26 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/app/api/orders/route.ts',
       'apps/web/src/lib/platform-admin-auth.ts',
     ],
+    // biome-ignore format: compact reviewed authority allowlist preserves the 300-line module gate.
     serviceImporters: [
       'apps/web/src/app/api/cron/drain-cache-invalidations/route.ts',
       'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-      'apps/web/src/app/api/cron/gigl-tracking/route.ts',
+      'apps/web/src/app/api/cron/process-redvault-refunds/route.ts',
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
       'apps/web/src/lib/events/event-pipeline-service-role-test-client.ts',
+      'apps/web/src/lib/ads/server-credential-client.ts',
+      'apps/web/src/lib/ads/server-spend-client.ts',
+      'apps/web/src/lib/jumia/server-credential-client.ts',
+      'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
+      'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
+      'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',
+      'apps/web/src/lib/piggyvest/server-intake-client.ts',
+      'apps/web/src/lib/search/server-analytics-client.ts',
       'apps/web/src/scripts/process-domain-events.ts',
       'apps/web/src/scripts/process-event-deliveries.ts',
     ],
+    servicePaths: eventPipelineAuthorityServicePaths,
     operationalServiceImporters: [
       'apps/web/src/scripts/reconcile-paystack-unmatched-partial.ts',
     ],
@@ -187,7 +187,7 @@ export const EVENT_PIPELINE_BOUNDARY = {
   callers: runtimeCallers,
   frozenAuthoritySources: frozenEventPipelineAuthoritySources,
   frozenProjectionFiles: {},
-  frozenRoutes,
+  frozenRoutes: eventPipelineFrozenRoutes,
   functions: {
     serviceRoleMetrics: ['get_domain_event_queue_metrics_v1'],
     sqlInternal: ['is_event_ingress_capability_v1', 'replay_event_delivery_v1'],
@@ -214,9 +214,6 @@ export const EVENT_PIPELINE_BOUNDARY = {
   projectionAuthorities: {
     'apps/web/src/app/api/analytics/conversion/conversion-route-merchant-context.ts':
       ['identity'],
-    'apps/web/src/app/api/platform/events/platform-event-forwarding.ts': [
-      'platformProviderConfig',
-    ],
     'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts': [
       'merchantFeatureProviderConfig',
       'merchantProviderConfig',

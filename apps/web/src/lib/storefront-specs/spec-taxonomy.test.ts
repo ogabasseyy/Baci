@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   type ComparableProductKeySpecs,
+  getProductSpecFamily,
   KEY_SPEC_CATEGORIES,
   SUMMARY_SPEC_PRIORITIES,
 } from './spec-taxonomy';
@@ -17,7 +18,33 @@ function getField(categoryName: string, key: string) {
   return field;
 }
 
+function buildUntrustedCameraFlagSpecs(key: string, value: string) {
+  const specs: ComparableProductKeySpecs = {};
+  specs[key] = value;
+  return specs;
+}
+
 describe('spec taxonomy', () => {
+  it('classifies camera families separately from mobile devices', () => {
+    expect(getProductSpecFamily('Cameras')).toBe('camera');
+    expect(getProductSpecFamily('Action Cameras')).toBe('camera');
+    expect(getProductSpecFamily('Instant Cameras')).toBe('camera');
+    expect(getProductSpecFamily('Lenses')).toBe('general');
+    expect(getProductSpecFamily('Drones')).toBe('camera');
+    expect(getProductSpecFamily('Gimbals')).toBe('camera');
+    expect(getProductSpecFamily('Camera Accessories')).toBe('general');
+    expect(getProductSpecFamily('instant-film')).toBe('general');
+    expect(getProductSpecFamily('memory-cards')).toBe('general');
+    expect(getProductSpecFamily('Smartphones')).toBe('mobile');
+    expect(getProductSpecFamily('iPhones')).toBe('mobile');
+    expect(getProductSpecFamily('iPad')).toBe('mobile');
+    expect(getProductSpecFamily('Apple Watch')).toBe('mobile');
+    expect(getProductSpecFamily('Laptops')).toBe('computer');
+    expect(getProductSpecFamily('Accessories')).toBe('general');
+    expect(getProductSpecFamily('Smartphone Cases')).toBe('general');
+    expect(getProductSpecFamily('Laptop Keyboard')).toBe('general');
+  });
+
   it('formats common unit-bearing fields', () => {
     expect(getField('Display', 'screen_size_inches').transform?.(6.8, {})).toBe(
       '6.8 inches'
@@ -46,6 +73,18 @@ describe('spec taxonomy', () => {
       [{ has_quad_camera: true }, 'Quad Camera'],
       [{ has_triple_camera: true }, 'Triple Camera'],
       [{ has_dual_camera: true }, 'Dual Camera'],
+      [
+        buildUntrustedCameraFlagSpecs('has_quad_camera', 'Unknown'),
+        'Single Camera',
+      ],
+      [
+        buildUntrustedCameraFlagSpecs('has_triple_camera', 'false'),
+        'Single Camera',
+      ],
+      [
+        buildUntrustedCameraFlagSpecs('has_dual_camera', 'true'),
+        'Single Camera',
+      ],
       [{}, 'Single Camera'],
     ];
 
@@ -93,6 +132,10 @@ describe('spec taxonomy', () => {
         expect.objectContaining({
           label: 'Battery',
           candidates: expect.arrayContaining([['Battery', 'Capacity']]),
+        }),
+        expect.objectContaining({
+          label: 'Storage',
+          candidates: expect.arrayContaining([['Storage', 'Internal Storage']]),
         }),
       ])
     );

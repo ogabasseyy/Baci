@@ -15,6 +15,7 @@ vi.mock('@/lib/quiz/quiz-device-hash', () => ({
 }));
 
 const EVENT_ID = '11111111-1111-4111-8111-111111111111';
+const ATTEMPT_ID = '22222222-2222-4222-8222-222222222222';
 const FINGERPRINT = 'a'.repeat(64);
 
 function request(eventId = EVENT_ID) {
@@ -78,5 +79,40 @@ describe('active v2 quiz attempt route', () => {
     const rpc = authenticated();
     expect((await GET(request('bad'))).status).toBe(400);
     expect(rpc).toHaveBeenCalledTimes(0);
+  });
+
+  it('returns the authoritative time for a pending response with a top-level attempt ID', async () => {
+    const rpc = authenticated({
+      availability: 'pending_results',
+      attemptId: ATTEMPT_ID,
+      eventEndsAt: '2026-08-05T10:05:00.000Z',
+      serverNow: '2026-08-05T10:04:00.000Z',
+    });
+    rpc.mockImplementation((name: string) =>
+      Promise.resolve(
+        name === 'quiz_runtime_contract_version'
+          ? { data: 2, error: null }
+          : name === 'get_quiz_attempt_submission_time_v2'
+            ? { data: '2026-08-05T10:03:12.345Z', error: null }
+            : {
+                data: {
+                  availability: 'pending_results',
+                  attemptId: ATTEMPT_ID,
+                  eventEndsAt: '2026-08-05T10:05:00.000Z',
+                  serverNow: '2026-08-05T10:04:00.000Z',
+                },
+                error: null,
+              }
+      )
+    );
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      attemptId: ATTEMPT_ID,
+      availability: 'pending_results',
+      submittedAt: '2026-08-05T10:03:12.345Z',
+    });
   });
 });

@@ -42,21 +42,37 @@ export function normalizePaystackDvaOrderCandidate(
     typeof row.assigned_at === 'string' ? new Date(row.assigned_at) : null;
   const validAssignedAt =
     assignedAt && !Number.isNaN(assignedAt.getTime()) ? assignedAt : null;
+  const orderRemainingAmount = Math.max(total - amountPaid, 0);
+  // Merchant-created invoices keep their assignment-time payable snapshot so
+  // a delayed transfer can still be attributed to the invoice. Storefront
+  // orders, however, can receive a manual or wallet payment after DVA
+  // assignment; cap their expected amount at the current order remainder so a
+  // stale snapshot cannot accept an old total or reject the new remainder.
   const outstandingAmount =
-    amountPaid > 0
-      ? Math.max(total - amountPaid, 0)
-      : normalizedPayableAmount != null
+    normalizedPayableAmount == null
+      ? orderRemainingAmount
+      : merchantCreated
         ? normalizedPayableAmount
-        : total;
+        : Math.min(normalizedPayableAmount, orderRemainingAmount);
   const expiresAt =
     typeof row.expires_at === 'string' ? new Date(row.expires_at) : null;
+  // The legacy cleanup deliberately clears unverifiable assignment snapshots.
+  // Never fall back to the mutable order email for those aliases: doing so
+  // could match a delayed transfer to the wrong customer after an email edit.
+  if (row.assignment_customer_email_source === 'legacy_untrusted') {
+    return null;
+  }
   return {
     order_id: String(row.order_id),
     merchant_id: String(order.merchant_id ?? ''),
     merchant_created: merchantCreated,
     payment_status: order.payment_status,
     customer_email:
-      typeof order.customer_email === 'string' ? order.customer_email : null,
+      typeof row.assignment_customer_email === 'string'
+        ? row.assignment_customer_email
+        : typeof order.customer_email === 'string'
+          ? order.customer_email
+          : null,
     total_kobo: toPaystackKobo(total),
     payable_amount_kobo:
       normalizedPayableAmount != null

@@ -163,8 +163,20 @@ describe('CI workflow quiz asset coverage', () => {
   it('deploys migration-applier dependencies', () => {
     const deployMigrationsFilter = getDeployMigrationsFilter();
 
+    expect(deployFilters).toContain(
+      "- '.github/actions/postdeploy-migrations/**'"
+    );
     expect(deployMigrationsFilter).toContain(
       "- '.github/scripts/apply-pending-migrations.sh'"
+    );
+    expect(deployMigrationsFilter).toContain(
+      "- '.github/scripts/apply-pending-migration.sh'"
+    );
+    expect(ciFilters).toContain(
+      "- '.github/scripts/apply-pending-migration.sh'"
+    );
+    expect(ciFilters).toContain(
+      "- '.github/actions/postdeploy-migrations/**'"
     );
     expect(deployMigrationsFilter).toContain(
       "- '.github/scripts/build-historical-repair-payload.sh'"
@@ -179,8 +191,15 @@ describe('CI workflow quiz asset coverage', () => {
 
   it('keeps root Next config in targeted security scans', () => {
     expect(securityWorkflow).toContain("- 'next.config.ts'");
-    expect(securityWorkflow).toContain('next\\.config\\.ts$');
-    expect(securityWorkflow).toMatch(/\snext\.config\.ts\s+\\/);
+    expect(securityWorkflow).toContain(
+      'diagnostics_helper=.github/scripts/semgrep-sarif-analysis-diagnostics.py'
+    );
+    expect(securityWorkflow).toContain(
+      'python3 "$diagnostics_helper" pr-targets "$PR_BASE_REF"'
+    );
+    expect(securityWorkflow).toMatch(
+      /scan_targets=\([\s\S]*?\n\s+next\.config\.ts\n/
+    );
   });
 
   it('runs bundle analysis when root Next config changes', () => {

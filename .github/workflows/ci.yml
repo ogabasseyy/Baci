@@ -311,6 +311,8 @@ jobs:
           PSQL_BIN="$(command -v psql)"
           "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.3( \(.+\))?$'
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
+      - name: Prepare pinned Supabase database image
+        run: bash .github/scripts/prepare-supabase-replay-image.sh
       # The loyalty aggregator enroll_customer_loyalty.sql \ir-includes
       # every sibling enroll_customer_loyalty*.sql suite as a part in
       # one transaction (guarded by

@@ -23,3 +23,13 @@ it('rejects malformed input instead of guessing', () => {
   );
   expect(() => decodeBase64UrlToUtf8('%E0%A4%A')).toThrow();
 });
+
+it('rejects trailing data after padding and non-canonical trailing bits', () => {
+  expect(() => decodeBase64UrlToUtf8('YQ==trailing')).toThrow(
+    'Invalid base64url value'
+  );
+  expect(() => decodeBase64UrlToUtf8('YQ=')).toThrow('Invalid base64url value');
+  expect(() => decodeBase64UrlToUtf8('YR')).toThrow('Invalid base64url value');
+  expect(decodeBase64UrlToUtf8('YQ==')).toBe('a');
+  expect(decodeBase64UrlToUtf8('YQ')).toBe('a');
+});

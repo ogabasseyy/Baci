@@ -151,7 +151,9 @@ export const cartHandoffPairingTokenSchema = z
   .string()
   .trim()
   .min(4)
-  .max(512)
+  // Signed payloads include tenant, principal, operation and environment
+  // identities; valid native/MCP tokens exceed 512 characters.
+  .max(2048)
   .regex(/^ch1\./);
 
 const handoffResolutionSchema = z.strictObject({

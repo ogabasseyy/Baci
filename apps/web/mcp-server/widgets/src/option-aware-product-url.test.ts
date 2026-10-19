@@ -10,7 +10,7 @@ describe('resolveOptionAwareProductUrl', () => {
       url: 'https://ogabassey.com/products/redmi?variantId=v1&condition=used',
     });
     expect(resolved.url).toBe(
-      'https://ogabassey.com/products/redmi?variantId=v1&condition=used'
+      'https://ogabassey.com/products/redmi?variantId=v1&condition=used',
     );
     expect(resolved.hasOptions).toBe(true);
   });
@@ -44,4 +44,25 @@ describe('resolveOptionAwareProductUrl', () => {
       hasOptions: false,
     });
   });
+});
+
+it('keeps render-tool option products on the website even without a preselected URL', () => {
+  expect(
+    resolveOptionAwareProductUrl({
+      id: 'phone',
+      name: 'Phone',
+      price: 10,
+      slug: 'phone',
+      has_variants: true,
+    }),
+  ).toEqual({ url: 'https://ogabassey.com/products/phone', hasOptions: true });
+  expect(
+    resolveOptionAwareProductUrl({
+      id: 'phone',
+      name: 'Phone',
+      price: 10,
+      slug: 'phone',
+      has_condition_offers: true,
+    }).hasOptions,
+  ).toBe(true);
 });

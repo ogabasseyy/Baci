@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { widgetHost } from '../widget-host';
 
 // Event type for OpenAI global changes
 const SET_GLOBALS_EVENT_TYPE = 'openai:set_globals';
@@ -8,6 +9,7 @@ type SetGlobalsEvent = CustomEvent<{
 }>;
 
 interface OpenAiGlobals {
+  hostError: string | null;
   toolOutput: unknown;
   toolInput: unknown;
   toolResponseMetadata: unknown;
@@ -15,13 +17,20 @@ interface OpenAiGlobals {
   theme: string;
   displayMode: string;
   maxHeight: number;
-  safeArea: { insets: { top: number; bottom: number; left: number; right: number } };
+  safeArea: {
+    insets: { top: number; bottom: number; left: number; right: number };
+  };
   locale: string;
+  mcpAppReady: boolean;
+  requestDisplayMode: (options: {
+    mode: 'inline' | 'fullscreen' | 'pip';
+  }) => Promise<unknown>;
 }
 
 declare global {
   interface Window {
     openai?: {
+      hostError?: string | null;
       toolOutput?: unknown;
       toolInput?: unknown;
       toolResponseMetadata?: unknown;
@@ -29,19 +38,27 @@ declare global {
       theme?: string;
       displayMode?: string;
       maxHeight?: number;
-      safeArea?: { insets: { top: number; bottom: number; left: number; right: number } };
+      safeArea?: {
+        insets: { top: number; bottom: number; left: number; right: number };
+      };
       locale?: string;
+      mcpAppReady?: boolean;
       setWidgetState?: (state: unknown) => void;
       callTool?: (
         name: string,
         args: Record<string, unknown>
       ) => Promise<unknown>;
-      openExternal?: (options: { href: string }) => void;
-      notifyIntrinsicHeight?: (height: number) => void;
+      openExternal?: (options: { href: string }) => void | Promise<void>;
+      notifyIntrinsicHeight?: (height: number) => void | Promise<void>;
       setOpenInAppUrl?: (options: { href: string }) => void;
       requestModal?: (options: unknown) => void;
-      requestDisplayMode?: (options: { mode: 'inline' | 'fullscreen' | 'pip' }) => Promise<unknown>;
-      sendFollowUpMessage?: (message: { prompt: string; scrollToBottom?: boolean }) => void;
+      requestDisplayMode?: (options: {
+        mode: 'inline' | 'fullscreen' | 'pip';
+      }) => Promise<unknown>;
+      sendFollowUpMessage?: (message: {
+        prompt: string;
+        scrollToBottom?: boolean;
+      }) => void | Promise<void>;
     };
   }
 }
@@ -56,13 +73,17 @@ export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
   return useSyncExternalStore(
     (onChange) => {
       if (typeof window === 'undefined') {
-        return () => {};
+        return () => {
+          // No browser event source exists during server rendering.
+        };
       }
 
       const handleSetGlobal = (event: Event) => {
         const customEvent = event as SetGlobalsEvent;
-        const value = customEvent.detail?.globals?.[key];
-        if (value === undefined) {
+        const globals = customEvent.detail?.globals;
+        // Presence, not value: a reset notification carries native values
+        // that may be undefined, and subscribers must still re-read.
+        if (!globals || !(key in globals)) {
           return;
         }
         onChange();
@@ -76,7 +97,7 @@ export function useOpenAiGlobal<K extends keyof OpenAiGlobals>(
         window.removeEventListener(SET_GLOBALS_EVENT_TYPE, handleSetGlobal);
       };
     },
-    () => (window.openai?.[key] ?? null) as OpenAiGlobals[K] | null,
+    () => (widgetHost.get()?.[key] ?? null) as OpenAiGlobals[K] | null,
     () => null as OpenAiGlobals[K] | null
   );
 }

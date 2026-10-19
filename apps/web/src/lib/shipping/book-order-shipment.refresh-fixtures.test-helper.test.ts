@@ -74,7 +74,7 @@ describe('book-order-shipment.refresh-fixtures.test-helper', () => {
         id: 'quote-refreshed',
         provider: 'GIGL',
         price: 2500,
-        providerRateId: 'GIGL_4_0',
+        providerRateId: 'GIGL_4_0_1_0_0_4',
       }),
     ]);
     await expect(

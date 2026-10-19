@@ -13,9 +13,19 @@ import {
   verifyBillCustomer as verifyMonnifyBillCustomer,
 } from '@/lib/monnify-bills';
 import { normalizeVtuNetworkProvider } from '@/lib/normalize-vtu-network-provider';
+import {
+  type CustomerRecord,
+  resolveVtuCustomer,
+} from './vtu-customer-resolution';
+
+export { resolveVtuCustomer };
+
 import { calculateCommerce } from '@/lib/supabase/client';
+import { MONNIFY_VALIDATION_FAILED_MESSAGE } from '@/lib/vtu-checkout-error-classifier';
 import { resolveVtuProvider } from '@/lib/vtu-commission-rates';
-import { withMerchantSlugAliasFallback } from '@/lib/with-merchant-slug-alias-fallback';
+import { buildVtuSubmissionMarkerEraMetadata } from '@/lib/vtu-flagged-recovery';
+import { resolveVtuMerchant } from '@/lib/vtu-merchant-lookup';
+import { throwIfStrictVtuLookupError } from '@/lib/vtu-strict-lookups';
 import type { Biller, BillerProduct } from '@/schemas/monnify-bills-schema';
 import { COMMISSION_CATEGORY_MAP, type PurchaseInput } from '@/schemas/vtu';
 
@@ -202,7 +212,9 @@ async function validateMonnifyBillPaymentBeforeCharge({
   );
 
   if (!verification.verified) {
-    throw new Error(`Monnify validation failed: ${verification.message}`);
+    // Fixed copy only: verification.message is the provider body and
+    // must never reach the response (Codex R90 P1).
+    throw new Error(MONNIFY_VALIDATION_FAILED_MESSAGE);
   }
 
   if (verification.requireValidationRef && !verification.validationReference) {
@@ -300,7 +312,9 @@ async function resolveMonnifyAirtimeCheckoutFields({
   );
 
   if (!verification.verified) {
-    throw new Error(`Monnify validation failed: ${verification.message}`);
+    // Fixed copy only: verification.message is the provider body and
+    // must never reach the response (Codex R90 P1).
+    throw new Error(MONNIFY_VALIDATION_FAILED_MESSAGE);
   }
 
   if (verification.requireValidationRef && !verification.validationReference) {
@@ -383,15 +397,6 @@ function resolveCommissionProviderKey({
   return key;
 }
 
-interface CustomerRecord {
-  id: string;
-  email: string | null;
-  first_name: string | null;
-  last_name: string | null;
-  phone: string | null;
-  user_id: string | null;
-}
-
 interface MerchantRecord {
   id: string;
   slug: string;
@@ -431,53 +436,13 @@ export interface PreparedVtuTransaction {
   };
 }
 
-export async function resolveVtuCustomer({
-  supabase,
-  merchantId,
-  user,
-}: {
-  supabase: SupabaseClient;
-  merchantId: string;
-  user: User;
-}) {
-  const { data: byUserId } = await supabase
-    .from('customers')
-    .select('id, email, first_name, last_name, phone, user_id')
-    .eq('merchant_id', merchantId)
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (byUserId) {
-    return byUserId as CustomerRecord;
-  }
-
-  if (!user.email) {
-    return null;
-  }
-
-  const { data: byEmail } = await supabase
-    .from('customers')
-    .select('id, email, first_name, last_name, phone, user_id')
-    .eq('merchant_id', merchantId)
-    .eq('email', user.email)
-    .maybeSingle();
-
-  if (byEmail && !byEmail.user_id) {
-    await supabase
-      .from('customers')
-      .update({ user_id: user.id })
-      .eq('id', byEmail.id);
-  }
-
-  return (byEmail as CustomerRecord | null) ?? null;
-}
-
 export async function preparePendingVtuTransaction({
   supabase,
   user,
   input,
   source,
   requireCustomer = false,
+  strictLookups = false,
 }: {
   supabase: SupabaseClient;
   user: User;
@@ -490,6 +455,8 @@ export async function preparePendingVtuTransaction({
   input: PurchaseInput & { customerName?: string };
   source: PurchaseInput['source'];
   requireCustomer?: boolean;
+  /** Fail 5xx (not 400/404) on transient lookup errors; see resolver. */
+  strictLookups?: boolean;
 }): Promise<PreparedVtuTransaction> {
   const isTelco = input.type === 'airtime' || input.type === 'data';
   const formattedPhone =
@@ -509,29 +476,24 @@ export async function preparePendingVtuTransaction({
     throw new Error('Invalid customer phone number');
   }
 
-  // Alias-aware: VTU purchase flows POST the merchant slug in the body (the proxy
-  // can't rewrite bodies), so a stale tab on a just-renamed store resolves via the
-  // alias table instead of a spurious "Merchant not found". A live slug wins.
-  const { data: merchant, error: merchantError } =
-    await withMerchantSlugAliasFallback(input.merchantSlug, (s) =>
-      supabase
-        .from('merchants')
-        .select('id, slug, business_name, paystack_subaccount_code')
-        .eq('slug', s)
-        .maybeSingle()
-    );
+  const merchant = await resolveVtuMerchant({
+    merchantSlug: input.merchantSlug,
+    strictLookups,
+    supabase,
+  });
 
-  if (merchantError || !merchant) {
-    throw new Error('Merchant not found');
-  }
-
-  const { data: settings } = await supabase
+  const { data: settings, error: settingsError } = await supabase
     .from('merchant_feature_settings')
     .select(
       'vtu_enabled, vtu_airtime_enabled, vtu_data_enabled, vtu_electricity_enabled, vtu_tv_enabled, vtu_betting_enabled, vtu_merchant_commission_rate, vtu_customer_cashback_enabled, vtu_customer_cashback_rate, paystack_enabled, korapay_enabled'
     )
     .eq('merchant_id', merchant.id)
     .single();
+  throwIfStrictVtuLookupError({
+    context: 'load VTU merchant settings',
+    error: settingsError,
+    strictLookups,
+  });
 
   const featureSettings = (settings ?? {}) as FeatureSettingsRecord;
   if (!featureSettings.vtu_enabled) {
@@ -553,6 +515,7 @@ export async function preparePendingVtuTransaction({
   const customer = await resolveVtuCustomer({
     supabase,
     merchantId: merchant.id,
+    strictLookups,
     user,
   });
 
@@ -820,6 +783,7 @@ export async function preparePendingVtuTransaction({
       customer_name: monnifyCustomerName,
       metadata: {
         provider: resolvedProvider,
+        ...buildVtuSubmissionMarkerEraMetadata(),
         ...(resolvedProvider === 'monnify'
           ? {
               billerCode: monnifyBillerCode,

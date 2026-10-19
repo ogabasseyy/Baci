@@ -26,4 +26,5 @@ export const PERMANENT_PAID_ORDER_SIDE_EFFECT_ERRORS = [
   'wired_in_b3_5',
   'financial_totals_inconsistent',
   'gateway_verification_terminal',
+  'settlement_order_cancelled',
 ] as const;

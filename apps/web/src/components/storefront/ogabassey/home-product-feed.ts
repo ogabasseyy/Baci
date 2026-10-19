@@ -2,7 +2,7 @@ import {
   deriveProductImageData,
   getImagePayloadAlt,
   getImagePayloadUrl,
-} from '@baci/shared/lib';
+} from '@baci/shared/lib/product-image-alt';
 import { prioritizeSmartphoneProducts } from '@baci/shared/storefront/prioritize-smartphone-products';
 import type { Product as StorefrontProduct } from '@/lib/products';
 import {

@@ -72,6 +72,7 @@ export const customerSavingsCreateGoalSchema = merchantIdentifierObjectSchema
     contributionAmount: amountSchema,
     contributionFrequency: z.enum(['daily', 'weekly', 'monthly']),
     earlyEndFeeAccepted: z.boolean().optional(),
+    goalIdempotencyKey: optionalNonEmptyString,
     initialContributionAmount: nonNegativeAmountSchema.optional().default(0),
     initialContributionIdempotencyKey: optionalNonEmptyString,
     metadata: z.record(z.string(), z.unknown()).optional(),

@@ -1,5 +1,5 @@
 import type { NextRequest, NextResponse } from 'next/server';
-import { getInternalApiSecret } from '@/env';
+import { getInternalApiSecret } from '@/lib/internal-api-secret';
 import { storefrontComparePageStatus } from '@/lib/storefront-compare-page-status';
 
 type StorefrontRouteType = 'admin' | 'auth' | 'storefront' | 'api';

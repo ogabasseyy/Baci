@@ -5,7 +5,9 @@ import { useCheckoutPaymentController } from './use-checkout-payment-controller'
 
 const mockCalculateCommerce = jest.fn();
 const mockGetRedvaultPaymentAvailability =
-  jest.fn<(...args: unknown[]) => Promise<boolean>>();
+  jest.fn<
+    (...args: unknown[]) => Promise<{ available: boolean; reason: string }>
+  >();
 let mockEnabledPaymentMethods = ['paystack', 'bank_transfer'];
 
 jest.mock('@/hooks/use-checkout-savings', () => ({
@@ -60,7 +62,7 @@ describe('useCheckoutPaymentController selection', () => {
       Promise.reject(new Error('offline'))
     );
     mockGetRedvaultPaymentAvailability.mockReturnValue(
-      new Promise<boolean>(() => undefined)
+      new Promise<{ available: boolean; reason: string }>(() => undefined)
     );
   });
 
@@ -95,7 +97,10 @@ describe('useCheckoutPaymentController selection', () => {
   });
 
   it('selects REDVAULT only after the server availability result succeeds', async () => {
-    mockGetRedvaultPaymentAvailability.mockResolvedValue(true);
+    mockGetRedvaultPaymentAvailability.mockResolvedValue({
+      available: true,
+      reason: 'staging_test_mode',
+    });
     const { result } = renderHook(() =>
       useCheckoutPaymentController({
         assuranceFee: 0,
@@ -117,7 +122,10 @@ describe('useCheckoutPaymentController selection', () => {
   });
 
   it('hides stale availability immediately when the merchant changes', async () => {
-    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce(true);
+    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce({
+      available: true,
+      reason: 'private_live_pilot',
+    });
     const { result, rerender } = renderHook(
       ({ merchantId }: { merchantId: string }) =>
         useCheckoutPaymentController({
@@ -139,6 +147,68 @@ describe('useCheckoutPaymentController selection', () => {
     rerender({ merchantId: 'merchant-2' });
     expect(result.current.redvaultAvailable).toBe(false);
     expect(result.current.selectedPayment).toBeNull();
+  });
+
+  it('hides stale availability immediately when the authenticated customer changes', async () => {
+    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+    const { result, rerender } = renderHook(
+      ({ customerId }: { customerId: string }) =>
+        useCheckoutPaymentController({
+          assuranceFee: 0,
+          customerId,
+          deliveryFee: 0,
+          isAuthenticated: true,
+          items,
+          merchantId: 'merchant-1',
+          merchantSlug: 'ogabassey',
+          step: 'payment',
+          subtotal: 500000,
+        }),
+      { initialProps: { customerId: 'customer-a' } }
+    );
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(true);
+
+    rerender({ customerId: 'customer-b' });
+    expect(result.current.redvaultAvailable).toBe(false);
+    expect(mockGetRedvaultPaymentAvailability).toHaveBeenLastCalledWith(
+      'merchant-1',
+      'product-1'
+    );
+  });
+
+  it('refetches availability when the auth user changes without a customer row', async () => {
+    mockGetRedvaultPaymentAvailability.mockResolvedValueOnce({
+      available: true,
+      reason: 'private_live_pilot',
+    });
+    const { result, rerender } = renderHook(
+      ({ userId }: { userId: string }) =>
+        useCheckoutPaymentController({
+          assuranceFee: 0,
+          deliveryFee: 0,
+          isAuthenticated: true,
+          items,
+          merchantId: 'merchant-1',
+          merchantSlug: 'ogabassey',
+          step: 'payment',
+          subtotal: 500000,
+          userId,
+        }),
+      { initialProps: { userId: 'user-a' } }
+    );
+    await act(async () => undefined);
+    expect(result.current.redvaultAvailable).toBe(true);
+
+    rerender({ userId: 'user-b' });
+    expect(result.current.redvaultAvailable).toBe(false);
+    expect(mockGetRedvaultPaymentAvailability).toHaveBeenLastCalledWith(
+      'merchant-1',
+      'product-1'
+    );
   });
 
   it('fails closed when availability rejects', async () => {

@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockSupabase = vi.hoisted(() => ({ rpc: vi.fn() }));
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: () => mockSupabase,
+const mockCreateWorkerClient = vi.hoisted(() => vi.fn(() => mockSupabase));
+vi.mock('@/lib/gigl-tracking-worker-client', () => ({
+  createGiglTrackingWorkerClient: mockCreateWorkerClient,
 }));
 
 const mockIsGiglRuntimeConfigured = vi.hoisted(() => vi.fn(() => true));
@@ -47,12 +48,14 @@ describe('GET /api/cron/gigl-tracking', () => {
       new NextRequest('http://localhost:3000/api/cron/gigl-tracking')
     );
     expect(response.status).toBe(401);
+    expect(mockCreateWorkerClient).not.toHaveBeenCalled();
     expect(mockSupabase.rpc).not.toHaveBeenCalled();
   });
 
   it('claims bounded monitors and returns the worker summary', async () => {
     const response = await GET(request('?batchSize=9'));
     expect(response.status).toBe(200);
+    expect(mockCreateWorkerClient).toHaveBeenCalledWith(process.env);
     expect(mockSupabase.rpc).toHaveBeenCalledWith(
       'claim_due_gigl_tracking_monitors',
       expect.objectContaining({ p_limit: 9 })
@@ -110,6 +113,20 @@ describe('GET /api/cron/gigl-tracking', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Failed to claim GIGL tracking monitors',
     });
+  });
+
+  it('returns a bounded 500 when the worker token is invalid', async () => {
+    mockCreateWorkerClient.mockImplementationOnce(() => {
+      throw new Error('expired worker token');
+    });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: 'GIGL tracking worker unavailable',
+    });
+    expect(mockSupabase.rpc).not.toHaveBeenCalled();
   });
 
   it('uses a bounded function duration', () => {

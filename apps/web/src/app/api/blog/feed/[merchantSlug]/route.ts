@@ -3,13 +3,21 @@ import { Feed } from 'feed';
 import { unstable_cache } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
 import { getAppUrl, getSupabaseAnonKey, getSupabaseUrl } from '@/env';
+import {
+  normalizeBlogFeedPostForFilter,
+  truncateFeedText,
+  xmlSafeFeedImageUrl,
+  xmlSafeFeedPathSegment,
+  xmlSafeFeedUrl,
+} from '@/lib/blog-feed-normalize';
 import { getBlogStructuredDataImageUrls } from '@/lib/blog-structured-data-images';
 import { stripHtml } from '@/lib/blog-utils';
 import {
-  filterPublicBlogPosts,
   isPublicBlogCategory,
+  isPublicBlogPost,
 } from '@/lib/public-blog-content-quality';
 import { sanitizeForFeed } from '@/lib/sanitize';
+import { stripInvalidXml10Characters } from '@/lib/sanitize-xml-10';
 import { getCurrentSlugForAlias } from '@/lib/slug-alias-cache';
 
 /**
@@ -34,11 +42,11 @@ interface BlogPost {
   title: string;
   slug: string;
   content: string;
-  excerpt: string;
+  excerpt: string | null;
   featured_image_url: string | null;
   featured_image_variants?: Record<string, unknown> | null;
   category: string | null;
-  author_name: string;
+  author_name: string | null;
   published_at: string | null;
   updated_at: string | null;
 }
@@ -247,7 +255,24 @@ async function fetchPublicFeedPosts(
     }
 
     const postBatch = Array.isArray(posts) ? (posts as BlogPost[]) : [];
-    publicPosts.push(...filterPublicBlogPosts(postBatch));
+    // Judge visibility on fully normalized copies, but emit the raw slug:
+    // URLs percent-encode it (identity-preserving + XML-safe) while the
+    // predicate must see the same stripped text the feed renders. Pairs keep
+    // each post attached to its own verdict (filterPublicBlogPosts is
+    // Array.filter over this same predicate).
+    const judgedBatch = postBatch.map((post) => ({
+      post,
+      predicate: normalizeBlogFeedPostForFilter(post),
+    }));
+    publicPosts.push(
+      ...judgedBatch
+        .filter(({ predicate }) => isPublicBlogPost(predicate))
+        .map(({ post, predicate }) => ({
+          ...post,
+          title: predicate.title,
+          category: predicate.category,
+        }))
+    );
     hasMoreRows = postBatch.length === RSS_QUERY_BATCH_SIZE;
     offset += RSS_QUERY_BATCH_SIZE;
   }
@@ -322,11 +347,18 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     // Base URL for the merchant's storefront
     // Use custom domain if available, otherwise fall back to slug-based URL
     const baseUrl = getAppUrl();
-    const storeUrl = merchant.custom_domain
+    const safeMerchantSlug = xmlSafeFeedPathSegment(merchant.slug);
+    const customStoreUrl = merchant.custom_domain
       ? `https://${merchant.custom_domain}`
-      : `${baseUrl}/${merchant.slug}`;
+      : null;
+    // A corrupt custom domain must not 500 the whole feed: fall back to the
+    // slug-based store URL instead of letting new URL() throw below.
+    const storeUrl =
+      customStoreUrl && URL.parse(customStoreUrl)
+        ? customStoreUrl
+        : `${baseUrl}/${safeMerchantSlug}`;
     const feedUrl = new URL(
-      `/api/blog/feed/${merchant.slug}`,
+      `/api/blog/feed/${safeMerchantSlug}`,
       storeUrl
     ).toString();
 
@@ -340,53 +372,61 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
       postsWithValidDates.length === 0
         ? null
         : (postsWithValidDates[0]?.publishedDate ?? new Date());
+    const feedText = stripInvalidXml10Characters;
+    const safeStoreUrl = xmlSafeFeedUrl(storeUrl);
+    const safeFeedUrl = xmlSafeFeedUrl(feedUrl);
+    const safeBaseUrl = xmlSafeFeedUrl(baseUrl);
 
     const feed = new Feed({
-      title: `${merchant.business_name} Blog`,
-      description:
+      title: feedText(`${merchant.business_name} Blog`),
+      description: feedText(
         merchant.site_description ||
-        `Latest posts from ${merchant.business_name}`,
-      id: `${storeUrl}/blog`,
-      link: `${storeUrl}/blog`,
+          `Latest posts from ${merchant.business_name}`
+      ),
+      id: `${safeStoreUrl}/blog`,
+      link: `${safeStoreUrl}/blog`,
       language: 'en',
-      image: merchant.logo_url || undefined,
-      favicon: `${baseUrl}/favicon.ico`,
-      copyright: `All rights reserved ${new Date().getFullYear()}, ${merchant.business_name}`,
+      image: xmlSafeFeedImageUrl(merchant.logo_url),
+      favicon: `${safeBaseUrl}/favicon.ico`,
+      copyright: feedText(
+        `All rights reserved ${new Date().getFullYear()}, ${merchant.business_name}`
+      ),
       ...(lastBuildDate ? { updated: lastBuildDate } : {}),
       generator: 'Baci E-commerce Platform',
       feedLinks: {
-        rss2: feedUrl,
+        rss2: safeFeedUrl,
       },
       author: {
-        name: merchant.business_name,
-        link: storeUrl,
+        name: feedText(merchant.business_name),
+        link: safeStoreUrl,
       },
     });
 
     for (const { post, publishedDate } of postsWithValidDates) {
-      const postUrl = `${storeUrl}/blog/${post.slug}`;
-      const excerpt = post.excerpt || stripHtml(post.content).substring(0, 300);
+      const postUrl = `${safeStoreUrl}/blog/${xmlSafeFeedPathSegment(post.slug)}`;
+      const excerpt =
+        post.excerpt || truncateFeedText(stripHtml(post.content || ''), 300);
 
       const sanitizedContent = sanitizeForFeed(post.content);
       const imageUrls = getBlogStructuredDataImageUrls(post);
 
       feed.addItem({
-        title: post.title,
+        title: feedText(post.title),
         id: postUrl,
         link: postUrl,
-        description: excerpt,
+        description: feedText(excerpt),
         content: sanitizedContent,
         author: [
           {
-            name: post.author_name,
-            link: storeUrl,
+            name: feedText(post.author_name || merchant.business_name),
+            link: safeStoreUrl,
           },
         ],
         date: publishedDate,
-        image: imageUrls[0],
+        image: xmlSafeFeedImageUrl(imageUrls[0]),
         category:
           post.category && isPublicBlogCategory(post.category)
-            ? [{ name: post.category }]
+            ? [{ name: feedText(post.category) }]
             : undefined,
       });
     }

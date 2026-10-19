@@ -1,44 +1,30 @@
 import { Suspense } from 'react';
-import { JsonLd } from '@/components/seo/json-ld';
-import {
-  OGABASSEY_DESCRIPTION,
-  OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL,
-  OGABASSEY_HOME_URL,
-  OGABASSEY_SOCIAL_IMAGE_URL,
-  OGABASSEY_TITLE,
-} from '@/config/ogabassey';
+import { OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL } from '@/config/ogabassey';
 import { OgabasseyHomeCriticalShell } from './ogabassey-home-critical-shell';
 import { OgabasseyHomeHeroPreloadLink } from './ogabassey-home-hero-preload-link';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 import { resolveOgabasseyHomeHeroShell } from './ogabassey-home-hero-shell-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
-import { OgabasseyHomeStyleLoader } from './ogabassey-home-style-loader';
+import { OgabasseyHomeStaticShellHead } from './ogabassey-home-static-shell-head';
 
 interface OgabasseyStaticHomePageContentProps {
   /** Static per-route prefix for request-streamed storefront links: '' for the
    *  apex domain and '/ogabassey' for the path route. */
   pathPrefix: string;
-  /** Set when the parent page already supplied critical styles and heading. */
+  /**
+   * Set when the parent shell (`OgabasseyStaticHomePage`) already supplies:
+   * 1. critical styles, heading, and the live slide-0 hero preload hint
+   *    (`OgabasseyHomeCommittedLcp`),
+   * 2. the static WebPage JSON-LD and style loader
+   *    (`OgabasseyHomeStaticShellHead`), and
+   * 3. an outer `<Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>`
+   *    boundary wrapping this component.
+   * Suppresses downstream hero hints, the duplicate shell head, and the
+   * nested inner hero-reserve Suspense boundary so each is emitted once.
+   */
   omitCommittedHero?: boolean;
 }
-
-const ogabasseyStaticHomepageSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'WebPage',
-  name: OGABASSEY_TITLE,
-  description: OGABASSEY_DESCRIPTION,
-  url: OGABASSEY_HOME_URL,
-  isPartOf: {
-    '@type': 'WebSite',
-    name: 'OgaBassey',
-    url: OGABASSEY_HOME_URL,
-  },
-  primaryImageOfPage: {
-    '@type': 'ImageObject',
-    url: OGABASSEY_SOCIAL_IMAGE_URL,
-  },
-} as const;
 
 export async function OgabasseyStaticHomePageContent({
   omitCommittedHero = false,
@@ -57,15 +43,18 @@ export async function OgabasseyStaticHomePageContent({
   const committedMobileLcpUrl = shellSlides?.[0]?.imageUrl ?? null;
   // Public immutable asset hints do not render shopping UI. Publication and
   // tenant checks remain in the request child (see the hero-shell contract).
-  // Single preload owner: the first-flush committed slot already emits a
-  // scanner-visible <link> for the committed URL, so re-emitting the flight
-  // hint for the same URL only duplicates it. Emit only when live slide-0
-  // rotated away from the committed constant — then the early hint covers
-  // a stale asset and the true LCP image still needs its hint. Origin
-  // preconnect stays covered by OgabasseyStaticResourceHints either way.
+  // Single preload owner: the static page sets omitCommittedHero because the
+  // upstream committed slot already emits a scanner-visible <link> for the
+  // live slide-0 URL, so any downstream hint for that URL would only
+  // duplicate it. Emit downstream hints solely in the standalone
+  // composition, where this component owns the hero; there the flight hint
+  // additionally stays silent while live slide-0 still matches the
+  // committed constant. Origin preconnect stays covered by
+  // OgabasseyStaticResourceHints either way.
   if (
     committedMobileLcpUrl &&
-    committedMobileLcpUrl !== OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL
+    committedMobileLcpUrl !== OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL &&
+    !omitCommittedHero
   ) {
     preloadOgabasseyHomeHeroResources(committedMobileLcpUrl);
   }
@@ -74,8 +63,7 @@ export async function OgabasseyStaticHomePageContent({
 
   return (
     <>
-      <JsonLd data={ogabasseyStaticHomepageSchema} />
-      <OgabasseyHomeStyleLoader />
+      {!omitCommittedHero && <OgabasseyHomeStaticShellHead />}
       {paintCommittedHero && committedMobileLcpUrl ? (
         <>
           <div data-ogabassey-home-lcp-shell="true">
@@ -93,17 +81,33 @@ export async function OgabasseyStaticHomePageContent({
         </>
       ) : (
         <>
-          {committedMobileLcpUrl ? (
-            <OgabasseyHomeHeroPreloadLink src={committedMobileLcpUrl} />
-          ) : null}
-          <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
+          {/*
+            No hero preload hint or second reserve boundary here: whenever
+            omitCommittedHero is true, the upstream committed slot owns the
+            scanner-visible hint and OgabasseyStaticHomePage already wraps
+            this component in <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>.
+            Avoiding a second nested reserve boundary saves ~19 KB of
+            duplicate fallback HTML + RSC Flight payload and eliminates an
+            extra Suspense boundary swap before Hero reveals.
+          */}
+          {omitCommittedHero ? (
             <OgabasseyHomePageContent
-              omitDocumentHeading={omitCommittedHero}
+              canonicalDomain={pathPrefix === ''}
+              omitDocumentHeading
               pathPrefix={pathPrefix}
               shellMerchantId={shellMerchantId}
               shellSlides={shellSlides}
             />
-          </Suspense>
+          ) : (
+            <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
+              <OgabasseyHomePageContent
+                omitDocumentHeading={false}
+                pathPrefix={pathPrefix}
+                shellMerchantId={shellMerchantId}
+                shellSlides={shellSlides}
+              />
+            </Suspense>
+          )}
         </>
       )}
     </>

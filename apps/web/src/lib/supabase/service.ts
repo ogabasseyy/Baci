@@ -17,8 +17,14 @@ const walletFundingRecoveryClientBrand: unique symbol = Symbol(
 const shippingQuoteBookingEconomicsClientBrand: unique symbol = Symbol(
   'baci.shipping-quote-booking-economics.service-role-client'
 );
+const piggyvestIntakeClientBrand: unique symbol = Symbol(
+  'baci.piggyvest-intake.service-role-client'
+);
 const immediateNotificationCompletionClientBrand: unique symbol = Symbol(
   'baci.immediate-notification-completion.service-role-client'
+);
+const searchAnalyticsClientBrand: unique symbol = Symbol(
+  'baci.search-analytics.service-role-client'
 );
 const serviceRoleBrandValue: true = true;
 
@@ -73,6 +79,18 @@ export type ShippingQuoteBookingEconomicsServiceClient =
   };
 
 /**
+ * A service-role client reserved for the PiggyVest webhook intake edge.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the intake call graph
+ * (inbox record, quarantine record, event processing) cannot be driven by a
+ * generic service client from any other edge. Only the HMAC-authenticated
+ * `/api/webhooks/piggyvest` route may construct it, via
+ * `createPiggyvestIntakeServiceClient`.
+ */
+export type PiggyvestIntakeServiceClient = SupabaseClient<Database> & {
+  readonly [piggyvestIntakeClientBrand]: true;
+};
+/**
  * A service-role client reserved for immediate-notification completion
  * HMAC provisioning.
  *
@@ -84,6 +102,21 @@ export type ImmediateNotificationCompletionServiceClient =
   SupabaseClient<Database> & {
     readonly [immediateNotificationCompletionClientBrand]: true;
   };
+
+/**
+ * A service-role client reserved for the search-submissions ingestion edge.
+ *
+ * Keep this type distinct from `ServiceRoleClient` so the telemetry insert
+ * cannot be driven by a generic service client from any other edge. Only
+ * `/api/search/submissions` may construct it, via
+ * `recordSearchSubmission`, after the Origin and storefront gates pass.
+ * Covered by the owner-approved temporary exception in AGENTS.md: the
+ * backend key inherently bypasses RLS; the brand constrains the approved
+ * call graph, not that capability.
+ */
+export type SearchAnalyticsServiceClient = SupabaseClient<Database> & {
+  readonly [searchAnalyticsClientBrand]: true;
+};
 
 /**
  * Creates a Supabase client with service role key for admin operations.
@@ -110,8 +143,14 @@ export function createServiceClient(
   sentinel: 'shipping-quote-booking-economics'
 ): ShippingQuoteBookingEconomicsServiceClient;
 export function createServiceClient(
+  sentinel: 'piggyvest-intake'
+): PiggyvestIntakeServiceClient;
+export function createServiceClient(
   sentinel: 'immediate-notification-completion'
 ): ImmediateNotificationCompletionServiceClient;
+export function createServiceClient(
+  sentinel: 'search-analytics'
+): SearchAnalyticsServiceClient;
 export function createServiceClient(): SupabaseClient;
 export function createServiceClient(
   sentinel?:
@@ -120,7 +159,9 @@ export function createServiceClient(
     | 'jumia-credentials'
     | 'wallet-funding-recovery'
     | 'shipping-quote-booking-economics'
+    | 'piggyvest-intake'
     | 'immediate-notification-completion'
+    | 'search-analytics'
 ) {
   const url = getSupabaseUrl();
   // `SUPABASE_ADS_CREDENTIAL_KEY` is the preferred deployment secret for the
@@ -181,6 +222,16 @@ export function createServiceClient(
   if (sentinel === 'shipping-quote-booking-economics') {
     return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
       [shippingQuoteBookingEconomicsClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'piggyvest-intake') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [piggyvestIntakeClientBrand]: serviceRoleBrandValue,
+    });
+  }
+  if (sentinel === 'search-analytics') {
+    return Object.assign(createClient<Database>(url, serviceRoleKey, options), {
+      [searchAnalyticsClientBrand]: serviceRoleBrandValue,
     });
   }
   return createClient(url, serviceRoleKey, options);

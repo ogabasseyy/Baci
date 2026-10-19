@@ -47,6 +47,8 @@ function createSupabase(
     shipping_platform_margin: 100,
     shipping_pricing_version: 'gigl_platform_margin_v1',
     shipping_address: {
+      latitude: 6.5,
+      longitude: 3.3,
       address: '123 Main St',
       city: 'Lagos',
       state: 'Lagos',
@@ -63,9 +65,31 @@ function createSupabase(
     price: 2500,
     currency: 'NGN',
     estimated_days: 3,
-    provider_rate_id: 'GIGL_4_0',
+    provider_rate_id: 'GIGL_4_0_1_0_0_4',
     expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-    quote_request: null,
+    quote_request: {
+      sessionId: 'checkout',
+      shipmentType: 'domestic',
+      sender: {
+        name: 'Test Store',
+        phone: '08098765432',
+        address: '456 Market Rd',
+        city: 'Lagos',
+        state: 'Lagos',
+        country: 'Nigeria',
+        countryCode: 'NG',
+      },
+      receiver: {
+        ...order.shipping_address,
+        name: 'Jane Doe',
+        phone: order.customer_phone,
+        country: 'Nigeria',
+        countryCode: 'NG',
+        latitude: 6.5,
+        longitude: 3.3,
+      },
+      items: [{ name: 'Widget', quantity: 1, weight: 1, value: 5000 }],
+    },
     provider_cost: 1000,
     platform_margin: 100,
     platform_margin_bps: 400,
@@ -172,6 +196,25 @@ function createSupabase(
 describe('GIGL booking economics', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+      {
+        id: 'current',
+        provider: 'GIGL',
+        serviceTier: 'GoStandard',
+        carrierName: 'GIG Logistics',
+        displayName: 'GIG Logistics',
+        price: 2500,
+        currency: 'NGN',
+        providerCost: 1000,
+        platformMargin: 100,
+        pricingVersion: 'gigl_platform_margin_v1',
+        estimatedDays: 3,
+        pickupIncluded: true,
+        insuranceIncluded: false,
+        providerRateId: 'GIGL_4_0_1_0_0_4',
+        expiresAt: new Date('2099-01-01'),
+      },
+    ]);
     vi.mocked(findReusableOrderShipment).mockResolvedValue(null);
     vi.mocked(resolveBookingMerchantSender).mockResolvedValue({
       ok: true,

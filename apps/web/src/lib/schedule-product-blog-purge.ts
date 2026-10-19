@@ -1,0 +1,225 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { expireProductBlogCacheReliable } from '@/lib/expire-product-blog-cache-reliable';
+import { getPublishedBlogPostSlugsForProducts } from '@/lib/get-published-blog-post-slugs-for-products';
+import { isValidUuid } from '@/lib/sanitize-core';
+import { scheduleStorefrontProductPurge } from '@/lib/storefront-product-purge';
+import { scheduleStorefrontHostnamePurge } from '@/lib/storefront-product-purge-hostnames';
+import type { StorefrontProductPurgeEntry } from '@/lib/storefront-product-purge-urls';
+
+export interface ScheduleProductBlogPurgeInput {
+  supabase: SupabaseClient;
+  merchantId: string;
+  merchantSlug?: string | null;
+  productIds: readonly string[];
+  entries: readonly StorefrontProductPurgeEntry[];
+  categorySlugs?: readonly (string | null | undefined)[];
+  /** Pass pre-delete results because the relationship rows may have cascaded. */
+  blogPostSlugs?: readonly string[];
+  /** Resolve pre-delete relationship IDs after the product mutation commits. */
+  blogPostIds?: readonly string[];
+  /** Keep the immediate product purge, but skip a second purge when no blog is linked. */
+  skipWhenNoLinkedPosts?: boolean;
+  /** The core product URLs were already evicted; schedule only related articles. */
+  skipProductPurge?: boolean;
+}
+
+function normalizeBlogPostSlugs(slugs: readonly string[]) {
+  return Array.from(
+    new Set(slugs.map((slug) => slug.trim()).filter((slug) => slug.length > 0))
+  );
+}
+
+function getPublishedBlogPostSlug(row: {
+  published_at?: string | null;
+  slug?: string | null;
+  status?: string | null;
+}) {
+  if (
+    row.status !== 'published' ||
+    typeof row.published_at !== 'string' ||
+    row.published_at.length === 0 ||
+    typeof row.slug !== 'string'
+  ) {
+    return null;
+  }
+  const slug = row.slug.trim();
+  return slug.length > 0 ? slug : null;
+}
+
+const BLOG_POST_ID_CHUNK_SIZE = 100;
+
+async function getPublishedBlogPostSlugsByIds(
+  supabase: SupabaseClient,
+  merchantId: string,
+  blogPostIds: readonly string[]
+) {
+  const normalizedIds = Array.from(
+    new Set(
+      blogPostIds
+        .map((id) => id.trim())
+        .filter((id) => id.length > 0 && isValidUuid(id))
+    )
+  );
+  const slugs: string[] = [];
+  for (
+    let start = 0;
+    start < normalizedIds.length;
+    start += BLOG_POST_ID_CHUNK_SIZE
+  ) {
+    const { data, error } = await supabase
+      .from('blog_posts')
+      .select('slug, status, published_at')
+      .eq('merchant_id', merchantId)
+      .eq('status', 'published')
+      .not('published_at', 'is', null)
+      .in('id', normalizedIds.slice(start, start + BLOG_POST_ID_CHUNK_SIZE));
+    if (error) throw error;
+    for (const row of (data ?? []) as Array<{
+      published_at?: string | null;
+      slug?: string | null;
+      status?: string | null;
+    }>) {
+      const slug = getPublishedBlogPostSlug(row);
+      if (slug) slugs.push(slug);
+    }
+  }
+  return slugs;
+}
+
+/**
+ * Resolve and schedule the published article URLs affected by a product
+ * mutation. This is best-effort cache invalidation: lookup or scheduling
+ * failures are logged and never escape into the product mutation response.
+ * Delete callers can provide a pre-delete slug snapshot because the join rows
+ * are removed by the product mutation's cascade.
+ */
+export async function scheduleProductBlogPurge({
+  supabase,
+  merchantId,
+  merchantSlug,
+  productIds,
+  entries,
+  categorySlugs,
+  blogPostSlugs,
+  blogPostIds,
+  skipWhenNoLinkedPosts = false,
+  skipProductPurge = false,
+}: ScheduleProductBlogPurgeInput): Promise<void> {
+  try {
+    // Invalidate the Next data before the outer CDN purge can trigger a
+    // refill. This runs before the slug gate because it needs only the
+    // merchant id: a failed post-write merchant read (the archive route queues
+    // `merchantRow?.slug`) must not leave linked articles stale until TTL.
+    // Only Cloudflare scheduling is gated on the slug below.
+    await expireProductBlogCacheReliable(merchantId);
+
+    const normalizedMerchantSlug = merchantSlug?.trim();
+    if (!normalizedMerchantSlug || entries.length === 0) {
+      return;
+    }
+
+    const normalizedCategorySlugs = (categorySlugs ?? []).filter(
+      (categorySlug): categorySlug is string =>
+        typeof categorySlug === 'string' && categorySlug.trim().length > 0
+    );
+    let linkedSlugs: string[];
+    let linkedSlugsIncomplete = false;
+    if (blogPostIds !== undefined) {
+      linkedSlugs = normalizeBlogPostSlugs(
+        await getPublishedBlogPostSlugsByIds(supabase, merchantId, blogPostIds)
+      );
+      if (normalizedCategorySlugs.length > 0) {
+        const categoryFallback = await getPublishedBlogPostSlugsForProducts(
+          supabase,
+          merchantId,
+          [],
+          normalizedCategorySlugs
+        );
+        linkedSlugsIncomplete = categoryFallback.incomplete;
+        linkedSlugs = normalizeBlogPostSlugs([
+          ...linkedSlugs,
+          ...categoryFallback.slugs,
+        ]);
+      }
+    } else if (blogPostSlugs === undefined) {
+      const linked = await getPublishedBlogPostSlugsForProducts(
+        supabase,
+        merchantId,
+        productIds,
+        normalizedCategorySlugs
+      );
+      linkedSlugsIncomplete = linked.incomplete;
+      linkedSlugs = normalizeBlogPostSlugs(linked.slugs);
+    } else {
+      linkedSlugs = normalizeBlogPostSlugs(blogPostSlugs);
+      if (normalizedCategorySlugs.length > 0) {
+        try {
+          const categoryFallback = await getPublishedBlogPostSlugsForProducts(
+            supabase,
+            merchantId,
+            [],
+            normalizedCategorySlugs
+          );
+          linkedSlugsIncomplete = categoryFallback.incomplete;
+          linkedSlugs = normalizeBlogPostSlugs([
+            ...linkedSlugs,
+            ...categoryFallback.slugs,
+          ]);
+        } catch (error) {
+          // A pre-delete snapshot is still useful if the post-delete category
+          // fallback read fails; do not lose those direct article targets —
+          // but the category remainder is unknown, so escalate below.
+          linkedSlugsIncomplete = true;
+          console.warn(
+            'Falling back to pre-delete product blog slugs after category lookup failed',
+            { merchantId, error }
+          );
+        }
+      }
+    }
+
+    if (linkedSlugs.length > 0) {
+      scheduleStorefrontProductPurge(
+        normalizedMerchantSlug,
+        entries,
+        skipProductPurge
+          ? { blogPostSlugs: linkedSlugs, blogPostsOnly: true }
+          : { blogPostSlugs: linkedSlugs }
+      );
+    } else if (!skipWhenNoLinkedPosts && !skipProductPurge) {
+      scheduleStorefrontProductPurge(normalizedMerchantSlug, entries);
+    }
+    if (linkedSlugsIncomplete && !(skipProductPurge && skipWhenNoLinkedPosts)) {
+      // A partial page/chunk failure preserved the known article URLs above
+      // but omitted the rest: evict the hostname (a superset) so the unknown
+      // remainder cannot stay stale until TTL. Callers combining
+      // skipProductPurge with skipWhenNoLinkedPosts opt out of this fallback
+      // and stay best-effort.
+      scheduleStorefrontHostnamePurge(normalizedMerchantSlug);
+    }
+  } catch (error) {
+    console.warn('Skipped product blog purge scheduling', {
+      merchantId,
+      productCount: productIds.length,
+      error,
+    });
+    if (!skipWhenNoLinkedPosts && !skipProductPurge) {
+      // Keep the core product purge fail-safe when enrichment cannot read the
+      // relationship table. Article URLs may wait for TTL, but PDP/listing
+      // caches must still be evicted after the mutation commits.
+      scheduleStorefrontProductPurge(merchantSlug, entries);
+    } else if (skipProductPurge && !skipWhenNoLinkedPosts) {
+      // The caller already evicted the core product URLs, so when the
+      // article lookup fails the affected URLs are unknown — evict the
+      // hostname rather than leaving articles stale until TTL. This covers
+      // the post-delete ID-resolution failure, where the cascaded
+      // relationships can no longer be queried again. Callers that combine
+      // skipProductPurge with skipWhenNoLinkedPosts opt out of this
+      // fallback and stay best-effort.
+      const fallbackSlug = merchantSlug?.trim();
+      if (fallbackSlug) {
+        scheduleStorefrontHostnamePurge(fallbackSlug);
+      }
+    }
+  }
+}

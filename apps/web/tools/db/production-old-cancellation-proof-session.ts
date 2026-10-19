@@ -16,7 +16,7 @@ type ProofSessionLimits = {
 };
 
 type ProofSessionOptions = {
-  environment: NodeJS.ProcessEnv;
+  environment: Partial<NodeJS.ProcessEnv>;
   executionTimeoutMs?: number;
   limits?: ProofSessionLimits;
   psqlBin: string;
@@ -59,7 +59,7 @@ export function createProductionOldCancellationProofSession(
             '-c idle_in_transaction_session_timeout=30s',
             '-c client_min_messages=warning',
           ].join(' '),
-        },
+        } as unknown as NodeJS.ProcessEnv,
         shell: false,
         stdio: ['pipe', 'pipe', 'pipe'],
       }

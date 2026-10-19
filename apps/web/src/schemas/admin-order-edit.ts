@@ -32,8 +32,34 @@ const editOrderItemSchema = z.object({
   variant_name: z.string().trim().max(200).nullable(),
 });
 
+const calendarDaySchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Order day must use YYYY-MM-DD')
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return (
+      parsed.getUTCFullYear() === year &&
+      parsed.getUTCMonth() === month - 1 &&
+      parsed.getUTCDate() === day
+    );
+  }, 'Order day must be a valid calendar date');
+
 export const adminOrderEditSchema = z
   .object({
+    // No lower bound by design: merchants may correct arbitrarily old
+    // manual sales, matching update_transaction_review_details.
+    transaction_date: z.iso
+      .datetime({ offset: true })
+      .refine(
+        (value) => new Date(value).getTime() <= Date.now(),
+        'Order date cannot be in the future'
+      )
+      .optional(),
+    // Device-local calendar day of the picked date, mirroring order
+    // creation. Optional for older clients; the server falls back to
+    // merchant-timezone derivation when it is absent.
+    transaction_date_day: calendarDaySchema.optional(),
     branch_id: z.uuid().nullable(),
     customer: editCustomerSchema,
     discount_amount: moneySchema,
@@ -46,6 +72,15 @@ export const adminOrderEditSchema = z
     source: z.string().trim().min(1).max(50).nullable(),
     tax_amount: moneySchema,
   })
+  .refine(
+    (value) =>
+      value.transaction_date_day === undefined ||
+      value.transaction_date !== undefined,
+    {
+      message: 'Order date is required when the order day is present',
+      path: ['transaction_date'],
+    }
+  )
   .refine(
     (value) => {
       if (value.gift_wrapping_fee === undefined) {

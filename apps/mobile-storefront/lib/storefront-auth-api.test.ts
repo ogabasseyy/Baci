@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 
 jest.mock('@/env', () => ({
   EXPO_PUBLIC_API_URL: 'https://usebaci.com',
@@ -12,7 +13,7 @@ jest.mock('./config', () => ({
 
 import { sendStorefrontOtp, verifyStorefrontOtp } from './storefront-auth-api';
 
-const mockFetch = jest.fn<typeof fetch>();
+const mockFetch = jest.fn<FetchImplementation>();
 
 describe('storefront auth API client', () => {
   beforeEach(() => {

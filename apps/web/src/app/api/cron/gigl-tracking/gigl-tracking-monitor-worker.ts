@@ -26,7 +26,7 @@ export type GiglTrackingMonitorSummary = {
   success: true;
 };
 
-type WorkerSupabase = SupabaseClient<Database>;
+type WorkerSupabase = Pick<SupabaseClient<Database>, 'rpc'>;
 type TrackShipments = (
   trackingNumbers: readonly string[]
 ) => Promise<Map<string, TrackingResult>>;

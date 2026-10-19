@@ -173,10 +173,10 @@ test('generated JWK stand-in accepts a fully resolved nonempty fallback', () => 
   assert.match(stdout, /verified.*legacy signing-secret fallback/i);
 });
 
-test('generated JWK stand-in accepts only explicit blank dotenv forms', () => {
+test('generated JWK stand-in accepts explicit blanks and the CLI sensitive marker', () => {
   const generatedValues = [];
 
-  for (const blankValue of ['', "''", '""']) {
+  for (const blankValue of ['', "''", '""', '"[SENSITIVE]"']) {
     const file = makePulledJwkEnvFile(blankValue);
     const stdout = run([JWK_KEY, file, GENERATE_ES256_JWK_STANDIN]);
     const generatedValue = parseSingleQuotedValue(file, JWK_KEY);
@@ -219,11 +219,19 @@ test('configured process value wins over an opaque pulled JWK and is not logged'
 
 test('workflow generates the JWK internally and keeps runtime injection Vercel-owned', () => {
   const workflow = fs.readFileSync(DEPLOY_WORKFLOW, 'utf8');
+  const normalizeStart = workflow.indexOf(
+    'node .github/scripts/normalize-vercel-sensitive-placeholders.mjs .vercel/.env.production.local',
+  );
+  const legacyStandinStart = workflow.indexOf(
+    "node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_JWT_SECRET .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'",
+  );
   const stepStart = workflow.indexOf(
     '      - name: Ensure build-time presence of runtime-only scoped Supabase JWT key',
   );
   const buildStart = workflow.indexOf('      - name: Build for Vercel', stepStart);
-  assert.ok(stepStart >= 0);
+  assert.ok(normalizeStart >= 0);
+  assert.ok(legacyStandinStart > normalizeStart);
+  assert.ok(stepStart > legacyStandinStart);
   assert.ok(buildStart > stepStart);
 
   const step = workflow.slice(stepStart, buildStart);

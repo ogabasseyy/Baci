@@ -1,0 +1,121 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { previewWorkflowContract } from './preview-workflow-contract.helpers.mjs';
+
+// Hermetic regression for the preview build's turbo cache-mode conflict:
+// the pulled env file must carry no TURBO_CACHE/TURBO_REMOTE_ONLY, and the
+// job-level mode alone must be accepted across sibling-flag states.
+// Requires installed deps (pnpm exec turbo); runs in CI after install.
+test('redacted build env is accepted by turbo with the job cache mode', (t) => {
+  const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+  const probe = spawnSync('pnpm', ['exec', 'turbo', '--version'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    timeout: 60000,
+  });
+  if (probe.status !== 0) {
+    // Loud skip: a silent vacuous pass would hide a dead gate.
+    console.error(
+      'WARNING: skipping turbo cache-mode regression: turbo toolchain unavailable'
+    );
+    t.skip('turbo toolchain unavailable');
+    return;
+  }
+  const fixture = fileURLToPath(
+    new URL('./fixtures/preview-env-pull-shape.fixture.env', import.meta.url),
+  );
+  const redactPatterns = fileURLToPath(
+    new URL('./preview-env-redact.sed', import.meta.url),
+  );
+  const directory = mkdtempSync(join(tmpdir(), 'preview-env-turbo-'));
+  try {
+    const envFile = join(directory, '.env.preview.local');
+    copyFileSync(fixture, envFile);
+    for (const args of [
+      ['-E', 's/=["\']?\\[SENSITIVE[[:blank:]]*\\]["\']?[[:space:]]*$/=""/', envFile],
+      ['-E', '-f', redactPatterns, envFile],
+    ]) {
+      const sed = spawnSync('sed', args, { encoding: 'utf8' });
+      assert.equal(sed.status, 0, sed.stderr);
+      writeFileSync(envFile, sed.stdout);
+    }
+    // Offer the redacted file to turbo exactly as `vercel build` would,
+    // plus the job-level cache mode read from the workflow (fail closed
+    // if the step ever drifts or duplicates the key; either quote style).
+    // The file carries no TURBO_CACHE/TURBO_REMOTE_ONLY (deleted, not
+    // blanked), so no step-vs-file precedence is assumed here.
+    // Scoped to the build job so a future legitimate TURBO_CACHE in
+    // another job cannot break this test with a confusing count error.
+    const buildBlock = previewWorkflowContract.jobBlock('build');
+    const cacheModes = [
+      ...buildBlock.matchAll(/^\s*TURBO_CACHE:\s*["']([^"']+)["']\s*$/gm),
+    ].map((match) => match[1]);
+    assert.equal(
+      cacheModes.length,
+      1,
+      'build job must set exactly one TURBO_CACHE'
+    );
+    // Purge ambient TURBO_* so only the redacted file plus the job cache
+    // mode reach turbo: --dry must prove hermetic, offline acceptance.
+    const env = { ...process.env };
+    for (const key of Object.keys(env)) {
+      if (key.startsWith('TURBO_')) delete env[key];
+    }
+    for (const rawLine of readFileSync(envFile, 'utf8').split('\n')) {
+      const match = /^(?:export[ \t]+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(
+        rawLine.trim()
+      );
+      if (!match) continue;
+      let value = match[2].trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      env[match[1]] = value;
+    }
+    // Prove both deletions behaviorally: without this, the job-mode
+    // assignment below would mask a TURBO_CACHE deletion regression.
+    assert.ok(!('TURBO_CACHE' in env), 'redacted file must carry no TURBO_CACHE');
+    assert.ok(
+      !('TURBO_REMOTE_ONLY' in env),
+      'redacted file must carry no TURBO_REMOTE_ONLY'
+    );
+    env.TURBO_CACHE = cacheModes[0];
+    // Prove every sibling-flag state, not just the fixture's true/true.
+    for (const download of ['true', 'false']) {
+      for (const summary of ['true', 'false']) {
+        env.TURBO_DOWNLOAD_LOCAL_ENABLED = download;
+        env.TURBO_RUN_SUMMARY = summary;
+        const dry = spawnSync(
+          'pnpm',
+          ['exec', 'turbo', 'build', '--filter=@baci/web', '--dry=json'],
+          {
+            cwd: repoRoot,
+            env,
+            encoding: 'utf8',
+            timeout: 180000,
+            maxBuffer: 64 * 1024 * 1024,
+          }
+        );
+        assert.equal(
+          dry.status,
+          0,
+          `flags ${download}/${summary}: ${(dry.stderr || '').slice(-2000)}`
+        );
+        assert.doesNotMatch(
+          dry.stderr || '',
+          /Cannot set [`']?cache[`']? config/
+        );
+      }
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

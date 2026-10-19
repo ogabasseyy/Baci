@@ -23,6 +23,7 @@ import { openCreditDirectCheckout } from '@/lib/credit-direct-client';
 import { openCredPalCheckout } from '@/lib/credpal';
 import { hasPriceNegotiationEntitlement } from '@/lib/feature-flags';
 import { captureCheckoutFunnelEventOnce } from '@/lib/posthog/capture-checkout-funnel-event';
+import { MobileOrderSummary as mockMobileOrderSummary } from '../components/MobileCheckoutComponents';
 import * as checkoutIdempotency from './checkout/checkout-idempotency';
 import {
   CHECKOUT_IDEMPOTENCY_STORAGE_KEY,
@@ -37,6 +38,8 @@ import {
   mockCaptureClientEvent,
   walletFundedTransferMock,
 } from './checkout-page.test-fixtures';
+
+const mockRouterPush = vi.fn();
 
 function mockCheckoutSubmissionState() {
   vi.mocked(useCart).mockReturnValue({
@@ -108,7 +111,7 @@ beforeEach(() => {
   window.sessionStorage.clear();
   addressAutocompleteMock.selectedPlace = null;
   vi.mocked(useRouter).mockReturnValue({
-    push: vi.fn(),
+    push: mockRouterPush,
     back: vi.fn(),
     replace: vi.fn(),
   } as unknown as ReturnType<typeof useRouter>);
@@ -161,6 +164,8 @@ export {
   mockCaptureCheckoutFunnelEventOnce,
   mockCaptureClientEvent,
   mockCheckoutSubmissionState,
+  mockMobileOrderSummary,
+  mockRouterPush,
   openCreditDirectCheckout,
   openCredPalCheckout,
   readCreditDirectPopupMarker,

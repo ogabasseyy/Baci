@@ -71,7 +71,7 @@ export function RepairsFallback() {
       <View style={styles.stepsContainer}>
         {REPAIR_WORKFLOW_STEPS.map((step, index) => (
           <View
-            key={index}
+            key={step.title}
             style={[styles.stepCard, { backgroundColor: colors.card }]}
           >
             <View style={styles.stepIconContainer}>
@@ -94,9 +94,9 @@ export function RepairsFallback() {
         Our Services
       </Text>
       <View style={styles.servicesList}>
-        {REPAIR_SERVICES.map((service, index) => (
+        {REPAIR_SERVICES.map((service) => (
           <Pressable
-            key={index}
+            key={service.title}
             style={[styles.serviceCard, { backgroundColor: colors.card }]}
             onPress={() => handleBookRepair(service.title)}
             accessibilityRole="button"

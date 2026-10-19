@@ -18,6 +18,7 @@ function terminalQuery(data: unknown, error: Error | null = null) {
   const query = {
     eq: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),
+    neq: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     single: vi.fn().mockResolvedValue({ data, error }),
@@ -42,6 +43,7 @@ describe('drainFailedOrderCancellationSideEffects', () => {
       .fn()
       .mockReturnValueOnce(terminalQuery([candidate]))
       .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
       .mockReturnValueOnce(
         terminalQuery({
           cancellation_reason: 'Unavailable',
@@ -62,6 +64,290 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     expect(result.drained).toEqual([
       { orderId: 'order-1', step: 'customer_email' },
     ]);
+  });
+
+  it('stops starting candidates once the invocation deadline passes', async () => {
+    const candidate = {
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([candidate]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]));
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_270_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(mocks.run).not.toHaveBeenCalled();
+      expect(from).toHaveBeenCalledTimes(3);
+      expect(result).toEqual({ drained: [], failed: [], skipped: [] });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('skips an email step without claiming when its sender budget will not fit', async () => {
+    const candidate = {
+      attempts: 4,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([candidate]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]));
+    // 30s left: past the deadline guard but short of the 48s
+    // single-attempt sender budget. Claiming would burn the final
+    // attempt only for the email to refuse before sending.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(mocks.run).not.toHaveBeenCalled();
+      expect(from).toHaveBeenCalledTimes(3);
+      expect(result).toEqual({ drained: [], failed: [], skipped: [] });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('admits an email against the separate email cutoff', async () => {
+    const candidate = {
+      attempts: 1,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([candidate]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({
+          cancellation_reason: 'Unavailable',
+          id: 'order-1',
+          merchant_id: 'merchant-1',
+        })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+    // 30s to the side-effect deadline but 56s to the email cutoff
+    // (48s sender budget plus the 8s claim allowance): the shared
+    // deadline alone would exclude the email at fetch time on every
+    // backlog run.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        emailDeadlineMs: 1_296_000,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(mocks.run).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: 'order-1', step: 'customer_email' })
+      );
+      expect(result.drained).toEqual([
+        { orderId: 'order-1', step: 'customer_email' },
+      ]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('fills the batch past a budget-ineligible email instead of starving refunds', async () => {
+    const email = {
+      attempts: 1,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    };
+    const refund = {
+      attempts: 1,
+      claimed_at: '2026-07-22T00:00:00Z',
+      order_id: 'order-2',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([email, refund]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-2', merchant_id: 'merchant-2' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-2' }));
+    // One slot left and 30s on the clock: the older email cannot meet
+    // its 48s sender budget, so the refund must take the slot instead
+    // of the batch going out empty every invocation.
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        limit: 1,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(mocks.run).toHaveBeenCalledTimes(1);
+      expect(mocks.run).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: 'order-2', step: 'refund' })
+      );
+      expect(result.drained).toEqual([{ orderId: 'order-2', step: 'refund' }]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('excludes emails from the fetch when the admission budget is already short', async () => {
+    const refund = {
+      attempts: 1,
+      claimed_at: '2026-07-22T00:00:00Z',
+      order_id: 'order-2',
+      step: 'refund',
+    };
+    // With limit 1 and an older email ahead of this refund, the
+    // unfiltered SQL fetch would return only the email and the batch
+    // would go out empty on every invocation; the exclusion lets the
+    // database return the refund instead.
+    const failedQuery = terminalQuery([refund]);
+    const deferredQuery = terminalQuery([]);
+    const staleQuery = terminalQuery([]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(failedQuery)
+      .mockReturnValueOnce(staleQuery)
+      .mockReturnValueOnce(deferredQuery)
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-2', merchant_id: 'merchant-2' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-2' }));
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_240_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        limit: 1,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(failedQuery.neq).toHaveBeenCalledWith('step', 'customer_email');
+      expect(deferredQuery.neq).toHaveBeenCalledWith('step', 'customer_email');
+      // Stale-claim terminalization is budget-independent.
+      expect(staleQuery.neq).not.toHaveBeenCalled();
+      expect(mocks.run).toHaveBeenCalledTimes(1);
+      expect(mocks.run).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: 'order-2', step: 'refund' })
+      );
+      expect(result.drained).toEqual([{ orderId: 'order-2', step: 'refund' }]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('fetches emails normally when the admission budget fits', async () => {
+    const email = {
+      attempts: 1,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    };
+    const failedQuery = terminalQuery([email]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(failedQuery)
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_200_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        limit: 1,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(failedQuery.neq).not.toHaveBeenCalled();
+      expect(mocks.run).toHaveBeenCalledWith(
+        expect.objectContaining({ orderId: 'order-1', step: 'customer_email' })
+      );
+      expect(result.drained).toEqual([
+        { orderId: 'order-1', step: 'customer_email' },
+      ]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('skips an email without claiming when lookups burn the send margin', async () => {
+    const email = {
+      attempts: 4,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'customer_email',
+    };
+    const failedQuery = terminalQuery([email]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(failedQuery)
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+    // 70s at admission, then 49s after the order/merchant reads: above
+    // the 48s send threshold the old code claimed on, but short of the
+    // send-plus-claim budget, so claiming would burn the final attempt
+    // on an admission refusal. Calls: fetch exclusion, stale cutoff,
+    // batch fill, deadline guard, pre-read backstop, post-read recheck.
+    const now = vi
+      .spyOn(Date, 'now')
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValueOnce(1_200_000)
+      .mockReturnValue(1_221_000);
+
+    try {
+      const result = await drainFailedOrderCancellationSideEffects({
+        deadlineMs: 1_270_000,
+        limit: 1,
+        sendCancellationEmail: vi.fn(),
+        supabase: { from } as never,
+      });
+
+      expect(failedQuery.neq).not.toHaveBeenCalled();
+      expect(mocks.run).not.toHaveBeenCalled();
+      expect(from).toHaveBeenCalledTimes(5);
+      expect(result).toEqual({ drained: [], failed: [], skipped: [] });
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('fails closed when candidate lookup fails', async () => {
@@ -100,6 +386,7 @@ describe('drainFailedOrderCancellationSideEffects', () => {
       .fn()
       .mockReturnValueOnce(terminalQuery([]))
       .mockReturnValueOnce(staleQuery)
+      .mockReturnValueOnce(terminalQuery([]))
       .mockReturnValueOnce(updateQuery);
 
     const result = await drainFailedOrderCancellationSideEffects({
@@ -116,12 +403,160 @@ describe('drainFailedOrderCancellationSideEffects', () => {
     expect(updateQuery.update).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'delivery_uncertain' })
     );
-    expect(result.skipped).toEqual([
+    expect(result.failed).toEqual([
       {
         orderId: 'order-2',
         reason: 'stale_claim_delivery_uncertain',
         step: 'refund',
       },
     ]);
+    expect(result.skipped).toEqual([]);
+  });
+
+  it('resumes deferred rows regardless of spent attempts', async () => {
+    const candidate = {
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const deferredQuery = terminalQuery([candidate]);
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(deferredQuery)
+      .mockReturnValueOnce(
+        terminalQuery({
+          id: 'order-1',
+          merchant_id: 'merchant-1',
+        })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    const result = await drainFailedOrderCancellationSideEffects({
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    expect(deferredQuery.eq).toHaveBeenCalledWith('status', 'deferred');
+    expect(deferredQuery.lt).not.toHaveBeenCalledWith(
+      'attempts',
+      expect.anything()
+    );
+    expect(mocks.run).toHaveBeenCalledWith(
+      expect.objectContaining({ orderId: 'order-1', step: 'refund' })
+    );
+    expect(result.drained).toEqual([{ orderId: 'order-1', step: 'refund' }]);
+  });
+
+  it('marks the final failed attempt so rate limits file evidence', async () => {
+    const lastAttempt = {
+      attempts: 4,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const freshAttempt = {
+      attempts: 1,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-2',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([lastAttempt, freshAttempt]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-2', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    await drainFailedOrderCancellationSideEffects({
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    expect(mocks.run).toHaveBeenCalledTimes(2);
+    for (const call of mocks.run.mock.calls) {
+      await (call[0] as { execute: () => Promise<unknown> }).execute();
+    }
+    expect(mocks.execute).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ isLastAttempt: true })
+    );
+    expect(mocks.execute).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ isLastAttempt: false })
+    );
+  });
+
+  it('marks an already-exhausted deferred row as the last attempt', async () => {
+    const deferred = {
+      attempts: 4,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([deferred]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    await drainFailedOrderCancellationSideEffects({
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    await (
+      mocks.run.mock.calls[0][0] as { execute: () => Promise<unknown> }
+    ).execute();
+    // A 429 on this row is recorded as an ordinary failure the capped
+    // failed-queue never reselects, so without the flag the leg would
+    // disappear without its exhausted-rate-limit review.
+    expect(mocks.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ isLastAttempt: true })
+    );
+  });
+
+  it('runs a fresh deferred row as a non-final attempt', async () => {
+    const deferred = {
+      attempts: 1,
+      claimed_at: '2026-07-21T00:00:00Z',
+      order_id: 'order-1',
+      step: 'refund',
+    };
+    const from = vi
+      .fn()
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([]))
+      .mockReturnValueOnce(terminalQuery([deferred]))
+      .mockReturnValueOnce(
+        terminalQuery({ id: 'order-1', merchant_id: 'merchant-1' })
+      )
+      .mockReturnValueOnce(terminalQuery({ id: 'merchant-1' }));
+
+    await drainFailedOrderCancellationSideEffects({
+      sendCancellationEmail: vi.fn(),
+      supabase: { from } as never,
+    });
+
+    expect(mocks.run).toHaveBeenCalledTimes(1);
+    await (
+      mocks.run.mock.calls[0][0] as { execute: () => Promise<unknown> }
+    ).execute();
+    expect(mocks.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ isLastAttempt: false })
+    );
   });
 });

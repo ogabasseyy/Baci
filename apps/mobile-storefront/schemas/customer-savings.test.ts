@@ -10,7 +10,24 @@ import {
   SavingsGoalActionResponseSchema,
   SavingsGoalSchema,
   SavingsGoalSummarySchema,
+  SavingsVariantResolutionResponseSchema,
 } from '@/schemas/customer-savings';
+
+it('parses completed variant resolution responses', () => {
+  const input = { goalId: 'goal-1', goalStatus: 'completed', success: true };
+
+  const result = SavingsVariantResolutionResponseSchema.parse(input);
+
+  expect(result).toEqual(input);
+});
+
+it('rejects variant resolution responses for active goals', () => {
+  const input = { goalId: 'goal-1', goalStatus: 'active', success: true };
+
+  const result = SavingsVariantResolutionResponseSchema.safeParse(input);
+
+  expect(result.success).toBe(false);
+});
 
 const validGoal = {
   breakFeePercent: 0,
@@ -56,9 +73,12 @@ describe('customer savings schemas', () => {
     ).toThrow();
   });
 
+  // Previously asserted integer-only amounts (1.5 rejected). The ledger
+  // stores numeric(12, 2), so kobo-precision values like 1.5 must parse;
+  // only sub-kobo precision is rejected now.
   it('rejects invalid savings goal amount boundaries', () => {
     for (const field of ['contributionAmount', 'targetAmount'] as const) {
-      for (const value of [0, -1, 1.5]) {
+      for (const value of [0, -1, 1.015]) {
         expect(() =>
           SavingsGoalSchema.parse({
             ...validGoal,
@@ -66,9 +86,12 @@ describe('customer savings schemas', () => {
           })
         ).toThrow();
       }
+      expect(
+        SavingsGoalSchema.parse({ ...validGoal, [field]: 1.5 })[field]
+      ).toBe(1.5);
     }
 
-    for (const value of [-1, 1.5]) {
+    for (const value of [-1, 1.015]) {
       expect(() =>
         SavingsGoalSchema.parse({
           ...validGoal,
@@ -195,8 +218,20 @@ describe('customer savings schemas', () => {
     ).toHaveLength(1);
   });
 
+  it('still rejects invalid money fields in the older staging creation response', () => {
+    expect(() =>
+      SavingsGoalSummarySchema.parse({
+        currentAmount: '0',
+        goalId: 'goal-staging',
+        goalStatus: 'active',
+        success: true,
+        walletBalance: 0,
+      })
+    ).toThrow();
+  });
+
   it('rejects invalid savings device swap responses', () => {
-    for (const currentAmount of [-1, 1.5]) {
+    for (const currentAmount of [-1, 1.015]) {
       expect(() =>
         SavingsDeviceSwapResponseSchema.parse({
           ...validDeviceSwapResponse,
@@ -205,7 +240,7 @@ describe('customer savings schemas', () => {
       ).toThrow();
     }
 
-    for (const targetAmount of [0, -1, 1.5]) {
+    for (const targetAmount of [0, -1, 1.015]) {
       expect(() =>
         SavingsDeviceSwapResponseSchema.parse({
           ...validDeviceSwapResponse,
@@ -260,5 +295,47 @@ describe('customer savings schemas', () => {
         success: true,
       })
     ).toThrow();
+  });
+
+  it('accepts kobo-precision balances in goals responses', () => {
+    // A 101-kobo transfer lands as numeric 1.01 in current_amount; the
+    // whole goals response must parse instead of failing checkout.
+    const result = ListSavingsGoalsResponseSchema.parse({
+      goals: [{ ...validGoal, currentAmount: 1.01 }],
+      summary: { activeGoalCount: 1, savingsBalance: 1.01 },
+    });
+
+    expect(result.goals[0]?.currentAmount).toBe(1.01);
+    expect(
+      SavingsContributionResponseSchema.parse({
+        contributionId: 'contribution-1',
+        goalCurrentAmount: 120000.5,
+        goalStatus: 'active',
+        success: true,
+        walletBalance: 60000.25,
+        walletTransactionId: null,
+      }).goalCurrentAmount
+    ).toBe(120000.5);
+  });
+
+  it('rejects sub-kobo precision and non-finite amounts', () => {
+    expect(
+      ListSavingsGoalsResponseSchema.safeParse({
+        goals: [{ ...validGoal, currentAmount: 1.015 }],
+        summary: { activeGoalCount: 1, savingsBalance: 0 },
+      }).success
+    ).toBe(false);
+    expect(
+      SavingsGoalSchema.safeParse({ ...validGoal, currentAmount: -1 }).success
+    ).toBe(false);
+    expect(
+      SavingsGoalSchema.safeParse({
+        ...validGoal,
+        currentAmount: Number.POSITIVE_INFINITY,
+      }).success
+    ).toBe(false);
+    expect(
+      SavingsGoalSchema.safeParse({ ...validGoal, targetAmount: 0 }).success
+    ).toBe(false);
   });
 });

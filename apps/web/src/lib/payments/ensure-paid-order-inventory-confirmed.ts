@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { revalidateProducts } from '@/lib/cache-revalidation';
 import { logger } from '@/lib/logger';
+import { scheduleOrderBlogPurgeForOrderAfterResponse } from '@/lib/schedule-order-blog-purge-for-order-after-response';
 
 export class SerializedInventoryUnavailableError extends Error {
   constructor() {
@@ -71,6 +72,11 @@ export async function ensurePaidOrderInventoryConfirmed(
         orderId,
       });
     }
+    scheduleOrderBlogPurgeForOrderAfterResponse({
+      supabase,
+      merchantId,
+      orderId,
+    });
   }
 
   if (
@@ -81,6 +87,13 @@ export async function ensurePaidOrderInventoryConfirmed(
     throw new SerializedInventoryUnavailableError();
   }
 }
+
+const ORDER_CANCELLED_STATUS_SPELLINGS = [
+  ['payment_status', 'cancelled'],
+  ['payment_status', 'canceled'],
+  ['shipping_status', 'cancelled'],
+  ['shipping_status', 'canceled'],
+] as const;
 
 export interface OrderStatusRollbackSnapshot {
   payment_status: string | null;
@@ -108,7 +121,7 @@ export async function rollbackOrderStatusAfterInventoryConfirmationFailure(
   }
 ): Promise<void> {
   const guard = options?.onlyIfPaymentStatus;
-  const restore = supabase
+  let restore = supabase
     .from('orders')
     .update({
       payment_status: previousStatus.payment_status,
@@ -121,20 +134,20 @@ export async function rollbackOrderStatusAfterInventoryConfirmationFailure(
     .eq('merchant_id', merchantId);
 
   if (guard && guard.length > 0) {
-    const { error } = await restore
-      .in('payment_status', guard)
-      .select('id')
-      .maybeSingle();
-    if (error) {
-      throw new Error(
-        `rollback_order_status_after_inventory_confirmation_failure failed: ${error.message}`
-      );
-    }
-    return;
+    restore = restore.in('payment_status', guard);
+  }
+  // The cancellation fence is unconditional: a merchant cancellation
+  // can commit while inventory confirmation is in flight at ANY caller
+  // (a webhook's own write already landed), and restoring the stale
+  // pre-update snapshot would move the order back out of cancelled
+  // after its cancellation side effects already ran (e.g. the loyalty
+  // claim release). Both spellings ride on both status axes; zero
+  // matching rows resolve silently (the row moved on or is cancelled).
+  for (const [column, spelling] of ORDER_CANCELLED_STATUS_SPELLINGS) {
+    restore = restore.neq(column, spelling);
   }
 
-  const { error } = await restore.select('id').single();
-
+  const { error } = await restore.select('id').maybeSingle();
   if (error) {
     throw new Error(
       `rollback_order_status_after_inventory_confirmation_failure failed: ${error.message}`

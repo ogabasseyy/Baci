@@ -18,6 +18,7 @@ import {
   getPlanFeatures,
   getUpgradeCTA,
   hasSmartCartPro,
+  isPlanTier,
   type PlanTier,
   planHasFeature,
 } from '@/lib/feature-flags';
@@ -51,30 +52,13 @@ interface MerchantFeaturesResult {
 
 export function useMerchantFeatures(): MerchantFeaturesResult {
   const merchantContext = useMerchantSafe();
-  const merchant = merchantContext?.merchant;
   const isLoading = merchantContext?.loading ?? true;
 
-  // Get plan tier from merchant data (default to 'free')
-  // TODO: Add plan_tier column to merchants table
-  const planTier: PlanTier = (() => {
-    if (!merchant) return 'free';
-
-    // If merchant has plan_tier field, use it
-    // @ts-expect-error - plan_tier not yet in type
-    if (merchant.plan_tier) {
-      // @ts-expect-error - plan_tier not yet in type
-      return merchant.plan_tier as PlanTier;
-    }
-
-    // Temporary: Check for known premium merchants
-    // Remove this once plan_tier is in database
-    const premiumSlugs = ['ogabassey', 'demo-premium'];
-    if (merchant.slug && premiumSlugs.includes(merchant.slug)) {
-      return 'pro';
-    }
-
-    return 'free';
-  })();
+  // `merchants.plan_tier` is NOT NULL with a 'free' default, so the merchant
+  // row is authoritative. An absent or unknown tier fails closed to 'free'
+  // rather than consulting a hardcoded premium-slug allowlist.
+  const rawPlanTier = merchantContext?.merchant?.plan_tier;
+  const planTier: PlanTier = isPlanTier(rawPlanTier) ? rawPlanTier : 'free';
 
   const hasFeature = (feature: FeatureKey) => planHasFeature(planTier, feature);
 

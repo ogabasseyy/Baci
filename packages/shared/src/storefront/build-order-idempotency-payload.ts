@@ -36,6 +36,12 @@ export type OrderIdempotencyPayloadInput = {
     city?: string | null;
     state?: string | null;
   } | null;
+  shared_cart?: {
+    cart_id?: string | null;
+    cart_version?: number | null;
+    checkout_generation?: number | null;
+    checkout_session_id?: string | null;
+  } | null;
   shipping_fee?: number;
   shipping_provider?: string | null;
   shipping_rate_id?: string | null;
@@ -190,6 +196,22 @@ export function buildOrderIdempotencyPayload(
     savings_amount: normalizeNumber(input.savings_amount),
     savings_goal_id: normalizeText(input.savings_goal_id) || null,
     selected_quote_id: normalizeText(input.selected_quote_id) || null,
+    // Bound shared-cart checkouts hash their reviewed cart identity:
+    // without it, a second cart reusing the key with identical order
+    // fields would replay the first cart's order. Omitted entirely
+    // for unbound checkouts so their hashes stay byte-identical.
+    shared_cart: input.shared_cart
+      ? {
+          cart_id: normalizeText(input.shared_cart.cart_id),
+          cart_version: normalizeNumber(input.shared_cart.cart_version),
+          checkout_generation: normalizeNumber(
+            input.shared_cart.checkout_generation
+          ),
+          checkout_session_id: normalizeText(
+            input.shared_cart.checkout_session_id
+          ),
+        }
+      : undefined,
     shipping_address: {
       address: normalizeText(input.shipping_address?.address),
       city: normalizeText(input.shipping_address?.city),

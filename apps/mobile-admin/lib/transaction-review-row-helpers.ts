@@ -107,6 +107,10 @@ export function collectDetailValues(values: unknown[], keys: Set<string>) {
   ).filter(Boolean);
 }
 
+// Canonical UTC date matching the search RPC gate (identical index string).
+export const toCanonicalSearchDate = (date: string) =>
+  Number.isNaN(Date.parse(date)) ? date : new Date(date).toISOString();
+
 export function buildSearchText(tokens: unknown[]) {
   return tokens
     .flatMap((token) => {

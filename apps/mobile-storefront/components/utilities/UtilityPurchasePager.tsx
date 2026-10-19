@@ -73,7 +73,9 @@ export function UtilityPurchasePager({
               currentType === 'airtime' ? quickRepeat.recentRecipients : []
             }
             onSelectRecentRecipient={quickRepeat.handleRecipientSelect}
-            onSuccess={onSuccess}
+            onSuccess={(result) =>
+              onSuccess({ ...result, utilityType: 'airtime' })
+            }
           />
         )}
       </View>
@@ -92,7 +94,9 @@ export function UtilityPurchasePager({
               currentType === 'data' ? quickRepeat.recentRecipients : []
             }
             onSelectRecentRecipient={quickRepeat.handleRecipientSelect}
-            onSuccess={onSuccess}
+            onSuccess={(result) =>
+              onSuccess({ ...result, utilityType: 'data' })
+            }
           />
         )}
       </View>
@@ -118,7 +122,7 @@ export function UtilityPurchasePager({
             }
             onSelectRecentRecipient={quickRepeat.handleRecipientSelect}
             type="tv"
-            onSuccess={onSuccess}
+            onSuccess={(result) => onSuccess({ ...result, utilityType: 'tv' })}
           />
         )}
       </View>
@@ -144,7 +148,9 @@ export function UtilityPurchasePager({
             }
             onSelectRecentRecipient={quickRepeat.handleRecipientSelect}
             type="power"
-            onSuccess={onSuccess}
+            onSuccess={(result) =>
+              onSuccess({ ...result, utilityType: 'power' })
+            }
           />
         )}
       </View>
@@ -172,7 +178,9 @@ export function UtilityPurchasePager({
             }
             onSelectRecentRecipient={quickRepeat.handleRecipientSelect}
             type="gaming"
-            onSuccess={onSuccess}
+            onSuccess={(result) =>
+              onSuccess({ ...result, utilityType: 'gaming' })
+            }
           />
         )}
       </View>

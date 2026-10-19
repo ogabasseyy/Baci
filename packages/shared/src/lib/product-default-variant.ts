@@ -1,3 +1,4 @@
+import { isProductVariantPurchasable } from './is-product-variant-purchasable';
 import {
   getCanonicalProductConditionPreferenceRank,
   normalizeCanonicalProductCondition,
@@ -10,6 +11,8 @@ export interface ProductDefaultVariantLike {
   compare_at_price?: number | null;
   condition?: string | null;
   in_stock?: boolean | null;
+  /** Canonical eligibility projected by the public option adapter. */
+  is_purchasable?: boolean;
   price?: number | null;
   price_modifier?: number | null;
   price_override?: number | null;
@@ -85,25 +88,6 @@ function getVariantPrice(
   }
 
   return basePrice;
-}
-
-function isVariantPurchasable(
-  manageStock: boolean | null | undefined,
-  variant: ProductDefaultVariantLike
-) {
-  if (manageStock === false) {
-    return true;
-  }
-
-  if (typeof variant.stock_quantity === 'number') {
-    return variant.stock_quantity > 0;
-  }
-
-  if (typeof variant.in_stock === 'boolean') {
-    return variant.in_stock;
-  }
-
-  return true;
 }
 
 function getVariantCondition<TVariant extends ProductDefaultVariantLike>(
@@ -211,7 +195,7 @@ export function resolveDefaultVariantSelection<
   const purchasableVariants = variants
     .map((variant, index) => ({ variant, index }))
     .filter(({ variant }) =>
-      isVariantPurchasable(product.manage_stock, variant)
+      isProductVariantPurchasable(product.manage_stock, variant)
     )
     .filter(({ variant }) => {
       if (!usesConditionAxis || !requestedCondition) {
@@ -255,7 +239,7 @@ export function resolveLowestPricedVariantSelection<
   const purchasableVariants = variants
     .map((variant, index) => ({ variant, index }))
     .filter(({ variant }) =>
-      isVariantPurchasable(product.manage_stock, variant)
+      isProductVariantPurchasable(product.manage_stock, variant)
     );
 
   if (purchasableVariants.length === 0) {
@@ -301,7 +285,7 @@ function resolveVariantSelectionInternal<
     .filter(({ variant }) =>
       config.includeOutOfStock
         ? true
-        : isVariantPurchasable(product.manage_stock, variant)
+        : isProductVariantPurchasable(product.manage_stock, variant)
     );
 
   if (variantCandidates.length === 0) {

@@ -17,7 +17,7 @@ function mismatch(tool: string): never {
 
 export function createSupabaseReplayDatabaseEnvironment(
   databaseUrl: string,
-  environment: NodeJS.ProcessEnv = process.env
+  environment: Partial<NodeJS.ProcessEnv> = process.env
 ): NodeJS.ProcessEnv {
   try {
     const parsed = new URL(databaseUrl);
@@ -48,7 +48,7 @@ export function createSupabaseReplayDatabaseEnvironment(
       PGPASSWORD: password,
       PGPORT: parsed.port,
       PGUSER: user,
-    };
+    } as unknown as NodeJS.ProcessEnv;
   } catch {
     throw new Error('Supabase replay database URL is not supported');
   }
@@ -122,7 +122,7 @@ export async function readSupabaseReplayDatabaseUrl(
 }
 
 export function readReplayCommandExecutionTimeoutMs(
-  environment: NodeJS.ProcessEnv = process.env
+  environment: Partial<NodeJS.ProcessEnv> = process.env
 ): number {
   const raw = environment.BACI_REPLAY_COMMAND_TIMEOUT_MS;
   if (raw === undefined || raw === '') {

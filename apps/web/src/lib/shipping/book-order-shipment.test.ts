@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrderShipmentBookingError } from '@/lib/shipping/order-shipment-booking-utils';
 
+type OrderShipmentBookingUtilsModule =
+  typeof import('@/lib/shipping/order-shipment-booking-utils');
+
 vi.mock('@/lib/shipping', () => ({
   shippingService: {
     getProviderQuotes: vi.fn(),
@@ -15,10 +18,7 @@ vi.mock('@/lib/shipping/refresh-order-shipment-quote', async () => ({
 vi.mock(
   '@/lib/shipping/order-shipment-booking-utils',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/shipping/order-shipment-booking-utils')
-      >();
+    const actual = await importOriginal<OrderShipmentBookingUtilsModule>();
     return {
       ...actual,
       buildReceiver: vi.fn().mockReturnValue({

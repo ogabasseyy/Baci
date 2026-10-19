@@ -37,7 +37,15 @@ export function getCartItemCheckoutUnitPrice(item: CartItem): number {
     return 0;
   }
 
-  const rawPrice = item.negotiatedPrice ?? item.price;
+  // A negotiated price applies only once the merchant accepted it:
+  // shared carts carry pending/rejected proposals on the line, and
+  // the server (and its reviewed checkout snapshot) prices those at
+  // catalog. Legacy lines carry no status and keep their price.
+  const negotiatedApplies =
+    item.negotiatedPrice != null &&
+    item.negotiationStatus !== 'pending' &&
+    item.negotiationStatus !== 'rejected';
+  const rawPrice = negotiatedApplies ? item.negotiatedPrice : item.price;
   return typeof rawPrice === 'number' && !Number.isNaN(rawPrice) ? rawPrice : 0;
 }
 

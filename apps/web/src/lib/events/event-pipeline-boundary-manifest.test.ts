@@ -71,15 +71,16 @@ describe('event pipeline authority manifest', () => {
       'apps/web/src/app/api/analytics/tiktok/route.ts':
         '4d59510f6a72ae25dd45c8cc8ea6762a709bf745286140a7a9e1aa4b64ee942e',
       'apps/web/src/app/api/platform/events/route.ts':
-        'bb3b5ea163f7029bd8a90523ac7944c9e126b2aebc0ce673f82c4e0c48d00161',
+        '0e62bed087fd29cb290af99f39dbc8589f9739ff06adde55598045945df7b7b1',
       'apps/web/src/app/api/orders/route.ts':
-        'b772d23ef6f99f375ff26d9eddd55fb92fc0fa1e3b0bc2a317c760f5f39fec5e',
+        '14db80c5b09cc8b051e99967915ab7665b971a7f994f2a14d507794995836936',
       'apps/web/src/app/api/payments/juicyway/webhook/route.ts':
         'a8748056acf57c8fe4aea5b5dbf6a2bbcd1599e7aa57af3130cf95c277e61ef5',
     });
     expect(manifest.trustedWrapperImporters).toEqual([
       'apps/web/src/app/api/analytics/conversion/route.ts',
       'apps/web/src/app/api/events/route.ts',
+      'apps/web/src/app/api/search/submissions/route.ts',
     ]);
     expect(manifest.sdkConstructorHashes).toEqual({
       'apps/web/src/lib/events/event-ingress-capability.ts':

@@ -514,6 +514,124 @@ describe('zeptomail audit logging', () => {
     });
   });
 
+  it('skips the platform fallback when the remaining budget cannot fit it', async () => {
+    getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
+    // Non-retryable rejection for the custom sender; the platform sender
+    // would succeed, but the fallback must not start on a short budget.
+    // Single-attempt worst case is 38s, so 20s cannot fit even one shot.
+    sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {
+      if (args.from?.address === 'orders@ogabassey.com') {
+        return Promise.reject({
+          error: { code: 'TM_3201', message: 'Invalid sender domain' },
+        });
+      }
+      return Promise.resolve({ request_id: 'zepto-fellback' });
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Order Confirmation',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      fallbackDeadlineMs: Date.now() + 20_000,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result).toMatchObject({ errorCode: 'TM_3201' });
+    expect(sendMailMock.mock.calls.map((c) => c[0]?.from?.address)).toEqual([
+      'orders@ogabassey.com',
+    ]);
+  });
+
+  it('runs a single fallback attempt when one shot fits the remaining budget', async () => {
+    getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
+    // 60s cannot fit another full retry loop, but the deadline-driven
+    // fallback is a single 38s shot: it must run instead of skipping
+    // on every retry until the row exhausts.
+    sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {
+      if (args.from?.address === 'orders@ogabassey.com') {
+        return Promise.reject({
+          error: { code: 'TM_3201', message: 'Invalid sender domain' },
+        });
+      }
+      return Promise.reject({
+        error: { code: 'TM_5001', message: 'Server overloaded' },
+      });
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Order Confirmation',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      fallbackDeadlineMs: Date.now() + 60_000,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result).toMatchObject({ errorCode: 'TM_5001' });
+    // One custom attempt plus exactly one platform attempt: no
+    // in-process retries on the fallback — the sweep retries.
+    expect(sendMailMock.mock.calls.map((c) => c[0]?.from?.address)).toEqual([
+      'orders@ogabassey.com',
+      'orders@usebaci.com',
+    ]);
+  });
+
+  it('stops after one attempt per sender when capped', async () => {
+    sendMailMock.mockRejectedValue({
+      error: { message: 'Server overloaded', code: 'TM_5001', details: null },
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Capped Test',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      maxAttemptsPerSender: 1,
+    });
+
+    // Retryable, but the cap means no in-process retry and no pointless
+    // backoff sleep: the cron tick retries instead.
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('TM_5001');
+    expect(result).not.toHaveProperty('deliveryOutcome');
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the platform fallback when the remaining budget fits it', async () => {
+    getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
+    sendMailMock.mockImplementation((args: { from?: { address?: string } }) => {
+      if (args.from?.address === 'orders@ogabassey.com') {
+        return Promise.reject({
+          error: { code: 'TM_3201', message: 'Invalid sender domain' },
+        });
+      }
+      return Promise.resolve({ request_id: 'zepto-fellback' });
+    });
+    const { sendEmail } = await import('./zeptomail');
+
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Order Confirmation',
+      htmlContent: '<p>Hello</p>',
+      emailType: 'orders',
+      auditContext: { merchantId: 'merchant-1', orderId: 'order-1' },
+      fallbackDeadlineMs: Date.now() + 200_000,
+    });
+
+    expect(result).toEqual({ success: true, messageId: 'zepto-fellback' });
+    expect(sendMailMock.mock.calls.map((c) => c[0]?.from?.address)).toEqual([
+      'orders@ogabassey.com',
+      'orders@usebaci.com',
+    ]);
+  });
+
   it('does not try a platform fallback after an ambiguous custom-domain send', async () => {
     getActiveMerchantSendingDomainMock.mockResolvedValue('ogabassey.com');
     sendMailMock.mockRejectedValueOnce(
@@ -597,5 +715,67 @@ describe('zeptomail audit logging', () => {
     expect(getActiveMerchantSendingDomainMock).toHaveBeenCalledWith(
       'explicit-merchant'
     );
+  });
+
+  it('still resolves success when the accepted-audit write throws', async () => {
+    sendMailMock.mockResolvedValue({ request_id: 'zepto-accepted' });
+    const adminModule = await import('@/lib/supabase/admin');
+    vi.mocked(adminModule.createAdminClient).mockImplementation((() => ({
+      from: () => ({
+        insert: () => ({
+          select: () =>
+            Promise.resolve({ data: [{ id: 'attempt-1' }], error: null }),
+        }),
+        update: () => ({
+          in: () => Promise.reject(new Error('audit store down')),
+        }),
+      }),
+    })) as never);
+    const { sendEmail } = await import('./zeptomail');
+
+    // The provider already accepted: a throw here would corrupt the
+    // outcome into a failure and make the caller resend. Audit
+    // writes resolve every failure so the accept survives.
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Test',
+      htmlContent: '<p>Hello</p>',
+    });
+
+    expect(result).toEqual({
+      success: true,
+      messageId: 'zepto-accepted',
+    });
+  });
+
+  it('still resolves failure when the failure-audit write throws', async () => {
+    sendMailMock.mockRejectedValue(
+      Object.assign(new Error('provider rejected'), { code: 'TM_4001' })
+    );
+    const adminModule = await import('@/lib/supabase/admin');
+    vi.mocked(adminModule.createAdminClient).mockImplementation((() => ({
+      from: () => ({
+        insert: () => ({
+          select: () =>
+            Promise.resolve({ data: [{ id: 'attempt-1' }], error: null }),
+        }),
+        update: () => ({
+          in: () => Promise.reject(new Error('audit store down')),
+        }),
+      }),
+    })) as never);
+    const { sendEmail } = await import('./zeptomail');
+
+    // Dispatch was attempted: per the dispatch-boundary contract a
+    // throw would wrongly read as pre-dispatch (safe to retry at
+    // once), so the outcome resolves as a definite rejection.
+    const result = await sendEmail({
+      to: 'customer@example.com',
+      subject: 'Test',
+      htmlContent: '<p>Hello</p>',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result).not.toHaveProperty('deliveryOutcome');
   });
 });

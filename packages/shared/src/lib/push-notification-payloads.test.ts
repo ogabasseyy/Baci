@@ -237,7 +237,10 @@ describe('getStorefrontNotificationNavigationTarget', () => {
         type: 'customer_savings_reminder',
         goalId: 'goal-1',
       })
-    ).toEqual({ screen: 'wallet', params: { action: 'savings' } });
+    ).toEqual({
+      screen: 'wallet',
+      params: { action: 'savings', savingsGoalId: 'goal-1' },
+    });
   });
 
   it('routes customer savings reminders without goal ids to the savings wallet action', () => {

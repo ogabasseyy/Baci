@@ -19,10 +19,7 @@ vi.mock('@/lib/cloudflare-purge', () => ({
 // Keep the real URL builder (so purge-URL assertions run against real output)
 // but make it spy-able so one test can force it to throw.
 vi.mock('@/lib/storefront-product-purge-urls', async (importOriginal) => {
-  const actual =
-    await importOriginal<
-      typeof import('@/lib/storefront-product-purge-urls')
-    >();
+  const actual = await importOriginal<StorefrontProductPurgeUrlsModule>();
   return {
     ...actual,
     buildStorefrontProductPurgeUrls: vi.fn(
@@ -34,6 +31,9 @@ vi.mock('@/lib/storefront-product-purge-urls', async (importOriginal) => {
 import { buildStorefrontProductPurgeUrls } from '@/lib/storefront-product-purge-urls';
 // ---- Import function AFTER mocks ----
 import { scheduleStorefrontProductPurge } from './storefront-product-purge';
+
+type StorefrontProductPurgeUrlsModule =
+  typeof import('@/lib/storefront-product-purge-urls');
 
 // ---- Tests ----
 
@@ -78,6 +78,39 @@ describe('scheduleStorefrontProductPurge', () => {
     expect(mockPurgeCloudflareUrls).not.toHaveBeenCalled();
   });
 
+  it('includes linked blog documents in the URL purge', () => {
+    scheduleStorefrontProductPurge(
+      'ogabassey',
+      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      { blogPostSlugs: ['iphone-guide'] }
+    );
+
+    expect(mockPurgeCloudflareUrls).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        'https://ogabassey.com/blog/iphone-guide',
+        'https://ogabassey.com/blog/iphone-guide/opengraph-image',
+        'https://www.ogabassey.com/blog/iphone-guide',
+      ])
+    );
+  });
+
+  it('can purge only linked blog documents after the product URLs were evicted', () => {
+    scheduleStorefrontProductPurge(
+      'ogabassey',
+      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      { blogPostSlugs: ['iphone-guide'], blogPostsOnly: true }
+    );
+
+    expect(mockPurgeCloudflareUrls).toHaveBeenCalledWith([
+      'https://ogabassey.com/blog',
+      'https://ogabassey.com/blog/iphone-guide',
+      'https://ogabassey.com/blog/iphone-guide/opengraph-image',
+      'https://www.ogabassey.com/blog',
+      'https://www.ogabassey.com/blog/iphone-guide',
+      'https://www.ogabassey.com/blog/iphone-guide/opengraph-image',
+    ]);
+  });
+
   it('purges URLs instead of hostnames at the exact 50-entry threshold', () => {
     const entries = Array.from({ length: 50 }, (_, index) => ({
       slug: `product-${index}`,
@@ -87,6 +120,43 @@ describe('scheduleStorefrontProductPurge', () => {
     scheduleStorefrontProductPurge('ogabassey', entries);
 
     expect(mockAfter).toHaveBeenCalledTimes(1);
+    expect(mockPurgeCloudflareUrls).toHaveBeenCalledTimes(1);
+    expect(mockPurgeCloudflareHostnamesConfirmed).not.toHaveBeenCalled();
+  });
+
+  it('uses a bounded hostname purge for large article-only invalidations', () => {
+    const blogPostSlugs = Array.from(
+      { length: 100 },
+      (_, index) => `guide-${index}`
+    );
+
+    scheduleStorefrontProductPurge(
+      'ogabassey',
+      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      { blogPostSlugs, blogPostsOnly: true }
+    );
+
+    expect(mockPurgeCloudflareUrls).not.toHaveBeenCalled();
+    expect(mockPurgeCloudflareHostnamesConfirmed).toHaveBeenCalledWith([
+      'ogabassey.com',
+      'www.ogabassey.com',
+    ]);
+  });
+
+  it('keeps URL purges at the exact bounded target count', () => {
+    vi.mocked(buildStorefrontProductPurgeUrls).mockReturnValueOnce(
+      Array.from(
+        { length: 300 },
+        (_, index) => `https://ogabassey.com/${index}`
+      )
+    );
+
+    scheduleStorefrontProductPurge(
+      'ogabassey',
+      [{ slug: 'iphone-15', categorySegment: 'smartphones' }],
+      { blogPostSlugs: ['large-guide-set'] }
+    );
+
     expect(mockPurgeCloudflareUrls).toHaveBeenCalledTimes(1);
     expect(mockPurgeCloudflareHostnamesConfirmed).not.toHaveBeenCalled();
   });

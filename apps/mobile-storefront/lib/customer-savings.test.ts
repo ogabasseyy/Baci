@@ -10,6 +10,7 @@ const {
   cancelSavingsGoalFutureDebits,
   pauseSavingsGoal,
   resumeSavingsGoal,
+  resolveSavingsGoalVariant,
   swapSavingsGoalDevice,
 } =
   require('@/lib/customer-savings') as typeof import('@/lib/customer-savings');
@@ -62,6 +63,14 @@ describe('customer savings api client', () => {
         swapSavingsGoalDevice({
           goalId: 'goal-1',
           productId: '00000000-0000-4000-8000-000000000101',
+          variantId: '00000000-0000-4000-8000-000000000102',
+        }),
+    },
+    {
+      name: 'resolveSavingsGoalVariant',
+      call: () =>
+        resolveSavingsGoalVariant({
+          goalId: '00000000-0000-4000-8000-000000000101',
           variantId: '00000000-0000-4000-8000-000000000102',
         }),
     },
@@ -165,6 +174,36 @@ describe('customer savings api client', () => {
       goalId: 'goal-1',
       success: true,
     });
+  });
+
+  it('accepts a staging goal creation response without echoed schedule fields', async () => {
+    mockFetchWithTimeout.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        contributionId: null,
+        currentAmount: 0,
+        goalId: 'goal-staging',
+        goalStatus: 'active',
+        success: true,
+        walletBalance: 0,
+      }),
+    });
+
+    await expect(
+      createSavingsGoal({
+        contributionAmount: 20000,
+        contributionFrequency: 'daily',
+        maturityDate: '2026-06-30',
+        nonWithdrawableAccepted: true,
+        productId: 'product-1',
+        sourceMode: 'manual',
+        startDate: '2026-05-20',
+        targetAmount: 800000,
+        termsAccepted: true,
+      })
+    ).resolves.toMatchObject({ goalId: 'goal-staging', success: true });
   });
 
   it('adds a savings contribution', async () => {

@@ -1,25 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { AGENTIC_PAYMENT_METHOD_PAY_ON_DELIVERY } from '@/config/agentic-payment-methods';
 import type { calculateCheckoutSession } from '@/lib/agentic/checkout';
+import { readAgenticSharedCartBinding } from '@/lib/agentic/checkout-completion-payloads';
 import type { AgenticCheckoutBuyer } from '@/lib/agentic/checkout-completion-response';
-import {
-  createAgenticCheckoutOrder,
-  sendAgenticOrderCreatedWebhook,
-} from '@/lib/agentic/checkout-order-dispatch';
+import { sendAgenticOrderCreatedWebhook } from '@/lib/agentic/checkout-order-dispatch';
 import { buildOrderFinalizationClaim } from '@/lib/agentic/checkout-order-finalization-claim';
 import {
   claimPayOnDeliveryFinalization,
   getMarkedPayOnDeliveryFinalizationOrderId,
   recordPayOnDeliveryOrderCreated,
 } from '@/lib/agentic/checkout-pay-on-delivery-claim';
-import {
-  compensatePayOnDeliveryFinalizationFailure,
-  releasePayOnDeliveryClaimSafely,
-} from '@/lib/agentic/checkout-pay-on-delivery-compensation';
+import { compensatePayOnDeliveryFinalizationFailure } from '@/lib/agentic/checkout-pay-on-delivery-compensation';
+import { createPayOnDeliveryOrder } from '@/lib/agentic/checkout-pay-on-delivery-create-order';
 import {
   buildPayOnDeliveryCheckoutResponse,
   buildPayOnDeliveryCompletedSessionUpdate,
-  buildPayOnDeliveryOrderPayload,
 } from '@/lib/agentic/checkout-pay-on-delivery-payloads';
 import { handlePayOnDeliverySessionCompletionFailure } from '@/lib/agentic/checkout-pay-on-delivery-session-completion-failure';
 import type { AgenticMetadata } from '@/lib/agentic/checkout-storage';
@@ -29,12 +24,12 @@ import {
   persistAgenticIdempotencyResponse,
 } from '@/lib/agentic/idempotency-response-storage';
 import { logger } from '@/lib/logger';
-import { productCacheRevalidation } from '@/lib/product-cache-revalidation';
 import { sanitizeForLog } from '@/lib/sanitize-core';
 
 type CheckoutCalculation = Awaited<ReturnType<typeof calculateCheckoutSession>>;
 
 export async function finalizeAgenticPayOnDeliveryCheckout({
+  agentId,
   buyer,
   idempotencyKey,
   merchantId,
@@ -44,8 +39,10 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
   requestId,
   route,
   sessionId,
+  sharedCartPrincipalId,
   supabase,
 }: {
+  agentId?: string | null;
   buyer: AgenticCheckoutBuyer;
   idempotencyKey: string;
   merchantId: string;
@@ -60,6 +57,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
   requestId: string;
   route: string;
   sessionId: string;
+  sharedCartPrincipalId?: string | null;
   supabase: SupabaseClient;
 }) {
   const finalizationClaim = buildOrderFinalizationClaim({
@@ -69,6 +67,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
   });
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId,
       idempotencyKey,
       merchantId,
       requestId,
@@ -108,122 +107,24 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
     'metadata' in claim && claim.metadata ? claim.metadata : metadata;
   let orderId = getMarkedPayOnDeliveryFinalizationOrderId(finalizationMetadata);
   if (!orderId) {
-    const orderPayload = buildPayOnDeliveryOrderPayload({
+    const created = await createPayOnDeliveryOrder({
       buyer,
-      session: orderSession,
-      sessionCalc: orderSessionCalc,
+      finalizationClaim,
+      finalizationMetadata,
+      merchantId,
+      orderSession,
+      orderSessionCalc,
+      sessionId,
+      sharedCartPrincipalId,
+      supabase,
     });
-    let orderResult: Awaited<ReturnType<typeof createAgenticCheckoutOrder>>;
-    try {
-      orderResult = await createAgenticCheckoutOrder(orderPayload, supabase);
-    } catch (error) {
-      await releasePayOnDeliveryClaimSafely({
-        finalizationClaim,
-        merchantId,
-        metadata: finalizationMetadata,
-        orderError: error,
-        sessionId,
-        supabase,
-      });
-      logger.error({
-        error: sanitizeForLog(error),
-        message: 'Pay-on-delivery order creation threw',
-        sessionId: sanitizeForLog(sessionId),
-      });
-      return respond({ error: 'Order creation failed' }, 500);
-    }
-
-    if (!orderResult.ok) {
-      await releasePayOnDeliveryClaimSafely({
-        finalizationClaim,
-        merchantId,
-        metadata: finalizationMetadata,
-        orderError: orderResult.error ?? orderResult.statusText,
-        sessionId,
-        supabase,
-      });
-      logger.error({
-        error: sanitizeForLog(orderResult.error ?? orderResult.statusText),
-        message: 'Pay-on-delivery order creation failed',
-        sessionId: sanitizeForLog(sessionId),
-      });
-      return respond({ error: 'Order creation failed' }, 500);
-    }
-
-    const createdOrderId = orderResult.orderId;
-    if (!createdOrderId) {
-      await releasePayOnDeliveryClaimSafely({
-        finalizationClaim,
-        merchantId,
-        metadata: finalizationMetadata,
-        orderError: 'Missing order id',
-        sessionId,
-        supabase,
-      });
-      logger.error({
-        message: 'Pay-on-delivery order creation response omitted order id',
-        sessionId: sanitizeForLog(sessionId),
-      });
-      return respond({ error: 'Order creation failed' }, 500);
-    }
-    orderId = createdOrderId;
-
-    // create_storefront_order decrements only products with manage_stock=true.
-    // Resolve that policy before cache work so unlimited-inventory sales cause
-    // no catalog or feed churn.
-    try {
-      const touchedProductIds = Array.from(
-        new Set(
-          orderSessionCalc.lineItems
-            .map((lineItem) => lineItem.item.product_id)
-            .filter(
-              (id): id is string => typeof id === 'string' && id.length > 0
-            )
-        )
+    if (!created.ok) {
+      return respond(
+        { error: created.error ?? 'Order creation failed' },
+        created.status ?? 500
       );
-      if (touchedProductIds.length > 0) {
-        const { data: touchedProducts, error: slugLookupError } = await supabase
-          .from('products')
-          .select('slug, manage_stock')
-          .in('id', touchedProductIds)
-          .eq('merchant_id', merchantId)
-          .returns<Array<{ manage_stock: boolean | null; slug: string }>>();
-        if (slugLookupError) {
-          productCacheRevalidation.revalidateProducts(merchantId, undefined, {
-            feedScope: 'merchant',
-          });
-          logger.error({
-            error: sanitizeForLog(slugLookupError),
-            message:
-              'Failed to look up product slugs for PDP cache revalidation after agentic pay-on-delivery order creation',
-            sessionId: sanitizeForLog(sessionId),
-          });
-        } else {
-          const trackedProducts = (touchedProducts ?? []).filter(
-            (product) => product.manage_stock === true
-          );
-          if (trackedProducts.length > 0) {
-            productCacheRevalidation.revalidateProducts(merchantId, undefined, {
-              feedScope: 'merchant',
-            });
-            productCacheRevalidation.revalidateProductSlugs(
-              merchantId,
-              trackedProducts.map((product) => product.slug)
-            );
-          } else {
-            productCacheRevalidation.revalidateDashboard(merchantId);
-          }
-        }
-      }
-    } catch (revalidateError) {
-      logger.error({
-        error: sanitizeForLog(revalidateError),
-        message:
-          'Failed to revalidate product caches after agentic pay-on-delivery order creation',
-        sessionId: sanitizeForLog(sessionId),
-      });
     }
-
+    orderId = created.orderId;
     const marker = await recordPayOnDeliveryOrderCreated({
       finalizationClaim,
       merchantId,
@@ -242,6 +143,7 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
         sessionId: sanitizeForLog(sessionId),
       });
       await compensatePayOnDeliveryFinalizationFailure({
+        bound: Boolean(readAgenticSharedCartBinding(finalizationMetadata)),
         finalizationClaim,
         merchantId,
         metadata: finalizationMetadata,
@@ -253,15 +155,14 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
       return respond({ error: 'Database error' }, 500);
     }
   }
-
   const successResponse = buildPayOnDeliveryCheckoutResponse({
     buyer,
     orderId,
     session: orderSession,
     sessionCalc: orderSessionCalc,
   });
-
   const persisted = await persistAgenticIdempotencyResponse({
+    agentId,
     idempotencyKey,
     merchantId,
     requestId,
@@ -280,7 +181,6 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
     });
     return respond({ error: 'Idempotency response storage failed' }, 503);
   }
-
   const updatePayload = buildPayOnDeliveryCompletedSessionUpdate({
     buyer,
     metadata: finalizationMetadata,
@@ -302,9 +202,9 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
     })
     .select('session_id')
     .maybeSingle();
-
   if (updateError || !updatedSession) {
     return handlePayOnDeliverySessionCompletionFailure({
+      agentId,
       finalizationClaim,
       idempotencyKey,
       merchantId,
@@ -318,7 +218,6 @@ export async function finalizeAgenticPayOnDeliveryCheckout({
       updateError: updateError ?? 'No checkout session row updated',
     });
   }
-
   const total = orderSessionCalc.totals.find(
     (candidate) => candidate.type === 'total'
   );

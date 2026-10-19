@@ -71,7 +71,7 @@ jobs:
           rm -f "apps/mobile-admin/android/app/google-services.json"
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -99,7 +99,7 @@ jobs:
           pnpm-bin-dir: ${{ steps.setup_pnpm.outputs.bin_dest }}
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
         with:
           cache-provider: basic
 
@@ -241,7 +241,7 @@ jobs:
             echo "::error::ANDROID_KEYSTORE_BASE64 secret is empty or not set"
             exit 1
           fi
-          KEYSTORE_PATH="${{ runner.temp }}/release.keystore"
+          KEYSTORE_PATH="${RUNNER_TEMP}/release.keystore"
           umask 077
           echo "$KEYSTORE_BASE64" | base64 -d > "$KEYSTORE_PATH"
           chmod 600 "$KEYSTORE_PATH"
@@ -301,7 +301,7 @@ jobs:
             --bundletool "${BUNDLETOOL_JAR}"
 
       - name: Upload AAB artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: app-release-${{ github.sha }}
           path: ${{ env.WORKING_DIR }}/android/app/build/outputs/bundle/release/app-release.aab
@@ -364,8 +364,8 @@ jobs:
       - name: Clean up keystore
         if: always()
         run: |
-          rm -f "${{ env.ANDROID_ADMIN_KEYSTORE_FILE }}"
-          if ! git -C ${{ github.workspace }} ls-files --error-unmatch ${{ env.WORKING_DIR }}/google-services.json >/dev/null 2>&1; then
-            rm -f ${{ env.WORKING_DIR }}/google-services.json
+          rm -f "$ANDROID_ADMIN_KEYSTORE_FILE"
+          if ! git -C "$GITHUB_WORKSPACE" ls-files --error-unmatch "$WORKING_DIR/google-services.json" >/dev/null 2>&1; then
+            rm -f "$WORKING_DIR/google-services.json"
           fi
-          rm -f ${{ env.WORKING_DIR }}/android/app/google-services.json
+          rm -f "$WORKING_DIR/android/app/google-services.json"

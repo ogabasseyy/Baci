@@ -19,7 +19,7 @@ import {
   DEFAULT_STOREFRONT_SEO_CATEGORY,
 } from '@/lib/storefront-seo-defaults';
 import { mergeStorefrontSmartAppBannerOther } from '@/lib/storefront-smart-app-banner-metadata';
-import type { LcpRouteProduct } from './page';
+import type { LcpRouteProduct } from './category-product-lcp-projection';
 
 export function buildCategoryProductMetadata({
   baseUrl,

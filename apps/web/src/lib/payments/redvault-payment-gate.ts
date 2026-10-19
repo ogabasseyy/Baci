@@ -126,7 +126,8 @@ export function createRedvaultVerifiedPaymentEvidence({
     parsed.data.data.domain !== expectedDomain ||
     parsed.data.data.channel !== 'card' ||
     parsed.data.data.authorization.channel !== 'card' ||
-    parsed.data.data.authorization.bank !== expectedIssuerName ||
+    parsed.data.data.authorization.bank.trim().toUpperCase() !==
+      expectedIssuerName.trim().toUpperCase() ||
     parsed.data.data.customer.email.trim().toLowerCase() !==
       expectedCustomerEmail.trim().toLowerCase()
   ) {
@@ -151,7 +152,7 @@ export function createRedvaultVerifiedPaymentEvidence({
     currency: parsed.data.data.currency.toUpperCase(),
     customerEmail: parsed.data.data.customer.email.trim().toLowerCase(),
     domain: parsed.data.data.domain,
-    issuerName: parsed.data.data.authorization.bank,
+    issuerName: expectedIssuerName.trim(),
     providerVerificationId: String(parsed.data.data.id),
     reference: parsed.data.data.reference,
     verificationSource: 'paystack_transaction_verify',

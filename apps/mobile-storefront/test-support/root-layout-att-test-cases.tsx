@@ -115,6 +115,9 @@ export function registerRootLayoutAttTests({
   it('waits for ATT to settle before activating a due savings reminder', async () => {
     initializeStorage.mockResolvedValue(undefined);
     setTrackingAuthorizationSettled(false);
+    // Reminder activation requires a signed-in user (boot auth gate); set
+    // one so this case exercises ATT gating rather than the user gate.
+    authState.user = { id: 'review-user' };
     const view = render(<RootLayout />);
 
     await waitFor(() => {

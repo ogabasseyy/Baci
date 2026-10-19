@@ -1,12 +1,12 @@
 'use client';
 
+import { normalizeCanonicalProductCondition } from '@baci/shared/lib/product-condition';
 import {
-  normalizeCanonicalProductCondition,
   resolveDefaultVariantSelection,
   resolveLowestPricedVariantSelection,
   resolveVariantDisplaySelection,
   resolveVariantSelection,
-} from '@baci/shared/lib';
+} from '@baci/shared/lib/product-default-variant';
 import { useEffect, useState } from 'react';
 import {
   canonicalizeVariantAxis,

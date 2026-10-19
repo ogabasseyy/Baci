@@ -1,187 +1,279 @@
 'use client';
 
 import { type Dispatch, type SetStateAction, useRef, useState } from 'react';
-import type {
-  Customer,
-  CustomerUser,
-} from '@/contexts/customer-auth-context';
+import type { Customer, CustomerUser } from '@/contexts/customer-auth-context';
+import { hasUtilityPurchaseIdentityMoved } from '@/contexts/customer-live-identity';
 import { toast } from '@/hooks/use-toast';
 import type { UtilityCheckoutPayload } from './utility-checkout';
-import { createWalletIdempotencyKey } from './utility-checkout';
 import { submitUtilityCheckout } from './utility-checkout-submit';
+import { getPendingVtuSettlementPass } from './use-utility-retained-settlement';
+import {
+  useUtilityIdempotencyKey,
+  type UtilityIdempotencyAttempt,
+} from './use-utility-idempotency-key';
+import { settleUtilityPurchaseResult } from './utility-purchase-result-settlement';
+import { checkUtilityPurchaseReadiness } from './utility-purchase-readiness';
+import {
+  type AirtimeDataSubmit,
+  type BillSubmit,
+  buildAirtimeDataPayload,
+  buildBillPayload,
+} from './utility-purchase-payloads';
+import { buildUtilityCheckoutWalletPayload } from './utility-checkout-wallet-payload';
+import { buildVtuWalletPayloadSignature } from './utility-vtu-payload-signature';
 import type { UtilityTabId } from './UtilityTabs';
-import type { UtilityPaymentMethod } from './utility-types';
 
 interface UseUtilityPurchaseParams {
   activeTab: UtilityTabId;
+  canFundByBankTransfer: boolean;
   clearIntent: () => void;
   customer: Customer | null;
   isAuthLoading: boolean;
   isAuthenticated: boolean;
+  merchantId: string | undefined;
   merchantSlug: string | undefined;
-  selectedPaymentMethod: UtilityPaymentMethod;
+  onInsufficientWalletBalance?: () => void;
+  isWalletRefreshPending: () => boolean;
+  isWalletInitialReadPending: () => boolean;
+  /** Live balance reader (R78 6sN80p): gate-time read, not pre-await snapshot. */
+  getWalletBalance: () => number;
+  /** Live error reader (R81 P2): gate-time read, not pre-await snapshot. */
+  getWalletError: () => boolean;
+  refreshWallet: () => void;
   setWalletBalance: Dispatch<SetStateAction<number>>;
   user: CustomerUser | null;
-  walletBalance: number;
+  walletLoading: boolean;
 }
 
-interface AirtimeDataSubmit {
-  phoneNumber: string;
-  amount: number;
-  networkProvider: string;
-  dataPlanCode?: string;
-}
-
-interface BillSubmit {
-  amount: number;
-  billItemIdentifier: string;
-  billerCode?: string;
-  customerAddress?: string;
-  customerIdentifier: string;
-  billerName: string;
-  productCode?: string;
-  provider?: 'kuda' | 'monnify';
-  requireValidationRef?: boolean;
-  type: string;
-  validationReference?: string;
-}
+export type UtilityPurchaseStep = 'details' | 'processing' | 'success';
 
 interface UseUtilityPurchaseReturn {
   handleAirtimeDataSubmit: (data: AirtimeDataSubmit) => void;
   handleBillSubmit: (data: BillSubmit) => void;
   loading: boolean;
-  setStep: Dispatch<SetStateAction<'details' | 'success'>>;
-  step: 'details' | 'success';
+  setStep: Dispatch<SetStateAction<UtilityPurchaseStep>>;
+  settleBackfilledAttempt: () => void;
+  step: UtilityPurchaseStep;
+  /** True from submit click until the purchase settles (covers the pre-loading settle await). */
+  submitting: boolean;
   successAmount: number;
   transactionRef: string;
+  transactionVoucherPin: string | null;
 }
 
-/**
- * Purchase orchestration extracted from `UtilityModal` to keep that component
- * under the 300-line modularity budget. Owns the checkout submit lifecycle
- * (loading/success step, transaction reference, wallet-only idempotency) so the
- * modal only wires props and renders. Behaviour is unchanged.
- */
+/** Purchase lifecycle + idempotency (unfunded/loading/error block). */
 export function useUtilityPurchase({
   activeTab,
+  canFundByBankTransfer,
   clearIntent,
   customer,
   isAuthLoading,
   isAuthenticated,
+  merchantId,
   merchantSlug,
-  selectedPaymentMethod,
+  onInsufficientWalletBalance,
+  isWalletRefreshPending,
+  isWalletInitialReadPending,
+  getWalletBalance,
+  getWalletError,
+  refreshWallet,
   setWalletBalance,
   user,
-  walletBalance,
+  walletLoading,
 }: UseUtilityPurchaseParams): UseUtilityPurchaseReturn {
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<'details' | 'success'>('details');
+  const [step, setStep] = useState<UtilityPurchaseStep>('details');
   const [transactionRef, setTransactionRef] = useState('');
   const [successAmount, setSuccessAmount] = useState(0);
-  const walletIdempotencyAttemptRef = useRef<{
-    key: string;
-    payloadSignature: string;
-  } | null>(null);
+  const [transactionVoucherPin, setTransactionVoucherPin] = useState<
+    string | null
+  >(null);
+  // Replays reuse the SAME transaction: never decrement twice.
+  const appliedBalanceRefs = useRef<Set<string>>(new Set());
+  // No render-derived identity ref: settlement compares against the
+  // LIVE auth identity (see below) — a ref updated only during
+  // render still names the submitting account when the switch lands
+  // after dispatch but before React commits the rerender.
+  const submittingRef = useRef(false);
+  const {
+    captureAttemptKey,
+    forgetScopedKey,
+    isAttemptRetained,
+    isResultViewActive,
+    isScopedReplay,
+    isScopedStale,
+    markAttemptShown,
+    noteScopedReference,
+    settleShownAttempt,
+  } = useUtilityIdempotencyKey({
+    customerId: customer?.id,
+    merchantId,
+    userId: user?.id,
+  });
 
-  const getWalletIdempotencyKey = (payloadSignature: string) => {
-    if (
-      walletIdempotencyAttemptRef.current?.payloadSignature !== payloadSignature
-    ) {
-      walletIdempotencyAttemptRef.current = {
-        key: createWalletIdempotencyKey(),
-        payloadSignature,
-      };
+  const handlePurchaseInner = async (payload: UtilityCheckoutPayload) => {
+    // Settle gate (R60) awaited BEFORE the peek (R66 6rvh_M): a stale
+    // peek would bypass, then mint fresh underfunded. Branch-on-null
+    // keeps idle submits synchronously dispatched.
+    const settlementPass = getPendingVtuSettlementPass();
+    if (settlementPass) {
+      await settlementPass;
+      if (!isResultViewActive()) return; // R73: closed during the gate.
+      // Identity re-check after the gate await (Codex R101 P2): the
+      // pass can take seconds, and an account/storefront switch in
+      // that window would otherwise submit under stale identity.
+      // Nothing submitted yet (capture runs inside the submit
+      // below), so no key to finalize — just stop.
+      if (
+        hasUtilityPurchaseIdentityMoved({
+          customerId: customer?.id ?? null,
+          merchantSlug: merchantSlug ?? null,
+          userId: user?.id ?? null,
+        })
+      ) {
+        toast({
+          title: 'Account changed',
+          description:
+            'The signed-in account changed while the purchase was starting. Please try again.',
+        });
+        return;
+      }
     }
-    return walletIdempotencyAttemptRef.current.key;
-  };
-
-  const handlePurchase = async (payload: UtilityCheckoutPayload) => {
-    if (isAuthLoading) {
-      toast({
-        title: 'Checking account',
-        description: 'Please wait while we confirm your session.',
-      });
+    // Peek signs the same payload the submit signs (shared builder).
+    const submittingUserId = user?.id ?? null; // Raw auth id: route-side binding.
+    const names = [customer?.first_name, customer?.last_name].filter(Boolean);
+    const customerName =
+      names.join(' ').trim() || customer?.email || user?.email || 'Customer';
+    // Pre-gate peek: the slug value is behavior-neutral here (the
+    // shared signature canonicalizer excludes merchantSlug), so an
+    // empty scope misses retention and the gate below blocks with
+    // 'Store unavailable' — never a hard-coded fallback storefront
+    // (Muse R125).
+    const isRetainedReplay = isAttemptRetained(
+      buildVtuWalletPayloadSignature(
+        buildUtilityCheckoutWalletPayload({
+          merchantSlug: merchantSlug ?? '',
+          customerName,
+          customerPhone: customer?.phone,
+          expectedUserId: submittingUserId,
+          payload,
+        })
+      )
+    );
+    if (
+      !checkUtilityPurchaseReadiness({
+        amount: payload.amount,
+        canFundByBankTransfer,
+        isAuthLoading,
+        isAuthenticated,
+        isRetainedReplay,
+        merchantId,
+        merchantSlug,
+        onInsufficientWalletBalance,
+        refreshWallet,
+        user,
+        getWalletBalance,
+        getWalletError,
+        walletLoading,
+        walletRefreshPending: isWalletRefreshPending(),
+        walletInitialReadPending: isWalletInitialReadPending(),
+      })
+    ) {
       return;
     }
-
-    if (!isAuthenticated || !user) {
-      toast({
-        title: 'Sign in required',
-        description: 'Please sign in to use utility checkout.',
-        variant: 'destructive',
-      });
+    if (!merchantSlug) {
+      // Unreachable: the readiness gate above blocks a missing slug
+      // with 'Store unavailable'. Narrows the type for the submit
+      // below without a fallback storefront.
       return;
     }
 
     setLoading(true);
-    const customerName =
-      [customer?.first_name, customer?.last_name]
-        .filter(Boolean)
-        .join(' ')
-        .trim() || customer?.email || user.email || 'Customer';
+    // Submitter capture (Codex R101 P2): account ids plus the store
+    // slug — the same auth user in a replacement storefront must
+    // not receive this store's result.
+    const submitter = {
+      customerId: customer?.id ?? null,
+      merchantSlug: merchantSlug ?? null,
+      userId: user?.id ?? null,
+    };
+    // Pre-submit balance generation (Codex R98 P2): the success
+    // effect decrements locally only while state still holds this
+    // value — a refresh that lands post-debit refreshes for server
+    // truth instead of double-counting the debit.
+    const submitBalance = getWalletBalance();
+    // Per-execution capture: concurrent submits can't redirect completion.
+    const captured: { attempt: UtilityIdempotencyAttempt | null } = {
+      attempt: null,
+    };
+    // Pass already awaited above the peek: capture recalls post-settle.
     const result = await submitUtilityCheckout({
       payload,
-      merchantSlug: merchantSlug || 'ogabassey',
+      merchantSlug,
       customerName,
       customerPhone: customer?.phone,
-      walletAmount:
-        selectedPaymentMethod === 'wallet'
-          ? Math.min(walletBalance, payload.amount)
-          : 0,
-      getWalletIdempotencyKey,
+      expectedUserId: submittingUserId,
+      getWalletIdempotencyKey: async (payloadSignature: string) => {
+        captured.attempt = await captureAttemptKey(payloadSignature);
+        return captured.attempt.key;
+      },
     });
 
-    if (result.kind === 'wallet-success') {
-      walletIdempotencyAttemptRef.current = null;
-      clearIntent();
-      setWalletBalance((balance) => Math.max(balance - payload.amount, 0));
-      setTransactionRef(result.reference);
-      setSuccessAmount(result.amount);
-      setStep('success');
-      toast({
-        title: result.processing
-          ? 'Purchase Processing'
-          : 'Purchase Successful',
-        description: result.processing
-          ? `Your ${activeTab} purchase is processing.`
-          : `Your ${activeTab} purchase was successful!`,
-      });
-    } else if (result.kind === 'error') {
-      toast({
-        title: 'Transaction Failed',
-        description: result.message,
-        variant: 'destructive',
-      });
-    }
-    setLoading(false);
+    await settleUtilityPurchaseResult({
+      activeTab,
+      appliedReferences: appliedBalanceRefs.current,
+      attempt: captured.attempt,
+      clearIntent,
+      forgetScopedKey,
+      isResultViewActive,
+      isScopedReplay,
+      isScopedStale,
+      markAttemptShown,
+      noteScopedReference,
+      getCurrentBalance: getWalletBalance,
+      refreshWallet,
+      result,
+      setLoading,
+      setStep,
+      setSuccessAmount,
+      setTransactionRef,
+      setTransactionVoucherPin,
+      setWalletBalance,
+      submitAmount: payload.amount,
+      submitBalance,
+      submitter,
+    });
+  };
+
+  // Render-visible twin of submittingRef (Codex R81 P2): the
+  // settle await precedes loading state, so tabs (and any other
+  // UI lock) must key off state set here — a ref alone never
+  // re-renders the tab bar during the wait.
+  const [submitting, setSubmitting] = useState(false);
+  // In-flight guard (R67 6rwGM2): the settle await precedes loading
+  // state, so a sync-flipping ref must block repeat clicks.
+  const handlePurchase = (payload: UtilityCheckoutPayload) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    void handlePurchaseInner(payload).finally(() => {
+      submittingRef.current = false;
+      setSubmitting(false);
+    });
+  };
+
+  // Backfill proved the shown 202 terminal: forget its key + refetch.
+  const settleBackfilledAttempt = () => {
+    settleShownAttempt();
+    refreshWallet();
   };
 
   const handleAirtimeDataSubmit = (data: AirtimeDataSubmit) => {
-    handlePurchase({
-      type: activeTab,
-      phoneNumber: data.phoneNumber,
-      amount: data.amount,
-      networkProvider: data.networkProvider,
-      dataPlanCode: data.dataPlanCode,
-    });
+    handlePurchase(buildAirtimeDataPayload(data, activeTab));
   };
 
   const handleBillSubmit = (data: BillSubmit) => {
-    handlePurchase({
-      type: data.type,
-      amount: data.amount,
-      billItemIdentifier: data.billItemIdentifier,
-      billerCode: data.billerCode,
-      ...(data.customerAddress
-        ? { customerAddress: data.customerAddress }
-        : {}),
-      customerIdentifier: data.customerIdentifier,
-      billerName: data.billerName,
-      productCode: data.productCode,
-      provider: data.provider,
-      requireValidationRef: data.requireValidationRef,
-      validationReference: data.validationReference,
-    });
+    handlePurchase(buildBillPayload(data));
   };
 
   return {
@@ -189,8 +281,11 @@ export function useUtilityPurchase({
     handleBillSubmit,
     loading,
     setStep,
+    settleBackfilledAttempt,
     step,
+    submitting,
     successAmount,
     transactionRef,
+    transactionVoucherPin,
   };
 }

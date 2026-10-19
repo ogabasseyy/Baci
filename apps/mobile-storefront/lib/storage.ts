@@ -37,7 +37,7 @@ export async function getStorageEntries(
   if (keys.length === 0) return [];
 
   if (mmkvStorage) {
-    return keys.map((key) => [key, mmkvStorage!.getString(key) ?? null]);
+    return keys.map((key) => [key, mmkvStorage?.getString(key) ?? null]);
   }
 
   return getAsyncStorageEntries(keys);

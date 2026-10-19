@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
+import type { FetchImplementation } from '@/types/fetch';
 
-const mockFetch = jest.fn<typeof fetch>();
+const mockFetch = jest.fn<FetchImplementation>();
 global.fetch = mockFetch;
 jest.mock('@/lib/supabase', () => ({
   supabase: {

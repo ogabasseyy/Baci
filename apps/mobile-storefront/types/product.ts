@@ -127,6 +127,7 @@ export interface Product {
   color_images?: Record<string, string[]>;
   variant_attributes?: Record<string, string[]>;
   variants?: ProductVariant[];
+  searchPreview?: boolean;
   specifications?: Record<string, string>;
   // Condition offers (multiple conditions with different prices)
   has_condition_offers?: boolean;

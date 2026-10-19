@@ -50,6 +50,17 @@ const mockListCustomerPaymentMethods =
     >
   >();
 const mockRandomUUID = jest.fn<() => string>();
+const mockFetchSavingsPlanFunding =
+  jest.fn<
+    (input: unknown) => Promise<{
+      status: string;
+      accounts?: Array<{
+        accountNumber: string;
+        accountName: string;
+        bankName: string;
+      }>;
+    }>
+  >();
 
 jest.mock('expo-router', () => ({
   router: {
@@ -71,8 +82,8 @@ jest.mock('@/hooks/use-debounce', () => ({
   useDebounce: (value: string) => value,
 }));
 
-jest.mock('@/hooks/use-products', () => ({
-  useProducts: () => mockUseProducts(),
+jest.mock('@/hooks/use-product-search', () => ({
+  useProductSearch: () => mockUseProducts(),
 }));
 
 jest.mock('@/hooks/use-wallet', () => ({
@@ -97,6 +108,8 @@ jest.mock('@/hooks/use-wallet', () => ({
 
 jest.mock('@/lib/customer-savings', () => ({
   createSavingsGoal: (input: unknown) => mockCreateSavingsGoal(input),
+  fetchSavingsPlanFunding: (input: unknown) =>
+    mockFetchSavingsPlanFunding(input),
   initializeSavingsAuthorization: (input: unknown) =>
     mockInitializeSavingsAuthorization(input),
   listCustomerPaymentMethods: () => mockListCustomerPaymentMethods(),
@@ -112,6 +125,14 @@ jest.mock('@/lib/clipboard', () => ({
 }));
 
 describe('StartSavingsScreen', () => {
+  it('does not mount legacy data or payment hooks when staging is explicitly unavailable', () => {
+    render(<StartSavingsScreen staging={null} />);
+    expect(screen.getByText('Draft review is unavailable.')).toBeOnTheScreen();
+    expect(mockUseProducts).not.toHaveBeenCalled();
+    expect(mockListCustomerPaymentMethods).not.toHaveBeenCalled();
+    expect(mockInitializeSavingsAuthorization).not.toHaveBeenCalled();
+    expect(mockCreateSavingsGoal).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseLocalSearchParams.mockReturnValue({});
@@ -154,11 +175,45 @@ describe('StartSavingsScreen', () => {
     mockRandomUUID.mockReturnValue('initial-contribution-key-1');
   });
 
+  it('reveals valid steps and preserves entries when changing device', () => {
+    const frame = jest
+      .spyOn(global, 'requestAnimationFrame')
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+    render(<StartSavingsScreen />);
+    expect(screen.queryByLabelText('Savings contribution amount')).toBeNull();
+    expect(screen.queryByLabelText('Savings source of funds')).toBeNull();
+    selectSavingsProduct();
+    expect(
+      screen.getByLabelText('Savings contribution amount')
+    ).toBeOnTheScreen();
+    expect(screen.queryByLabelText('Savings source of funds')).toBeNull();
+    setContributionAmount();
+    expect(screen.getByLabelText('Savings source of funds')).toBeOnTheScreen();
+    fireEvent.press(getSavingsRadio('Initial contribution Yes'));
+    expect(screen.queryByLabelText('Savings source of funds')).toBeNull();
+    fireEvent.changeText(
+      getSavingsInput('Initial contribution amount'),
+      '1000'
+    );
+    expect(screen.getByLabelText('Savings source of funds')).toBeOnTheScreen();
+    fireEvent.press(screen.getByLabelText('Change savings device'));
+    expect(screen.queryByLabelText('Savings contribution amount')).toBeNull();
+    selectSavingsProduct();
+    expect(
+      screen.getByLabelText('Initial contribution amount').props.value
+    ).toBe('1,000');
+    expect(screen.getByLabelText('Savings source of funds')).toBeOnTheScreen();
+    frame.mockRestore();
+  });
+
   it('requires terms acceptance before opening preview', () => {
     render(<StartSavingsScreen />);
 
     selectSavingsProduct();
-    fireEvent.changeText(getSavingsInput('Savings target amount'), '800000');
+    expect(screen.queryByLabelText('Savings target amount')).toBeNull();
     setContributionAmount();
     fireEvent.press(getSavingsButton('Continue savings setup'));
 
@@ -175,7 +230,7 @@ describe('StartSavingsScreen', () => {
     acceptSavingsTerms();
     fireEvent.press(getSavingsButton('Continue savings setup'));
 
-    expect(screen.getByText('Preview your savings plan')).toBeOnTheScreen();
+    expect(screen.getByText('Your savings plan')).toBeOnTheScreen();
 
     fireEvent.press(getSavingsButton('Choose savings funding option'));
     fireEvent.press(getSavingsButton('Continue funding option'));
@@ -233,10 +288,20 @@ describe('StartSavingsScreen', () => {
     expect(secondCall.initialContributionIdempotencyKey).toBe(
       'initial-contribution-key-1'
     );
-    expect(mockRandomUUID).toHaveBeenCalledTimes(1);
+    expect(mockRandomUUID).toHaveBeenCalledTimes(2);
   });
 
-  it('shows transfer instructions when bank transfer funding is selected', async () => {
+  it('creates the plan then shows its dedicated account for bank transfer funding', async () => {
+    mockFetchSavingsPlanFunding.mockResolvedValue({
+      status: 'ready',
+      accounts: [
+        {
+          accountNumber: '0001234567',
+          accountName: 'Synthetic account',
+          bankName: 'Synthetic bank',
+        },
+      ],
+    });
     render(<StartSavingsScreen />);
 
     selectSavingsProduct();
@@ -247,10 +312,30 @@ describe('StartSavingsScreen', () => {
     fireEvent.press(getSavingsButton('Pay with bank transfer'));
     fireEvent.press(getSavingsButton('Continue funding option'));
 
-    await waitFor(() =>
-      expect(screen.getByText('Fund wallet to continue')).toBeOnTheScreen()
+    await waitFor(() => expect(mockCreateSavingsGoal).toHaveBeenCalledTimes(1));
+    expect(mockCreateSavingsGoal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialContributionAmount: 0,
+        sourceMode: 'manual',
+      })
     );
-    expect(screen.getByText('0123456789')).toBeOnTheScreen();
+    await waitFor(() =>
+      expect(screen.getByText('Fund your plan to continue')).toBeOnTheScreen()
+    );
+    fireEvent.changeText(
+      screen.getByLabelText('BVN for plan account'),
+      '00000000000'
+    );
+    fireEvent.press(screen.getByRole('button', { name: 'Show plan account' }));
+
+    await waitFor(() =>
+      expect(mockFetchSavingsPlanFunding).toHaveBeenCalledWith(
+        expect.objectContaining({ bvn: '00000000000', goalId: 'goal-1' })
+      )
+    );
+    await waitFor(() =>
+      expect(screen.getByText('0001234567')).toBeOnTheScreen()
+    );
   });
 
   it('creates an auto-debit savings goal with a selected saved card', async () => {
@@ -279,4 +364,21 @@ describe('StartSavingsScreen', () => {
       })
     );
   });
+});
+
+jest.mock('react-native-keyboard-controller', () => {
+  const React = jest.requireActual('react') as typeof import('react');
+  const { ScrollView, View } = jest.requireActual(
+    'react-native'
+  ) as typeof import('react-native');
+  return {
+    KeyboardAvoidingView: View,
+    KeyboardController: { isVisible: () => false, dismiss: async () => {} },
+    KeyboardAwareScrollView: React.forwardRef(
+      (
+        props: import('react-native').ScrollViewProps,
+        ref: import('react').Ref<import('react-native').ScrollView>
+      ) => React.createElement(ScrollView, { ...props, ref })
+    ),
+  };
 });

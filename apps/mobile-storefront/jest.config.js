@@ -32,7 +32,7 @@ const config = {
   // jest-expo 57.0.2 loads TypeScript sources from Expo packages nested under
   // its own pnpm node_modules tree, so that nested Expo subtree must be compiled.
   transformIgnorePatterns: [
-    'node_modules/(?!(\\.pnpm|jest-expo/node_modules/(expo(nent)?|@expo(nent)?/.*)|((jest-)?react-native|@react-native(-community)?|@react-native-vector-icons/.*)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@shopify/flash-list|@supabase/.*|react-native-worklets|zustand|nativewind))',
+    'node_modules/(?!(\\.pnpm|jest-expo/node_modules/(expo(nent)?|@expo(nent)?/.*)|((jest-)?react-native|@react-native(-community)?|@react-native-vector-icons/.*)|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@shopify/flash-list|@supabase/.*|react-native-worklets|zustand|nativewind|@noble/hashes))',
   ],
   // setupFiles runs before the jest-expo preset setup (before test code scope)
   setupFiles: ['<rootDir>/__mocks__/expo-winter-setup.js'],
@@ -48,6 +48,10 @@ const config = {
     '^react-test-renderer$': reactTestRendererPath,
     '^uuid$': uuidPath,
     '^@sentry/react-native$': '<rootDir>/__mocks__/sentry-react-native.js',
+    // The native module crashes in Jest via nested expo-constants copies;
+    // suites with their own factory mock keep it, everyone else gets the
+    // Node-backed stand-in.
+    '^expo-crypto$': '<rootDir>/__mocks__/expo-crypto.js',
     // Prevent expo winter runtime from loading native-only modules in Jest
     'expo/src/winter/ImportMetaRegistry':
       '<rootDir>/__mocks__/expo-import-meta-registry.js',

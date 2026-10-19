@@ -110,6 +110,20 @@ describe('event pipeline verifier staged source snapshot', () => {
     );
   });
 
+  it('rejects the retired platform authority helper in the staged source view', () => {
+    const { baseSha, root } = repository();
+    const path =
+      'apps/web/src/app/api/platform/events/platform-event-forwarding.ts';
+    mkdirSync(join(root, path, '..'), { recursive: true });
+    writeFileSync(join(root, path), 'export const forwarding = true;\n');
+    git(root, 'add', path);
+    writeFileSync(join(root, path), 'export const retired = true;\n');
+
+    expect(verifyEventPipelineBoundaries(root, baseSha)).toContain(
+      `${path}: retired platform authority helper is present`
+    );
+  });
+
   it('accepts identical frozen bytes for governed inherited authority', () => {
     const source =
       "import { createServiceClient } from '@/lib/supabase/service';\n";

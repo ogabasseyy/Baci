@@ -34,12 +34,18 @@ export default async function CartPage({
 
   return (
     <Suspense fallback={<CommerceRouteLoading />}>
-      <CartContent merchantId={merchant.id} />
+      <CartContent merchantId={merchant.id} merchantSlug={merchant.slug} />
     </Suspense>
   );
 }
 
-async function CartContent({ merchantId }: { merchantId: string }) {
+async function CartContent({
+  merchantId,
+  merchantSlug,
+}: {
+  merchantId: string;
+  merchantSlug: string;
+}) {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   const { data: vatSettings, error } = await supabase
@@ -61,6 +67,7 @@ async function CartContent({ merchantId }: { merchantId: string }) {
   return (
     <CartPageWrapper
       merchantId={merchantId}
+      merchantSlug={merchantSlug}
       vatEnabled={vatEnabled}
       vatRate={vatRate}
     />

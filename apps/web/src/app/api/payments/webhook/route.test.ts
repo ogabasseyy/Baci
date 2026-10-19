@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import type { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { prefundedCardWebhookCases } from './prefunded-card-webhook-cases.test-support';
 import { redvaultCaptureCases } from './redvault-capture-cases.test-support';
 import { GET, POST } from './route';
 
@@ -17,6 +18,13 @@ const mockRunPaidOrderSideEffects = vi.hoisted(() => vi.fn());
 const mockPersistMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
 const mockFailMerchantWalletAssignmentEvent = vi.hoisted(() => vi.fn());
 const mockCaptureOrHoldRedvaultPayment = vi.hoisted(() => vi.fn());
+const mockReconcilePrimaryCardCheckout = vi.hoisted(() => vi.fn());
+vi.mock(
+  '@/lib/piggyvest/primary-wallet-card-checkout-webhook-reconcile',
+  () => ({
+    reconcilePrimaryWalletCardCheckoutWebhook: mockReconcilePrimaryCardCheckout,
+  })
+);
 
 // Mock environment variables
 vi.mock('@/env', () => ({
@@ -517,6 +525,7 @@ describe('POST /api/payments/webhook', () => {
       kind: 'match',
     });
     mockGetPaystackDvaReceiverAccountNumber.mockReturnValue(null);
+    mockReconcilePrimaryCardCheckout.mockResolvedValue(null);
     mockMarkAgenticPaystackDvaSessionPaid.mockResolvedValue({
       ok: true,
     });
@@ -886,6 +895,98 @@ describe('POST /api/payments/webhook', () => {
 
       expect(response.status).toBe(401);
       expect(data).toEqual({ error: 'Invalid signature' });
+    });
+
+    it('routes a checkout-key-only delivery exclusively to the card reconcile path', async () => {
+      process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET =
+        'test-checkout-secret';
+      try {
+        const body = {
+          event: 'charge.success',
+          data: { reference: 'pvb-first-primary-op-1' },
+        };
+        const bodyString = JSON.stringify(body);
+        const reconciled = Response.json({ received: true }, { status: 200 });
+        mockReconcilePrimaryCardCheckout.mockResolvedValueOnce(reconciled);
+        const request = createMockRequest(body, {
+          'x-paystack-signature': createSignature(
+            bodyString,
+            'test-checkout-secret'
+          ),
+        });
+
+        expect(await POST(request)).toBe(reconciled);
+        expect(mockReconcilePrimaryCardCheckout).toHaveBeenCalledWith({
+          body,
+        });
+        expect(
+          mockHandlePaystackSavingsWebhookTransaction
+        ).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET;
+      }
+    });
+
+    it('retries an unresolved card-shaped checkout-key charge', async () => {
+      process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET =
+        'test-checkout-secret';
+      try {
+        const body = {
+          event: 'charge.success',
+          data: { reference: 'pvb-first-primary-op-9' },
+        };
+        const bodyString = JSON.stringify(body);
+        const request = createMockRequest(body, {
+          'x-paystack-signature': createSignature(
+            bodyString,
+            'test-checkout-secret'
+          ),
+        });
+
+        const response = await POST(request);
+        expect(response.status).toBe(503);
+        expect(await response.json()).toEqual({
+          error: 'Primary card reconciliation pending',
+          code: 'PRIMARY_CARD_WEBHOOK_PENDING',
+        });
+        expect(
+          mockHandlePaystackSavingsWebhookTransaction
+        ).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET;
+      }
+    });
+
+    it('acks a non-card checkout-key delivery without legacy handling', async () => {
+      process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET =
+        'test-checkout-secret';
+      try {
+        const body = {
+          event: 'charge.success',
+          data: { reference: 'REF123' },
+        };
+        const bodyString = JSON.stringify(body);
+        const request = createMockRequest(body, {
+          'x-paystack-signature': createSignature(
+            bodyString,
+            'test-checkout-secret'
+          ),
+        });
+
+        const response = await POST(request);
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+          message: 'Event ignored',
+        });
+        expect(mockReconcilePrimaryCardCheckout).toHaveBeenCalledWith({
+          body,
+        });
+        expect(
+          mockHandlePaystackSavingsWebhookTransaction
+        ).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.PIGGYVEST_PRIMARY_CARD_PAYSTACK_SECRET;
+      }
     });
 
     it('accepts valid Korapay signature', async () => {
@@ -5845,7 +5946,12 @@ describe('POST /api/payments/webhook', () => {
           return {
             update: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
+            neq: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { id: 'order-123' },
+              error: null,
+            }),
             single: vi.fn().mockResolvedValue({
               data: {
                 id: 'order-123',
@@ -6692,7 +6798,12 @@ describe('POST /api/payments/webhook', () => {
           return {
             update: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
+            neq: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { id: 'order-123' },
+              error: null,
+            }),
             single: vi.fn().mockResolvedValue({
               data: {
                 id: 'order-123',
@@ -7029,6 +7140,52 @@ describe('POST /api/payments/webhook', () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ message: 'Event ignored' });
+  });
+
+  // Suite's shared synthetic Paystack secret (test-only stub, also returned by
+  // the @/env mock above): passed explicitly so the signing key provably
+  // matches the value the route verifies against.
+  prefundedCardWebhookCases(POST, 'test-paystack-secret');
+
+  describe('primary card checkout webhook reconcile', () => {
+    const primaryBody = {
+      event: 'charge.success',
+      data: {
+        reference: 'pvb-first-primary-10000000-0000-4000-8000-000000000005',
+        customer: { email: 'customer@example.test' },
+        metadata: {
+          transaction_type: 'primary_wallet_card_checkout',
+          operation_id: '10000000-0000-4000-8000-000000000005',
+        },
+      },
+    };
+    function signedPrimaryRequest() {
+      return createMockRequest(primaryBody, {
+        'x-paystack-signature': createSignature(
+          JSON.stringify(primaryBody),
+          'test-paystack-secret'
+        ),
+      });
+    }
+    it('acknowledges once the webhook durably reconciles the collection', async () => {
+      mockReconcilePrimaryCardCheckout.mockResolvedValueOnce(
+        Response.json({ received: true }, { status: 200 })
+      );
+      const response = await POST(signedPrimaryRequest());
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ received: true });
+      expect(mockReconcilePrimaryCardCheckout).toHaveBeenCalledWith({
+        body: primaryBody,
+      });
+    });
+    it('keeps unresolved primary checkouts retryable through the sync boundary', async () => {
+      const response = await POST(signedPrimaryRequest());
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: 'Primary card reconciliation pending',
+        code: 'PRIMARY_CARD_WEBHOOK_PENDING',
+      });
+    });
   });
 });
 

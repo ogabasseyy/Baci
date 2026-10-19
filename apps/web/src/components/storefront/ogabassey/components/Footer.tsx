@@ -69,7 +69,9 @@ export const Footer: React.FC<FooterProps> = ({ merchant, storeSlug }) => {
   const contactEmail =
     firstNonEmptyTrimmed(merchant?.support_email, merchant?.email) ??
     'support@ogabassey.com';
-  const contactPhone = merchant?.phone || '+234 814 697 8921';
+  const contactPhone =
+    firstNonEmptyTrimmed(merchant?.support_phone, merchant?.phone) ??
+    '+234 814 697 8921';
   const contactAddress =
     firstNonEmptyTrimmed(merchant?.business_address) ??
     '2 Olaide Tomori St, Ikeja, Lagos';

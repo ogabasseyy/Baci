@@ -6,8 +6,6 @@ const callbacks = () => ({
   setIsLoadingResumedOrder: vi.fn(),
   setResumedOrder: vi.fn(),
   setCheckoutFields: vi.fn(),
-  setPaymentTab: vi.fn(),
-  setPaymentMethod: vi.fn(),
   setResumeOrderError: vi.fn(),
 });
 const identity = {
@@ -15,7 +13,6 @@ const identity = {
   resumeMerchantSlug: 'ogabassey',
   resumeTrackingToken: 'tracking-token',
   resumeLookupEmail: null,
-  preferredGateway: null,
 };
 afterEach(() => vi.unstubAllGlobals());
 

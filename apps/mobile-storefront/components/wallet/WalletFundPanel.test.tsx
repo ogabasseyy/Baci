@@ -25,6 +25,14 @@ const fundingAccount: WalletDisplayFundingAccount = {
   provider: 'paystack',
 };
 
+it('does not advertise Paystack fees on a PiggyVest funding account', () => {
+  renderPanel({ fundingAccount: { ...fundingAccount, provider: 'piggyvest' } });
+  expect(
+    screen.getByText(/after PiggyVest confirms receipt/)
+  ).toBeOnTheScreen();
+  expect(screen.queryByText(/1% fee/)).toBeNull();
+});
+
 function renderPanel(
   overrides: Partial<Parameters<typeof WalletFundPanel>[0]> = {}
 ) {
@@ -72,6 +80,22 @@ describe('WalletFundPanel', () => {
     ).toBeTruthy();
   });
 
+  it('explains the separate savings transfer when funding an existing plan', () => {
+    renderPanel({ returnToSavings: true });
+
+    expect(screen.getByText(/Funding adds money to your wallet/i)).toBeTruthy();
+    expect(screen.getByText(/confirm the transfer/i)).toBeTruthy();
+    expect(screen.getByText(/Re-enter the amount if needed/i)).toBeTruthy();
+  });
+
+  it('shows the account owner and dismisses through the close button', () => {
+    const props = renderPanel();
+    expect(screen.getByText('OGB / JOHN DOE')).toBeTruthy();
+    expect(screen.queryByText('Powered by PiggyVest')).toBeNull();
+    fireEvent.press(screen.getByRole('button', { name: 'Close add money' }));
+    expect(props.onResetFund).toHaveBeenCalledTimes(1);
+  });
+
   it('copies the account number', () => {
     renderPanel();
 
@@ -91,17 +115,20 @@ describe('WalletFundPanel', () => {
 
     expect(screen.getByLabelText('Wallet top-up amount')).toBeTruthy();
 
-    fireEvent.press(
-      screen.getByRole('button', { name: 'Confirm wallet top-up' })
-    );
-
-    expect(props.onConfirmFund).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole('button', { name: 'Continue to payment' })
+    ).toHaveAccessibilityState({ disabled: true });
+    expect(props.onConfirmFund).not.toHaveBeenCalled();
   });
 
   it('starts with card entry expanded when opened with a prefilled amount', () => {
-    renderPanel({ fundAmount: '1000' });
+    const props = renderPanel({ fundAmount: '1000' });
 
     expect(screen.getByLabelText('Wallet top-up amount')).toBeTruthy();
+    fireEvent.press(
+      screen.getByRole('button', { name: 'Continue to payment' })
+    );
+    expect(props.onConfirmFund).toHaveBeenCalledTimes(1);
   });
 
   it('reveals card entry when the amount is prefilled after the panel is open', () => {

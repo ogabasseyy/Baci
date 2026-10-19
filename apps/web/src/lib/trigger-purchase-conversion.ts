@@ -153,6 +153,10 @@ export async function triggerPurchaseConversion(
       throw new Error('event_pipeline_enqueue_disabled');
     }
 
+    // Every legacy path, including enqueue-disabled and legacy_only callers,
+    // must retain merchant authority before reading provider credentials.
+    if (isLegacyAnalyticsFanoutDisabled()) return;
+
     // Fetch merchant's analytics configuration and feature toggle.
     const merchantAnalytics = await fetchAnalyticsPlatformConfig(
       supabase,

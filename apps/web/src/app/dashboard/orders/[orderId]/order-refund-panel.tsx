@@ -147,6 +147,7 @@ export function OrderRefundPanel({
     confirmed,
     date,
     effectiveRemaining,
+    hasPaystackPayment: summary?.hasPaystackPayment === true,
     method,
     note,
     orderId,

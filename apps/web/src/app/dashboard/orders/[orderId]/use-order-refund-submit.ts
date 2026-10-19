@@ -15,6 +15,7 @@ export function useOrderRefundSubmit({
   confirmed,
   date,
   effectiveRemaining,
+  hasPaystackPayment,
   method,
   note,
   orderId,
@@ -37,6 +38,7 @@ export function useOrderRefundSubmit({
   confirmed: boolean;
   date: string;
   effectiveRemaining: number | null;
+  hasPaystackPayment: boolean;
   method: string;
   note: string;
   orderId: string;
@@ -59,7 +61,12 @@ export function useOrderRefundSubmit({
     if (
       action === 'retry' &&
       !window.confirm(
-        'Retry the remaining refund? Fund your Paystack balance first.'
+        // The balance hint only applies to Paystack: other gateways
+        // retry against their own rails, and telling a merchant to
+        // fund Paystack for them invites abandoning a valid retry.
+        hasPaystackPayment
+          ? 'Retry the remaining refund? Fund your Paystack balance first.'
+          : 'Retry the remaining refund?'
       )
     )
       return;

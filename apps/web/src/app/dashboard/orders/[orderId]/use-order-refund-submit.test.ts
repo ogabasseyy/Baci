@@ -24,6 +24,7 @@ function Harness({
     confirmed: true,
     date: '2026-09-28T12:00',
     effectiveRemaining: 100,
+    hasPaystackPayment: true,
     method: 'bank_transfer',
     note: 'teller 4',
     orderId: 'order-1',
@@ -99,6 +100,17 @@ describe('useOrderRefundSubmit', () => {
     expect(setters.setLegId).toHaveBeenCalledWith('');
     expect(setters.setBusy).toHaveBeenCalledWith(false);
     expect(captured.revision?.current).toBe(2);
+  });
+
+  it('uses gateway-neutral retry copy for non-Paystack orders', async () => {
+    const { captured } = setup({ hasPaystackPayment: false });
+    await act(async () => {
+      await captured.submit?.('retry');
+    });
+    expect(window.confirm).toHaveBeenCalledWith('Retry the remaining refund?');
+    expect(apiPost).toHaveBeenCalledWith('/api/orders/order-1/refund', {
+      action: 'retry',
+    });
   });
 
   it('aborts the retry when the merchant declines confirmation', async () => {

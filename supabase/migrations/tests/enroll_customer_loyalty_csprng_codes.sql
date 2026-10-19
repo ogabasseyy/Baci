@@ -19,20 +19,74 @@ SELECT pg_temp.assert_true(
   'csprng mint clause failed'
 );
 
--- Codes minted by the earlier suites keep their shapes: RDM- plus 12
--- uppercase hex for redemptions, 8 uppercase hex for referrals.
+-- A fresh member mints a referral code through enroll (8 uppercase
+-- hex). Scoped to this part's own rows: earlier suites deliberately
+-- fixture legacy-shaped codes.
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000181',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated',
+  'enroll-user-81@example.com',
+  'test', pg_catalog.now(), pg_catalog.now(), pg_catalog.now(), '{}', '{}'
+);
+INSERT INTO public.customers (id, merchant_id, email, user_id) VALUES (
+  '01aa0000-0000-4000-8000-000000000081',
+  '01aa0000-0000-4000-8000-000000000001',
+  'enroll-81@example.com',
+  '01aa0000-0000-4000-8000-000000000181'
+);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000181');
+
 SELECT pg_temp.assert_true(
-  NOT EXISTS (
-    SELECT 1 FROM public.reward_redemptions
-    WHERE discount_code !~ '^RDM-[0-9A-F]{12}$'
-  ),
-  'redemption code shape clause failed'
+  (SELECT result ->> 'success' = 'true'
+   FROM public.enroll_customer_loyalty(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000081',
+     NULL
+   ) AS result),
+  'csprng enroll clause failed'
 );
 SELECT pg_temp.assert_true(
-  NOT EXISTS (
+  EXISTS (
     SELECT 1 FROM public.customer_loyalty
-    WHERE referral_code IS NOT NULL
-      AND referral_code !~ '^[0-9A-F]{8}$'
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '01aa0000-0000-4000-8000-000000000081'
+      AND referral_code ~ '^[0-9A-F]{8}$'
   ),
   'referral code shape clause failed'
+);
+
+-- Top the member up as the merchant owner (staff fixtures from the
+-- adjustment suite), then redeem: the minted redemption code keeps
+-- the RDM- + 12 uppercase hex shape.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+   FROM public.adjust_loyalty_points(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000081',
+     1000, 'CSPRNG top-up', 'adjust'
+   ) AS result),
+  'csprng top-up clause failed'
+);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000181');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND (result ->> 'redemption_code') ~ '^RDM-[0-9A-F]{12}$'
+   FROM public.redeem_loyalty_reward(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000081',
+     (SELECT id FROM public.loyalty_rewards
+      WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+        AND name = 'Free shipping')
+   ) AS result),
+  'redemption code shape clause failed'
 );

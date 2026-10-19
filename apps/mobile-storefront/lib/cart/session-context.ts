@@ -1,4 +1,5 @@
 import { nativeCartContextSchema } from '@/schemas/cart-context';
+import { decodeBase64UrlToUtf8 } from './base64url';
 /** Unverified metadata is only a local replay fence. The server verifies all authority. */
 export function readNativeCartContext(
   proof: string,
@@ -10,16 +11,7 @@ export function readNativeCartContext(
     proof.length > 8192
   )
     throw new Error('Cart proof unavailable');
-  const encoded = proof.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  const bytes = atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '='));
-  const value: unknown = JSON.parse(
-    decodeURIComponent(
-      Array.from(
-        bytes,
-        (c) => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`
-      ).join('')
-    )
-  );
+  const value: unknown = JSON.parse(decodeBase64UrlToUtf8(proof.split('.')[1]));
   const result = nativeCartContextSchema.parse(value);
   if (
     result.merchantId.toLowerCase() !== merchantId.toLowerCase() ||

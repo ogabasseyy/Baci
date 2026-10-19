@@ -133,6 +133,14 @@ holder of that key from signing a forged issuance time.
 
 ## Deployment checklist (migration chain)
 
+- Never let `20261015170000` be the tip of an applied chain: that
+  intermediate migration grants the SECURITY DEFINER replay-snapshot
+  RPC to anon, and later append-only migrations (`20261015176000`,
+  `20261015179985`) revoke anon and add the route-claim check. Apply
+  the chain only as a whole, and verify the final state — the SQL
+  contract `supabase/tests/commerce_cart_replay_privileges_feature_shapes.sql`
+  (wired into the commerce-cart SQL bridge) asserts anon cannot
+  execute `storefront_checkout_replay_snapshot`.
 - Immediately after `20261015154000` applies and before any later
   migration or enrollment step, inspect `cron.job` for a terminal-cart
   purge job: the chain briefly schedules that purge mid-chain and

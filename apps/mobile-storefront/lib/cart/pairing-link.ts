@@ -1,4 +1,5 @@
 import { nativePairingHintSchema } from '@/schemas/cart-pairing';
+import { decodeBase64UrlToUtf8 } from './base64url';
 
 interface Config {
   merchantId: string;
@@ -123,9 +124,8 @@ export function captureCartPairingLink(path: string, config: Config): string {
       !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(handoffId)
     )
       return '/cart';
-    const encoded = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
     const hint = nativePairingHintSchema.parse(
-      JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=')))
+      JSON.parse(decodeBase64UrlToUtf8(token.split('.')[1]))
     );
     if (hint.merchantId.toLowerCase() !== config.merchantId.toLowerCase())
       return '/cart';

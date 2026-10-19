@@ -28,7 +28,8 @@ const hashNames = {
 
 module.exports = {
   CryptoDigestAlgorithm,
-  CryptoEncoding: { BASE64: 'base64', HEX: 'hex', UTF8: 'utf8' },
+  // Matches the pinned expo-crypto contract: only BASE64 and HEX exist.
+  CryptoEncoding: { BASE64: 'base64', HEX: 'hex' },
   randomUUID,
   getRandomBytes: (byteCount) => new Uint8Array(randomBytes(byteCount)),
   getRandomBytesAsync: async (byteCount) =>
@@ -39,8 +40,9 @@ module.exports = {
     const digest = createHash(name).update(String(data)).digest();
     const encoding = options?.encoding ?? 'hex';
     if (encoding === 'base64') return digest.toString('base64');
-    if (encoding === 'utf8') return digest.toString('utf8');
     if (encoding === 'hex') return digest.toString('hex');
+    // The native module rejects any other encoding (including utf8);
+    // fail loudly so Jest cannot pass on bytes a device would reject.
     throw new Error(`Unsupported digest encoding: ${String(encoding)}`);
   },
   digest: async (algorithm, data) => {

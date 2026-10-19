@@ -60,6 +60,21 @@ it('reduces non-pairing absolute URLs to the in-app cart route', () => {
   expect(captureCartPairingLink('/(tabs)/shop', config)).toBe('/(tabs)/shop');
 });
 
+it('captures a valid token when the global atob is unavailable', () => {
+  const original = globalThis.atob;
+  // @ts-expect-error simulate a runtime without the web global
+  delete globalThis.atob;
+  try {
+    const path = `https://shop.example.com/cart#handoff=${token()}&hid=${hid}`;
+    expect(captureCartPairingLink(path, config)).toBe('/cart');
+    expect(peekCartPairingLink()).toMatchObject({
+      handoffId: hid,
+      destination: 'native',
+    });
+  } finally {
+    globalThis.atob = original;
+  }
+});
 it('captures the relative path shape redirectSystemPath delivers', () => {
   const path = `/cart#handoff=${token()}&hid=${hid}`;
   expect(captureCartPairingLink(path, config)).toBe('/cart');

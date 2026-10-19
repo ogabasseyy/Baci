@@ -30,7 +30,7 @@ vi.mock('@/lib/agentic/agent-request-controls', () => ({
 }));
 
 vi.mock('@/lib/agentic/merchant-context', () => ({
-  resolveAgenticMerchantContext: mockResolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc: mockResolveAgenticMerchantContext,
 }));
 
 vi.mock('@/lib/agentic/mutation-request', () => ({
@@ -45,8 +45,8 @@ vi.mock('@/lib/agentic/ucp-cart-checkout-conversion', () => ({
   convertUcpCartToCheckout: mockConvertUcpCartToCheckout,
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({
-  createAdminClient: vi.fn(() => ({})),
+vi.mock('@/lib/supabase/anon', () => ({
+  createAnonClient: vi.fn(() => ({})),
 }));
 
 function mockMutation() {

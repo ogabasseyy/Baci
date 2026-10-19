@@ -90,6 +90,13 @@ jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children?: React.ReactNode }) => children,
 }));
 
+jest.mock('@/components/cart/SharedCartBridge', () => ({
+  SharedCartBridge: () => <MockText>shared-cart-bridge</MockText>,
+}));
+jest.mock('@/components/cart/NativeCartPairingPanel', () => ({
+  NativeCartPairingPanel: () => <MockText>cart-pairing-panel</MockText>,
+}));
+
 jest.mock('@/components/ConnectivityBanner', () => ({
   ConnectivityBanner: () => <MockText>connectivity-banner</MockText>,
 }));

@@ -1,3 +1,4 @@
+import { decodeBase64UrlToUtf8 } from './cart/base64url';
 import {
   getHostedStorefrontConfiguration,
   HOSTED_EXPO_PUSH_ORIGIN,
@@ -12,8 +13,7 @@ function jwtPayload(value: string): Record<string, unknown> {
     segments.some((part) => !/^[A-Za-z0-9_-]+$/.test(part))
   )
     throw new Error();
-  const decode = (part: string) =>
-    atob(part.replace(/-/g, '+').replace(/_/g, '/'));
+  const decode = (part: string) => decodeBase64UrlToUtf8(part);
   const header = JSON.parse(decode(segments[0]));
   const payload: unknown = JSON.parse(decode(segments[1]));
   if (

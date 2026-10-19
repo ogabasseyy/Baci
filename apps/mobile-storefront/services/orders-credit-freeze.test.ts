@@ -39,3 +39,19 @@ describe('buildSnapshottedOrderPayload', () => {
     );
   });
 });
+
+it('passes canonical provenance unchanged into the credit snapshot boundary', async () => {
+  const shared_cart = {
+    cart_id: '11111111-1111-4111-8111-111111111111',
+    checkout_session_id: '22222222-2222-4222-8222-222222222222',
+    checkout_generation: 1,
+    cart_version: 4,
+  };
+  const payload = { items: [], shared_cart };
+  mockBuildPayload.mockReturnValueOnce(payload);
+  await buildSnapshottedOrderPayload(
+    { merchantId: 'm', request: {} } as never,
+    'gen-1'
+  );
+  expect(mockApply).toHaveBeenCalledWith(payload, 'gen-1');
+});

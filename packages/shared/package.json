@@ -10,6 +10,7 @@
     "./types": "./src/types/index.ts",
     "./constants": "./src/constants/index.ts",
     "./contracts": "./src/contracts/index.ts",
+    "./cart": "./src/cart/index.ts",
     "./imei": "./src/imei/index.ts",
     "./insurance": "./src/insurance/index.ts",
     "./lib": "./src/lib/index.ts",

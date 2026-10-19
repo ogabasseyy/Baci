@@ -14,6 +14,7 @@ import type { AuthStoreGet, AuthStoreSet } from './auth-store.types';
 import { clearLocalAndDeactivatePushToken } from './auth-store-push';
 import { syncAuthenticatedState } from './auth-store-sync';
 import { useCartStore } from './cart-store';
+import { clearDeviceCartForAccountTeardown } from './clear-device-cart';
 import { useComparisonStore } from './comparison-store';
 import { useQuizStore } from './quiz-store';
 import { useSavedStore } from './saved-store';
@@ -150,7 +151,36 @@ export function createInitializeAction({
         (event, session) => {
           const { merchantId, user: previousUser } = get();
           deferAuthStateChange(async () => {
+            const retireDeviceCartSafely = async () => {
+              try {
+                await clearDeviceCartForAccountTeardown();
+              } catch {
+                log.error(
+                  'Failed to retire cart device during auth transition'
+                );
+                if (typeof useCartStore.setState === 'function') {
+                  useCartStore.setState({
+                    items: [],
+                    lineSequence: 0,
+                    cartWideNegotiationActive: false,
+                  });
+                }
+              }
+            };
             if (event === 'SIGNED_IN' && session?.user) {
+              if (previousUser?.id && previousUser.id !== session.user.id) {
+                // The Supabase JWT has already switched: fence the old
+                // identity synchronously so no screen or store can act
+                // as the previous account while retirement (a network
+                // revocation) is awaited, then hydrate the new one.
+                set({
+                  customer: null,
+                  isLoading: true,
+                  session: null,
+                  user: null,
+                });
+                await retireDeviceCartSafely();
+              }
               // Only wipe quiz state on an actual account SWITCH. SIGNED_IN also
               // fires on same-user session re-establishment / token refresh —
               // resetting then would kick a shopper out of an in-progress quiz.
@@ -170,9 +200,10 @@ export function createInitializeAction({
                 );
               }
             } else if (event === 'SIGNED_OUT') {
+              // Teardown invalidates callbacks synchronously; offline retirement stays in secure storage.
+              await retireDeviceCartSafely();
               const storedToken = await getStoredPushToken();
               await clearLocalAndDeactivatePushToken(storedToken);
-              await useCartStore.getState().clearCart();
               useSavedStore.getState().clearSaved();
               useComparisonStore.getState().clearComparison();
               useQuizStore.getState().reset();

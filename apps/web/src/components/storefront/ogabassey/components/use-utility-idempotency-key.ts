@@ -4,6 +4,7 @@ import { buildPendingVtuScopeTag } from '@baci/shared';
 import { useEffect, useRef } from 'react';
 import type { UtilityCheckoutResult } from './utility-checkout-submit';
 import {
+  adoptCanonicalVtuKey,
   forgetPendingVtuPurchase,
   forgetPendingVtuPurchaseGeneration,
   getPendingVtuKey,
@@ -35,6 +36,7 @@ export interface UtilityIdempotencyAttempt {
 }
 
 interface UseUtilityIdempotencyKeyResult {
+  adoptCanonicalKey: (scoped: string, key: string) => void;
   captureAttemptKey: (
     payloadSignature: string
   ) => Promise<UtilityIdempotencyAttempt>;
@@ -201,6 +203,10 @@ export function useUtilityIdempotencyKey({
     forgetPendingVtuPurchase(scoped);
   };
 
+  const adoptCanonicalKey = (scoped: string, key: string) => {
+    adoptCanonicalVtuKey(scoped, key);
+  };
+
   const noteScopedReference = (scoped: string, reference: string) => {
     notePendingVtuReference(scoped, reference);
   };
@@ -239,6 +245,7 @@ export function useUtilityIdempotencyKey({
   };
 
   return {
+    adoptCanonicalKey,
     captureAttemptKey,
     forgetScopedKey,
     isAttemptRetained,

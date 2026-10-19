@@ -94,6 +94,7 @@ async function executeAirtimePurchase({
         ...request,
         expectedUserId: submittingUserId,
         idempotencyKey,
+        pendingDescriptor: descriptor,
       });
       if (
         shouldDiscardVtuResultForAccountSwitch(
@@ -242,11 +243,8 @@ export function useAirtimePurchaseHandler({
     };
     // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
     // peeking first bypasses the balance gate on entries the pass
-    // then proves terminal. Sync ref guard admits no second submit.
-    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
-    // peeking first bypasses the balance gate on entries the pass
-    // then proves terminal. Shared helper also re-checks the owner
-    // after the await (Codex R103 P2).
+    // then proves terminal. Sync ref guard admits no second submit;
+    // shared helper re-checks the owner after the await (R103).
     if (!(await awaitUtilitySettlementGate({ getIsActive, payment }))) {
       isSubmittingRef.current = false;
       return;

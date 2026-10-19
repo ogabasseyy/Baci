@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildPendingVtuScopeTag } from '@baci/shared';
 import { scopePendingVtuSignature } from './utility-pending-vtu-scope';
 import {
+  adoptCanonicalVtuKey,
   clearPendingVtuKeys,
   forgetPendingVtuByReference,
   forgetPendingVtuPurchase,
@@ -25,6 +26,7 @@ import {
 import {
   flushPendingVtuPurchases,
   forgottenScopedKeys,
+  pendingVtuPurchases,
 } from './utility-pending-vtu-sync';
 
 // jsdom ships no navigator.locks, and the mint runner fails closed
@@ -543,5 +545,38 @@ describe('utility-pending-idempotency', () => {
     for (const record of snapshot.forgotten) {
       expect(record.key).toBe('key-H1');
     }
+  });
+
+  it('adopts the canonical key after a claim join, preserving entry fields', async () => {
+    rememberPendingVtuPurchase('{"a":1}', 'key-minted', 'scope-1');
+    notePendingVtuReference('{"a":1}', 'REF-1');
+
+    adoptCanonicalVtuKey('{"a":1}', 'key-winner');
+
+    expect(recallPendingVtuKey('{"a":1}')).toBe('key-winner');
+    expect(pendingVtuPurchases.get('{"a":1}')).toMatchObject({
+      key: 'key-winner',
+      reference: 'REF-1',
+      scopeTag: 'scope-1',
+    });
+    await flushPendingVtuPurchases();
+    expect(recallPendingVtuKey('{"a":1}')).toBe('key-winner');
+  });
+
+  it('adoption is a no-op for a missing entry (never resurrect)', () => {
+    adoptCanonicalVtuKey('{"gone":1}', 'key-winner');
+
+    expect(recallPendingVtuKey('{"gone":1}')).toBeUndefined();
+    expect(pendingVtuPurchases.has('{"gone":1}')).toBe(false);
+  });
+
+  it('adoption is a no-op when the entry is already canonical', () => {
+    rememberPendingVtuPurchase('{"a":2}', 'key-winner');
+    const before = pendingVtuPurchases.get('{"a":2}');
+
+    adoptCanonicalVtuKey('{"a":2}', 'key-winner');
+
+    expect(pendingVtuPurchases.get('{"a":2}')).toBe(before);
+    expect(recallPendingVtuKey('{"a":2}')).toBe('key-winner');
   });
 });

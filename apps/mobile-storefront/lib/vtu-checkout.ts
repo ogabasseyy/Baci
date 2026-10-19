@@ -1,4 +1,7 @@
-import { fetchJsonWithDeadline } from '@baci/shared';
+import {
+  fetchJsonWithDeadline,
+  VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER,
+} from '@baci/shared';
 import { EXPO_PUBLIC_API_URL } from '@/env';
 import { CONFIG } from '@/lib/config';
 import {
@@ -6,6 +9,7 @@ import {
   fetchWithTimeout,
   HttpError,
 } from '@/lib/fetch-with-timeout';
+import { adoptCanonicalVtuKey } from './pending-vtu-idempotency';
 import {
   getAccessToken,
   getResponseErrorMessage,
@@ -74,9 +78,17 @@ export async function chargeWalletForVtu(
      * clients identically.
      */
     expectedUserId?: string | null;
+    /**
+     * Registry descriptor for the minted entry. When the server
+     * joins this submit onto another key's in-flight transaction
+     * (intent claim), the entry rebinds to the winner key so
+     * retries replay instead of re-preparing per attempt.
+     */
+    pendingDescriptor?: string;
   }
 ) {
-  const { expectedUserId, idempotencyKey, ...rest } = payload;
+  const { expectedUserId, idempotencyKey, pendingDescriptor, ...rest } =
+    payload;
   const accessToken = await getAccessToken(expectedUserId, {
     requireSubmitterBinding: true,
   });
@@ -102,6 +114,15 @@ export async function chargeWalletForVtu(
     },
     method: 'POST',
   });
+  // Winner-key adoption (intent-claim join), BEFORE branching on
+  // outcome: retained-key retries on any path must replay the
+  // winner, not re-prepare + orphan per attempt. Terminal paths
+  // forget right after, so the rebind is harmless there.
+  const canonicalKey =
+    response.headers.get(VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER) ?? undefined;
+  if (canonicalKey && pendingDescriptor) {
+    adoptCanonicalVtuKey(pendingDescriptor, canonicalKey);
+  }
   if (!response.ok) {
     throw new HttpError(response.status, getResponseErrorMessage(data));
   }

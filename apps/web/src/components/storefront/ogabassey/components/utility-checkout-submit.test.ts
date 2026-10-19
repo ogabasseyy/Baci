@@ -10,11 +10,12 @@ import { submitUtilityCheckout } from './utility-checkout-submit';
 
 function jsonResponse(
   body: Record<string, unknown>,
-  init: { ok?: boolean; status?: number } = {}
+  init: { ok?: boolean; status?: number; headers?: Record<string, string> } = {}
 ) {
   return {
     ok: init.ok ?? true,
     status: init.status ?? 200,
+    headers: new Headers(init.headers ?? {}),
     text: () => Promise.resolve(JSON.stringify(body)),
   } as Response;
 }
@@ -166,6 +167,7 @@ describe('submitUtilityCheckout', () => {
     mockFetchWithCsrf.mockResolvedValue({
       ok: false,
       status: 502,
+      headers: new Headers(),
       text: () => Promise.resolve('<html>Bad gateway</html>'),
     } as Response);
 
@@ -297,4 +299,57 @@ describe('submitUtilityCheckout', () => {
       vi.useRealTimers();
     }
   }, 10_000);
+
+  it('surfaces the canonical key after an intent-claim join (success)', async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      jsonResponse(
+        { amount: 100, reference: 'REF1', status: 'successful' },
+        { headers: { 'X-Vtu-Canonical-Idempotency-Key': 'winner-key' } }
+      )
+    );
+
+    const result = await submitUtilityCheckout(baseRequest);
+
+    expect(result).toEqual({
+      kind: 'wallet-success',
+      reference: 'REF1',
+      amount: 100,
+      processing: false,
+      canonicalIdempotencyKey: 'winner-key',
+    });
+  });
+
+  it('surfaces the canonical key after an intent-claim join (error)', async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      jsonResponse({ error: 'Insufficient balance' }, {
+        ok: false,
+        status: 400,
+        headers: { 'X-Vtu-Canonical-Idempotency-Key': 'winner-key' },
+      })
+    );
+
+    const result = await submitUtilityCheckout(baseRequest);
+
+    expect(result).toEqual({
+      kind: 'error',
+      message: 'Insufficient balance',
+      status: 400,
+      canonicalIdempotencyKey: 'winner-key',
+    });
+  });
+
+  it('omits the canonical key when the server sent no wire', async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      jsonResponse({ amount: 100, reference: 'REF1', status: 'successful' })
+    );
+
+    const result = await submitUtilityCheckout(baseRequest);
+
+    expect(result).toEqual({
+      kind: 'wallet-success',
+      reference: 'REF1',
+      amount: 100,
+      processing: false,
+    });
+  });
 });

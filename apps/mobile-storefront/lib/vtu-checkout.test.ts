@@ -14,6 +14,11 @@ import {
 } from '@/lib/fetch-with-timeout';
 import { MOBILE_TO_KUDA_PROVIDER } from '@/lib/network-utils';
 import {
+  clearPendingVtuKeys,
+  recallPendingVtuKey,
+  rememberPendingVtuPurchase,
+} from '@/lib/pending-vtu-idempotency';
+import {
   chargeWalletForVtu,
   confirmVtuCheckout,
   listSavedVtuCards,
@@ -50,7 +55,11 @@ const mockFetchWithTimeout =
 
 type MockDeadlineResult = {
   data: Record<string, unknown>;
-  response: { ok: boolean; status?: number };
+  response: {
+    ok: boolean;
+    status?: number;
+    headers: { get: (name: string) => string | null };
+  };
 };
 
 const mockFetchJsonWithDeadline =
@@ -172,7 +181,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         amount: 1000,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     const result = await confirmVtuCheckout({
@@ -189,7 +198,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         status: 123,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     await expect(
@@ -206,7 +215,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         status: 'failed',
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     await expect(
@@ -223,7 +232,7 @@ describe('vtu-checkout service', () => {
         error: 'Payment is not yet successful',
         status: 'pending',
       },
-      response: { ok: false, status: 409 },
+      response: { ok: false, status: 409, headers: { get: () => null } },
     });
 
     const result = await confirmVtuCheckout({
@@ -243,7 +252,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         status: 'processing',
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     await expect(
@@ -263,7 +272,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-123',
         status: 'processing',
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     try {
@@ -321,12 +330,14 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-456',
         amount: 1000,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     // Caller-supplied UUID — the contract change. The form
     // controller holds this key in a ref so a network failure
-    // doesn't lose it; chargeWalletForVtu is a pure transport.
+    // doesn't lose it; chargeWalletForVtu also adopts the
+    // server's canonical key when the response carries the join
+    // wire (uniform across outcomes — never a per-path concern).
     const idempotencyKey = '11111111-2222-3333-4444-555555555555';
     const result = await chargeWalletForVtu({
       amount: 1000,
@@ -368,7 +379,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-456',
         amount: 1000,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     const before = Date.now();
@@ -395,7 +406,7 @@ describe('vtu-checkout service', () => {
         reference: 'VTU-456',
         amount: 1000,
       },
-      response: { ok: true },
+      response: { ok: true, headers: { get: () => null } },
     });
 
     const result = await chargeWalletForVtu({
@@ -522,5 +533,87 @@ describe('shouldRotateWalletIdempotencyKeyForError', () => {
     expect(shouldRotateWalletIdempotencyKeyForError('bare string')).toBe(false);
     expect(shouldRotateWalletIdempotencyKeyForError(undefined)).toBe(false);
     expect(shouldRotateWalletIdempotencyKeyForError(null)).toBe(false);
+  });
+
+  it('chargeWalletForVtu: adopts the canonical key after an intent-claim join', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-join-ok', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { status: 'successful', reference: 'VTU-456', amount: 1000 },
+      response: {
+        ok: true,
+        headers: {
+          get: (name: string) =>
+            name === 'X-Vtu-Canonical-Idempotency-Key' ? 'key-winner' : null,
+        },
+      },
+    });
+
+    await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: 'key-minted',
+      expectedUserId: 'user-1',
+      pendingDescriptor: 'desc-join-ok',
+    });
+
+    expect(recallPendingVtuKey('desc-join-ok')).toBe('key-winner');
+  });
+
+  it('chargeWalletForVtu: adopts the canonical key before throwing on error joins', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-join-err', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { error: 'boom' },
+      response: {
+        ok: false,
+        status: 500,
+        headers: {
+          get: (name: string) =>
+            name === 'X-Vtu-Canonical-Idempotency-Key' ? 'key-winner' : null,
+        },
+      },
+    });
+
+    await expect(
+      chargeWalletForVtu({
+        amount: 1000,
+        networkProvider: 'mtn',
+        phoneNumber: '08012345678',
+        type: 'airtime',
+        walletAmount: 1000,
+        idempotencyKey: 'key-minted',
+        expectedUserId: 'user-1',
+        pendingDescriptor: 'desc-join-err',
+      })
+    ).rejects.toThrow(HttpError);
+    expect(recallPendingVtuKey('desc-join-err')).toBe('key-winner');
+  });
+
+  it('chargeWalletForVtu: skips adoption without a descriptor', async () => {
+    clearPendingVtuKeys();
+    rememberPendingVtuPurchase('desc-no-adopt', 'key-minted');
+    mockFetchJsonWithDeadline.mockResolvedValue({
+      data: { status: 'successful', reference: 'VTU-456', amount: 1000 },
+      response: {
+        ok: true,
+        headers: { get: () => 'key-winner' },
+      },
+    });
+
+    await chargeWalletForVtu({
+      amount: 1000,
+      networkProvider: 'mtn',
+      phoneNumber: '08012345678',
+      type: 'airtime',
+      walletAmount: 1000,
+      idempotencyKey: 'key-minted',
+      expectedUserId: 'user-1',
+    });
+
+    expect(recallPendingVtuKey('desc-no-adopt')).toBe('key-minted');
   });
 });

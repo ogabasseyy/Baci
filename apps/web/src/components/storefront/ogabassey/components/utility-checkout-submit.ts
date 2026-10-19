@@ -2,6 +2,7 @@ import {
   DEFAULT_FETCH_TIMEOUT_MESSAGE,
   DEFAULT_FETCH_TIMEOUT_MS,
   isAbortError,
+  VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER,
   withDeadline,
 } from '@baci/shared/lib';
 import { fetchWithCsrf } from '@/lib/api-client';
@@ -34,12 +35,19 @@ export type UtilityCheckoutResult =
       processing: boolean;
       cashback?: UtilityCheckoutCashback;
       voucherPin?: string;
+      /** Winner key after an intent-claim join; adopt for retries. */
+      canonicalIdempotencyKey?: string;
     }
   // `status` is the HTTP status when the server answered, and undefined for
   // network failures and malformed bodies. Callers rotate the idempotency
   // key only on terminal 4xx (mirroring mobile); anything else keeps the key
   // so a retry replays instead of double-charging.
-  | { kind: 'error'; message: string; status?: number };
+  | {
+      kind: 'error';
+      message: string;
+      status?: number;
+      canonicalIdempotencyKey?: string;
+    };
 
 /**
  * Module-scope helper: keeps try/finally + throw-in-try out of the component
@@ -115,6 +123,11 @@ export const submitUtilityCheckout = async ({
     } finally {
       clearTimeout(timer);
     }
+    // Winner-key wire (intent-claim join): the caller's key has no
+    // mapping, so the caller adopts this key for retries. Present
+    // on joins regardless of outcome; absent otherwise.
+    const canonicalIdempotencyKey =
+      response.headers.get(VTU_CANONICAL_IDEMPOTENCY_KEY_HEADER) ?? undefined;
     let parsedData: unknown;
     try {
       parsedData = JSON.parse(rawResponse);
@@ -127,6 +140,7 @@ export const submitUtilityCheckout = async ({
           kind: 'error',
           message: `Payment checkout failed (${response.status})`,
           status: response.status,
+          ...(canonicalIdempotencyKey ? { canonicalIdempotencyKey } : {}),
         };
       }
       throw new Error('Payment checkout returned an invalid response');
@@ -136,6 +150,7 @@ export const submitUtilityCheckout = async ({
         kind: 'error',
         message: getCheckoutErrorMessage(parsedData),
         status: response.status,
+        ...(canonicalIdempotencyKey ? { canonicalIdempotencyKey } : {}),
       };
     }
     if (!isUtilityCheckoutResponse(parsedData)) {
@@ -158,6 +173,7 @@ export const submitUtilityCheckout = async ({
       processing: data.status === 'processing',
       ...(cashback ? { cashback } : {}),
       ...(data.voucherPin ? { voucherPin: data.voucherPin } : {}),
+      ...(canonicalIdempotencyKey ? { canonicalIdempotencyKey } : {}),
     };
   } catch (error) {
     return {

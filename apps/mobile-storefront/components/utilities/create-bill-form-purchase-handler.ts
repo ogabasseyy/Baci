@@ -184,6 +184,7 @@ export function createBillFormPurchaseHandler({
           ...request,
           expectedUserId: submittingUserId,
           idempotencyKey,
+          pendingDescriptor: descriptor,
         });
         if (
           shouldDiscardVtuResultForAccountSwitch(

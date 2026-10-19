@@ -96,6 +96,7 @@ export function useUtilityPurchase({
   // after dispatch but before React commits the rerender.
   const submittingRef = useRef(false);
   const {
+    adoptCanonicalKey,
     captureAttemptKey,
     forgetScopedKey,
     isAttemptRetained,
@@ -218,6 +219,12 @@ export function useUtilityPurchase({
         return captured.attempt.key;
       },
     });
+    // Adopt the winner key after a claim join (retries replay it).
+    const canonicalKey = result.canonicalIdempotencyKey;
+    if (canonicalKey && captured.attempt) {
+      adoptCanonicalKey(captured.attempt.scoped, canonicalKey);
+      captured.attempt = { ...captured.attempt, key: canonicalKey };
+    }
 
     await settleUtilityPurchaseResult({
       activeTab,

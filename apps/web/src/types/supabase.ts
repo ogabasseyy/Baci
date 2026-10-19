@@ -17045,6 +17045,20 @@ export type Database = {
         Args: { p_transaction_id: string };
         Returns: Json;
       };
+      claim_vtu_intent: {
+        Args: {
+          p_customer_id: string;
+          p_fingerprint: string;
+          p_key: string;
+          p_merchant_id: string;
+          p_transaction_id: string;
+        };
+        Returns: {
+          created: boolean;
+          idempotency_key: string;
+          transaction_id: string;
+        }[];
+      };
       claim_wallet_credit_push: {
         Args: { p_transaction_id: string };
         Returns: boolean;

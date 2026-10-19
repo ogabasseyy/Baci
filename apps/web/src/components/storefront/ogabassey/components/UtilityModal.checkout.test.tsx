@@ -413,6 +413,7 @@ describe('UtilityModal checkout routing', () => {
     harness.checkoutFetch.mockResolvedValue({
       ok: false,
       status: 502,
+      headers: new Headers(),
       text: () => Promise.resolve('<html>Bad gateway</html>'),
     } as Response);
 

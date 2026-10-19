@@ -25,23 +25,19 @@ import {
 
 /**
  * Cross-mount recall for wallet-only VTU idempotency keys (web):
- * retries reuse the key and the route's idempotency row dedupes
- * instead of double-charging. Entries key by canonical purchase
- * signature (scoped owner+merchant, SHA-256; no recipient in the
- * map/snapshot). Deletion rule (R68): only a view that just showed
- * a result may forget it; background passes mark stale instead.
- * Durability: localStorage, 7-day TTL; 5-minute stale window for
- * success replays. Sync/scoping in sibling modules; ops live here.
+ * retries reuse the key and the route's claim dedupes instead of
+ * double-charging. Entries key by canonical purchase signature
+ * (scoped owner+merchant, SHA-256). Deletion rule (R68): only a
+ * view that just showed a result may forget it. Sync/scoping in
+ * sibling modules; ops live here.
  */
 
 /** Sequential web UX never has more than a couple of pendings in flight. */
 const MAX_PENDING_PURCHASES = 32;
 
 /**
- * Recall window for a remembered key. Genuine resolutions land within
- * seconds of the submit; a success replay older than this is a NEW
- * purchase intent reusing a completed transaction's key, and applying
- * it would present the earlier vend as the new purchase.
+ * Recall window for a remembered key. A success replay older than
+ * this is a NEW intent reusing a completed key — never apply it.
  */
 export const PENDING_VTU_STALE_AFTER_MS = 5 * 60 * 1000;
 
@@ -83,10 +79,8 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
   }
 }
 
-/** Records the key (cap-enforced); false when memory-only — dropped
- * AND the tombstone restored so a retry re-mints AND re-persists
- * (R96 P1, R99 P2 mobile mirror). */
-/** Memory admission for a minted key (sync; durability is a scheduled locked flush — R152 P1). */
+/** Memory admission for a minted key, cap-enforced (sync; durability
+ * is a scheduled locked flush — R152 P1; R96 P1, R99 P2 mirror). */
 export function rememberPendingVtuPurchase(
   payloadSignature: string,
   key: string,
@@ -107,6 +101,22 @@ export function rememberPendingVtuPurchase(
     completedAt: null,
   });
   forgottenScopedKeys.delete(payloadSignature);
+  schedulePendingVtuFlush();
+}
+
+/** Rebinds a minted entry to the server's canonical (winner) key
+ * after an intent-claim join, preserving reference/scopeTag/
+ * completion. No-op when the entry is missing (forgotten/rotated
+ * meanwhile — never resurrect) or already canonical. */
+export function adoptCanonicalVtuKey(
+  payloadSignature: string,
+  key: string
+): void {
+  const entry = pendingVtuPurchases.get(payloadSignature);
+  if (!entry || entry.key === key) {
+    return;
+  }
+  pendingVtuPurchases.set(payloadSignature, { ...entry, key });
   schedulePendingVtuFlush();
 }
 
@@ -246,12 +256,9 @@ const PENDING_VTU_STORAGE_ERROR =
   'Could not save this purchase for retry. Please check your browser storage and try again.';
 
 /**
- * Recalled key, else mint + remember (mobile mirror). Async: the
- * triple runs under the navigator.locks mint mutex (R149), so two
- * tabs racing recall → mint serialize and the loser adopts the
- * winner's key instead of double-debiting. Throws the storage
- * error when the lock is unacquired or the mint is memory-only
- * (R96 P1): aborts pre-POST, retry re-mints once storage works.
+ * Recalled key, else mint + remember (mobile mirror) under the
+ * navigator.locks mint mutex (R149). Throws the storage error
+ * when the lock is unacquired or the mint is memory-only (R96 P1).
  */
 export function getPendingVtuKey(
   payloadSignature: string,
@@ -283,14 +290,6 @@ export function getPendingVtuKey(
   });
 }
 
-/**
- * Noted server references across live entries (cross-tab synced).
- * The retained-settlement hook reads history for these when the
- * purchase modal opens (Codex R57 6rseWu). Reference-less entries
- * are excluded (nothing to look up). With a scope tag, tagged
- * entries for OTHER owners are excluded too — untagged (legacy)
- * entries fail open, since their owner is unknowable (R62 6rtokd).
- */
 /** Test-only escape hatch: module state survives across renderHook mounts. */
 export function clearPendingVtuKeys(): void {
   pendingVtuPurchases.clear();

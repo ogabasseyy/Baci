@@ -10,6 +10,7 @@ jest.mock('expo-crypto', () => ({
 }));
 
 import {
+  adoptCanonicalVtuKey,
   clearPendingVtuKeys,
   forgetPendingVtuByReference,
   forgetPendingVtuPurchase,
@@ -33,7 +34,10 @@ import {
 } from './pending-vtu-idempotency-codec';
 import * as vtuStore from './pending-vtu-idempotency-store';
 import { noteForgottenVtuScopes } from './pending-vtu-idempotency-store';
-import { flushPendingVtuPurchases } from './pending-vtu-idempotency-sync';
+import {
+  flushPendingVtuPurchases,
+  pendingPurchases,
+} from './pending-vtu-idempotency-sync';
 
 describe('pending-vtu-idempotency', () => {
   // Suite-level isolation (Muse R123 low): the MMKV mock buckets
@@ -819,5 +823,38 @@ describe('pending-vtu-idempotency', () => {
 
     expect(listNotedPendingVtuReferences()).toEqual(['REF-SIBLING']);
     expect(hasNotedPendingVtuReference(scoped, 'REF-SIBLING')).toBe(true);
+  });
+
+  it('adopts the canonical key after a claim join, preserving entry fields', async () => {
+    rememberPendingVtuPurchase('desc-adopt', 'key-minted', 'scope-1');
+    notePendingVtuReference('desc-adopt', 'REF-1');
+
+    adoptCanonicalVtuKey('desc-adopt', 'key-winner');
+
+    expect(recallPendingVtuKey('desc-adopt')).toBe('key-winner');
+    expect(pendingPurchases.get('desc-adopt')).toMatchObject({
+      key: 'key-winner',
+      reference: 'REF-1',
+      scopeTag: 'scope-1',
+    });
+    await flushPendingVtuPurchases();
+    expect(recallPendingVtuKey('desc-adopt')).toBe('key-winner');
+  });
+
+  it('adoption is a no-op for a missing entry (never resurrect)', () => {
+    adoptCanonicalVtuKey('desc-gone', 'key-winner');
+
+    expect(recallPendingVtuKey('desc-gone')).toBeNull();
+    expect(pendingPurchases.has('desc-gone')).toBe(false);
+  });
+
+  it('adoption is a no-op when the entry is already canonical', () => {
+    rememberPendingVtuPurchase('desc-same', 'key-winner');
+    const before = pendingPurchases.get('desc-same');
+
+    adoptCanonicalVtuKey('desc-same', 'key-winner');
+
+    expect(pendingPurchases.get('desc-same')).toBe(before);
+    expect(recallPendingVtuKey('desc-same')).toBe('key-winner');
   });
 });

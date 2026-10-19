@@ -93,10 +93,9 @@ function enforcePendingVtuCap(now: number = Date.now()): void {
 /**
  * Records the key (cap-enforced). New generations supersede the
  * scope tombstone only once durable (R94 P2, R99 P2); false when
- * memory-only — dropped AND the tombstone restored so a retry
- * re-mints AND re-persists (R96 P1, web mirror).
+ * memory-only — dropped AND the tombstone restored (R96 P1).
  */
-/** Memory admission for a minted key (sync; durability is a scheduled locked flush — R152 P1, web mirror). */
+/** Memory admission for a minted key, cap-enforced (sync; scheduled locked flush — R152 P1, web mirror). */
 export function rememberPendingVtuPurchase(
   descriptor: string,
   key: string,
@@ -120,17 +119,26 @@ export function rememberPendingVtuPurchase(
   schedulePendingVtuFlush();
 }
 
+/** Rebinds a minted entry to the server's canonical (winner) key
+ * after an intent-claim join, preserving reference/scopeTag/
+ * completion. No-op when the entry is missing (forgotten/rotated
+ * meanwhile — never resurrect) or already canonical. Web mirror. */
+export function adoptCanonicalVtuKey(descriptor: string, key: string): void {
+  const entry = pendingPurchases.get(descriptor);
+  if (!entry || entry.key === key) {
+    return;
+  }
+  pendingPurchases.set(descriptor, { ...entry, key });
+  schedulePendingVtuFlush();
+}
+
 const PENDING_VTU_STORAGE_ERROR =
   'Could not save this purchase for retry. Please try again.';
 
 /**
- * Recall-or-mint choke point (R148, real mutex R149, web mirror):
- * async — the triple runs under the navigator.locks mint mutex on
- * Expo web, so two tabs racing recall → mint serialize and the
- * loser adopts the winner's key instead of double-debiting. Throws
- * the storage error when the lock is unacquired or the mint is
- * undurable — the throw aborts before the POST and the handler's
- * finally releases the checkout guard.
+ * Recall-or-mint choke point (R148, mutex R149, web mirror) under
+ * the navigator.locks mint mutex on Expo web. Throws the storage
+ * error when the lock is unacquired or the mint is undurable.
  */
 export function getPendingVtuKey(
   descriptor: string,

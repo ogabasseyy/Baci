@@ -160,6 +160,7 @@ export function createDataFormPurchaseHandler({
           ...request,
           expectedUserId: submittingUserId,
           idempotencyKey,
+          pendingDescriptor: descriptor,
         });
         if (
           shouldDiscardVtuResultForAccountSwitch(
@@ -203,10 +204,8 @@ export function createDataFormPurchaseHandler({
           await refreshWalletAfterSuppressedVtuResult(payment);
           return;
         }
-        // Only rotate on terminal success. 'processing' means the
-        // vend is still in flight server-side; rotating now would let
-        // a user-initiated retry bypass the route's dedupe row and
-        // create a duplicate VTU transaction.
+        // Never rotate while processing: the vend is still in flight
+        // server-side; rotating would bypass the claim and double-debit.
         if (result.status === 'processing') {
           notePendingVtuReference(descriptor, result.reference);
         }

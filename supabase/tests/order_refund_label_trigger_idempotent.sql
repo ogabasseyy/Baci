@@ -1,11 +1,13 @@
 -- REGRESSION TEST: the refunded-label sync trigger is idempotent.
 --
--- A cancelled order's later terminal refund rows (legs landing one
--- by one, proof-stamp refires) re-fire the trigger; its label UPDATE
--- carries the manager RPC's distinct-from guard, so an
--- already-refunded order is never rewritten and its updated_at
--- never bumps for downstream consumers. Self-contained fixtures
--- use the d720 namespace and roll back.
+-- A cancelled order's terminal refund row only flips the label once
+-- the provider verdict stamp lands; proof stamps reassign the same
+-- status to refire the sync (the worker's production flow). Every
+-- later refire re-runs the label UPDATE, whose distinct-from guard
+-- (manager RPC parity) leaves an already-refunded order unrewritten
+-- so its updated_at never bumps for downstream consumers. The bare
+-- unverified row must NOT flip the label on its own. Self-contained
+-- fixtures use the d720 namespace and roll back.
 --
 -- USAGE:
 --   supabase test db supabase/tests/order_refund_label_trigger_idempotent.sql
@@ -66,10 +68,26 @@ DECLARE
   v_ctid_before tid;
   v_ctid_after tid;
 BEGIN
+  -- The bare terminal row is unverified Paystack evidence: the
+  -- label gates must keep the paid label until the verdict stamp.
+  SELECT payment_status INTO v_status FROM public.orders
+  WHERE id = 'd7201000-0000-4000-8000-000000000001';
+  IF v_status IS DISTINCT FROM 'paid' THEN
+    RAISE EXCEPTION 'unverified refund flipped label, got %', v_status;
+  END IF;
+
+  -- Production proof stamp: reassign the same status (refiring the
+  -- sync trigger) with the provider verdict in metadata. Now the
+  -- gates clear and the label flips.
+  UPDATE public.transactions
+     SET status = 'completed',
+         metadata = metadata || pg_catalog.jsonb_build_object(
+           'provider_refund_status', 'processed')
+   WHERE id = 'd7202000-0000-4000-8000-000000000002';
   SELECT payment_status INTO v_status FROM public.orders
   WHERE id = 'd7201000-0000-4000-8000-000000000001';
   IF v_status IS DISTINCT FROM 'refunded' THEN
-    RAISE EXCEPTION 'terminal refund did not flip label, got %', v_status;
+    RAISE EXCEPTION 'stamped refund did not flip label, got %', v_status;
   END IF;
 
   -- Tuple-version the flipped order, then refire the trigger with

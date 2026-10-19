@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CUSTOMER_ID,
   createRequest,
-  createSuccessResult,
   MERCHANT_ID,
   mockSession,
   enrollMocks as mocks,

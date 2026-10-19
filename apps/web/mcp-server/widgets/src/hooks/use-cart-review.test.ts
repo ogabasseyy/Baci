@@ -99,10 +99,10 @@ it('reports a rejected review URL instead of silently doing nothing', () => {
   }
 });
 
-it('reports a popup-blocked Review instead of stranding the shopper', () => {
+it('reports a known browser navigation failure instead of stranding the shopper', () => {
   const { result, setCartError } = setup({ cart, cartUrl: foreignUrl });
   delete window.openai;
-  window.open = vi.fn(() => null);
+  window.open = vi.fn(() => { throw new Error('navigation rejected'); });
   expect(result.current.canReviewCart).toBe(true);
   act(() => {
     result.current.handleViewCart();
@@ -139,4 +139,13 @@ it('reports a navigation failure instead of throwing', () => {
   expect(setCartError).toHaveBeenCalledWith(
     'Could not open your guest cart. Please try again.'
   );
+});
+
+it('does not show a false popup error for a successful noopener request returning null', () => {
+  const { result, setCartError } = setup({ cart, cartUrl: foreignUrl });
+  delete window.openai;
+  window.open = vi.fn(() => null);
+  act(() => { result.current.handleViewCart(); });
+  expect(window.open).toHaveBeenCalledWith(foreignUrl, '_blank', 'noopener,noreferrer');
+  expect(setCartError).not.toHaveBeenCalled();
 });

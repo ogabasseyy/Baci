@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from "@modelcontextprotocol/server";
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { expect, it, vi } from 'vitest';
 import { registerGuestCartTool } from './guest-cart-tool';

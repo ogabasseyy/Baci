@@ -7,6 +7,8 @@ repo_root="$(cd "$script_dir/../.." && pwd)"
 
 cd "$repo_root"
 
+node --test "$script_dir/checkout-recovery-atomic-release.test.mjs" "$script_dir/security-pr-scope.test.mjs" "$script_dir/security-analysis-diagnostics.test.mjs" "$script_dir/recovery-release-approval.test.mjs"
+
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_sql_parser.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_nested_queries.test.mjs"
 node --test "$repo_root/supabase/tests/serialized_variant_inventory_concurrency_contract_availability.test.mjs"
@@ -70,7 +72,7 @@ bash "$script_dir/historical-migration-repair-backfill.test.sh"
 bash "$repo_root/supabase/tests/run-serialized-variant-inventory-concurrency-test.sh"
 bash "$repo_root/supabase/tests/run-storefront-order-private-schema-boundary-test.sh"
 node "$repo_root/supabase/tests/run-order-shipment-booking-permissions-test.mjs"
-BACI_SHIPPING_QUOTE_POSTGRES=1 pnpm --filter @baci/web exec vitest run src/lib/shipping/shipping-quote-route-proof.postgres.test.ts
+BACI_SHIPPING_QUOTE_POSTGRES=1 pnpm --filter @baci/web exec vitest run src/lib/shipping/shipping-quote-route-proof.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-concurrency.postgres.test.ts src/lib/shipping/prepare-checkout-shipping-recovery.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-acl.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-quantity.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-aliases.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-delivery.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-retry.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-backstop.postgres.test.ts src/lib/shipping/customer-checkout-shipping-recovery-reconciliation.postgres.test.ts
 bash "$repo_root/supabase/tests/run-paystack-reference-claim-concurrency-test.sh"
 bash "$repo_root/supabase/tests/run-merchant-invoice-partial-payment-review-index-test.sh"
 bash "$repo_root/supabase/tests/run-gigl-tracking-retry-repair-test.sh"

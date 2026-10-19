@@ -39,6 +39,10 @@ export interface UniversalCartReadinessResult {
   lastCheckedAt: string;
   status: UniversalCartReadinessStatus;
   url: string;
+  /** Cart transfer (create/read/replace/cancel) readiness alone. */
+  cartTransferReady?: boolean;
+  /** Native checkout/payment/order readiness alone. */
+  checkoutReady?: boolean;
 }
 
 interface UniversalCartReadinessMerchant {
@@ -178,7 +182,12 @@ function buildReadinessResult({
     ),
   ];
 
+  const checkById = new Map(checks.map((check) => [check.id, check.status]));
   return {
+    cartTransferReady: checkById.get('ucp_cart_capability') === 'pass',
+    checkoutReady:
+      checkById.get('ucp_checkout_capability') === 'pass' &&
+      checkById.get('payment_handler_configured') === 'pass',
     checks,
     lastCheckedAt: checkedAt,
     status: getReadinessStatus(checks),

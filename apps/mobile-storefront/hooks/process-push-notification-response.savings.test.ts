@@ -2,10 +2,10 @@ import { jest } from '@jest/globals';
 import type { NotificationResponse } from 'expo-notifications';
 import { processPushNotificationResponse } from './process-push-notification-response';
 
-const mockHandle =
-  jest.fn<
-    typeof import('@/services/push-notifications').handleNotificationResponse
-  >();
+type PushNotificationsModule =
+  typeof import('@/services/push-notifications').handleNotificationResponse;
+
+const mockHandle = jest.fn<PushNotificationsModule>();
 jest.mock('@/services/push-notifications', () => ({
   handleNotificationResponse: (...args: Parameters<typeof mockHandle>) =>
     mockHandle(...args),

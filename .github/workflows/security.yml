@@ -12,6 +12,11 @@ on:
     # Run daily at 3:00 AM UTC
     - cron: '0 3 * * *'
   workflow_dispatch:
+    inputs:
+      pg_diagnostics:
+        description: 'Run optional synthetic PostgreSQL rule diagnostics; required scans remain unchanged'
+        type: boolean
+        default: false
 
 concurrency:
   group: security-${{ github.ref }}
@@ -44,6 +49,7 @@ jobs:
           # root changes must stay in the security-relevant PR scope.
           filters: |
             semgrep_relevant:
+              - '.semgrepignore'
               - 'apps/web/src/app/api/**'
               - 'apps/web/src/lib/**'
               - 'apps/web/src/schemas/**'
@@ -106,10 +112,14 @@ jobs:
 
       - name: Resolve Semgrep scope output
         id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FILTER_SEMGREP_RELEVANT: ${{ steps.filter.outputs.semgrep_relevant }}
+          FILTER_TRUSTED_CHANGED: ${{ steps.filter.outputs.trusted_changed }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "semgrep_relevant=${{ steps.filter.outputs.semgrep_relevant }}" >> "$GITHUB_OUTPUT"
-            echo "trusted_changed=${{ steps.filter.outputs.trusted_changed }}" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            echo "semgrep_relevant=$FILTER_SEMGREP_RELEVANT" >> "$GITHUB_OUTPUT"
+            echo "trusted_changed=$FILTER_TRUSTED_CHANGED" >> "$GITHUB_OUTPUT"
           else
             echo "semgrep_relevant=true" >> "$GITHUB_OUTPUT"
             # Push/schedule/dispatch carry no PR diff; content
@@ -136,7 +146,7 @@ jobs:
 
     container:
       # Pin to specific version for reproducibility
-      image: semgrep/semgrep:1.104.0
+      image: semgrep/semgrep:1.181.0@sha256:81474464c1f07483ba0682a44787fd93c91397419762a04abe2bafaae396304b
 
     steps:
       - name: Checkout repository
@@ -147,9 +157,8 @@ jobs:
           # Required to diff against the PR base branch for targeted scans.
           fetch-depth: 0
 
-      - name: Run targeted Semgrep for security-relevant PR changes
+      - name: Fetch PR base ref for targeted Semgrep
         if: github.event_name == 'pull_request'
-        id: semgrep_pr
         shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -165,55 +174,161 @@ jobs:
           EOF
           chmod 700 "$fetch_askpass"
           GIT_ASKPASS="$fetch_askpass" GIT_TERMINAL_PROMPT=0 \
-            git -c credential.helper= fetch --no-tags --prune origin \
-            "${{ github.event.pull_request.base.ref }}:refs/remotes/origin/${{ github.event.pull_request.base.ref }}"
-          mapfile -t changed_files < <(
-            git diff --name-only --diff-filter=d "origin/${{ github.event.pull_request.base.ref }}...HEAD" -- \
-              '*.js' '*.jsx' '*.ts' '*.tsx' '*.mjs' '*.cjs' '*.sql' '*.yml' '*.yaml' |
-            grep -E '^(next\.config\.ts$|apps/web/src/app/api/|apps/web/src/lib/|apps/web/src/schemas/|apps/mobile-admin/(app|hooks|lib)/|apps/mobile-storefront/(app|hooks|lib|services|stores)/|packages/shared/|supabase/migrations/|\.github/workflows/)' ||
-            true
-          )
+            git -c credential.helper= fetch --no-tags origin \
+            "${PR_BASE_REF}:refs/remotes/origin/${PR_BASE_REF}"
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Select targeted Semgrep PR files
+        if: github.event_name == 'pull_request'
+        id: semgrep_pr_targets
+        shell: bash
+        run: |
+          diagnostics_helper=.github/scripts/semgrep-sarif-analysis-diagnostics.py
+          if git cat-file -e "origin/${PR_BASE_REF}:${diagnostics_helper}" 2>/dev/null; then
+            base_helper_dir="$(mktemp -d)"
+            trap 'rm -rf "$base_helper_dir"' EXIT
+            git show "origin/${PR_BASE_REF}:${diagnostics_helper}" > "${base_helper_dir}/semgrep-sarif-analysis-diagnostics.py"
+            diagnostics_helper="${base_helper_dir}/semgrep-sarif-analysis-diagnostics.py"
+          else
+            # Bootstrap fallback before the helper lands on the base branch:
+            # exercises the PR-head helper rather than providing independent
+            # base-pinned attestation; CODEOWNERS review + tripwire govern trust.
+            echo "::warning::Base branch ${PR_BASE_REF} lacks ${diagnostics_helper}; using PR-head bootstrap copy (requires CODEOWNERS human review, not independent CI attestation)."
+          fi
+          python3 "$diagnostics_helper" pr-targets "$PR_BASE_REF"
+          # Ignore policy changes affect unchanged files as well as the diff.
+          # Apply that policy to the entire protected push scope, using the
+          # trusted base helper and retaining strict manifest completeness.
+          ignore_policy_changed="$(git diff --name-only "origin/${PR_BASE_REF}...HEAD" -- .semgrepignore)"
+          if [ -n "$ignore_policy_changed" ]; then
+            base_pr_targets="$(mktemp)"
+            trap 'rm -f "$base_pr_targets"; if [ -n "${base_helper_dir:-}" ]; then rm -rf "$base_helper_dir"; fi' EXIT
+            cp semgrep.requested-targets "$base_pr_targets"
+            scan_targets=(
+              apps/web/src/app/api
+              apps/web/src/lib
+              apps/web/src/schemas
+              apps/mobile-admin/app
+              apps/mobile-admin/hooks
+              apps/mobile-admin/lib
+              apps/mobile-storefront/app
+              apps/mobile-storefront/hooks
+              apps/mobile-storefront/lib
+              apps/mobile-storefront/services
+              apps/mobile-storefront/stores
+              packages/shared
+              supabase/migrations
+              next.config.ts
+              .github/workflows
+              .github/scripts/semgrep-sarif-analysis-diagnostics.py
+              .github/scripts/semgrep-sarif-pg-diagnostic.py
+              .github/scripts/semgrep-sarif-pg-diagnostic.test.py
+            )
+            python3 "$diagnostics_helper" push-targets "${scan_targets[@]}"
+            # Keep all base-selected paths, including paths outside these roots.
+            cat "$base_pr_targets" >> semgrep.requested-targets
+            # Older base helpers do not yet recognize these exact Python files.
+            git ls-files -z -- \
+              .github/scripts/semgrep-sarif-pg-diagnostic.py \
+              .github/scripts/semgrep-sarif-pg-diagnostic.test.py >> semgrep.requested-targets
+          fi
+          # Add exact new token-bearing diagnostics even when the trusted base
+          # selector predates them. Preserve every base-selected target.
+          git diff --name-only -z --diff-filter=d "origin/${PR_BASE_REF}...HEAD" -- \
+            .github/scripts/semgrep-sarif-pg-diagnostic.py \
+            .github/scripts/semgrep-sarif-pg-diagnostic.test.py >> semgrep.requested-targets
+          # Preserve filename bytes and NUL framing while removing duplicate targets.
+          LC_ALL=C sort -zu -o semgrep.requested-targets semgrep.requested-targets
+        env:
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+
+      - name: Run targeted Semgrep for security-relevant PR changes
+        if: github.event_name == 'pull_request'
+        id: semgrep_pr
+        shell: bash
+        run: |
+          mapfile -d '' -t changed_files < semgrep.requested-targets
 
           if [ ${#changed_files[@]} -eq 0 ]; then
+            echo "scanned=false" >> "$GITHUB_OUTPUT"
             echo "No security-relevant changed files. Skipping Semgrep."
             exit 0
           fi
 
-          # --error: bare scan exits 0 with findings; the gate reads the outcome.
-          semgrep scan --error --config auto --sarif --output=semgrep.sarif "${changed_files[@]}"
+          echo "scanned=true" >> "$GITHUB_OUTPUT"
+          # Match the existing full CI engine; use only the existing entitlement.
+          semgrep install-semgrep-pro
+          # --strict also fails on warning-level analysis errors.
+          semgrep scan --error --strict --pro-intrafile --config auto --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${changed_files[@]}"
         env:
-          GITHUB_TOKEN: ${{ github.token }}
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
       - name: Run scoped Semgrep on protected branch pushes
         if: github.event_name == 'push'
         id: semgrep_push
+        shell: bash
         run: |
-          semgrep scan --error --config auto --sarif --output=semgrep.sarif \
-            apps/web/src/app/api \
-            apps/web/src/lib \
-            apps/web/src/schemas \
-            apps/mobile-admin/app \
-            apps/mobile-admin/hooks \
-            apps/mobile-admin/lib \
-            apps/mobile-storefront/app \
-            apps/mobile-storefront/hooks \
-            apps/mobile-storefront/lib \
-            apps/mobile-storefront/services \
-            apps/mobile-storefront/stores \
-            packages/shared \
-            supabase/migrations \
-            next.config.ts \
+          scan_targets=(
+            apps/web/src/app/api
+            apps/web/src/lib
+            apps/web/src/schemas
+            apps/mobile-admin/app
+            apps/mobile-admin/hooks
+            apps/mobile-admin/lib
+            apps/mobile-storefront/app
+            apps/mobile-storefront/hooks
+            apps/mobile-storefront/lib
+            apps/mobile-storefront/services
+            apps/mobile-storefront/stores
+            packages/shared
+            supabase/migrations
+            next.config.ts
             .github/workflows
+            .github/scripts/semgrep-sarif-analysis-diagnostics.py
+            .github/scripts/semgrep-sarif-pg-diagnostic.py
+            .github/scripts/semgrep-sarif-pg-diagnostic.test.py
+          )
+          python3 .github/scripts/semgrep-sarif-analysis-diagnostics.py push-targets "${scan_targets[@]}"
+          semgrep install-semgrep-pro
+          semgrep scan --error --strict --pro-intrafile --config auto --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json "${scan_targets[@]}"
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
 
+      - name: Diagnose PostgreSQL rule with synthetic fixtures
+        if: github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true
+        id: pg_diagnostic
+        shell: bash
+        run: |
+          semgrep install-semgrep-pro
+          python3 .github/scripts/semgrep-sarif-pg-diagnostic.py "${RUNNER_TEMP}/pg-diagnostic-summary.json"
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+        # Optional diagnostics never replace or exempt the required full scan.
+        continue-on-error: true
+
+      - name: Upload synthetic PostgreSQL diagnostic
+        id: pg_diagnostic_upload
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-pg-synthetic-diagnostic
+          path: ${{ runner.temp }}/pg-diagnostic-summary.json
+          if-no-files-found: error
+          retention-days: 3
+        continue-on-error: true
+
+      - name: Warn if optional PostgreSQL diagnostics failed
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.pg_diagnostics == true && (steps.pg_diagnostic.outcome == 'failure' || steps.pg_diagnostic_upload.outcome == 'failure')
+        run: echo "::warning::Optional PostgreSQL diagnostics failed; inspect the synthetic summary and step status. The required full Semgrep scan remains enforced."
+
       - name: Run full Semgrep on scheduled and manual scans
         if: github.event_name != 'pull_request' && github.event_name != 'push'
         id: semgrep_full
-        run: semgrep ci --sarif --output=semgrep.sarif
+        run: semgrep ci --no-suppress-errors --timeout 15 --sarif --output=semgrep.sarif --json-output=semgrep.raw.json
         env:
           SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
         continue-on-error: true
@@ -235,12 +350,44 @@ jobs:
           fetch-depth: 1
           sparse-checkout: .github/scripts
 
+      - name: Verify complete Semgrep analysis and preserve raw SARIF
+        if: always()
+        env:
+          SCAN_EVENT_NAME: ${{ github.event_name }}
+          EMPTY_PR_SCOPE: ${{ github.event_name == 'pull_request' && steps.semgrep_pr.outputs.scanned == 'false' }}
+        run: |
+          diagnostics_helper=.github/scripts/semgrep-sarif-analysis-diagnostics.py
+          if [ "$SCAN_EVENT_NAME" = "pull_request" ]; then
+            if [ -f "${GITHUB_WORKSPACE}/base-filter/${diagnostics_helper}" ]; then
+              diagnostics_helper="${GITHUB_WORKSPACE}/base-filter/${diagnostics_helper}"
+            else
+              echo "::warning::base-filter lacks ${diagnostics_helper}; using PR-head bootstrap copy (requires CODEOWNERS human review, not independent CI attestation)."
+            fi
+          fi
+          python3 "$diagnostics_helper" validate
+          if [ "$EMPTY_PR_SCOPE" != "true" ]; then
+            python3 -c 'import json, pathlib, sys; sys.exit(0 if isinstance(json.loads(pathlib.Path("semgrep.raw.json").read_text()).get("results"), list) else 1)'
+          fi
+
+      - name: Preserve unfiltered Semgrep diagnostics
+        if: always() && (github.event_name != 'pull_request' || steps.semgrep_pr.outputs.scanned != 'false')
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: semgrep-raw-diagnostics
+          path: |
+            semgrep.raw.json
+            semgrep.raw.sarif
+            semgrep.analysis-status.json
+            semgrep.requested-targets
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Drop audited checkout finding from SARIF
         if: always()
         run: |
           set -euo pipefail
           filter_dir=.github/scripts
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             filter_dir="${GITHUB_WORKSPACE}/base-filter/.github/scripts"
             for f in semgrep-sarif-filter.py semgrep_sarif_agent.py semgrep_sarif_agentenv.py semgrep_sarif_alias.py semgrep_sarif_archive.py semgrep_sarif_audit.py semgrep_sarif_awk.py semgrep_sarif_bashfunc.py semgrep_sarif_cmdfile.py semgrep_sarif_binutils.py semgrep_sarif_consts.py semgrep_sarif_consumer.py semgrep_sarif_container.py semgrep_sarif_copy.py semgrep_sarif_defer.py semgrep_sarif_embeds.py semgrep_sarif_findout.py semgrep_sarif_gh.py semgrep_sarif_git.py semgrep_sarif_helpers.py semgrep_sarif_helpertree.py semgrep_sarif_heredoc.py semgrep_sarif_install.py semgrep_sarif_interp.py semgrep_sarif_jq.py semgrep_sarif_nameref.py semgrep_sarif_order.py semgrep_sarif_peel.py semgrep_sarif_perl.py semgrep_sarif_pins.py semgrep_sarif_refs.py semgrep_sarif_poison.py semgrep_sarif_programs.py semgrep_sarif_redirect.py semgrep_sarif_runner.py semgrep_sarif_scan.py semgrep_sarif_secretbind.py semgrep_sarif_sed.py semgrep_sarif_segments.py semgrep_sarif_shell.py semgrep_sarif_steps.py semgrep_sarif_subscript.py semgrep_sarif_tar.py semgrep_sarif_varcollect.py semgrep_sarif_varmap.py semgrep_sarif_words.py semgrep_sarif_xargs.py semgrep_sarif_zone.py; do
               [ -f "${filter_dir}/${f}" ] || { echo "::error::base filter copy missing ${f}; failing closed."; exit 1; }
@@ -248,6 +395,7 @@ jobs:
           fi
           python3 "${filter_dir}/semgrep-sarif-filter.py"
         env:
+          EVENT_NAME: ${{ github.event_name }}
           TRUSTED_CHANGED: ${{ needs.changes.outputs.trusted_changed }}
           # Advisory mode: trusted-only drift warns instead of failing
           # this required job (hardening drift still fails; tripwire

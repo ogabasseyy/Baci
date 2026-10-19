@@ -102,6 +102,10 @@ describe('useRedvaultAvailability', () => {
     ['assurance', { assuranceFee: 500, deliveryFee: 0 }],
     ['delivery', { assuranceFee: 0, deliveryFee: 1500 }],
   ])('hides a pilot result when %s fees apply', async (_label, fees) => {
+    mockGetAvailability.mockResolvedValue({
+      available: true,
+      reason: 'public_product_test',
+    });
     const { result } = renderHook(() =>
       useRedvaultAvailability({
         ...fees,

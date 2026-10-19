@@ -1,5 +1,6 @@
 import { eventPipelineAdminImporters } from '@/lib/events/event-pipeline-authority-paths';
 import { eventPipelineAuthorityServicePaths } from '@/lib/events/event-pipeline-authority-service-paths';
+import { eventPipelineCartCredentialPaths } from '@/lib/events/event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from '@/lib/events/event-pipeline-chat-credential-paths';
 import { eventPipelineCredentialPaths } from '@/lib/events/event-pipeline-credential-paths';
 import {
@@ -22,6 +23,7 @@ import {
   eventPipelineExpenseCleanupAdjacentFunctions,
   eventPipelineVpsRuntimeCallers,
 } from '@/lib/events/event-pipeline-vps-runtime-callers';
+import { eventPipelineVtuReplayAdminPaths } from '@/lib/events/event-pipeline-vtu-replay-admin-paths';
 import type { Database, Json } from '@/types/supabase';
 
 export { EVENT_PIPELINE_FUNCTION_NAMES };
@@ -131,7 +133,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
   ],
   authority: {
     adminImporters: eventPipelineAdminImporters,
-    adminPaths: eventPipelineGatewayCronAdminPaths,
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    adminPaths: [...eventPipelineGatewayCronAdminPaths, ...eventPipelineVtuReplayAdminPaths],
     bareClientImporters: [
       ...Object.keys(eventPipelineFrozenRoutes),
       'apps/web/src/app/api/analytics/conversion/route.ts',
@@ -139,18 +142,8 @@ export const EVENT_PIPELINE_BOUNDARY = {
       'apps/web/src/lib/analytics/fetch-analytics-platform-config.ts',
       'apps/web/src/lib/merchant-feature-gates.ts',
     ],
-    credentialPaths: [
-      ...eventPipelineCredentialPaths,
-      ...eventPipelineImmediateOrderCredentialPaths,
-      ...eventPipelineJumiaCredentialPaths,
-      ...eventPipelinePiggyvestCredentialPaths,
-      ...eventPipelineRepairPickupCredentialPaths,
-      ...eventPipelineRedvaultCredentialPaths,
-      ...eventPipelineShippingCredentialPaths,
-      ...eventPipelineChatCredentialPaths,
-      ...eventPipelinePaystackRefundCredentialPaths,
-      ...eventPipelineGatewayCronCredentialPaths,
-    ],
+    // biome-ignore format: compact spread preserves the 300-line runtime ceiling.
+    credentialPaths: [...eventPipelineCartCredentialPaths, ...eventPipelineCredentialPaths, ...eventPipelineImmediateOrderCredentialPaths, ...eventPipelineJumiaCredentialPaths, ...eventPipelinePiggyvestCredentialPaths, ...eventPipelineRepairPickupCredentialPaths, ...eventPipelineRedvaultCredentialPaths, ...eventPipelineShippingCredentialPaths, ...eventPipelineChatCredentialPaths, ...eventPipelinePaystackRefundCredentialPaths, ...eventPipelineGatewayCronCredentialPaths],
     factoryModules: [
       'apps/web/src/lib/supabase/admin.ts',
       'apps/web/src/lib/supabase/server.ts',

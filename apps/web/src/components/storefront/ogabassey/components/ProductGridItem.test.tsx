@@ -369,4 +369,43 @@ describe('ProductGridItem', () => {
     completeSpy.mockRestore();
     naturalWidthSpy.mockRestore();
   });
+
+  it('does not re-read image layout properties on subsequent re-renders after loading', () => {
+    const completeSpy = vi
+      .spyOn(window.HTMLImageElement.prototype, 'complete', 'get')
+      .mockReturnValue(true);
+    const naturalWidthSpy = vi
+      .spyOn(window.HTMLImageElement.prototype, 'naturalWidth', 'get')
+      .mockReturnValue(640);
+
+    const { rerender } = render(
+      <ProductGridItem
+        product={baseProduct}
+        onAddToCart={vi.fn()}
+        isAdded={false}
+        isWishlisted={false}
+        onToggleWishlist={vi.fn()}
+      />
+    );
+
+    expect(completeSpy).toHaveBeenCalledTimes(1);
+    expect(naturalWidthSpy).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ProductGridItem
+        product={baseProduct}
+        onAddToCart={vi.fn()}
+        isAdded={true}
+        isWishlisted={false}
+        onToggleWishlist={vi.fn()}
+      />
+    );
+
+    expect(completeSpy).toHaveBeenCalledTimes(1);
+    expect(naturalWidthSpy).toHaveBeenCalledTimes(1);
+
+    completeSpy.mockRestore();
+    naturalWidthSpy.mockRestore();
+  });
 });
+

@@ -14,6 +14,11 @@ on:
         description: Exact commit verified by the release coordinator
         required: false
         type: string
+      reconcile_checkout_recovery_legacy:
+        description: Approve the exact ten-migration recovery predecessor upgrade to its closed gate
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -229,6 +234,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      CHECKOUT_RECOVERY_LEGACY_RECONCILIATION: ${{ github.event_name == 'workflow_dispatch' && inputs.reconcile_checkout_recovery_legacy && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -478,6 +484,11 @@ jobs:
       # Bumping the pin requires re-checking that the new CLI's bundled
       # esbuild version is still on the allow list.
       - run: .github/scripts/run-pinned-vercel.sh pull --yes --environment=production
+      - name: Normalize sensitive build placeholders
+        # CLI 57 writes [SENSITIVE] for unavailable runtime values. As in the
+        # Preview flow, normalize only that marker before build validation;
+        # actual Production values and runtime validation remain unchanged.
+        run: node .github/scripts/normalize-vercel-sensitive-placeholders.mjs .vercel/.env.production.local
       - name: Verify GIGL fallback token presence (defined, not validity) in Vercel Production
         # Presence-only: Vercel pulls sensitive values blank, so this
         # proves the Production key is DEFINED and injects a build-time
@@ -506,6 +517,12 @@ jobs:
         env:
           QUIZ_RPC_SERVER_SECRET: ${{ secrets.QUIZ_RPC_SERVER_SECRET }}
         run: node .github/scripts/inject-prebuilt-env-secret.mjs QUIZ_RPC_SERVER_SECRET .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
+      - name: Ensure build-time presence of runtime-only legacy Supabase JWT secret
+        # SUPABASE_JWT_SECRET is marked sensitive in Vercel Production, so it
+        # pulls as a blank placeholder after normalization. Inject a build-time
+        # stand-in so the legacy fallback and env.ts build validation pass while
+        # Vercel supplies the real secret at runtime.
+        run: node .github/scripts/inject-prebuilt-env-secret.mjs SUPABASE_JWT_SECRET .vercel/.env.production.local 'build-time-presence-stand-in-not-used-at-runtime-000000000000'
       - name: Ensure build-time presence of runtime-only scoped Supabase JWT key
         # Vercel pulls sensitive runtime values as empty strings. Generate a
         # fresh build-only JWK inside the injector to satisfy build validation;

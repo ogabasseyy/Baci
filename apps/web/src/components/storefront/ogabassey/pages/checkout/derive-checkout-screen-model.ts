@@ -50,6 +50,8 @@ export interface CheckoutScreenModelInput {
   };
   availability: {
     redvaultAvailable: boolean;
+    /** Bound shared-cart orders cannot take the REDVAULT path. */
+    sharedCartActive: boolean;
   };
 }
 
@@ -132,7 +134,8 @@ export function deriveCheckoutScreenModel({
       merchant,
       user,
       currency: identity.currencyCode,
-      redvaultAvailable: availability.redvaultAvailable,
+      redvaultAvailable:
+        availability.redvaultAvailable && !availability.sharedCartActive,
       redvaultOrderReady: Boolean(paymentSession.redvault.orderReady),
     },
   };

@@ -194,11 +194,11 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: true,
     },
     getComponents: async () => {
-      const { GadgetDefaultTemplate } = await import(
-        '@/components/storefront/templates/gadget-default-template'
+      const { ElectronicsTemplateHome } = await import(
+        './registry-client-homes'
       );
       return {
-        Home: GadgetDefaultTemplate as ComponentType<TemplatePageProps>,
+        Home: ElectronicsTemplateHome,
       };
     },
     mockData: {
@@ -234,11 +234,9 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: true,
     },
     getComponents: async () => {
-      const { PremiumDefaultTemplate } = await import(
-        '@/components/storefront/templates/premium-default'
-      );
+      const { FashionTemplateHome } = await import('./registry-client-homes');
       return {
-        Home: PremiumDefaultTemplate as ComponentType<TemplatePageProps>,
+        Home: FashionTemplateHome,
       };
     },
     mockData: {
@@ -274,8 +272,8 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { HomeGoodsHome } = await import('./home-goods');
-      return { Home: HomeGoodsHome };
+      const { HomeGoodsTemplateHome } = await import('./registry-client-homes');
+      return { Home: HomeGoodsTemplateHome };
     },
     mockData: {
       merchant: {
@@ -310,8 +308,10 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { FoodBeverageHome } = await import('./food-beverage');
-      return { Home: FoodBeverageHome };
+      const { FoodBeverageTemplateHome } = await import(
+        './registry-client-homes'
+      );
+      return { Home: FoodBeverageTemplateHome };
     },
     mockData: {
       merchant: {
@@ -346,8 +346,10 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { BeautyHome } = await import('./beauty');
-      return { Home: BeautyHome };
+      const { HealthBeautyTemplateHome } = await import(
+        './registry-client-homes'
+      );
+      return { Home: HealthBeautyTemplateHome };
     },
     mockData: {
       merchant: {
@@ -382,8 +384,10 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { HairExtensionsHome } = await import('./hair-extensions');
-      return { Home: HairExtensionsHome };
+      const { HairExtensionsTemplateHome } = await import(
+        './registry-client-homes'
+      );
+      return { Home: HairExtensionsTemplateHome };
     },
     mockData: {
       merchant: {
@@ -418,8 +422,10 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { PharmaceuticalHome } = await import('./pharmaceutical');
-      return { Home: PharmaceuticalHome };
+      const { PharmaceuticalsTemplateHome } = await import(
+        './registry-client-homes'
+      );
+      return { Home: PharmaceuticalsTemplateHome };
     },
     mockData: {
       merchant: {
@@ -465,11 +471,11 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     tags: ['gadgets', 'dark', 'modern', 'advanced'],
     updatedAt: '2024-12-05',
     getComponents: async () => {
-      const { GadgetUniverseTemplate } = await import(
-        '@/components/storefront/templates/gadget-universe'
+      const { GadgetUniverseTemplateHome } = await import(
+        './registry-client-homes'
       );
       return {
-        Home: GadgetUniverseTemplate as React.ComponentType<any>,
+        Home: GadgetUniverseTemplateHome,
       };
     },
     mockData: {
@@ -571,11 +577,11 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { Home } = await import(
-        '@/components/storefront/new-template/home'
+      const { GadgetsProTemplateHome } = await import(
+        './registry-client-homes'
       );
       return {
-        Home: Home as ComponentType<TemplatePageProps>,
+        Home: GadgetsProTemplateHome,
       };
     },
     mockData: {
@@ -614,8 +620,8 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
       orderTracking: false,
     },
     getComponents: async () => {
-      const { HandmadeHome } = await import('./artisan');
-      return { Home: HandmadeHome };
+      const { HandmadeTemplateHome } = await import('./registry-client-homes');
+      return { Home: HandmadeTemplateHome };
     },
     mockData: {
       merchant: {

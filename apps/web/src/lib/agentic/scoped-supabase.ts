@@ -53,3 +53,26 @@ export function createAgenticScopedSupabaseClient({
     },
   });
 }
+
+/** Server-only authority to resolve one configured merchant's private controls. */
+export function createAgenticMerchantContextClient(
+  slug: string,
+  now = new Date()
+) {
+  const normalizedSlug = slug.trim().toLowerCase();
+  if (!normalizedSlug || Buffer.byteLength(normalizedSlug, 'utf8') > 254) {
+    throw new Error('Agentic merchant slug is required');
+  }
+  const issuedAt = Math.floor(now.getTime() / 1000);
+  const token = signScopedSupabaseJwt({
+    aud: 'authenticated',
+    role: 'agentic_merchant_context',
+    agentic_merchant_slug: normalizedSlug,
+    iat: issuedAt,
+    exp: issuedAt + TOKEN_TTL_SECONDS,
+  });
+  return createClient(getSupabaseUrl(), getSupabaseAnonKey(), {
+    auth: { autoRefreshToken: false, persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+}

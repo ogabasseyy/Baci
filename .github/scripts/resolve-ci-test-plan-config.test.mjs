@@ -4,6 +4,7 @@ import { ciTestPlanConfig } from './resolve-ci-test-plan-config.mjs';
 import './tools-worker-typecheck-contract.test.mjs';
 import './web-build-timeout-contract.test.mjs';
 import './web-test-checkout-contract.test.mjs';
+import './shipping-recovery-ci-contract.test.mjs';
 
 test('treats turbo build env additions as safe config smoke changes', () => {
   assert.equal(

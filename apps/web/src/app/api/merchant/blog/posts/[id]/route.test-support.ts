@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { vi } from 'vitest';
 import { DEFAULT_BLOG_MEDIA_CDN_ORIGIN } from '@/config/cdn';
 
+type ServerModule = typeof import('next/server');
+type IndexnowModule = typeof import('@/lib/indexnow');
+
 // ---- Mocks ----
 
 vi.mock('@/env', () => ({
@@ -11,8 +14,7 @@ vi.mock('@/env', () => ({
 }));
 
 vi.mock('next/server', async () => {
-  const actual =
-    await vi.importActual<typeof import('next/server')>('next/server');
+  const actual = await vi.importActual<ServerModule>('next/server');
 
   return {
     ...actual,
@@ -71,7 +73,7 @@ vi.mock('@/lib/zoho-blog-campaign-server', () => ({
 }));
 
 vi.mock('@/lib/indexnow', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/indexnow')>();
+  const actual = await importOriginal<IndexnowModule>();
 
   return {
     ...actual,

@@ -1,28 +1,36 @@
-import { router } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import type { useUtilityPayment } from '@/hooks/use-utility-payment';
+import { buildVtuPurchaseDescriptor } from '@/lib/pending-vtu-descriptor';
 import {
-  chargeSavedVtuCard,
+  forgetPendingVtuPurchaseDurable,
+  isStalePendingVtuSuccess,
+  notePendingVtuReference,
+} from '@/lib/pending-vtu-idempotency';
+import type { WalletReturnHref } from '@/lib/sanitize-wallet-return-to';
+import {
+  acquireUtilityCheckoutOrAlert,
+  releaseUtilityCheckout,
+} from '@/lib/utility-checkout-inflight';
+import { ensureUtilityWalletReady } from '@/lib/utility-wallet-readiness';
+import {
   chargeWalletForVtu,
-  computeVtuWalletAmount,
-  initializeVtuCheckout,
-  isSavedVtuCardChargeProcessing,
-  requiresSavedVtuCardAuthorization,
+  creditedVtuCashback,
   shouldRotateWalletIdempotencyKeyForError,
-  type VtuConfirmationGateway,
-  VtuPaymentStillProcessingError,
-  waitForVtuConfirmation,
 } from '@/lib/vtu-checkout';
 import type { Customer } from '@/stores/auth-store.types';
 import type { AirtimeFormProps } from './airtime-form.types';
 import {
-  buildAirtimeGatewayParams,
   getAirtimeCustomerName,
   validateAirtimePurchaseInput,
 } from './airtime-form-controller.helpers';
-
-const SAVED_CARD_CONFIRMATION_GATEWAY: VtuConfirmationGateway = 'paystack';
+import { useMountedRef } from './use-mounted-ref';
+import {
+  awaitUtilitySettlementGate,
+  preserveSuppressedVtuSuccess,
+  refreshWalletAfterSuppressedVtuResult,
+  shouldDiscardVtuResultForAccountSwitch,
+} from './vtu-account-switch';
 
 interface UseAirtimePurchaseHandlerProps {
   amount: string;
@@ -33,167 +41,147 @@ interface UseAirtimePurchaseHandlerProps {
   customer: Customer | null;
   onSuccess: AirtimeFormProps['onSuccess'];
   dismissKeyboard: () => void;
+  returnToHref?: WalletReturnHref | null;
+  /** Screen liveness probe (mount state by default; injectable). */
+  getIsActive?: () => boolean;
 }
 
 interface ExecuteAirtimePurchaseInput {
-  customer: Customer | null;
-  isWalletOnly: boolean;
+  getIsActive?: () => boolean;
   numericAmount: number;
   onSettled: () => void;
   onSuccess: AirtimeFormProps['onSuccess'];
   payment: ReturnType<typeof useUtilityPayment>;
   phoneNumber: string;
-  selectedProvider: string | null;
-  walletAmount: number;
+  /** Caller-prebuilt (peek-signed): never rebuilt, no peek/submit drift. */
+  request: {
+    amount: number;
+    customerName: string;
+    customerPhone: string | undefined;
+    networkProvider: string | undefined;
+    phoneNumber: string;
+    type: 'airtime';
+    walletAmount: number;
+  };
 }
 
+/**
+ * Wallet-only airtime purchase. The wallet must cover the full amount —
+ * there is no card or gateway fallback.
+ */
 async function executeAirtimePurchase({
-  customer,
-  isWalletOnly,
+  getIsActive,
   numericAmount,
   onSettled,
   onSuccess,
   payment,
   phoneNumber,
-  selectedProvider,
-  walletAmount,
+  request,
 }: ExecuteAirtimePurchaseInput): Promise<void> {
-  let didNavigate = false;
   try {
-    const customerName = getAirtimeCustomerName(customer);
-
-    if (isWalletOnly) {
-      const idempotencyKey = payment.getWalletIdempotencyKey();
-      try {
-        const result = await chargeWalletForVtu({
-          amount: numericAmount,
-          customerName,
-          customerPhone: customer?.phone,
-          networkProvider: selectedProvider ?? undefined,
-          phoneNumber,
-          type: 'airtime',
-          walletAmount: numericAmount,
-          idempotencyKey,
-        });
-        if (result.status === 'processing') {
-          onSuccess({
-            amount: result.amount ?? numericAmount,
-            customerIdentifier: phoneNumber,
-            reference: result.reference,
-            status: 'processing',
-          });
-          return;
-        }
-        payment.resetWalletIdempotencyKey();
+    // Descriptor-keyed recall: remount retries reuse the SAME key so
+    // the route dedupes instead of debiting a second transaction.
+    const descriptor = payment.scopePendingVtuDescriptor(
+      buildVtuPurchaseDescriptor(request)
+    );
+    // The pass was already awaited above the retained peek in
+    // handlePurchase; the capture below recalls post-settle state.
+    const idempotencyKey = await payment.getWalletIdempotencyKey(descriptor);
+    const submittingOwner = payment.captureSubmittingOwner();
+    const submittingUserId = payment.captureSubmittingUserId();
+    try {
+      const result = await chargeWalletForVtu({
+        ...request,
+        expectedUserId: submittingUserId,
+        idempotencyKey,
+      });
+      if (
+        shouldDiscardVtuResultForAccountSwitch(
+          payment,
+          submittingOwner,
+          getIsActive
+        )
+      ) {
+        // Finalize the SUBMITTER's entry so switch-back repeats replay
+        // the original outcome instead of minting fresh.
+        await preserveSuppressedVtuSuccess(payment, descriptor, result);
+        return;
+      }
+      if (getIsActive && !getIsActive()) {
+        // Back-navigated mid-flight: preserve for SAME-key replay on
+        // reopen; suppress onSuccess/Alert (screen gone).
+        await preserveSuppressedVtuSuccess(payment, descriptor, result);
+        return;
+      }
+      if (result.status === 'processing') {
+        notePendingVtuReference(descriptor, result.reference);
         onSuccess({
           amount: result.amount ?? numericAmount,
-          cashback: result.cashback,
+          customerIdentifier: phoneNumber,
           reference: result.reference,
-          status: 'successful',
-          voucherPin: result.voucherPin,
+          status: 'processing',
         });
         return;
-      } catch (error) {
-        if (shouldRotateWalletIdempotencyKeyForError(error)) {
-          payment.resetWalletIdempotencyKey();
-        }
-        throw error;
       }
-    }
-
-    if (payment.selectedSavedCardId) {
-      const result = await chargeSavedVtuCard({
-        amount: numericAmount,
-        customerName,
-        customerPhone: customer?.phone,
-        networkProvider: selectedProvider ?? undefined,
-        phoneNumber,
-        savedPaymentMethodId: payment.selectedSavedCardId,
-        type: 'airtime',
-        ...(walletAmount > 0 ? { walletAmount } : {}),
-      });
-
-      if (requiresSavedVtuCardAuthorization(result)) {
-        router.push({
-          pathname: '/payment-gateway',
-          params: buildAirtimeGatewayParams({
-            amount: numericAmount,
-            authorizationUrl: result.authorization_url,
-            customerIdentifier: phoneNumber,
-            gateway: result.gateway,
-            reference: result.reference,
-          }),
-        });
-        didNavigate = true;
+      if (isStalePendingVtuSuccess(descriptor, result.reference)) {
+        // Old replay answering a NEW intent: forget so the next tap
+        // mints fresh, and say so instead of presenting it as new.
+        await forgetPendingVtuPurchaseDurable(descriptor);
+        Alert.alert(
+          'Purchase Already Completed',
+          `This purchase already completed (${result.reference}). Submit again to make a new purchase.`
+        );
         return;
       }
-
-      if (isSavedVtuCardChargeProcessing(result)) {
-        try {
-          const confirmationGateway =
-            result.gateway ?? SAVED_CARD_CONFIRMATION_GATEWAY;
-          const confirmed = await waitForVtuConfirmation({
-            gateway: confirmationGateway,
-            reference: result.reference,
-          });
-          onSuccess({
-            amount: confirmed.amount ?? numericAmount,
-            cashback: confirmed.cashback,
-            reference: confirmed.reference,
-            status: 'successful',
-            voucherPin: confirmed.voucherPin,
-          });
-        } catch (error) {
-          if (error instanceof VtuPaymentStillProcessingError) {
-            onSuccess({
-              amount: error.amount ?? numericAmount,
-              customerIdentifier: error.customerIdentifier ?? phoneNumber,
-              reference: error.reference,
-              status: 'processing',
-            });
-            return;
-          }
-          throw error;
-        }
-        return;
-      }
-
+      // Durable (Codex R153 P2): lands before onSuccess finalizes.
+      await forgetPendingVtuPurchaseDurable(descriptor);
       onSuccess({
-        amount: result.amount,
-        cashback: result.cashback,
+        amount: result.amount ?? numericAmount,
+        cashback: creditedVtuCashback(result.cashback),
+        customerIdentifier: phoneNumber,
         reference: result.reference,
         status: 'successful',
         voucherPin: result.voucherPin,
       });
       return;
+    } catch (error) {
+      if (
+        shouldDiscardVtuResultForAccountSwitch(
+          payment,
+          submittingOwner,
+          getIsActive
+        )
+      ) {
+        // Still finalize status-bearing terminal errors for the
+        // SUBMITTER (descriptor captured at submit): otherwise the
+        // retained key replays the dead transaction when they retry.
+        if (shouldRotateWalletIdempotencyKeyForError(error)) {
+          payment.resetWalletIdempotencyKey(descriptor);
+        }
+        return;
+      }
+      if (shouldRotateWalletIdempotencyKeyForError(error)) {
+        payment.resetWalletIdempotencyKey(descriptor);
+        // The rejection may prove a stale balance (e.g. 400 after
+        // another spend): AWAIT the refetch (never rejects), else a
+        // quick retry re-passes on it. On-screen only — off-screen
+        // uses the never-fails refresh below, never the Alert.
+        if (!getIsActive || getIsActive()) {
+          await payment.refetchWallet();
+        }
+      }
+      if (getIsActive && !getIsActive()) {
+        // Screen gone: refresh (a 5xx may have committed while its
+        // response was lost, and the retained key re-serves the
+        // cached balance on reopen — without this the client gate
+        // validates against the pre-debit balance) then suppress
+        // the failure UI (no Alert over the new screen). Never-fails
+        // wrapper: the refresh must not surface as Payment Failed.
+        await refreshWalletAfterSuppressedVtuResult(payment);
+        return;
+      }
+      throw error;
     }
-
-    const selectedGateway = payment.selectedGateway;
-    if (!selectedGateway) {
-      throw new Error('A payment gateway must be selected before checkout.');
-    }
-
-    const result = await initializeVtuCheckout({
-      type: 'airtime',
-      amount: numericAmount,
-      customerName,
-      customerPhone: customer?.phone,
-      gateway: selectedGateway,
-      networkProvider: selectedProvider ?? undefined,
-      phoneNumber,
-      ...(walletAmount > 0 ? { walletAmount } : {}),
-    });
-    router.push({
-      pathname: '/payment-gateway',
-      params: buildAirtimeGatewayParams({
-        amount: numericAmount,
-        authorizationUrl: result.authorization_url,
-        customerIdentifier: phoneNumber,
-        gateway: result.gateway,
-        reference: result.reference,
-      }),
-    });
-    didNavigate = true;
   } catch (error) {
     console.error('Airtime purchase failed:', error);
     Alert.alert(
@@ -201,7 +189,7 @@ async function executeAirtimePurchase({
       error instanceof Error ? error.message : 'Something went wrong.'
     );
   } finally {
-    if (!didNavigate) {
+    if (!getIsActive || getIsActive()) {
       onSettled();
     }
   }
@@ -216,9 +204,13 @@ export function useAirtimePurchaseHandler({
   customer,
   onSuccess,
   dismissKeyboard,
+  returnToHref,
+  getIsActive: getIsActiveProp,
 }: UseAirtimePurchaseHandlerProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
+  const mountedRef = useMountedRef();
+  const getIsActive = getIsActiveProp ?? (() => mountedRef.current);
 
   const handlePurchase = async () => {
     dismissKeyboard();
@@ -227,22 +219,11 @@ export function useAirtimePurchaseHandler({
     }
     isSubmittingRef.current = true;
 
-    const walletAmount = computeVtuWalletAmount(
-      payment.walletSelection?.use === true
-        ? payment.walletSelection.amount
-        : 0,
-      numericAmount
-    );
-    const isWalletOnly = walletAmount > 0 && walletAmount === numericAmount;
-
     const validationError = validateAirtimePurchaseInput({
       amount,
-      isWalletOnly,
       numericAmount,
       phoneNumber,
-      selectedGateway: payment.selectedGateway,
       selectedProvider,
-      selectedSavedCardId: payment.selectedSavedCardId,
     });
     if (validationError) {
       Alert.alert(validationError.title, validationError.message);
@@ -250,21 +231,65 @@ export function useAirtimePurchaseHandler({
       return;
     }
 
-    setIsSubmitting(true);
-    await executeAirtimePurchase({
-      customer,
-      isWalletOnly,
-      numericAmount,
-      onSettled: () => {
-        isSubmittingRef.current = false;
-        setIsSubmitting(false);
-      },
-      onSuccess,
-      payment,
+    const request = {
+      amount: numericAmount,
+      customerName: getAirtimeCustomerName(customer),
+      customerPhone: customer?.phone,
+      networkProvider: selectedProvider ?? undefined,
       phoneNumber,
-      selectedProvider,
-      walletAmount,
-    });
+      type: 'airtime' as const,
+      walletAmount: numericAmount,
+    };
+    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
+    // peeking first bypasses the balance gate on entries the pass
+    // then proves terminal. Sync ref guard admits no second submit.
+    // Settle-then-submit gate (R60) BEFORE the retained peek (R66):
+    // peeking first bypasses the balance gate on entries the pass
+    // then proves terminal. Shared helper also re-checks the owner
+    // after the await (Codex R103 P2).
+    if (!(await awaitUtilitySettlementGate({ getIsActive, payment }))) {
+      isSubmittingRef.current = false;
+      return;
+    }
+    // Retained-replay peek (R65 6ru4mK): the SAME request the submit
+    // signs with — a charged-but-unanswered retry must bypass the
+    // balance gate instead of stranding behind top-up.
+    const isRetainedReplay = payment.hasRetainedVtuAttempt(request);
+    if (
+      !ensureUtilityWalletReady({
+        amount: numericAmount,
+        isRetainedReplay,
+        payment,
+        returnToHref,
+      })
+    ) {
+      isSubmittingRef.current = false;
+      return;
+    }
+
+    // Screen-wide guard (Codex R77 6sNGO3): per-tab refs don't see
+    // sibling tabs — refuse concurrent checkouts, don't queue.
+    if (!acquireUtilityCheckoutOrAlert()) {
+      isSubmittingRef.current = false;
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await executeAirtimePurchase({
+        getIsActive,
+        numericAmount,
+        onSettled: () => {
+          isSubmittingRef.current = false;
+          setIsSubmitting(false);
+        },
+        onSuccess,
+        payment,
+        phoneNumber,
+        request,
+      });
+    } finally {
+      releaseUtilityCheckout();
+    }
   };
 
   return {

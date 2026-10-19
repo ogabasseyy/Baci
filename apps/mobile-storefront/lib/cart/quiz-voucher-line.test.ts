@@ -12,13 +12,21 @@ const paidItem: CartItem = {
 };
 
 describe('isQuizVoucherLine', () => {
-  it('detects cart lines carrying either quiz voucher identifier', () => {
+  it('detects only complete token-and-award voucher pairs', () => {
+    expect(
+      isQuizVoucherLine({
+        ...paidItem,
+        voucher_token: 'qv1.aaa.bbb',
+        voucher_award_id: 'award-1',
+      })
+    ).toBe(true);
+    // A partial pair is an ordinary priced line, not voucher-backed.
     expect(
       isQuizVoucherLine({ ...paidItem, voucher_token: 'qv1.aaa.bbb' })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       isQuizVoucherLine({ ...paidItem, voucher_award_id: 'award-1' })
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('returns false for normal paid cart lines', () => {

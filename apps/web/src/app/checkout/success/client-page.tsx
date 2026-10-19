@@ -3,7 +3,7 @@
 import { CheckCircle, Star } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { ThemedButton } from '@/components/themed';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -11,6 +11,7 @@ import { MerchantProvider, useMerchant } from '@/hooks/use-merchant-client';
 import { getCountryByCode } from '@/lib/countries';
 import { formatDisplayCurrency } from '@/lib/format-display-currency';
 import { BACI_GOOGLE_REVIEW_URL } from '@/lib/post-purchase-actions';
+import { retireLegacyCheckoutRedirectWhenPaid } from '../legacy-checkout-redirect-retirement';
 import {
   getLastOrderSnapshot,
   getServerLastOrderSnapshot,
@@ -33,6 +34,24 @@ export function SuccessPageContent() {
   );
   const order = parseOrderSnapshot(orderSnapshot);
   const { merchant } = useMerchant();
+  const confirmedOrderId = order?.order_id;
+  const confirmedEmail = order?.shipping?.email;
+  const merchantSlug = merchant?.slug;
+
+  // Retire the loyalty checkout key retained for this order once the
+  // tracking endpoint confirms it is paid, so a repeated identical
+  // purchase creates a fresh order. Reaching this page alone does not
+  // retire anything: the snapshot exists since order creation, so an
+  // abandoned gateway visit must keep the replay key.
+  useEffect(() => {
+    if (confirmedOrderId) {
+      void retireLegacyCheckoutRedirectWhenPaid({
+        orderId: confirmedOrderId,
+        email: confirmedEmail,
+        merchantSlug,
+      });
+    }
+  }, [confirmedOrderId, confirmedEmail, merchantSlug]);
 
   const formatCurrency = (amount: number) => {
     const country = merchant?.country

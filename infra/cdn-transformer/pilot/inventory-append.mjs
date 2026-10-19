@@ -1,0 +1,172 @@
+// Serialized inventory appender for the merchant image pilot: the lock
+// primitives live in inventory-store.mjs; this module runs record reads,
+// validation, and publication through them.
+import { open, rename, unlink } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { MAX_INVENTORY_BYTES } from './constants.mjs';
+import {
+  fsyncDir,
+  isUnsupportedSyncError,
+  readUpToBytes,
+} from './disk-guards.mjs';
+import {
+  acquireInventoryLock,
+  assertInventoryLockHeld,
+  PilotAcquireError,
+  releaseInventoryLock,
+} from './inventory-store.mjs';
+import {
+  validateInventory,
+  validateInventoryUniqueness,
+} from './job-schema.mjs';
+
+// Run fn while holding the inventory lock. Shared by the appender and
+// the acquisition rollback guard so rollback (check + unlink) and
+// publication (verify + append) serialize: without one lock around both
+// halves, a rollback can unlink a snapshot after a paused acquirer
+// verified it but before it appends — publishing a record that points
+// at a missing source.
+export async function withInventoryLock(lockDir, fn, hooks = {}) {
+  const token = await acquireInventoryLock(lockDir, hooks);
+  try {
+    // The section receives an ownership revalidator: end-of-section
+    // detection is fail-loud, but a section that publishes must check
+    // BEFORE the rename, while refusing is still fail-safe. Callers
+    // that predate this argument ignore it.
+    const result = await fn({
+      assertHeld: () => assertInventoryLockHeld(lockDir, token),
+    });
+    // A section whose lock was renamed away mid-section ran
+    // concurrently with another holder: surface that loudly before
+    // releasing, while the section's outcome is still actionable.
+    await assertInventoryLockHeld(lockDir, token);
+    return result;
+  } finally {
+    await releaseInventoryLock(lockDir, token);
+  }
+}
+
+// Bounded inventory read shared by the serialized appender and the
+// acquisition rollback guard: a corrupt or swapped-in giant file
+// rejects on size before parsing, never exhausts the caller.
+export async function readInventoryRecords(inventoryPath) {
+  const { bytes, truncated } = await readUpToBytes(
+    inventoryPath,
+    MAX_INVENTORY_BYTES
+  );
+  if (truncated) {
+    throw new PilotAcquireError(
+      `acquire: inventory exceeds ${MAX_INVENTORY_BYTES} bytes`
+    );
+  }
+  let records;
+  try {
+    records = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw new PilotAcquireError(`acquire: inventory is not valid JSON`);
+  }
+  if (!Array.isArray(records)) {
+    throw new PilotAcquireError(`acquire: inventory is not an array`);
+  }
+  return records;
+}
+
+export function appendInventoryRecord(inventoryPath, record, options = {}) {
+  // Serialized: two concurrent appends must never read the same array and
+  // overwrite each other, silently dropping an asset.
+  const lockDir = `${inventoryPath}.lock`;
+  return withInventoryLock(lockDir, async ({ assertHeld }) => {
+    let records;
+    try {
+      records = await readInventoryRecords(inventoryPath);
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        records = [];
+      } else {
+        throw error;
+      }
+    }
+    // Still under the lock: the caller revalidates whatever its record
+    // depends on (the acquisition snapshot must exist) before the
+    // publish commits — a rollback that won the lock first unlinked it,
+    // so publish fails loudly instead of dangling.
+    await options.beforeAppend?.(records);
+    records.push(record);
+    const jobs = records.map((entry) => ({
+      assetId: entry.assetId,
+      expectedSha256: entry.sha256,
+      merchantId: entry.merchantId,
+      role: entry.role,
+      schemaVersion: entry.schemaVersion,
+      sourcePath: entry.sourcePath,
+    }));
+    const validated = validateInventory(jobs);
+    if (!validated.ok) {
+      throw new PilotAcquireError(
+        `acquire: inventory invalid (${validated.errors.join('; ')})`
+      );
+    }
+    const unique = validateInventoryUniqueness(records);
+    if (!unique.ok) {
+      throw new PilotAcquireError(
+        `acquire: inventory invalid (${unique.errors.join('; ')})`
+      );
+    }
+    // Pre-publish ceiling: the read path above rejects inventories
+    // over MAX_INVENTORY_BYTES, so publishing one would brick every
+    // future append (each rejects on the stuck over-ceiling read)
+    // while this call claims success. Refuse BEFORE writing, leaving
+    // the previous publish intact for the operator to trim.
+    const serialized = `${JSON.stringify(records, null, 2)}\n`;
+    if (Buffer.byteLength(serialized, 'utf8') > MAX_INVENTORY_BYTES) {
+      throw new PilotAcquireError(
+        `acquire: inventory would exceed ${MAX_INVENTORY_BYTES} bytes`
+      );
+    }
+    // Publish via temp + fsync + atomic rename so an interruption leaves the
+    // old inventory or the new one, never half-written JSON.
+    const tmp = join(
+      dirname(inventoryPath),
+      `.inventory-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`
+    );
+    const handle = await open(tmp, 'w');
+    try {
+      await handle.writeFile(serialized);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    // Pre-publish ownership: a steal-race loser may have renamed this
+    // section's live lock away after the read, and a rival may already
+    // have published on top of the same base. Renaming now would
+    // silently clobber the rival's update — refuse loudly instead,
+    // leaving the rival's publish intact. Residual: an eviction in the
+    // check-then-rename window still publishes, but the end-of-section
+    // check then throws loudly and the operator reconciles.
+    try {
+      await assertHeld();
+    } catch (error) {
+      await unlink(tmp).catch(() => undefined);
+      throw error;
+    }
+    await rename(tmp, inventoryPath);
+    // Directory-entry durability: the temp-file fsync above persisted
+    // the bytes, not the renamed entry — without this sync a power loss
+    // can roll the publish back while acquisition reported success. A
+    // real sync failure throws loudly (like the end-of-section
+    // ownership check) and the operator reconciles; only platforms
+    // without sync support proceed, matching the generation store's
+    // downgrade philosophy.
+    const syncDir = options.fsyncDir ?? fsyncDir;
+    try {
+      await syncDir(dirname(inventoryPath));
+    } catch (error) {
+      if (!isUnsupportedSyncError(error)) {
+        throw new PilotAcquireError(
+          `acquire: inventory directory sync failed (${error?.code ?? 'unknown'})`
+        );
+      }
+    }
+    return records.length;
+  });
+}

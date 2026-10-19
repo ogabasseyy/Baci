@@ -1,6 +1,10 @@
 import {
+  GuestCartBridgePendingError,
+  GuestCartCanonicalError,
   GuestCartExpiredError,
   GuestCartFullError,
+  GuestCartMigratedError,
+  GuestCartPersistedError,
   GuestCartStorageUnavailableError,
 } from './guest-cart-errors';
 
@@ -28,6 +32,64 @@ export class ProductUnavailable extends Error {
  * Split from the tool registration to hold the 300-line file budget.
  */
 export function mapGuestCartToolError(error: unknown) {
+  // A persisted creation wraps its definitive failure: surface the
+  // failure itself, not the persistence marker.
+  if (error instanceof GuestCartPersistedError)
+    return mapGuestCartToolError(error.cause);
+  // A migrated legacy cart has a canonical shared-cart successor: the
+  // typed outcome carries it so the client refreshes into the shared
+  // cart instead of starting a second guest cart.
+  if (error instanceof GuestCartCanonicalError)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: error.retryable
+            ? 'The cart changed or is temporarily unavailable. Retry with the returned cart_token and current version.'
+            : 'This cart action is not authorized or valid. Reconnect to continue.',
+        },
+      ],
+      structuredContent: {
+        success: false,
+        code: error.code,
+        retryable: error.retryable,
+        ...(error.retryable ? { cart_token: error.cartToken } : {}),
+        ...(error.cartId ? { canonical_cart_id: error.cartId } : {}),
+        ...(error.version ? { version: error.version } : {}),
+      },
+    };
+  if (error instanceof GuestCartBridgePendingError)
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'Your guest cart is saved. Retry using the returned cart_token to finish connecting it.',
+        },
+      ],
+      structuredContent: {
+        success: false,
+        cart_token: error.cartToken,
+        retryable: true,
+        code: 'refresh_required',
+      },
+    };
+  if (error instanceof GuestCartMigratedError) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: error.cartId
+            ? `This guest cart moved to the shared cart (${error.cartId}). Refresh the cart to continue with the shared cart.`
+            : 'This guest cart moved to the shared cart. Refresh the cart to continue with the shared cart.',
+        },
+      ],
+      structuredContent: {
+        success: false,
+        cart_migrated: true,
+        migrated_cart_id: error.cartId,
+      },
+    };
+  }
   // An expired, evicted, or unknown token is recoverable: the typed
   // flag tells the widget to retry once without the stale token.
   if (error instanceof GuestCartExpiredError) {

@@ -3,7 +3,7 @@
 import {
   formatCanonicalProductConditionLabel,
   sortCanonicalProductConditionsByPreference,
-} from '@baci/shared/lib';
+} from '@baci/shared/lib/product-condition';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { useState } from 'react';

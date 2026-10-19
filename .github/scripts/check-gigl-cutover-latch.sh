@@ -108,7 +108,8 @@ fetch_env=(git)
 auth_config=""
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   auth_config="$(mktemp 2>/dev/null)" || auth_config=""
-  if [ -n "$auth_config" ] && printf '[http]\n\textraHeader = AUTHORIZATION: bearer %s\n' "$GITHUB_TOKEN" > "$auth_config"; then
+  basic_auth="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\r\n' 2>/dev/null || true)"
+  if [ -n "$auth_config" ] && [ -n "$basic_auth" ] && printf '[http]\n\textraHeader = AUTHORIZATION: basic %s\n' "$basic_auth" > "$auth_config"; then
     fetch_env=(git -c "include.path=$auth_config")
   else
     [ -n "$auth_config" ] && rm -f "$auth_config"

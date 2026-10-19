@@ -18,16 +18,20 @@ import {
 import type { AgenticMutationRequest } from '@/lib/agentic/mutation-request';
 import { reserveAgenticRequestId } from '@/lib/agentic/request-replay';
 import { getAgenticReplayErrorStatus } from '@/lib/agentic/request-replay-response';
+import { handleCanonicalUcpCart } from '@/lib/agentic/ucp-canonical-cart';
 import {
   buildCheckoutResponseFromSession,
   loadCheckoutSessionByRowId,
   resolvePolicyBaseUrl,
 } from '@/lib/agentic/ucp-cart-checkout-response';
+import { ucpCartMigrationRaceOutcome } from '@/lib/agentic/ucp-cart-migration-race';
 import { loadUcpCartSession } from '@/lib/agentic/ucp-cart-route-support';
 import {
   buildUcpCartCheckoutLinkUpdate,
   coerceNullableJsonRecord,
   coerceUcpCartItems,
+  UcpCartMigratedError,
+  ucpCartCallerMismatch,
 } from '@/lib/agentic/ucp-cart-storage';
 import { logger } from '@/lib/logger';
 import { sanitizeForLog } from '@/lib/sanitize-core';
@@ -50,6 +54,7 @@ export async function convertUcpCartToCheckout({
   supabase: SupabaseClient;
 }): Promise<NextResponse> {
   const idempotency = await reserveAgenticIdempotencyKey({
+    agentId: mutation.agentId,
     apiVersion: mutation.apiVersion,
     body: mutation.rawBody,
     key: mutation.idempotencyKey,
@@ -77,6 +82,7 @@ export async function convertUcpCartToCheckout({
 
   const respond = (response: unknown, status: number) =>
     buildStoredAgenticIdempotencyResponse({
+      agentId: mutation.agentId,
       idempotencyKey: mutation.idempotencyKey,
       merchantId: merchant.id,
       requestId: mutation.requestId,
@@ -107,6 +113,15 @@ export async function convertUcpCartToCheckout({
     );
   }
 
+  const canonical = await handleCanonicalUcpCart({
+    merchant,
+    cartId,
+    agentId: mutation.agentId,
+    action: 'checkout',
+    operationId: mutation.idempotencyKey,
+  });
+  if (canonical) return respond(canonical.body, canonical.status);
+
   const cartResult = await loadUcpCartSession({
     cartId,
     merchantId: merchant.id,
@@ -122,6 +137,27 @@ export async function convertUcpCartToCheckout({
     return respond({ error: 'Database error' }, 500);
   }
   if (!cartResult.cart) return respond({ error: 'Cart not found' }, 404);
+  if (
+    ucpCartCallerMismatch(cartResult.cart, mutation.agentId, { mutation: true })
+  ) {
+    return respond({ error: 'Cart not found' }, 404);
+  }
+
+  // A migrated cart is retired: its authority moved to the shared
+  // canonical cart, so the legacy conversion path must not create an
+  // (unbound) order for it. The caller refreshes onto the canonical
+  // cart and checks out there with the cart binding instead.
+  if (cartResult.cart.migratedToCartId) {
+    const migrated = new UcpCartMigratedError(cartResult.cart.migratedToCartId);
+    return respond(
+      {
+        cart_id: migrated.cartId,
+        code: migrated.code,
+        error: migrated.message,
+      },
+      409
+    );
+  }
 
   if (cartResult.cart.status === 'converted') {
     if (!cartResult.cart.checkout_session_id) {
@@ -223,6 +259,14 @@ export async function convertUcpCartToCheckout({
       message: 'Failed to link UCP cart to checkout session',
       route: CART_TO_CHECKOUT_ROUTE,
     });
+    const migrated = await ucpCartMigrationRaceOutcome({
+      error: updateError,
+      cartId,
+      merchantId: merchant.id,
+      agentId: mutation.agentId,
+      supabase,
+    });
+    if (migrated) return respond(migrated.body, migrated.status);
     return respond({ error: 'Database error' }, 500);
   }
 

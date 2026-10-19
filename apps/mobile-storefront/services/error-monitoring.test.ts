@@ -21,6 +21,32 @@ describe('initializeErrorMonitoring', () => {
     mockInstallMemoryWarningDiagnostics.mockClear();
   });
 
+  it('preserves native startup diagnostics when Expo supplies native Sentry options', () => {
+    const runtime = globalThis as typeof globalThis & {
+      __SENTRY_OPTIONS__?: unknown;
+    };
+    const previous = runtime.__SENTRY_OPTIONS__;
+    runtime.__SENTRY_OPTIONS__ = { dsn: 'https://public@example.invalid/1' };
+    try {
+      const { initializeErrorMonitoring } =
+        jest.requireActual<typeof import('./error-monitoring')>(
+          './error-monitoring'
+        );
+      initializeErrorMonitoring({
+        EXPO_PUBLIC_SENTRY_DSN: 'https://public@example.invalid/1',
+      });
+      expect(mockInit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          autoInitializeNativeSdk: false,
+          enableNative: true,
+        })
+      );
+    } finally {
+      if (previous === undefined) delete runtime.__SENTRY_OPTIONS__;
+      else runtime.__SENTRY_OPTIONS__ = previous;
+    }
+  });
+
   it('excludes capability tokens and address queries from network telemetry', () => {
     const { initializeErrorMonitoring } =
       jest.requireActual<typeof import('./error-monitoring')>(

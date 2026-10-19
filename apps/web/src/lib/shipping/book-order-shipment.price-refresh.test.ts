@@ -5,8 +5,12 @@ import {
   prepaidGiglCustomerCheckoutPayment,
 } from './book-order-shipment.refresh-fixtures.test-helper';
 
+type EnvModule = typeof import('@/env');
+type OrderShipmentBookingUtilsModule =
+  typeof import('@/lib/shipping/order-shipment-booking-utils');
+
 vi.mock('@/env', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/env')>();
+  const actual = await importOriginal<EnvModule>();
   return { ...actual, ...shippingQuoteEnvTestMock };
 });
 
@@ -20,10 +24,7 @@ vi.mock('@/lib/shipping', () => ({
 vi.mock(
   '@/lib/shipping/order-shipment-booking-utils',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/shipping/order-shipment-booking-utils')
-      >();
+    const actual = await importOriginal<OrderShipmentBookingUtilsModule>();
     return {
       ...actual,
       buildReceiver: vi.fn().mockReturnValue({
@@ -72,7 +73,7 @@ function createSupabase() {
     price: 2500,
     currency: 'NGN',
     estimated_days: 3,
-    provider_rate_id: 'GIGL_4_0',
+    provider_rate_id: 'GIGL_4_0_1_0_0_4',
     expires_at: new Date(Date.now() + 86_400_000).toISOString(),
     quote_request: {
       sessionId: 'session-1',
@@ -87,6 +88,8 @@ function createSupabase() {
         countryCode: 'NG',
       },
       receiver: {
+        latitude: 6.5,
+        longitude: 3.3,
         name: 'Customer',
         phone: '08000000001',
         address: 'Receiver Road',
@@ -181,7 +184,7 @@ describe('bugfix: PATCH fulfillment rejects refreshed price changes', () => {
         estimatedDays: 3,
         pickupIncluded: true,
         insuranceIncluded: false,
-        providerRateId: 'GIGL_4_0',
+        providerRateId: 'GIGL_4_0_1_0_0_4',
         expiresAt: new Date(Date.now() + 86_400_000),
         rawResponse: {},
       },
@@ -192,8 +195,8 @@ describe('bugfix: PATCH fulfillment rejects refreshed price changes', () => {
     await expect(
       bookOrderShipment(createSupabase(), 'merchant-1', 'order-1')
     ).rejects.toMatchObject({
-      code: 'QUOTE_PRICE_CHANGED',
-      status: 400,
+      code: 'SHIPPING_QUOTE_RECONFIRM_REQUIRED',
+      status: 409,
     });
 
     expect(shippingService.bookShipment).not.toHaveBeenCalled();

@@ -21,7 +21,12 @@ on:
       - 'apps/mobile-storefront/ios/Ogabassey/Info.plist'
       - '.github/scripts/ios-scene-presentation.test.mjs'
       - 'patches/expo-linear-gradient@*'
+      - 'patches/react-native@*'
       - 'apps/mobile-storefront/scripts/native-regressions/**'
+      - 'apps/mobile-storefront/config/sentry-native-diagnostics*'
+      - 'apps/mobile-storefront/config/withSentryNativeDiagnostics.js'
+      - 'apps/mobile-storefront/config/expo-plugins.js'
+      - 'apps/mobile-storefront/services/error-monitoring*'
       - 'apps/mobile-storefront/config/ios-gradient-layer.test.mjs'
       - '.github/scripts/ios-runtime-scheduler.test.mjs'
       - '.github/workflows/ios-runtime-scheduler-pr.yml'
@@ -49,7 +54,7 @@ jobs:
           persist-credentials: false
 
       - name: Select Xcode ${{ env.XCODE_VERSION }}
-        run: sudo xcode-select -s "/Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer"
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
 
       - name: Install JS deps
         uses: ./.github/actions/pnpm-install-cached
@@ -59,6 +64,14 @@ jobs:
 
       - name: Verify native gradient composition
         run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh
+
+      - name: Verify native clipping geometry and traversal work
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-clipping-views.sh
+
+      - name: Verify native Sentry breadcrumb policy and MetricKit integration
+        run: |
+          node --test apps/mobile-storefront/config/sentry-native-diagnostics.test.mjs
+          bash apps/mobile-storefront/scripts/native-regressions/check-sentry-diagnostics.sh
 
       - name: Verify scene presentation Swift and legacy window fallback
         run: node --test .github/scripts/ios-scene-presentation.test.mjs apps/mobile-storefront/config/ios-scene-presentation.test.mjs

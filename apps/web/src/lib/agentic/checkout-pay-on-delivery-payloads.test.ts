@@ -78,6 +78,36 @@ describe('pay-on-delivery agentic checkout payloads', () => {
     ]);
   });
 
+  it('sends unit prices and the purchased condition for multi-quantity lines', () => {
+    const payload = buildPayOnDeliveryOrderPayload({
+      buyer,
+      session: {
+        merchant_id: 'merchant-1',
+        session_id: 'agentic_session_1',
+        shipping_address: { city: 'Lagos' },
+      },
+      sessionCalc: {
+        ...sessionCalc,
+        lineItems: [
+          {
+            ...sessionCalc.lineItems[0],
+            base_amount: 900000,
+            item: {
+              ...sessionCalc.lineItems[0].item,
+              condition: 'used',
+              quantity: 3,
+            },
+          },
+        ],
+      } as never,
+    });
+    expect(payload.items[0]).toMatchObject({
+      condition: 'used',
+      price: 300000,
+      quantity: 3,
+    });
+  });
+
   it('builds completed checkout session updates and agent response bodies', () => {
     const update = buildPayOnDeliveryCompletedSessionUpdate({
       buyer,

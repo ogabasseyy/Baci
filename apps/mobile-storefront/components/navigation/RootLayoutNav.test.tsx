@@ -14,6 +14,7 @@ const MockText = Text;
 const MockView = View;
 const mockUseAuthGuard = jest.fn();
 const mockSetNavigationBarStyle = jest.fn();
+const mockRootStackOptions = jest.fn();
 const originalPlatformOS = Platform.OS;
 const renderMockQueryProvider = ({
   children,
@@ -36,16 +37,25 @@ jest.mock('expo-router/react-navigation', () => ({
 }));
 
 jest.mock('expo-router', () => {
-  const Stack = ({ children }: { children?: React.ReactNode }) => (
-    <MockView
-      accessibilityLabel="root stack"
-      accessibilityRole="summary"
-      accessible
-      testID="root-stack"
-    >
-      {children}
-    </MockView>
-  );
+  const Stack = ({
+    children,
+    screenOptions,
+  }: {
+    children?: React.ReactNode;
+    screenOptions?: unknown;
+  }) => {
+    mockRootStackOptions(screenOptions);
+    return (
+      <MockView
+        accessibilityLabel="root stack"
+        accessibilityRole="summary"
+        accessible
+        testID="root-stack"
+      >
+        {children}
+      </MockView>
+    );
+  };
 
   Stack.Screen = ({ name }: { name: string }) => <MockText>{name}</MockText>;
 
@@ -78,6 +88,13 @@ jest.mock('react-native-gesture-handler', () => ({
 
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: ({ children }: { children?: React.ReactNode }) => children,
+}));
+
+jest.mock('@/components/cart/SharedCartBridge', () => ({
+  SharedCartBridge: () => <MockText>shared-cart-bridge</MockText>,
+}));
+jest.mock('@/components/cart/NativeCartPairingPanel', () => ({
+  NativeCartPairingPanel: () => <MockText>cart-pairing-panel</MockText>,
 }));
 
 jest.mock('@/components/ConnectivityBanner', () => ({
@@ -148,6 +165,14 @@ describe('RootLayoutNav', () => {
 
   afterEach(() => {
     setPlatformOS(originalPlatformOS);
+  });
+
+  it('asks the native stack to suspend covered routes while checkout or a product is active', () => {
+    render(<RootLayoutNav />);
+
+    expect(mockRootStackOptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({ freezeOnBlur: true })
+    );
   });
 
   it('renders the storefront navigator and startup overlays', () => {

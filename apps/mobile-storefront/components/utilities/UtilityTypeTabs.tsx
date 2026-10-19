@@ -93,17 +93,16 @@ export function UtilityTypeTabs({
     });
   }, [selectedType, viewportWidth, measurementVersion]);
 
-  const handleTabLayout =
-    (index: number, type: UtilityType) => (event: LayoutChangeEvent) => {
-      const nextWidth = event.nativeEvent.layout.width;
-      if (nextWidth <= 0) return;
+  const handleTabLayout = (type: UtilityType) => (event: LayoutChangeEvent) => {
+    const nextWidth = event.nativeEvent.layout.width;
+    if (nextWidth <= 0) return;
 
-      const previousWidth = measuredWidthsRef.current[type];
-      if (previousWidth !== nextWidth) {
-        measuredWidthsRef.current[type] = nextWidth;
-        setMeasurementVersion((version) => version + 1);
-      }
-    };
+    const previousWidth = measuredWidthsRef.current[type];
+    if (previousWidth !== nextWidth) {
+      measuredWidthsRef.current[type] = nextWidth;
+      setMeasurementVersion((version) => version + 1);
+    }
+  };
 
   return (
     <View
@@ -138,7 +137,7 @@ export function UtilityTypeTabs({
                 colors={colors}
                 isSelected={isSelected}
                 onSelect={onSelect}
-                onLayout={handleTabLayout(index, item.type)}
+                onLayout={handleTabLayout(item.type)}
               />
             );
           })}

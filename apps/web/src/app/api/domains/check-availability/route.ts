@@ -205,7 +205,10 @@ async function buildDomainResults(
       try {
         return await lookupDomain(suggestion);
       } catch (error) {
-        console.error(`Error looking up suggestion ${suggestion}:`, error);
+        console.error('Error looking up domain suggestion:', {
+          suggestion,
+          error,
+        });
         return null;
       }
     })

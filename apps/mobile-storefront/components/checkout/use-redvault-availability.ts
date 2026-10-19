@@ -72,7 +72,8 @@ export function useRedvaultAvailability({
   // The live pilot requires zero fees, but general REDVAULT does not: hide
   // the method only when the resolved reason is the pilot and a fee applies.
   const pilotFeeBlocked =
-    availability?.reason === 'private_live_pilot' &&
+    (availability?.reason === 'private_live_pilot' ||
+      availability?.reason === 'public_product_test') &&
     (assuranceFee > 0 || deliveryFee > 0);
   const expired =
     availability?.available === true &&

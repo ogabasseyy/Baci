@@ -83,3 +83,17 @@ it('forwards airport quotes only when they match the current delivery method', (
     })
   ).toMatchObject({ selected_quote_id: null, airport_type: 'delivery' });
 });
+it('attaches the shared cart binding for bound checkouts', () => {
+  const sharedCart = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+  expect(buildCheckoutOrderRequest({ ...input, sharedCart })).toMatchObject({
+    shared_cart: sharedCart,
+  });
+});
+it('omits shared_cart for legacy checkouts', () => {
+  expect(buildCheckoutOrderRequest(input)).not.toHaveProperty('shared_cart');
+});

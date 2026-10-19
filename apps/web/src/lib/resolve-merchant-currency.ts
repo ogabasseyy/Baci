@@ -116,6 +116,41 @@ export function formatMerchantCurrency(
 }
 
 /**
+ * Payout-only currency config, mirroring the SQL
+ * `merchant_resolved_currency` rule: a valid payout currency
+ * (uppercased), else NGN — the merchant's country currency never
+ * substitutes. Loyalty amounts are denominated at issuance by that
+ * rule (and checkout enforces it), so loyalty labels must format with
+ * this variant rather than the display resolver above: a US merchant
+ * with a blank payout currency issues NGN codes, and a "$100" minimum
+ * label would misstate the enforced NGN 100.
+ */
+export function resolvePayoutOnlyCurrencyConfig(
+  merchant: MerchantCurrencySource
+): CurrencyConfig {
+  const code =
+    normalizeCurrencyCode(merchant.payout_currency) ?? DEFAULT_CURRENCY_CODE;
+  return {
+    code,
+    symbol: CURRENCY_SYMBOLS[code] ?? code,
+    locale: CURRENCY_DEFAULT_LOCALES[code] ?? DEFAULT_LOCALE,
+  };
+}
+
+/** Format an amount in the merchant's payout-only (issuance) currency. */
+export function formatPayoutOnlyCurrency(
+  amount: number,
+  merchant: MerchantCurrencySource,
+  options?: Partial<Intl.NumberFormatOptions>
+): string {
+  return formatCurrencyWithConfig(
+    amount,
+    resolvePayoutOnlyCurrencyConfig(merchant),
+    options
+  );
+}
+
+/**
  * Format an amount when only a bare currency code is available (e.g.
  * `order.currency` on records where the merchant row isn't loaded).
  *

@@ -20,7 +20,10 @@ import {
   rejectInvalidRedvaultLivePilotSnapshot,
   rejectUnauthorizedRedvaultLivePilot,
 } from '@/lib/checkout/redvault-live-pilot-initialize-gate';
-import { getRedvaultPaymentAvailability } from '@/lib/checkout/redvault-payment-availability';
+import {
+  getRedvaultPaymentAvailability,
+  isRedvaultLivePilotReason,
+} from '@/lib/checkout/redvault-payment-availability';
 import { createStorefrontOrderRpcClient } from '@/lib/checkout/storefront-order-rpc-client';
 import {
   capturePaymentWithCrypto,
@@ -705,15 +708,13 @@ async function initializeJuicyway(
           }
 
           // LOG SESSION POLLING
-          console.log(
-            `[Juicyway Poll #${pollAttempt}/${MAX_POLL_ATTEMPTS}] Session`,
-            {
-              status: polledSessionData.payment?.status,
-              message: polledSessionData.message,
-              hasAddress: !!paymentMethod?.address,
-              raw: `${JSON.stringify(polledSessionData).substring(0, 100)}...`,
-            }
-          );
+          console.log('[Juicyway Poll] Session', {
+            pollAttempt,
+            maxPollAttempts: MAX_POLL_ATTEMPTS,
+            status: polledSessionData.payment?.status,
+            message: polledSessionData.message,
+            hasAddress: !!paymentMethod?.address,
+          });
 
           // Fallback: If session endpoint doesn't return address, try the specific PAYMENT endpoint
           // This handles cases where session status lags behind payment status
@@ -738,10 +739,10 @@ async function initializeJuicyway(
                     })
                   | undefined;
                 const fallbackAddr = pm?.address || pm?.params?.address;
-                console.log(`[Juicyway Poll #${pollAttempt}] Payment Check`, {
+                console.log('[Juicyway Poll] Payment Check', {
+                  pollAttempt,
                   status: paymentDetails.status,
                   hasAddress: !!fallbackAddr,
-                  raw: `${JSON.stringify(paymentDetails).substring(0, 100)}...`,
                 });
 
                 if (fallbackAddr) {
@@ -1072,8 +1073,9 @@ export async function POST(request: NextRequest) {
           409
         );
       }
-      redvaultLivePilotInitialize =
-        availability.reason === 'private_live_pilot';
+      redvaultLivePilotInitialize = isRedvaultLivePilotReason(
+        availability.reason
+      );
       const pilotAuthRejection = rejectUnauthorizedRedvaultLivePilot({
         reason: availability.reason,
         userId: redvaultCustomerAuth?.user?.id,

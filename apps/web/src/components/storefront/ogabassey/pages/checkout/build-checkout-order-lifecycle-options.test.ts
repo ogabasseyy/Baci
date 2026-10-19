@@ -192,3 +192,30 @@ describe('buildCheckoutOrderLifecycleOptions', () => {
     expect(prepared.actions.removeFromCart).toHaveBeenCalledWith('cart-line-1');
   });
 });
+
+describe('buildCheckoutOrderLifecycleOptions shared cart binding', () => {
+  const binding = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+
+  it('forwards the prepared binding into the order request', () => {
+    const prepared = input();
+    (prepared.prepared.identity as Record<string, unknown>).sharedCartBinding =
+      binding;
+
+    const options = buildCheckoutOrderLifecycleOptions(prepared);
+
+    expect(options.submit.orderRequest).toMatchObject({
+      shared_cart: binding,
+    });
+  });
+
+  it('omits shared_cart when no binding was prepared', () => {
+    const options = buildCheckoutOrderLifecycleOptions(input());
+
+    expect(options.submit.orderRequest).not.toHaveProperty('shared_cart');
+  });
+});

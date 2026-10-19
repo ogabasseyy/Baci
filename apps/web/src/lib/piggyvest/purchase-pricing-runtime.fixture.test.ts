@@ -1,12 +1,64 @@
+import type { EventEmitter } from 'node:events';
+import { Client } from 'pg';
 import { afterEach, expect, it, vi } from 'vitest';
 import {
   authenticatedReader,
   configuration,
   database,
   goal,
+  query,
 } from './purchase-pricing-runtime.fixture';
 
-afterEach(() => vi.unstubAllEnvs());
+type PgModule = typeof import('pg');
+
+vi.mock('pg', () => ({ Client: vi.fn() }));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+});
+
+it.each([
+  'synthetic-ambient-password',
+  '',
+])('keeps direct local queries independent of environment/password-file fallback (%j)', async (ambientPassword) => {
+  vi.stubEnv(
+    'PIGGYVEST_LOCAL_TEST_SOCKET',
+    '/private/tmp/baci-piggyvest-runtime.synthetic/socket'
+  );
+  vi.stubEnv('PGPASSWORD', ambientPassword);
+  vi.stubEnv('PGPASSFILE', '/tmp/synthetic-pgpass-must-not-be-read');
+  const actualPg = await vi.importActual<PgModule>('pg');
+  let nativeClient: Client | undefined;
+  vi.mocked(Client).mockImplementation(function captureOptions(configuration) {
+    nativeClient = new actualPg.Client(configuration);
+    return {
+      connect: async () => undefined,
+      query: async () => ({ rows: [{ result: 'synthetic' }] }),
+      end: async () => undefined,
+    } as unknown as Client;
+  });
+  await expect(query('purchase_pricing_customer', 'SELECT 1')).resolves.toEqual(
+    { rows: [{ result: 'synthetic' }] }
+  );
+  expect(nativeClient).toBeDefined();
+  if (!nativeClient) throw new Error('Expected native fixture client');
+  const password: unknown = Reflect.get(nativeClient, 'password');
+  expect(password).toBeTypeOf('function');
+  expect(password).not.toBe('synthetic-ambient-password');
+  const rejected = Promise.withResolvers<Error>();
+  const connection = Reflect.get(nativeClient, 'connection') as EventEmitter;
+  connection.once('error', rejected.resolve);
+  const getPassword = Reflect.get(nativeClient, '_getPassword') as (
+    callback: () => void
+  ) => void;
+  const authenticated = vi.fn();
+  getPassword.call(nativeClient, authenticated);
+  await expect(rejected.promise).resolves.toEqual(
+    new Error('Local database password authentication is disabled')
+  );
+  expect(authenticated).not.toHaveBeenCalled();
+});
+
 it('rejects remote and missing database transport before connecting', () => {
   vi.stubEnv('PIGGYVEST_LOCAL_TEST_SOCKET', 'remote.example');
   expect(() => database()).toThrow();

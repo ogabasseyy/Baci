@@ -53,6 +53,21 @@ function createSupabaseWithUpdateChains(
 
   return {
     from: vi.fn((table: string) => {
+      if (table === 'orders') {
+        // Finalization verifies the live order state for every
+        // session: freshly created fixture orders await payment.
+        const chain = {
+          select: vi.fn(),
+          eq: vi.fn(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: { payment_status: 'unpaid', shipping_status: 'pending' },
+            error: null,
+          }),
+        };
+        chain.select.mockReturnValue(chain);
+        chain.eq.mockReturnValue(chain);
+        return chain;
+      }
       if (table !== 'checkout_sessions') {
         throw new Error(`Unexpected table ${table}`);
       }

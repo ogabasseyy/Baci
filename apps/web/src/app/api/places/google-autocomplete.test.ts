@@ -3,8 +3,10 @@ import { fetchGoogleAutocomplete } from './google-autocomplete';
 import { fetchLegacyPlacesJson } from './legacy-places';
 import { reserveGooglePlacesRequest } from './provider-budget';
 
+type LegacyPlacesModule = typeof import('./legacy-places');
+
 vi.mock('./legacy-places', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('./legacy-places')>()),
+  ...(await importOriginal<LegacyPlacesModule>()),
   fetchLegacyPlacesJson: vi.fn(),
 }));
 vi.mock('./provider-budget', () => ({

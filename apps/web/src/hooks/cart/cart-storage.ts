@@ -1,12 +1,20 @@
 import { logger } from '@/lib/logger';
-import type { AddToCartOptions, CartItem } from './cart-types';
 
-const CART_STORAGE_KEY = 'baci-cart';
-const GUEST_CART_SUFFIX = 'guest';
+import type {
+  AddToCartOptions,
+  CartItem,
+  SharedCartDisplayItem,
+} from './cart-types';
+
+export const CART_STORAGE_KEY = 'baci-cart';
+
+export const GUEST_CART_SUFFIX = 'guest';
 
 export { DEFAULT_ASSURANCE_RATE } from '@/lib/checkout/constants';
+
 export const DEFAULT_DEFERRED_VALIDATION_TIMEOUT_MS = 2500;
-const MERCHANT_SLUG_KEY = 'baci-cart-merchant-slug';
+
+export const MERCHANT_SLUG_KEY = 'baci-cart-merchant-slug';
 
 export const getStorefrontCartStorageKey = (slug?: string | null) => {
   return slug
@@ -49,7 +57,9 @@ export const generateCartItemId = (
   return parts.join('::');
 };
 
-export const getCartFromStorage = (slug?: string | null): CartItem[] => {
+export const getCartFromStorage = (
+  slug?: string | null
+): SharedCartDisplayItem[] => {
   if (typeof window === 'undefined') return [];
 
   try {
@@ -64,21 +74,31 @@ export const getCartFromStorage = (slug?: string | null): CartItem[] => {
         const item = entry as Record<string, unknown>;
         return typeof item.id === 'string' && typeof item.name === 'string';
       })
-      .map(
-        (entry) =>
-          ({
-            ...entry,
-            price:
-              typeof entry.price === 'number' && !Number.isNaN(entry.price)
-                ? entry.price
-                : Number(entry.price) || 0,
-            quantity:
-              typeof entry.quantity === 'number' &&
-              !Number.isNaN(entry.quantity)
-                ? entry.quantity
-                : Number(entry.quantity) || 1,
-          }) as CartItem
-      );
+      .map((entry) => {
+        // Temp optimistic markers never survive storage: an unconfirmed
+        // line must not resurrect after reload. The stable server id is
+        // kept so a re-adopted cache still matches its confirmed lines.
+        const {
+          pendingTempId: _pendingTempId,
+          hydrationFailed: _hydrationFailed,
+          ...rest
+        } = entry;
+        return {
+          ...rest,
+          price:
+            typeof entry.price === 'number' && !Number.isNaN(entry.price)
+              ? entry.price
+              : Number(entry.price) || 0,
+          quantity:
+            typeof entry.quantity === 'number' && !Number.isNaN(entry.quantity)
+              ? entry.quantity
+              : Number(entry.quantity) || 1,
+          serverLineId:
+            typeof entry.serverLineId === 'string'
+              ? entry.serverLineId
+              : undefined,
+        } as SharedCartDisplayItem;
+      });
   } catch (error) {
     logger.error({
       message: 'Failed to read cart from localStorage',
@@ -104,7 +124,7 @@ export const saveCartToStorage = (cart: CartItem[], slug?: string | null) => {
   }
 };
 
-const GROUP_NEGOTIATION_SUFFIX = 'group-negotiation';
+export const GROUP_NEGOTIATION_SUFFIX = 'group-negotiation';
 
 export const getStorefrontGroupNegotiationStorageKey = (
   slug?: string | null
@@ -182,3 +202,5 @@ export const saveMerchantSlugToStorage = (slug: string | null) => {
     });
   }
 };
+
+export * from './shared-cart-storage';

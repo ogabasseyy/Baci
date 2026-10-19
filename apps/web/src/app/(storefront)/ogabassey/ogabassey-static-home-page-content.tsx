@@ -1,48 +1,30 @@
 import { Suspense } from 'react';
-import { JsonLd } from '@/components/seo/json-ld';
-import {
-  OGABASSEY_DESCRIPTION,
-  OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL,
-  OGABASSEY_HOME_URL,
-  OGABASSEY_SOCIAL_IMAGE_URL,
-  OGABASSEY_TITLE,
-} from '@/config/ogabassey';
+import { OGABASSEY_HOME_COMMITTED_HERO_IMAGE_URL } from '@/config/ogabassey';
 import { OgabasseyHomeCriticalShell } from './ogabassey-home-critical-shell';
 import { OgabasseyHomeHeroPreloadLink } from './ogabassey-home-hero-preload-link';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { preloadOgabasseyHomeHeroResources } from './ogabassey-home-hero-resource-hints';
 import { resolveOgabasseyHomeHeroShell } from './ogabassey-home-hero-shell-data';
 import { OgabasseyHomePageContent } from './ogabassey-home-page-content';
-import { OgabasseyHomeStyleLoader } from './ogabassey-home-style-loader';
+import { OgabasseyHomeStaticShellHead } from './ogabassey-home-static-shell-head';
 
 interface OgabasseyStaticHomePageContentProps {
   /** Static per-route prefix for request-streamed storefront links: '' for the
    *  apex domain and '/ogabassey' for the path route. */
   pathPrefix: string;
   /**
-   * Set when the parent page already supplied critical styles, heading, AND
-   * the hero preload hint. Suppresses all downstream hints, so only set this
-   * alongside an upstream committed slot that emits the live slide-0 link.
+   * Set when the parent shell (`OgabasseyStaticHomePage`) already supplies:
+   * 1. critical styles, heading, and the live slide-0 hero preload hint
+   *    (`OgabasseyHomeCommittedLcp`),
+   * 2. the static WebPage JSON-LD and style loader
+   *    (`OgabasseyHomeStaticShellHead`), and
+   * 3. an outer `<Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>`
+   *    boundary wrapping this component.
+   * Suppresses downstream hero hints, the duplicate shell head, and the
+   * nested inner hero-reserve Suspense boundary so each is emitted once.
    */
   omitCommittedHero?: boolean;
 }
-
-const ogabasseyStaticHomepageSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'WebPage',
-  name: OGABASSEY_TITLE,
-  description: OGABASSEY_DESCRIPTION,
-  url: OGABASSEY_HOME_URL,
-  isPartOf: {
-    '@type': 'WebSite',
-    name: 'OgaBassey',
-    url: OGABASSEY_HOME_URL,
-  },
-  primaryImageOfPage: {
-    '@type': 'ImageObject',
-    url: OGABASSEY_SOCIAL_IMAGE_URL,
-  },
-} as const;
 
 export async function OgabasseyStaticHomePageContent({
   omitCommittedHero = false,
@@ -81,8 +63,7 @@ export async function OgabasseyStaticHomePageContent({
 
   return (
     <>
-      <JsonLd data={ogabasseyStaticHomepageSchema} />
-      <OgabasseyHomeStyleLoader />
+      {!omitCommittedHero && <OgabasseyHomeStaticShellHead />}
       {paintCommittedHero && committedMobileLcpUrl ? (
         <>
           <div data-ogabassey-home-lcp-shell="true">
@@ -101,18 +82,32 @@ export async function OgabasseyStaticHomePageContent({
       ) : (
         <>
           {/*
-            No hero preload hint here: whenever this branch renders with a
-            live URL, omitCommittedHero is set and the upstream committed
-            slot already owns the scanner-visible hint for that URL.
+            No hero preload hint or second reserve boundary here: whenever
+            omitCommittedHero is true, the upstream committed slot owns the
+            scanner-visible hint and OgabasseyStaticHomePage already wraps
+            this component in <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>.
+            Avoiding a second nested reserve boundary saves ~19 KB of
+            duplicate fallback HTML + RSC Flight payload and eliminates an
+            extra Suspense boundary swap before Hero reveals.
           */}
-          <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
+          {omitCommittedHero ? (
             <OgabasseyHomePageContent
-              omitDocumentHeading={omitCommittedHero}
+              canonicalDomain={pathPrefix === ''}
+              omitDocumentHeading
               pathPrefix={pathPrefix}
               shellMerchantId={shellMerchantId}
               shellSlides={shellSlides}
             />
-          </Suspense>
+          ) : (
+            <Suspense fallback={<OgabasseyHomeHeroReserveFallback />}>
+              <OgabasseyHomePageContent
+                omitDocumentHeading={false}
+                pathPrefix={pathPrefix}
+                shellMerchantId={shellMerchantId}
+                shellSlides={shellSlides}
+              />
+            </Suspense>
+          )}
         </>
       )}
     </>

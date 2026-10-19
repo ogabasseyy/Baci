@@ -243,19 +243,11 @@ export function AirtimeForm(props: AirtimeFormProps) {
           <UtilityPaymentOptions
             amount={numericAmount}
             canFundByBankTransfer={payment.canFundByBankTransfer}
-            cards={payment.cards}
-            isLoadingCards={payment.isLoadingCards}
-            onSelectGateway={payment.selectGateway}
-            onSelectSavedCard={payment.selectSavedCard}
             returnToHref={walletReturnToHref}
-            selectedGateway={payment.selectedGateway}
-            selectedSavedCardId={payment.selectedSavedCardId}
-            supportedGateways={payment.supportedGateways}
-            walletBalance={payment.walletBalance}
+            walletBalance={payment.getWalletBalance()}
             walletError={payment.walletError}
             walletIsLoading={payment.walletIsLoading}
-            walletSelection={payment.walletSelection}
-            onWalletToggle={payment.setWalletSelection}
+            walletIsSettled={payment.isWalletSettled()}
           />
         </View>
       </ScrollView>
@@ -287,9 +279,7 @@ export function AirtimeForm(props: AirtimeFormProps) {
               <ActivityIndicator color={BRAND.onPrimary} />
             ) : (
               <Text style={styles.payButtonText}>
-                {payment.selectedSavedCardId
-                  ? `Pay ₦${numericAmount ? numericAmount.toLocaleString() : '0'}`
-                  : 'Continue to Payment'}
+                {`Pay ₦${numericAmount ? numericAmount.toLocaleString() : '0'}`}
               </Text>
             )}
           </Pressable>

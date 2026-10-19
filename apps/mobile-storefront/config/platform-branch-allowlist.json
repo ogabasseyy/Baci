@@ -316,6 +316,10 @@
     {
       "path": "services/savings-reminder-native.ts",
       "justification": "Reviewed web guard and Android notification channel setup for savings reminders."
+    },
+    {
+      "path": "lib/pending-vtu-idempotency-store.ts",
+      "justification": "Reviewed web-only MMKV Map-fallback durability probe (Codex R125 P1): Platform.OS web gate with localStorage access check so a non-durable web write reports failure and the pre-POST guard refuses; native always durable. Covered by blocked/accessible regression tests."
     }
   ],
   "knownForbiddenPatterns": []

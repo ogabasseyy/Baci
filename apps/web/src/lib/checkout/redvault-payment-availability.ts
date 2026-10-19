@@ -5,10 +5,15 @@ export type RedvaultPaymentAvailability = {
   reason:
     | 'provider_evidence_unavailable'
     | 'staging_test_mode'
-    | 'private_live_pilot';
+    | 'private_live_pilot'
+    | 'public_product_test';
 };
 
 const LIVE_BACI_SUPABASE_HOST = 'aivqthbxdshhltbwipbr.supabase.co';
+
+export function isRedvaultLivePilotReason(reason: string): boolean {
+  return reason === 'private_live_pilot' || reason === 'public_product_test';
+}
 
 function isPreviewOrLocalTest(appUrl: URL): boolean {
   if (process.env.VERCEL_ENV === 'preview') {
@@ -45,8 +50,15 @@ function hasIsolatedStagingPaymentConfiguration(): boolean {
 }
 
 export function getRedvaultPaymentAvailability(): RedvaultPaymentAvailability {
-  if (getRedvaultLivePilotPolicy()) {
-    return { available: true, reason: 'private_live_pilot' };
+  const pilot = getRedvaultLivePilotPolicy();
+  if (pilot) {
+    return {
+      available: true,
+      reason:
+        pilot.audience === 'public_product_test'
+          ? 'public_product_test'
+          : 'private_live_pilot',
+    };
   }
   if (
     process.env.BACI_RUNTIME_ENV === 'staging' &&

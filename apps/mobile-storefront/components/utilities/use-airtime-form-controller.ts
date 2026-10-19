@@ -45,7 +45,7 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
   const [shouldScrollToPayment, setShouldScrollToPayment] =
     useState(isRepeatPaymentReady);
   const numericAmount = Number(amount.replace(/\D/g, ''));
-  const payment = useUtilityPayment(numericAmount);
+  const payment = useUtilityPayment();
   const selectedProviderConfig =
     NETWORK_PROVIDERS.find((provider) => provider.id === selectedProvider) ??
     null;
@@ -69,6 +69,15 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     setAmount(sanitizeAirtimeAmountInput(value));
   };
 
+  // Prefilled deep-link so a wallet top-up round-trips the customer back to a
+  // ready-to-buy airtime form (they still re-tap Buy — never auto-submitted).
+  const walletReturnToHref = buildUtilityWalletReturnTo({
+    amount: numericAmount,
+    networkProvider: selectedProvider,
+    phoneNumber,
+    type: 'airtime',
+  });
+
   const { isSubmitting, handlePurchase } = useAirtimePurchaseHandler({
     amount,
     numericAmount,
@@ -78,6 +87,7 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
     customer,
     onSuccess,
     dismissKeyboard,
+    returnToHref: walletReturnToHref,
   });
 
   const handlePaymentLayout = (event: LayoutChangeEvent) => {
@@ -88,15 +98,6 @@ export function useAirtimeFormController(props: AirtimeFormProps) {
       shouldScrollToPayment,
     });
   };
-
-  // Prefilled deep-link so a wallet top-up round-trips the customer back to a
-  // ready-to-buy airtime form (they still re-tap Buy — never auto-submitted).
-  const walletReturnToHref = buildUtilityWalletReturnTo({
-    amount: numericAmount,
-    networkProvider: selectedProvider,
-    phoneNumber,
-    type: 'airtime',
-  });
 
   return {
     amount,

@@ -18,6 +18,7 @@ import type {
   SavingsSelection,
   WalletSelection,
 } from '@/lib/wallet-payment-helpers';
+import type { CartCheckoutBinding } from '@/schemas/cart-checkout-binding';
 import { createOrder, OrderError } from '@/services/orders';
 import type { CartItem } from '@/stores/cart-store';
 import {
@@ -61,6 +62,7 @@ interface SubmitBnplCheckoutParams {
   selectedQuote: ShippingQuote | undefined;
   setIsProcessing: (value: boolean) => void;
   snapshot: CheckoutSnapshot;
+  sharedCartBinding?: CartCheckoutBinding;
 }
 
 export async function submitBnplCheckout({
@@ -83,6 +85,7 @@ export async function submitBnplCheckout({
   selectedQuote,
   setIsProcessing,
   snapshot,
+  sharedCartBinding,
 }: SubmitBnplCheckoutParams) {
   const klumpSubmitDisabledReason =
     selectedPayment === 'klump'
@@ -115,6 +118,7 @@ export async function submitBnplCheckout({
     selectedQuote,
     shippingProvider: getShippingProvider(),
     snapshot,
+    sharedCartBinding,
   });
   // The order service owns durable retry identity across payment methods.
   // Never rotate it when a completed order rejects reuse.

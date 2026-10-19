@@ -109,4 +109,9 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
       'supabase/migrations/20261017090000_scope_paystack_pin_recheck.sql',
     sha256: '63733a509d9df6786ea04edfff2e7826e6b6da525640bad3aa3a0924c59c5171',
   },
+  {
+    repositoryPath:
+      'supabase/migrations/20261019150000_record_verified_txn_id_numeric.sql',
+    sha256: '646e05f882d0ee624522de0eb5806bdd601e3b3cc8cc281ce14ffe9f580bc130',
+  },
 ];

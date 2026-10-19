@@ -192,8 +192,9 @@ export async function reconcilePaystackCancellationRefund(
   ) {
     throw new Error('unknown_paystack_refund_status');
   }
-  // Decimal text into the bigint RPC arg: PostgREST coerces exact
-  // digit strings, while a number here would already be rounded.
+  // Decimal text into the numeric RPC arg: PostgREST coerces exact
+  // digit strings at any width, while a number here would already
+  // be rounded (and a bigint arg would reject IDs above int64max).
   const { error } = await supabase.rpc(
     'record_verified_paystack_cancellation_refund_v1',
     {

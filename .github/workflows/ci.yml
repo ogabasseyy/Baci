@@ -460,6 +460,7 @@ jobs:
           --sql-check supabase/tests/order_refund_record_merchant_scope.sql
           --sql-check supabase/tests/order_refund_response_truncation.sql
           --sql-check supabase/tests/order_refund_management_null_paid.sql
+          --sql-check supabase/tests/order_refund_unsigned_txn_id_numeric.sql
           --sql-check supabase/migrations/tests/search_analytics_service_role_only_insert.sql
           --sql-check supabase/migrations/tests/enroll_customer_loyalty.sql
           --sql-check supabase/migrations/tests/enroll_customer_loyalty_concurrency.sql

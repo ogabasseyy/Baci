@@ -279,6 +279,11 @@ describe('customer-auth-session passive identity revocation', () => {
     expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
     expect(setUser).toHaveBeenCalledWith(null);
     expect(setCustomer).toHaveBeenCalledWith(null);
+    // The already-exchanged auth cookie must be rolled back too, not
+    // just React state, or the new customer stays authenticated.
+    expect(fetchMock).toHaveBeenCalledWith('/api/storefront/auth/logout', {
+      method: 'POST',
+    });
 
     setUser.mockClear();
     setCustomer.mockClear();

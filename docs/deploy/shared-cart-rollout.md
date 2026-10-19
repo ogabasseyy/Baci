@@ -157,6 +157,18 @@ activation check must confirm database statement logging does not
 persist RPC arguments (`log_statement` must not capture the preview
 calls), since the raw token now reaches the RPC as an argument.
 
+Accepted surface: on shared platform hosts, a same-host Referer slug
+may select which merchant a path-routed storefront hint names
+(`resolveCartMerchant`). The Referer is client-supplied and therefore
+only a selection signal, never authority: session principals are
+rechecked against the resolved merchant (`merchant_mismatch`), proofs
+are merchant-bound, and forging the pair gains no cross-tenant cart
+access. The residual is that an apex caller can mint anonymous
+bootstrap/create carts for an arbitrary merchant — equivalent to
+visiting that storefront directly — bounded by per-IP proxy limits
+and per-merchant bootstrap/create quotas. This is accepted for the
+pilot; revisit if anonymous cart pollution is observed.
+
 Voucher credential storage: committed cart lines persist the quiz
 voucher token in cleartext, and authenticated cart snapshots return it
 to verified grant holders of that cart, because the orders route's

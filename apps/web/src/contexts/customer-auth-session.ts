@@ -130,6 +130,13 @@ export async function loadCustomerSession(
         );
         if (isCancelled()) return;
         if (!retired) {
+          // Mirror commitCustomerAuthSession: clearing React state
+          // is not enough, because the browser already holds the new
+          // account's auth cookie. Roll the auth session back so a
+          // later session-aware page cannot authenticate the new
+          // customer while the old cart authority is unretired.
+          await rollbackCustomerAuthSession(merchantSlug);
+          if (isCancelled()) return;
           setUser(null);
           setCustomer(null);
           publishCustomerIdentity(null, null, merchantSlug);

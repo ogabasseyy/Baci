@@ -52,7 +52,7 @@ export function ProductOfferSelector({
               selectedCondition ===
                 normalizeCanonicalProductCondition(product.condition || 'new')
               ? 'border-store-primary text-store-primary bg-store-primary/5'
-              : 'border-gray-200 text-gray-500 hover:border-gray-300'
+              : 'border-store-border text-store-background-text/60 hover:border-store-background-text/30'
           )}
         >
           {conditionLabels[product.condition || 'new'] || 'New'}
@@ -89,7 +89,7 @@ export function ProductOfferSelector({
                 'rounded-lg border-2 px-4 py-2 text-sm font-bold transition-all',
                 isOfferSelected
                   ? 'border-store-primary text-store-primary bg-store-primary/5'
-                  : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  : 'border-store-border text-store-background-text/60 hover:border-store-background-text/30'
               )}
             >
               {sameConditionCount > 1

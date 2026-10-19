@@ -95,6 +95,47 @@ describe('cart-stock helpers', () => {
     ).toBe(2);
   });
 
+  it('sums duplicate lines sharing one exact offer identity', () => {
+    // Legacy canonical-alias adoption can leave two lines on the same
+    // offer: the quantity-edit mutation validates this joint total so
+    // the siblings cannot each fit alone and jointly over-claim.
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'redmi-note-14',
+      offer_id: 'offer-1',
+      name: 'Redmi Note 14',
+      price: 220000,
+      quantity: 2,
+    });
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'redmi-note-14',
+      offer_id: 'offer-1',
+      name: 'Redmi Note 14',
+      price: 220000,
+      quantity: 2,
+    });
+    useCartStore.getState().addItem({
+      product_id: 'product-1',
+      slug: 'redmi-note-14',
+      offer_id: 'offer-2',
+      name: 'Redmi Note 14',
+      price: 200000,
+      quantity: 5,
+    });
+
+    expect(
+      getExistingCartQuantityForStock({
+        product_id: 'product-1',
+        slug: 'redmi-note-14',
+        offer_id: 'offer-1',
+        name: 'Redmi Note 14',
+        price: 220000,
+        quantity: 2,
+      })
+    ).toBe(4);
+  });
+
   it('uses cached stock while offline', async () => {
     mockNetInfoFetch.mockResolvedValue({
       isConnected: false,

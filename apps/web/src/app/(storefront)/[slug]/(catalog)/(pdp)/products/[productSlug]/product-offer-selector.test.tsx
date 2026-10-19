@@ -116,4 +116,33 @@ describe('ProductOfferSelector base highlight', () => {
     expect(buttons[0].className).toContain('border-store-primary');
     expect(buttons[1].className).not.toContain('border-store-primary');
   });
+
+  it('styles unselected buttons with storefront theme tokens, not gray', () => {
+    const product = {
+      condition: 'new',
+      has_condition_offers: true,
+      id: 'p1',
+      name: 'Widget',
+      offers: [
+        { condition: 'used', id: 'o1', price: 30000, stock_quantity: 3 },
+      ],
+      price: 50000,
+    } as Product;
+    render(
+      <ProductOfferSelector
+        conditionDescriptions={{}}
+        conditionLabels={{ used: 'Premium Used' }}
+        formatCurrency={(value) => `NGN${value}`}
+        onConditionChange={vi.fn()}
+        product={product}
+        selectedCondition={'new' as ProductCondition}
+        selectedOffer={null}
+      />
+    );
+
+    const unselected = screen.getByRole('button', { name: 'Premium Used' });
+    expect(unselected.className).toContain('border-store-border');
+    expect(unselected.className).toContain('text-store-background-text/60');
+    expect(unselected.className).not.toContain('gray-');
+  });
 });

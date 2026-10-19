@@ -63,6 +63,11 @@ export default function ProductRequest({
       });
       setSent(true);
       setOpen(false);
+      // Rotate the idempotency id after a completed submission (web
+      // parity): the form stays mounted across searches, so a return
+      // to the same query must mint a fresh id instead of replaying
+      // success without a new row. Uncertain retries keep the id.
+      request.current = { key: '', id: '' };
       Keyboard.dismiss();
     } catch (error) {
       setError(

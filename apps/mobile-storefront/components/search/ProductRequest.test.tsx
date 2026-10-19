@@ -132,6 +132,33 @@ it('allows a new request after a successful request and query change', async () 
     'Galaxy S99'
   );
 });
+it('rotates the request id when the same query is requested again after success', async () => {
+  jest.mocked(submitProductRequest).mockResolvedValue();
+  mockRandomUUID.mockClear();
+  const view = render(
+    <ProductRequest query="iPhone 20" colors={Colors.light} />
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.changeText(
+    screen.getByLabelText('Email or phone number'),
+    'shopper@example.com'
+  );
+  fireEvent.press(screen.getByRole('button', { name: 'Send product request' }));
+  await waitFor(() =>
+    expect(screen.getByText(/Request sent to the store/)).toBeTruthy()
+  );
+  expect(mockRandomUUID).toHaveBeenCalledTimes(1);
+
+  // Navigate away and back to the identical query while mounted: the
+  // payload key matches the completed submission, so without rotation
+  // the intake RPC would replay success without a new merchant row.
+  view.rerender(<ProductRequest query="Galaxy S99" colors={Colors.light} />);
+  view.rerender(<ProductRequest query="iPhone 20" colors={Colors.light} />);
+  fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.press(screen.getByRole('button', { name: 'Send product request' }));
+  await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(2));
+  expect(mockRandomUUID).toHaveBeenCalledTimes(2);
+});
 it('isolates the open form behind a modal accessibility boundary', () => {
   render(<ProductRequest query="iPhone 20" colors={Colors.light} />);
   fireEvent.press(screen.getByRole('button', { name: 'Request this product' }));

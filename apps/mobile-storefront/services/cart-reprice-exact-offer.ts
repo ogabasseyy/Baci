@@ -115,6 +115,13 @@ export function reconcileStrictBasePools({
     if (item.voucher_token || item.voucher_award_id) {
       continue;
     }
+    // Lines already flagged unavailable earlier in repricing (vanished
+    // or invalid offers) will be removed before checkout: excluding
+    // them from the pool total keeps one bad sibling from marking a
+    // valid line unavailable too.
+    if (alreadyFlagged.has(item.id)) {
+      continue;
+    }
     const siblings = simpleLinesByProductId.get(item.product_id) ?? [];
     siblings.push(item);
     simpleLinesByProductId.set(item.product_id, siblings);

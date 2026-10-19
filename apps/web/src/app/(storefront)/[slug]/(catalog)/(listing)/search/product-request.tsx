@@ -97,6 +97,13 @@ export function ProductRequest({
       );
       setSent(true);
       setOpen(false);
+      // Rotate the idempotency id after a completed submission: the
+      // component stays mounted across searches, so without this a
+      // return to the same query would resubmit the same id and the
+      // intake RPC would replay success without creating a new row —
+      // even after the 24-hour content-dedup window. Uncertain
+      // retries keep the id (error path below leaves it untouched).
+      request.current = { key: '', id: '' };
     } catch (error) {
       setError(
         error instanceof ProductRequestSubmitError && error.status === 429

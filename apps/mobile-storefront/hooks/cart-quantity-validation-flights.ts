@@ -51,3 +51,8 @@ export function endQuantityValidationFlight(id: string): void {
 export function readQuantityValidationBaseline(id: string): number | undefined {
   return quantityValidationFlights.get(id)?.baseline;
 }
+
+/** Test-only: clears every flight entry so cases never share baselines. */
+export function resetQuantityValidationFlightsForTests(): void {
+  quantityValidationFlights.clear();
+}

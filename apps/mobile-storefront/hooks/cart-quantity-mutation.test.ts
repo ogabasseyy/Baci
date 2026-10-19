@@ -23,6 +23,43 @@ jest.mock('./cart-notifications', () => ({
 jest.mock('./cart-stock', () => ({
   checkStock: jest.fn(),
   getExistingProductQuantityForStock: jest.fn(() => 0),
+  // Faithful identity-total seam: the real aggregation (duplicate
+  // lines, voucher exclusion) is unit-tested in cart-stock.test.ts;
+  // here the mutation must call it with the edited item and pass
+  // its return to checkStock as the validated quantity.
+  getExistingCartQuantityForStock: jest.fn(
+    (item: {
+      product_id: string;
+      variant_id?: string | null;
+      offer_id?: string | null;
+    }) => {
+      const { useCartStore: store } =
+        require('../stores/cart-store') as typeof import('../stores/cart-store');
+      const variantId = item.variant_id ?? null;
+      const offerId = item.offer_id ?? null;
+      return store.getState().items.reduce(
+        (
+          total: number,
+          cartItem: {
+            product_id: string;
+            variant_id?: string | null;
+            offer_id?: string | null;
+            quantity: number;
+            voucher_token?: string;
+            voucher_award_id?: string;
+          }
+        ) =>
+          !cartItem.voucher_token &&
+          !cartItem.voucher_award_id &&
+          cartItem.product_id === item.product_id &&
+          (cartItem.variant_id ?? null) === variantId &&
+          (cartItem.offer_id ?? null) === offerId
+            ? total + cartItem.quantity
+            : total,
+        0
+      );
+    }
+  ),
 }));
 jest.mock('./cart-query-cache', () => ({
   getCachedOptionStock: jest.fn(() => undefined),
@@ -32,6 +69,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { resetCartLineSequence, useCartStore } from '../stores/cart-store';
 import type { CartItem } from '../stores/cart-store.types';
 import { createUpdateQuantityMutation } from './cart-quantity-mutation';
+import { resetQuantityValidationFlightsForTests } from './cart-quantity-validation-flights';
 import { checkStock } from './cart-stock';
 
 const mockCheckStock = checkStock as unknown as jest.MockedFunction<
@@ -72,6 +110,7 @@ function mutation(queryClient = {} as QueryClient) {
 describe('cart quantity mutation rollback', () => {
   beforeEach(() => {
     seed([]);
+    resetQuantityValidationFlightsForTests();
     jest.clearAllMocks();
   });
 
@@ -242,6 +281,7 @@ describe('cart quantity mutation rollback', () => {
 describe('cart quantity mutation validation', () => {
   beforeEach(() => {
     seed([]);
+    resetQuantityValidationFlightsForTests();
     jest.clearAllMocks();
   });
 
@@ -296,5 +336,95 @@ describe('cart quantity mutation validation', () => {
     await expect(mutationFn({ id: 'a', quantity: 10 })).rejects.toThrow(
       'Only 2 items available in stock'
     );
+  });
+
+  it('validates the post-write identity total across duplicate offer lines', async () => {
+    // Two lines share one exact offer (legacy alias adoption): the
+    // edited line alone fits the 3-unit allocation, but the joint
+    // total of 4 must fail validation.
+    seed([
+      line({ id: 'a', product_id: 'p1', offer_id: 'offer-1', quantity: 2 }),
+      line({ id: 'b', product_id: 'p1', offer_id: 'offer-1', quantity: 2 }),
+    ]);
+    const { onMutate, mutationFn } = mutation();
+
+    onMutate({ id: 'a', quantity: 2 });
+    mockCheckStock.mockImplementation(
+      async (_productId: unknown, requested: unknown) => ({
+        available: (requested as number) <= 3,
+        currentStock: 3,
+        requestedQuantity: requested as number,
+      })
+    );
+
+    await expect(mutationFn({ id: 'a', quantity: 2 })).rejects.toThrow(
+      'Only 3 items available in stock'
+    );
+    expect(mockCheckStock).toHaveBeenCalledWith(
+      'p1',
+      4,
+      undefined,
+      expect.objectContaining({ offerId: 'offer-1' })
+    );
+  });
+
+  it('reapplies a late validated quantity after a newer rollback', () => {
+    seed([line({ id: 'a', quantity: 1, product_id: 'p1' })]);
+    const invalidateQueries = jest.fn();
+    const { onMutate, onError, onSettled, onSuccess } = mutation({
+      invalidateQueries,
+    } as unknown as QueryClient);
+
+    // 1 -> 2 -> 3 with the newer edit (3) failing first: its
+    // rollback restores the shared baseline 1.
+    onMutate({ id: 'a', quantity: 2 });
+    const second = onMutate({ id: 'a', quantity: 3 });
+    const error = new Error('Only 2 items available in stock');
+    onError(error, { id: 'a', quantity: 3 }, second);
+    onSettled(undefined, error, { id: 'a', quantity: 3 });
+    expect(useCartStore.getState().items[0]?.quantity).toBe(1);
+
+    // The older validation for 2 lands late: 2 passed stock
+    // validation, so the cart must show 2, not the stale rollback 1.
+    const success = {
+      id: 'a',
+      quantity: 2,
+      stockCheck: { available: true, currentStock: 2 },
+    };
+    onSuccess(success as never);
+    onSettled(success as never, null, { id: 'a', quantity: 2 });
+
+    expect(useCartStore.getState().items[0]?.quantity).toBe(2);
+  });
+
+  it('never clobbers a still-newer edit on late success', () => {
+    seed([line({ id: 'a', quantity: 1, product_id: 'p1' })]);
+    const invalidateQueries = jest.fn();
+    const { onMutate, onError, onSettled, onSuccess } = mutation({
+      invalidateQueries,
+    } as unknown as QueryClient);
+
+    onMutate({ id: 'a', quantity: 2 });
+    const second = onMutate({ id: 'a', quantity: 3 });
+    const error = new Error('Only 2 items available in stock');
+    onError(error, { id: 'a', quantity: 3 }, second);
+    onSettled(undefined, error, { id: 'a', quantity: 3 });
+
+    // A third keystroke edit lands before the late success arrives.
+    const third = onMutate({ id: 'a', quantity: 4 });
+    expect(useCartStore.getState().items[0]?.quantity).toBe(4);
+
+    const success = {
+      id: 'a',
+      quantity: 2,
+      stockCheck: { available: true, currentStock: 2 },
+    };
+    onSuccess(success as never);
+    onSettled(success as never, null, { id: 'a', quantity: 2 });
+
+    // The line moved off the rollback baseline, so the late
+    // success only advances the baseline and leaves 4 in place.
+    expect(useCartStore.getState().items[0]?.quantity).toBe(4);
+    expect(third.appliedQuantity).toBe(4);
   });
 });

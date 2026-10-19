@@ -8,7 +8,11 @@ import {
   readQuantityValidationBaseline,
 } from './cart-quantity-validation-flights';
 import { getCachedOptionStock } from './cart-query-cache';
-import { checkStock, getExistingProductQuantityForStock } from './cart-stock';
+import {
+  checkStock,
+  getExistingCartQuantityForStock,
+  getExistingProductQuantityForStock,
+} from './cart-stock';
 
 /**
  * Quantity-update mutation options for the optimistic cart.
@@ -79,9 +83,16 @@ export function createUpdateQuantityMutation({
       // stock error (and roll back) when live stock covers the clamped
       // amount but not the unbounded request.
       const appliedQuantity = item.quantity;
+      // Validate the post-write identity total, mirroring the add
+      // mutation: duplicate lines sharing one exact offer (possible
+      // after legacy canonical-alias adoption) must jointly fit the
+      // offer allocation — each line fitting alone would over-claim
+      // and die later at repricing or checkout. The store already
+      // holds this edit's optimistic write, so the total includes it.
+      const identityTotal = getExistingCartQuantityForStock(item);
       const stockCheck = await checkStock(
         item.product_id,
-        appliedQuantity,
+        identityTotal,
         getCachedOptionStock(queryClient, item.product_id, {
           variantId: item.variant_id ?? null,
           offerId: item.offer_id ?? null,
@@ -230,12 +241,37 @@ export function createUpdateQuantityMutation({
     },
 
     onSuccess: (data: UpdateQuantityResult) => {
+      // Capture the pre-advance baseline first: a newer overlapping
+      // edit may have already rolled the line back to it while this
+      // request was in flight.
+      const preAdvanceBaseline = readQuantityValidationBaseline(data.id);
       // This quantity passed stock validation: it becomes the
       // rollback baseline for any still-pending overlapping edit.
       advanceQuantityValidationBaseline(data.id, data.quantity);
       // Bug #96 fix: Read fresh items from store instead of stale closure
-      const freshItems = useCartStore.getState().items;
-      const item = freshItems.find((i) => i.id === data.id);
+      const state = useCartStore.getState();
+      const item = state.items.find((i) => i.id === data.id);
+      // Late-success reconcile: when a newer edit failed and rolled
+      // the line back to the shared baseline before this validation
+      // landed (1 -> 2 -> 3 with 3 failing first), the cart holds the
+      // rollback value while this quantity just passed validation.
+      // Reapply the validated quantity instead of stranding the
+      // shopper below it. A still-newer edit would have moved the
+      // line off the baseline, so it is never clobbered; the restore
+      // is quantity-only and preserves negotiation state.
+      if (
+        item &&
+        preAdvanceBaseline !== undefined &&
+        item.quantity === preAdvanceBaseline &&
+        item.quantity !== data.quantity
+      ) {
+        restoreItemsInStore(
+          state.items.map((line) =>
+            line.id === data.id ? { ...line, quantity: data.quantity } : line
+          ),
+          state.cartWideNegotiationActive
+        );
+      }
       if (item) {
         queryClient.invalidateQueries({
           queryKey: ['product', item.product_id],

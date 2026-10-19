@@ -180,6 +180,66 @@ it('mints a fresh id for the same query and contact on another store', async () 
   expect(secondId.requestId).not.toBe(firstId.requestId);
 });
 
+it('rotates the id when the same query is requested again after success', async () => {
+  vi.mocked(submitProductRequest).mockResolvedValue();
+  const { rerender } = render(
+    <ProductRequest query="iPhone 20" merchantSlug="ogabassey" />
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.change(screen.getByLabelText('Email or phone number'), {
+    target: { value: 'shopper@example.com' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+  await waitFor(() =>
+    expect(screen.getByRole('status').textContent).toContain('Request sent')
+  );
+  const firstId = vi.mocked(submitProductRequest).mock.calls[0]?.[1] as {
+    requestId: string;
+  };
+
+  // Navigate away and back to the identical query while mounted.
+  rerender(<ProductRequest query="Galaxy S30" merchantSlug="ogabassey" />);
+  rerender(<ProductRequest query="iPhone 20" merchantSlug="ogabassey" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.change(screen.getByLabelText('Email or phone number'), {
+    target: { value: 'shopper@example.com' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+  await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(2));
+  const secondId = vi.mocked(submitProductRequest).mock.calls[1]?.[1] as {
+    requestId: string;
+  };
+
+  // Without rotation the intake RPC replays success on the stale id
+  // without creating a new merchant row, even after its 24h window.
+  expect(secondId.requestId).not.toBe(firstId.requestId);
+});
+
+it('reuses the id for an uncertain retry after a failure', async () => {
+  vi.mocked(submitProductRequest)
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce();
+  render(<ProductRequest query="iPhone 20" merchantSlug="ogabassey" />);
+  fireEvent.click(screen.getByRole('button', { name: 'Request this product' }));
+  fireEvent.change(screen.getByLabelText('Email or phone number'), {
+    target: { value: 'shopper@example.com' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+  await waitFor(() => expect(screen.getByRole('alert')).toBeDefined());
+  fireEvent.click(screen.getByRole('button', { name: 'Send request' }));
+  await waitFor(() => expect(submitProductRequest).toHaveBeenCalledTimes(2));
+
+  // The first attempt may have committed server-side: the retry must
+  // carry the same id so the RPC dedupes instead of double-creating.
+  const firstId = vi.mocked(submitProductRequest).mock.calls[0]?.[1] as {
+    requestId: string;
+  };
+  const secondId = vi.mocked(submitProductRequest).mock.calls[1]?.[1] as {
+    requestId: string;
+  };
+  expect(secondId.requestId).toBe(firstId.requestId);
+});
+
 it('fails closed without a CSPRNG instead of minting a weak id', async () => {
   vi.mocked(submitProductRequest).mockResolvedValue();
   const uuidDescriptor = Object.getOwnPropertyDescriptor(crypto, 'randomUUID');

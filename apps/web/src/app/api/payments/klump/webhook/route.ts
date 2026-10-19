@@ -111,19 +111,32 @@ function updateKlumpOrder({
   orderId: string;
   supabase: ReturnType<typeof createAdminClient>;
 }) {
-  return supabase
-    .from('orders')
-    .update({
-      payment_status: 'paid',
-      shipping_status: 'processing',
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', orderId)
-    .neq('payment_status', 'paid')
-    .select(
-      'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
-    )
-    .maybeSingle<KlumpUpdatedOrder>();
+  return (
+    supabase
+      .from('orders')
+      .update({
+        payment_status: 'paid',
+        shipping_status: 'processing',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', orderId)
+      .neq('payment_status', 'paid')
+      // A payment-only cancellation (mark_abandoned_orders) is terminal
+      // too: its loyalty claim may already be released and re-claimed by
+      // another order, so a late capture must not reopen this one. The
+      // cancelled-order handler below files such payments for review.
+      .neq('payment_status', 'cancelled')
+      .neq('payment_status', 'canceled')
+      // Same fence on the shipping axis: either axis releasing the
+      // loyalty claim (migration 20261010000014) makes the order
+      // terminal for payment finalization.
+      .neq('shipping_status', 'cancelled')
+      .neq('shipping_status', 'canceled')
+      .select(
+        'id, merchant_id, order_number, customer_name, total, currency, payment_status, shipping_status, cancelled_at, shipping_provider, shipping_funding_source, shipping_platform_retained_amount'
+      )
+      .maybeSingle<KlumpUpdatedOrder>()
+  );
 }
 
 function getKlumpPlatformFee(
@@ -371,6 +384,34 @@ export async function POST(request: NextRequest) {
       }
 
       order = existingOrder;
+    }
+
+    // The update predicates exclude cancelled orders (either axis),
+    // so a late capture for one lands here with updatedOrder null:
+    // file it for review instead of confirming inventory on an unpaid
+    // order (which rejects and would retry the webhook into a loop).
+    if (
+      order &&
+      (order.payment_status === 'cancelled' ||
+        order.payment_status === 'canceled' ||
+        isOrderClampedAsCancelled(order))
+    ) {
+      const reviewFiled = await handlePaymentForCancelledOrder({
+        gatewayReference: referenceResult.data,
+        order,
+        reason:
+          'Klump payment captured for an order cancelled before finalization',
+        transactionId: transaction.id,
+      });
+      if (!reviewFiled) {
+        return errorResponse('Payment reconciliation review unavailable', 500);
+      }
+
+      return NextResponse.json({
+        message:
+          'Klump payment recorded; order was cancelled, filed for review',
+        success: true,
+      });
     }
 
     if (order) {

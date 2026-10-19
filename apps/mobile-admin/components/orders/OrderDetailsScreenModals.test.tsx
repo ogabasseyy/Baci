@@ -57,8 +57,14 @@ vi.mock('@/components/orders/RecordPaymentSheet', async () => {
   };
 });
 
+const shipmentFlow = vi.hoisted(() => ({
+  proceed: undefined as undefined | (() => unknown),
+}));
 vi.mock('@/components/orders/ShipmentFlowSheet', () => ({
-  ShipmentFlowSheet: () => null,
+  ShipmentFlowSheet: (props: { onContinueFromMethod: () => unknown }) => {
+    shipmentFlow.proceed = props.onContinueFromMethod;
+    return null;
+  },
 }));
 
 vi.mock('@/components/orders/ShipOnCreditDialog', () => ({
@@ -259,4 +265,16 @@ describe('OrderDetailsScreenModals', () => {
     );
     expect(controller.handleSendOrderDetailsToRider).toHaveBeenCalledTimes(1);
   });
+});
+
+it('preserves the controller checkout-review promise through to the shipment sheet', async () => {
+  const proceed = vi.fn().mockResolvedValue('review_checkout_quote');
+  render(
+    <OrderDetailsScreenModals
+      controller={createController({ proceedFromShipmentMethod: proceed })}
+      order={createOrder()}
+    />
+  );
+  await expect(shipmentFlow.proceed?.()).resolves.toBe('review_checkout_quote');
+  expect(proceed).toHaveBeenCalledOnce();
 });

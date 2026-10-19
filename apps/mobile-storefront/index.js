@@ -12,6 +12,10 @@ if (typeof global.crypto === 'undefined') {
   };
 }
 
+if (process.env.EXPO_PUBLIC_LOCAL_STOREFRONT === '1') {
+  require('./lib/install-local-storefront-runtime').installLocalStorefrontRuntime();
+}
+
 const { initializeErrorMonitoring } = require('./services/error-monitoring');
 
 initializeErrorMonitoring();

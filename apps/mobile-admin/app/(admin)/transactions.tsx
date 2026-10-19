@@ -17,10 +17,14 @@ import { TransactionsSummary } from '@/components/transactions/TransactionsSumma
 import { styles } from '@/components/transactions/transactions.styles';
 import { useAnalyticsOverview } from '@/hooks/useAnalyticsOverview';
 import { useCurrency } from '@/hooks/useCurrency';
+import { useCurrentDate } from '@/hooks/useCurrentDate';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useTheme } from '@/hooks/useTheme';
 import { useTransactionCostPriceEditor } from '@/hooks/useTransactionCostPriceEditor';
 import { useTransactionReview } from '@/hooks/useTransactionReview';
+import { useTransactionsSummary } from '@/hooks/useTransactionsSummary';
 import { resolveAnalyticsDateRange } from '@/lib/analytics-period';
+import { parseTransactionReviewRangeParams } from '@/lib/parse-transaction-review-range-params';
 import {
   filterOrdersForTransactionTab,
   filterTransactionOrders,
@@ -37,26 +41,11 @@ export default function TransactionsScreen() {
     endDate?: string | string[];
     startDate?: string | string[];
   }>();
-  const startDateParam = Array.isArray(params.startDate)
-    ? params.startDate[0]
-    : params.startDate;
-  const endDateParam = Array.isArray(params.endDate)
-    ? params.endDate[0]
-    : params.endDate;
-  const parsedStartDate = startDateParam ? new Date(startDateParam) : undefined;
-  const parsedEndDate = endDateParam ? new Date(endDateParam) : undefined;
-  const range =
-    parsedStartDate &&
-    parsedEndDate &&
-    !Number.isNaN(parsedStartDate.getTime()) &&
-    !Number.isNaN(parsedEndDate.getTime()) &&
-    parsedStartDate.getTime() <= parsedEndDate.getTime()
-      ? {
-          endDate: parsedEndDate,
-          startDate: parsedStartDate,
-        }
-      : undefined;
-  const currentMonthAnchor = new Date();
+  const range = parseTransactionReviewRangeParams(
+    params.startDate,
+    params.endDate
+  );
+  const currentMonthAnchor = useCurrentDate();
   const profitRange = resolveAnalyticsDateRange(
     'this_month',
     currentMonthAnchor.getFullYear(),
@@ -66,28 +55,29 @@ export default function TransactionsScreen() {
   );
   const { data: profitAnalytics, error: profitError } =
     useAnalyticsOverview(profitRange);
+  const [activeTab, setActiveTab] = useState<TransactionReviewTab>('paid');
+  const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 250);
+  const searching = Boolean(debouncedSearchQuery.trim());
   const {
     data: orders = [],
     isLoading,
     isRefetching,
     error,
     refetch,
-  } = useTransactionReview(range);
+    searchTruncated,
+  } = useTransactionReview(searching ? undefined : range, {
+    search: searching ? debouncedSearchQuery : undefined,
+    tab: activeTab,
+  });
+  const { refetchMonthlyCount, refetchRangeSummary, summary } =
+    useTransactionsSummary(range, currentMonthAnchor);
   const isRetrying = isLoading || isRefetching;
-  const [activeTab, setActiveTab] = useState<TransactionReviewTab>('paid');
-  const [searchQuery, setSearchQuery] = useState('');
   const editor = useTransactionCostPriceEditor({
     currencySymbol,
     formatCurrency,
   });
 
-  const summary = orders.reduce(
-    (acc, order) => ({
-      missingCosts: acc.missingCosts + order.missingCostCount,
-      transactions: acc.transactions + 1,
-    }),
-    { missingCosts: 0, transactions: 0 }
-  );
   const estimatedProfitThisMonthLabel = profitError
     ? 'Unavailable'
     : profitAnalytics
@@ -95,7 +85,12 @@ export default function TransactionsScreen() {
       : '--';
 
   const tabFilteredOrders = filterOrdersForTransactionTab(orders, activeTab);
-  const visibleOrders = filterTransactionOrders(tabFilteredOrders, searchQuery);
+  // While the debounced query lags behind typing, hold the browse list
+  // instead of flashing a no-match state from the 40-row window.
+  const visibleOrders = filterTransactionOrders(
+    tabFilteredOrders,
+    searching ? debouncedSearchQuery : ''
+  );
   const unmatchedItemCount = visibleOrders.reduce(
     (count, order) =>
       count +
@@ -229,7 +224,11 @@ export default function TransactionsScreen() {
             isRetrying={isRetrying}
             onRetry={() => {
               void refetch();
+              void refetchMonthlyCount();
+              void refetchRangeSummary();
             }}
+            searching={searching}
+            searchTruncated={searchTruncated}
             visibleOrderCount={visibleOrders.length}
           />
 

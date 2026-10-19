@@ -4,6 +4,9 @@ import {
   prepaidGiglCustomerCheckoutPayment,
 } from './book-order-shipment.refresh-fixtures.test-helper';
 
+type OrderShipmentBookingUtilsModule =
+  typeof import('@/lib/shipping/order-shipment-booking-utils');
+
 vi.mock('@/lib/shipping', () => ({
   shippingService: {
     getProviderQuotes: vi.fn(),
@@ -14,10 +17,7 @@ vi.mock('@/lib/shipping', () => ({
 vi.mock(
   '@/lib/shipping/order-shipment-booking-utils',
   async (importOriginal) => {
-    const actual =
-      await importOriginal<
-        typeof import('@/lib/shipping/order-shipment-booking-utils')
-      >();
+    const actual = await importOriginal<OrderShipmentBookingUtilsModule>();
     return {
       ...actual,
       buildReceiver: vi.fn().mockReturnValue({
@@ -40,13 +40,14 @@ const { bookOrderShipment } = await import('./book-order-shipment');
 const { shippingService } = await import('@/lib/shipping');
 
 const quoteSender = {
-  name: 'Ogabassey',
-  phone: '08000000000',
+  name: 'Merchant',
+  phone: '08000000002',
   address: '2 Olaide Tomori Street, Ikeja, 100001',
   city: 'Ikeja',
   state: 'Lagos',
   country: 'Nigeria',
   countryCode: 'NG',
+  postalCode: '100001',
 };
 
 function createSupabase(
@@ -71,6 +72,7 @@ function createSupabase(
     customer_name: 'Customer',
     customer_email: 'customer@example.com',
     customer_phone: '08000000001',
+    shipping_fee: 2500,
     selected_quote_id: 'quote-1',
     shipping_provider: 'GIGL',
     ...prepaidGiglCustomerCheckoutPayment,
@@ -91,7 +93,7 @@ function createSupabase(
     price: 2500,
     currency: 'NGN',
     estimated_days: 3,
-    provider_rate_id: 'GIGL_4_0',
+    provider_rate_id: 'GIGL_4_0_1_0_0_4',
     expires_at: new Date(Date.now() + 86_400_000).toISOString(),
     quote_request: {
       sessionId: 'session-1',
@@ -99,6 +101,8 @@ function createSupabase(
       sender: quoteSender,
       receiver: {
         ...order.shipping_address,
+        latitude: 6.5,
+        longitude: 3.3,
         name: order.customer_name,
         phone: order.customer_phone,
         country: 'Nigeria',
@@ -167,6 +171,25 @@ function createSupabase(
 describe('bookOrderShipment sender selection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(shippingService.getProviderQuotes).mockResolvedValue([
+      {
+        id: 'current',
+        provider: 'GIGL',
+        serviceTier: 'GoStandard',
+        carrierName: 'GIG Logistics',
+        displayName: 'GIG Logistics',
+        price: 2500,
+        currency: 'NGN',
+        providerCost: 2000,
+        platformMargin: 500,
+        pricingVersion: 'gigl_platform_margin_v1',
+        estimatedDays: 3,
+        pickupIncluded: true,
+        insuranceIncluded: false,
+        providerRateId: 'GIGL_4_0_1_0_0_4',
+        expiresAt: new Date('2099-01-01'),
+      },
+    ]);
     vi.mocked(shippingService.bookShipment).mockResolvedValue({
       provider: 'GIGL',
       providerShipmentId: 'waybill-1',
@@ -177,7 +200,7 @@ describe('bookOrderShipment sender selection', () => {
     });
   });
 
-  it('uses the server-resolved merchant sender for a domestic shipment', async () => {
+  it('uses the server-resolved sender when saved sender contacts match', async () => {
     await bookOrderShipment(createSupabase(), 'merchant-1', 'order-1');
 
     expect(shippingService.bookShipment).toHaveBeenCalledWith(

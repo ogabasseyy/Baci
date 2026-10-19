@@ -39,6 +39,7 @@ const STOREFRONT_API_SOURCE_PATHS = new Set([
   'reviews/[id]/helpful',
   'search',
   'search/autocomplete',
+  'search/submissions',
   'shipping/quotes',
   'shipping/locations',
   'vtu/billers',

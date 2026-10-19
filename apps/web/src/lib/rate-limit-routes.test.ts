@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { getRateLimitConfig } from './rate-limit-routes';
 
 describe('rate-limit route matching', () => {
+  it('isolates submission writes from autocomplete and search reads', () => {
+    expect(getRateLimitConfig('/api/search/submissions')).toMatchObject({
+      pattern: '/api/search/submissions',
+      config: { maxRequests: 20, windowMs: 60_000 },
+    });
+    expect(getRateLimitConfig('/api/search/autocomplete').pattern).toBe(
+      'default'
+    );
+  });
   it('uses the polling bucket only for an exact quiz result route', () => {
     expect(
       getRateLimitConfig('/api/quiz/attempts/attempt-1/result')
@@ -32,6 +41,38 @@ describe('rate-limit route matching', () => {
     expect(
       getRateLimitConfig('/api/storefront/products').config.maxRequests
     ).toBe(100);
+  });
+
+  it('bounds anonymous cart bootstraps below the storefront bucket', () => {
+    expect(getRateLimitConfig('/api/storefront/cart/bootstrap')).toMatchObject({
+      pattern: '/api/storefront/cart/bootstrap',
+      config: { maxRequests: 20, windowMs: 60_000 },
+    });
+    expect(getRateLimitConfig('/api/storefront/cart').config.maxRequests).toBe(
+      100
+    );
+    expect(
+      getRateLimitConfig('/api/storefront/cart/commands').config.maxRequests
+    ).toBe(100);
+  });
+
+  it('bounds handoff issue, redeem and preview below the storefront bucket', () => {
+    for (const path of [
+      '/api/storefront/cart/handoff',
+      '/api/storefront/cart/handoff/redeem',
+    ]) {
+      expect(getRateLimitConfig(path)).toMatchObject({
+        config: { maxRequests: 20, windowMs: 60_000 },
+        pattern: '/api/storefront/cart/handoff',
+      });
+    }
+  });
+
+  it('bounds unauthenticated legacy bridge traffic per token bucket', () => {
+    expect(getRateLimitConfig('/api/storefront/cart/legacy')).toMatchObject({
+      pattern: '/api/storefront/cart/legacy',
+      config: { maxRequests: 600, windowMs: 60_000 },
+    });
   });
 
   it('isolates autocomplete and place details in the Places bucket', () => {

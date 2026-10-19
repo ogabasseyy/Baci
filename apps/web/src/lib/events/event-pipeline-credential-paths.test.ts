@@ -11,24 +11,18 @@ describe('event-pipeline credential paths', () => {
     ).toBe(true);
   });
 
-  it('records the audited compare preflight secret edges', () => {
-    expect(eventPipelineCredentialPaths).toEqual(
-      expect.arrayContaining([
-        [
-          'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
-          'apps/web/src/env.ts',
-        ],
-        [
-          'apps/web/src/lib/storefront-compare-page-hard-status.ts',
-          'apps/web/src/env.ts',
-        ],
-        [
-          'apps/web/src/proxy.ts',
-          'apps/web/src/lib/storefront-compare-page-hard-status.ts',
-          'apps/web/src/env.ts',
-        ],
-      ])
-    );
+  it('retains only the internal compare route secret edge', () => {
+    expect(eventPipelineCredentialPaths).toContainEqual([
+      'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
+      'apps/web/src/env.ts',
+    ]);
+    expect(
+      eventPipelineCredentialPaths.some((path) =>
+        path.some((modulePath) =>
+          modulePath.endsWith('/storefront-compare-page-hard-status.ts')
+        )
+      )
+    ).toBe(false);
   });
 
   it('records the scoped invoice notification delivery edges', () => {

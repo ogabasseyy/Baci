@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authenticateApiRequest } from '@/lib/api-auth';
+import type { SharedCartOrderProofResult } from '@/lib/cart/order-proof';
 import {
   buildOrderIdempotencyPayload,
   hashOrderIdempotencyPayload,
@@ -10,6 +11,10 @@ import { logger } from '@/lib/logger';
 import { reservePaystackDvaAssignment } from '@/lib/payments/reserve-paystack-dva-assignment';
 import { createQuizVoucherToken } from '@/lib/quiz-voucher-token';
 import { POST } from './route';
+
+type PersistPaystackDvaAssignmentModule =
+  typeof import('@/lib/payments/persist-paystack-dva-assignment');
+type ServerModule = typeof import('next/server');
 
 // Hoisted mocks for fire-and-forget side effects so tests don't await emails / push.
 const {
@@ -118,9 +123,7 @@ vi.mock(
   '@/lib/payments/persist-paystack-dva-assignment',
   async (importOriginal) => {
     const actual =
-      await importOriginal<
-        typeof import('@/lib/payments/persist-paystack-dva-assignment')
-      >();
+      (await importOriginal()) as PersistPaystackDvaAssignmentModule;
     // Default passthrough preserves the legacy RPC-less doubles every
     // invoice test relies on; individual tests override per-case (e.g. the
     // Pay for Me reservation, whose proof-bound RPC needs a live key).
@@ -192,8 +195,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/server', async () => {
-  const actual =
-    await vi.importActual<typeof import('next/server')>('next/server');
+  const actual = await vi.importActual<ServerModule>('next/server');
   return { ...actual, after: mockAfter };
 });
 
@@ -238,6 +240,18 @@ vi.mock('@/lib/checkout/storefront-order-rpc-client', () => ({
 
 vi.mock('@/lib/quiz-proof', () => ({
   createQuizRpcServerProof: mockCreateQuizRpcServerProof,
+}));
+
+const mockVerifySharedCartOrderProof = vi.hoisted(() =>
+  vi.fn<() => SharedCartOrderProofResult>(() => ({
+    ok: true as const,
+    principalId: 'guest-principal-001',
+  }))
+);
+vi.mock('@/lib/cart/order-proof', () => ({
+  requestCarriesSharedCartSessionProof: vi.fn(() => false),
+  requestPresentsCartProofMaterial: vi.fn(() => false),
+  verifySharedCartOrderProof: mockVerifySharedCartOrderProof,
 }));
 
 // The invoice email flow persists the auto-generated DVA through the
@@ -302,8 +316,17 @@ interface RpcOverrides {
     data: unknown;
     error: unknown;
   };
+  create_storefront_order_with_cart_binding?: {
+    data: unknown;
+    error: unknown;
+  };
+  create_storefront_order_with_loyalty_code?: {
+    data: unknown;
+    error: unknown;
+  };
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
+  get_loyalty_redemption_for_checkout?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
   redeem_savings_for_order?: { data: unknown; error: unknown };
   finalize_wallet_order_payment?: { data: unknown; error: unknown };
@@ -373,6 +396,9 @@ function buildMockSupabase(
     // The order row returned by the claimed-award reserved-order idempotency
     // lookup (`orders` where id = reserved_order_id / order_items.order_id).
     claimedReservedOrder?: Record<string, unknown> | null;
+    // Successive rows for repeated claimed-order lookups (e.g. the
+    // re-read after a replay finalizer call).
+    claimedReservedOrderSequence?: Array<Record<string, unknown> | null>;
     // Simulate a transient failure of the claimed-order (`orders`) lookup.
     claimedReservedOrderError?: boolean;
     // The order_id returned by the standard-path fallback lookup
@@ -581,6 +607,9 @@ function buildMockSupabase(
     }
   }
 
+  const claimedSequence = opts.claimedReservedOrderSequence
+    ? [...opts.claimedReservedOrderSequence]
+    : null;
   return {
     auth: { getUser: vi.fn() },
     from: vi.fn((table: string) => {
@@ -588,18 +617,21 @@ function buildMockSupabase(
       if (
         table === 'orders' &&
         (opts.claimedReservedOrder !== undefined ||
+          opts.claimedReservedOrderSequence !== undefined ||
           opts.claimedReservedOrderError)
       ) {
         return {
           ...sharedChainable,
-          maybeSingle: vi.fn().mockResolvedValue({
+          maybeSingle: vi.fn().mockImplementation(async () => ({
             data: opts.claimedReservedOrderError
               ? null
-              : opts.claimedReservedOrder,
+              : claimedSequence && claimedSequence.length > 0
+                ? claimedSequence.shift()
+                : opts.claimedReservedOrder,
             error: opts.claimedReservedOrderError
               ? { message: 'orders lookup blip' }
               : null,
-          }),
+          })),
         };
       }
       if (
@@ -843,6 +875,98 @@ describe('POST /api/orders REDVAULT integration', () => {
       quoteSpy.mockRestore();
       checkoutSpy.mockRestore();
       shippingSpy.mockRestore();
+    }
+  });
+
+  it('rejects shared-cart REDVAULT orders before any unbound draft', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const events = await import(
+      '@/lib/events/record-platform-order-created-event'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          {
+            order: {
+              created_at: '2026-09-21T11:00:00.000Z',
+              currency: 'NGN',
+              id: 'rv-order-1',
+              order_number: 'RV-1',
+              total: 1500,
+            },
+          },
+          { status: 201 }
+        ) as never
+      );
+    const eventSpy = vi.spyOn(events, 'recordPlatformOrderCreatedEvent');
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-event-checkout' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+            shared_cart: {
+              cart_id: '22222222-2222-4222-8222-222222222222',
+              checkout_session_id: '33333333-3333-4333-8333-333333333333',
+              checkout_generation: 1,
+              cart_version: 3,
+            },
+          }),
+        })
+      );
+      expect(response.status).toBe(400);
+      expect((await response.json()).code).toBe(
+        'REDVAULT_COMBINATION_UNSUPPORTED'
+      );
+      expect(checkoutSpy).not.toHaveBeenCalled();
+      expect(eventSpy).not.toHaveBeenCalled();
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      eventSpy.mockRestore();
     }
   });
 
@@ -1621,19 +1745,67 @@ describe('POST /api/orders — quiz voucher guard', () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it('replays an already-paid claimed voucher order without re-finalizing', async () => {
+  it.each([
+    'legacy',
+    'bound-invalid-proof',
+    'bound-valid-proof',
+    'bound-replay-success',
+  ] as const)('handles claimed voucher replay through the correct authority: %s', async (mode) => {
     // A voucher checkout that succeeded but lost its HTTP response leaves the
     // award claimed with a reserved (already paid) order. Retrying must NOT prune
     // the prize as an "invalid voucher" — return the existing order as a replayed
-    // success so the shopper reaches their order screen, and NOT touch any RPC.
+    // success. Bound retries must first verify the cart receipt in its RPC.
     vi.stubEnv('QUIZ_PHASE', 'production');
     vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'yes');
     vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'voucher-secret');
     const awardId = '11111111-1111-4111-8111-111111111111';
     const productId = '22222222-2222-4222-8222-222222222222';
     const reservedOrderId = '99999999-9999-4999-8999-999999999999';
+    const boundPaidOrder = {
+      ...baseOrderRow,
+      id: reservedOrderId,
+      order_number: 'ORD-PRIZE-1',
+      tracking_token: 'track-prize-1',
+      customer_id: CUSTOMER_ID,
+      customer_email: 'customer@example.com',
+      customer_name: 'Test Customer',
+      payment_status: 'paid',
+      shipping_status: 'pending',
+      payment_method: 'quiz_voucher',
+      merchant_id: MERCHANT_ID,
+      tax_basis: 'exclusive',
+      gift_wrapping_fee: 0,
+      shipping_fee: 0,
+      discount_amount: 0,
+      tax_amount: 0,
+      subtotal: 0,
+      total: 0,
+      idempotency_replayed: true,
+    };
+    const boundReceipt = {
+      ok: true,
+      code: null,
+      replayed: true,
+      order: boundPaidOrder,
+      binding: {
+        cartId: '223e4567-e89b-12d3-a456-426614174000',
+        cartVersionReviewed: 3,
+        checkout_generation: 1,
+        merchantId: MERCHANT_ID,
+        sessionId: '323e4567-e89b-12d3-a456-426614174000',
+        variant: 'quiz_voucher',
+      },
+    };
     const supabase = buildMockSupabase(
-      {},
+      {
+        create_storefront_order_with_cart_binding: {
+          data: mode === 'bound-replay-success' ? boundReceipt : null,
+          error:
+            mode === 'bound-replay-success'
+              ? null
+              : { code: 'P0001', message: 'cart_order_unauthorized' },
+        },
+      },
       {
         quizAwardOverrides: {
           [awardId]: {
@@ -1674,10 +1846,26 @@ describe('POST /api/orders — quiz voucher guard', () => {
       secret: 'voucher-secret',
     });
 
+    if (mode !== 'legacy')
+      mockVerifySharedCartOrderProof.mockReturnValueOnce(
+        mode === 'bound-invalid-proof'
+          ? { ok: false }
+          : { ok: true, principalId: 'owner-a' }
+      );
     const request = new NextRequest('http://localhost/api/orders', {
       method: 'POST',
       body: JSON.stringify({
         ...baseOrderPayload,
+        ...(mode !== 'legacy'
+          ? {
+              shared_cart: {
+                cart_id: '223e4567-e89b-12d3-a456-426614174000',
+                cart_version: 3,
+                checkout_generation: 1,
+                checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+              },
+            }
+          : {}),
         items: [
           {
             ...baseOrderPayload.items[0],
@@ -1693,6 +1881,44 @@ describe('POST /api/orders — quiz voucher guard', () => {
     const response = await POST(request);
     const body = await readJson(response);
 
+    if (mode === 'bound-replay-success') {
+      expect(response.status, JSON.stringify(body)).toBe(200);
+      expect(body.order.id).toBe(reservedOrderId);
+      expect(supabase.rpc).toHaveBeenCalledWith(
+        'create_storefront_order_with_cart_binding',
+        expect.objectContaining({ p_variant: 'quiz_voucher' })
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'finalize_quiz_voucher_order_payment',
+        expect.anything()
+      );
+      return;
+    }
+    if (mode !== 'legacy') {
+      expect(response.status, JSON.stringify(body)).toBe(
+        mode === 'bound-invalid-proof' ? 401 : 403
+      );
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'finalize_quiz_voucher_order_payment',
+        expect.anything()
+      );
+      if (mode === 'bound-invalid-proof') {
+        expect(body.code).toBe('SHARED_CART_PROOF_REQUIRED');
+        expect(supabase.rpc).not.toHaveBeenCalledWith(
+          'create_storefront_order_with_cart_binding',
+          expect.anything()
+        );
+      } else {
+        expect(supabase.rpc).toHaveBeenCalledWith(
+          'create_storefront_order_with_cart_binding',
+          expect.objectContaining({
+            p_variant: 'quiz_voucher',
+            p_args: expect.objectContaining({ p_cart_principal_id: 'owner-a' }),
+          })
+        );
+      }
+      return;
+    }
     expect(response.status).toBe(200);
     expect(response.headers.get('x-idempotency-replayed')).toBe('true');
     expect(body.idempotency).toEqual({ replayed: true });
@@ -1811,6 +2037,24 @@ describe('POST /api/orders — quiz voucher guard', () => {
           shipping_status: 'pending',
           total: 0,
         },
+        claimedReservedOrderSequence: [
+          {
+            id: orderId,
+            order_number: 'ORD-PRIZE-3',
+            customer_id: CUSTOMER_ID,
+            payment_status: 'unpaid',
+            shipping_status: 'pending',
+            total: 0,
+          },
+          {
+            id: orderId,
+            order_number: 'ORD-PRIZE-3',
+            customer_id: CUSTOMER_ID,
+            payment_status: 'paid',
+            shipping_status: 'pending',
+            total: 0,
+          },
+        ],
       }
     );
     const supabaseMod = await import('@/lib/supabase/server');
@@ -1857,6 +2101,77 @@ describe('POST /api/orders — quiz voucher guard', () => {
     expect(response.status).toBe(200);
     expect(body.order).toMatchObject({ payment_status: 'paid' });
     // The finalizer was retried for the still-unpaid order.
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'finalize_quiz_voucher_order_payment',
+      { p_award_id: awardId, p_order_id: orderId }
+    );
+  });
+
+  it('returns a non-pruning 503 when the replay finalizer succeeds without transitioning the order', async () => {
+    vi.stubEnv('QUIZ_PHASE', 'production');
+    vi.stubEnv('QUIZ_PRODUCTION_APPROVED', 'yes');
+    vi.stubEnv('QUIZ_RPC_SERVER_SECRET', 'voucher-secret');
+    const awardId = '11111111-1111-4111-8111-111111111111';
+    const productId = '22222222-2222-4222-8222-222222222222';
+    const orderId = '99999999-9999-4999-8999-999999999999';
+    const unpaidRow = {
+      id: orderId,
+      order_number: 'ORD-PRIZE-5',
+      customer_id: CUSTOMER_ID,
+      payment_status: 'unpaid',
+      shipping_status: 'pending',
+      total: 0,
+    };
+    const supabase = buildMockSupabase(
+      {},
+      {
+        quizAwardOverrides: {
+          [awardId]: { status: 'claimed', reserved_order_id: orderId },
+        },
+        claimedReservedOrder: unpaidRow,
+        claimedReservedOrderSequence: [unpaidRow, unpaidRow],
+      }
+    );
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: mockAuthUser(AUTH_USER_ID),
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+    const token = createQuizVoucherToken({
+      payload: {
+        awardId,
+        condition: 'new',
+        expiresAt: '2099-05-22T12:00:00.000Z',
+        productId,
+        userId: AUTH_USER_ID,
+        variantId: null,
+      },
+      secret: 'voucher-secret',
+    });
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          items: [
+            {
+              ...baseOrderPayload.items[0],
+              condition: 'new',
+              product_id: productId,
+              price: 0,
+              voucher_token: token,
+            },
+          ],
+        }),
+      })
+    );
+    expect(response.status).toBe(503);
+    const body = await readJson(response);
+    expect(body.code).toBe('QUIZ_VOUCHER_LOOKUP_FAILED');
     expect(supabase.rpc).toHaveBeenCalledWith(
       'finalize_quiz_voucher_order_payment',
       { p_award_id: awardId, p_order_id: orderId }
@@ -3748,6 +4063,34 @@ describe('POST /api/orders — product cache revalidation after order creation',
   });
 
   it('revalidates the merchant product caches once after a successful order', async () => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(() => {
+      const supabase = buildMockSupabase();
+      const originalFrom = supabase.from;
+      supabase.from = vi.fn((table: string) => {
+        const original = originalFrom(table);
+        if (table !== 'products') {
+          return original;
+        }
+        // Success path: the enrichment lookup resolves (no rows), so the
+        // rejection-only broad hard-expire below must not fire.
+        const enrichmentOutcome = Promise.resolve({
+          data: [],
+          error: null,
+        });
+        const select = vi.fn((columns: string) => {
+          if (columns.startsWith('id, slug, name')) {
+            return {
+              eq: vi.fn(() => ({ in: vi.fn(() => enrichmentOutcome) })),
+            };
+          }
+          return original.select(columns);
+        });
+        return { ...original, select };
+      });
+      return supabase as unknown as never;
+    });
+
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
@@ -3793,21 +4136,35 @@ describe('POST /api/orders — product cache revalidation after order creation',
         if (table !== 'products') {
           return original;
         }
-        // Only the slug-revalidation lookup selects exactly 'slug' — the
-        // pre-existing tax/negotiation product lookup selects other columns
-        // and must keep resolving via the default chain.
-        const select = vi.fn((columns: string) =>
-          columns === 'slug'
-            ? {
-                eq: vi.fn().mockReturnThis(),
-                in: vi.fn().mockReturnThis(),
-                returns: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: { message: 'db down' },
-                }),
-              }
-            : original.select(columns)
-        );
+        // The cache-revalidation lookup selects the compact id/slug/policy
+        // projection; the pre-existing tax/negotiation product lookup selects
+        // other columns and must keep resolving via the default chain.
+        // The enrichment lookup (long projection) fails the same way — a db
+        // outage affects both reads — so it resolves a realistic `{ error }`
+        // instead of the default chain's bare-await undefined: enrichment
+        // fails open to caller hints without rejecting.
+        const enrichmentOutcome = Promise.resolve({
+          data: null,
+          error: { message: 'db down' },
+        });
+        const select = vi.fn((columns: string) => {
+          if (columns.startsWith('id, slug, manage_stock')) {
+            return {
+              eq: vi.fn().mockReturnThis(),
+              in: vi.fn().mockReturnThis(),
+              returns: vi.fn().mockResolvedValue({
+                data: null,
+                error: { message: 'db down' },
+              }),
+            };
+          }
+          if (columns.startsWith('id, slug, name')) {
+            return {
+              eq: vi.fn(() => ({ in: vi.fn(() => enrichmentOutcome) })),
+            };
+          }
+          return original.select(columns);
+        });
         return { ...original, select };
       });
       return supabase as unknown as never;
@@ -3822,7 +4179,14 @@ describe('POST /api/orders — product cache revalidation after order creation',
 
     expect(response.status).toBe(201);
     expect(mockRevalidateProducts).toHaveBeenCalledExactlyOnceWith(MERCHANT_ID);
-    expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
+    // Fail-closed: the route-level slug lookup failed, but the known-ids blog
+    // purge fallback still hard-expires the per-slug Next tags from the caller
+    // hints so a later edge purge cannot refill from stale snapshots.
+    expect(mockRevalidateProductSlugs).toHaveBeenCalledExactlyOnceWith(
+      MERCHANT_ID,
+      ['p-1'],
+      { expireImmediately: true }
+    );
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
         message: 'Failed to resolve product slugs for PDP cache revalidation',
@@ -4024,10 +4388,30 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     );
   });
 
-  it('allows selected GIGL international quotes to keep quoted physical metadata when product metadata is absent', async () => {
+  it.each([
+    false,
+    true,
+  ])('preserves GIGL quote metadata and attaches pins only on new orders (replay=%s)', async (isReplay) => {
+    const destinationModule = await import(
+      '@/lib/shipping/order-quote-destination'
+    );
+    const enrichSpy = vi.spyOn(
+      destinationModule,
+      'enrichShippingAddressWithQuoteDestination'
+    );
     const supabaseMod = await import('@/lib/supabase/server');
     const supabase = buildMockSupabase(
-      {},
+      {
+        has_storefront_order_idempotency_key: { data: isReplay, error: null },
+        ...(isReplay
+          ? {
+              create_storefront_order: {
+                data: [{ ...baseOrderRow, idempotency_replayed: true }],
+                error: null,
+              },
+            }
+          : {}),
+      },
       {
         productRows: [
           {
@@ -4056,6 +4440,8 @@ describe('POST /api/orders — selected shipping quote validation', () => {
               country: 'Canada',
               countryCode: 'CA',
               postalCode: 'M5V 3L9',
+              latitude: 43.65,
+              longitude: -79.38,
             },
             items: [
               {
@@ -4080,6 +4466,7 @@ describe('POST /api/orders — selected shipping quote validation', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
+        headers: { 'Idempotency-Key': 'gigl-attested-coordinate-test' },
         body: JSON.stringify({
           ...baseOrderPayload,
           items: [
@@ -4101,17 +4488,44 @@ describe('POST /api/orders — selected shipping quote validation', () => {
             country: 'Canada',
             countryCode: 'CA',
             postalCode: 'M5V 3L9',
+            latitude: 0,
+            longitude: 0,
           },
         }),
       })
     );
 
+    expect(enrichSpy).toHaveBeenCalledWith(
+      expect.anything(),
+      '11111111-1111-4111-8111-111111111111',
+      expect.anything(),
+      expect.anything(),
+      { persistAttestedCoordinates: !isReplay }
+    );
+    enrichSpy.mockRestore();
+    if (isReplay) {
+      // Preserve the existing fail-closed provider-context contract for an
+      // extant quote replay. No destination is written in this branch.
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: 'INTERNATIONAL_QUOTE_PROVIDER_MISMATCH',
+      });
+      expect(supabase.rpc).not.toHaveBeenCalledWith(
+        'create_storefront_order',
+        expect.anything()
+      );
+      return;
+    }
     expect(response.status).toBe(201);
     expect(supabase.rpc).toHaveBeenCalledWith(
       'create_storefront_order',
       expect.objectContaining({
         p_selected_quote_id: '11111111-1111-4111-8111-111111111111',
         p_shipping_provider: 'GIGL',
+        p_shipping_address: expect.objectContaining({
+          latitude: 43.65,
+          longitude: -79.38,
+        }),
       })
     );
   });
@@ -5347,7 +5761,7 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     );
   });
 
-  it('preserves legacy negotiation entitlement fallback when plan_tier is missing', async () => {
+  it('derives no discount for a legacy premium slug when plan_tier is missing', async () => {
     const rpcSpy = vi.fn().mockResolvedValue({
       data: [
         {
@@ -5467,11 +5881,13 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     });
     await POST(request);
 
-    // Per-line: catalog 1000, client 980 → reduction 20 (= 2% cap),
-    // + 7.5% VAT on the reduction = 1.5 → discount 21.5.
+    // Regression: the route used to grant negotiation to a hardcoded premium
+    // slug allowlist whenever plan_tier was null, so this merchant received a
+    // 21.5 auto-discount. plan_tier is now NOT NULL and authoritative, so an
+    // absent tier fails closed and the slug confers nothing.
     expect(rpcSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        p_discount_amount: 21.5,
+        p_discount_amount: 0,
         p_expected_total: 1053.5,
         p_tax_amount: 75,
       })
@@ -5601,7 +6017,7 @@ describe('POST /api/orders — B3.5 VAT RPC error mapping', () => {
     );
   });
 
-  it('does not apply legacy negotiation fallback when plan_tier is malformed', async () => {
+  it('derives no discount when plan_tier is malformed', async () => {
     const rpcSpy = vi.fn().mockResolvedValue({
       data: null,
       error: {
@@ -7046,6 +7462,14 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('dispatches a payment request email with transfer details for payforme orders', async () => {
+    // DVA-focused: stub the unrelated checkout blog-purge scheduler so the
+    // after() ordering assertions below observe only the DVA flow.
+    const blogPurgeMod = await import(
+      '@/lib/checkout/schedule-checkout-product-blog-purge'
+    );
+    const blogPurgeStub = vi
+      .spyOn(blogPurgeMod, 'scheduleCheckoutProductBlogPurge')
+      .mockResolvedValue(undefined);
     const supabase = buildMockSupabase();
     const { accountUpsert, backgroundSupabase } = createBackgroundSupabaseMock({
       orderItemsResponses: [
@@ -7143,6 +7567,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     const response = await POST(request);
+    blogPurgeStub.mockRestore();
     expect(response.status).toBe(201);
 
     await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
@@ -7192,6 +7617,14 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
   });
 
   it('retries Pay for Me DVA provisioning post-response after a handled provider failure', async () => {
+    // DVA-focused: stub the unrelated checkout blog-purge scheduler so the
+    // after() ordering assertions below observe only the DVA flow.
+    const retryBlogPurgeMod = await import(
+      '@/lib/checkout/schedule-checkout-product-blog-purge'
+    );
+    const retryBlogPurgeStub = vi
+      .spyOn(retryBlogPurgeMod, 'scheduleCheckoutProductBlogPurge')
+      .mockResolvedValue(undefined);
     // paystackRequest converts HTTP errors and fetch rejections into
     // { success: false }: the pre-response attempt must report retryable
     // (not suppress the fallback), so the committed request email still
@@ -7295,6 +7728,7 @@ describe('POST /api/orders — invoice payment method email attachment', () => {
     });
 
     const response = await POST(request);
+    retryBlogPurgeStub.mockRestore();
     expect(response.status).toBe(201);
 
     await vi.waitFor(() => expect(mockSendEmail).toHaveBeenCalled(), {
@@ -9951,5 +10385,356 @@ describe('POST /api/orders — merchant shipping rate enforcement', () => {
       shipping_rate_name: 'Nationwide Delivery',
       shipping_pickup_details: null,
     });
+  });
+});
+
+describe('POST /api/orders — shared cart binding', () => {
+  const SHARED_CART = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+  const BOUND_ORDER = {
+    ...baseOrderRow,
+    customer_email: 'customer@example.com',
+    customer_name: 'Test Customer',
+    customer_phone: '08012345678',
+    discount_amount: 0,
+    gift_wrapping_fee: 0,
+    idempotency_replayed: false,
+    merchant_id: MERCHANT_ID,
+    payment_method: 'paystack',
+    payment_status: 'unpaid',
+    shipping_address: null,
+    shipping_status: 'pending',
+    tax_amount: 0,
+    tax_basis: 'exclusive',
+    tracking_token: 'tok-123',
+  };
+  const BOUND_RECEIPT = {
+    binding: {
+      cartId: SHARED_CART.cart_id,
+      cartVersionReviewed: 3,
+      checkout_generation: 1,
+      merchantId: MERCHANT_ID,
+      sessionId: SHARED_CART.checkout_session_id,
+      variant: 'base',
+    },
+    code: null,
+    ok: true,
+    order: BOUND_ORDER,
+    replayed: false,
+  };
+
+  async function setupBinding(overrides: RpcOverrides) {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const supabase = buildMockSupabase(overrides, {
+      productRows: [{ id: 'p-1', price: 1000 }],
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: mockAuthUser(AUTH_USER_ID),
+      error: null,
+      supabase: supabase as unknown as never,
+    });
+    return supabase;
+  }
+
+  function bindingRequest(extra: Record<string, unknown> = {}) {
+    return new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        shared_cart: SHARED_CART,
+        ...extra,
+      }),
+    });
+  }
+
+  it('rejects a bound submit without the preparing principal proof', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+    mockVerifySharedCartOrderProof.mockReturnValueOnce({
+      ok: false as const,
+    } as never);
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(401);
+    expect((await response.json()).code).toBe('SHARED_CART_PROOF_REQUIRED');
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
+  it('submits a bound base order through the binding RPC', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      {
+        p_args: expect.objectContaining({
+          p_cart_id: SHARED_CART.cart_id,
+          p_cart_principal_id: 'guest-principal-001',
+          p_cart_version: SHARED_CART.cart_version,
+          p_merchant_id: MERCHANT_ID,
+          p_customer_email: 'customer@example.com',
+        }),
+        p_generation: 1,
+        p_session_id: SHARED_CART.checkout_session_id,
+        p_variant: 'base',
+      }
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+  });
+
+  it('maps a binding transport failure to a retryable 503', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { message: 'connection reset by peer' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(503);
+    expect((await response.json()).code).toBe(
+      'SHARED_CART_TEMPORARILY_UNAVAILABLE'
+    );
+  });
+
+  it('submits a bound savings order with the redemption payload', async () => {
+    const savingsReceipt = {
+      ...BOUND_RECEIPT,
+      binding: { ...BOUND_RECEIPT.binding, variant: 'savings' },
+      order: {
+        ...BOUND_ORDER,
+        savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        savings_goal_status: 'paused',
+        savings_redeemed_amount: 500,
+        savings_redemption_id: '77777777-aaaa-bbbb-cccc-dddddddddddd',
+        savings_redemption_success: true,
+      },
+    };
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: savingsReceipt,
+        error: null,
+      },
+    });
+
+    const response = await POST(
+      bindingRequest({
+        savings_amount: 500,
+        savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        use_savings_credit: true,
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_savings_amount: 500,
+          p_savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+        }),
+        p_variant: 'savings',
+      })
+    );
+    const body = (await response.json()) as {
+      savings: {
+        amountUsed: number;
+        goalId: string;
+        redemptionId: string;
+      } | null;
+    };
+    expect(body.savings).toEqual({
+      amountUsed: 500,
+      goalId: '123e4567-e89b-12d3-a456-426614174555',
+      redemptionId: '77777777-aaaa-bbbb-cccc-dddddddddddd',
+    });
+  });
+
+  it('forwards cart line ids into the bound items payload', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: BOUND_RECEIPT,
+        error: null,
+      },
+    });
+
+    const response = await POST(
+      bindingRequest({
+        items: [
+          {
+            cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+            name: 'Widget',
+            price: 1000,
+            product_id: 'p-1',
+            quantity: 1,
+          },
+        ],
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({
+        p_args: expect.objectContaining({
+          p_items: expect.arrayContaining([
+            expect.objectContaining({
+              cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+              product_id: 'p-1',
+            }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('keeps the direct path when no binding is sent', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order: { data: [baseOrderRow], error: null },
+    });
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(baseOrderPayload),
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.anything()
+    );
+    expect(supabase.rpc).not.toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.anything()
+    );
+  });
+
+  it('maps a stale binding to 409 with a refresh code', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_checkout_stale' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(409);
+    expect((await readJson(response)).code).toBe('SHARED_CART_STALE');
+  });
+
+  it('maps an expired session to 409', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_checkout_expired' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(409);
+    expect((await readJson(response)).code).toBe('SHARED_CART_SESSION_EXPIRED');
+  });
+
+  it('maps a binding authorization failure to 403', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_order_unauthorized' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(403);
+    expect((await readJson(response)).code).toBe(
+      'SHARED_CART_BINDING_FORBIDDEN'
+    );
+  });
+
+  it('maps a binding invalid-variant failure to 400, not a server fault', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'cart_order_invalid_variant' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(400);
+  });
+
+  it('keeps legacy mapping for inner order rejections on the bound path', async () => {
+    await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: null,
+        error: { code: 'P0001', message: 'order_total_mismatch' },
+      },
+    });
+
+    const response = await POST(bindingRequest());
+
+    expect(response.status).toBe(400);
+    expect(await readJson(response)).toMatchObject({
+      details: 'order_total_mismatch',
+      error: 'Failed to create order',
+    });
+  });
+
+  it('accepts a replayed binding as the same order', async () => {
+    const supabase = await setupBinding({
+      create_storefront_order_with_cart_binding: {
+        data: {
+          ...BOUND_RECEIPT,
+          order: { ...BOUND_ORDER, idempotency_replayed: true },
+          replayed: true,
+        },
+        error: null,
+      },
+    });
+
+    const response = await POST(bindingRequest());
+    const payload = await readJson(response);
+
+    // Replays answer 200 (not 201): the receipt's idempotency flag flows
+    // through the same replay branch as direct idempotent replays.
+    expect(response.status).toBe(200);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_cart_binding',
+      expect.objectContaining({ p_variant: 'base' })
+    );
+    expect(payload.order?.id ?? payload.id).toBe('order-id');
   });
 });

@@ -31,6 +31,12 @@ export interface UtilityPurchaseResult {
   status?: UtilityPurchaseStatus;
   voucherPin?: string;
   address?: string | null;
+  /**
+   * Submitted utility type, stamped by the pager. The pager stays
+   * swipeable in flight, so the result MUST NOT use the live
+   * selected type — a swipe would poll history under the wrong type.
+   */
+  utilityType?: ValidUtilityType;
 }
 
 export const VALID_UTILITY_TYPES = [

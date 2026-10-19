@@ -3,6 +3,33 @@ import type { ExpoConfig } from 'expo/config';
 import { createExpoPlugins } from './expo-plugins';
 
 describe('createExpoPlugins', () => {
+  it('compiles the patched iOS renderer instead of shipping the unpatched prebuilt core', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    expect(plugins).toContainEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        ios: expect.objectContaining({ buildReactNativeFromSource: true }),
+      }),
+    ]);
+  });
+  it('opts into the UIKit scene lifecycle required by iOS 27 builds', () => {
+    const plugins = createExpoPlugins({
+      facebookSdkPlugin: null,
+      sentryPlugin: null,
+      tiktokBusinessPlugin: null,
+    });
+    expect(plugins).toContainEqual([
+      'expo-build-properties',
+      expect.objectContaining({
+        ios: expect.objectContaining({ enableSceneSupport: true }),
+      }),
+    ]);
+  });
+
   it('builds iOS Expo consumers from source to prevent the build575 JSI ABI mismatch', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,
@@ -21,7 +48,7 @@ describe('createExpoPlugins', () => {
     ]);
   });
 
-  it('does not set buildReactNativeFromSource; withReactNativeFromSource owns includeBuild', () => {
+  it('leaves Android source-build wiring to the idempotent includeBuild plugin', () => {
     const plugins = createExpoPlugins({
       facebookSdkPlugin: null,
       sentryPlugin: null,

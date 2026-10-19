@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getConditionPrefilterClauses,
   matchesConditionFamily,
+  matchesMcpPostHydrationFilters,
   matchesRowConditionFamily,
 } from './search-products-query-helpers';
 
@@ -61,5 +62,14 @@ describe('search-products condition helpers', () => {
     ).toBe(false);
     expect(matchesRowConditionFamily({ condition: 'refurbished' }, 'open_box'))
       .toBe(true);
+  });
+
+  it('folds brand and category ASCII-only like the SQL pre-cap narrowing', () => {
+    expect(matchesMcpPostHydrationFilters(
+      { brand: 'ΟΣ', category: 'Audio' } as never, { brand: 'ΟΣ' }
+    )).toBe(true);
+    expect(matchesMcpPostHydrationFilters(
+      { brand: 'Samsung', category: 'Audio' } as never, { brand: 'samsung' }
+    )).toBe(true);
   });
 });

@@ -1,0 +1,8 @@
+{
+  "mode": "hosted-staging",
+  "apiOrigin": "https://staging.ogabassey.com",
+  "supabaseOrigin": "https://staging-auth.ogabassey.com",
+  "expectedAuthIssuer": "https://staging-auth.ogabassey.com/auth/v1",
+  "merchantId": "10000000-0000-4000-8000-000000000001",
+  "publicKeySha256": "1065d3a5c300f1d3ba3d6c42cbe0524128c57cc2032a4345bff4100cb6f7a3f2"
+}

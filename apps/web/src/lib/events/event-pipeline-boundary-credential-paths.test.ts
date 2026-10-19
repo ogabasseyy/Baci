@@ -2,12 +2,19 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { eventPipelineCartCredentialPaths } from './event-pipeline-cart-credential-paths';
 import { eventPipelineChatCredentialPaths } from './event-pipeline-chat-credential-paths';
+import { eventPipelineDvaCredentialPaths } from './event-pipeline-dva-credential-paths';
+import { eventPipelineGatewayCronCredentialPaths } from './event-pipeline-gateway-cron-credential-paths';
+import { eventPipelineGiglCredentialPaths } from './event-pipeline-gigl-credential-paths';
 import { eventPipelineImmediateOrderCredentialPaths } from './event-pipeline-immediate-order-credential-paths';
 import { eventPipelineJumiaCredentialPaths } from './event-pipeline-jumia-credential-paths';
+import { eventPipelinePaystackRefundCredentialPaths } from './event-pipeline-paystack-refund-credential-paths';
+import { eventPipelinePiggyvestCredentialPaths } from './event-pipeline-piggyvest-credential-paths';
 import { eventPipelineRedvaultCredentialPaths } from './event-pipeline-redvault-credential-paths';
 import { eventPipelineRepairPickupCredentialPaths } from './event-pipeline-repair-pickup-credential-paths';
 import { eventPipelineShippingCredentialPaths } from './event-pipeline-shipping-credential-paths';
+import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
 
 const modulePath = resolve(
   process.cwd(),
@@ -24,6 +31,7 @@ describe('event pipeline credential-path authority', () => {
     );
 
     expect(manifest.authority.credentialPaths).toEqual([
+      ...eventPipelineCartCredentialPaths,
       [
         'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
         'apps/web/src/lib/agentic/mutation-request.ts',
@@ -146,56 +154,7 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/cloudflare-purge.ts',
         'apps/web/src/env.ts',
       ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/expo-push.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-        'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-        'apps/web/src/lib/insurance/notify-activate-protection.ts',
-        'apps/web/src/lib/supabase/admin.ts',
-        'apps/web/src/env.ts',
-      ],
+      ...eventPipelineGiglCredentialPaths,
       [
         'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
         'apps/web/src/env.ts',
@@ -227,15 +186,6 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/env.ts',
       ],
       [
-        'apps/web/src/lib/storefront-compare-page-hard-status.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/proxy.ts',
-        'apps/web/src/lib/storefront-compare-page-hard-status.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
         'apps/web/src/app/api/agentic/catalog/lookup/route.ts',
         'apps/web/src/lib/agentic/mutation-request.ts',
         'apps/web/src/lib/agentic/request-integrity.ts',
@@ -253,51 +203,7 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/agentic/request-integrity.ts',
         'apps/web/src/env.ts',
       ],
-      [
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/[id]/generate-dva/route.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/[id]/generate-dva/generate-dva-test-support.ts',
-        'apps/web/src/app/api/orders/[id]/generate-dva/route.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/[id]/ship-on-credit/provision-credit-order-dva.ts',
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/[id]/ship-on-credit/route.ts',
-        'apps/web/src/app/api/orders/[id]/ship-on-credit/provision-credit-order-dva.ts',
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/orders/route.ts',
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
-      [
-        'apps/web/src/app/api/payments/initialize/route.ts',
-        'apps/web/src/lib/payments/persist-paystack-dva-assignment.ts',
-        'apps/web/src/lib/payments/reserve-paystack-dva-assignment.ts',
-        'apps/web/src/env.ts',
-      ],
+      ...eventPipelineDvaCredentialPaths,
       [
         'apps/web/src/app/api/chat/route.ts',
         'apps/web/src/app/api/chat/ollama-chat-tool-runtime.ts',
@@ -327,12 +233,16 @@ describe('event pipeline credential-path authority', () => {
         'apps/web/src/lib/supabase/admin.ts',
         'apps/web/src/env.ts',
       ],
+      ...eventPipelineVtuReplayCredentialPaths,
       ...eventPipelineImmediateOrderCredentialPaths,
       ...eventPipelineJumiaCredentialPaths,
+      ...eventPipelinePiggyvestCredentialPaths,
       ...eventPipelineRepairPickupCredentialPaths,
       ...eventPipelineRedvaultCredentialPaths,
       ...eventPipelineShippingCredentialPaths,
       ...eventPipelineChatCredentialPaths,
+      ...eventPipelinePaystackRefundCredentialPaths,
+      ...eventPipelineGatewayCronCredentialPaths,
     ]);
   });
 });

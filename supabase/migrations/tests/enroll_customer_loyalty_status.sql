@@ -1,0 +1,254 @@
+-- Status cases for the enroll_customer_loyalty suite (cases 12-14).
+
+-- 12. A disabled program suppresses enrollment and the catalog, but
+-- members keep balance/history/receipts; non-members fail closed.
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000120',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated', 'nonmember@example.com',
+  'test', now(), now(), now(), '{}', '{}'
+);
+INSERT INTO public.customers (id, merchant_id, email, user_id) VALUES (
+  '01aa0000-0000-4000-8000-000000000030',
+  '01aa0000-0000-4000-8000-000000000001',
+  'nonmember@example.com', '01aa0000-0000-4000-8000-000000000120'
+);
+UPDATE public.loyalty_settings
+SET enabled = false
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND result ->> 'enrolled' = 'true'
+     AND jsonb_array_length(result -> 'rewards') = 0
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result),
+  'disabled program hid member status or kept the catalog'
+);
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000120');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'program_unavailable'
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000030'
+   ) AS result),
+  'status did not fail closed for a non-member on a disabled program'
+);
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+UPDATE public.loyalty_settings
+SET enabled = true
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'customer_not_found'
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000099'
+   ) AS result),
+  'status did not fail closed on an unknown customer'
+);
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000102');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'false' AND result ->> 'error' = 'customer_not_found'
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result),
+  'cross-customer status disclosed membership'
+);
+-- 13. A non-enrolled customer gets zeros plus the live catalog.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000106');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND (result ->> 'enrolled')::boolean IS FALSE
+     AND (result ->> 'points_balance')::integer = 0
+     AND (result ->> 'lifetime_points')::integer = 0
+     AND result ->> 'current_tier' = 'Bronze'
+     AND jsonb_array_length(result -> 'rewards') = 1
+     AND result -> 'rewards' -> 0 ->> 'name' = 'Free shipping'
+     AND (result -> 'rewards' -> 0 ->> 'points_cost')::integer = 200
+     AND NOT EXISTS (
+       SELECT 1 FROM jsonb_array_elements(result -> 'rewards')
+       WHERE value ->> 'name' = 'Sold-out perk'
+     )
+     AND jsonb_array_length(result -> 'transactions') = 0
+     AND jsonb_array_length(result -> 'tiers') = 4
+     AND (result -> 'referral_code') = 'null'::jsonb
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000016'
+   ) AS result),
+  'non-enrolled status returned the wrong projection'
+);
+-- 14. An enrolled customer gets balances, catalog, and recent transactions.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND (result ->> 'enrolled')::boolean IS TRUE
+     AND (result ->> 'points_balance')::integer = 100
+     AND (result ->> 'lifetime_points')::integer = 100
+     AND result ->> 'current_tier' = 'Bronze'
+     AND length(result ->> 'referral_code') = 8
+     AND (result ->> 'referral_code') = (
+       SELECT referral_code FROM public.customer_loyalty
+       WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+         AND customer_id = '01aa0000-0000-4000-8000-000000000011'
+     )
+     AND jsonb_array_length(result -> 'rewards') = 1
+     AND jsonb_array_length(result -> 'transactions') = 2
+     AND (SELECT count(*)
+       FROM jsonb_array_elements(result -> 'transactions')
+       WHERE value ->> 'type' = 'referral') = 1
+     AND (SELECT count(*)
+       FROM jsonb_array_elements(result -> 'transactions')
+       WHERE value ->> 'type' = 'bonus') = 1
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result),
+  'enrolled status returned the wrong projection'
+);
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000105');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+     AND result ->> 'current_tier' = 'Silver'
+     AND (result ->> 'lifetime_points')::integer = 1500
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000015'
+   ) AS result),
+  'tier-crossing status returned the wrong tier'
+);
+-- 14c. Status derives the tier from the CURRENT ladder, not the stored rung.
+UPDATE public.loyalty_settings SET tiers = '[{"name": "Bronze", "perks": [], "minPoints": 0, "multiplier": 1.0}, {"name": "Silver", "perks": ["free_shipping"], "minPoints": 2000, "multiplier": 1.25}]'::jsonb WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'current_tier' = 'Bronze'
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000015'
+   ) AS result),
+  'status kept the stored tier after a ladder edit'
+);
+UPDATE public.loyalty_settings SET tiers = '[{"name": "Bronze", "perks": [], "minPoints": 0, "multiplier": 1.0}, {"name": "Silver", "perks": ["free_shipping"], "minPoints": 1000, "multiplier": 1.25}, {"name": "Gold", "perks": ["free_shipping", "early_access"], "minPoints": 5000, "multiplier": 1.5}, {"name": "Platinum", "perks": ["free_shipping", "early_access", "exclusive_discounts"], "minPoints": 10000, "multiplier": 2.0}]'::jsonb WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+-- 15. The catalog projection surfaces minimum_order_amount so the UI can
+-- disclose the checkout minimum before the customer spends points.
+-- (A valued checkout discount carries it: a valueless one is manual
+-- and minimum-bearing manual rewards hide instead, per the guards.)
+INSERT INTO public.loyalty_rewards (
+  merchant_id, name, points_cost, reward_type, reward_value,
+  minimum_order_amount, enabled
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000001', 'Checkout minimum perk', 100,
+  'discount_fixed', 1000, 2500, true
+);
+
+-- Member 011 belongs to user 101: re-auth past case 14b's 105.
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT (value ->> 'minimum_order_amount')::numeric = 2500
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result,
+   LATERAL jsonb_array_elements(result -> 'rewards') AS value
+   WHERE value ->> 'name' = 'Checkout minimum perk'),
+  'status projection dropped minimum_order_amount'
+);
+
+-- Keep the shared catalog fixture set unchanged for later files.
+UPDATE public.loyalty_rewards SET enabled = false
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND name = 'Checkout minimum perk';
+-- 15b. Duplicate tier names collapse to the lowest threshold
+-- (last-match-wins would oscillate Silver -> Gold -> Silver).
+UPDATE public.loyalty_settings
+SET tiers = '[{"name": "Silver", "minPoints": 1000}, {"name": "Silver", "minPoints": 5000}, {"name": "Gold", "minPoints": 3000}, {"name": "Platinum", "minPoints": 10000}]'::jsonb
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  public.calculate_loyalty_tier(
+    6000, '01aa0000-0000-4000-8000-000000000001'
+  ) = 'Gold',
+  'duplicate tier names did not collapse to the lowest threshold'
+);
+UPDATE public.loyalty_settings
+SET tiers = DEFAULT
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+-- 15c. History carries the issued code as a recovery receipt for
+-- capped rewards that already left the catalog.
+INSERT INTO public.reward_redemptions (
+  id, customer_id, merchant_id, points_spent, reward_type,
+  reward_value, discount_code
+) VALUES (
+  '01aa0000-0000-4000-8000-00000000015c',
+  '01aa0000-0000-4000-8000-000000000011',
+  '01aa0000-0000-4000-8000-000000000001',
+  100, 'discount', 500, 'RDM-STATUS15C'
+);
+INSERT INTO public.points_transactions (
+  customer_id, merchant_id, type, points, balance_after,
+  source, source_id, description
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000011',
+  '01aa0000-0000-4000-8000-000000000001',
+  'redemption', -100, 200, 'redemption',
+  '01aa0000-0000-4000-8000-00000000015c', 'Redeemed: Big perk'
+);
+SELECT pg_temp.assert_true(
+  (SELECT value ->> 'redemption_code' = 'RDM-STATUS15C'
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result,
+   LATERAL jsonb_array_elements(result -> 'transactions') AS value
+   WHERE value ->> 'type' = 'redemption'
+     AND value ->> 'description' = 'Redeemed: Big perk'),
+  'history dropped the issued redemption code'
+);
+-- Fixture cleanup: receipt rows must not leak into later files.
+DELETE FROM public.points_transactions
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+  AND customer_id = '01aa0000-0000-4000-8000-000000000011'
+  AND source = 'redemption'
+  AND source_id = '01aa0000-0000-4000-8000-00000000015c';
+DELETE FROM public.reward_redemptions
+WHERE id = '01aa0000-0000-4000-8000-00000000015c';
+
+
+-- The program cap rides in the status payload so the catalog can
+-- disclose it before the customer spends points.
+UPDATE public.loyalty_settings
+SET maximum_redemption_percentage = 25
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';
+
+SELECT pg_temp.assert_true(
+  (SELECT (result ->> 'max_redemption_percentage')::numeric = 25
+   FROM public.get_loyalty_status(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000011'
+   ) AS result),
+  'status payload omitted the program redemption cap'
+);
+
+-- Restore the baseline default the bridge fixtures rely on.
+UPDATE public.loyalty_settings
+SET maximum_redemption_percentage = 50
+WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001';

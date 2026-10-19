@@ -1,267 +1,127 @@
-import { Platform } from 'react-native';
-import { formatNgnCurrency } from '@/lib/format-ngn-currency';
+import { EXPO_PUBLIC_API_URL } from '@/env';
+import { CONFIG } from '@/lib/config';
 import { createLogger } from '@/lib/logger';
-import { asyncStorage as AsyncStorage } from '@/lib/storage';
+import { pickMerchantId } from '@/lib/pick-merchant-id';
+import { savingsNotificationCapability } from '@/services/savings-notification-capability';
+import { useAuthStore } from '@/stores/auth-store';
+import {
+  ensureSavingsReminderChannel,
+  ensureSavingsReminderPermissions,
+  loadNotificationsModule,
+} from './savings-reminder-native';
+import {
+  cancelStoredSavingsReminderNotification,
+  disposeUnscopedSavingsReminders,
+  type SavingsReminderFrequency,
+  scheduleRecurringSavingsReminder,
+  suppressStoredSavingsReminderNotification,
+} from './savings-reminder-scheduling';
+import {
+  type SavingsReminderRequest,
+  type SavingsReminderScope,
+  savingsReminderStorage,
+} from './savings-reminder-storage';
+
+export { activateDueSavingsReminderNotification } from './savings-reminder-activation';
+export type { SavingsReminderScope };
+
+/**
+ * Builds the storage scope for reminder records. Pure over explicit inputs
+ * so the auth-change cleanup (which must target the PREVIOUS scope) resolves
+ * identically to the live paths. Returns null when no account qualifies —
+ * callers fail closed rather than read or write device-global state.
+ */
+export function buildReminderScope(
+  userId: string | null | undefined,
+  merchantId: string | null | undefined
+): SavingsReminderScope | null {
+  const resolvedMerchantId = pickMerchantId(merchantId, CONFIG.MERCHANT_ID);
+  if (!userId || !resolvedMerchantId) return null;
+  return { merchantId: resolvedMerchantId, userId };
+}
+
+function resolveReminderScope(): SavingsReminderScope | null {
+  const { merchantId, user } = useAuthStore.getState();
+  return buildReminderScope(user?.id, merchantId);
+}
 
 const log = createLogger('SavingsReminderNotifications');
-const SAVINGS_REMINDER_CHANNEL_ID = 'savings';
-const SAVINGS_REMINDER_NOTIFICATION_ID_KEY =
-  'baci:savings-reminder-notification-id';
-const SAVINGS_REMINDER_GOAL_ID_KEY = 'baci:savings-reminder-goal-id';
-const SAVINGS_REMINDER_PENDING_REQUEST_KEY =
-  'baci:savings-reminder-pending-request';
-type SavingsReminderFrequency = 'daily' | 'weekly' | 'monthly';
-type NotificationsModule = typeof import('expo-notifications');
 
-interface SavingsReminderRequest {
-  contributionAmount: number;
-  frequency: SavingsReminderFrequency;
-  goalId: string;
-  goalTitle: string;
-  scheduledAt: Date;
-}
-
-let Notifications: NotificationsModule | null = null;
-
-function loadNotificationsModule() {
-  if (Platform.OS === 'web') return null;
-  if (Notifications) return Notifications;
-
-  try {
-    Notifications = require('expo-notifications') as NotificationsModule;
-    return Notifications;
-  } catch (error) {
-    log.debug('Notifications module unavailable for savings reminders', error);
-    return null;
-  }
-}
-
-async function ensureSavingsReminderPermissions(
-  notifications: NotificationsModule
-) {
-  const { status: existingStatus } = await notifications.getPermissionsAsync();
-  if (existingStatus === 'granted') return true;
-
-  const { status } = await notifications.requestPermissionsAsync();
-  return status === 'granted';
-}
-
-async function ensureSavingsReminderChannel(
-  notifications: NotificationsModule
-) {
-  if (Platform.OS !== 'android') return;
-
-  await notifications.setNotificationChannelAsync(SAVINGS_REMINDER_CHANNEL_ID, {
-    name: 'Savings Reminders',
-    description: 'Reminders to keep your device savings goal on track',
-    importance: notifications.AndroidImportance.DEFAULT,
+function hasServerSavingsNotificationCapabilityFor(scope: {
+  merchantId: string;
+  userId: string;
+}) {
+  return savingsNotificationCapability.isAvailable({
+    apiOrigin: EXPO_PUBLIC_API_URL,
+    merchantId: scope.merchantId,
+    userId: scope.userId,
   });
 }
 
-function buildSavingsReminderTrigger({
-  frequency,
-  notifications,
-  scheduledAt,
-}: {
-  frequency: SavingsReminderFrequency;
-  notifications: NotificationsModule;
-  scheduledAt: Date;
-}) {
-  const channelId = SAVINGS_REMINDER_CHANNEL_ID;
-  const hour = scheduledAt.getHours();
-  const minute = scheduledAt.getMinutes();
-
-  if (frequency === 'daily') {
-    return {
-      channelId,
-      hour,
-      minute,
-      type: notifications.SchedulableTriggerInputTypes.DAILY,
-    };
-  }
-
-  if (frequency === 'weekly') {
-    return {
-      channelId,
-      hour,
-      minute,
-      type: notifications.SchedulableTriggerInputTypes.WEEKLY,
-      weekday: scheduledAt.getDay() + 1,
-    };
-  }
-
-  return {
-    channelId,
-    day: scheduledAt.getDate(),
-    hour,
-    minute,
-    type: notifications.SchedulableTriggerInputTypes.MONTHLY,
-  };
-}
-
-function parseStoredSavingsReminderRequest(
-  value: string | null
-): SavingsReminderRequest | null {
-  if (!value) return null;
-
-  try {
-    const parsed = JSON.parse(value) as Partial<
-      Omit<SavingsReminderRequest, 'scheduledAt'> & { scheduledAt: string }
-    >;
-    const scheduledAt =
-      typeof parsed.scheduledAt === 'string'
-        ? new Date(parsed.scheduledAt)
-        : null;
-    if (
-      typeof parsed.contributionAmount !== 'number' ||
-      !Number.isFinite(parsed.contributionAmount) ||
-      (parsed.frequency !== 'daily' &&
-        parsed.frequency !== 'weekly' &&
-        parsed.frequency !== 'monthly') ||
-      typeof parsed.goalId !== 'string' ||
-      typeof parsed.goalTitle !== 'string' ||
-      !scheduledAt ||
-      Number.isNaN(scheduledAt.getTime())
-    ) {
-      return null;
-    }
-
-    return {
-      contributionAmount: parsed.contributionAmount,
-      frequency: parsed.frequency,
-      goalId: parsed.goalId,
-      goalTitle: parsed.goalTitle,
-      scheduledAt,
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function storePendingSavingsReminderRequest(
-  request: SavingsReminderRequest
+export function cancelSavingsReminderNotification(
+  goalId?: string,
+  captured?: { merchantId: string; userId: string }
 ) {
-  await AsyncStorage.setItem(
-    SAVINGS_REMINDER_PENDING_REQUEST_KEY,
-    JSON.stringify({
-      ...request,
-      scheduledAt: request.scheduledAt.toISOString(),
-    })
-  );
-}
-
-async function removePendingSavingsReminderRequest(goalId?: string) {
-  const storedRequest = parseStoredSavingsReminderRequest(
-    await AsyncStorage.getItem(SAVINGS_REMINDER_PENDING_REQUEST_KEY)
-  );
-  if (!storedRequest) {
-    await AsyncStorage.removeItem(SAVINGS_REMINDER_PENDING_REQUEST_KEY);
-    return false;
-  }
-  if (goalId && storedRequest.goalId !== goalId) {
-    return false;
-  }
-
-  await AsyncStorage.removeItem(SAVINGS_REMINDER_PENDING_REQUEST_KEY);
-  return true;
-}
-
-async function cancelStoredSavingsReminderNotification(
-  notifications: NotificationsModule,
-  goalId?: string
-) {
-  const removedPendingRequest =
-    await removePendingSavingsReminderRequest(goalId);
-  const [storedNotificationId, storedGoalId] = await Promise.all([
-    AsyncStorage.getItem(SAVINGS_REMINDER_NOTIFICATION_ID_KEY),
-    AsyncStorage.getItem(SAVINGS_REMINDER_GOAL_ID_KEY),
-  ]);
-
-  if (!storedNotificationId) {
-    return removedPendingRequest;
-  }
-  if (goalId && storedGoalId && storedGoalId !== goalId) {
-    return removedPendingRequest;
-  }
-
-  try {
-    await notifications.cancelScheduledNotificationAsync(storedNotificationId);
-  } catch (error) {
-    log.debug('Unable to cancel stored savings reminder notification', error);
-  }
-
-  await Promise.all([
-    AsyncStorage.removeItem(SAVINGS_REMINDER_NOTIFICATION_ID_KEY),
-    AsyncStorage.removeItem(SAVINGS_REMINDER_GOAL_ID_KEY),
-  ]);
-  return true;
-}
-
-async function scheduleRecurringSavingsReminder({
-  notifications,
-  request,
-}: {
-  notifications: NotificationsModule;
-  request: SavingsReminderRequest;
-}) {
-  const notificationId = await notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Savings reminder',
-      body: `Add ${formatNgnCurrency(request.contributionAmount)} toward ${request.goalTitle}.`,
-      data: {
-        goalId: request.goalId,
-        screen: 'wallet',
-        type: 'customer_savings_reminder',
-      },
-    },
-    trigger: buildSavingsReminderTrigger({
-      frequency: request.frequency,
+  return savingsReminderStorage.runExclusive(async () => {
+    // A captured scope pins delayed/queued cancellations to the account
+    // that scheduled them; without it, resolveReminderScope() would read
+    // the then-current auth state and could target a later sign-in.
+    const scope = captured
+      ? buildReminderScope(captured.userId, captured.merchantId)
+      : resolveReminderScope();
+    if (!scope) return false;
+    const notifications = loadNotificationsModule();
+    await disposeUnscopedSavingsReminders(notifications);
+    return cancelStoredSavingsReminderNotification(
       notifications,
-      scheduledAt: request.scheduledAt,
-    }),
+      scope,
+      goalId
+    );
   });
-  await Promise.all([
-    AsyncStorage.setItem(SAVINGS_REMINDER_NOTIFICATION_ID_KEY, notificationId),
-    AsyncStorage.setItem(SAVINGS_REMINDER_GOAL_ID_KEY, request.goalId),
-  ]);
-  return notificationId;
 }
 
-export async function cancelSavingsReminderNotification(goalId?: string) {
-  const notifications = loadNotificationsModule();
-  if (!notifications) return false;
-
-  return await cancelStoredSavingsReminderNotification(notifications, goalId);
-}
-
-export async function activateDueSavingsReminderNotification() {
-  const request = parseStoredSavingsReminderRequest(
-    await AsyncStorage.getItem(SAVINGS_REMINDER_PENDING_REQUEST_KEY)
-  );
-  if (!request) {
-    await AsyncStorage.removeItem(SAVINGS_REMINDER_PENDING_REQUEST_KEY);
-    return null;
-  }
-  if (request.scheduledAt.getTime() > Date.now()) {
-    return null;
-  }
-
-  const notifications = loadNotificationsModule();
-  if (!notifications) return null;
-
-  const hasPermission = await ensureSavingsReminderPermissions(notifications);
-  if (!hasPermission) return null;
-
-  await ensureSavingsReminderChannel(notifications);
-  const notificationId = await scheduleRecurringSavingsReminder({
-    notifications,
-    request,
+/**
+ * Auth-change cleanup for a scope that is no longer active. Cancels the
+ * prior scope's live OS notifications and re-arms the records (clears the
+ * cancelled notificationId, keeps the retained pending request) so the
+ * reminders resume if the account signs back in — instead of firing under
+ * a different account or dying silently.
+ */
+export function cancelScopeSavingsReminders(scope: SavingsReminderScope) {
+  return savingsReminderStorage.runExclusive(async () => {
+    const notifications = loadNotificationsModule();
+    await disposeUnscopedSavingsReminders(notifications);
+    let cancelled = false;
+    for (const record of await savingsReminderStorage.read(scope)) {
+      if (!record.notificationId) continue;
+      // Clear the stored ID only after the OS confirms cancellation. If
+      // the native call throws (or the module is unavailable) the
+      // recurring notification is still live, so retain the ID for a later
+      // retry — otherwise it fires under the next account and sign-back-in
+      // re-arms a duplicate from the retained pending request.
+      if (!notifications) continue;
+      try {
+        await notifications.cancelScheduledNotificationAsync(
+          record.notificationId
+        );
+      } catch (error) {
+        log.debug(
+          'Unable to cancel scoped savings reminder notification',
+          error
+        );
+        continue;
+      }
+      await savingsReminderStorage.write({
+        ...record,
+        notificationId: undefined,
+      });
+      cancelled = true;
+    }
+    return cancelled;
   });
-  await AsyncStorage.removeItem(SAVINGS_REMINDER_PENDING_REQUEST_KEY);
-  return notificationId;
 }
 
-export async function scheduleSavingsReminderNotification({
+export function scheduleSavingsReminderNotification({
   contributionAmount,
   frequency,
   goalId,
@@ -274,27 +134,98 @@ export async function scheduleSavingsReminderNotification({
   goalTitle: string;
   scheduledAt?: Date;
 }): Promise<string | null> {
+  // Capture the scope before enqueueing: resolving inside the queued
+  // callback would read then-current auth state, so a plan submitted by
+  // customer A while another operation runs could be stored/scheduled in
+  // customer B's scope after an account switch. The captured scope is
+  // threaded through the capability check and the scheduling operation.
+  const scope = resolveReminderScope();
+  if (!scope) return Promise.resolve(null);
+  return savingsReminderStorage.runExclusive(() =>
+    scheduleReminder(
+      {
+        contributionAmount,
+        frequency,
+        goalId,
+        goalTitle,
+        scheduledAt,
+      },
+      scope
+    )
+  );
+}
+
+/**
+ * Server-delivery suppression for a scope with an observed server
+ * capability. Unlike cancelSavingsReminderNotification (which destroys the
+ * records), this keeps the retained pending requests so local reminders
+ * can be re-armed if server delivery later becomes unavailable.
+ */
+export function suppressSavingsReminderNotification(captured?: {
+  merchantId: string;
+  userId: string;
+}) {
+  return savingsReminderStorage.runExclusive(async () => {
+    const scope = captured
+      ? buildReminderScope(captured.userId, captured.merchantId)
+      : resolveReminderScope();
+    if (!scope) return false;
+    const notifications = loadNotificationsModule();
+    await disposeUnscopedSavingsReminders(notifications);
+    return suppressStoredSavingsReminderNotification(notifications, scope);
+  });
+}
+
+async function scheduleReminder(
+  request: SavingsReminderRequest,
+  scope: SavingsReminderScope
+): Promise<string | null> {
   const notifications = loadNotificationsModule();
-  if (!notifications) return null;
-
-  const hasPermission = await ensureSavingsReminderPermissions(notifications);
-  if (!hasPermission) return null;
-
-  await ensureSavingsReminderChannel(notifications);
-  await cancelStoredSavingsReminderNotification(notifications);
-
-  const request = {
-    contributionAmount,
-    frequency,
-    goalId,
-    goalTitle,
-    scheduledAt,
-  };
-  if (scheduledAt.getTime() > Date.now()) {
-    await storePendingSavingsReminderRequest(request);
+  await disposeUnscopedSavingsReminders(notifications);
+  if (await hasServerSavingsNotificationCapabilityFor(scope)) {
+    // Suppress, not cancel: pre-existing pendings must survive so local
+    // reminders re-arm if server delivery is later lost.
+    await suppressStoredSavingsReminderNotification(notifications, scope);
+    // Persist the incoming request as a pending (no live schedule) so a
+    // later loss of server delivery can still re-arm this goal; an update
+    // overwrites the previous pending for the goal. Preserve a retained
+    // live ID: when suppression's OS cancel fails, the notification is
+    // still real and must stay trackable.
+    const [existing] = await savingsReminderStorage.read(scope, request.goalId);
+    await savingsReminderStorage.write({
+      goalId: request.goalId,
+      merchantId: scope.merchantId,
+      notificationId: existing?.notificationId,
+      pending: request,
+      userId: scope.userId,
+    });
     return null;
   }
-
-  await removePendingSavingsReminderRequest();
-  return await scheduleRecurringSavingsReminder({ notifications, request });
+  if (
+    !notifications ||
+    !(await ensureSavingsReminderPermissions(notifications))
+  )
+    return null;
+  await ensureSavingsReminderChannel(notifications);
+  await cancelStoredSavingsReminderNotification(
+    notifications,
+    scope,
+    request.goalId
+  );
+  const [remaining] = await savingsReminderStorage.read(scope, request.goalId);
+  if (remaining.notificationId) return null;
+  if (request.scheduledAt.getTime() > Date.now()) {
+    await savingsReminderStorage.write({
+      goalId: request.goalId,
+      merchantId: scope.merchantId,
+      pending: request,
+      userId: scope.userId,
+    });
+    return null;
+  }
+  return await scheduleRecurringSavingsReminder({
+    notifications,
+    request,
+    scope,
+  });
 }

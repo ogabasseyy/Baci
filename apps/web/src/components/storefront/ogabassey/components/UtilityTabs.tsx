@@ -17,15 +17,26 @@ export type UtilityTabId = (typeof TABS)[number]['id'];
 interface UtilityTabsProps {
   activeTab: UtilityTabId;
   onSelect: (tab: UtilityTabId) => void;
+  /** Blocks tab switches (click + keyboard) while a request is in flight. */
+  disabled?: boolean;
 }
 
-export function UtilityTabs({ activeTab, onSelect }: UtilityTabsProps) {
+export function UtilityTabs({
+  activeTab,
+  onSelect,
+  disabled,
+}: UtilityTabsProps) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const handleKeyDown = (
     event: KeyboardEvent<HTMLButtonElement>,
     currentIndex: number
   ) => {
+    // Native disabled blocks click/focus, but an already-focused tab
+    // could still fire keydown — guard explicitly.
+    if (disabled) {
+      return;
+    }
     let nextIndex: number | null = null;
     if (event.key === 'ArrowRight') {
       nextIndex = (currentIndex + 1) % TABS.length;
@@ -58,6 +69,7 @@ export function UtilityTabs({ activeTab, onSelect }: UtilityTabsProps) {
             tabRefs.current[index] = element;
           }}
           aria-selected={activeTab === tab.id}
+          disabled={disabled}
           role="tab"
           tabIndex={activeTab === tab.id ? 0 : -1}
           type="button"

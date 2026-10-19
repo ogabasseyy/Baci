@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -84,5 +85,192 @@ describe('RewardsPage', () => {
       'href',
       '/test-store/account/login?redirect=/test-store/pages/rewards'
     );
+  });
+
+  it('keeps the enrolled subtree mounted during a background refetch', async () => {
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    const { useCustomerAuth } = await import(
+      '@/contexts/customer-auth-context'
+    );
+    vi.mocked(useCustomerAuth).mockReturnValue({
+      customer: { id: 'customer-1' },
+    } as never);
+    const { useLoyalty } = await import('@/hooks/use-loyalty');
+    const loyaltyMock = vi.mocked(useLoyalty);
+    const settled = {
+      enrolled: true,
+      loading: false,
+      recentTransactions: [],
+      getTierInfo: vi.fn(),
+      tier: null,
+      refetch: vi.fn(),
+    };
+    loyaltyMock.mockReturnValue(settled as never);
+    const { RewardsCatalog } = await import(
+      '@/components/storefront/loyalty/rewards-catalog'
+    );
+    const catalogMock = vi.mocked(RewardsCatalog);
+
+    const { rerender } = render(<RewardsPage />);
+    expect(catalogMock).toHaveBeenCalled();
+
+    // The catalog fires onRedeemed -> page refetch -> loading flips true
+    // while old data is still rendered. The catalog (and its success
+    // dialog) must survive; only the initial fetch shows the skeleton.
+    catalogMock.mockClear();
+    loyaltyMock.mockReturnValue({ ...settled, loading: true } as never);
+    rerender(<RewardsPage />);
+
+    expect(catalogMock).toHaveBeenCalled();
+  });
+
+  it('skeletons instead of showing the previous shopper after sign-in change', async () => {
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    const { useCustomerAuth } = await import(
+      '@/contexts/customer-auth-context'
+    );
+    const authMock = vi.mocked(useCustomerAuth);
+    authMock.mockReturnValue({ customer: { id: 'customer-1' } } as never);
+    const { useLoyalty } = await import('@/hooks/use-loyalty');
+    const loyaltyMock = vi.mocked(useLoyalty);
+    const settled = {
+      enrolled: true,
+      loading: false,
+      recentTransactions: [],
+      getTierInfo: vi.fn(),
+      tier: null,
+      refetch: vi.fn(),
+    };
+    loyaltyMock.mockReturnValue(settled as never);
+    const { RewardsCatalog } = await import(
+      '@/components/storefront/loyalty/rewards-catalog'
+    );
+    const catalogMock = vi.mocked(RewardsCatalog);
+
+    const { rerender } = render(<RewardsPage />);
+    expect(catalogMock).toHaveBeenCalled();
+
+    // New shopper while the hook still shows customer-1's settled data
+    // (loading has not flipped yet): the previous enrolled subtree
+    // must not paint. Only a true->false edge stamps the identity.
+    catalogMock.mockClear();
+    authMock.mockReturnValue({ customer: { id: 'customer-2' } } as never);
+    rerender(<RewardsPage />);
+
+    expect(catalogMock).not.toHaveBeenCalled();
+  });
+
+  it('settles a synchronous preview identity instead of skeletoning forever', async () => {
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    const { useCustomerAuth } = await import(
+      '@/contexts/customer-auth-context'
+    );
+    vi.mocked(useCustomerAuth).mockReturnValue({
+      customer: { id: 'customer-1' },
+    } as never);
+    const { useLoyalty } = await import('@/hooks/use-loyalty');
+    const loyaltyMock = vi.mocked(useLoyalty);
+    loyaltyMock.mockReturnValue({
+      enrolled: true,
+      loading: false,
+      recentTransactions: [],
+      getTierInfo: vi.fn(),
+      tier: null,
+      refetch: vi.fn(),
+    } as never);
+    const { RewardsCatalog } = await import(
+      '@/components/storefront/loyalty/rewards-catalog'
+    );
+    const catalogMock = vi.mocked(RewardsCatalog);
+
+    const { rerender } = render(<RewardsPage />);
+    expect(catalogMock).toHaveBeenCalled();
+
+    // Preview/demo identities settle synchronously inside the hook
+    // (data swapped, loading never flips): the change commit must not
+    // stamp, but the follow-up render carrying the preview data must.
+    catalogMock.mockClear();
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'demo-store',
+        business_name: 'Demo Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    rerender(<RewardsPage />);
+    rerender(<RewardsPage />);
+
+    expect(catalogMock).toHaveBeenCalled();
+  });
+
+  it('shows the issued code beside redemption history entries', async () => {
+    useMerchantSafeMock.mockReturnValue({
+      merchant: {
+        id: 'merchant-1',
+        business_name: 'Test Store',
+        country: 'NG',
+        payout_currency: 'NGN',
+      },
+      loading: false,
+    });
+    const { useCustomerAuth } = await import(
+      '@/contexts/customer-auth-context'
+    );
+    vi.mocked(useCustomerAuth).mockReturnValue({
+      customer: { id: 'customer-1' },
+    } as never);
+    const { useLoyalty } = await import('@/hooks/use-loyalty');
+    vi.mocked(useLoyalty).mockReturnValue({
+      enrolled: true,
+      loading: false,
+      recentTransactions: [
+        {
+          id: 'txn-1',
+          points: -100,
+          type: 'redemption',
+          description: 'Redeemed: Big perk',
+          created_at: '2026-01-01',
+          redemption_code: 'RDM-ABC123',
+        },
+      ],
+      getTierInfo: vi.fn(),
+      tier: null,
+      refetch: vi.fn(),
+    } as never);
+
+    render(<RewardsPage />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('tab', { name: /history/i }));
+
+    // Recovery receipt: the capped reward left the catalog, but the
+    // already-paid code stays visible in history.
+    expect(screen.getByText(/RDM-ABC123/)).toBeInTheDocument();
   });
 });

@@ -29,6 +29,20 @@
 # claim-minting revision is rolled out. MIGRATION_PHASE=postdeploy (or the
 # default `all`) applies those migrations normally.
 #
+# MIGRATION_MAX_VERSION=YYYYMMDDHHMMSS applies only migrations at or below
+# the given version, deferring newer ones (counted, never recorded) so a
+# deploy step can verify the applied prefix -- e.g. observe PostgREST
+# actually serving a hook -- before a later step applies the rest. The cap
+# never splits an atomic group: a group reaching above it defers whole.
+#
+# Ordering contract (callers, not this script, own it): the cap only
+# proves a prefix when the caller applies restore-capped, probes, then
+# applies the remainder uncapped -- invoking this script directly
+# without the cap applies everything in one pass by design (local
+# single-phase use), skipping whatever gate the cap was sectioning
+# off. Keep deploy.yml's two-phase apply/probe/apply sequence (or an
+# equivalent) whenever a canary proof is required.
+#
 # `statements` remains ARRAY[]::text[] because the CLI only consults version/name;
 # preserving SQL there would require fragile escaping of `$$` and single quotes.
 set -euo pipefail
@@ -51,6 +65,16 @@ case "$migration_phase" in
     ;;
   *)
     echo "::error::MIGRATION_PHASE must be all, predeploy, or postdeploy" >&2
+    exit 1
+    ;;
+esac
+
+migration_max_version="${MIGRATION_MAX_VERSION:-}"
+case "$migration_max_version" in
+  '') ;;
+  [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
+  *)
+    echo "::error::MIGRATION_MAX_VERSION must be a 14-digit migration version" >&2
     exit 1
     ;;
 esac
@@ -119,6 +143,8 @@ applied_versions_body="$(jq -n '{query: "SELECT version, name FROM supabase_migr
 applied_versions_response="$(api_query <<<"$applied_versions_body")"
 applied_migrations="$(jq -r '.[] | [.version, .name] | @tsv' <<<"$applied_versions_response")"
 
+verify_checkout_recovery_migration_history "$applied_migrations" "$migrations_dir" || exit 1
+
 applied_count_remote=$(printf '%s' "$applied_migrations" | grep -c . || true)
 echo "Applied versions on remote: ${applied_count_remote}"
 
@@ -139,6 +165,11 @@ applied_count=0
 skipped_count=0
 deferred_count=0
 atomic_group_skip_bases=''
+
+if [ "$checkout_recovery_legacy_upgrade_required" -eq 1 ]; then
+  . "$script_dir/reconcile-checkout-recovery-legacy.sh"
+  reconcile_checkout_recovery_legacy || exit 1
+fi
 
 for file in "${sorted_files[@]}"; do
   base="$(basename "$file" .sql)"
@@ -207,11 +238,25 @@ for file in "${sorted_files[@]}"; do
     continue
   fi
 
+  # LC_ALL=C: both sides are validated 14-digit versions (ordering
+  # coincides either way), but byte collation removes the locale
+  # dependence entirely.
+  if [ -n "$migration_max_version" ] && LC_ALL=C [ "$version" \> "$migration_max_version" ]; then
+    echo "⏸ deferred above MIGRATION_MAX_VERSION $migration_max_version: $version  ${name}"
+    deferred_count=$((deferred_count + 1))
+    continue
+  fi
+
   atomic_group_files=()
   atomic_group_cursor="$base"
   atomic_group_candidate_skip_bases=''
+  atomic_group_exceeds_max=0
   while next_base="$(atomic_migration_group_next_base "$atomic_group_cursor")"; do
     next_file="$migrations_dir/${next_base}.sql"
+    if [ -n "$migration_max_version" ] && LC_ALL=C [ "${next_base%%_*}" \> "$migration_max_version" ]; then
+      atomic_group_exceeds_max=1
+      break
+    fi
     if [ ! -f "$next_file" ] || \
       [ -n "$(awk -F '\t' -v version="${next_base%%_*}" '$1 == version { print $2; exit }' <<<"$applied_migrations")" ]; then
       atomic_group_files=()
@@ -222,6 +267,11 @@ for file in "${sorted_files[@]}"; do
     atomic_group_candidate_skip_bases="${atomic_group_candidate_skip_bases}${atomic_group_candidate_skip_bases:+$'\n'}${next_base}"
     atomic_group_cursor="$next_base"
   done
+  if [ "$atomic_group_exceeds_max" = 1 ]; then
+    echo "⏸ deferred above MIGRATION_MAX_VERSION $migration_max_version: $version  ${name} (atomic group)"
+    deferred_count=$((deferred_count + 1))
+    continue
+  fi
   if [ "${#atomic_group_files[@]}" -gt 0 ]; then
     apply_atomic_migration_group "$file" "${atomic_group_files[@]}" || exit 1
     atomic_group_skip_bases="$atomic_group_candidate_skip_bases"

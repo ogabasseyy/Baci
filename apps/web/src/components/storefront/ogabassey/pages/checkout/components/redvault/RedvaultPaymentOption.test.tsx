@@ -45,7 +45,7 @@ function renderOption({
 describe('RedvaultPaymentOption', () => {
   it.each([
     19_999_999, 20_000_000, 20_000_001,
-  ])('shows both MOU tiers without deriving a discount from eligible subtotal %s', (eligibleSubtotalKobo) => {
+  ])('shows fixed 5% savings without deriving a discount from eligible subtotal %s', (eligibleSubtotalKobo) => {
     renderOption({
       selected: true,
       summary: {
@@ -59,19 +59,19 @@ describe('RedvaultPaymentOption', () => {
 
     expect(
       screen.getByText(
-        '10% off when the eligible pre-discount subtotal is below ₦200,000; 5% at ₦200,000 or more. Excluded products and fees do not count toward this threshold.'
+        'Save 5% on eligible products. Excluded products and fees do not receive a discount.'
       )
     ).toBeInTheDocument();
     expect(screen.getByText('-₦123.45')).toBeInTheDocument();
     expect(screen.getByText('₦543,210.00')).toBeInTheDocument();
-    expect(screen.queryByText('5% off eligible items')).toBeNull();
+    expect(screen.getByText('5% off eligible items')).toBeInTheDocument();
   });
 
-  it('explains the threshold before a server quote exists', () => {
+  it('explains the fixed discount before a server quote exists', () => {
     renderOption({ summary: null });
 
     expect(
-      screen.getByText(/10% off when the eligible pre-discount subtotal/)
+      screen.getByText(/Save 5% on eligible products/)
     ).toBeInTheDocument();
     expect(screen.queryByText('UBA REDVAULT savings')).toBeNull();
   });

@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { classifyPaidOrderReplay } from '@/lib/payments/classify-paid-order-replay';
 import { confirmPaidOrderInventoryOrRollback } from '@/lib/payments/confirm-paid-order-inventory';
 import { fileBlockedOrderPaymentReview } from '@/lib/payments/file-blocked-order-payment-review';
 import type {
@@ -13,7 +14,6 @@ export type {
 
 import { fileSettlementCaptureFailureReview } from '@/lib/payments/file-settlement-capture-failure-review';
 import { schedulePaidOrderNotifications } from '@/lib/payments/notify-paid-order';
-import { getOrderOutboxState } from '@/lib/payments/order-has-outbox-rows';
 import { toRichPaidOrder } from '@/lib/payments/paid-order-normalization';
 import { persistPaidOrderSideEffectRetry } from '@/lib/payments/paid-order-retry-persistence';
 import { PAID_ORDER_RICH_SELECT } from '@/lib/payments/paid-order-rich-select';
@@ -32,9 +32,14 @@ export async function finalizeOrderGatewayPayment({
   wonTransactionFlip,
   actor,
   scheduleAfter,
+  signal,
+  fallbackDeadlineMs,
+  emailMaxAttemptsPerSender,
+  expectedOutstandingMinor,
 }: FinalizeOrderGatewayPaymentArgs): Promise<FinalizeOrderGatewayPaymentOutcome> {
   const result = await resolveOrderGatewayCompletion({
     actor,
+    expectedOutstandingMinor,
     gateway,
     gatewayResponse,
     merchantId: transaction.merchant_id,
@@ -58,37 +63,29 @@ export async function finalizeOrderGatewayPayment({
     return blockedOutcome;
   }
 
-  const healed = Boolean(
-    completion.already_completed && completion.order_updated
-  );
-  const outboxState = completion.order_updated
-    ? null
-    : await getOrderOutboxState(supabase, orderId);
-  if (
-    completion.order_already_paid &&
-    !completion.order_updated &&
-    outboxState?.lookupFailed
-  ) {
+  const {
+    capturedOnAlreadyPaidOrder,
+    healed,
+    legacyPaidReplay,
+    outboxState,
+    shouldNotify,
+    sideEffectsLookupFailed,
+  } = await classifyPaidOrderReplay({
+    alreadyCompleted: completion.already_completed,
+    orderAlreadyPaid: completion.order_already_paid,
+    orderId,
+    orderUpdated: completion.order_updated,
+    redvaultDuplicate: result.redvaultDuplicate,
+    supabase,
+    transactionId: transaction.id,
+    wonTransactionFlip,
+  });
+  if (sideEffectsLookupFailed) {
     return {
       error: new Error('payment_side_effects_lookup_failed'),
       kind: 'completion_failed',
     };
   }
-  const capturedOnAlreadyPaidOrder =
-    Boolean(completion.order_already_paid) &&
-    !completion.order_updated &&
-    ((!result.redvaultDuplicate && wonTransactionFlip) ||
-      (Boolean(outboxState?.hasRows) &&
-        outboxState?.payerTransactionId !== transaction.id));
-  const legacyPaidReplay =
-    Boolean(completion.order_already_paid) &&
-    !completion.order_updated &&
-    !wonTransactionFlip &&
-    outboxState?.hasRows === false;
-
-  const shouldNotify =
-    Boolean(completion.order_updated) ||
-    (!capturedOnAlreadyPaidOrder && Boolean(outboxState?.onlyUntouchedSeed));
 
   const { data: order, error: orderFetchError } = await supabase
     .from('orders')
@@ -172,6 +169,7 @@ export async function finalizeOrderGatewayPayment({
   // before the modern side-effect drain to avoid duplicating those effects.
   if (legacyPaidReplay) {
     return {
+      capturedOnPaidOrder: false,
       healed,
       kind: 'completed',
       orderNumber: completion.order_number ?? null,
@@ -205,11 +203,14 @@ export async function finalizeOrderGatewayPayment({
 
   const sideEffectArgs = {
     actor,
+    emailMaxAttemptsPerSender,
     externalGatewayReference: reference,
+    fallbackDeadlineMs,
     gatewayResponse,
     order: richOrder,
     scheduleAfter,
     settlementGateway: gateway,
+    signal,
     supabase,
     transaction: {
       amount: transaction.amount,
@@ -230,6 +231,7 @@ export async function finalizeOrderGatewayPayment({
         reference,
       });
       return {
+        capturedOnPaidOrder: true,
         healed,
         kind: 'completed',
         orderNumber: completion.order_number ?? null,
@@ -285,6 +287,7 @@ export async function finalizeOrderGatewayPayment({
   }
 
   return {
+    capturedOnPaidOrder: capturedOnAlreadyPaidOrder,
     healed,
     kind: 'completed',
     orderNumber: completion.order_number ?? null,

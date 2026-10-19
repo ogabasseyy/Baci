@@ -27,4 +27,64 @@ describe('merchantHasFeature', () => {
       )
     ).toBe(false);
   });
+
+  it('keeps shared-cart enrollment disabled for every plan by default', () => {
+    for (const planTier of [
+      'free',
+      'starter',
+      'pro',
+      'business',
+      'enterprise',
+    ]) {
+      expect(
+        merchantHasFeature(
+          { plan_tier: planTier, premium_features: [] },
+          'shared_cart'
+        )
+      ).toBe(false);
+      expect(
+        merchantHasFeature(
+          { plan_tier: planTier, premium_features: [] },
+          'shared_cart_realtime'
+        )
+      ).toBe(false);
+    }
+    expect(
+      merchantHasFeature(
+        { plan_tier: 'free', premium_features: ['shared_cart'] },
+        'shared_cart'
+      )
+    ).toBe(true);
+    expect(
+      merchantHasFeature(
+        { plan_tier: 'free', premium_features: ['shared_cart'] },
+        'shared_cart_realtime'
+      )
+    ).toBe(false);
+  });
+});
+
+it.each([
+  'shared_cart',
+  'shared_cart_accounts',
+  'shared_cart_realtime',
+] as const)('requires explicit canonical pilot enrollment for %s even with all_features', (feature) => {
+  expect(
+    merchantHasFeature(
+      { plan_tier: 'enterprise', premium_features: ['all_features'] },
+      feature
+    )
+  ).toBe(false);
+  expect(
+    merchantHasFeature(
+      { plan_tier: 'free', premium_features: [` ${feature.toUpperCase()} `] },
+      feature
+    )
+  ).toBe(false);
+  expect(
+    merchantHasFeature(
+      { plan_tier: 'free', premium_features: [feature] },
+      feature
+    )
+  ).toBe(true);
 });

@@ -21,8 +21,10 @@ export const styles = StyleSheet.create({
     padding: SPACING.xl,
   },
   tabHeader: {
-    alignItems: 'flex-start',
-    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    justifyContent: 'flex-start',
     paddingHorizontal: SPACING.md,
     paddingTop: SPACING.lg,
     paddingBottom: 0,
@@ -95,8 +97,8 @@ export const styles = StyleSheet.create({
   },
   historySection: {
     margin: SPACING.md,
-    borderRadius: RADIUS['2xl'],
-    padding: SPACING.md,
+    borderRadius: 24,
+    padding: 20,
   },
   sectionTitle: {
     fontSize: TYPOGRAPHY.size.lg,
@@ -114,7 +116,7 @@ export const styles = StyleSheet.create({
   transactionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: 18,
     borderBottomWidth: 1,
   },
   txIcon: {

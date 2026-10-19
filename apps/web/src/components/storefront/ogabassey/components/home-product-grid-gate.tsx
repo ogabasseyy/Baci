@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { useViewportActivation } from '@/components/storefront/use-viewport-activation';
 import type { Product } from '../types';
 import { useActivationFocusRestore } from './use-activation-focus-restore';
@@ -213,7 +213,9 @@ export function HomeProductGridGate({
       .then((module) => {
         if (!cancelled) {
           captureFocusBeforeSwap();
-          setGrid(() => module.HomeProductGrid);
+          startTransition(() => {
+            setGrid(() => module.HomeProductGrid);
+          });
         }
       })
       .catch((error: unknown) => {

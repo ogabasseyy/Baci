@@ -1,0 +1,124 @@
+'use client';
+
+import { buildImportEntries } from './build-import-entries';
+
+import { getCartFromStorage } from './cart-storage';
+
+import { planLegacyImport } from './shared-cart-reducer';
+import type { createCartSnapshotActions } from './shared-cart-snapshots';
+import type { SharedCartRuntime } from './use-shared-cart-runtime';
+
+export function createCartRecovery(
+  context: SharedCartRuntime &
+    Pick<ReturnType<typeof createCartSnapshotActions>, 'refreshNow'>
+) {
+  const {
+    enabled,
+    dispatch,
+    stateRef,
+    generationRef,
+    importOpIdsRef,
+    createAttemptedRef,
+    optionsRef,
+    refreshNow,
+  } = context;
+
+  function retryPendingSync(): void {
+    if (!enabled) return;
+    const failed = stateRef.current.queue.find(
+      (entry) => entry.state === 'failed'
+    );
+    if (!failed) return;
+    dispatch({
+      generation: generationRef.current,
+      operationId: failed.operationId,
+      type: 'command/retry',
+    });
+  }
+
+  function refreshSharedCart(): Promise<void> {
+    // Explicit stale-review refresh: bypass coalescing and visibility
+    // guards so the next submit sees the live version. Adoption and
+    // generation guards still apply.
+    return refreshNow(true);
+  }
+
+  function retryImport(
+    resolutions: import('@baci/shared/cart').CartMergeResolution[] = []
+  ): void {
+    if (!enabled) return;
+    const generation = generationRef.current;
+    const current = stateRef.current;
+    if (current.importStatus !== 'failed') return;
+    const cached = getCartFromStorage(optionsRef.current.merchantSlug);
+    if (cached.length === 0) {
+      dispatch({ generation, status: 'skipped', type: 'import/resolved' });
+      return;
+    }
+    if (!current.confirmed) {
+      createAttemptedRef.current = false;
+      retryPendingSync();
+      return;
+    }
+    const planned = planLegacyImport(
+      cached,
+      current.confirmed,
+      current.confirmed.cartId,
+      resolutions
+    );
+    if (planned.kind === 'nothing') {
+      dispatch({ generation, status: 'skipped', type: 'import/resolved' });
+      return;
+    }
+    if (planned.kind === 'blocked') {
+      dispatch({ generation, type: 'import/capacity_exceeded' });
+      return;
+    }
+    if (planned.kind === 'conflicts') {
+      dispatch({
+        conflicts: planned.conflicts,
+        generation,
+        type: 'import/conflicts',
+      });
+      return;
+    }
+    if (planned.kind === 'create') return;
+    dispatch({
+      generation,
+      type: 'import/started',
+      warnings: planned.warnings,
+    });
+    const entries = buildImportEntries(planned, current.confirmed.cartId);
+    if (entries.length === 0) {
+      dispatch({ generation, status: 'done', type: 'import/resolved' });
+      return;
+    }
+    importOpIdsRef.current = new Set(entries.map((entry) => entry.operationId));
+    dispatch({ entries, generation, type: 'import/enqueue' });
+  }
+  function discardLegacyImport(): void {
+    if (
+      !enabled ||
+      stateRef.current.importStatus !== 'failed' ||
+      !stateRef.current.confirmed
+    )
+      return;
+    dispatch({
+      generation: generationRef.current,
+      status: 'skipped',
+      type: 'import/resolved',
+    });
+  }
+  function resolveImportConflicts(
+    resolutions: import('@baci/shared/cart').CartMergeResolution[]
+  ): void {
+    retryImport(resolutions);
+  }
+  return {
+    retryPendingSync,
+    refreshSharedCart,
+    retryImport,
+    discardLegacyImport,
+    resolveImportConflicts,
+  };
+}

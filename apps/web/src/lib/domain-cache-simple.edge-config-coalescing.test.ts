@@ -1,23 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockEdgeGet = vi.fn();
+const mockFetchCustomDomain = vi.fn();
+const mockFetchSlugForDomain = vi.fn();
+
 vi.mock('@vercel/edge-config', () => ({
   get: (...args: unknown[]) => mockEdgeGet(...args),
 }));
-
-const mockMaybeSingle = vi.fn();
-const mockLimit = vi.fn(() => ({ maybeSingle: mockMaybeSingle }));
-const mockEq = vi.fn();
-mockEq.mockImplementation(() => ({
-  eq: mockEq,
-  limit: mockLimit,
-  maybeSingle: mockMaybeSingle,
-}));
-const mockSelect = vi.fn(() => ({ eq: mockEq }));
-const mockFrom = vi.fn(() => ({ select: mockSelect }));
-
-vi.mock('./supabase/admin', () => ({
-  createAdminClient: () => ({ from: mockFrom }),
+vi.mock('./domain-cache-database', () => ({
+  fetchCustomDomain: (...args: unknown[]) => mockFetchCustomDomain(...args),
+  fetchSlugForDomain: (...args: unknown[]) => mockFetchSlugForDomain(...args),
 }));
 
 const {
@@ -28,407 +20,320 @@ const {
   invalidateReverseDomainCacheForSlug,
 } = await import('./domain-cache-simple');
 
-beforeEach(() => {
-  vi.useFakeTimers();
-  vi.clearAllMocks();
-  mockEdgeGet.mockReset();
-  mockMaybeSingle.mockReset();
-  mockLimit.mockReset().mockReturnValue({ maybeSingle: mockMaybeSingle });
-  mockEq.mockReset().mockImplementation(() => ({
-    eq: mockEq,
-    limit: mockLimit,
-    maybeSingle: mockMaybeSingle,
-  }));
-  mockSelect.mockReset().mockReturnValue({ eq: mockEq });
-  mockFrom.mockReset().mockReturnValue({ select: mockSelect });
-});
+describe('domain cache read coalescing and invalidation', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    mockEdgeGet.mockReset();
+    mockFetchCustomDomain.mockReset();
+    mockFetchSlugForDomain.mockReset();
+    mockEdgeGet.mockRejectedValue(new Error('Edge Config unavailable'));
+  });
 
-afterEach(() => {
-  vi.useRealTimers();
-});
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
-describe('Edge Config read coalescing', () => {
-  it('shares only concurrent normalized forward reads', async () => {
-    let resolve: ((value: string) => void) | undefined;
-    const providerRead = new Promise<string>((done) => {
-      resolve = done;
-    });
-    mockEdgeGet.mockReturnValueOnce(providerRead);
+  it('shares concurrent normalized forward resolver reads', async () => {
+    let resolve:
+      | ((value: { outcome: 'resolved'; value: string }) => void)
+      | undefined;
+    mockFetchCustomDomain.mockReturnValueOnce(
+      new Promise((done) => (resolve = done))
+    );
 
-    const first = getCustomDomainForSlug(' OGABASSEY ');
-    const second = getCustomDomainForSlug('ogabassey');
-    resolve?.('ogabassey.com');
+    const first = getCustomDomainForSlug(' SHOP ');
+    const second = getCustomDomainForSlug('shop');
+    resolve?.({ outcome: 'resolved', value: 'shop.test' });
 
     await expect(Promise.all([first, second])).resolves.toEqual([
-      'ogabassey.com',
-      'ogabassey.com',
+      'shop.test',
+      'shop.test',
     ]);
-    expect(mockEdgeGet).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(60_001);
-    mockEdgeGet.mockResolvedValueOnce('fresh.ogabassey.com');
-    await expect(getCustomDomainForSlug('ogabassey')).resolves.toBe(
-      'fresh.ogabassey.com'
-    );
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
+    expect(mockFetchCustomDomain).toHaveBeenCalledTimes(1);
   });
 
-  it('reuses a positive Edge Config mapping for the warm-instance TTL', async () => {
-    mockEdgeGet.mockResolvedValue('warm-edge.com');
-
-    await expect(getCustomDomainForSlug('warm-edge')).resolves.toBe(
-      'warm-edge.com'
-    );
-    await expect(getCustomDomainForSlug('warm-edge')).resolves.toBe(
-      'warm-edge.com'
-    );
-
-    expect(mockEdgeGet).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not cache a forward result that resolves after invalidation', async () => {
-    let resolve: ((value: string) => void) | undefined;
-    mockEdgeGet.mockReturnValueOnce(new Promise<string>((r) => (resolve = r)));
-    const pending = getCustomDomainForSlug('race-forward');
-    invalidateForwardDomainCacheForSlug('race-forward');
-    resolve?.('old.example.com');
-    await expect(pending).resolves.toBe('old.example.com');
-    mockEdgeGet.mockResolvedValueOnce('new.example.com');
-    await expect(getCustomDomainForSlug('race-forward')).resolves.toBe(
-      'new.example.com'
-    );
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-  });
-
-  it('keeps generation fences monotonic when a key is evicted and reused', async () => {
-    invalidateForwardDomainCacheForSlug('aba-forward');
-    let resolve: ((value: string) => void) | undefined;
-    mockEdgeGet.mockReturnValueOnce(new Promise<string>((r) => (resolve = r)));
-    const pending = getCustomDomainForSlug('aba-forward');
-    invalidateForwardDomainCacheForSlug('aba-forward');
-    for (let index = 0; index < 1000; index += 1) {
-      invalidateForwardDomainCacheForSlug(`aba-other-${index}`);
-    }
-    invalidateForwardDomainCacheForSlug('aba-forward');
-    resolve?.('stale.example.com');
-    await expect(pending).resolves.toBe('stale.example.com');
-    mockEdgeGet.mockResolvedValueOnce('fresh.example.com');
-    await expect(getCustomDomainForSlug('aba-forward')).resolves.toBe(
-      'fresh.example.com'
-    );
-  });
-
-  it('normalizes a successful forward mapping before caching it', async () => {
-    mockEdgeGet.mockResolvedValue('  Store.Example.COM.  ');
-
-    await expect(getCustomDomainForSlug('normalized-edge')).resolves.toBe(
-      'store.example.com'
-    );
-    await expect(getCustomDomainForSlug('normalized-edge')).resolves.toBe(
-      'store.example.com'
-    );
-    expect(mockEdgeGet).toHaveBeenCalledTimes(1);
-  });
-
-  it('falls back when Edge Config returns an invalid forward mapping', async () => {
-    mockEdgeGet.mockResolvedValue('   ');
-    mockMaybeSingle.mockResolvedValue({
-      data: {
-        id: 'merchant-1',
-        domains: [
-          {
-            domain: 'db-fallback.example.com',
-            is_primary: true,
-            status: 'active',
-            domain_type: 'custom',
-          },
-        ],
-      },
-    });
-
-    await expect(getCustomDomainForSlug('invalid-edge')).resolves.toBe(
-      'db-fallback.example.com'
-    );
-    expect(mockFrom).toHaveBeenCalled();
-  });
-
-  it('rejects URL-shaped forward mappings and does not cache them', async () => {
-    mockEdgeGet
-      .mockResolvedValueOnce('https://store.example.com/path')
-      .mockResolvedValueOnce('valid.example.com');
-    mockMaybeSingle.mockResolvedValue({ data: null });
-
-    await expect(
-      getCustomDomainForSlug('malformed-forward')
-    ).resolves.toBeNull();
-    await expect(getCustomDomainForSlug('malformed-forward')).resolves.toBe(
-      'valid.example.com'
-    );
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-  });
-
-  it('shares only concurrent normalized reverse reads', async () => {
-    let resolve: ((value: string) => void) | undefined;
-    const providerRead = new Promise<string>((done) => {
-      resolve = done;
-    });
-    mockEdgeGet.mockReturnValueOnce(providerRead);
-
-    const first = getSlugForCustomDomain(' OGABASSEY.COM. ');
-    const second = getSlugForCustomDomain('ogabassey.com');
-    resolve?.('ogabassey');
-
-    await expect(Promise.all([first, second])).resolves.toEqual([
-      'ogabassey',
-      'ogabassey',
-    ]);
-    expect(mockEdgeGet).toHaveBeenCalledTimes(1);
-  });
-
-  it('refreshes a positive reverse mapping after 60 seconds', async () => {
-    mockEdgeGet
-      .mockResolvedValueOnce('reverse-slug')
-      .mockResolvedValueOnce('updated-slug');
-
-    await expect(getSlugForCustomDomain('reverse-warm.com')).resolves.toBe(
-      'reverse-slug'
-    );
-    await expect(getSlugForCustomDomain('reverse-warm.com')).resolves.toBe(
-      'reverse-slug'
-    );
-    expect(mockEdgeGet).toHaveBeenCalledTimes(1);
-
-    vi.advanceTimersByTime(60_001);
-    await expect(getSlugForCustomDomain('reverse-warm.com')).resolves.toBe(
-      'updated-slug'
-    );
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not cache a reverse result that resolves after invalidation', async () => {
-    let resolve: ((value: string) => void) | undefined;
-    mockEdgeGet.mockReturnValueOnce(new Promise<string>((r) => (resolve = r)));
-    const pending = getSlugForCustomDomain('race-reverse.com');
-    invalidateReverseDomainCacheForDomain('race-reverse.com');
-    resolve?.('old-slug');
-    await expect(pending).resolves.toBe('old-slug');
-    mockEdgeGet.mockResolvedValueOnce('new-slug');
-    await expect(getSlugForCustomDomain('race-reverse.com')).resolves.toBe(
-      'new-slug'
-    );
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-  });
-
-  it('fences an uncached reverse read invalidated by slug', async () => {
-    let resolve: ((value: string) => void) | undefined;
-    let notifyProviderStarted: (() => void) | undefined;
-    const providerStarted = new Promise<void>(
-      (started) => (notifyProviderStarted = started)
-    );
-    mockEdgeGet.mockImplementationOnce(() => {
-      notifyProviderStarted?.();
-      return new Promise<string>((r) => (resolve = r));
-    });
-    const pending = getSlugForCustomDomain('race-slug.com');
-    await providerStarted;
-    invalidateReverseDomainCacheForSlug('old-slug');
-    mockEdgeGet.mockResolvedValueOnce('new-slug');
-    const fresh = getSlugForCustomDomain('race-slug.com');
-    resolve?.('old-slug');
-    await expect(pending).resolves.toBe('old-slug');
-    await expect(fresh).resolves.toBe('new-slug');
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-  });
-
-  it('keeps reverse slug fences safe after tombstone eviction', async () => {
-    invalidateReverseDomainCacheForSlug('aba-reverse');
-    let resolve: ((value: string) => void) | undefined;
-    mockEdgeGet.mockReturnValueOnce(new Promise<string>((r) => (resolve = r)));
-    const pending = getSlugForCustomDomain('aba-reverse.com');
-    invalidateReverseDomainCacheForSlug('aba-reverse');
-    for (let index = 0; index < 1000; index += 1) {
-      invalidateReverseDomainCacheForSlug(`aba-reverse-${index}`);
-    }
-    resolve?.('aba-reverse');
-    await expect(pending).resolves.toBe('aba-reverse');
-    mockEdgeGet.mockResolvedValueOnce('fresh-reverse');
-    await expect(getSlugForCustomDomain('aba-reverse.com')).resolves.toBe(
-      'fresh-reverse'
-    );
-  });
-
-  it('does not cache a pending null reverse DB result after slug invalidation', async () => {
-    mockEdgeGet.mockRejectedValue(new Error('provider outage'));
-    let resolveDb: ((value: { data: null }) => void) | undefined;
-    let dbStarted: (() => void) | undefined;
-    const started = new Promise<void>((resolve) => (dbStarted = resolve));
-    mockMaybeSingle.mockImplementationOnce(
+  it('does not cache a forward result that finishes after invalidation', async () => {
+    let resolve:
+      | ((value: { outcome: 'resolved'; value: string }) => void)
+      | undefined;
+    let started: (() => void) | undefined;
+    const readStarted = new Promise<void>((done) => (started = done));
+    mockFetchCustomDomain.mockImplementationOnce(
       () =>
-        new Promise<{ data: null }>((resolve) => {
-          resolveDb = resolve;
-          dbStarted?.();
+        new Promise((done) => {
+          resolve = done;
+          started?.();
         })
     );
-    const pending = getSlugForCustomDomain('null-race-reverse.com');
-    await started;
-    invalidateReverseDomainCacheForSlug('missing-slug');
-    resolveDb?.({ data: null });
-    await expect(pending).resolves.toBeNull();
-    await vi.advanceTimersByTimeAsync(0);
-    mockMaybeSingle.mockResolvedValueOnce({ data: null });
-    await expect(
-      getSlugForCustomDomain('null-race-reverse.com')
-    ).resolves.toBeNull();
-    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
-    expect(mockFrom).toHaveBeenCalledTimes(2);
+    const stale = getCustomDomainForSlug('forward-race');
+    await readStarted;
+    invalidateForwardDomainCacheForSlug('forward-race');
+    resolve?.({ outcome: 'resolved', value: 'old.test' });
+    await expect(stale).resolves.toBe('old.test');
+    mockFetchCustomDomain.mockResolvedValueOnce({
+      outcome: 'resolved',
+      value: 'new.test',
+    });
+
+    await expect(getCustomDomainForSlug('forward-race')).resolves.toBe(
+      'new.test'
+    );
   });
 
-  it('rejects malformed reverse slugs and does not cache them', async () => {
+  it('shares concurrent normalized reverse resolver reads', async () => {
+    let resolve:
+      | ((value: { outcome: 'resolved'; value: string }) => void)
+      | undefined;
+    mockFetchSlugForDomain.mockReturnValueOnce(
+      new Promise((done) => (resolve = done))
+    );
+
+    const first = getSlugForCustomDomain(' SHOP.TEST. ');
+    const second = getSlugForCustomDomain('shop.test');
+    resolve?.({ outcome: 'resolved', value: 'shop' });
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      'shop',
+      'shop',
+    ]);
+    expect(mockFetchSlugForDomain).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not cache a reverse result that finishes after invalidation', async () => {
+    let resolve:
+      | ((value: { outcome: 'resolved'; value: string }) => void)
+      | undefined;
+    let started: (() => void) | undefined;
+    const readStarted = new Promise<void>((done) => (started = done));
+    mockFetchSlugForDomain.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+          started?.();
+        })
+    );
+    const stale = getSlugForCustomDomain('reverse-race.test');
+    await readStarted;
+    invalidateReverseDomainCacheForDomain('reverse-race.test');
+    resolve?.({ outcome: 'resolved', value: 'old' });
+    await expect(stale).resolves.toBe('old');
+    mockFetchSlugForDomain.mockResolvedValueOnce({
+      outcome: 'resolved',
+      value: 'new',
+    });
+
+    await expect(getSlugForCustomDomain('reverse-race.test')).resolves.toBe(
+      'new'
+    );
+  });
+
+  it('refreshes a positive forward Edge Config mapping after its warm TTL', async () => {
+    mockEdgeGet
+      .mockResolvedValueOnce('edge-forward-old.test')
+      .mockResolvedValueOnce('edge-forward-new.test');
+
+    await expect(getCustomDomainForSlug('edge-forward-ttl')).resolves.toBe(
+      'edge-forward-old.test'
+    );
+    await expect(getCustomDomainForSlug('edge-forward-ttl')).resolves.toBe(
+      'edge-forward-old.test'
+    );
+    vi.advanceTimersByTime(60_001);
+    await expect(getCustomDomainForSlug('edge-forward-ttl')).resolves.toBe(
+      'edge-forward-new.test'
+    );
+    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('normalizes a successful forward Edge Config mapping before warming it', async () => {
+    mockEdgeGet.mockResolvedValue('  Store.Example.COM.  ');
+
+    await expect(
+      getCustomDomainForSlug('edge-forward-normalized')
+    ).resolves.toBe('store.example.com');
+    await expect(
+      getCustomDomainForSlug('edge-forward-normalized')
+    ).resolves.toBe('store.example.com');
+    expect(mockEdgeGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes a positive reverse Edge Config mapping after its warm TTL', async () => {
+    mockEdgeGet
+      .mockResolvedValueOnce('edge-reverse-old')
+      .mockResolvedValueOnce('edge-reverse-new');
+
+    await expect(getSlugForCustomDomain('edge-reverse-ttl.test')).resolves.toBe(
+      'edge-reverse-old'
+    );
+    await expect(getSlugForCustomDomain('edge-reverse-ttl.test')).resolves.toBe(
+      'edge-reverse-old'
+    );
+    vi.advanceTimersByTime(60_001);
+    await expect(getSlugForCustomDomain('edge-reverse-ttl.test')).resolves.toBe(
+      'edge-reverse-new'
+    );
+    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not warm a malformed forward Edge Config value', async () => {
+    mockEdgeGet
+      .mockResolvedValueOnce('https://not-a-host.test/path')
+      .mockResolvedValueOnce('valid-forward.test');
+    mockFetchCustomDomain.mockResolvedValue({ outcome: 'not-found' });
+
+    await expect(
+      getCustomDomainForSlug('malformed-forward-edge')
+    ).resolves.toBeNull();
+    await expect(
+      getCustomDomainForSlug('malformed-forward-edge')
+    ).resolves.toBe('valid-forward.test');
+    expect(mockEdgeGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not warm a malformed reverse Edge Config value', async () => {
     mockEdgeGet
       .mockResolvedValueOnce('merchant/path')
-      .mockResolvedValueOnce('merchant-slug');
-    mockMaybeSingle.mockResolvedValue({ data: null });
+      .mockResolvedValueOnce('valid-reverse');
+    mockFetchSlugForDomain.mockResolvedValue({ outcome: 'not-found' });
 
     await expect(
-      getSlugForCustomDomain('malformed-reverse.com')
+      getSlugForCustomDomain('malformed-reverse-edge.test')
     ).resolves.toBeNull();
-    await expect(getSlugForCustomDomain('malformed-reverse.com')).resolves.toBe(
-      'merchant-slug'
-    );
+    await expect(
+      getSlugForCustomDomain('malformed-reverse-edge.test')
+    ).resolves.toBe('valid-reverse');
     expect(mockEdgeGet).toHaveBeenCalledTimes(2);
   });
 
-  it('retries after a provider failure without retaining it', async () => {
+  it('retries Edge Config after a failure instead of warming its fallback', async () => {
     mockEdgeGet
-      .mockRejectedValueOnce(new Error('temporary outage'))
-      .mockResolvedValueOnce('recovered-edge.com');
-    mockMaybeSingle.mockResolvedValue({ data: null });
+      .mockRejectedValueOnce(new Error('edge unavailable'))
+      .mockResolvedValueOnce('recovered-edge.test');
+    mockFetchCustomDomain.mockResolvedValue({ outcome: 'unavailable' });
 
-    await getCustomDomainForSlug('edge-retry');
-
+    await expect(getCustomDomainForSlug('edge-retry')).resolves.toBeNull();
     await expect(getCustomDomainForSlug('edge-retry')).resolves.toBe(
-      'recovered-edge.com'
+      'recovered-edge.test'
     );
     expect(mockEdgeGet).toHaveBeenCalledTimes(2);
   });
 
-  it('coalesces DB fallback reads during a provider outage', async () => {
-    let resolveDb:
-      | ((value: { data: { id: string; domains: null } }) => void)
+  it('shares concurrent fallback reads while Edge Config is unavailable', async () => {
+    let resolve:
+      | ((value: { outcome: 'resolved'; value: string }) => void)
       | undefined;
-    const dbRead = new Promise<{ data: { id: string; domains: null } }>(
-      (resolve) => {
-        resolveDb = resolve;
-      }
+    mockFetchCustomDomain.mockReturnValueOnce(
+      new Promise((done) => (resolve = done))
     );
-    mockEdgeGet.mockRejectedValue(new Error('provider outage'));
-    mockMaybeSingle.mockReturnValue(dbRead);
 
-    const first = getCustomDomainForSlug('fallback-stampede');
-    const second = getCustomDomainForSlug(' FALLBACK-STAMPEDE ');
-    resolveDb?.({ data: { id: 'merchant-1', domains: null } });
+    const first = getCustomDomainForSlug('fallback-coalesce');
+    const second = getCustomDomainForSlug('fallback-coalesce');
+    resolve?.({ outcome: 'resolved', value: 'fallback-coalesce.test' });
 
-    await expect(Promise.all([first, second])).resolves.toEqual([null, null]);
-    expect(mockEdgeGet).toHaveBeenCalledTimes(1);
-    expect(mockFrom).toHaveBeenCalledTimes(1);
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      'fallback-coalesce.test',
+      'fallback-coalesce.test',
+    ]);
+    expect(mockFetchCustomDomain).toHaveBeenCalledTimes(1);
   });
 
-  it('does not cache a forward DB result resolved after invalidation', async () => {
-    mockEdgeGet.mockRejectedValue(new Error('provider outage'));
-    let resolveDb: ((value: { data: unknown }) => void) | undefined;
-    const dbRead = new Promise<{ data: unknown }>(
-      (resolve) => (resolveDb = resolve)
-    );
-    let notifyDbStarted: (() => void) | undefined;
-    const dbStarted = new Promise<void>(
-      (resolve) => (notifyDbStarted = resolve)
-    );
-    mockMaybeSingle.mockImplementationOnce(() => {
-      notifyDbStarted?.();
-      return dbRead;
-    });
-    const pending = getCustomDomainForSlug('db-race-forward');
-    await dbStarted;
-    expect(mockFrom).toHaveBeenCalledOnce();
-    invalidateForwardDomainCacheForSlug('db-race-forward');
-    let notifyFreshDbStarted: (() => void) | undefined;
-    const freshDbStarted = new Promise<void>(
-      (resolve) => (notifyFreshDbStarted = resolve)
-    );
-    mockMaybeSingle.mockImplementationOnce(() => {
-      notifyFreshDbStarted?.();
-      return Promise.resolve({
-        data: {
-          id: 'm1',
-          domains: [
-            {
-              domain: 'new.example.com',
-              is_primary: true,
-              status: 'active',
-              domain_type: 'custom',
-            },
-          ],
-        },
-      });
-    });
-    const fresh = getCustomDomainForSlug('db-race-forward');
-    await freshDbStarted;
-    expect(mockFrom).toHaveBeenCalledTimes(2);
-    resolveDb?.({ data: { id: 'm1', domains: null } });
-    await expect(pending).resolves.toBeNull();
-    await expect(fresh).resolves.toBe('new.example.com');
-    expect(mockFrom).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not cache a reverse DB result resolved after invalidation', async () => {
-    mockEdgeGet.mockRejectedValue(new Error('provider outage'));
-    let resolveDb: ((value: { data: unknown }) => void) | undefined;
-    const dbRead = new Promise<{ data: unknown }>(
-      (resolve) => (resolveDb = resolve)
-    );
-    let notifyDbStarted: (() => void) | undefined;
-    const dbStarted = new Promise<void>(
-      (resolve) => (notifyDbStarted = resolve)
-    );
-    mockMaybeSingle.mockImplementationOnce(() => {
-      notifyDbStarted?.();
-      return dbRead;
-    });
-    const pending = getSlugForCustomDomain('db-race-reverse.com');
-    await dbStarted;
-    expect(mockFrom).toHaveBeenCalledOnce();
-    invalidateReverseDomainCacheForDomain('db-race-reverse.com');
-    let notifyFreshDbStarted: (() => void) | undefined;
-    const freshDbStarted = new Promise<void>(
-      (resolve) => (notifyFreshDbStarted = resolve)
-    );
-    mockMaybeSingle.mockImplementationOnce(() => {
-      notifyFreshDbStarted?.();
-      return Promise.resolve({ data: { merchants: { slug: 'new-slug' } } });
-    });
-    const fresh = getSlugForCustomDomain('db-race-reverse.com');
-    await freshDbStarted;
-    expect(mockFrom).toHaveBeenCalledTimes(2);
-    resolveDb?.({ data: { merchants: { slug: 'old-slug' } } });
-    await expect(pending).resolves.toBe('old-slug');
-    await expect(fresh).resolves.toBe('new-slug');
-    expect(mockFrom).toHaveBeenCalledTimes(2);
-  });
-
-  it('prefers a new Edge mapping over a warm DB fallback', async () => {
+  it('lets a fresh Edge Config reverse mapping override a warm fallback', async () => {
     mockEdgeGet
       .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce('current-edge-slug');
-    mockMaybeSingle.mockResolvedValue({
-      data: { merchants: { slug: 'stale-db-slug' } },
+      .mockResolvedValueOnce('new-edge-slug');
+    mockFetchSlugForDomain.mockResolvedValue({
+      outcome: 'resolved',
+      value: 'old-fallback-slug',
     });
 
-    await expect(getSlugForCustomDomain('promoted.com')).resolves.toBe(
-      'stale-db-slug'
+    await expect(
+      getSlugForCustomDomain('edge-wins-reverse.test')
+    ).resolves.toBe('old-fallback-slug');
+    await expect(
+      getSlugForCustomDomain('edge-wins-reverse.test')
+    ).resolves.toBe('new-edge-slug');
+  });
+
+  it('fences a pending reverse not-found after slug invalidation', async () => {
+    let resolve: ((value: { outcome: 'not-found' }) => void) | undefined;
+    let started: (() => void) | undefined;
+    const readStarted = new Promise<void>((done) => (started = done));
+    mockFetchSlugForDomain.mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+          started?.();
+        })
     );
-    await expect(getSlugForCustomDomain('promoted.com')).resolves.toBe(
-      'current-edge-slug'
+
+    const stale = getSlugForCustomDomain('reverse-null-fence.test');
+    await readStarted;
+    invalidateReverseDomainCacheForSlug('missing-slug');
+    resolve?.({ outcome: 'not-found' });
+    await expect(stale).resolves.toBeNull();
+    mockFetchSlugForDomain.mockResolvedValueOnce({ outcome: 'not-found' });
+
+    await expect(
+      getSlugForCustomDomain('reverse-null-fence.test')
+    ).resolves.toBeNull();
+    expect(mockFetchSlugForDomain).toHaveBeenCalledTimes(2);
+  });
+
+  it('fences an Edge reverse read invalidated by its returned slug', async () => {
+    let resolve: ((value: string) => void) | undefined;
+    let started: (() => void) | undefined;
+    const readStarted = new Promise<void>((done) => (started = done));
+    mockEdgeGet.mockImplementationOnce(() => {
+      started?.();
+      return new Promise((done) => (resolve = done));
+    });
+
+    const stale = getSlugForCustomDomain('reverse-slug-fence.test');
+    await readStarted;
+    invalidateReverseDomainCacheForSlug('old-slug');
+    mockEdgeGet.mockResolvedValueOnce('new-slug');
+    const fresh = getSlugForCustomDomain('reverse-slug-fence.test');
+    resolve?.('old-slug');
+
+    await expect(stale).resolves.toBe('old-slug');
+    await expect(fresh).resolves.toBe('new-slug');
+  });
+
+  it('keeps forward generation fences after tombstone eviction', async () => {
+    invalidateForwardDomainCacheForSlug('forward-aba');
+    let resolve: ((value: string) => void) | undefined;
+    mockEdgeGet.mockReturnValueOnce(new Promise((done) => (resolve = done)));
+    const stale = getCustomDomainForSlug('forward-aba');
+    invalidateForwardDomainCacheForSlug('forward-aba');
+    for (let index = 0; index < 1000; index += 1) {
+      invalidateForwardDomainCacheForSlug(`forward-aba-other-${index}`);
+    }
+    invalidateForwardDomainCacheForSlug('forward-aba');
+    resolve?.('stale-aba.test');
+    await expect(stale).resolves.toBe('stale-aba.test');
+    mockEdgeGet.mockResolvedValueOnce('fresh-aba.test');
+
+    await expect(getCustomDomainForSlug('forward-aba')).resolves.toBe(
+      'fresh-aba.test'
     );
-    expect(mockFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps reverse slug fences after tombstone eviction', async () => {
+    invalidateReverseDomainCacheForSlug('reverse-aba');
+    let resolve: ((value: string) => void) | undefined;
+    mockEdgeGet.mockReturnValueOnce(new Promise((done) => (resolve = done)));
+    const stale = getSlugForCustomDomain('reverse-aba.test');
+    invalidateReverseDomainCacheForSlug('reverse-aba');
+    for (let index = 0; index < 1000; index += 1) {
+      invalidateReverseDomainCacheForSlug(`reverse-aba-other-${index}`);
+    }
+    resolve?.('reverse-aba');
+    await expect(stale).resolves.toBe('reverse-aba');
+    mockEdgeGet.mockResolvedValueOnce('fresh-reverse-aba');
+
+    await expect(getSlugForCustomDomain('reverse-aba.test')).resolves.toBe(
+      'fresh-reverse-aba'
+    );
   });
 });

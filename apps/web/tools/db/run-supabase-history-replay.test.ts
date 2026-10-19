@@ -144,7 +144,9 @@ describe('runSupabaseHistoryReplay', () => {
 
     await expect(
       runSupabaseHistoryReplay(fixture.replayOptions(), fixture.deps)
-    ).rejects.toThrow(/^supabase failed: non-zero-exit$/);
+    ).rejects.toThrow(
+      /^Supabase replay stage migration up failed \(supabase failed: non-zero-exit\)$/
+    );
 
     expect(fixture.commands).not.toContain(
       `supabase status --workdir ${fixture.workdir} -o env`
@@ -200,7 +202,9 @@ describe('runSupabaseHistoryReplay', () => {
         fixture.replayOptions('production-effect'),
         fixture.deps
       )
-    ).rejects.toThrow(/^supabase failed: non-zero-exit$/);
+    ).rejects.toThrow(
+      /^Supabase replay stage db start failed \(supabase failed: non-zero-exit\)$/
+    );
 
     expect(fixture.commands).toContain(
       `supabase stop --no-backup --workdir ${fixture.workdir}`
@@ -233,12 +237,16 @@ describe('runSupabaseHistoryReplay', () => {
     ).catch((error: unknown) => error);
 
     expect(failure).toMatchObject({
-      message: 'supabase failed: timeout',
+      message:
+        'Supabase replay stage db start failed (supabase failed: timeout)',
       replayDiagnostics: {
         cleanup: { resourceReadiness: 'anomalous' },
       },
     });
-    expect((failure as Error).cause).toBe(operationalFailure);
+    expect((failure as Error).cause).toMatchObject({
+      message:
+        'Supabase replay stage db start failed (supabase failed: timeout)',
+    });
     expect(fixture.removed).toEqual([fixture.workdir]);
   });
 
@@ -283,7 +291,7 @@ describe('runSupabaseHistoryReplay', () => {
 
     await expect(
       runSupabaseHistoryReplay(fixture.replayOptions(), fixture.deps)
-    ).rejects.toThrow(/^Supabase replay status is invalid$/);
+    ).rejects.toThrow(/^Supabase replay stage status failed$/);
     expect(fixture.writes).toEqual([]);
   });
 });

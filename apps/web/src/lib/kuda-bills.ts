@@ -6,6 +6,7 @@
  */
 
 import { withKudaElectricityBillItems } from '@baci/shared/lib';
+import { isKudaOutcomeUnknown } from '@/lib/kuda-transport-error';
 import {
   extractKudaTransactionId,
   extractKudaVoucherPin,
@@ -265,7 +266,10 @@ export async function purchaseBill(
       success: false,
       reference,
       message: error instanceof Error ? error.message : 'Bill purchase failed',
-      status: 'failed',
+      // Transport-unknown throws (timeout, drop, 5xx) resolve as
+      // pending so BILL_TSQ reconciliation converges the row; only
+      // definitive 4xx rejections fail outright (Codex R102 P1).
+      status: isKudaOutcomeUnknown(error) ? 'pending' : 'failed',
       amount,
     };
   }

@@ -37,7 +37,10 @@ function proofFixture() {
       .mockReturnValueOnce('__BACI_REPAIRED_BEGIN__')
       .mockReturnValueOnce('__BACI_REPAIRED_END__'),
     createSession: vi.fn(
-      (_options: { environment: NodeJS.ProcessEnv; psqlBin: string }) => session
+      (_options: {
+        environment: Partial<NodeJS.ProcessEnv>;
+        psqlBin: string;
+      }) => session
     ),
     readCancellationDigest: vi.fn((snapshot: string) =>
       snapshot.includes('"old"') ? oldSha : repairedSha

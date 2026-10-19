@@ -1,8 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import plist from 'plist';
 import fastfileConfigValidator from './validate-fastfile-ad-tracking-config.cjs';
+import {
+  readAppConfigSourceWithSplitFallback,
+  readRequiredFile,
+} from './check-ad-tracking-config-source.mjs';
 
 const { validateFastfileAdTrackingConfig } = fastfileConfigValidator;
 
@@ -36,13 +39,6 @@ function parseArgs(argv) {
   }
 
   return options;
-}
-
-function readRequiredFile(filePath) {
-  if (!existsSync(filePath)) {
-    throw new Error(`Missing file: ${filePath}`);
-  }
-  return readFileSync(filePath, 'utf8');
 }
 
 function extractQuotedPropertyValues(source, propertyName) {
@@ -243,7 +239,6 @@ function main() {
   const scriptFile = fileURLToPath(import.meta.url);
   const defaultProjectRoot = path.resolve(path.dirname(scriptFile), '..');
   const projectRoot = path.resolve(options.projectRoot ?? defaultProjectRoot);
-  const appConfigPath = path.join(projectRoot, 'app.config.ts');
   const infoPlistPath = path.join(projectRoot, 'ios', 'Ogabassey', 'Info.plist');
   const xcodeProjectPath = path.join(
     projectRoot,
@@ -259,7 +254,7 @@ function main() {
   let fastfileSource;
   try {
     appConfigDeclarations = extractAppConfigAdDeclarations(
-      readRequiredFile(appConfigPath)
+      readAppConfigSourceWithSplitFallback(projectRoot)
     );
     infoPlist = plist.parse(readRequiredFile(infoPlistPath));
     xcodeProjectSource = readRequiredFile(xcodeProjectPath);

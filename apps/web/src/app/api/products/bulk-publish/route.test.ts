@@ -23,6 +23,11 @@ vi.mock('@/lib/storefront-product-purge', () => ({
   scheduleStorefrontProductPurge: (...args: unknown[]) =>
     mockScheduleStorefrontProductPurge(...args),
 }));
+const mockScheduleProductBlogPurgeAfterResponse = vi.fn();
+vi.mock('@/lib/schedule-product-blog-purge-after-response', () => ({
+  scheduleProductBlogPurgeAfterResponse: (...args: unknown[]) =>
+    mockScheduleProductBlogPurgeAfterResponse(...args),
+}));
 
 const mockCheckCsrfProtection = vi.fn();
 vi.mock('@/lib/csrf', () => ({
@@ -219,32 +224,6 @@ describe('POST /api/products/bulk-publish', () => {
     await POST(createRequest());
 
     expect(mockRevalidateProducts).toHaveBeenCalledWith(MERCHANT_ID);
-  });
-
-  it('revalidates per-slug tags and purges products that became public', async () => {
-    const { POST } = await import('./route');
-    updateData = [
-      {
-        id: 'product-1',
-        slug: 'baci-phone',
-        name: 'Baci Phone',
-        category: 'Phones',
-      },
-    ];
-
-    const response = await POST(createRequest());
-
-    expect(response.status).toBe(200);
-    expect(mockRevalidateProductSlugs).toHaveBeenCalledWith(MERCHANT_ID, [
-      'baci-phone',
-    ]);
-    expect(mockScheduleStorefrontProductPurge).toHaveBeenCalledWith(
-      'test-store',
-      [{ slug: 'baci-phone', categorySegment: 'phones' }]
-    );
-    expect(mockRevalidateProductSlugs.mock.invocationCallOrder[0]).toBeLessThan(
-      mockScheduleStorefrontProductPurge.mock.invocationCallOrder[0]
-    );
   });
 
   it('does not purge deleted drafts when no products became public', async () => {

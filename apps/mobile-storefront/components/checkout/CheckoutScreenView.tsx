@@ -17,30 +17,28 @@ import { AddressSuggestionsProvider } from '@/components/ui/address-suggestions-
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
+import { useCartCheckoutSnapshot } from '@/hooks/use-cart-checkout-snapshot';
 import { useMerchant } from '@/hooks/use-merchant';
 import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
-import { CheckoutLocationPickerOverlays } from './CheckoutLocationPickerOverlays';
-import { CheckoutPaymentOverlays } from './CheckoutPaymentOverlays';
+import { CartCheckoutReviewNotice } from './CartCheckoutReviewNotice';
+import { CheckoutOverlays } from './CheckoutOverlays';
 import { checkoutScreenViewStyles as styles } from './CheckoutScreenView.styles';
 import { CheckoutSimulationBanner } from './CheckoutSimulationBanner';
-import { calculateCheckoutAssuranceFee } from './checkout-order-builders';
 import type { CheckoutScreenViewProps } from './checkout-prize-simulation.types';
-import {
-  CHECKOUT_MERCHANT_ID,
-  CHECKOUT_MERCHANT_SLUG,
-} from './checkout-screen.constants';
 import type { AppliedDiscount } from './DiscountCodeInput';
-import { isCheckoutAddressContinueReady } from './is-checkout-address-continue-ready';
+import { isCheckoutContinueReady } from './is-checkout-address-continue-ready';
 import { getMerchantPickupLocation } from './merchant-pickup-location';
 import { CheckoutDiscount } from './redvault/CheckoutDiscount';
-import { getRedvaultCompatibleDiscount } from './redvault/get-redvault-compatible-discount';
-import { RedvaultOrderReview } from './redvault/RedvaultOrderReview';
+import {
+  discountedCheckoutTotal,
+  getRedvaultCompatibleDiscount,
+} from './redvault/get-redvault-compatible-discount';
 import { useCheckoutAddressState } from './use-checkout-address-state';
 import { useCheckoutCryptoPayment } from './use-checkout-crypto-payment';
 import { useCheckoutCtaAnimation } from './use-checkout-cta-animation';
 import { useCheckoutDisplayCart } from './use-checkout-display-cart';
 import { useCheckoutNavigation } from './use-checkout-navigation';
-import { useCheckoutPaymentController } from './use-checkout-payment-controller';
+import { useCheckoutScreenPayment } from './use-checkout-screen-payment';
 import { useCheckoutStepActions } from './use-checkout-step-actions';
 import { useRedvaultReview } from './use-redvault-review';
 
@@ -53,6 +51,9 @@ export function CheckoutScreenView({
   const insets = useSafeAreaInsets();
   const { clearCart, items, subtotal } =
     useCheckoutDisplayCart(prizeSimulation);
+  // Canonical preparation/review for shared-cart devices; preparation
+  // never submits an order, and the submit path refuses stale reviews.
+  const cartReview = useCartCheckoutSnapshot();
   const { customer, isAuthenticated, user } = useAuthStatus();
   const { data: merchant } = useMerchant();
   const merchantPickupLocation = getMerchantPickupLocation(merchant);
@@ -106,23 +107,12 @@ export function CheckoutScreenView({
     setStep,
     step,
   });
-  const assuranceFee = calculateCheckoutAssuranceFee(items);
-  const paymentController = useCheckoutPaymentController({
-    assuranceFee,
-    customerId: customer?.id,
-    customerPhone: customer?.phone,
-    deliveryFee,
-    isAuthenticated,
-    items,
-    merchantId: merchant?.id || CHECKOUT_MERCHANT_ID,
-    merchantSlug: CHECKOUT_MERCHANT_SLUG,
-    step,
-    subtotal,
-  });
   const {
+    assuranceFee,
     availablePaymentMethods,
     displayTotal,
     orderTotals,
+    paymentController,
     paymentSettings,
     paymentTab,
     resetPaymentSelection,
@@ -131,7 +121,17 @@ export function CheckoutScreenView({
     total,
     walletBalance,
     walletSelection,
-  } = paymentController;
+  } = useCheckoutScreenPayment({
+    customerId: customer?.id,
+    customerPhone: customer?.phone,
+    deliveryFee,
+    isAuthenticated,
+    items,
+    merchantId: merchant?.id,
+    step,
+    subtotal,
+    userId: user?.id,
+  });
   const { getLiveSavingsSelection } = savings;
   const { closeRedvaultReview, openRedvaultReview, redvaultReview } =
     useRedvaultReview({
@@ -208,6 +208,12 @@ export function CheckoutScreenView({
           {prizeSimulation ? (
             <CheckoutSimulationBanner colors={colors} />
           ) : null}
+          <CartCheckoutReviewNotice
+            status={cartReview.status}
+            review={cartReview.review}
+            onRetry={cartReview.retry}
+            textColor={colors.text}
+          />
           <CheckoutStepper
             step={step}
             setStep={setStep}
@@ -244,23 +250,21 @@ export function CheckoutScreenView({
           />
           <CheckoutBottomAction
             animatedCtaArrowStyle={animatedCtaArrowStyle}
-            canContinue={
-              step !== 'address'
-                ? step !== 'payment' || selectedPayment !== null
-                : isCheckoutAddressContinueReady({
-                    hasSelectedShippingQuote: Boolean(selectedQuote),
-                    hasContactIdentity: addressState.hasContactIdentity,
-                    isAddressComplete,
-                    isCurrentQuoteContext,
-                    isLoadingQuotes,
-                    isPickupStation: deliveryMethod === 'pickup_station',
-                    requiresShippingQuote,
-                  })
-            }
+            canContinue={isCheckoutContinueReady({
+              step,
+              selectedPayment,
+              hasSelectedShippingQuote: Boolean(selectedQuote),
+              hasContactIdentity: addressState.hasContactIdentity,
+              isAddressComplete,
+              isCurrentQuoteContext,
+              isLoadingQuotes,
+              isPickupStation: deliveryMethod === 'pickup_station',
+              requiresShippingQuote,
+            })}
             colors={colors}
-            displayTotal={Math.max(
-              0,
-              displayTotal - (compatibleDiscount?.discountAmount ?? 0)
+            displayTotal={discountedCheckoutTotal(
+              displayTotal,
+              compatibleDiscount
             )}
             insetsBottom={insets.bottom}
             isProcessing={isProcessing}
@@ -270,30 +274,22 @@ export function CheckoutScreenView({
             selectedPayment={selectedPayment}
             prizeSimulation={Boolean(prizeSimulation)}
             step={step}
-            total={Math.max(
-              0,
-              total - (compatibleDiscount?.discountAmount ?? 0)
-            )}
+            total={discountedCheckoutTotal(total, compatibleDiscount)}
           />
         </AppKeyboardContainer>
       </SafeAreaView>
-      <RedvaultOrderReview
-        input={redvaultReview}
-        onClose={closeRedvaultReview}
-      />
-      <CheckoutLocationPickerOverlays
+      <CheckoutOverlays
+        redvaultReview={redvaultReview}
+        closeRedvaultReview={closeRedvaultReview}
         colors={colors}
         isDark={isDark}
-        removeClippedSubviews={Platform.OS === 'android'}
         shipping={shipping}
         watchedCity={watchedCity}
         watchedState={watchedState}
-      />
-      <CheckoutPaymentOverlays
         crypto={crypto}
         clearCart={clearCart}
-        colors={colors}
         isProcessing={isProcessing}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
     </AddressSuggestionsProvider>
   );

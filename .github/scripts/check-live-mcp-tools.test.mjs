@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  DEFAULT_REQUIRED_TOOLS,
   DEFAULT_REQUIRED_TOOL_SCHEMA_CONTRACTS,
   validateToolSchemaContracts,
 } from './check-live-mcp-tools.mjs';

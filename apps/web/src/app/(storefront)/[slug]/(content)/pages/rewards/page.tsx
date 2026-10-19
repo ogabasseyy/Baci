@@ -1,27 +1,15 @@
 'use client';
 
-import {
-  Award,
-  Gift,
-  History,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
-  Trophy,
-} from 'lucide-react';
-import Link from 'next/link';
+import { Gift, History, Trophy } from 'lucide-react';
 import { useParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { LoyaltyEnrollmentForm } from '@/components/storefront/loyalty/loyalty-enrollment-form';
 import { LoyaltyStatusCard } from '@/components/storefront/loyalty/loyalty-status-card';
 import { RewardsCatalog } from '@/components/storefront/loyalty/rewards-catalog';
+import { RewardsHistory } from '@/components/storefront/loyalty/rewards-history';
+import { RewardsSignInPrompt } from '@/components/storefront/loyalty/rewards-sign-in-prompt';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
@@ -49,8 +37,62 @@ export default function RewardsPage() {
   const merchantPayoutCurrency =
     merchantCurrencyContext?.merchant?.payout_currency ?? null;
 
-  const { enrolled, loading, recentTransactions, getTierInfo, tier } =
+  const { enrolled, loading, recentTransactions, getTierInfo, tier, refetch } =
     useLoyalty(merchantId || undefined, customerId || undefined);
+
+  // The page, status card, and catalog each own a useLoyalty instance: a
+  // redemption inside the catalog must refresh the other two as well, or
+  // the balance and history go stale until a reload.
+  const [refreshToken, setRefreshToken] = useState(0);
+  const handleRedeemed = () => {
+    void refetch();
+    setRefreshToken((token) => token + 1);
+  };
+
+  // Keeps the enrollment receipt mounted after the page-level refetch
+  // reports enrolled: without this, onEnrolled's refetch flips the
+  // subtree to the status card and unmounts the form, discarding the
+  // success card (points + referral code) before the shopper dismisses
+  // it. Cleared on dismiss or identity change.
+  const [showEnrollmentReceipt, setShowEnrollmentReceipt] = useState(false);
+  const handleEnrolled = () => {
+    setShowEnrollmentReceipt(true);
+    void refetch();
+  };
+
+  // The skeleton shows until the first settled fetch for THIS identity. A
+  // same-identity background refetch (e.g. after onRedeemed) keeps the
+  // enrolled subtree mounted so the success dialog survives; a merchant or
+  // customer change mismatches immediately (before the new fetch lands),
+  // so the previous shopper's data never paints.
+  const identity = `${merchantId ?? ''}:${customerId ?? ''}`;
+  const [loadedIdentity, setLoadedIdentity] = useState<string | null>(null);
+  // Mark loaded only on a true->false edge, and never on the
+  // identity-change commit itself: the hook's data and loading still
+  // describe the previous identity there, so stamping would flash
+  // stale shopper data. Synchronous preview/demo loads settle inside
+  // the hook's effect (declared above) without a loading edge; the
+  // follow-up render carries the new identity's data with loading
+  // false, and the tracker reset lets that render stamp instead of
+  // leaving the skeleton up forever.
+  const wasLoading = useRef(true);
+  const seenIdentity = useRef(identity);
+  // No dep array: the follow-up render that carries a synchronous
+  // load's data changes neither identity nor loading, so the stamp
+  // check must run on every commit.
+  useEffect(() => {
+    if (seenIdentity.current !== identity) {
+      seenIdentity.current = identity;
+      wasLoading.current = true;
+      setShowEnrollmentReceipt(false);
+      return;
+    }
+    if (wasLoading.current && !loading) setLoadedIdentity(identity);
+    wasLoading.current = loading;
+  });
+  // No loading term: same-identity refetches keep content (dialog
+  // survives), while a new identity skeletons on the very first render.
+  const showSkeleton = loadedIdentity !== identity;
 
   // Loading state
   if (!merchantId) {
@@ -68,80 +110,7 @@ export default function RewardsPage() {
 
   // Not logged in state
   if (!customerId) {
-    return (
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center size-16 bg-purple-100 rounded-full mb-4">
-            <Sparkles className="size-8 text-purple-600" />
-          </div>
-          <h1 className="text-3xl font-bold mb-2">Rewards Program</h1>
-          <p className="text-muted-foreground max-w-md mx-auto">
-            Sign in to your account to view your rewards, earn points, and
-            redeem exclusive offers
-          </p>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign in to access rewards</CardTitle>
-            <CardDescription>
-              Already have an account? Sign in to view your points and rewards.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Link
-              href={`/${slug}/account/login?redirect=/${slug}/pages/rewards`}
-              className="inline-flex items-center justify-center w-full px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-            >
-              Sign In to Continue
-            </Link>
-          </CardContent>
-        </Card>
-
-        {/* Show benefits preview */}
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold mb-4">Member Benefits</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                icon: Sparkles,
-                title: 'Earn Points',
-                description: 'Get points on every purchase',
-              },
-              {
-                icon: Gift,
-                title: 'Redeem Rewards',
-                description: 'Exchange points for discounts',
-              },
-              {
-                icon: Trophy,
-                title: 'Unlock Tiers',
-                description: 'Rise through member levels',
-              },
-              {
-                icon: Award,
-                title: 'Exclusive Access',
-                description: 'Early access to sales',
-              },
-            ].map((benefit) => (
-              <Card key={benefit.title}>
-                <CardContent className="pt-6">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="p-3 bg-purple-100 rounded-full mb-3">
-                      <benefit.icon className="size-6 text-purple-600" />
-                    </div>
-                    <h3 className="font-medium mb-1">{benefit.title}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {benefit.description}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <RewardsSignInPrompt slug={slug} />;
   }
 
   const tierInfo = tier ? getTierInfo(tier) : null;
@@ -158,21 +127,34 @@ export default function RewardsPage() {
         </p>
       </div>
 
-      {loading ? (
+      {showSkeleton ? (
         <div className="space-y-6">
           <Skeleton className="h-48 w-full" />
           <Skeleton className="h-64 w-full" />
         </div>
-      ) : !enrolled ? (
+      ) : !enrolled || showEnrollmentReceipt ? (
         <LoyaltyEnrollmentForm
           merchantId={merchantId}
           customerId={customerId}
           merchantName={merchantName}
+          onEnrolled={handleEnrolled}
+          onReceiptDismiss={() => {
+            setShowEnrollmentReceipt(false);
+            // The child's own retry may already have recovered the
+            // enrollment while this page-level state still says
+            // not-enrolled; refetch so dismissal cannot strand the
+            // rewards area on the now-empty form branch.
+            void refetch();
+          }}
         />
       ) : (
         <div className="space-y-6">
           {/* Status Card */}
-          <LoyaltyStatusCard merchantId={merchantId} customerId={customerId} />
+          <LoyaltyStatusCard
+            merchantId={merchantId}
+            customerId={customerId}
+            refreshToken={refreshToken}
+          />
 
           {/* Tier Benefits */}
           {tierInfo && (
@@ -228,78 +210,12 @@ export default function RewardsPage() {
                 customerId={customerId}
                 merchantCountry={merchantCountry}
                 merchantPayoutCurrency={merchantPayoutCurrency}
+                onRedeemed={handleRedeemed}
               />
             </TabsContent>
 
             <TabsContent value="history" className="mt-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Points History</CardTitle>
-                  <CardDescription>Your recent points activity</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {recentTransactions.length === 0 ? (
-                    <div className="text-center py-8">
-                      <History className="size-12 mx-auto text-muted-foreground mb-4" />
-                      <p className="text-muted-foreground">
-                        No transactions yet
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Make a purchase to start earning points
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {recentTransactions.map((transaction) => (
-                        <div
-                          key={transaction.id}
-                          className="flex items-center justify-between py-3 border-b last:border-0"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              className={`p-2 rounded-full ${
-                                transaction.points > 0
-                                  ? 'bg-green-100'
-                                  : 'bg-red-100'
-                              }`}
-                            >
-                              {transaction.points > 0 ? (
-                                <TrendingUp className="size-4 text-green-600" />
-                              ) : (
-                                <TrendingDown className="size-4 text-red-600" />
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">
-                                {transaction.description}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(
-                                  transaction.created_at
-                                ).toLocaleDateString(undefined, {
-                                  year: 'numeric',
-                                  month: 'short',
-                                  day: 'numeric',
-                                })}
-                              </p>
-                            </div>
-                          </div>
-                          <span
-                            className={`font-semibold ${
-                              transaction.points > 0
-                                ? 'text-green-600'
-                                : 'text-red-600'
-                            }`}
-                          >
-                            {transaction.points > 0 ? '+' : ''}
-                            {transaction.points.toLocaleString()} pts
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <RewardsHistory transactions={recentTransactions} />
             </TabsContent>
           </Tabs>
         </div>

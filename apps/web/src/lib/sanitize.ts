@@ -7,6 +7,10 @@ import {
   type SanitizeHtmlOptions,
 } from '@/lib/sanitize-html-config';
 import { stripDisallowedRawTextBlocks } from '@/lib/sanitize-raw-text-blocks';
+import {
+  normalizeXml10ForHtmlParsing,
+  stripInvalidXml10Characters,
+} from '@/lib/sanitize-xml-10';
 
 // Re-export removed as per knip analysis
 // import from './sanitize-core' directly if needed
@@ -116,41 +120,49 @@ export function escapeHtmlAttribute(value: string): string {
  * Ensures all links have rel="noopener noreferrer".
  */
 export function sanitizeForFeed(dirty: string): string {
-  return sanitizeLib(dirty, {
-    allowedTags: [
-      'p',
-      'br',
-      'strong',
-      'em',
-      'u',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'ul',
-      'ol',
-      'li',
-      'blockquote',
-      'pre',
-      'code',
-      'a',
-      'img',
-    ],
-    allowedAttributes: {
-      a: ['href', 'title', 'rel'],
-      img: ['src', 'alt', 'title', 'width', 'height'],
-    },
-    allowedSchemes: ['http', 'https', 'mailto'],
-    allowProtocolRelative: false,
-    transformTags: {
-      a: (tagName, attribs) => ({
-        tagName,
-        attribs: { ...attribs, rel: 'noopener noreferrer' },
-      }),
-    },
-  });
+  // Strip BEFORE parsing: sanitize-html's scheme check only deletes U+0000–U+0020,
+  // so a forbidden char inside a scheme (java<U+FFFE>script:, raw or &#xFFFE;-
+  // encoded) would look schemeless to the parser and then join into javascript:
+  // under the outer strip. The outer strip stays to catch anything the
+  // sanitizer re-emits.
+  const preNormalized = normalizeXml10ForHtmlParsing(dirty);
+  return stripInvalidXml10Characters(
+    sanitizeLib(preNormalized, {
+      allowedTags: [
+        'p',
+        'br',
+        'strong',
+        'em',
+        'u',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'ul',
+        'ol',
+        'li',
+        'blockquote',
+        'pre',
+        'code',
+        'a',
+        'img',
+      ],
+      allowedAttributes: {
+        a: ['href', 'title', 'rel'],
+        img: ['src', 'alt', 'title', 'width', 'height'],
+      },
+      allowedSchemes: ['http', 'https', 'mailto'],
+      allowProtocolRelative: false,
+      transformTags: {
+        a: (tagName, attribs) => ({
+          tagName,
+          attribs: { ...attribs, rel: 'noopener noreferrer' },
+        }),
+      },
+    })
+  );
 }
 
 /**

@@ -1,4 +1,8 @@
-import { filterByLocationPhrase } from '@baci/shared/lib';
+// Direct leaf import, not the `@baci/shared/lib` barrel: the poller
+// runtime evaluates every barrel re-export, which would make each
+// shared-util edit a worker change. The leaf keeps the tracked worker
+// graph to exactly what the poller executes.
+import { filterByLocationPhrase } from '@baci/shared/lib/filter-by-location-phrase';
 import type { ShippingAddress, ShippingQuote } from '../types';
 import {
   buildGiglProviderRateId,

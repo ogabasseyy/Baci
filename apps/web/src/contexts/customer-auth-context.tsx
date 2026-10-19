@@ -1,8 +1,20 @@
 'use client';
 
-import { createContext, type ReactNode, use, useEffect, useState } from 'react';
-import { clearCartStorage } from '@/hooks/use-cart';
+import {
+  createContext,
+  type ReactNode,
+  use,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from 'react';
 import { useCustomerProfileUpdate } from '@/hooks/use-customer-profile-update';
+import {
+  commitCustomerAuthSession,
+  loadCustomerSession,
+  performCustomerLogout,
+} from './customer-auth-session';
+import { publishCustomerIdentity } from './customer-live-identity';
 
 export interface CustomerUser {
   id: string;
@@ -39,7 +51,7 @@ export interface SavedAddress {
   is_default?: boolean;
 }
 
-interface OtpState {
+export interface OtpState {
   email: string;
   codeSent: boolean;
   expiresAt?: number;
@@ -76,87 +88,6 @@ interface CustomerAuthProviderProps {
   merchantSlug: string;
 }
 
-interface CustomerSession {
-  customer: Customer;
-  user: CustomerUser;
-}
-
-async function fetchCustomerSession(
-  merchantSlug: string
-): Promise<CustomerSession | null> {
-  const response = await fetch(
-    `/api/storefront/auth/session?merchantSlug=${encodeURIComponent(merchantSlug)}`
-  );
-  const data = (await response.json()) as {
-    authenticated?: boolean;
-    customer?: Customer;
-    user?: CustomerUser;
-  };
-
-  if (!data.authenticated || !data.user || !data.customer) {
-    return null;
-  }
-
-  return {
-    customer: data.customer,
-    user: data.user,
-  };
-}
-
-interface SessionSetters {
-  setUser: (user: CustomerUser | null) => void;
-  setCustomer: (customer: Customer | null) => void;
-  setIsLoading: (loading: boolean) => void;
-}
-
-// Module-scope helper so the try/catch/finally control flow lives outside the
-// component body, keeping the provider compilable by the React Compiler.
-async function loadCustomerSession(
-  merchantSlug: string,
-  { setUser, setCustomer, setIsLoading }: SessionSetters,
-  isCancelled: () => boolean = () => false
-): Promise<void> {
-  try {
-    const session = await fetchCustomerSession(merchantSlug);
-    if (isCancelled()) return;
-
-    if (session) {
-      setUser(session.user);
-      setCustomer(session.customer);
-    } else {
-      setUser(null);
-      setCustomer(null);
-    }
-  } catch (error) {
-    if (isCancelled()) return;
-    console.error('Session check error:', error);
-    setUser(null);
-    setCustomer(null);
-  } finally {
-    if (!isCancelled()) setIsLoading(false);
-  }
-}
-
-// Module-scope helper for logout so its try/catch/finally stays outside render.
-async function performCustomerLogout(
-  merchantSlug: string,
-  setUser: (user: CustomerUser | null) => void,
-  setCustomer: (customer: Customer | null) => void,
-  setOtpState: (otp: OtpState | null) => void
-): Promise<void> {
-  try {
-    await fetch('/api/storefront/auth/logout', { method: 'POST' });
-  } catch (error) {
-    console.error('Logout error:', error);
-  } finally {
-    setUser(null);
-    setCustomer(null);
-    setOtpState(null);
-    // Clear cart on logout to prevent cart data leakage between users
-    clearCartStorage(merchantSlug);
-  }
-}
-
 export function CustomerAuthProvider({
   children,
   merchantSlug,
@@ -176,6 +107,13 @@ export function CustomerAuthProvider({
   // See react.dev "Adjusting some state when a prop changes".
   const [prevMerchantSlug, setPrevMerchantSlug] = useState(merchantSlug);
   if (merchantSlug !== prevMerchantSlug) {
+    // Render-phase state reset ONLY (react.dev "Adjusting some state
+    // when a prop changes"): React discards these setStates if it
+    // abandons the render. The live-identity publish MUST NOT live
+    // here — the module mutation cannot roll back, so a speculative
+    // render would report a merchant switch that never committed and
+    // discard a healthy in-flight checkout (Codex R129 P2). It runs
+    // in the committed layout effect below instead.
     setPrevMerchantSlug(merchantSlug);
     setIsLoading(true);
     setUser(null);
@@ -185,7 +123,23 @@ export function CustomerAuthProvider({
 
   // Check session on demand (e.g. refreshCustomer).
   const checkSession = () =>
-    loadCustomerSession(merchantSlug, { setUser, setCustomer, setIsLoading });
+    loadCustomerSession(merchantSlug, {
+      currentUserId: user?.id,
+      setUser,
+      setCustomer,
+      setIsLoading,
+    });
+
+  // Publish the storefront reset commit-synchronously (Codex R129
+  // P2, R133 P2): a layout effect leaves no post-commit window in
+  // which a settling promise continuation could read the previous
+  // storefront's identity and publish the old store's result into
+  // the newly committed view. Runs on mount and every committed
+  // merchantSlug change. The async session load stays in the
+  // passive effect below.
+  useLayoutEffect(() => {
+    publishCustomerIdentity(null, null, merchantSlug);
+  }, [merchantSlug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -257,10 +211,25 @@ export function CustomerAuthProvider({
         return { success: false, error: data.error || 'Verification failed' };
       }
 
-      // Set user and customer from response
-      setUser(data.user);
-      setCustomer(data.customer);
-      setOtpState(null);
+      // Set user and customer from response, retiring any previous
+      // customer's device cart authority before switching identities.
+      const committed = await commitCustomerAuthSession(
+        merchantSlug,
+        { customer: data.customer, user: data.user },
+        {
+          currentUserId: user?.id,
+          setCustomer,
+          setOtpState,
+          setUser,
+        }
+      );
+      if (!committed) {
+        return {
+          success: false,
+          error:
+            'Could not safely switch accounts. Please retry when connected.',
+        };
+      }
 
       return { success: true };
     } catch (error) {
@@ -271,7 +240,13 @@ export function CustomerAuthProvider({
 
   // Logout
   const logout = () =>
-    performCustomerLogout(merchantSlug, setUser, setCustomer, setOtpState);
+    performCustomerLogout(
+      merchantSlug,
+      setUser,
+      setCustomer,
+      setOtpState,
+      user?.id
+    );
 
   // Shared OAuth sign-in helper
   const signInWithOAuth = async (
@@ -280,6 +255,12 @@ export function CustomerAuthProvider({
     providerLabel: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
+      // Cart authority is NOT retired here: if the endpoint errors or
+      // the shopper cancels at the provider, the existing session must
+      // keep its cart. Retirement happens when the callback commits a
+      // different identity (loadCustomerSession /
+      // commitCustomerAuthSession retire the previous account then,
+      // with auth rollback when revocation fails).
       // Use the current browser origin to support custom domains (e.g., ogabassey.com)
       // This automatically handles: localhost, subdomains (*.usebaci.com), and custom domains
       // We redirect to /account/callback which exchanges the OAuth code for a session

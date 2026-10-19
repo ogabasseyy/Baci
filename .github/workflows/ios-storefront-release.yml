@@ -31,6 +31,7 @@ permissions:
   contents: read
 
 env:
+  EXPO_PUBLIC_BUILD_SHA: ${{ github.sha }}
   BACI_MOBILE_BUILD_PLATFORM: ios
   # Compile Expo consumers against the same resolved JSI headers and library.
   EXPO_USE_PRECOMPILED_MODULES: '0'
@@ -64,20 +65,20 @@ jobs:
           persist-credentials: false
 
       - name: Select Xcode ${{ env.XCODE_VERSION }}
-        run: sudo xcode-select -s "/Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer"
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Setup Ruby
-        uses: ruby/setup-ruby@762794c140bbeda0f1224786aa33b4b46783a6c1 # v1.326.0
+        uses: ruby/setup-ruby@e81a8fa391b11a595c1b7ed84177cc0fe02faf83 # v1.328.0
         with:
           ruby-version: ${{ env.RUBY_VERSION }}
           bundler-cache: true
@@ -98,6 +99,20 @@ jobs:
       # Reevaluate the compatibility patch before upgrading to Xcode 27.
       - name: Verify Swift RuntimeScheduler compatibility
         run: node --test .github/scripts/ios-runtime-scheduler.test.mjs
+
+      - name: Verify native gradient composition
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh
+
+      - name: Verify native clipping geometry and traversal work
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-clipping-views.sh
+
+      - name: Verify native Sentry breadcrumb policy and MetricKit integration
+        run: |
+          node --test apps/mobile-storefront/config/sentry-native-diagnostics.test.mjs
+          bash apps/mobile-storefront/scripts/native-regressions/check-sentry-diagnostics.sh
+
+      - name: Verify scene presentation Swift and legacy window fallback
+        run: node --test .github/scripts/ios-scene-presentation.test.mjs apps/mobile-storefront/config/ios-scene-presentation.test.mjs
 
       - name: Verify Expo JSI symbol regression fixtures
         run: node --test .github/scripts/verify-ios-expo-jsi-symbols.test.mjs
@@ -187,7 +202,9 @@ jobs:
           STOREFRONT_TIKTOK_APP_SECRET: ${{ secrets.STOREFRONT_TIKTOK_APP_SECRET }}
           STOREFRONT_FACEBOOK_APP_ID: ${{ secrets.STOREFRONT_FACEBOOK_APP_ID }}
           STOREFRONT_FACEBOOK_CLIENT_TOKEN: ${{ secrets.STOREFRONT_FACEBOOK_CLIENT_TOKEN }}
-        run: pnpm exec expo prebuild --platform ios --clean
+        run: |
+          pnpm exec expo config --type public --json | node ../../.github/scripts/sentry-storefront-provenance.mjs ios
+          pnpm exec expo prebuild --platform ios --clean
 
       - name: Fix prebuild signing style for archive
         working-directory: ${{ env.WORKING_DIR }}
@@ -276,7 +293,7 @@ jobs:
 
       - name: Upload IPA artifact
         if: success() || failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ios-storefront-release-${{ github.sha }}
           path: |

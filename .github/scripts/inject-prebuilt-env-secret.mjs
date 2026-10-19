@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Ensure a single key is present in a Vercel-pulled dotenv file so the local
 // prebuilt `vercel build` passes env.ts's build-time presence validation for a
-// *sensitive* (write-only) Vercel env var — which `vercel pull` returns EMPTY
-// (`KEY=""`). The value is consumed only at RUNTIME, where Vercel injects the
-// real sensitive value and env.ts re-validates against it. The injected key is
+// *sensitive* (write-only) Vercel env var — which `vercel pull` redacts as
+// `KEY=""` or, since CLI 57, `KEY="[SENSITIVE]"`. The value is consumed only at
+// RUNTIME, where Vercel injects the real value and env.ts re-validates it.
+// The injected key is
 // server-only (not `NEXT_PUBLIC_`), so it is never bundled client-side.
 //
 // Usage: node inject-prebuilt-env-secret.mjs <KEY> <ENV_FILE> [STANDIN]
@@ -11,10 +12,11 @@
 //                       non-empty, it is injected unconditionally.
 //   [STANDIN]           optional build-time stand-in. Used only when the real
 //                       value is empty and Vercel pulled exactly one explicitly
-//                       blank `<KEY>=`, `<KEY>=''`, or `<KEY>=""` entry.
+//                       blank `<KEY>=`, `<KEY>=''`, or `<KEY>=""` entry, or
+//                       the exact CLI marker `<KEY>="[SENSITIVE]"`.
 //   --generate-es256-jwk-standin
 //                       generate an ephemeral ES256 private JWK only after the
-//                       same explicit-blank check. When the optional key is
+//                       same redaction check. When the optional key is
 //                       absent, leave the file unchanged so production can use
 //                       the configured legacy signing-secret fallback. The JWK
 //                       is written directly to the pulled file and is never
@@ -50,8 +52,10 @@ function findDotenvAssignments(lines, targetKey) {
   });
 }
 
-function isExplicitlyBlankDotenvValue(value) {
-  return value === '' || value === "''" || value === '""';
+function isRedactedDotenvValue(value) {
+  return (
+    value === '' || value === "''" || value === '""' || value === '"[SENSITIVE]"'
+  );
 }
 
 function readExpandedDotenvValue(contents, file, targetKey) {
@@ -143,19 +147,19 @@ if (usingGeneratedStandin && assignments.length === 0) {
   process.exit(0);
 }
 
-// A stand-in may only substitute for Vercel's write-only blank placeholder.
-// Refusing absent, duplicated, nonblank, or malformed-looking entries avoids
+// A stand-in may only substitute for Vercel's exact write-only placeholders.
+// Refusing absent, duplicated, non-redacted, or malformed-looking entries avoids
 // replacing a value that Vercel pull did expose or an opaque dotenv construct.
 if (
   usingStandin &&
-  (assignments.length !== 1 || !isExplicitlyBlankDotenvValue(assignments[0].value))
+  (assignments.length !== 1 || !isRedactedDotenvValue(assignments[0].value))
 ) {
   const state =
     assignments.length === 0
       ? 'absent'
       : assignments.length > 1
         ? 'ambiguous'
-        : 'not explicitly blank';
+        : 'not explicitly blank or a recognized sensitive marker';
   console.error(
     `${key} is ${state} in ${file}. Refusing to replace it with a build-time ` +
       'stand-in; configure Vercel with a write-only sensitive value or provide a real value.',

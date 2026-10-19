@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearKudaDataPlanCacheForTests } from '@/lib/kuda-data-plans';
-import {
-  preparePendingVtuTransaction,
-  resolveVtuCustomer,
-} from '@/lib/vtu-pending-transaction';
+import { preparePendingVtuTransaction } from '@/lib/vtu-pending-transaction';
 
 const {
   mockFormatPhoneNumber,
@@ -15,6 +12,7 @@ const {
   mockVerifyMonnifyBillCustomer,
   mockLoggerWarn,
   mockCalculateCommerce,
+  mockGetCurrentSlugForAliasStrict,
 } = vi.hoisted(() => ({
   mockFormatPhoneNumber: vi.fn((value: string) => value),
   mockIsValidPhoneNumber: vi.fn(() => true),
@@ -30,6 +28,12 @@ const {
       platformEarning: 5,
     })
   ),
+  mockGetCurrentSlugForAliasStrict: vi.fn(),
+}));
+
+vi.mock('@/lib/slug-alias-cache', () => ({
+  getCurrentSlugForAlias: vi.fn().mockResolvedValue(null),
+  getCurrentSlugForAliasStrict: mockGetCurrentSlugForAliasStrict,
 }));
 
 vi.mock('@/lib/kuda', () => ({
@@ -71,9 +75,6 @@ vi.mock('@/lib/logger', () => ({
 
 type PrepareSupabase = Parameters<
   typeof preparePendingVtuTransaction
->[0]['supabase'];
-type ResolveCustomerSupabase = Parameters<
-  typeof resolveVtuCustomer
 >[0]['supabase'];
 
 function createMockSupabase({
@@ -175,6 +176,7 @@ function prepareAirtime(supabase: PrepareSupabase, networkProvider = 'mtn') {
     supabase,
     user: {
       id: 'user-1',
+      email_confirmed_at: '2026-01-01T00:00:00.000Z',
       email: 'customer@example.com',
     } as unknown as Parameters<typeof preparePendingVtuTransaction>[0]['user'],
     input: {
@@ -251,6 +253,9 @@ describe('preparePendingVtuTransaction', () => {
           billerCode: 'MTN',
           productCode: '13',
           provider: 'monnify',
+          // Marker-era flag (Codex R55 6rrU6H): unconditional, so the
+          // unsubmitted proof never needs a deploy-coupled cutoff.
+          submissionMarkerEra: true,
         }),
         network_provider: 'MTN',
       })
@@ -328,6 +333,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -362,6 +368,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -411,6 +418,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -467,6 +475,7 @@ describe('preparePendingVtuTransaction', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction
@@ -518,6 +527,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -583,6 +593,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -624,6 +635,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -691,6 +703,7 @@ describe('preparePendingVtuTransaction', () => {
       supabase,
       user: {
         id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
       } as unknown as Parameters<
         typeof preparePendingVtuTransaction
@@ -753,6 +766,7 @@ describe('preparePendingVtuTransaction', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction
@@ -791,6 +805,7 @@ describe('preparePendingVtuTransaction', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction
@@ -866,6 +881,7 @@ describe('preparePendingVtuTransaction', () => {
         supabase,
         user: {
           id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
           email: 'customer@example.com',
         } as unknown as Parameters<
           typeof preparePendingVtuTransaction
@@ -896,6 +912,7 @@ describe('preparePendingVtuTransaction', () => {
             supabase,
             user: {
               id: 'user-1',
+              email_confirmed_at: '2026-01-01T00:00:00.000Z',
               email: 'customer@example.com',
             } as unknown as Parameters<
               typeof preparePendingVtuTransaction
@@ -921,6 +938,7 @@ describe('preparePendingVtuTransaction', () => {
             supabase,
             user: {
               id: 'user-1',
+              email_confirmed_at: '2026-01-01T00:00:00.000Z',
               email: 'customer@example.com',
             } as unknown as Parameters<
               typeof preparePendingVtuTransaction
@@ -945,6 +963,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1001,6 +1020,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1046,6 +1066,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1092,6 +1113,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1128,6 +1150,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1184,6 +1207,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1229,6 +1253,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1304,6 +1329,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1350,6 +1376,7 @@ describe('preparePendingVtuTransaction', () => {
           supabase,
           user: {
             id: 'user-1',
+            email_confirmed_at: '2026-01-01T00:00:00.000Z',
             email: 'customer@example.com',
           } as unknown as Parameters<
             typeof preparePendingVtuTransaction
@@ -1398,6 +1425,7 @@ describe('preparePendingVtuTransaction', () => {
             supabase,
             user: {
               id: 'user-1',
+              email_confirmed_at: '2026-01-01T00:00:00.000Z',
               email: 'customer@example.com',
             } as unknown as Parameters<
               typeof preparePendingVtuTransaction
@@ -1415,179 +1443,170 @@ describe('preparePendingVtuTransaction', () => {
             >[0]['input'],
             source: 'checkout',
           })
-        ).rejects.toThrow('Monnify validation failed: Invalid phone number');
+        ).rejects.toThrow(
+          'Monnify validation failed. Please verify the details and try again.'
+        );
       });
     });
   });
 });
 
-describe('resolveVtuCustomer', () => {
-  const linkedCustomer = {
-    email: 'customer@example.com',
-    first_name: 'Ada',
-    id: 'customer-1',
-    last_name: 'Lovelace',
-    phone: '08012345678',
-    user_id: 'user-1',
-  };
-
-  function createResolveCustomerSupabase({
-    byEmail = null,
-    byUserId = null,
-    updateError = null,
+describe('preparePendingVtuTransaction strictLookups', () => {
+  function supabaseWithLookupErrors({
+    customerError = null,
+    merchantError = null,
+    merchantMiss = false,
+    settingsError = null,
   }: {
-    byEmail?: Record<string, unknown> | null;
-    byUserId?: Record<string, unknown> | null;
-    updateError?: unknown;
+    customerError?: { message: string } | null;
+    merchantError?: { message: string } | null;
+    merchantMiss?: boolean;
+    settingsError?: { message: string } | null;
   }) {
-    const customerUpdateEq = vi
-      .fn()
-      .mockResolvedValue({ data: null, error: updateError });
-    const customerUpdate = vi.fn(() => ({
-      eq: customerUpdateEq,
-    }));
-    const supabase = {
+    const merchantRow =
+      merchantError || merchantMiss ? null : { id: 'merchant-1' };
+    return {
       from: vi.fn((table: string) => {
-        if (table !== 'customers') {
-          throw new Error(`Unexpected table: ${table}`);
+        if (table === 'merchants') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: merchantRow,
+                  error: merchantError,
+                }),
+                single: vi.fn().mockResolvedValue({
+                  data: merchantRow,
+                  error: merchantError,
+                }),
+              }),
+            }),
+          };
         }
-
+        if (table === 'merchant_feature_settings') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                single: vi.fn().mockResolvedValue({
+                  data: settingsError
+                    ? null
+                    : { vtu_enabled: true, vtu_airtime_enabled: true },
+                  error: settingsError,
+                }),
+              }),
+            }),
+          };
+        }
         return {
-          select: vi.fn(() => {
-            const filters = new Map<string, unknown>();
-            const builder = {
-              eq: vi.fn((field: string, value: unknown) => {
-                filters.set(field, value);
-                return builder;
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: null,
+                  error: customerError,
+                }),
               }),
-              maybeSingle: vi.fn(() => {
-                if (filters.has('user_id')) {
-                  return Promise.resolve({ data: byUserId, error: null });
-                }
-
-                return Promise.resolve({ data: byEmail, error: null });
-              }),
-            };
-            return builder;
+            }),
           }),
-          update: customerUpdate,
         };
       }),
-    } as unknown as ResolveCustomerSupabase;
-
-    return { customerUpdate, customerUpdateEq, supabase };
+    } as unknown as PrepareSupabase;
   }
 
-  it('resolves a customer directly by user_id without relinking', async () => {
-    const { customerUpdate, supabase } = createResolveCustomerSupabase({
-      byUserId: linkedCustomer,
-    });
-
-    const customer = await resolveVtuCustomer({
-      merchantId: 'merchant-1',
+  function prepareStrictAirtime(supabase: PrepareSupabase) {
+    return preparePendingVtuTransaction({
       supabase,
       user: {
+        id: 'user-1',
+        email_confirmed_at: '2026-01-01T00:00:00.000Z',
         email: 'customer@example.com',
-        id: 'user-1',
-      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
-    });
-
-    expect(customer?.id).toBe('customer-1');
-    expect(customerUpdate).not.toHaveBeenCalled();
-  });
-
-  it('links an email-matched guest customer before VTU checkout writes payment rows', async () => {
-    const { customerUpdate, customerUpdateEq, supabase } =
-      createResolveCustomerSupabase({
-        byEmail: {
-          ...linkedCustomer,
-          user_id: null,
-        },
-      });
-
-    const customer = await resolveVtuCustomer({
-      merchantId: 'merchant-1',
-      supabase,
-      user: {
-        email: 'customer@example.com',
-        id: 'user-1',
-      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
-    });
-
-    expect(customer?.id).toBe('customer-1');
-    expect(customerUpdate).toHaveBeenCalledWith({ user_id: 'user-1' });
-    expect(customerUpdateEq).toHaveBeenCalledWith('id', 'customer-1');
-  });
-
-  it('does not relink an email-matched customer that already has a user_id', async () => {
-    const { customerUpdate, supabase } = createResolveCustomerSupabase({
-      byEmail: linkedCustomer,
-    });
-
-    const customer = await resolveVtuCustomer({
-      merchantId: 'merchant-1',
-      supabase,
-      user: {
-        email: 'customer@example.com',
-        id: 'user-1',
-      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
-    });
-
-    expect(customer?.id).toBe('customer-1');
-    expect(customerUpdate).not.toHaveBeenCalled();
-  });
-
-  it('returns null when no user_id or email customer exists', async () => {
-    const { customerUpdate, supabase } = createResolveCustomerSupabase({});
-
-    const customer = await resolveVtuCustomer({
-      merchantId: 'merchant-1',
-      supabase,
-      user: {
-        email: 'customer@example.com',
-        id: 'user-1',
-      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
-    });
-
-    expect(customer).toBeNull();
-    expect(customerUpdate).not.toHaveBeenCalled();
-  });
-
-  it('returns null when user email is missing and user_id lookup fails', async () => {
-    const { customerUpdate, supabase } = createResolveCustomerSupabase({});
-
-    const customer = await resolveVtuCustomer({
-      merchantId: 'merchant-1',
-      supabase,
-      user: {
-        email: undefined,
-        id: 'user-1',
-      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
-    });
-
-    expect(customer).toBeNull();
-    expect(customerUpdate).not.toHaveBeenCalled();
-  });
-
-  it('still returns the email-matched customer when the opportunistic link update fails', async () => {
-    const { customerUpdate, supabase } = createResolveCustomerSupabase({
-      byEmail: {
-        ...linkedCustomer,
-        user_id: null,
+      } as unknown as Parameters<
+        typeof preparePendingVtuTransaction
+      >[0]['user'],
+      input: {
+        merchantSlug: 'ogabassey',
+        type: 'airtime',
+        amount: 1000,
+        phoneNumber: '08012345678',
+        networkProvider: 'mtn',
+        source: 'checkout',
       },
-      updateError: { message: 'boom' },
+      source: 'checkout',
+      requireCustomer: true,
+      strictLookups: true,
+    });
+  }
+
+  it('throws on transient merchant error instead of Merchant-not-found 400', async () => {
+    const supabase = supabaseWithLookupErrors({
+      merchantError: { message: 'connection reset' },
     });
 
-    const customer = await resolveVtuCustomer({
-      merchantId: 'merchant-1',
-      supabase,
-      user: {
-        email: 'customer@example.com',
-        id: 'user-1',
-      } as Parameters<typeof resolveVtuCustomer>[0]['user'],
+    await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
+      /Failed to resolve VTU merchant/
+    );
+  });
+
+  it('throws on transient settings error instead of VTU-disabled 400', async () => {
+    const supabase = supabaseWithLookupErrors({
+      settingsError: { message: 'timeout' },
     });
 
-    expect(customer?.id).toBe('customer-1');
-    expect(customerUpdate).toHaveBeenCalledWith({ user_id: 'user-1' });
+    await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
+      /Failed to load VTU merchant settings/
+    );
+  });
+
+  it('throws on transient customer error instead of Customer-404', async () => {
+    const supabase = supabaseWithLookupErrors({
+      customerError: { message: 'connection reset' },
+    });
+
+    await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
+      /Failed to look up VTU customer/
+    );
+  });
+
+  it('throws (never Merchant-not-found) when strict alias resolution fails', async () => {
+    // An alias-DB failure must not masquerade as "Merchant not found":
+    // the merchant exists; the lookup is indeterminate and the caller
+    // must 500 (key kept) instead of terminally rejecting.
+    mockGetCurrentSlugForAliasStrict.mockRejectedValueOnce(
+      new Error('[Slug Alias Cache] alias lookup failed for slug: ogabassey')
+    );
+    const supabase = supabaseWithLookupErrors({ merchantMiss: true });
+
+    await expect(prepareStrictAirtime(supabase)).rejects.toThrow(
+      /alias lookup failed/
+    );
+  });
+
+  it('keeps legacy 400s on lookup errors when not strict', async () => {
+    const supabase = supabaseWithLookupErrors({
+      merchantError: { message: 'connection reset' },
+    });
+
+    await expect(
+      preparePendingVtuTransaction({
+        supabase,
+        user: {
+          id: 'user-1',
+          email_confirmed_at: '2026-01-01T00:00:00.000Z',
+          email: 'customer@example.com',
+        } as unknown as Parameters<
+          typeof preparePendingVtuTransaction
+        >[0]['user'],
+        input: {
+          merchantSlug: 'ogabassey',
+          type: 'airtime',
+          amount: 1000,
+          phoneNumber: '08012345678',
+          networkProvider: 'mtn',
+          source: 'checkout',
+        },
+        source: 'checkout',
+        requireCustomer: true,
+      })
+    ).rejects.toThrow('Merchant not found');
   });
 });

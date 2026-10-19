@@ -14,14 +14,23 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import type React from 'react';
+import { AppState } from 'react-native';
+import {
+  getCrashBreadcrumbsForTest,
+  resetCrashDiagnosticsForTest,
+} from '@/lib/crash-diagnostics';
 import { registerRootLayoutAttTests } from '@/test-support/root-layout-att-test-cases';
+import {
+  mockActivateDueSavingsReminderNotification,
+  mockBuildReminderScope,
+  mockCancelScopeSavingsReminders,
+} from '@/test-support/root-layout-reminder-mock';
 
 const mockInitializeStorage = jest.fn<() => Promise<void>>();
 const mockInitializeAuth = jest.fn<() => Promise<void>>();
 const mockCleanup = jest.fn();
 const mockRegisterPushNotifications = jest.fn();
 const mockPrefetchStartupStorefrontData = jest.fn<() => Promise<void>>();
-const mockActivateDueSavingsReminderNotification = jest.fn();
 const mockInitializeAdTrackingForStartup = jest.fn<() => Promise<void>>();
 const mockUseAppTrackingTransparency = jest.fn();
 const mockRootLayoutNavMount = jest.fn();
@@ -157,24 +166,68 @@ jest.mock('@/services/orders', () => ({
 jest.mock('@/services/savings-reminder-notifications', () => ({
   activateDueSavingsReminderNotification:
     mockActivateDueSavingsReminderNotification,
+  buildReminderScope: mockBuildReminderScope,
+  cancelScopeSavingsReminders: mockCancelScopeSavingsReminders,
 }));
 
 jest.mock('@/stores/auth-store', () => ({
   // useAuthStore is a Zustand-style mock: callable as a selector over
   // mockAuthState while also exposing getState() for direct store reads.
+  // subscribe mirrors the real zustand store API used by the queued
+  // create-order handler registered during layout init.
   useAuthStore: Object.assign(
     (selector: (state: unknown) => unknown) => selector(mockAuthState),
-    { getState: () => mockAuthState }
+    {
+      getState: () => mockAuthState,
+      subscribe: () => () => undefined,
+    }
   ),
 }));
 
 const { default: RootLayout, resetRootLayoutBootstrapStateForTest } =
   require('@/app/_layout') as typeof import('@/app/_layout');
 
+// Same pattern as memory-warning-diagnostics.test.ts: the RN preset's
+// AppState.addEventListener does not return a working subscription here,
+// so install a per-test mock (restored afterwards) instead of spying.
+function mockAppStateListener() {
+  const original = AppState.addEventListener;
+  const addEventListener = jest.fn(
+    (_event: string, _handler: (state: string) => void) => ({
+      remove: jest.fn(),
+    })
+  );
+  Object.defineProperty(AppState, 'addEventListener', {
+    configurable: true,
+    value: addEventListener,
+  });
+  return {
+    addEventListener,
+    restoreAppState: () => {
+      Object.defineProperty(AppState, 'addEventListener', {
+        configurable: true,
+        value: original,
+      });
+    },
+  };
+}
+
+function latestChangeHandler(
+  addEventListener: ReturnType<typeof mockAppStateListener>['addEventListener']
+) {
+  const handlers = addEventListener.mock.calls
+    .filter(([event]) => event === 'change')
+    .map(([, handler]) => handler);
+  expect(handlers.length).toBeGreaterThan(0);
+  return handlers[handlers.length - 1];
+}
+
 describe('RootLayout storage boot gate', () => {
   beforeEach(() => {
     resetRootLayoutBootstrapStateForTest();
     jest.clearAllMocks();
+    mockActivateDueSavingsReminderNotification.mockResolvedValue(null);
+    mockCancelScopeSavingsReminders.mockResolvedValue(false);
     jest.useFakeTimers();
     mockInitializeAuth.mockResolvedValue(undefined);
     mockInitializeAdTrackingForStartup.mockResolvedValue(undefined);
@@ -316,5 +369,113 @@ describe('RootLayout storage boot gate', () => {
       );
     });
     expect(screen.queryByTestId('animated-splash')).toBeNull();
+  });
+
+  it('activates due savings reminders when the app foregrounds', async () => {
+    mockAuthState.user = { id: 'customer-1' };
+    mockInitializeStorage.mockResolvedValue(undefined);
+    const { addEventListener, restoreAppState } = mockAppStateListener();
+
+    try {
+      render(<RootLayout />);
+      await waitFor(() => {
+        expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
+      });
+
+      const onChange = latestChangeHandler(addEventListener);
+      const before =
+        mockActivateDueSavingsReminderNotification.mock.calls.length;
+      act(() => {
+        onChange('active');
+      });
+      expect(mockActivateDueSavingsReminderNotification.mock.calls.length).toBe(
+        before + 1
+      );
+      act(() => {
+        onChange('background');
+      });
+      expect(mockActivateDueSavingsReminderNotification.mock.calls.length).toBe(
+        before + 1
+      );
+    } finally {
+      restoreAppState();
+    }
+  });
+
+  it('skips foreground reminder activation while logged out', async () => {
+    mockAuthState.user = null;
+    mockInitializeStorage.mockResolvedValue(undefined);
+    const { addEventListener, restoreAppState } = mockAppStateListener();
+
+    try {
+      render(<RootLayout />);
+      await waitFor(() => {
+        expect(addEventListener).toHaveBeenCalled();
+      });
+
+      mockActivateDueSavingsReminderNotification.mockClear();
+      act(() => {
+        latestChangeHandler(addEventListener)('active');
+      });
+      expect(mockActivateDueSavingsReminderNotification).not.toHaveBeenCalled();
+    } finally {
+      restoreAppState();
+    }
+  });
+
+  it('records a breadcrumb instead of throwing when foreground activation rejects', async () => {
+    mockAuthState.user = { id: 'customer-1' };
+    mockInitializeStorage.mockResolvedValue(undefined);
+    const { addEventListener, restoreAppState } = mockAppStateListener();
+
+    try {
+      render(<RootLayout />);
+      await waitFor(() => {
+        expect(screen.getByTestId('root-layout-nav')).toBeOnTheScreen();
+      });
+
+      // The boot effect already fired activation on mount; arm the
+      // rejection for the foreground call specifically.
+      mockActivateDueSavingsReminderNotification.mockClear();
+      mockActivateDueSavingsReminderNotification.mockRejectedValueOnce(
+        new Error('storage unavailable')
+      );
+      resetCrashDiagnosticsForTest();
+      await act(async () => {
+        latestChangeHandler(addEventListener)('active');
+        await Promise.resolve();
+      });
+
+      expect(
+        getCrashBreadcrumbsForTest().filter(
+          (crumb) =>
+            crumb.name === 'root_layout:savings_reminder_activation_failed'
+        )
+      ).toHaveLength(1);
+    } finally {
+      restoreAppState();
+    }
+  });
+
+  it('skips foreground reminder activation before boot is ready', async () => {
+    mockAuthState.user = { id: 'customer-1' };
+    mockAuthState.isInitialized = false;
+    mockInitializeStorage.mockResolvedValue(undefined);
+    const { addEventListener, restoreAppState } = mockAppStateListener();
+
+    try {
+      render(<RootLayout />);
+      await waitFor(() => {
+        expect(addEventListener).toHaveBeenCalled();
+      });
+
+      mockActivateDueSavingsReminderNotification.mockClear();
+      act(() => {
+        latestChangeHandler(addEventListener)('active');
+      });
+      expect(mockActivateDueSavingsReminderNotification).not.toHaveBeenCalled();
+    } finally {
+      restoreAppState();
+    }
   });
 });

@@ -60,20 +60,12 @@ const emittedColorTokensByPath: Record<string, readonly string[]> = {
 };
 const [text, number] = ['text', 'number'] as const;
 const rendererColorPattern = /^(?:#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6})$/;
-const cssLengthValue =
-  '(?:0|(?:0|[1-9][0-9]{0,3})(?:\\.[0-9]{1,3})?(?:px|rem|em|%|vh|vw|vmin|vmax))';
-const cssBorderLengthValue =
-  '(?:0|(?:0|[1-9][0-9]{0,3})(?:\\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax))';
-const cssFunctionalLength = (length: string) =>
-  `(?:calc\\(${length}(?:\\s+[+-]\\s+${length})+\\)|clamp\\(${length},\\s*${length},\\s*${length}\\))`;
-const cssLengthPattern = new RegExp(
-  `^(?:${cssLengthValue}|${cssFunctionalLength(cssLengthValue)})$`
-);
+const cssLengthPattern =
+  /^(?:(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|%|vh|vw|vmin|vmax))|(?:calc\((?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|%|vh|vw|vmin|vmax))(?:\s+[+-]\s+(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|%|vh|vw|vmin|vmax)))+\)|clamp\((?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|%|vh|vw|vmin|vmax)),\s*(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|%|vh|vw|vmin|vmax)),\s*(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|%|vh|vw|vmin|vmax))\)))$/;
 const cssSignedLengthPattern =
   /^(?:0|-?(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax))$/;
-const cssBorderWidthPattern = new RegExp(
-  `^(?:${cssBorderLengthValue}|${cssFunctionalLength(cssBorderLengthValue)}|thin|medium|thick)$`
-);
+const cssBorderWidthPattern =
+  /^(?:(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax))|(?:calc\((?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax))(?:\s+[+-]\s+(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax)))+\)|clamp\((?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax)),\s*(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax)),\s*(?:0|(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,3})?(?:px|rem|em|vh|vw|vmin|vmax))\))|thin|medium|thick)$/;
 const cssBorderStylePattern =
   /^(?:none|hidden|dotted|dashed|solid|double|groove|ridge|inset|outset)$/;
 const cssDurationPattern = /^(?:0|(?:[0-9]{1,4})(?:\.[0-9]{1,3})?(?:ms|s))$/;

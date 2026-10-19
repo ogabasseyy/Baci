@@ -1,3 +1,7 @@
+import {
+  buildSearchText,
+  toCanonicalSearchDate,
+} from './transaction-review-row-helpers';
 import type { TransactionReviewOrder } from './transaction-review-types';
 
 function normalizeCostPriceParts(value: string) {
@@ -115,18 +119,23 @@ export function getSupplierOptionsFromOrders(orders: TransactionReviewOrder[]) {
   ).sort((first, second) => first.localeCompare(second));
 }
 
+// Mirrors the full order search text with items narrowed to the missing-cost
+// subset: every order-level token the RPC can match (id, total, date,
+// fulfillment details) must survive, or server candidates that only match
+// through those fields waste the tab paging budget and hide true matches.
 function getVisibleOrderSearchText(order: TransactionReviewOrder) {
-  return [
+  return buildSearchText([
+    order.id,
     order.orderNumber,
     order.customerName,
     order.customerEmail,
     order.customerPhone,
     order.paymentMethod,
-    ...order.items.map((item) => item.searchText),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
+    toCanonicalSearchDate(order.createdAt),
+    order.total,
+    order.detailTokens ?? [],
+    order.items.map((item) => item.searchText),
+  ]);
 }
 
 export function filterOrdersForTransactionTab(

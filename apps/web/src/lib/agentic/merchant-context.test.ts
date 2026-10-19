@@ -5,6 +5,7 @@ import {
   getConfiguredAgenticMerchantSlug,
   isAgenticCheckoutRuntimeConfigured,
   resolveAgenticMerchantContext,
+  resolveAgenticMerchantContextFromRpc,
 } from '@/lib/agentic/merchant-context';
 
 // server-only has no runtime exports; mock it so Vitest can import server modules.
@@ -20,6 +21,10 @@ const mocks = vi.hoisted(() => {
       );
 
   return {
+    contextRpc: vi.fn<() => Promise<{ data: unknown; error: unknown }>>(
+      async () => ({ data: [], error: null })
+    ),
+    contextClient: vi.fn(),
     getAgenticApiKey: vi.fn(() =>
       getFirstNonBlankEnv('BACI_AGENTIC_ACCESS_TOKEN', 'OPENAI_AGENTIC_API_KEY')
     ),
@@ -57,6 +62,13 @@ const mocks = vi.hoisted(() => {
     }),
   };
 });
+
+vi.mock('@/lib/agentic/scoped-supabase', () => ({
+  createAgenticMerchantContextClient: (slug: string) => {
+    mocks.contextClient(slug);
+    return { rpc: mocks.contextRpc };
+  },
+}));
 
 vi.mock('@/env', () => ({
   getAgenticApiKey: mocks.getAgenticApiKey,
@@ -392,4 +404,76 @@ describe('isAgenticCheckoutRuntimeConfigured', () => {
 
     expect(isAgenticCheckoutRuntimeConfigured()).toBe(false);
   });
+});
+
+describe('resolveAgenticMerchantContextFromRpc', () => {
+  it('maps the scoped RPC projection to the merchant context', async () => {
+    stubBaseEnv();
+    vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+    const rpc = mocks.contextRpc;
+    rpc.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'merchant-1',
+          slug: 'fixture-store',
+          business_name: 'Fixture Store',
+          paystack_subaccount_code: 'ACCT_fixture',
+          custom_domain: 'fixture.example.com',
+          agentic_checkout_enabled: true,
+          pay_on_delivery_enabled: true,
+          agent_allowlist: ['fixture-agent'],
+          agent_denylist: [],
+        },
+      ],
+      error: null,
+    });
+    const context = await resolveAgenticMerchantContextFromRpc();
+    expect(rpc).toHaveBeenCalledWith('resolve_agentic_merchant_context', {
+      p_slug: 'demo-store',
+    });
+    expect(context).toMatchObject({
+      id: 'merchant-1',
+      slug: 'fixture-store',
+      business_name: 'Fixture Store',
+      paystack_subaccount_code: 'ACCT_fixture',
+      custom_domain: 'fixture.example.com',
+      agentic_checkout_enabled: true,
+      pay_on_delivery_enabled: true,
+      agent_user_agent_allowlist: ['fixture-agent'],
+    });
+  });
+
+  it('returns null when the RPC errors or resolves no merchant', async () => {
+    stubBaseEnv();
+    vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+    mocks.contextRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'down' },
+    });
+    await expect(resolveAgenticMerchantContextFromRpc()).resolves.toBeNull();
+    mocks.contextRpc.mockResolvedValueOnce({ data: [], error: null });
+    await expect(resolveAgenticMerchantContextFromRpc()).resolves.toBeNull();
+  });
+});
+
+it('uses a server-scoped context client by default', async () => {
+  stubBaseEnv();
+  vi.stubEnv('OPENAI_AGENTIC_MERCHANT_SLUG', 'demo-store');
+  await resolveAgenticMerchantContextFromRpc();
+  expect(mocks.contextClient).toHaveBeenCalledWith('demo-store');
+  expect(mocks.contextRpc).toHaveBeenCalledWith(
+    'resolve_agentic_merchant_context',
+    { p_slug: 'demo-store' }
+  );
+});
+
+it('uses one normalized slug for both scoped authority and RPC arguments', async () => {
+  mocks.getAgenticMerchantSlug.mockReturnValueOnce('\t Demo-Store\n');
+  mocks.contextRpc.mockResolvedValueOnce({ data: [], error: null });
+  await resolveAgenticMerchantContextFromRpc();
+  expect(mocks.contextClient).toHaveBeenCalledWith('demo-store');
+  expect(mocks.contextRpc).toHaveBeenCalledWith(
+    'resolve_agentic_merchant_context',
+    { p_slug: 'demo-store' }
+  );
 });

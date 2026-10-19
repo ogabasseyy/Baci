@@ -46,3 +46,36 @@ full tenant/proxy route test, database RLS test, or provider settlement proof.
 Real provider cancellation, webhook delivery, refunds and reconciliation remain
 separate sandbox/staging gates. The successful payment-handoff page does not
 represent a charge or paid order.
+
+For a manual local browser pass, run the built harness, open `/catalog`, click
+**Add test phone**, then open `/checkout?qa=manual`. The checkout starts empty;
+the yellow fixture panel is visible only with this
+explicit query parameter. Its controls select successful or always-failing
+payment initialization and reset cart, checkout and pending-order browser
+state. The harness serves synthetic local responses for shipping, order
+creation/reuse and payment initialization; payment handoffs stay on
+`/payment-handoff`, and no provider or real order is contacted. The saved-address
+selector is unavailable in the current checkout implementation, which
+initializes its saved-address list empty; use the real new-address form and
+both delivery choices for manual QA.
+
+The local shipping quote fixture prices both door and pickup at zero, matching
+the deterministic single-item order's zero shipping fee and fixed ₦107,500
+total (₦100,000 subtotal plus ₦7,500 VAT). It does not calculate dynamic
+checkout amounts or stand in for server-side amount authority.
+
+For an isolated crypto modal browser pass, open
+`/crypto-payment-modal`. This harness-only page mounts the real
+`CryptoPaymentModal` with a synthetic address and an inline data-URI image.
+It loads the storefront styles and checkout theme provider with a synthetic
+merchant color so browser checks exercise the styled modal.
+Choose an idle, checking, pending, confirmed, or failed verification state
+before opening the modal. The header close button dismisses immediately; the
+footer close button uses the browser confirmation dialog. Clipboard interaction
+uses the local browser clipboard permission. The fixture does not call a
+payment provider or the crypto initialization and verification APIs, so it
+checks the modal UI only, not checkout hook integration.
+
+The panel is covered by Playwright. The browser suite also switches the real
+payment controls between Paystack and Korapay, injects a provider
+initialization error, then retries against the same order using the reuse API.

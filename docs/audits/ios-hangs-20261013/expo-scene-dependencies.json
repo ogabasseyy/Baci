@@ -1,0 +1,140 @@
+[
+  {
+    "package": "expo-asset",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 27,
+    "version": "57.0.19"
+  },
+  {
+    "package": "@expo/config-plugins",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 91,
+    "version": "57.0.10"
+  },
+  {
+    "package": "expo-modules-core",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 335,
+    "version": "57.0.21"
+  },
+  {
+    "package": "expo-modules-autolinking",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 45,
+    "version": "57.0.15"
+  },
+  {
+    "package": "@expo/local-build-cache-provider",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 0,
+    "version": "57.0.9"
+  },
+  {
+    "package": "babel-preset-expo",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 0,
+    "version": "57.0.15"
+  },
+  {
+    "package": "@expo/fingerprint",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 0,
+    "version": "0.20.14"
+  },
+  {
+    "package": "expo-dev-menu",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 60,
+    "version": "57.0.20"
+  },
+  {
+    "package": "expo-dev-launcher",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 82,
+    "version": "57.0.21"
+  },
+  {
+    "package": "@expo/config",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 17,
+    "version": "57.0.10"
+  },
+  {
+    "package": "@expo/metro-config",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 0,
+    "version": "57.0.13"
+  },
+  {
+    "package": "@expo/cli",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 378,
+    "version": "57.0.29"
+  },
+  {
+    "package": "expo-constants",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 15,
+    "version": "57.0.21"
+  },
+  {
+    "package": "@expo/image-utils",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 0,
+    "version": "0.11.6"
+  },
+  {
+    "package": "@expo/require-utils",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 8,
+    "version": "57.0.6"
+  },
+  {
+    "package": "@expo/metro-file-map",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 0,
+    "version": "57.0.4"
+  },
+  {
+    "package": "@expo/inline-modules",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 0,
+    "version": "0.1.8"
+  },
+  {
+    "package": "@expo/router-server",
+    "upstreamCommit": "50ac74f1ab5682c8e32b24da6e5e97dd4dbbb80f",
+    "matchingSourceFiles": 32,
+    "version": "57.0.12"
+  },
+  {
+    "package": "@expo/prebuild-config",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 23,
+    "version": "57.0.18"
+  },
+  {
+    "package": "expo",
+    "version": "57.0.23",
+    "upstreamCommit": "f6f5af06b95cb7d511b52641885b2fb5adad525d",
+    "matchingSourceFiles": 145
+  },
+  {
+    "package": "expo-build-properties",
+    "version": "57.0.20",
+    "upstreamCommit": "a56c66f30c2d89a5833e077559a0ec1130097ed3",
+    "matchingSourceFiles": 9
+  },
+  {
+    "package": "expo-dev-client",
+    "version": "57.0.20",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 8
+  },
+  {
+    "package": "expo-modules-jsi",
+    "version": "57.1.2",
+    "upstreamCommit": "58da4edafcb043872c3ed9bf8f5957e6544d0a9c",
+    "matchingSourceFiles": 88
+  }
+]

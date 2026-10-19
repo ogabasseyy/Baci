@@ -123,4 +123,58 @@ describe('OgabasseyHomeProductSection', () => {
     // Best-effort loader degrades to empty launch coverage on its own.
     await expect(launchPromise).resolves.toEqual([]);
   });
+
+  it('places the hero before the product section in the streamed Fizz HTML via the macrotask yield', async () => {
+    const { Suspense } = await import('react');
+    const { renderToReadableStream } = await import('react-dom/server.edge');
+
+    async function MultiMicrotaskHero() {
+      // Simulate the sequential cached awaits in resolveOgabasseyHomeHeroShell
+      // (getCachedMerchant -> loadOgabasseyLaunchProducts -> connection).
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      return <section data-testid="streamed-hero">Hero Banner</section>;
+    }
+
+    const stream = await renderToReadableStream(
+      <div>
+        <Suspense fallback={<div data-testid="product-fallback" />}>
+          <OgabasseyHomeProductSection
+            merchant={mockSectionMerchant}
+            pathPrefix="/ogabassey"
+            productsPromise={Promise.resolve([createSectionProduct()])}
+          />
+        </Suspense>
+        <Suspense fallback={<div data-testid="hero-fallback" />}>
+          <MultiMicrotaskHero />
+        </Suspense>
+      </div>
+    );
+
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    const chunks: string[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    chunks.push(decoder.decode());
+    const html = chunks.join('');
+
+    const heroChunkIndex = chunks.findIndex((chunk) =>
+      chunk.includes('Hero Banner')
+    );
+    const productChunkIndex = chunks.findIndex((chunk) =>
+      chunk.includes('OgaBassey home payload')
+    );
+
+    expect(heroChunkIndex).toBeGreaterThan(-1);
+    expect(productChunkIndex).toBeGreaterThan(-1);
+    expect(heroChunkIndex).toBeLessThan(productChunkIndex);
+    expect(html.indexOf('Hero Banner')).toBeLessThan(
+      html.indexOf('OgaBassey home payload')
+    );
+  });
 });

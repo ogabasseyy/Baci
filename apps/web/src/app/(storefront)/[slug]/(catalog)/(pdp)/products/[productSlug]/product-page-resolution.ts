@@ -175,13 +175,21 @@ export const getRequestScopedProduct = cache(
 // redirect (page component) or emit noindex metadata (generateMetadata).
 export function getCategorizedRedirectTarget(
   storeSlug: string,
-  product: Product
+  product: Product,
+  searchParams?: ResolvedSearchParams
 ): string | null {
   const productPath = getProductUrl(product);
   if (productPath.startsWith('/products/')) {
     return null;
   }
-  return buildProductRedirectPath(storeSlug, productPath);
+  const targetPath = buildProductRedirectPath(storeSlug, productPath);
+  // Only the path is wrong — the selection is valid, so the matched
+  // option (variantId, condition) rides along instead of opening defaults.
+  if (searchParams === undefined) {
+    return targetPath;
+  }
+  const queryString = buildRedirectSearchParams(searchParams).toString();
+  return queryString ? `${targetPath}?${queryString}` : targetPath;
 }
 
 // Returns the canonical redirect target when the URL's variant params are
@@ -256,7 +264,11 @@ export async function resolveProductPage(
     }
     permanentRedirect(asRoute(legacyRedirectPath));
   }
-  const categorizedTarget = getCategorizedRedirectTarget(slug, product);
+  const categorizedTarget = getCategorizedRedirectTarget(
+    slug,
+    product,
+    resolvedSearchParams
+  );
   if (categorizedTarget) {
     permanentRedirect(asRoute(categorizedTarget));
   }

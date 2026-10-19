@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { piggyvestWebhookEventSchema } from './events';
 import { interestPayoutSuccessEventSchema } from './interest-payout-event';
+import observedInterestPayout from './interest-payout-success.fixture.json';
 
 const interestEvent = {
   eventId: '01K8TESTINTEREST001',
@@ -29,6 +31,49 @@ const interestEvent = {
 };
 
 describe('interestPayoutSuccessEventSchema', () => {
+  it('accepts the technical-team payload and preserves its net kobo amount', () => {
+    const parsed = interestPayoutSuccessEventSchema.parse(
+      observedInterestPayout
+    );
+
+    expect(parsed.eventCategory).toBe('interest_payout');
+    expect(parsed.eventData.amount).toBe(733);
+    expect(parsed.eventData.break_down).toEqual({
+      gross_interest_payout: 814,
+      withholding_tax: 81,
+      net_interest_payout: 733,
+    });
+    expect(parsed.pvb_destination_wallet).toBeNull();
+    expect(parsed.eventData.destination_wallet).toBe(
+      'b7ff9afd-bb88-11f1-a539-42010a9c0026'
+    );
+  });
+
+  it('accepts the provider underscore category through the webhook parser', () => {
+    const result = piggyvestWebhookEventSchema.safeParse({
+      ...interestEvent,
+      eventCategory: 'interest_payout',
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.eventCategory).toBe('interest_payout');
+    }
+  });
+
+  it.each([
+    'interest_accrued',
+    'interest payout',
+    'INTEREST_PAYOUT',
+  ])('rejects the unrelated payout category %s', (eventCategory) => {
+    const result = interestPayoutSuccessEventSchema.safeParse({
+      ...interestEvent,
+      eventCategory,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it('accepts the provider-shaped interest payout', () => {
     // Arrange & Act
     const result = interestPayoutSuccessEventSchema.safeParse(interestEvent);

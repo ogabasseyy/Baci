@@ -41,6 +41,11 @@ export async function OgabasseyHomeProductSection({
   productsPromise,
 }: OgabasseyHomeProductSectionProps) {
   const products = (await productsPromise) || [];
+  // Yield one macrotask after the product feed resolves so that when
+  // 'use cache' resolves synchronously in memory during PPR resume or SSR,
+  // React's Fizz HTML stream flushes the above-the-fold <Hero> boundary
+  // before serializing ~57 KB of below-the-fold product card RSC Flight data.
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
   const merchantProducts = mapHomeProductsToTemplateProducts(products);
   const merchantCurrency = resolveMerchantCurrencyConfig(merchant);
 

@@ -19,6 +19,12 @@ export async function fetchAvailableBrands(
   const pageSize = 500;
   let offset = 0;
 
+  // Mirror fetchProductsPage: an explicitly provided search that
+  // normalizes to nothing matches no brands rather than all of them.
+  if (options.search && !buildProductSearchQuery(options.search).normalized) {
+    return [];
+  }
+
   while (true) {
     const normalizedSearch = options.search
       ? buildProductSearchQuery(options.search).normalized

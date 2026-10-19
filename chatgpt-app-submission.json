@@ -1,0 +1,200 @@
+{
+  "$schema": "https://developers.openai.com/plugins/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "Ogabassey",
+    "subtitle": "Shop tech products",
+    "description": "Find electronics and accessories in the Ogabassey catalog, inspect product options and listed prices, and open a cart handoff on Ogabassey. Check where to confirm delivery fees and availability before completing checkout on the website.",
+    "category": "SHOPPING"
+  },
+  "tools": {
+    "search_products": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Searches active Ogabassey catalog records and returns matching product data without changing them.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_product": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads public details for a selected Ogabassey product without changing it.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_product_variants": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads public variant and offer details without changing catalog data.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "prepare_storefront_cart_link": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Returns a product handoff URL; the item is added only if the shopper opens that URL on Ogabassey.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "add_to_cart": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Deprecated alias of prepare_storefront_cart_link: returns a product handoff URL; the item is added only if the shopper opens that URL on Ogabassey.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "update_ogabassey_guest_cart": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Saves guest cart lines keyed by an opaque cart token; quantity 0 removes a line.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Removals and quantity decreases delete persisted guest-cart lines; catalog records, charges, and orders are unaffected."
+      }
+    },
+    "get_store_info": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Reads public store and policy information without changing records.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "browse_categories": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Lists public catalog categories without changing records.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_brands": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Lists brands in the public Ogabassey catalog without changing records.",
+        "open_world_justification": "Only uses the bounded Ogabassey catalog and store policies.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    },
+    "get_delivery_fee_info": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": true,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Returns delivery policy or a live estimate without booking delivery, charging a fee, or changing a cart.",
+        "open_world_justification": "May call the external GIG carrier for a read-only delivery estimate.",
+        "destructive_justification": "Does not delete records, charge a customer, or complete an order."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Find public accessories without excluding non-phone products.",
+      "user_prompt": "Using Ogabassey, find a fragrance diffuser in Accessories and show its listed price and image.",
+      "file_attachment_urls": null,
+      "tools_triggered": "search_products",
+      "expected_output": "Shows the Moodo Smart Home Fragrance Diffuser listing in Accessories with its current listed price and image, without unrelated phone recommendations. If the listing is no longer active, say so rather than inventing a substitute.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Inspect an exact product and its condition.",
+      "user_prompt": "Using Ogabassey, show the details and current listed price for Redmi 15.",
+      "file_attachment_urls": null,
+      "tools_triggered": "get_product",
+      "expected_output": "Shows the matching product details and labels any condition-specific price; does not promise live stock.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Check selectable options before checkout.",
+      "user_prompt": "Using Ogabassey, what storage and colour options are listed for Redmi 15?",
+      "file_attachment_urls": null,
+      "tools_triggered": "get_product_variants",
+      "expected_output": "Lists actual product options and distinguishes confirmed stock from availability that needs checking.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Share a cart handoff link, then save it to the persistent guest cart.",
+      "user_prompt": "Using Ogabassey, give me a link that adds one Apple 20W fast charger to my cart on the website, then save it to my guest cart so I can keep shopping in chat.",
+      "file_attachment_urls": null,
+      "tools_triggered": "prepare_storefront_cart_link, update_ogabassey_guest_cart",
+      "expected_output": "Returns an Ogabassey handoff URL for one item, then saves it to the guest cart with a review URL; the shopper can review the cart on Ogabassey before checkout.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Check where to confirm destination-specific delivery fees.",
+      "user_prompt": "Using Ogabassey, how much is delivery to Ikeja, Lagos?",
+      "file_attachment_urls": null,
+      "tools_triggered": "get_delivery_fee_info",
+      "expected_output": "Without selected shipment items, explains the delivery policy and asks for product IDs, quantities and exact variants before a live GIG estimate. Requests confirmed per-unit packed weight if needed; never invents rates or weights. With eligible items, returns available live estimates or explains why unavailable, and directs final confirmation to checkout.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not search a different retailer.",
+      "user_prompt": "Find a fragrance diffuser on Amazon, not Ogabassey.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "Does not invoke Ogabassey because the buyer specified another retailer.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not handle utility payments.",
+      "user_prompt": "Pay my electricity bill and show me the receipt.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "Does not invoke Ogabassey; utility bill payment is outside this app.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not claim unrelated product availability.",
+      "user_prompt": "Find my private photo library and organize the pictures.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "Does not invoke Ogabassey or claim access to personal photos.",
+      "expected_output_url": null
+    }
+  ]
+}

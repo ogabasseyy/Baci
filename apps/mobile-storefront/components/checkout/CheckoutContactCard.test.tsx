@@ -125,12 +125,14 @@ describe('CheckoutContactCard', () => {
     expect(onToggleSaveDetails).toHaveBeenCalledTimes(1);
   });
 
-  it('strips whitespace from the email as the user types', () => {
+  it('preserves autofilled email text until the keyboard releases the field', () => {
     render(<CheckoutContactCardHarness />);
 
     const emailInput = screen.getByPlaceholderText('john@example.com');
     fireEvent.changeText(emailInput, ' ja ne@ example.com ');
 
+    expect(emailInput.props.value).toBe(' ja ne@ example.com ');
+    fireEvent(emailInput, 'blur');
     expect(emailInput.props.value).toBe('jane@example.com');
   });
 

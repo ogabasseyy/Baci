@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { logger } from '@/lib/logger';
 import { sanitizeSearchQuery } from '@/lib/sanitize-core';
 import { GET as autocompleteGET } from './autocomplete/route';
 import { GET as searchGET } from './route';
+
+type ServerModule = typeof import('next/server');
 
 const afterCallbacks = vi.hoisted(
   () => [] as Array<() => Promise<void> | void>
@@ -128,7 +129,7 @@ vi.mock('next/headers', () => ({
 }));
 
 vi.mock('next/server', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next/server')>();
+  const actual = await importOriginal<ServerModule>();
   return {
     ...actual,
     after: vi.fn((callback: () => Promise<void> | void) => {
@@ -151,93 +152,21 @@ describe('Search API Security', () => {
   });
 
   describe('GET /api/search', () => {
-    it('should sanitize search query before passing to rpc and insert', async () => {
+    it('sanitizes direct search reads without recording a submission', async () => {
       const maliciousQuery = '<script>alert(1)</script>';
       const merchantId = '123e4567-e89b-12d3-a456-426614174000';
-      const expectedQuery = sanitizeSearchQuery(maliciousQuery);
-
       const request = new NextRequest(
-        `http://localhost:3000/api/search?q=${encodeURIComponent(
-          maliciousQuery
-        )}&merchant_id=${merchantId}&limit=10`
+        `http://localhost:3000/api/search?q=${encodeURIComponent(maliciousQuery)}&merchant_id=${merchantId}&limit=10`
       );
-
       const response = await searchGET(request);
-      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect((await response.json()).query).toBe(
+        sanitizeSearchQuery(maliciousQuery)
+      );
       await flushAfterCallbacks();
-
-      expect(response.status).toBe(200);
-      expect(data.query).toBe(expectedQuery);
-      expect(mockAnalyticsSupabase.from).toHaveBeenCalledWith(
-        'search_analytics'
-      );
-      expect(mockAnalyticsChainable.insert).toHaveBeenCalledWith({
-        merchant_id: merchantId,
-        search_query: expectedQuery,
-        results_count: 0,
-        search_method: 'server',
-      });
-    });
-
-    it('does not fail product search when analytics insert fails', async () => {
-      const merchantId = '123e4567-e89b-12d3-a456-426614174000';
-      mockAnalyticsChainable.insert.mockResolvedValueOnce({
-        error: { message: 'insert failed' },
-      });
-
-      const request = new NextRequest(
-        `http://localhost:3000/api/search?q=iphone&merchant_id=${merchantId}`
-      );
-
-      const response = await searchGET(request);
-      const data = await response.json();
-      await flushAfterCallbacks();
-
-      expect(response.status).toBe(200);
-      expect(data.query).toBe('iphone');
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Storefront search analytics insert failed',
-          error: { message: 'insert failed' },
-          merchantId,
-          query: 'iphone',
-        })
-      );
-    });
-
-    it('schedules analytics after the search response instead of blocking it', async () => {
-      const merchantId = '123e4567-e89b-12d3-a456-426614174000';
-      let resolveAnalyticsInsert:
-        | ((result: { error: { message: string } | null }) => void)
-        | undefined;
-      mockAnalyticsChainable.insert.mockImplementationOnce(
-        () =>
-          new Promise<{ error: { message: string } | null }>((resolve) => {
-            resolveAnalyticsInsert = resolve;
-          })
-      );
-
-      const request = new NextRequest(
-        `http://localhost:3000/api/search?q=iphone&merchant_id=${merchantId}`
-      );
-
-      const response = await searchGET(request);
-      const data = await response.json();
-
-      expect(response.status).toBe(200);
-      expect(data.query).toBe('iphone');
+      // Reads are silent: no render row and no explicit submission row.
       expect(mockAnalyticsChainable.insert).not.toHaveBeenCalled();
-
-      const afterFlush = flushAfterCallbacks();
-      expect(mockAnalyticsChainable.insert).toHaveBeenCalledWith({
-        merchant_id: merchantId,
-        search_query: 'iphone',
-        results_count: 0,
-        search_method: 'server',
-      });
-
-      resolveAnalyticsInsert?.({ error: null });
-      await afterFlush;
+      expect(afterCallbacks).toHaveLength(0);
     });
 
     it('should validate merchant_id UUID', async () => {

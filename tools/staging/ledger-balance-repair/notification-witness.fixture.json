@@ -1,0 +1,42 @@
+{
+  "excludedTargetCount": 7,
+  "excludedTargetHash": "0b9bbba3cc9dff53a3bd3e742a97c5713f07b342061f1b558410baa666a0891f",
+  "redactedColumns": [
+    "title",
+    "body"
+  ],
+  "targetCount": 1,
+  "targetHash": "2968b91904ac3be2279dbaf93f6a2a2459711cb82f76cf5027c9c3ab02eb6995",
+  "targetRowColumnHashes": [
+    {
+      "body": "f96777710a678e42fa46264a53a6694ee377e9e2277567f734554fdff787171a",
+      "created_at": "158f762ba339ed8fa833af3f11a8a1f9aa17150dfdde69324644712ad2e35538",
+      "customer_id": "d589f9603b2fbc4fba3a3be8824f1f34a4feba6881d7dc4fa935623295965342",
+      "due_period_start": "a72e817557cdf236280120c5ae3c4753832f3c5eeca48eafbf052ed9c57b3703",
+      "event_key": "59f0c2b8d9fd7ec5fed216af2f37e285bd1a936b0385c54b49ffe6ea7d3bce4e",
+      "goal_id": "8838112e0ee4287e001c7f5b1236950324919a61a2b4f82c3d39191bfdde8dce",
+      "id": "48625fb49567847409eb3ba8571ddc9dbaf32de993d48a8d45ed1bfeb12f9a7a",
+      "merchant_id": "d32eafecfdab6718dbf6fb17794f2e04ec396f1765de6740806bbdf3aedba832",
+      "push_expanded_at": "28e99ddda0fd0a4b455cb991d031f44a8413e884f0ccbcbe86f6b95b9b49b517",
+      "read_at": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "title": "2e77521a59212122af0ed66cdddc46298b04f8356220fd71a4637cb54702ea41",
+      "type": "16eb1bbc047e85fd29fcae3182863835824c2fd778e4106d800f276b0340e795",
+      "voided_at": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    }
+  ],
+  "targetRows": [
+    {
+      "created_at": "2026-10-03T16:40:14.266867+00:00",
+      "customer_id": "10000000-0000-4000-8000-000000000002",
+      "due_period_start": "2026-10-01T23:00:00+00:00",
+      "event_key": "missed:2026-10-02",
+      "goal_id": "9f01153c-1589-4dde-b9aa-8f644a846832",
+      "id": "914e9941-c9c1-44a1-9879-1de3e54ac365",
+      "merchant_id": "10000000-0000-4000-8000-000000000001",
+      "push_expanded_at": "2026-10-03T16:40:14.294433+00:00",
+      "read_at": null,
+      "type": "missed_contribution",
+      "voided_at": null
+    }
+  ]
+}

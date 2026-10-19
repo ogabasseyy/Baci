@@ -1,0 +1,33 @@
+{
+  "profileVersion": "2026-04-08",
+  "note": "Pinned to UCP_PROFILE_VERSION in apps/web/src/lib/agentic/ucp-profile-constants.ts. Shapes mirror the existing Baci UCP cart routes (request-integrity headers, ucp-cart-response envelope); they are not copied from a newer general profile. Re-verify against official platform documentation before any external enrollment claim.",
+  "createCartRequest": {
+    "currency": "NGN",
+    "line_items": [{ "item": { "id": "<product-id>" }, "quantity": 1 }]
+  },
+  "cartResponseEnvelope": {
+    "id": "<cart-id>",
+    "status": "active",
+    "currency": "NGN",
+    "line_items": [],
+    "totals": [{ "amount": 0, "display_text": "Total", "type": "total" }],
+    "links": { "continue_url": "https://<merchant-host>/cart" },
+    "ucp": {
+      "version": "2026-04-08",
+      "status": "success",
+      "capabilities": { "dev.ucp.shopping.cart": [{ "version": "2026-04-08" }] }
+    }
+  },
+  "migratedCartOutcome": {
+    "httpStatus": 409,
+    "body": {
+      "cart_id": "<canonical-cart-id>",
+      "code": "refresh_required",
+      "error": "Agent cart moved to the shared cart; refresh to continue"
+    }
+  },
+  "callerMismatchOutcome": {
+    "httpStatus": 404,
+    "body": { "error": "Cart not found" }
+  }
+}

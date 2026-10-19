@@ -1,0 +1,24 @@
+diff --git a/ios/WebBrowserSession.swift b/ios/WebBrowserSession.swift
+--- a/ios/WebBrowserSession.swift
++++ b/ios/WebBrowserSession.swift
+@@ -30,7 +30,7 @@
+   }
+ 
+   func open() {
+-    var currentViewController = UIApplication.shared.keyWindow?.rootViewController
++    var currentViewController = Utilities.keyWindow()?.rootViewController
+     while currentViewController?.presentedViewController != nil {
+       currentViewController = currentViewController?.presentedViewController
+     }
+diff --git a/ios/WebAuthSession.swift b/ios/WebAuthSession.swift
+--- a/ios/WebAuthSession.swift
++++ b/ios/WebAuthSession.swift
+@@ -6,7 +6,7 @@
+ private class PresentationContextProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
+   func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+     #if os(iOS)
+-    return UIApplication.shared.keyWindow ?? ASPresentationAnchor()
++    return Utilities.keyWindow() ?? ASPresentationAnchor()
+     #else
+     return NSApp.mainWindow ?? ASPresentationAnchor()
+     #endif

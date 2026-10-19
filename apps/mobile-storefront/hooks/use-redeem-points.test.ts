@@ -103,6 +103,7 @@ function setupHook(points = 1000) {
   const queryKey = walletKeys.data({
     merchantId: 'merchant-1',
     ownerId: 'customer-1',
+    userId: 'user-1',
   });
   queryClient.setQueryData(queryKey, createWalletData(points));
   const hook = renderHook(() => useRedeemPoints(), {

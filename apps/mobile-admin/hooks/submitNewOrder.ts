@@ -244,6 +244,15 @@ export async function submitNewOrder({
     queryClient.invalidateQueries({ queryKey: ['orders'] });
     queryClient.invalidateQueries({ queryKey: ['order-counts'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+    queryClient.invalidateQueries({
+      queryKey: ['monthly-transaction-count', merchantId],
+    });
+    queryClient.invalidateQueries({
+      queryKey: ['transaction-review', merchantId],
+    });
+    queryClient.invalidateQueries({ queryKey: ['analytics-overview'] });
+    queryClient.invalidateQueries({ queryKey: ['analytics-detail'] });
+    queryClient.invalidateQueries({ queryKey: ['top-selling-products'] });
 
     setLastOrderId(createdOrder.id);
     setShowSuccessModal(true);

@@ -1,6 +1,7 @@
 import { join, resolve as resolvePath } from 'node:path';
 import { createRemediationCaseState } from './remediation-case-state.mjs';
 import { redactCodexError } from './remediation-codex-output.mjs';
+import { resolveRemediationContainerIdentity } from './remediation-container-identity.mjs';
 import { createRemediationDraftPrStatusResolver } from './remediation-draft-pr-status.mjs';
 import { runRemediationAutofix } from './remediation-git-workflow.mjs';
 import { reconcileRemediationLifecycle } from './remediation-lifecycle-recovery.mjs';
@@ -27,6 +28,7 @@ export function createRemediationWorker({
     autofixRunner = runRemediationAutofix,
     candidateEnricher,
     candidateLoader,
+    containerIdentity,
     draftPrStatusResolver,
     env = process.env,
     fetchFn = fetch,
@@ -157,6 +159,10 @@ export function createRemediationWorker({
     for (const candidate of lifecycleCandidates) {
       actions.push({ type: candidate.lifecycleEvent || 'lifecycle_observed' });
     }
+    const autofixContainerIdentity =
+      mode === 'autofix'
+        ? resolveRemediationContainerIdentity({ containerIdentity })
+        : undefined;
     for (const pendingCandidate of candidates) {
       let candidate = pendingCandidate;
       if (typeof candidateEnricher === 'function') {
@@ -220,7 +226,12 @@ export function createRemediationWorker({
       }
       let result;
       try {
-        result = await autofixRunner({ candidate, env, prompt });
+        result = await autofixRunner({
+          candidate,
+          containerIdentity: autofixContainerIdentity,
+          env,
+          prompt,
+        });
       } catch (error) {
         actions.push({
           detail: error instanceof Error ? error.message : String(error),

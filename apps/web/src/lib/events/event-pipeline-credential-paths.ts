@@ -1,3 +1,6 @@
+import { giglTrackingCredentialPaths } from './event-pipeline-credential-paths.gigl-tracking';
+import { eventPipelineVtuReplayCredentialPaths } from './event-pipeline-vtu-replay-credential-paths';
+
 export const eventPipelineCredentialPaths = [
   ...['lookup', 'product', 'search'].map(
     (operation) =>
@@ -112,56 +115,7 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/cloudflare-purge.ts',
     'apps/web/src/env.ts',
   ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    'apps/web/src/lib/expo-push.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/app/api/cron/gigl-tracking-notifications/route.ts',
-    'apps/web/src/app/api/cron/gigl-tracking/gigl-tracking-notification-worker.ts',
-    'apps/web/src/lib/insurance/notify-activate-protection.ts',
-    'apps/web/src/lib/supabase/admin.ts',
-    'apps/web/src/env.ts',
-  ],
+  ...giglTrackingCredentialPaths,
   [
     'apps/web/src/app/api/cron/provision-wallet-funding-recovery-hmac/route.ts',
     'apps/web/src/env.ts',
@@ -190,15 +144,6 @@ export const eventPipelineCredentialPaths = [
   ],
   [
     'apps/web/src/app/api/internal/compare-page-status/[identifier]/route.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/lib/storefront-compare-page-hard-status.ts',
-    'apps/web/src/env.ts',
-  ],
-  [
-    'apps/web/src/proxy.ts',
-    'apps/web/src/lib/storefront-compare-page-hard-status.ts',
     'apps/web/src/env.ts',
   ],
   [
@@ -295,4 +240,8 @@ export const eventPipelineCredentialPaths = [
     'apps/web/src/lib/supabase/admin.ts',
     'apps/web/src/env.ts',
   ],
+  // Wallet-only VTU replay helper (PR #3655, AGENTS.md checkout
+  // exception): spread here — not in event-pipeline-database.ts —
+  // to keep the aggregator at the 300-line runtime ceiling.
+  ...eventPipelineVtuReplayCredentialPaths,
 ] as const;

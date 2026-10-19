@@ -1,6 +1,6 @@
 # Shared-code consolidation audit (Step 1)
 
-Date: 2026-10-19. Base: `main` at `390da149c3` (post-#3693). Consumer counts below were re-run with the stated pipeline against merge head `0bbde3fd68` and are unchanged (459/147/121).
+Date: 2026-10-19. Base: `main` at `390da149c3` (post-#3693). The import-surface counts below were measured with the stated pipeline at commit `5bba215d94` (this audit's head; subsequent doc-only commits do not affect them).
 Scope per the amended consolidation plan: only domains where at least
 two apps hold same-concept modules. Method: side-by-side reading of
 representative module pairs plus symbol/format inventories. `knip`
@@ -9,19 +9,20 @@ output was used only as a supporting signal. No code was moved.
 ## Consumers and existing shared surface
 
 `@baci/shared` (`packages/shared`, ~265 source files / ~23k lines) is
-consumed by all three apps. Consumer counts below are the direct
-output of the stated command (files whose text contains an
-`@baci/shared` import/require/dynamic-import pattern, `.test.`
-paths excluded by the pipeline — no further semantic filtering is
-claimed):
-`apps/web/src` 459, `apps/mobile-storefront` 147,
+consumed by all three apps. The counts below are **not** a semantic
+consumer census: they are files matching the stated import-text
+pattern (static/dynamic import, `require`, side-effect import, and
+re-export forms; comment/string mentions are included and `.test.`
+paths are excluded by the pipeline — no further semantic filtering
+is claimed):
+`apps/web/src` 500, `apps/mobile-storefront` 170,
 `apps/mobile-admin` 121. One contract caveat: the shared package's own Zod peer range is `^3.0.0 || ^4.0.0` (dev dependency `^4.4.3`), so Zod-4-only APIs such as `z.iso.datetime` cannot move into `@baci/shared` until the wallet wave either narrows that peer range or records a compatibility decision. Note the package already uses the same Zod-4-only API in-tree (`z.iso.datetime({ offset: true })` in `packages/shared/src/contracts/piggyvest-device-change.ts:5`), so the de-facto floor is already Zod 4 — the decision is to record that floor, not to migrate code. Reproduce exactly (one command per base):
-`grep -rlE "(from[[:space:]]+['\"]@baci/shared|require\(['\"]@baci/shared|import\(['\"]@baci/shared)" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules <base> | grep -v '\.test\.' | wc -l`
+`grep -rlE "(from[[:space:]]+['\"]@baci/shared|require\(['\"]@baci/shared|import\(['\"]@baci/shared|import[[:space:]]+['\"]@baci/shared|export[[:space:]].*from[[:space:]]+['\"]@baci/shared)" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules <base> | grep -v '\.test\.' | wc -l`
 with `<base>` = `apps/web/src`, `apps/mobile-storefront`,
 `apps/mobile-admin` respectively; other precise
 counts in this doc are from the same session's `find`/`wc`/`grep`
-pass on base `390da149c3` (not re-measured on `0bbde3fd68`; only
-the consumer counts above were re-run there) and should be treated
+pass on base `390da149c3` (not re-measured at `5bba215d94`; only
+the import-surface counts above were) and should be treated
 as ±1 file at file boundaries (tests vs fixtures classification).
 The sequencing argument rests on the qualitative duplication
 evidence in each row, not on exact counts. Bases differ
@@ -79,7 +80,7 @@ work below extends it.
 the cart pilot activation is complete only when **every** item in
 this checklist is done, in this order:
 
-1. The 81 registered cart migrations have applied to production.
+1. The registered cart migrations have applied to production (registry: `apps/web/tools/db/supabase-history-replay-cart-pending-sources.ts` with the count pinned in `supabase-history-replay-cart-pending-sources.test.ts` — 83 entries at this audit's head `5bba215d94`, up from 81 at the audit base as later main PRs added cart migrations; the wave verifies the then-current registry count rather than this number). Both gate artifacts exist in-repo: this rollout doc (`docs/deploy/shared-cart-rollout.md`) and the acceptance matrix (`docs/qa/shared-cart-acceptance.md`).
 2. The final privilege state is verified (anon cannot execute
    preview/replay RPCs).
 3. The pre-enrollment telemetry/quota gates in the rollout doc are
@@ -165,7 +166,18 @@ green CI and change no activation state.
    email cannot install a reservation that blocks the real shopper),
    records a durable *initializing* state before any provider call,
    reconciles unknown provider outcomes before releasing anything,
-   and is released only on a known-failed outcome. The 1c rollout
+   and is released only on a known-failed outcome.
+   **Deployment prerequisite:** the tracking-token wiring (mobile
+   `initializeGatewayAndRoute` and web `requestDvaInitialization`,
+   specified in the 1c row below) must ship *before* the 1b guard is
+   enabled — the guard demands a proof the current clients do not
+   yet transmit, so enabling it first would reject ordinary guest
+   bank transfers (including already-installed clients) throughout
+   the interval; alternatively a working minimum-version/force-update
+   gate (row 10) must precede enablement. When the token travels in
+   the request body, `tracking_token` joins the initialize route's
+   redaction key set (`redactPaymentLogValue`) with a regression
+   test, and a header transport must not be logged either. The 1c rollout
    must evaluate a minimum-version/force-update gate (row 10 policy)
    for stale clients rather than silently accepting the window. Share the intent/poll subshape **and** a canonical *order-funding-scoped* account subshape derived from the single server response builder (`wallet-order-funding-intent-response.ts` emits exactly `accountName/accountNumber/bankName/provider` from `result.account`): both clients parse the same order-funding endpoint payload, so for that endpoint the client schemas' divergence (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) is drift to align to the server's actual emission, not a legitimate per-app contract. Scope limit: the mobile `WalletFundingAccountSchema` is also reused by the piggyvest primary-wallet snapshot (`piggyvest-primary-wallet.ts` extends it with `provider: z.literal('piggyvest')`, and its 200-char caps mirror the server snapshot schema in `apps/web/src/schemas/piggyvest-primary-wallet-snapshot.ts`) — that is a different payload with its own legitimate contract, so the piggyvest snapshot schema stays distinct (or a separate extension) and is not aligned to the order-funding builder. A third consumer must also be preserved: `WalletFundingAccountResponseSchema` (same schema file) parses the standalone legacy `/wallet/funding-account` GET/POST responses via `lib/wallet-funding-account.ts`, which is outside this wave — so the wave splits out an order-intent-specific account schema, or explicitly includes and characterizes the legacy funding-account response before altering the shared base. The wave adds a characterization fixture for each of the three account payloads (order-funding, piggyvest snapshot, standalone funding-account) before any unification. The wave verifies the subshape against the actual create/poll HTTP responses before adopting it; the wave must also align the create-failure
    protocol — the failure classifier is
@@ -264,8 +276,13 @@ fallback in `formatCurrencyCompactNotation`,
 `apps/mobile-admin/lib/utils.ts:177-215`, currency formatting only — no date fallback is claimed or needed
 for this currency-only wave). The formatting wave must therefore
 add an on-device/Hermes verification (or a verified locale/currency
-allowlist) before relying on fixture parity. Size: one shared module
-plus wrapper swaps. Size is an estimate to confirm at wave start
-(shared module ~150 lines + fixtures ~100 + three thin wrappers);
-if the wrapper swaps push the PR over the ~400-line decision-rule
-budget, split by app (shared module + one app per PR).
+allowlist) before relying on fixture parity. **Size — committed
+split, not an estimate:** row 1 counts 7+ `formatPrice` definitions,
+4+ `formatCurrency` definitions, and 133 `formatCurrency` call sites
+with divergent outputs, so replacing definitions and preserving
+call-site signatures is the dominant cost and cannot fit one
+~400-line PR. The wave is therefore split up front: (i) shared
+module + characterization fixtures PR, then (ii) one adoption PR
+per app, each sized per definition/call-site class at wave start
+and held to the ~400-line decision-rule budget (splitting further
+by formatter within an app if a class exceeds it).

@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { cartSessionStorage } from './session-storage';
 
 jest.mock('expo-secure-store', () => ({
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'whenUnlockedThisDeviceOnly',
   getItemAsync: jest.fn(),
   setItemAsync: jest.fn(),
   deleteItemAsync: jest.fn(),
@@ -30,7 +31,8 @@ it('treats a corrupted stored record as absent and overwrites it on set', async 
   await cartSessionStorage.set(a, 'cp1.fresh.signature');
   expect(secure.setItemAsync).toHaveBeenCalledWith(
     expect.stringContaining(a),
-    expect.stringContaining('cp1.fresh.signature')
+    expect.stringContaining('cp1.fresh.signature'),
+    { keychainAccessible: 'whenUnlockedThisDeviceOnly' }
   );
   secure.getItemAsync.mockResolvedValue('{"unexpected":"shape"}');
   await expect(cartSessionStorage.get(a)).resolves.toBeNull();
@@ -111,6 +113,21 @@ it('retires a proof atomically so restarts cannot restore it, and fences late pr
   expect(secure.deleteItemAsync).not.toHaveBeenCalled();
   await cartSessionStorage.acknowledgeRetirement?.(a, 'cp1.a.signature');
   expect(secure.deleteItemAsync).toHaveBeenCalledTimes(1);
+});
+it('writes proofs and retire markers device-only so backups cannot migrate grant authority', async () => {
+  let stored: string | null = null;
+  secure.setItemAsync.mockImplementation(async (_key, value) => {
+    stored = value;
+  });
+  secure.getItemAsync.mockImplementation(async () => stored);
+  await cartSessionStorage.set(a, 'cp1.a.signature');
+  await cartSessionStorage.retire?.(a);
+  expect(secure.setItemAsync).toHaveBeenCalledTimes(2);
+  for (const call of secure.setItemAsync.mock.calls) {
+    expect(call[2]).toEqual({
+      keychainAccessible: 'whenUnlockedThisDeviceOnly',
+    });
+  }
 });
 it('retains account ownership when ordinary command replies renew the proof', async () => {
   let stored: string | null = null;

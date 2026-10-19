@@ -129,7 +129,10 @@ export const cartSessionStorage: CartSessionStorage = {
                 ? promotion.ownerSubject
                 : previous?.ownerSubject,
           })
-        )
+        ),
+        // Device-only: a backup restored to new hardware must not carry
+        // live device-grant authority with it.
+        { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }
       );
     });
   },
@@ -140,7 +143,8 @@ export const cartSessionStorage: CartSessionStorage = {
       if (record)
         await SecureStore.setItemAsync(
           storageKey,
-          JSON.stringify({ ...record, retired: true })
+          JSON.stringify({ ...record, retired: true }),
+          { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }
         );
     });
   },

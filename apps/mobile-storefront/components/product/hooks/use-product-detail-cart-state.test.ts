@@ -175,4 +175,45 @@ describe('useProductDetailCartState', () => {
 
     mockCartStoreState.items = [];
   });
+
+  it('excludes variant lines from the strict base-pool total', () => {
+    // Variant inventory is separate from the base pool: a stale
+    // variant line must not consume the UI total and make an
+    // in-stock base line appear unavailable.
+    mockCartStoreState.items = [
+      {
+        cartItemId: 'line-base',
+        product_id: 'product-1',
+        quantity: 2,
+      },
+      {
+        cartItemId: 'line-variant',
+        product_id: 'product-1',
+        variant_id: 'variant-1',
+        quantity: 4,
+      },
+    ] as never;
+
+    const { result } = renderHook(() =>
+      useProductDetailCartState({
+        currentVariantDisplaySelection: null,
+        effectiveSelectedAttributes: {},
+        effectiveSelectedColor: null,
+        effectiveSelectedStorage: null,
+        effectiveSelectedVariantId: null,
+        offerConditionKey: null,
+        routeOfferId: null,
+        suppressConditionOfferMatch: false,
+        product: {
+          condition: 'new',
+          has_variants: false,
+          id: 'product-1',
+        },
+      } as never)
+    );
+
+    expect(result.current.productQuantityInCart).toBe(2);
+
+    mockCartStoreState.items = [];
+  });
 });

@@ -80,12 +80,17 @@ export function useProductDetailCartState(routeData: RouteData) {
   // purchasability check compares the pool against the product-wide
   // total — not the single matched line. Voucher lines redeem
   // pre-reserved units outside the pool and contribute nothing.
+  // Variant lines are excluded too: variant inventory is separate
+  // from the base pool (mirrors getExistingProductQuantityForStock),
+  // so a stale variant line must not make an in-stock base line or
+  // offer appear unavailable.
   const productQuantityInCart =
     routeData.product?.id == null
       ? 0
       : items.reduce(
           (total, item) =>
             item.product_id === routeData.product?.id &&
+            item.variant_id == null &&
             !item.voucher_token &&
             !item.voucher_award_id
               ? total + item.quantity

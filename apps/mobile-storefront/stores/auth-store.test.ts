@@ -796,6 +796,39 @@ describe('useAuthStore', () => {
       expect(mockQuizReset).toHaveBeenCalled();
     });
 
+    it('fences the old identity before hydrating a switched account', async () => {
+      await runInitialize();
+      (supabase.from as jest.Mock).mockImplementation((table: string) => {
+        if (table === 'merchants')
+          return makeChain({ data: mockMerchantRow, error: null });
+        return makeChain({ data: mockCustomerRow, error: null });
+      });
+      (useAuthStore.setState as (state: object) => void)({
+        user: { id: USER_ID },
+      });
+      const seenUserIds: (string | null)[] = [];
+      const unsubscribe = useAuthStore.subscribe((state) =>
+        seenUserIds.push(state.user?.id ?? null)
+      );
+      try {
+        await act(async () => {
+          await emitAuthStateChange('SIGNED_IN', {
+            ...mockSession,
+            user: { ...mockUser, id: OTHER_USER_ID },
+          });
+        });
+      } finally {
+        unsubscribe();
+      }
+      // The old identity must be cleared (null) before the new user
+      // is hydrated, even though cart retirement is awaited in between.
+      const fenceIndex = seenUserIds.indexOf(null);
+      const switchedIndex = seenUserIds.indexOf(OTHER_USER_ID);
+      expect(fenceIndex).toBeGreaterThanOrEqual(0);
+      expect(switchedIndex).toBeGreaterThan(fenceIndex);
+      expect(useAuthStore.getState().user?.id).toBe(OTHER_USER_ID);
+    });
+
     it('does NOT reset quiz state on a same-user SIGNED_IN (session refresh)', async () => {
       // Arrange: shopper already signed in as USER_ID (mid-quiz).
       await runInitialize();

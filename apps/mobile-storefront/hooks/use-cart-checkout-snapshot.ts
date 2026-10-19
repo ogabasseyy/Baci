@@ -132,7 +132,11 @@ export function useCartCheckoutSnapshot() {
       setStatus((prev) => (prev === 'ready' ? 'stale' : prev));
       return;
     }
-    const renewDelayMs = Math.max(0, remainingMs - 5000);
+    // Renew five seconds before expiry, but never at zero delay:
+    // preparation reuses a still-active session unchanged, so an
+    // immediate retry would spin until expiry. Inside the window,
+    // wait for expiry itself and let the next preparation rotate.
+    const renewDelayMs = remainingMs > 5000 ? remainingMs - 5000 : remainingMs;
     const renewTimer = setTimeout(() => {
       operation.current = null;
       setRetryCount((count) => count + 1);

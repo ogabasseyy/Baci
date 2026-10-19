@@ -181,6 +181,30 @@ it('prepares again when offer totals change at the same cart version', async () 
   await waitFor(() => expect(prepare).toHaveBeenCalledTimes(2));
 });
 
+it('does not spin at zero delay when preparation reuses a nearly expired session', async () => {
+  jest.useFakeTimers();
+  try {
+    const reusedExpiry = new Date(Date.now() + 3000).toISOString();
+    const prepare = jest.fn().mockResolvedValue({
+      snapshot: review,
+      sessionExpiresAt: reusedExpiry,
+    });
+    useNativeSharedCartStore.setState({ prepareCheckoutReview: prepare });
+    const { result } = renderHook(() => useCartCheckoutSnapshot());
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(prepare).toHaveBeenCalledTimes(1);
+    // Inside the five-second renewal window the reused session must
+    // not trigger immediate re-preparation; the next attempt waits
+    // for expiry instead of looping.
+    await act(async () => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(prepare).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 it('renews the checkout review before sessionExpiresAt lapses', async () => {
   jest.useFakeTimers();
   try {

@@ -168,8 +168,19 @@ export function createInitializeAction({
               }
             };
             if (event === 'SIGNED_IN' && session?.user) {
-              if (previousUser?.id && previousUser.id !== session.user.id)
+              if (previousUser?.id && previousUser.id !== session.user.id) {
+                // The Supabase JWT has already switched: fence the old
+                // identity synchronously so no screen or store can act
+                // as the previous account while retirement (a network
+                // revocation) is awaited, then hydrate the new one.
+                set({
+                  customer: null,
+                  isLoading: true,
+                  session: null,
+                  user: null,
+                });
                 await retireDeviceCartSafely();
+              }
               // Only wipe quiz state on an actual account SWITCH. SIGNED_IN also
               // fires on same-user session re-establishment / token refresh —
               // resetting then would kick a shopper out of an in-progress quiz.

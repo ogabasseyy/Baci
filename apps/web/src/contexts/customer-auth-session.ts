@@ -205,18 +205,6 @@ export async function commitCustomerAuthSession(
   return true;
 }
 
-export async function prepareCustomerOAuthRedirect(
-  merchantSlug: string,
-  currentUserId?: string | null
-): Promise<boolean> {
-  const previousUserId = getRememberedCustomerUserId(
-    merchantSlug,
-    currentUserId
-  );
-  if (!previousUserId) return true;
-  return await retirePreviousAccountCartAuthority(merchantSlug, previousUserId);
-}
-
 // Module-scope helper for logout so its try/catch/finally stays outside render.
 export async function performCustomerLogout(
   merchantSlug: string,

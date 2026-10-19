@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   commitCustomerAuthSession,
   loadCustomerSession,
-  prepareCustomerOAuthRedirect,
   resetRememberedCustomerSessionsForTests,
 } from '@/contexts/customer-auth-session';
 import { publishCustomerIdentity } from '@/contexts/customer-live-identity';
@@ -354,16 +353,6 @@ describe('customer-auth-session passive identity revocation', () => {
       expect.objectContaining({ id: 'user-2' })
     );
     expect(setOtpState).toHaveBeenCalledWith(null);
-  });
-
-  it('retires device cart authority before OAuth redirect when a customer is already signed in', async () => {
-    vi.mocked(revokeCartDeviceSession).mockResolvedValue({ ok: true });
-
-    const allowed = await prepareCustomerOAuthRedirect('ogabassey', 'user-1');
-
-    expect(allowed).toBe(true);
-    expect(revokeCartDeviceSession).toHaveBeenCalledWith('ogabassey');
-    expect(clearCartStorage).toHaveBeenCalledWith('ogabassey', 'user-1');
   });
 
   it('refuses to restore an unconfirmed switched session when rollback logout fails until logout succeeds', async () => {

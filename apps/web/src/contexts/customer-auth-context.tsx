@@ -13,7 +13,6 @@ import {
   commitCustomerAuthSession,
   loadCustomerSession,
   performCustomerLogout,
-  prepareCustomerOAuthRedirect,
 } from './customer-auth-session';
 import { publishCustomerIdentity } from './customer-live-identity';
 
@@ -256,17 +255,12 @@ export function CustomerAuthProvider({
     providerLabel: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
-      const retired = await prepareCustomerOAuthRedirect(
-        merchantSlug,
-        user?.id
-      );
-      if (!retired) {
-        return {
-          success: false,
-          error:
-            'Could not safely switch accounts. Please retry when connected.',
-        };
-      }
+      // Cart authority is NOT retired here: if the endpoint errors or
+      // the shopper cancels at the provider, the existing session must
+      // keep its cart. Retirement happens when the callback commits a
+      // different identity (loadCustomerSession /
+      // commitCustomerAuthSession retire the previous account then,
+      // with auth rollback when revocation fails).
       // Use the current browser origin to support custom domains (e.g., ogabassey.com)
       // This automatically handles: localhost, subdomains (*.usebaci.com), and custom domains
       // We redirect to /account/callback which exchanges the OAuth code for a session

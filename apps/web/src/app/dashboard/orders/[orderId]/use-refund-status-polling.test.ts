@@ -184,6 +184,31 @@ describe('useRefundStatusPolling', () => {
     await act(async () => {});
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(12);
   });
+  it('carries the mount load into the cap when the summary settles after mount', async () => {
+    // No server summary: the mount load bills first, and only its
+    // response flips the panel into the settled watch. That billed
+    // load counts toward the twelve, so the watch adds eleven more.
+    const { rerender } = render(
+      React.createElement(Harness, { terminal: false })
+    );
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    rerender(
+      React.createElement(Harness, { settledWatch: true, terminal: false })
+    );
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11 * 300_000);
+    });
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(12);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600_000);
+    });
+    await act(async () => {});
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(12);
+  });
   it('pauses while the tab is hidden and refreshes on return', async () => {
     render(React.createElement(Harness, { terminal: false }));
     await act(async () => {});

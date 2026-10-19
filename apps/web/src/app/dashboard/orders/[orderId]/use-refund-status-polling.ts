@@ -37,6 +37,10 @@ export function useRefundStatusPolling({
   terminal: boolean;
 }) {
   const loadedOrder = useRef<string | null>(null);
+  // The order whose mount load already billed the RPC before the
+  // summary settled: the settled watch carries that load into its
+  // cap instead of restarting at zero on the transition.
+  const billedOrder = useRef<string | null>(null);
   const requestSequence = useRef(0);
   useEffect(() => {
     const controller = new AbortController();
@@ -81,8 +85,10 @@ export function useRefundStatusPolling({
     // Hidden ticks never consume the settled cap: only polls that
     // actually bill the RPC count toward the hour — the mount load
     // below included, or a no-initial-summary view would bill
-    // thirteen loads under a twelve-load bound.
-    let settledPolls = 0;
+    // thirteen loads under a twelve-load bound. When the summary
+    // only settles after that mount load, the effect restarts with
+    // settledWatch true, so the billed load carries in here.
+    let settledPolls = billedOrder.current === orderId ? 1 : 0;
     // Load on mount and navigation only: terminal flips re-arm the
     // timer below, and refetching there would clobber the summary a
     // submit just installed with a stale read. With a server summary
@@ -92,6 +98,7 @@ export function useRefundStatusPolling({
       const firstMount = loadedOrder.current === null;
       loadedOrder.current = orderId;
       if (!(firstMount && hasInitialSummary)) {
+        billedOrder.current = orderId;
         if (settledWatch) {
           settledPolls += 1;
         }

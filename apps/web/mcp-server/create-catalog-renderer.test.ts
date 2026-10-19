@@ -150,8 +150,8 @@ it('rejects an offer selection when variants own the condition axis', async () =
   const render = createCatalogRenderer(async () => ({
     structuredContent: {
       products: [{ id: 'phone', name: 'Phone', price: 80, base_price: 100, base_condition: 'new', condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true, has_condition_offers: true }],
-      variants: [{ option_id: 'v1', price: 100, availability: 'in_stock', condition: 'used' }],
-      condition_offers: [{ offer_id: 'o1', condition: 'used', price: 80, availability: 'in_stock' }],
+      variants: [{ option_id: 'v1', attributes: {}, price: 100, availability: 'in_stock', condition: 'used' }],
+      condition_offers: [{ offer_id: 'o1', condition: 'used', price: 80, stock_quantity: 1, availability: 'in_stock' }],
     },
   }));
   const result = await render({ products: [{ product_id: 'phone', matched_option: { kind: 'offer', option_id: 'o1', condition: 'used' } }] });

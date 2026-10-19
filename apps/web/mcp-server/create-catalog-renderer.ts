@@ -97,6 +97,13 @@ export function createCatalogRenderer(
                 if (structuredDiscoveryIdentity.variantsOwnConditionAxis(product, parsed.variants)) {
                   throw new Error('Condition offers are not valid with variant-owned conditions');
                 }
+                // The PDP ignores a bare condition parameter on variant
+                // products (condition-only params resolve zero variant
+                // matches), so an unpaired offer would render a price the
+                // linked page never shows. Search always pairs these offers.
+                if (product.has_variants === true && !variantId) {
+                  throw new Error('Paired variant is required for offers on variant products');
+                }
                 const parentCondition = normalizeCondition(product.base_condition ?? product.condition) || 'new';
                 const firstOfferForCondition = parsed.condition_offers?.find(
                   (candidate) => normalizeCondition(candidate.condition) === selectedCondition
@@ -118,7 +125,9 @@ export function createCatalogRenderer(
                     throw new Error('Paired variant no longer available');
                   }
                   price = pairedVariant.price;
-                  compareAtPrice = pairedVariant.compare_at_price;
+                  // The PDP sources the comparison price from the selected
+                  // variant or the parent product, never the offer row.
+                  compareAtPrice = pairedVariant.compare_at_price ?? product.compare_at_price;
                   availability = pairedVariant.availability;
                 } else {
                   if (matched.availability === 'out_of_stock') throw new Error('Offer no longer available');

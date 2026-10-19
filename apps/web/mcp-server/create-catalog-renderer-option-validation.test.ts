@@ -81,3 +81,31 @@ it('rejects unknown condition labels instead of treating them as new', async () 
   }] });
   expect(result.isError).toBe(true);
 });
+
+it('rejects an unpaired offer on a variant product', async () => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: {
+      products: [{ id: 'phone', name: 'Phone', price: 125, base_price: 125, base_condition: 'new', condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true, has_condition_offers: true }],
+      variants: [{ option_id: 'variant-7', attributes: { storage: '256GB' }, price: 125, availability: 'in_stock', condition: null }],
+      condition_offers: [{ offer_id: 'offer-2', condition: 'used', price: 80, stock_quantity: 1, availability: 'in_stock' }],
+    },
+  }));
+  const result = await render({ products: [{
+    product_id: 'phone', matched_option: { kind: 'offer', option_id: 'offer-2', condition: 'used' },
+  }] });
+  expect(result.isError).toBe(true);
+});
+
+it('falls back to the parent comparison price for a paired offer without a variant comparison price', async () => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: {
+      products: [{ id: 'phone', name: 'Phone', price: 125, base_price: 125, base_condition: 'new', compare_at_price: 150, condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true, has_condition_offers: true }],
+      variants: [{ option_id: 'variant-7', attributes: { storage: '256GB' }, price: 125, availability: 'in_stock', condition: null }],
+      condition_offers: [{ offer_id: 'offer-2', condition: 'used', price: 80, stock_quantity: 1, availability: 'in_stock' }],
+    },
+  }));
+  const result = await render({ products: [{
+    product_id: 'phone', matched_option: { kind: 'offer', option_id: 'offer-2', variantId: 'variant-7', condition: 'used' },
+  }] });
+  expect(result.structuredContent.products[0]).toMatchObject({ price: 125, compare_at_price: 150 });
+});

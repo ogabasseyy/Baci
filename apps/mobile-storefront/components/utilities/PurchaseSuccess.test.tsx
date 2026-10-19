@@ -306,6 +306,92 @@ describe('PurchaseSuccess', () => {
     ).not.toBeOnTheScreen();
   });
 
+  it('tells a failed wallet-only purchase the wallet was refunded', () => {
+    render(
+      <PurchaseSuccess
+        type="power"
+        customerIdentifier="43901766923"
+        txReference="ref-123"
+        cashback={null}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        refundConfirmed={true}
+        status="failed"
+      />
+    );
+
+    // No "another payment method": wallet-only, refund confirmed.
+    expect(
+      screen.getByText(
+        'Your electricity purchase for 43901766923 failed. Your wallet has been refunded — please try again.'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('keeps the failed copy soft without refund proof', () => {
+    // A failed status WITHOUT refundConfirmed (e.g. a future caller
+    // passing failed from route params) must not assert a refund.
+    const { rerender } = render(
+      <PurchaseSuccess
+        type="power"
+        customerIdentifier="43901766923"
+        txReference="ref-123"
+        cashback={null}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        status="failed"
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Your electricity purchase for 43901766923 failed. Please check your wallet balance and try again.'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/has been refunded/)).not.toBeOnTheScreen();
+
+    rerender(
+      <PurchaseSuccess
+        type="airtime"
+        txReference="ref-456"
+        cashback={null}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        refundConfirmed={false}
+        status="failed"
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Your airtime purchase failed. Please check your wallet balance and try again.'
+      )
+    ).toBeOnTheScreen();
+  });
+
+  it('says no charge was made for a skipped refund, never that it refunded', () => {
+    // Codex R110 P2: skipped rows were never charged.
+    render(
+      <PurchaseSuccess
+        type="power"
+        customerIdentifier="43901766923"
+        txReference="ref-123"
+        cashback={null}
+        isAuthenticated={true}
+        onCreateAccount={jest.fn()}
+        refundSkipped={true}
+        status="failed"
+      />
+    );
+
+    expect(
+      screen.getByText(
+        'Your electricity purchase for 43901766923 failed. No charge was made to your wallet — please try again.'
+      )
+    ).toBeOnTheScreen();
+    expect(screen.queryByText(/has been refunded/)).not.toBeOnTheScreen();
+  });
+
   it('shows the reference (not the slogan) while a purchase is still processing', () => {
     render(
       <PurchaseSuccess

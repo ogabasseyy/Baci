@@ -19,6 +19,7 @@ import { EXPECTED_PENDING_ORDER_REFUND_SOURCES } from './expected-pending-order-
 import { PAYMENT_INGRESS_AND_PROVENANCE_PENDING_SOURCES } from './expected-pending-payment-ingress-sources.test-support';
 import { EXPECTED_PENDING_SEPT_SOURCES } from './expected-pending-sept-sources.test-support';
 import { EXPECTED_PENDING_TAIL_SOURCES } from './expected-pending-tail-sources.test-fixture';
+import { EXPECTED_PENDING_VTU_REPLAY_SOURCES } from './expected-pending-vtu-replay-sources.test-support';
 import { EXPECTED_PLAN_TIER_PENDING_SOURCES } from './expected-plan-tier-pending-sources.test-support';
 import { EXPECTED_PRIMARY_PENDING_SOURCES } from './expected-primary-pending-sources.test-support';
 import { EXPECTED_QUIZ_LIVE_PENDING_SOURCES } from './expected-quiz-live-pending-sources.test-support';
@@ -266,6 +267,7 @@ export const EXPECTED_PENDING_SOURCES = [
     sha256: 'a234118a7dcf99f1eb9a7b9a56e7e45e887241c104e78ba0d4bb7cb2c3ef66db',
   },
   ...EXPECTED_PENDING_GUEST_CART_SOURCES,
+  ...EXPECTED_PENDING_VTU_REPLAY_SOURCES,
   {
     repositoryPath:
       'supabase/migrations/20260928080000_product_discovery_embeddings.sql',

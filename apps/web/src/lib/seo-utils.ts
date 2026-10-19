@@ -1,8 +1,8 @@
+import { toSchemaItemConditionUri } from '@baci/shared/lib/product-condition';
 import {
   getEffectiveProductStock,
   getProductStockBucket,
-  toSchemaItemConditionUri,
-} from '@baci/shared/lib';
+} from '@baci/shared/lib/product-inventory';
 import type { Metadata, Route } from 'next';
 import type {
   BreadcrumbList,

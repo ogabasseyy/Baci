@@ -19,9 +19,10 @@ export type RedvaultLivePilotPolicy = {
   enabled: boolean;
   merchantId: string;
   productId: string;
-  expiresAt: number;
-  maxAttempts: number;
-};
+} & (
+  | { audience: 'private_user'; expiresAt: number; maxAttempts: number }
+  | { audience: 'public_product_test'; expiresAt: null; maxAttempts: null }
+);
 
 export function getRedvaultLivePilotPolicy(
   now = Date.now()
@@ -52,6 +53,9 @@ export function getRedvaultLivePilotPolicy(
   }
   const merchantId = process.env.REDVAULT_LIVE_PILOT_MERCHANT_ID ?? '';
   const productId = process.env.REDVAULT_LIVE_PILOT_PRODUCT_ID ?? '';
+  const audience = process.env.REDVAULT_LIVE_PILOT_AUDIENCE || 'private_user';
+  if (audience !== 'private_user' && audience !== 'public_product_test')
+    return null;
   const expiresAt = Date.parse(
     process.env.REDVAULT_LIVE_PILOT_EXPIRES_AT ?? ''
   );
@@ -65,16 +69,35 @@ export function getRedvaultLivePilotPolicy(
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       productId
     ) ||
-    !Number.isFinite(expiresAt) ||
-    expiresAt <= now ||
-    !Number.isInteger(maxAttempts) ||
-    maxAttempts < 1 ||
-    maxAttempts > 1 ||
     !livePaymentEvidence ||
     process.env.PAYSTACK_SECRET_KEY?.startsWith('sk_live_') !== true
   )
     return null;
-  return { enabled: true, merchantId, productId, expiresAt, maxAttempts };
+  if (audience === 'public_product_test') {
+    return {
+      enabled: true,
+      audience,
+      merchantId,
+      productId,
+      expiresAt: null,
+      maxAttempts: null,
+    };
+  }
+  if (
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= now ||
+    !Number.isInteger(maxAttempts) ||
+    maxAttempts !== 1
+  )
+    return null;
+  return {
+    enabled: true,
+    audience,
+    merchantId,
+    productId,
+    expiresAt,
+    maxAttempts,
+  };
 }
 
 /**
@@ -107,7 +130,8 @@ export function validateRedvaultLivePilotOrder(input: {
       : 0;
   return Boolean(
     policy &&
-      input.userId === REDVAULT_PILOT_USER_ID &&
+      (policy.audience === 'public_product_test' ||
+        input.userId === REDVAULT_PILOT_USER_ID) &&
       input.merchantId === policy.merchantId &&
       input.currency.toUpperCase() === 'NGN' &&
       input.items.length === 1 &&

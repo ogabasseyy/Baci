@@ -74,6 +74,9 @@ function createExpoPlugins({
         },
         ios: {
           deploymentTarget: '16.4',
+          // The clipping traversal fix must be compiled into Fabric. Expo's
+          // prebuilt React Native core does not include local pnpm patches.
+          buildReactNativeFromSource: true,
           // SDK 57 opt-in forwards scene startup and link callbacks on iOS 27.
           enableSceneSupport: true,
           useFrameworks: 'static',
@@ -91,7 +94,11 @@ function createExpoPlugins({
     './config/withAndroidSystemBars.js',
     './config/withAndroidGradleFixes.js',
     './config/withReactNativeFromSource.js',
-    ...(sentryPlugin ? [sentryPlugin] : []),
+    // Expo executes AppDelegate mods in reverse registration order. Register
+    // our callback first so it sees Sentry's generated native initializer.
+    ...(sentryPlugin
+      ? ['./config/withSentryNativeDiagnostics.js', sentryPlugin]
+      : []),
     [
       'posthog-react-native/expo',
       {

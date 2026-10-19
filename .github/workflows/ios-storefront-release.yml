@@ -103,6 +103,14 @@ jobs:
       - name: Verify native gradient composition
         run: bash apps/mobile-storefront/scripts/native-regressions/check-gradient-layer.sh
 
+      - name: Verify native clipping geometry and traversal work
+        run: bash apps/mobile-storefront/scripts/native-regressions/check-clipping-views.sh
+
+      - name: Verify native Sentry breadcrumb policy and MetricKit integration
+        run: |
+          node --test apps/mobile-storefront/config/sentry-native-diagnostics.test.mjs
+          bash apps/mobile-storefront/scripts/native-regressions/check-sentry-diagnostics.sh
+
       - name: Verify scene presentation Swift and legacy window fallback
         run: node --test .github/scripts/ios-scene-presentation.test.mjs apps/mobile-storefront/config/ios-scene-presentation.test.mjs
 

@@ -11,6 +11,9 @@ import { OrderStatusUpdateError } from './order-status-update-error';
 import type { OrdersPage } from './order-types';
 import { parseResponsePayload } from './response-utils';
 
+// Shipping includes a bounded tariff check before carrier submission. Keep a
+// single deadline across fetch and response parsing, with no automatic retry.
+const SHIPMENT_BOOKING_TIMEOUT_MS = 30000;
 const ORDER_STATUS_UPDATE_TIMEOUT_MS = 15000;
 const IS_DEV_RUNTIME = typeof __DEV__ !== 'undefined' && __DEV__;
 
@@ -94,7 +97,9 @@ async function updateOrderStatus(
         },
         method: isCancellation ? 'POST' : 'PATCH',
       },
-      ORDER_STATUS_UPDATE_TIMEOUT_MS
+      status === 'shipped'
+        ? SHIPMENT_BOOKING_TIMEOUT_MS
+        : ORDER_STATUS_UPDATE_TIMEOUT_MS
     );
     response = result.response;
     responseText = result.text;

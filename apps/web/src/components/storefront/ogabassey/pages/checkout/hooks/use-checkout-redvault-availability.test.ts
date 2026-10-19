@@ -237,7 +237,7 @@ describe('useCheckoutRedvaultAvailability', () => {
       { price: 100, negotiatedPrice: 90 },
     ],
   ])('hides every reason when a cart carries %s', (_label, negotiation) => {
-    for (const reason of ['private_live_pilot', 'general']) {
+    for (const reason of ['private_live_pilot', 'public_product_test', 'general']) {
       mockUseAvailability.mockReturnValue({ available: true, reason });
       const { result } = renderHook(() =>
         useCheckoutRedvaultAvailability({
@@ -252,6 +252,16 @@ describe('useCheckoutRedvaultAvailability', () => {
         reason: 'unavailable',
       });
     }
+  });
+
+  it('blocks extra fees on public product tests without requiring a tester account', () => {
+    mockUseAvailability.mockReturnValue({ available: true, reason: 'public_product_test' });
+    const { result } = renderHook(() => useCheckoutRedvaultAvailability({
+      cartItems: [{ id: 'pilot-product', quantity: 1 }], merchantId: 'merchant',
+      merchantSlug: 'store', userId: null,
+      pilotFeeBlockers: { hasAssurance: false, shippingFee: 1, giftWrappingCost: 0 },
+    }));
+    expect(result.current.availability.available).toBe(false);
   });
 
   it('keeps results when the negotiated price equals the line price', () => {

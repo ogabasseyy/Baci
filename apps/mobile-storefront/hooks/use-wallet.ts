@@ -3,10 +3,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { CONFIG } from '@/lib/config';
+import {
+  createLiveWalletQuery,
+  walletIdentitiesAgree,
+} from '@/lib/live-wallet-query';
 import { supabase } from '@/lib/supabase';
+import { resolveWalletReadOwnerId } from '@/lib/utility-owner-ids';
 import { createWalletFundingAccount } from '@/lib/wallet-funding-account';
 import { useAuthStore } from '@/stores/auth-store';
-import { fetchWalletData } from './wallet-data';
+import { fetchWalletDataUnbounded } from './wallet-data';
+import { runWithWalletLoadDeadline } from './wallet-load-deadline';
 import { walletKeys } from './wallet-query';
 
 export { useRedeemPoints } from './use-redeem-points';
@@ -60,14 +66,12 @@ export function useWallet(options: UseWalletOptions = {}) {
   const savingsInvalidationTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const walletOwnerId = customer?.id ?? user?.id ?? '';
+  const walletOwnerId = resolveWalletReadOwnerId(customer?.id, user?.id);
   const activeMerchantId = merchantId || CONFIG.MERCHANT_ID;
-  // Both identities present but disagreeing (customer row linked to a
-  // different auth user) means a switch is mid-flight: hold the query
-  // — including the primary probe — until they agree, so the load can
-  // never mix one identity's wallet with another's funding account.
-  const identityAgreed =
-    !customer?.id || !user?.id || (customer.user_id ?? user.id) === user.id;
+  // Hold the query — including the primary probe — until the
+  // identities agree, so the load can never mix one identity's
+  // wallet with another's funding account.
+  const identityAgreed = walletIdentitiesAgree(customer, user?.id);
   const walletQueryKey =
     walletOwnerId && activeMerchantId
       ? walletKeys.data({
@@ -89,8 +93,16 @@ export function useWallet(options: UseWalletOptions = {}) {
     refetch,
   } = useQuery({
     queryKey: walletQueryKey,
-    queryFn: () =>
-      fetchWalletData(customer?.id ?? null, activeMerchantId, user?.id ?? null),
+    queryFn: ({ signal }) =>
+      runWithWalletLoadDeadline(
+        () =>
+          fetchWalletDataUnbounded(
+            customer?.id ?? null,
+            activeMerchantId,
+            user?.id ?? null
+          ),
+        signal
+      ),
     enabled: !!walletOwnerId && !!activeMerchantId && identityAgreed,
     staleTime: cachePolicy.staleTime,
     gcTime: cachePolicy.gcTime,
@@ -99,7 +111,9 @@ export function useWallet(options: UseWalletOptions = {}) {
   // Real-time sync
   // 2026 Critical Fix: Prevent channel race condition on rapid mount/unmount
   useEffect(() => {
-    if (!customer?.id && !user?.id) return;
+    // Equivalent to the old both-absent guard (the helper returns null
+    // exactly then), and narrows the nullable owner for the key below.
+    if (!walletOwnerId) return;
 
     // Cleanup any existing channel first (prevent duplicates)
     if (channelRef.current) {
@@ -118,6 +132,7 @@ export function useWallet(options: UseWalletOptions = {}) {
       if (isMounted) {
         queryClient.invalidateQueries({
           queryKey: activeWalletQueryKey,
+          exact: false,
         });
       }
     };
@@ -223,13 +238,21 @@ export function useWallet(options: UseWalletOptions = {}) {
     };
   }, [activeMerchantId, customer?.id, user?.id, queryClient, walletOwnerId]);
 
+  // Live gate readers (R75/R78/R80): bound to the CURRENT store
+  // identity, not this render's — see lib/live-wallet-query.
+  const liveWalletQuery = createLiveWalletQuery(queryClient);
+
   return {
     data,
     error,
     fetchStatus,
+    getWalletBalance: liveWalletQuery.getBalance,
+    getWalletError: liveWalletQuery.getError,
     isError,
+    isFetchingNow: liveWalletQuery.isFetching,
     isLoading,
     isRefetching,
+    isWalletSettled: liveWalletQuery.isSettled,
     refetch,
   };
 }
@@ -253,7 +276,7 @@ export function useCreateWalletFundingAccount() {
         merchantSlug: activeMerchantSlug,
       }),
     onSuccess: async () => {
-      const walletOwnerId = customer?.id ?? user?.id ?? '';
+      const walletOwnerId = resolveWalletReadOwnerId(customer?.id, user?.id);
       if (!walletOwnerId || !activeMerchantId) {
         return;
       }
@@ -264,6 +287,7 @@ export function useCreateWalletFundingAccount() {
           ownerId: walletOwnerId,
           userId: user?.id ?? undefined,
         }),
+        exact: false,
       });
     },
   });

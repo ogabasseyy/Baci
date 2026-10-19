@@ -1,5 +1,4 @@
 // Raw frozen replay-source data; update migration hashes in lockstep.
-
 import { ADMIN_PLATFORM_PENDING_SOURCES } from './supabase-history-replay-admin-sources';
 import { ADS_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-ads-pending-sources';
 import { BLOG_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-blog-pending-sources';
@@ -14,6 +13,9 @@ import { GIGL_WALLET_SHIPPING_PENDING_SOURCES } from './supabase-history-replay-
 import { INVENTORY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-inventory-pending-sources';
 import { JUMIA_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-jumia-pending-sources';
 import { NEGOTIATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-negotiation-pending-sources';
+import { PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-completion-pending-sources';
+import { PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-paystack-cancellation-pending-sources';
+import { PENDING_SOURCES_HEAD_TAIL } from './supabase-history-replay-pending-sources-tail';
 import { PRIMARY_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-primary-pending-sources';
 import { PRODUCTION_MAPPINGS } from './supabase-history-replay-production-mappings';
 import { REDVAULT_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-redvault-pending-sources';
@@ -28,6 +30,8 @@ import { SEARCH_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-sea
 import { STOREFRONT_CLUSTER_GUIDE_PENDING_SOURCES } from './supabase-history-replay-storefront-cluster-guide-pending-sources';
 import { STOREFRONT_COMPARISON_PENDING_REPLAY_SOURCE_ROW } from './supabase-history-replay-storefront-comparison-pending-sources';
 import { STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-storefront-order-pending-sources';
+import { VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-email-pending-sources';
+import { VTU_PENDING_REPLAY_SOURCE_ROWS } from './supabase-history-replay-vtu-pending-sources';
 
 const STOREFRONT_PDP_SEMANTIC_PENDING_SOURCES = `a402b932c082f876b44feb1cd98ef4d879641a0a5e075b52a05fb0a9b7df43dc 20260831153000_optimize_storefront_pdp_semantic_reads.sql`;
 const STOREFRONT_SEMANTIC_INDEX_REPAIR_PENDING_SOURCES = `2999879d1a4127e4b703c8cb18a88f276ced6b2512331c1383402fdf36fff76d 20260901123000_repair_storefront_semantic_inventory_indexes.sql`;
@@ -203,25 +207,7 @@ f2b640bac8c3f3d41158313bc910aec6de0058cf652c47f0595c635bd98ecee1 20260803120000_
 9b9e6101026ee6bff7556b2425f13036bebc30951b544f119f80e764ba16ae35 20260804100000_quiz_universal_deadlines_v2.sql
 7fb0cc1e0fa7f837bc4bf3eb233549d539875b96b072fb65b2edf25a582c9a91 20260804110000_quiz_final_results_and_product_winner.sql
 54feed9b89d28855d7d6f4bb83ea04d708f2d1e75c9cff814d6f49845d26e5bc 20260804120000_restore_storefront_order_private_schema_usage.sql
-ec3fe4b41c298d7089f1ab84651ef2240dd33d4f2296708b1162fc13b94bddce 20260804120500_quiz_leaderboard_username_snapshots.sql
-7cf05b46d76ce952e22cd70f963d59a5d0aea3133ee5c6253c0a58c09ba6511b 20260804121000_quiz_safe_player_projections_v2.sql
-47ce98f725bf17f3bbaa2859603687d2a59fad347c8a295f58f399e2a5ed8d14 20260804122000_activate_quiz_runtime_contract_v2.sql
-a2ba3c15243bb274722f8803c69592413e24ba22c03a6ae751f0b65962e33b24 20260804123000_quiz_regulatory_basis_and_live_launch_v2.sql
-7550dc0f84d9a15775bb2cd1d63679c3021cdcd44c2d0f837948d22d92f2e441 20260804130000_harden_storefront_order_private_schema_boundary.sql
-62201972e14cbafc34feb0584697b92d402eea9c15890a6ec4bbcfc3d5c7e0c5 20260804140000_harden_authenticated_private_schema_delegates.sql
-3919731ca694ee4a6f9e974455e0e50f598673ad663ede5f815442c3620246c6 20260805090000_complete_merchant_invoice_partial_payments.sql
-38018e799caa068a018087a472231736b1f1a43bd99e691905fb8ca4715c36ad 20260805090001_reapply_merchant_invoice_partial_review_contract.sql
-4924076d16f686d006096ace88813b21161908ab915b9dab7251ed1071894d1e 20260805090002_reapply_complete_merchant_invoice_partial_payment.sql
-eb0e6e627ac989bb685a7ffbd45f4d6c7a5b8736b1949a94c62db657bfad978c 20260805173000_harden_merchant_invoice_partial_completion.sql
-183d9d41fa070610f6223c45afb956e91085e72fd71e5dea135f1cfee5b2abe6 20260805173100_lock_merchant_invoice_exact_completion.sql
-d477926460dbeae1320b4f14165595808d8907d6b436a46d2e4c17895488be4b 20260805190000_recheck_completed_merchant_invoice_exact_payments.sql
-c3e73bdc49a901993f4422b89a6e88405681c36fcb068138f7a0ad46cc7c50e2 20260806000100_retire_reviewed_merchant_invoice_partial_captures.sql
-7656e866131c288d176a79eddb5206cb860417cc63385a2949eb1bc208752b5a 20260806000200_serialize_merchant_invoice_exact_claims.sql
-2e7b6ea5f55a5c6df81f20abc015ddf4d77699be6d74f2720713dd728e3d7933 20260808090000_exclude_reviewed_merchant_invoice_partial_captures.sql
-c5150a2929d4efcf71bbfdc051b3caf80beeea849b6c69a30b0df325968f3792 20260808093000_preserve_merchant_invoice_partial_capture_retirement.sql
-da62c84ff85648b528894dbcbb75fd344f1acfcd450e356e7018f114c6815490 20260823010000_public_shipping_sender_projection.sql
-38617623446eccea3a8a426ca53e2935dfbc28091ce66a7c17543cd18936ffef 20260927060000_plan_tier_authoritative_snapshot_entitlement.sql
-`; // biome-ignore format: keep the manifest at the 300-line modularity limit
+${PENDING_SOURCES_HEAD_TAIL}`; // biome-ignore format: keep the manifest at the 300-line modularity limit
 const PENDING_SOURCES = [
   REFUND_PENDING_REPLAY_SOURCE_ROWS,
   CONNECTOR_PENDING_REPLAY_SOURCE_ROWS,
@@ -235,10 +221,14 @@ const PENDING_SOURCES = [
   'c26c071f926457cfc07a951f9c5860e5d3b16136162fd70b5b6d85165c27a4c8 20261008230100_mcp_guest_cart_write_rpcs.sql',
   '3d8b0d48d5583ef67d075de6b3322af72b2b85001cc2f16f655d9b1274ad2c5a 20261010090000_mcp_guest_cart_gigl_worker_request_scope.sql',
   '32e0cf82c8f4427203e12a731c2fe7e7bd8303933d6bf9662012aa2941c700bd 20261010100000_mcp_guest_cart_worker_postgrest_isolate.sql',
+  VTU_PENDING_REPLAY_SOURCE_ROWS,
   '58736f2055f1d497d2b273d290658e34b2006cbd0d81015cf7749e668aa29b11 20261013172724_fix_shipment_booking_refund_probe_permissions.sql',
   '8c6107207fadff4fe89a53b3f5c1b3a24230284cbeaa45599d3b348ea7f10dad 20261013194440_fix_shipping_quote_proof_canonicalization.sql',
+  VTU_EMAIL_PENDING_REPLAY_SOURCE_ROWS,
   CHECKOUT_RECOVERY_PENDING_REPLAY_SOURCE_ROWS,
   DISCOVERY_PENDING_REPLAY_SOURCE_ROWS,
+  PAYSTACK_CANCELLATION_PENDING_REPLAY_SOURCE_ROWS,
+  PAYSTACK_CANCELLATION_COMPLETION_PENDING_REPLAY_SOURCE_ROWS,
   PENDING_SOURCES_HEAD,
   PRIMARY_PENDING_REPLAY_SOURCE_ROWS,
   STOREFRONT_ORDER_PENDING_REPLAY_SOURCE_ROWS,

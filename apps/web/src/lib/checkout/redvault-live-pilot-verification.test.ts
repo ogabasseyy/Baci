@@ -60,6 +60,7 @@ function summaryFixture(
 function policyFixture() {
   return {
     enabled: true,
+    audience: 'private_user' as const,
     merchantId: MERCHANT_ID,
     productId: '11111111-1111-4111-8111-111111111111',
     expiresAt: Date.now() + 3600_000,
@@ -104,6 +105,72 @@ describe('verifyRedvaultLivePilotSnapshot', () => {
       client: input.client,
       orderId: 'order-1',
     });
+  });
+
+  it.each([
+    null,
+    undefined,
+    'other-customer',
+  ])('accepts public product snapshots for identity %j', async (userId) => {
+    vi.mocked(getRedvaultCheckoutSummary).mockResolvedValue(
+      summaryFixture({ total: 102.5 }, { tax_kobo: 750, payable_kobo: 10250 })
+    );
+    const client = {
+      rpc: vi.fn().mockResolvedValue({
+        data: [
+          {
+            enabled: true,
+            audience: 'public_product_test',
+            merchant_id: MERCHANT_ID,
+            product_id: policyFixture().productId,
+            expires_at: null,
+          },
+        ],
+        error: null,
+      }),
+    } as unknown as SupabaseClient;
+    vi.mocked(getRedvaultLivePilotPolicy).mockReturnValue({
+      ...policyFixture(),
+      audience: 'public_product_test',
+      expiresAt: null,
+      maxAttempts: null,
+    });
+    expect(
+      await verifyRedvaultLivePilotSnapshot({
+        ...snapshotInput(),
+        client,
+        userId,
+      })
+    ).toEqual({ ok: true });
+    vi.mocked(client.rpc).mockResolvedValueOnce({
+      data: [],
+      error: null,
+    } as never);
+    expect(
+      await verifyRedvaultLivePilotSnapshot({
+        ...snapshotInput(),
+        client,
+        userId,
+      })
+    ).toEqual(UNAVAILABLE_REJECTION);
+    expect(
+      await verifyRedvaultLivePilotSnapshot({
+        ...snapshotInput(),
+        client,
+        userId,
+        merchantId: 'other',
+      })
+    ).toEqual(UNAVAILABLE_REJECTION);
+    vi.mocked(getRedvaultCheckoutSummary).mockResolvedValue(
+      summaryFixture({}, { shipping_kobo: 1 })
+    );
+    expect(
+      await verifyRedvaultLivePilotSnapshot({
+        ...snapshotInput(),
+        client,
+        userId,
+      })
+    ).toEqual(UNAVAILABLE_REJECTION);
   });
 
   it('accepts a taxed snapshot whose total derives from the recomputed tax', async () => {

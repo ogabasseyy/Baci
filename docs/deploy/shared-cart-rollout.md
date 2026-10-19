@@ -4,8 +4,9 @@ Status: prepared only. Nothing in this document has been executed
 against production. Migrations are registered as pending, feature
 flags remain disabled by default, and no merchant is enrolled.
 
-Authoritative pending-migration count: **81** cart migrations are
-registered in
+Authoritative pending-migration count: **83** cart migrations are
+registered (at the time of writing; the registry-pinned length in
+the cited test is the authority whenever it changes) in
 `apps/web/tools/db/expected-cart-pending-sources.test-support.ts`
 (asserted by `supabase-history-replay-cart-pending-sources.test.ts`).
 Any other count in PR descriptions or earlier notes is superseded by

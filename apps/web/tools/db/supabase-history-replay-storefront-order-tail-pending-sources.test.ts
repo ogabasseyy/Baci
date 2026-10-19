@@ -17,6 +17,8 @@ describe('storefront order tail pending replay sources', () => {
       '20261016140000_storefront_order_item_offer_identity_freeze.sql',
       '20261016150000_storefront_order_idempotency_key_entropy.sql',
       '20261016160000_storefront_order_item_offer_tenant_bind.sql',
+      '20261019090000_storefront_order_offer_final_state.sql',
+      '20261019100000_storefront_order_item_offer_line_condition_identity.sql',
     ]);
     for (const row of rows) {
       const [sha256, filename, ...extra] = row.split(' ');

@@ -80,6 +80,9 @@ export function createCatalogRenderer(
                   : 'unconfirmed';
               } else if (option.kind === 'variant') {
                 if (!option.option_id) throw new Error('Variant identity missing');
+                // Search never pairs a variantId with a variant selection, so
+                // a conflicting caller value is a stale selection, not a hint.
+                if (variantId && variantId !== option.option_id) throw new Error('Conflicting variant identity');
                 const matched = parsed.variants?.find((candidate) => candidate.option_id === option.option_id);
                 const matchedCondition = normalizeCondition(matched?.condition ?? product.base_condition ?? product.condition);
                 if (!matched || typeof matched.price !== 'number' || !matchedCondition || matchedCondition !== selectedCondition || matched.availability === 'out_of_stock') {

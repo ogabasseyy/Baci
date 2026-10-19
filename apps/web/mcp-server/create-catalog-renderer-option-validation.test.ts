@@ -109,3 +109,36 @@ it('falls back to the parent comparison price for a paired offer without a varia
   }] });
   expect(result.structuredContent.products[0]).toMatchObject({ price: 125, compare_at_price: 150 });
 });
+
+it('rejects a variant selection whose caller variantId conflicts with its option_id', async () => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: {
+      products: [{ id: 'phone', name: 'Phone', price: 125, condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true }],
+      variants: [
+        { option_id: 'v1', attributes: { storage: '128GB' }, price: 100, availability: 'in_stock', condition: null },
+        { option_id: 'v2', attributes: { storage: '256GB' }, price: 125, availability: 'in_stock', condition: null },
+      ],
+    },
+  }));
+  const result = await render({ products: [{
+    product_id: 'phone', matched_option: { kind: 'variant', option_id: 'v1', variantId: 'v2', condition: 'new' },
+  }] });
+  expect(result.isError).toBe(true);
+  expect(result.structuredContent.products).toEqual([]);
+});
+
+it('accepts a variant selection that echoes its option_id as variantId', async () => {
+  const render = createCatalogRenderer(async () => ({
+    structuredContent: {
+      products: [{ id: 'phone', name: 'Phone', slug: 'phone', price: 125, condition: 'new', in_stock: true, stock_level: 'available', stock_confidence: 'high', has_variants: true }],
+      variants: [{ option_id: 'v1', attributes: { storage: '128GB' }, price: 100, availability: 'in_stock', condition: null }],
+    },
+  }));
+  const result = await render({ products: [{
+    product_id: 'phone', matched_option: { kind: 'variant', option_id: 'v1', variantId: 'v1', condition: 'new' },
+  }] });
+  expect(result.structuredContent.products[0]).toMatchObject({
+    price: 100,
+    url: 'https://ogabassey.com/products/phone?condition=new&variantId=v1',
+  });
+});

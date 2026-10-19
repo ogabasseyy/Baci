@@ -115,8 +115,7 @@ BEGIN
       -- worker later quarantines. Reject it as invalid input.
       IF p_method='paystack' THEN
         SELECT id INTO v_pinned_leg FROM public.transactions leg
-          WHERE leg.id=p_leg_id AND leg.order_id=p_order_id
-          AND leg.merchant_id=p_merchant_id
+          WHERE leg.id=p_leg_id
           AND upper(btrim(leg.gateway))='PAYSTACK';
         IF NOT FOUND THEN
           RAISE EXCEPTION 'invalid_manual_refund' USING ERRCODE='22023';

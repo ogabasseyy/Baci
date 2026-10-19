@@ -26,7 +26,7 @@ describe('ORDER_REFUND_PENDING_REPLAY_SOURCE_ROWS', () => {
 
     expect(sources).toEqual(EXPECTED_PENDING_ORDER_REFUND_SOURCES);
     expect(sources.at(-1)?.repositoryPath).toBe(
-      'supabase/migrations/20261016060000_verify_stamped_manuals_any_status.sql'
+      'supabase/migrations/20261017090000_scope_paystack_pin_recheck.sql'
     );
   });
 

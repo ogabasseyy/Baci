@@ -14,7 +14,7 @@ export function StaticUtilityWords({
 }) {
   return (
     <span
-      className={`text-primary font-bold transition-all duration-500 inline-grid ${minWidthClass} text-left align-baseline`}
+      className={`text-primary font-bold leading-none transition-all duration-500 inline-grid ${minWidthClass} text-left align-baseline`}
     >
       {STATIC_UTILITY_WORDS.map((word, index) => (
         <span

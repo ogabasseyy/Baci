@@ -46,13 +46,14 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { PhoneInput } from '@/components/ui/phone-input';
+import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 import { useCart } from '@/hooks/use-cart';
 import {
   type CheckoutCustomerData,
   useCheckoutCustomerLifecycle,
 } from '@/hooks/use-checkout-customer-lifecycle';
 import { useCurrency } from '@/hooks/use-currency';
-import { MerchantProvider, useMerchant } from '@/hooks/use-merchant-client';
+import { useMerchant } from '@/hooks/use-merchant-client';
 import { useToast } from '@/hooks/use-toast';
 import { apiPost } from '@/lib/api-client';
 import { buildCheckoutOrderItems } from '@/lib/checkout/build-order-items';

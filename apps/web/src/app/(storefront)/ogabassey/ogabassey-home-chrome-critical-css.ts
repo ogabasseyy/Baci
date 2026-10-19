@@ -4,7 +4,7 @@
  * loads automatically after hydration; these component-layer declarations
  * match its geometry so arriving CSS does not move the header or navigation.
  */
-export const OGABASSEY_HOME_CHROME_CRITICAL_CSS = `
+export const OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS = `
 @layer theme, base, components, utilities;
 @layer base{
 @media all{
@@ -21,7 +21,6 @@ export const OGABASSEY_HOME_CHROME_CRITICAL_CSS = `
 @layer components{
 .ogabassey-storefront-shell{--ogabassey-brand:var(--store-primary,#d62027);--ogabassey-brand-text:var(--store-primary-text,var(--store-on-primary,#ffffff));--ogabassey-shell-background:var(--storefront-shell-background,#0f0f0f);--ogabassey-shell-text:var(--store-primary-text,#ffffff);--ogabassey-chrome-background:var(--ogabassey-shell-background);--ogabassey-chrome-text:var(--ogabassey-shell-text);--ogabassey-surface:var(--store-surface,var(--store-background,#ffffff));--ogabassey-surface-text:var(--store-background-text,#111827);--ogabassey-border:var(--store-border,color-mix(in srgb,var(--ogabassey-surface-text) 12%,transparent));background:var(--ogabassey-shell-background);color:var(--ogabassey-surface-text);display:flex;flex-direction:column;min-height:100vh;overflow-x:clip;position:relative}
 .ogabassey-storefront-main{flex:1 1 auto}
-.ogabassey-ad-slot{flex:0 0 auto;height:var(--ad-slot-h);max-width:100%;min-width:min(100%,var(--ad-slot-w));width:min(100%,var(--ad-slot-w))}
 .ogabassey-navbar{position:sticky;top:0;transform:translateY(-100%);z-index:50}
 .ogabassey-navbar[data-visible="true"]{transform:translateY(0)}
 .ogabassey-navbar__top{background:var(--ogabassey-chrome-background);color:var(--ogabassey-chrome-text);overflow:visible;position:relative;z-index:20}
@@ -44,6 +43,18 @@ export const OGABASSEY_HOME_CHROME_CRITICAL_CSS = `
 .ogabassey-navbar-secondary{background:var(--ogabassey-surface);border-bottom:1px solid var(--ogabassey-border);display:none;position:relative;z-index:10}
 .ogabassey-navbar-secondary__inner{margin:0 auto;max-width:1400px;padding:0 1.5rem;position:relative;z-index:10}
 .ogabassey-navbar-secondary__list{align-items:center;display:flex;gap:1.5rem;height:3rem}
+@media (min-width:768px){
+.ogabassey-navbar__primary-row{align-items:center;flex-direction:row;gap:0.75rem;padding:1rem 1.5rem}
+.ogabassey-navbar__brand-row{width:auto}
+.ogabassey-navbar__search-wrap{flex:1 1 auto;margin-left:auto;margin-right:auto;max-width:42rem}
+.ogabassey-navbar-search .ogabassey-navbar-search__input,.ogabassey-navbar-search input{height:3rem}
+.ogabassey-navbar__desktop-actions{align-items:center;display:flex;flex:0 0 auto;gap:1.25rem}
+.ogabassey-navbar-secondary{display:block}
+}
+}`.trim();
+
+export const OGABASSEY_HOME_FOOTER_CHROME_CRITICAL_CSS = `@layer components{
+.ogabassey-ad-slot{flex:0 0 auto;height:var(--ad-slot-h);max-width:100%;min-width:min(100%,var(--ad-slot-w));width:min(100%,var(--ad-slot-w))}
 .ogabassey-navbar-secondary__category{position:relative}
 .ogabassey-navbar-secondary__button,.ogabassey-navbar-secondary__link{align-items:center;background:transparent;border:0;color:color-mix(in srgb,var(--ogabassey-surface-text) 78%,transparent);cursor:pointer;display:flex;font-size:0.875rem;font-weight:600;gap:0.5rem;padding:0.25rem;text-decoration:none;white-space:nowrap}
 .ogabassey-navbar-secondary__divider{background:var(--ogabassey-border);height:1rem;width:1px}
@@ -56,12 +67,8 @@ export const OGABASSEY_HOME_CHROME_CRITICAL_CSS = `
 .ogabassey-mobile-footer__item[data-active="true"] .ogabassey-mobile-footer__label{opacity:1}
 @media (min-width:768px){
 .ogabassey-ad-slot{height:var(--ad-slot-h-lg);min-width:min(100%,var(--ad-slot-w-lg));width:min(100%,var(--ad-slot-w-lg))}
-.ogabassey-navbar__primary-row{align-items:center;flex-direction:row;gap:0.75rem;padding:1rem 1.5rem}
-.ogabassey-navbar__brand-row{width:auto}
-.ogabassey-navbar__search-wrap{flex:1 1 auto;margin-left:auto;margin-right:auto;max-width:42rem}
-.ogabassey-navbar-search .ogabassey-navbar-search__input,.ogabassey-navbar-search input{height:3rem}
-.ogabassey-navbar__desktop-actions{align-items:center;display:flex;flex:0 0 auto;gap:1.25rem}
-.ogabassey-navbar-secondary{display:block}
 .ogabassey-mobile-footer{display:none}
 }
 }`.trim();
+
+export const OGABASSEY_HOME_CHROME_CRITICAL_CSS = `${OGABASSEY_HOME_HEADER_CHROME_CRITICAL_CSS}\n${OGABASSEY_HOME_FOOTER_CHROME_CRITICAL_CSS}`;

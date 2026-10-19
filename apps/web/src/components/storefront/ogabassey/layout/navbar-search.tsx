@@ -4,7 +4,6 @@ import { Search } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import type React from 'react';
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { Input } from '@/components/ui/input';
 import type { SearchAutocompleteProps } from '@/components/storefront/search-autocomplete';
 import {
   recordSearchSubmission,
@@ -95,6 +94,8 @@ interface NavbarSearchProps {
 
 const SEARCH_INPUT_CLASS_NAME =
   'ogabassey-navbar-search ogabassey-navbar-search--autocomplete';
+const SEARCH_FALLBACK_INPUT_CLASS_NAME =
+  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground placeholder:transition-opacity focus:placeholder:opacity-0 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:relative focus-visible:z-10 ogabassey-navbar-search__input';
 
 export function NavbarSearch({
   basePath,
@@ -216,7 +217,7 @@ export function NavbarSearch({
         onSubmit={handleSubmit}
         className="ogabassey-navbar-search"
       >
-        <Input
+        <input
           type="search"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
@@ -225,7 +226,7 @@ export function NavbarSearch({
           aria-label="Search blog posts"
           id="blog-search-input"
           name="search"
-          className="ogabassey-navbar-search__input"
+          className={SEARCH_FALLBACK_INPUT_CLASS_NAME}
         />
         <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
       </form>
@@ -265,7 +266,7 @@ export function NavbarSearch({
         className="ogabassey-navbar-search"
       >
         <Search className="ogabassey-navbar-search__icon" aria-hidden="true" />
-        <Input
+        <input
           type="search"
           value={searchQuery}
           onChange={(event) => {
@@ -279,7 +280,7 @@ export function NavbarSearch({
           aria-label="Search products"
           id="search-input"
           name="q"
-          className="ogabassey-navbar-search__input"
+          className={SEARCH_FALLBACK_INPUT_CLASS_NAME}
         />
       </form>
     );

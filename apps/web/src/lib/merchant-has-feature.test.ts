@@ -88,3 +88,37 @@ it.each([
     )
   ).toBe(true);
 });
+
+it('does not construct Date when evaluating shared-cart gates during static prerender', () => {
+  const OriginalDate = globalThis.Date;
+  const ThrowingDate = new Proxy(OriginalDate, {
+    construct() {
+      throw new Error('Next.js blocking-prerender-current-time');
+    },
+  });
+  globalThis.Date = ThrowingDate;
+  try {
+    expect(
+      merchantHasFeature(
+        {
+          plan_expires_at: '2026-12-31T00:00:00.000Z',
+          plan_tier: 'enterprise',
+          premium_features: ['shared_cart'],
+        },
+        'shared_cart'
+      )
+    ).toBe(true);
+    expect(
+      merchantHasFeature(
+        {
+          plan_expires_at: null,
+          plan_tier: 'pro',
+          premium_features: [],
+        },
+        'growth_integrations'
+      )
+    ).toBe(true);
+  } finally {
+    globalThis.Date = OriginalDate;
+  }
+});

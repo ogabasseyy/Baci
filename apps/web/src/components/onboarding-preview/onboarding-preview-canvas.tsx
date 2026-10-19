@@ -4,9 +4,9 @@ import type { Data } from '@puckeditor/core';
 import { Render } from '@puckeditor/core';
 import { Component, type ReactNode } from 'react';
 import { builderConfig } from '@/components/builder/config';
+import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 import { CartProvider } from '@/hooks/use-cart';
 import type { MerchantData } from '@/hooks/use-merchant';
-import { MerchantProvider } from '@/hooks/use-merchant-client';
 import type { BrandColors } from '@/types';
 
 interface Props {

@@ -15,7 +15,7 @@ vi.mock('@/lib/api-client', () => ({
   fetchWithCsrf: fetchWithCsrfMock,
 }));
 
-vi.mock('@/hooks/use-merchant-client', () => ({
+vi.mock('@/hooks/merchant/merchant-provider', () => ({
   MerchantProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 

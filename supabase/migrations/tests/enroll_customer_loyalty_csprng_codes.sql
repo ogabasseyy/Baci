@@ -14,7 +14,8 @@ SELECT pg_temp.assert_true(
         'redeem_loyalty_reward'
       )
       AND p.prosrc LIKE '%gen_random_bytes%'
-      AND p.prosrc NOT LIKE '%md5%'
+      AND p.prosrc NOT ILIKE '%md5(%'
+      AND p.prosrc NOT ILIKE '%random()%'
   ) = 4,
   'csprng mint clause failed'
 );
@@ -89,4 +90,70 @@ SELECT pg_temp.assert_true(
         AND name = 'Free shipping')
    ) AS result),
   'redemption code shape clause failed'
+);
+
+-- The adjust and award creation paths mint referral codes too (the
+-- top-up above ran on an already-enrolled member, so its creation
+-- loop never fired). Exercise both on first-touch members.
+INSERT INTO auth.users (
+  id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data
+) VALUES (
+  '01aa0000-0000-4000-8000-000000000182',
+  '00000000-0000-0000-0000-000000000000',
+  'authenticated', 'authenticated',
+  'enroll-user-82@example.com',
+  'test', pg_catalog.now(), pg_catalog.now(), pg_catalog.now(), '{}', '{}'
+);
+INSERT INTO public.customers (id, merchant_id, email, user_id) VALUES (
+  '01aa0000-0000-4000-8000-000000000082',
+  '01aa0000-0000-4000-8000-000000000001',
+  'enroll-82@example.com',
+  '01aa0000-0000-4000-8000-000000000182'
+), (
+  '01aa0000-0000-4000-8000-000000000083',
+  '01aa0000-0000-4000-8000-000000000001',
+  'enroll-83@example.com',
+  NULL
+);
+
+SELECT pg_temp.as_user('01aa0000-0000-4000-8000-000000000101');
+
+SELECT pg_temp.assert_true(
+  (SELECT result ->> 'success' = 'true'
+   FROM public.adjust_loyalty_points(
+     '01aa0000-0000-4000-8000-000000000001',
+     '01aa0000-0000-4000-8000-000000000082',
+     100, 'CSPRNG first adjust', 'adjust'
+   ) AS result),
+  'csprng first-adjust clause failed'
+);
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '01aa0000-0000-4000-8000-000000000082'
+      AND referral_code ~ '^[0-9A-F]{8}$'
+  ),
+  'adjust-minted referral code shape clause failed'
+);
+
+SELECT pg_temp.assert_true(
+  public.award_purchase_points(
+    '01aa0000-0000-4000-8000-000000000083',
+    '01aa0000-0000-4000-8000-000000000001',
+    '01aa0000-0000-4000-8000-0000000000a3',
+    10000
+  ) > 0,
+  'csprng first-award clause failed'
+);
+SELECT pg_temp.assert_true(
+  EXISTS (
+    SELECT 1 FROM public.customer_loyalty
+    WHERE merchant_id = '01aa0000-0000-4000-8000-000000000001'
+      AND customer_id = '01aa0000-0000-4000-8000-000000000083'
+      AND referral_code ~ '^[0-9A-F]{8}$'
+  ),
+  'award-minted referral code shape clause failed'
 );

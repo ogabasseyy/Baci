@@ -52,6 +52,28 @@ describe('POST /api/loyalty/redemptions/consume (Bearer [REDACTED])', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'Bearer',
+    'BEARER',
+    'Bearer ',
+    'Bearer\t',
+  ])('still enforces CSRF for tokenless Authorization variant %j', async (authorization) => {
+    // Every tokenless spelling extracts no token in production, so
+    // the cookie-authenticated request must go through CSRF.
+    setCsrfValid(false);
+
+    const response = await POST(
+      makeRequest(
+        { code: 'RDM-ABC123', idempotency_key: 'attempt-mobile' },
+        { authorization }
+      )
+    );
+
+    expect(response.status).toBe(403);
+    expect(checkCsrfProtection).toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('consumes for a cookie session with a bare Bearer [REDACTED] when CSRF passes', async () => {
     const response = await POST(
       makeRequest(

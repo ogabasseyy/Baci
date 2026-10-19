@@ -131,10 +131,13 @@ export function setupConsumeMocks() {
     return match?.[1]?.trim() || null;
   });
   authenticateApiRequest.mockImplementation((request: Request) => {
-    const authorization = request.headers.get('authorization') ?? '';
-    if (authorization.toLowerCase().startsWith('bearer ')) {
+    // Branch on token extraction exactly like production: a tokenless
+    // scheme word (bare `Bearer`, trailing space, tab) extracts null
+    // and falls back to cookie auth instead of failing as Bearer [REDACTED]
+    const token = getBearerTokenFromRequest(request);
+    if (token !== null) {
       return Promise.resolve(
-        authorization === `Bearer ${MOBILE_AUTH_TOKEN}`
+        token === MOBILE_AUTH_TOKEN
           ? { user: { id: 'mobile-user' }, supabase: createMockSupabase() }
           : { user: null, supabase: null }
       );

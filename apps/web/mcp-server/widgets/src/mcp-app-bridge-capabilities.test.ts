@@ -83,3 +83,19 @@ it('falls back to the native display-mode bridge when the standard context omits
   });
   expect(host.requestDisplayMode).not.toHaveBeenCalled();
 });
+
+it('surfaces native link denials as host errors instead of unhandled rejections', async () => {
+  const native = {
+    openExternal: vi.fn().mockRejectedValueOnce(new Error('denied')),
+  };
+  window.openai = native;
+  host.getHostCapabilities.mockReturnValueOnce(
+    {} as ReturnType<typeof host.getHostCapabilities>
+  );
+  await connectMcpApp();
+  await widgetHost.get()?.openExternal?.({ href: 'https://ogabassey.com' });
+  expect(native.openExternal).toHaveBeenCalledWith({
+    href: 'https://ogabassey.com',
+  });
+  expect(widgetHost.get()?.hostError).toContain('Could not open');
+});

@@ -58,6 +58,7 @@ export async function connectMcpApp() {
   }
   const context = app.getHostContext();
   const capabilities = app.getHostCapabilities();
+  const nativeOpenExternal = extensions?.openExternal?.bind(extensions);
   update({
     mcpAppReady: true,
     ...context,
@@ -80,7 +81,19 @@ export async function connectMcpApp() {
             });
           }
         }
-      : extensions?.openExternal?.bind(extensions),
+      : nativeOpenExternal
+        ? async ({ href }) => {
+            update({ hostError: null });
+            try {
+              await nativeOpenExternal({ href });
+            } catch {
+              update({
+                hostError:
+                  'Could not open Ogabassey. Please try again or continue in the conversation.',
+              });
+            }
+          }
+        : undefined,
     requestDisplayMode: context?.availableDisplayModes?.includes('fullscreen')
       ? async ({ mode }) => {
           update({ hostError: null });

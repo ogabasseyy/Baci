@@ -76,7 +76,7 @@ export const EXPECTED_PENDING_ORDER_REFUND_SOURCES = [
   },
   {
     repositoryPath:
-      'supabase/migrations/20261016010000_reconciliation_finalization_predicate.sql',
+      'supabase/migrations/20261016011000_reconciliation_finalization_predicate.sql',
     sha256: 'dbaa198b919586d4e00b70223eae0fa75eba2b3df0b4851452e7f6553eb39e20',
   },
   {

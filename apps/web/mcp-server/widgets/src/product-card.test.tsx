@@ -57,7 +57,7 @@ describe('ProductCard', () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     render(<ProductCard product={product} isInCart={false} onAddToCart={vi.fn()} onViewCart={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'Review on Ogabassey' }));
-    expect(open).toHaveBeenCalledWith('https://ogabassey.com/products/redmi', '_blank');
+    expect(open).toHaveBeenCalledWith('https://ogabassey.com/products/redmi', '_blank', 'noopener,noreferrer');
     open.mockRestore();
   });
   it.each([null, ''])('uses the product ID when the slug is %s', (slug) => {

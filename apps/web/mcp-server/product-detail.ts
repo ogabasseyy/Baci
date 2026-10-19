@@ -1,10 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { CallToolResult, TextContent } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolResult, TextContent } from "@modelcontextprotocol/server";
 import type { z } from 'zod';
 import { mcpToolOutputSchemas } from '../src/schemas/mcp-tool-output';
 import { getMcpOfferAvailability } from './product-offer-availability';
 import { getMcpProductStockSummary } from './product-stock-summary';
-import { STORE_WIDGET_URI } from './widget-resource-uri';
 import { MCP_OPTION_COLOR_EVIDENCE_GUIDANCE } from './option-color-evidence-guidance';
 import { getMcpVariantAttributeTextValue } from './variant-attribute-text-value';
 import { getMcpVariantColorValue } from './variant-color-value';
@@ -51,8 +50,10 @@ export async function buildMcpProductDetail({
 }): Promise<ProductDetailResult> {
   // Fetch variants if product has variants
   let variants: Array<{
+    id: string;
     attributes: Record<string, unknown> | null;
     price_override: number | null;
+    compare_at_price: number | null;
     stock_quantity: number;
     condition: string;
     images: unknown[];
@@ -73,8 +74,10 @@ export async function buildMcpProductDetail({
 
   // Fetch condition offers if available
   let conditionOffers: Array<{
+    offer_id: string;
     condition: string;
     price: number;
+    compare_at_price: number | null;
     stock_quantity: number;
     grade: string | null;
     condition_notes: string | null;
@@ -130,6 +133,15 @@ export async function buildMcpProductDetail({
     name: product.name,
     slug: product.slug,
     price: displayPrice,
+    base_price: product.price,
+    base_condition: product.condition || 'new',
+    base_in_stock: product.manage_stock === true
+      ? Number(product.stock_quantity ?? 0) > 0
+      : null,
+    // Unmasked parent comparison price: the generic compare_at_price is
+    // nulled when the display price comes from an option, but option
+    // branches need the authoritative parent value for PDP parity.
+    base_compare_at_price: product.compare_at_price,
     compare_at_price: displayCompareAtPrice,
     image: getSafeCatalogImageUrl(typeof product.images?.[0] === 'string' ? product.images[0] : product.images?.[0]?.url) ?? null,
     condition: displayCondition,
@@ -140,6 +152,7 @@ export async function buildMcpProductDetail({
     stock_confidence: stockSummary.confidence,
     stock_level: stockSummary.level,
     has_variants: product.has_variants,
+    has_condition_offers: product.has_condition_offers,
   };
 
   // Build detailed text response
@@ -225,8 +238,10 @@ export async function buildMcpProductDetail({
       products: [formatted],
       catalog_colors: buildMcpCatalogColorsPayload(catalogColors, 'Stored product color labels and safely projected color images; they do not establish selectable variant or stock combinations.'),
       variants: variants.map((v) => ({
+        option_id: v.id,
         attributes: v.attributes,
-        price: v.price_override,
+        price: v.price_override ?? product.price,
+        compare_at_price: v.compare_at_price,
         stock: product.manage_stock ? v.stock_quantity : null,
         availability: getMcpOfferAvailability(product.manage_stock, v.stock_quantity).availability,
         condition: v.condition,
@@ -238,10 +253,6 @@ export async function buildMcpProductDetail({
       })),
       variant_lookup_failed: variantLookupFailed,
       offer_lookup_failed: offerLookupFailed,
-    },
-    _meta: {
-      'openai/outputTemplate': STORE_WIDGET_URI,
-      'openai/widgetPrefersBorder': true,
     },
   };
   const trackedBaseStockInvalid = product.manage_stock === true &&

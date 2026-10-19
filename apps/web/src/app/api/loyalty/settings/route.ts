@@ -7,6 +7,7 @@ import {
   toUserAccess,
 } from '@/lib/get-merchant-for-api-request';
 import { createClient } from '@/lib/supabase/server';
+import { loyaltySettingsPostSchema } from '@/schemas/loyalty-settings';
 
 /**
  * Loyalty Settings API
@@ -127,6 +128,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate before any database operation: malformed JSON, a
+    // non-object body, and wrongly-typed fields fail closed with 400
+    // instead of triggering merchant or permission lookups.
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid request body' },
+        { status: 400 }
+      );
+    }
+    const parsed = loyaltySettingsPostSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      const capIssue = parsed.error.issues.some((issue) =>
+        issue.path.includes('maximum_redemption_percentage')
+      );
+      return NextResponse.json(
+        {
+          error: capIssue
+            ? 'maximum_redemption_percentage must be at least 0.01 and at most 100 with up to two decimal places'
+            : 'Invalid request body',
+        },
+        { status: 400 }
+      );
+    }
+
     const merchantContext = await getMerchantForApiRequest(supabase, user.id);
     if (!merchantContext) {
       return NextResponse.json(
@@ -142,7 +170,6 @@ export async function POST(request: NextRequest) {
 
     const merchantId = merchantContext.merchantId;
 
-    const body = await request.json();
     const {
       enabled,
       program_name,
@@ -157,7 +184,7 @@ export async function POST(request: NextRequest) {
       maximum_redemption_percentage,
       tiers,
       points_expiry_days,
-    } = body;
+    } = parsed.data;
 
     const { data: settings, error } = await supabase
       .from('loyalty_settings')

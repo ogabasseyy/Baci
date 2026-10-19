@@ -5946,7 +5946,12 @@ describe('POST /api/payments/webhook', () => {
           return {
             update: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
+            neq: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { id: 'order-123' },
+              error: null,
+            }),
             single: vi.fn().mockResolvedValue({
               data: {
                 id: 'order-123',
@@ -6793,7 +6798,12 @@ describe('POST /api/payments/webhook', () => {
           return {
             update: vi.fn().mockReturnThis(),
             eq: vi.fn().mockReturnThis(),
+            neq: vi.fn().mockReturnThis(),
             select: vi.fn().mockReturnThis(),
+            maybeSingle: vi.fn().mockResolvedValue({
+              data: { id: 'order-123' },
+              error: null,
+            }),
             single: vi.fn().mockResolvedValue({
               data: {
                 id: 'order-123',

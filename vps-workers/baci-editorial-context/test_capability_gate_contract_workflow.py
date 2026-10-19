@@ -168,8 +168,8 @@ class ContractWorkflowTests(unittest.TestCase):
     def test_replaced_first_step_fails(self):
         text = _workflow_text()
         swapped = text.replace(
-            "      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n",
-            "      - uses: evil/action@v1\n",
+            "        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1\n",
+            "        uses: evil/action@v1\n",
             1,
         )
         failures = check.workflow_failures(swapped)
@@ -273,8 +273,8 @@ class ContractWorkflowTests(unittest.TestCase):
         # sitecustomize before the base-owned checker starts.
         text = _workflow_text()
         bashed = text.replace(
-            "    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n    steps:\n      - uses: actions/checkout",
-            "    runs-on: ubuntu-24.04\n    timeout-minutes: 5\n    env:\n      BASH_ENV: /tmp/payload.sh\n    steps:\n      - uses: actions/checkout",
+            "    timeout-minutes: 5\n    steps:\n      # Reviewed: head is contract-check DATA only, never executed; the",
+            "    timeout-minutes: 5\n    env:\n      BASH_ENV: /tmp/payload.sh\n    steps:\n      # Reviewed: head is contract-check DATA only, never executed; the",
             1,
         )
         failures = check.workflow_failures(bashed)

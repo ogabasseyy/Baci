@@ -80,7 +80,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/test_capability_gate_contract.py": "5007e1d3039cfd5c3007596d72a6f12a7564674be67b724d106ffe18eac896a4",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_adversarial.py": "3b0492ae60b8ce4e6c1e7ba34adb0b06f4277bf54bddbb01e03198304c389b26",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "411de0bb193a6b7c0d75244aab9b6dbb664fae3f4a51b5f7f76a4c5a09359d5e",
-    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "1381bd0b024f0e1780915ab1aab614093af2d5a61b718224310e542b9d77411b",
+    "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "e2808d4bda408991739ad01f56b8f597ccafcf7cf95c8903469bf5a2edc1e2c2",
     "vps-workers/baci-editorial-context/test_capability_gate_main.py": "de2e01ec7fadae64bc02f0bfabc345c9677f64369ea235b09450575c8d4693e6",
     "vps-workers/baci-editorial-context/test_capability_register_binding.py": "67566abfee3947628513bf8c91049575485e46d5c35d73a8c6871f956eeb1476",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",

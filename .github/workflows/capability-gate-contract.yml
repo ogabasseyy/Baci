@@ -47,7 +47,7 @@ env:
   # Baseline hash of the checker script itself. The checker cannot pin
   # itself, so the base-owned workflow carries the baseline and passes it as
   # argv[1]; a same-PR checker change declares its new hash here.
-  PINNED_CHECKER_SHA256: 2ae118f036ee81c22a4b69fa0d08a36262346058ff48bd30c3cb624e96b95aef
+  PINNED_CHECKER_SHA256: bbdf1efc3d3c1fe05ed4f1238abfe7445072de135beca90c660c70aba797b67b
 
 jobs:
   gate-contract:

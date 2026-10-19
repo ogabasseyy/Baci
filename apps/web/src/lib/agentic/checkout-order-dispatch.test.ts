@@ -453,10 +453,11 @@ describe('agentic checkout order dispatch', () => {
         ? products
         : makeFromStub({ vatStatus: 'registered' })(table);
     const payload = orderPayload();
+    const items = payload.items as Record<string, unknown>[];
     const result = await createAgenticCheckoutOrder(
       {
         ...payload,
-        items: payload.items.map((item) => ({ ...item, condition: 'used' })),
+        items: items.map((item) => ({ ...item, condition: 'used' })),
       },
       { rpc, from } as unknown as SupabaseClient
     );
@@ -913,10 +914,12 @@ describe('agentic checkout order dispatch — shared cart binding', () => {
         ? products
         : makeFromStub({ vatStatus: 'registered' })(table);
     const payload = boundPayload();
+    const items = (payload as unknown as { items: Record<string, unknown>[] })
+      .items;
     const result = await createAgenticCheckoutOrder(
       {
         ...payload,
-        items: payload.items.map((item) => ({ ...item, condition: 'used' })),
+        items: items.map((item) => ({ ...item, condition: 'used' })),
       },
       { rpc, from } as unknown as SupabaseClient
     );

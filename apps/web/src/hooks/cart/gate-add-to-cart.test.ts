@@ -19,12 +19,20 @@ describe('gateAddToCart', () => {
   });
   it('allows unknown stock to resolve downstream instead of rejecting', () => {
     expect(
-      gateAddToCart({ ...product, manage_stock: null, stock: null })
+      gateAddToCart({
+        ...product,
+        manage_stock: null as unknown as boolean,
+        stock: null as unknown as number,
+      })
     ).not.toBeNull();
   });
   it('treats NULL manage_stock as managed for a known depleted value', () => {
     expect(
-      gateAddToCart({ ...product, manage_stock: null, stock: 0 })
+      gateAddToCart({
+        ...product,
+        manage_stock: null as unknown as boolean,
+        stock: 0,
+      })
     ).toBeNull();
   });
   it('allows the winner to add a reserved prize at zero public stock', () => {

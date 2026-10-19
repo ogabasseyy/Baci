@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react';
 import { Alert } from 'react-native';
 import type { CartPriceChange, RepriceResult } from '@/services/cart-reprice';
 import type { CartItem } from '@/stores/cart-store.types';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { createOrderResponseFixture } from './checkout-order-response-fixture';
 import { CHECKOUT_MERCHANT_ID } from './checkout-screen.constants';
 import { useCheckoutSubmit } from './use-checkout-submit';
@@ -987,5 +988,27 @@ describe('useCheckoutSubmit', () => {
         userId: 'auth-user-1',
       })
     );
+  });
+  it('explains a missing shared cart review without sending an order', async () => {
+    useNativeSharedCartStore.setState({
+      enabled: true,
+      checkoutReview: null,
+      snapshot: null,
+    });
+    try {
+      const params = createParams({ selectedPayment: 'paystack' });
+      const { result } = renderHook(() => useCheckoutSubmit(params));
+      await act(async () => {
+        await result.current(address);
+      });
+      expect(mockCreateOrder).not.toHaveBeenCalled();
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'Cart is syncing',
+        expect.stringContaining('review')
+      );
+      expect(params.setStep).toHaveBeenCalledWith('review');
+    } finally {
+      useNativeSharedCartStore.setState({ enabled: false });
+    }
   });
 });

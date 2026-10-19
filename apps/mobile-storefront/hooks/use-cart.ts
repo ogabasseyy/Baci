@@ -14,6 +14,7 @@ import { useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { isSameCartLine } from '@/stores/cart-line';
 import { useCartStore } from '@/stores/cart-store';
+import { hasSharedCartWriter } from '@/stores/shared-cart-writer';
 import { showCartToast } from './cart-notifications';
 import { createUpdateQuantityMutation } from './cart-quantity-mutation';
 import { getCachedOptionStock } from './cart-query-cache';
@@ -33,6 +34,7 @@ export function useCart() {
   // Get store actions
   const {
     items,
+    isLoading,
     addItem: addItemToStore,
     removeItem: removeItemFromStore,
     updateQuantity: updateQuantityInStore,
@@ -44,6 +46,7 @@ export function useCart() {
   } = useCartStore(
     useShallow((state) => ({
       items: state.items,
+      isLoading: state.isLoading,
       addItem: state.addItem,
       removeItem: state.removeItem,
       updateQuantity: state.updateQuantity,
@@ -144,6 +147,11 @@ export function useCart() {
         if (!addedLine) {
           return;
         }
+        // A shared-cart writer owns the lines: the legacy rollback must
+        // not edit the parked cart.
+        if (hasSharedCartWriter()) {
+          return;
+        }
         useCartStore.setState((state) => {
           const current = state.items.find((i) => i.id === addedLine.id);
           // Concurrently removed: leave alone, never resurrect.
@@ -227,7 +235,8 @@ export function useCart() {
 
     onError: (_error, _id, context) => {
       if (context?.previousItems) {
-        useCartStore.setState({ items: context.previousItems });
+        if (!hasSharedCartWriter())
+          useCartStore.setState({ items: context.previousItems });
       }
       showCartToast('Failed to remove item', 'error');
     },
@@ -246,6 +255,10 @@ export function useCart() {
 
   // Wrapped functions for easier consumption
   const addToCart = (item: AddToCartInput) => {
+    if (hasSharedCartWriter()) {
+      addItemToStore(item);
+      return;
+    }
     addToCartMutation.mutate(item);
   };
 
@@ -257,10 +270,18 @@ export function useCart() {
   };
 
   const removeFromCart = (id: string) => {
+    if (hasSharedCartWriter()) {
+      void removeItemFromStore(id);
+      return;
+    }
     removeFromCartMutation.mutate(id);
   };
 
   const updateQuantity = (id: string, quantity: number) => {
+    if (hasSharedCartWriter()) {
+      void updateQuantityInStore(id, quantity);
+      return;
+    }
     updateQuantityMutation.mutate({ id, quantity });
   };
 
@@ -277,9 +298,15 @@ export function useCart() {
     updateQuantity,
 
     // Mutation states for UI feedback
-    isAddingToCart: addToCartMutation.isPending,
-    isRemovingFromCart: removeFromCartMutation.isPending,
-    isUpdatingQuantity: updateQuantityMutation.isPending,
+    isAddingToCart: hasSharedCartWriter()
+      ? isLoading
+      : addToCartMutation.isPending,
+    isRemovingFromCart: hasSharedCartWriter()
+      ? isLoading
+      : removeFromCartMutation.isPending,
+    isUpdatingQuantity: hasSharedCartWriter()
+      ? isLoading
+      : updateQuantityMutation.isPending,
 
     // Direct store access for non-optimistic operations
     getItem,

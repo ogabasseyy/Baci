@@ -17,6 +17,22 @@ describe('resolveAgenticTaxLinePrice', () => {
     ).toBe(5000);
   });
 
+  it('prefers the condition price over variant, offer, and parent prices', () => {
+    expect(
+      resolveAgenticTaxLinePrice({
+        candidateVariant: { product_id: 'prod-1', price_override: 5000 },
+        conditionPrices: new Map([[JSON.stringify(['prod-1', 'used']), 3000]]),
+        item: {
+          condition: 'used',
+          product_id: 'prod-1',
+          offer_id: 'offer-1',
+        },
+        offerPrices: new Map([['prod-1::offer-1', 4000]]),
+        product: { price: 10000 },
+      })
+    ).toBe(3000);
+  });
+
   it('falls back to the live offer price for offer lines', () => {
     expect(
       resolveAgenticTaxLinePrice({

@@ -151,6 +151,9 @@ export function buildCheckoutOrderLifecycleOptions({
           provider: delivery.shippingProvider,
           address: delivery.address,
         },
+        ...(identity.sharedCartBinding
+          ? { sharedCart: identity.sharedCartBinding }
+          : {}),
       }),
       paymentMethod: state.paymentMethod,
       total: state.total,

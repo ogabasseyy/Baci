@@ -1,3 +1,11 @@
+// biome-ignore-all lint/correctness/noUndeclaredVariables: Jest globals are provided by jest-expo in this legacy store test.
+jest.mock('expo-crypto', () => ({
+  randomUUID: jest.fn(() => 'test-generation'),
+}));
+jest.mock('@/lib/persist-checkout-generation', () => ({
+  persistCheckoutGenerationDetached: jest.fn(),
+}));
+
 /**
  * Tests for auth-store — focused on OAuth checkout fix behaviors:
  * - Customer lookup by user_id (not email)
@@ -8,7 +16,6 @@
  * - cleanup() unsubscribes auth listener
  */
 
-// biome-ignore-all lint/correctness/noUndeclaredVariables: Jest globals are provided by jest-expo in this legacy store test.
 import { act } from '@testing-library/react-native';
 
 // ---------------------------------------------------------------------------
@@ -127,7 +134,11 @@ jest.mock('../lib/validation', () => ({
 const mockClearCart = jest.fn(async () => undefined);
 jest.mock('./cart-store', () => ({
   useCartStore: {
-    getState: jest.fn(() => ({ items: [], clearCart: mockClearCart })),
+    getState: jest.fn(() => ({
+      items: [],
+      clearCart: mockClearCart,
+    })),
+    setState: jest.fn(),
   },
 }));
 
@@ -201,6 +212,7 @@ import * as pushTokenStorage from '../lib/push-token-storage';
 import { supabase } from '../lib/supabase';
 import * as pushNotificationsService from '../services/push-notifications';
 import { useAuthStore } from './auth-store';
+import { useCartStore } from './cart-store';
 
 // Spies wired in beforeEach
 let mockGetStoredPushToken: jest.SpyInstance;
@@ -784,6 +796,39 @@ describe('useAuthStore', () => {
       expect(mockQuizReset).toHaveBeenCalled();
     });
 
+    it('fences the old identity before hydrating a switched account', async () => {
+      await runInitialize();
+      (supabase.from as jest.Mock).mockImplementation((table: string) => {
+        if (table === 'merchants')
+          return makeChain({ data: mockMerchantRow, error: null });
+        return makeChain({ data: mockCustomerRow, error: null });
+      });
+      (useAuthStore.setState as (state: object) => void)({
+        user: { id: USER_ID },
+      });
+      const seenUserIds: (string | null)[] = [];
+      const unsubscribe = useAuthStore.subscribe((state) =>
+        seenUserIds.push(state.user?.id ?? null)
+      );
+      try {
+        await act(async () => {
+          await emitAuthStateChange('SIGNED_IN', {
+            ...mockSession,
+            user: { ...mockUser, id: OTHER_USER_ID },
+          });
+        });
+      } finally {
+        unsubscribe();
+      }
+      // The old identity must be cleared (null) before the new user
+      // is hydrated, even though cart retirement is awaited in between.
+      const fenceIndex = seenUserIds.indexOf(null);
+      const switchedIndex = seenUserIds.indexOf(OTHER_USER_ID);
+      expect(fenceIndex).toBeGreaterThanOrEqual(0);
+      expect(switchedIndex).toBeGreaterThan(fenceIndex);
+      expect(useAuthStore.getState().user?.id).toBe(OTHER_USER_ID);
+    });
+
     it('does NOT reset quiz state on a same-user SIGNED_IN (session refresh)', async () => {
       // Arrange: shopper already signed in as USER_ID (mid-quiz).
       await runInitialize();
@@ -937,6 +982,38 @@ describe('useAuthStore', () => {
       expect(mockClearComparison).toHaveBeenCalled();
       // Quiz attempt/result/prize must not survive a sign-out.
       expect(mockQuizReset).toHaveBeenCalled();
+    });
+
+    it('blanks displayed cart items when device cart retirement fails on SIGNED_OUT', async () => {
+      resetSupabaseMocks({
+        session: mockSession,
+        getUser: { data: { user: mockUser }, error: null },
+        customerResult: { data: mockCustomerRow, error: null },
+      });
+      (supabase.from as jest.Mock).mockImplementation((table: string) =>
+        makeChain(
+          table === 'merchants'
+            ? { data: mockMerchantRow, error: null }
+            : { data: mockCustomerRow, error: null }
+        )
+      );
+
+      await act(async () => {
+        await useAuthStore.getState().initialize();
+      });
+      (useCartStore.setState as jest.Mock).mockClear();
+      mockClearCart.mockRejectedValueOnce(new Error('offline'));
+
+      await act(async () => {
+        await emitAuthStateChange('SIGNED_OUT', null);
+        await _flushPromises();
+      });
+
+      expect(useCartStore.setState).toHaveBeenCalledWith({
+        items: [],
+        lineSequence: 0,
+        cartWideNegotiationActive: false,
+      });
     });
   });
 
@@ -1408,6 +1485,46 @@ describe('useAuthStore', () => {
       await signOutPromise;
       expect(signOutFinished).toBe(true);
       expect(useAuthStore.getState().user).toBeNull();
+    });
+
+    it('finishes local teardown and removes persisted session when the auth provider or push cleanup throws during sign-out', async () => {
+      (supabase.auth.signOut as jest.Mock)
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce({ error: null });
+      await useAuthStore.getState().signOut();
+      expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+      expect(useAuthStore.getState().user).toBeNull();
+      expect(useAuthStore.getState().session).toBeNull();
+      expect(mockClearCart).toHaveBeenCalled();
+    });
+
+    it('clears identity and loading even when provider sign-out and saved cleanup both throw', async () => {
+      const user = {
+        ...mockUser,
+        app_metadata: {},
+        aud: 'authenticated',
+        created_at: '2026-10-15T00:00:00Z',
+      };
+      const session = {
+        ...mockSession,
+        user,
+        expires_in: 3600,
+        token_type: 'bearer' as const,
+      };
+      useAuthStore.setState({ user, session });
+      (supabase.auth.signOut as jest.Mock).mockRejectedValueOnce(
+        new Error('offline')
+      );
+      mockClearSaved.mockImplementationOnce(() => {
+        throw new Error('saved cleanup failed');
+      });
+      await expect(useAuthStore.getState().signOut()).resolves.toBeUndefined();
+      expect(useAuthStore.getState()).toMatchObject({
+        user: null,
+        session: null,
+        customer: null,
+        isLoading: false,
+      });
     });
 
     it('still signs out when cart clear persistence rejects', async () => {

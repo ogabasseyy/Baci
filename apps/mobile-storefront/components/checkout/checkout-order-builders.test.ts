@@ -527,4 +527,49 @@ describe('checkout order builders', () => {
     });
     expect(payload.items[0].offer_id).toBe('offer-used-b');
   });
+
+  it('preserves minor-unit cent precision for bound assurance fees and checkout snapshot totals', () => {
+    const itemsSnapshot = [
+      {
+        id: 'line-insured',
+        product_id: 'prod-insured',
+        slug: 'screen-guard',
+        name: 'Screen Guard',
+        price: 101,
+        quantity: 1,
+        hasAssurance: true,
+        assuranceRate: 0.05,
+      },
+    ];
+    const snapshot = createCheckoutSnapshot(itemsSnapshot, 0, 0);
+
+    expect(snapshot.assuranceFee).toBe(5.05);
+    expect(snapshot.subtotal).toBe(101);
+    expect(snapshot.total).toBe(106.05);
+
+    const request = buildCheckoutOrderRequest({
+      address,
+      customerEmail: 'ada@example.com',
+      customerName: 'Ada Lovelace',
+      customerPhone: '08012345678',
+      deliveryMethod: 'door',
+      itemsSnapshot,
+      paymentMethodForOrder: 'card',
+      selectedQuote: undefined,
+      shippingProvider: undefined,
+      snapshot,
+      sharedCartBinding: {
+        cart_id: '22222222-2222-4222-8222-222222222222',
+        cart_version: 1,
+        checkout_generation: 1,
+        checkout_session_id: '44444444-4444-4444-8444-444444444444',
+      },
+    });
+
+    expect(request.items[0]).toMatchObject({
+      cart_line_id: 'line-insured',
+      has_assurance: true,
+      assurance_fee: 5.05,
+    });
+  });
 });

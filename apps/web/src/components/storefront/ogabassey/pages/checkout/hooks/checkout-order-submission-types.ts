@@ -1,5 +1,6 @@
 import type { CartItem } from '@/hooks/cart';
 import type { useCart } from '@/hooks/cart';
+import type { SharedCartSyncStatus } from '@/hooks/cart/cart-types';
 import type { useAuthSafe } from '@/contexts/auth-context';
 import type { MerchantData } from '@/hooks/merchant/types';
 import type { useWalletFundedBankTransfer } from './use-wallet-funded-bank-transfer';
@@ -36,6 +37,13 @@ export interface CheckoutOrderSubmissionContext {
     checkoutCartTotal: number;
     clearCart: () => void;
     removeFromCart: ReturnType<typeof useCart>['removeFromCart'];
+    /** Authoritative cart identity for bound checkout; absent for legacy carts. */
+    sharedCartEnabled?: boolean;
+    sharedCartRef?: { cartId: string; version: number } | null;
+    /** Refetches the authoritative snapshot; absent for legacy carts. */
+    refreshSharedCart?: () => Promise<void>;
+    /** Sync state of the shared cart; bound submit requires 'synced'. */
+    sharedCartSyncStatus?: SharedCartSyncStatus | null;
   };
   contact: Pick<Form, 'customerEmail' | 'customerPhone' | 'firstName' | 'lastName' | 'newsletterOptIn'>;
   delivery: {

@@ -42,7 +42,7 @@ function isValidCartItemShape(item: unknown): item is CartItem {
 
   if (
     cartItem.negotiatedPrice !== undefined &&
-    (!isFiniteNumber(cartItem.negotiatedPrice) || cartItem.negotiatedPrice <= 0)
+    (!isFiniteNumber(cartItem.negotiatedPrice) || cartItem.negotiatedPrice < 0)
   ) {
     return false;
   }

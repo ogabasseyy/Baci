@@ -1,5 +1,8 @@
 import type { AgentCommerceManifest } from '@/lib/agentic/agent-commerce-manifest';
-import { UCP_PROFILE_VERSION } from '@/lib/agentic/ucp-profile-constants';
+import {
+  CHECKOUT_SESSION_CAPABILITIES,
+  UCP_PROFILE_VERSION,
+} from '@/lib/agentic/ucp-profile-constants';
 
 const UCP_PROFILE_BASE_URL = `https://ucp.dev/${UCP_PROFILE_VERSION}`;
 const UCP_SPEC_BASE_URL = `${UCP_PROFILE_BASE_URL}/specification`;
@@ -18,13 +21,6 @@ const UCP_CATALOG_SPEC_URL = `${UCP_SPEC_BASE_URL}/catalog`;
 const UCP_ORDER_SPEC_URL = `${UCP_SPEC_BASE_URL}/order`;
 const UCP_CHECKOUT_SCHEMA_URL = `${UCP_SCHEMA_BASE_URL}/checkout.json`;
 const UCP_ORDER_SCHEMA_URL = `${UCP_SCHEMA_BASE_URL}/order.json`;
-const CHECKOUT_SESSION_CAPABILITIES = [
-  'checkout.session.create',
-  'checkout.session.read',
-  'checkout.session.update',
-  'checkout.session.complete',
-  'checkout.session.cancel',
-] as const;
 type OperationMap = Record<string, string>;
 
 export function buildUcpCapabilities({
@@ -263,7 +259,9 @@ function hasCheckoutCapabilities(manifest: AgentCommerceManifest): boolean {
 }
 
 function hasCartCapability(manifest: AgentCommerceManifest): boolean {
-  return hasCheckoutCapabilities(manifest) && hasCheckoutLinks(manifest);
+  // Signed cart transfers are available independently of native checkout.
+  // This does not advertise payment or order operations.
+  return manifest.auth !== null;
 }
 
 function hasNativeCatalogCapability(manifest: AgentCommerceManifest): boolean {

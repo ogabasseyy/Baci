@@ -85,3 +85,44 @@ describe('buildOrderIdempotencyPayload', () => {
     );
   });
 });
+
+describe('shared_cart binding identity', () => {
+  const base = {
+    customer_email: 'buyer@example.com',
+    customer_name: 'Ada Okafor',
+    customer_phone: '08012345678',
+    items: [{ product_id: 'buds2', price: 85000, quantity: 1 }],
+    merchant_id: 'merchant-one',
+  };
+
+  it('distinguishes two reviewed carts reusing one key', () => {
+    const first = buildOrderIdempotencyPayload({
+      ...base,
+      shared_cart: {
+        cart_id: 'cart-a',
+        cart_version: 3,
+        checkout_generation: 1,
+        checkout_session_id: 'session-a',
+      },
+    });
+    const second = buildOrderIdempotencyPayload({
+      ...base,
+      shared_cart: {
+        cart_id: 'cart-b',
+        cart_version: 3,
+        checkout_generation: 1,
+        checkout_session_id: 'session-b',
+      },
+    });
+    expect(first).not.toEqual(second);
+    expect(first.shared_cart?.cart_id).toBe('cart-a');
+  });
+
+  it('keeps unbound payloads byte-identical to the legacy shape', () => {
+    const payload = buildOrderIdempotencyPayload(base);
+    // The key may exist with an undefined value; what matters is
+    // that serialization (and therefore the hash) is unchanged.
+    expect(payload.shared_cart).toBeUndefined();
+    expect(JSON.stringify(payload)).not.toContain('shared_cart');
+  });
+});

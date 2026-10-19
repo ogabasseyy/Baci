@@ -21,12 +21,19 @@ import { type CreateOrderResult, parseOrderResponse } from './orders.response';
 import {
   type CreateOrderRequest,
   CreateOrderRequestSchema,
-  type OrderResponse,
 } from './orders.schemas';
 import { recordOrderCreatedAnalytics } from './orders-analytics';
 import { resolveCheckoutAuth } from './orders-auth';
+import {
+  cartBindingMatchesCurrentDevice,
+  readSharedCartOrderProof,
+} from './orders-cart-binding';
 import { buildSnapshottedOrderPayload } from './orders-credit-freeze';
 import { releaseCreditAfterDefinitiveRejection } from './orders-credit-release';
+import {
+  getCustomerOrders as getCustomerOrdersForMerchant,
+  getOrder as getOrderForCustomer,
+} from './orders-queries';
 import { getCheckoutStoredSession } from './orders-session';
 import { validateCheckoutUser } from './orders-user-validation';
 import { readCheckoutStoredSession } from './read-checkout-stored-session';
@@ -82,6 +89,18 @@ export async function createOrder(
     );
   }
   const validatedRequest = validationResult.data;
+  if (
+    !cartBindingMatchesCurrentDevice(
+      validatedRequest.shared_cart,
+      useCartStore.getState().sharedCartRef,
+      MERCHANT_ID
+    )
+  ) {
+    throw new OrderError(
+      'Review your shared cart before checkout.',
+      'CART_REVIEW_REQUIRED'
+    );
+  }
 
   const isOnline = await checkNetwork();
   if (!isOnline) {
@@ -183,6 +202,11 @@ export async function createOrder(
       taxAmount: orderPayload.tax_amount,
     });
 
+    const cartProof = await readSharedCartOrderProof(
+      validatedRequest.shared_cart,
+      MERCHANT_ID,
+      user?.id ?? session?.user?.id
+    );
     const response = await fetchWithRetry(
       `${API_URL}/api/orders`,
       {
@@ -190,6 +214,7 @@ export async function createOrder(
         headers: {
           'Content-Type': 'application/json',
           'Idempotency-Key': idempotencyKey,
+          ...(cartProof ? { 'x-cart-proof': cartProof } : {}),
           ...checkoutAuth.authorizationHeaders,
         },
         body: JSON.stringify(orderPayload),
@@ -240,57 +265,10 @@ export async function createOrder(
   }
 }
 
-export async function getOrder(
-  orderId: string,
-  customerId: string
-): Promise<OrderResponse['order'] | null> {
-  const isOnline = await checkNetwork();
-  if (!isOnline) {
-    throw new OrderError(
-      'No internet connection. Please check your network.',
-      'NETWORK_ERROR'
-    );
-  }
-
-  const { data, error } = await supabase
-    .from('orders')
-    .select(
-      'id, order_number, total, payment_status, shipping_status, created_at'
-    )
-    .eq('id', orderId)
-    .eq('customer_id', customerId)
-    .single();
-
-  if (error) {
-    log.error('Error fetching order', error);
-    return null;
-  }
-
-  return data;
+export function getOrder(orderId: string, customerId: string) {
+  return getOrderForCustomer(orderId, customerId);
 }
 
-export async function getCustomerOrders(customerId: string) {
-  const isOnline = await checkNetwork();
-  if (!isOnline) {
-    throw new OrderError(
-      'No internet connection. Please check your network.',
-      'NETWORK_ERROR'
-    );
-  }
-
-  const { data, error } = await supabase
-    .from('orders')
-    .select(
-      'id, order_number, total, payment_status, shipping_status, created_at, order_items(id, product_id, condition, image_url, name, quantity, price, has_assurance)'
-    )
-    .eq('customer_id', customerId)
-    .eq('merchant_id', MERCHANT_ID)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    log.error('Error fetching customer orders', error);
-    throw new OrderError('Failed to load orders', 'FETCH_ERROR', error);
-  }
-
-  return data || [];
+export function getCustomerOrders(customerId: string) {
+  return getCustomerOrdersForMerchant(customerId, MERCHANT_ID);
 }

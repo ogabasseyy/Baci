@@ -84,6 +84,8 @@ export interface MobileCheckoutOrderItemPayload {
   assurance_fee: number;
   voucher_token?: string;
   voucher_award_id?: string;
+  /** Stable canonical cart line id, present only for shared-cart orders. */
+  cart_line_id?: string;
 }
 
 function normalizeString(value: string | null | undefined) {
@@ -198,6 +200,7 @@ export function buildMobileCheckoutOrderItems(
 ): MobileCheckoutOrderItemPayload[] {
   return items.map((item) => {
     const effectivePrice = item.negotiatedPrice ?? item.price;
+    const effectivePriceMinor = Math.round(effectivePrice * 100);
     return {
       id: item.product_id,
       product_id: item.product_id,
@@ -212,10 +215,10 @@ export function buildMobileCheckoutOrderItems(
       has_assurance: item.hasAssurance || false,
       assurance_fee: item.hasAssurance
         ? Math.round(
-            effectivePrice *
+            effectivePriceMinor *
               item.quantity *
               (item.assuranceRate ?? defaultAssuranceRate)
-          )
+          ) / 100
         : 0,
     };
   });
@@ -225,21 +228,23 @@ export function calculateMobileCheckoutAssuranceFee(
   items: readonly MobileCheckoutOrderItemInput[],
   defaultAssuranceRate = 0.05
 ) {
-  return items.reduce((sum, item) => {
+  const totalMinor = items.reduce((sum, item) => {
     if (!item.hasAssurance) {
       return sum;
     }
 
     const effectivePrice = item.negotiatedPrice ?? item.price;
+    const effectivePriceMinor = Math.round(effectivePrice * 100);
     return (
       sum +
       Math.round(
-        effectivePrice *
+        effectivePriceMinor *
           item.quantity *
           (item.assuranceRate ?? defaultAssuranceRate)
       )
     );
   }, 0);
+  return totalMinor / 100;
 }
 
 export function buildMobileCheckoutOrderFingerprint({

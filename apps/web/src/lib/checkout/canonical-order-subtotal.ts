@@ -1,8 +1,13 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  loadOrderConditionPrices,
+  orderConditionPrice,
+} from '@/lib/checkout/order-condition-prices';
 import { logger } from '@/lib/logger';
 
 export type CanonicalSubtotalItem = {
   product_id?: string;
+  condition?: string | null;
   variant_id?: string | null;
   offer_id?: string | null;
   quantity: number;
@@ -49,12 +54,16 @@ export async function computeCanonicalOrderSubtotal({
   merchantId,
   offerPrices,
   supabase,
+  allowUnavailableConditionPrices,
+  conditionPriceOverrides,
 }: {
   items: CanonicalSubtotalItem[];
   merchantId: string;
   /** `${product_id}::${offer_id}` → live offer price, when verified. */
   offerPrices?: Map<string, number>;
   supabase: SupabaseClient;
+  allowUnavailableConditionPrices?: boolean;
+  conditionPriceOverrides?: Map<string, number>;
 }): Promise<number | null> {
   const productIds = Array.from(
     new Set(
@@ -117,6 +126,16 @@ export async function computeCanonicalOrderSubtotal({
     );
   }
 
+  const conditionPrices = await loadOrderConditionPrices(
+    items,
+    merchantId,
+    supabase,
+    {
+      allowUnavailable: allowUnavailableConditionPrices,
+      priceOverrides: conditionPriceOverrides,
+    }
+  );
+
   const productMap = new Map(products.map((product) => [product.id, product]));
   const variantMap = new Map(
     (variantsData ?? []).map((variant) => [variant.id, variant])
@@ -158,7 +177,11 @@ export async function computeCanonicalOrderSubtotal({
         'Offer line is missing verified live offer economics'
       );
     const unitPrice = Number(
-      variant?.price_override ?? offerPrice ?? product.price ?? 0
+      orderConditionPrice(conditionPrices, item) ??
+        variant?.price_override ??
+        offerPrice ??
+        product.price ??
+        0
     );
     const quantity = Number(item.quantity);
     const assuranceFee = Number(item.assurance_fee ?? 0);

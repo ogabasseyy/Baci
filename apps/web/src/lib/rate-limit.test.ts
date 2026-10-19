@@ -4,6 +4,7 @@ import {
   __resetRateLimitStoreForTesting,
   checkImeiPollRateLimit,
   checkRateLimit,
+  getTrustedClientIdentifier,
   setRateLimitDiagnosticHook,
 } from './rate-limit';
 
@@ -25,6 +26,108 @@ vi.mock('@upstash/ratelimit', () => ({
 vi.mock('./redis', () => ({
   getRedis: mockGetRedis,
 }));
+
+describe('legacy bridge rate limit keying', () => {
+  beforeEach(() => {
+    __resetRateLimitStoreForTesting();
+    mockGetRedis.mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    __resetRateLimitStoreForTesting();
+    vi.unstubAllEnvs();
+  });
+
+  it('keys legacy bridge buckets by token, not the shared egress IP', async () => {
+    const prefix = `Bearer ${['legacy', 'mcp'].join('_')}_`;
+    const url = 'https://ogabassey.com/api/storefront/cart/legacy';
+    const headersFor = (token: string) => ({
+      authorization: `${prefix}${token}`,
+      'x-real-ip': '192.0.2.20',
+    });
+    const first = await checkRateLimit(
+      new NextRequest(url, {
+        method: 'POST',
+        headers: headersFor('a'.repeat(64)),
+      })
+    );
+    const second = await checkRateLimit(
+      new NextRequest(url, {
+        method: 'POST',
+        headers: headersFor('a'.repeat(64)),
+      })
+    );
+    const otherToken = await checkRateLimit(
+      new NextRequest(url, {
+        method: 'POST',
+        headers: headersFor('b'.repeat(64)),
+      })
+    );
+
+    expect(first.limit).toBe(600);
+    expect(second.remaining).toBe(598);
+    // A different token behind the same IP gets its own bucket.
+    expect(otherToken.remaining).toBe(599);
+  });
+
+  it('enforces the aggregate per-IP ceiling across rotating tokens using the trusted client identifier', async () => {
+    vi.stubEnv('VERCEL', '1');
+    const prefix = `Bearer ${['legacy', 'mcp'].join('_')}_`;
+    const url = 'https://ogabassey.com/api/storefront/cart/legacy';
+    const requestFrom = (ip: string, tokenIndex: number) =>
+      new NextRequest(url, {
+        method: 'POST',
+        headers: {
+          authorization: `${prefix}${tokenIndex.toString(16).padStart(64, '0')}`,
+          'x-real-ip': ip,
+        },
+      });
+
+    // 3,000 rotating well-formed tokens from one IP all pass the
+    // aggregate ceiling (each token bucket is nearly untouched).
+    for (let index = 0; index < 3_000; index++) {
+      const result = await checkRateLimit(requestFrom('192.0.2.30', index));
+      expect(result.allowed).toBe(true);
+    }
+    // The next request from that IP is blocked by the ceiling even
+    // with a brand-new token, while a distinct IP is unaffected.
+    const blocked = await checkRateLimit(requestFrom('192.0.2.30', 3_001));
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.limit).toBe(3_000);
+    const control = await checkRateLimit(requestFrom('192.0.2.31', 3_001));
+    expect(control.allowed).toBe(true);
+  });
+
+  it('collapses untrusted x-real-ip and x-forwarded-for headers into one legacy bridge ceiling bucket', async () => {
+    const prefix = `Bearer ${['legacy', 'mcp'].join('_')}_`;
+    const url = 'https://ogabassey.com/api/storefront/cart/legacy';
+    for (let index = 0; index < 3_000; index++) {
+      const result = await checkRateLimit(
+        new NextRequest(url, {
+          method: 'POST',
+          headers: {
+            authorization: `${prefix}${index.toString(16).padStart(64, '0')}`,
+            'x-forwarded-for': `203.0.113.${index % 250}`,
+            'x-real-ip': `198.51.100.${index % 250}`,
+          },
+        })
+      );
+      expect(result.allowed).toBe(true);
+    }
+    const blocked = await checkRateLimit(
+      new NextRequest(url, {
+        method: 'POST',
+        headers: {
+          authorization: `${prefix}${(3_001).toString(16).padStart(64, '0')}`,
+          'x-forwarded-for': '203.0.113.254',
+          'x-real-ip': '198.51.100.254',
+        },
+      })
+    );
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.limit).toBe(3_000);
+  });
+});
 
 // Dedicated coverage for the quiz-specific rate-limit entries added for launch.
 // The broader per-IP identifier / trie behavior is covered in rate-limit.test.tsx.
@@ -261,5 +364,49 @@ describe('quiz route rate limits', () => {
     await expect(
       checkRateLimit(new NextRequest('http://localhost:3000/api/unknown'))
     ).resolves.toMatchObject({ allowed: true });
+  });
+});
+
+describe('getTrustedClientIdentifier (cart quota identity)', () => {
+  function requestWith(headers: Record<string, string>): NextRequest {
+    return new NextRequest('http://localhost:3000/api/storefront/cart', {
+      headers,
+    });
+  }
+
+  it('never lets a rotating x-forwarded-for reset the quota subject', () => {
+    // Every spoofed value must land in the same shared bucket, so the
+    // anonymous cart budgets cannot be reset by header rotation.
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({ 'x-forwarded-for': '203.0.113.1' })
+      )
+    ).toBe('unknown');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({ 'x-forwarded-for': '198.51.100.9, 203.0.113.1' })
+      )
+    ).toBe('unknown');
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-forwarded-for': 'x' }))
+    ).toBe('unknown');
+  });
+
+  it('uses the platform-set x-real-ip when present', () => {
+    vi.stubEnv('VERCEL', '1');
+    expect(
+      getTrustedClientIdentifier(
+        requestWith({
+          'x-forwarded-for': '203.0.113.1',
+          'x-real-ip': '192.0.2.44',
+        })
+      )
+    ).toBe('192.0.2.44');
+  });
+
+  it('ignores a malformed x-real-ip', () => {
+    expect(
+      getTrustedClientIdentifier(requestWith({ 'x-real-ip': 'not-an-ip' }))
+    ).toBe('unknown');
   });
 });

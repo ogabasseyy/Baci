@@ -48,6 +48,10 @@ const config = {
     '^react-test-renderer$': reactTestRendererPath,
     '^uuid$': uuidPath,
     '^@sentry/react-native$': '<rootDir>/__mocks__/sentry-react-native.js',
+    // The native module crashes in Jest via nested expo-constants copies;
+    // suites with their own factory mock keep it, everyone else gets the
+    // Node-backed stand-in.
+    '^expo-crypto$': '<rootDir>/__mocks__/expo-crypto.js',
     // Prevent expo winter runtime from loading native-only modules in Jest
     'expo/src/winter/ImportMetaRegistry':
       '<rootDir>/__mocks__/expo-import-meta-registry.js',

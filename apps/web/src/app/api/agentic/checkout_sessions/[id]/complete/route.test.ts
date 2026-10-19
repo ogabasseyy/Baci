@@ -356,7 +356,8 @@ describe('POST /api/agentic/checkout_sessions/[id]/complete', () => {
         payment_method: 'pay_on_delivery',
         payment_status: 'pending',
       }),
-      expect.any(Object)
+      expect.any(Object),
+      { boundPrincipalId: null }
     );
     const completedPayload = updateSpy.mock.calls.find(
       ([payload]) => payload.status === 'completed'

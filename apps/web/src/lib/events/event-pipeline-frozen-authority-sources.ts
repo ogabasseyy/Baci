@@ -81,8 +81,35 @@ export const eventPipelineFrozenRoutes = {
   // prepareLoyaltyCheckout (branch F1 replay bypass + offerPrices
   // ported into the helper); notification, payment authority, and
   // database operations are unchanged.
+  // Re-pinned for reviewed canonical-cart transaction binding. Existing
+  // payment/notification authority is unchanged; no service grants are added.
+  // Re-pinned for the shared-cart binding invalid_item status correction
+  // (500 -> 400, a client error); payment/notification authority unchanged.
+  // Re-pinned for condition-offer validation errors as client errors;
+  // payment, notification and credential authority are unchanged.
+  // Re-pinned for early cart-proof checks and claimed-voucher binding replay;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned after extracting reviewed cart proof/binding response orchestration;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned for the claimed-voucher replay re-read of the stored order;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned after extracting bound-order dispatch and the shared
+  // condition-offer response from the route; payment, notification
+  // and credential authority remain unchanged. Re-pinned again after
+  // merging the GIGL checkout-pin changes from main; the cart binding
+  // dispatch is unchanged. Re-pinned after the orders replay probe moved
+  // to the scoped storefront_checkout_replay_snapshot RPC (no service-role
+  // client on the route); order authority paths are unchanged. Re-pinned
+  // after shared-cart orders were barred from the REDVAULT draft rail.
+  // Re-pinned after the replay-snapshot probe moved to the admin client
+  // and the RPC was restricted to service_role. Re-pinned again after
+  // the probe returned to the normal client with a minimized snapshot
+  // projection (no service-role client on the guest checkout path).
+  // Merge re-pin for #3693: shared-cart binding/condition-offer response
+  // extraction plus this branch offer-economics union; both reviewed,
+  // hash covers the union.
   'apps/web/src/app/api/orders/route.ts':
-    'bcdd1a5afde32a8bac290b1f4da2754089aaa9841285c3924606623779e51a80',
+    'e4d48e505455ab62f60be7a226853a1f45a31435101e739203fa17991d7c1db0',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

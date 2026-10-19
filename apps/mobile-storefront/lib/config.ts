@@ -62,6 +62,7 @@ const extra = readExpoExtra();
 
 export const CONFIG = {
   MERCHANT_ID: readString(extra, 'merchantId', ''),
+  MERCHANT_DOMAIN: readString(extra, 'merchantDomain', ''),
   // Keep mobile runtime fallback aligned with this app's default merchant.
   MERCHANT_SLUG: readString(extra, 'merchantSlug', 'ogabassey'),
   TEMPLATE_ID: readString(extra, 'templateId', 'default'),

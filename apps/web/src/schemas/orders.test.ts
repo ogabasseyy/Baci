@@ -848,3 +848,91 @@ describe('orderUpdateSchema', () => {
     );
   });
 });
+
+describe('orderCreateSchema shared cart binding', () => {
+  const binding = {
+    cart_id: '223e4567-e89b-12d3-a456-426614174000',
+    cart_version: 3,
+    checkout_generation: 1,
+    checkout_session_id: '323e4567-e89b-12d3-a456-426614174000',
+  };
+
+  it('accepts an optional shared_cart binding and preserves it', () => {
+    const result = orderCreateSchema.safeParse({
+      ...validOrder,
+      shared_cart: binding,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.shared_cart).toEqual(binding);
+    }
+  });
+
+  it('omits shared_cart for legacy checkouts', () => {
+    const result = orderCreateSchema.safeParse(validOrder);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.shared_cart).toBeUndefined();
+    }
+  });
+
+  it('rejects a binding with a non-uuid session', () => {
+    const result = orderCreateSchema.safeParse({
+      ...validOrder,
+      shared_cart: { ...binding, checkout_session_id: 'not-a-uuid' },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects a binding with a non-positive generation or version', () => {
+    expect(
+      orderCreateSchema.safeParse({
+        ...validOrder,
+        shared_cart: { ...binding, checkout_generation: 0 },
+      }).success
+    ).toBe(false);
+    expect(
+      orderCreateSchema.safeParse({
+        ...validOrder,
+        shared_cart: { ...binding, cart_version: -1 },
+      }).success
+    ).toBe(false);
+  });
+
+  it('accepts a cart_line_id on items', () => {
+    const result = orderCreateSchema.safeParse({
+      ...validOrder,
+      items: [
+        {
+          cart_line_id: '423e4567-e89b-12d3-a456-426614174000',
+          name: 'Test Product',
+          price: 1000,
+          productId: 'prod-1',
+          quantity: 1,
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.items[0]?.cart_line_id).toBe(
+        '423e4567-e89b-12d3-a456-426614174000'
+      );
+    }
+  });
+
+  it('rejects a non-uuid cart_line_id', () => {
+    const result = orderCreateSchema.safeParse({
+      ...validOrder,
+      items: [
+        {
+          cart_line_id: 'temp-1',
+          name: 'Test Product',
+          price: 1000,
+          productId: 'prod-1',
+          quantity: 1,
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+});

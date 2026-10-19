@@ -4,6 +4,7 @@ import { createLogger } from '@/lib/logger';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGeneration } from '@/lib/persist-checkout-generation';
 import type { CartState } from './cart-store-state';
+import { forwardSharedCartWrite } from './shared-cart-writer';
 
 const log = createLogger('CartStore');
 
@@ -12,6 +13,8 @@ export function createCheckoutGenerationActions(
 ): Pick<CartState, 'advanceCheckoutGeneration' | 'restoreItems'> {
   return {
     advanceCheckoutGeneration: async () => {
+      const forwarded = forwardSharedCartWrite({ type: 'legacy_generation' });
+      if (forwarded) return await forwarded;
       const checkoutGeneration = mintedCheckoutGenerations.register(
         Crypto.randomUUID()
       );
@@ -23,6 +26,8 @@ export function createCheckoutGenerationActions(
       cartWideNegotiationActive,
       checkoutGeneration
     ) => {
+      const forwarded = forwardSharedCartWrite({ type: 'legacy_restore' });
+      if (forwarded) return await forwarded;
       set({
         items,
         ...(cartWideNegotiationActive !== undefined && {

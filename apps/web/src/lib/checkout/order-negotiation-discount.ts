@@ -7,6 +7,10 @@ import {
   MAX_AUTO_NEGOTIATION_DISCOUNT_RATE,
 } from '@baci/shared/lib';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  loadOrderConditionPrices,
+  orderConditionPrice,
+} from '@/lib/checkout/order-condition-prices';
 import { logger } from '@/lib/logger';
 import { CanonicalOrderSubtotalLoadError } from './canonical-order-subtotal';
 import {
@@ -144,6 +148,8 @@ export async function computeOrderNegotiationDiscount({
   offerPrices,
   supabase,
   vatRegistered,
+  allowUnavailableConditionPrices,
+  conditionPriceOverrides,
 }: {
   items: NegotiationDiscountItem[];
   merchantId: string;
@@ -152,6 +158,8 @@ export async function computeOrderNegotiationDiscount({
   // offer (what the RPC charges), not the parent catalog price.
   offerPrices?: Map<string, number>;
   supabase: SupabaseClient;
+  allowUnavailableConditionPrices?: boolean;
+  conditionPriceOverrides?: Map<string, number>;
   // The route passes `merchant.vat_registration_status === 'registered'`.
   // Non-registered merchants charge no VAT, so the discount must not gross up.
   vatRegistered: boolean;
@@ -226,6 +234,16 @@ export async function computeOrderNegotiationDiscount({
     );
   }
 
+  const conditionPrices = await loadOrderConditionPrices(
+    items,
+    merchantId,
+    supabase,
+    {
+      allowUnavailable: allowUnavailableConditionPrices,
+      priceOverrides: conditionPriceOverrides,
+    }
+  );
+
   const productMap = new Map(products.map((product) => [product.id, product]));
   const variantMap = new Map(
     (variantsData ?? []).map((variant) => [variant.id, variant])
@@ -257,7 +275,11 @@ export async function computeOrderNegotiationDiscount({
         : undefined;
     lines.push({
       catalogUnitPrice: Number(
-        variant?.price_override ?? offerPrice ?? product.price ?? 0
+        orderConditionPrice(conditionPrices, item) ??
+          variant?.price_override ??
+          offerPrice ??
+          product.price ??
+          0
       ),
       clientUnitPrice: Number(item.price),
       lineId,

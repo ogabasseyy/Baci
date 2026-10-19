@@ -49,7 +49,11 @@ export function buildAgenticCheckoutOrderPayload({
         ? { variant_attributes: li.item.variant_attributes }
         : {}),
       quantity: li.item.quantity,
-      price: li.base_amount,
+      // The orders API prices each item as a unit price multiplied
+      // by quantity; base_amount is the line total, so divide it
+      // back out and forward the purchased condition lane.
+      price: li.base_amount / li.item.quantity,
+      ...(li.item.condition ? { condition: li.item.condition } : {}),
     })),
     subtotal: getSubtotalAmount(sessionCalc.totals),
     shipping_fee: getFulfillmentAmount(sessionCalc.totals),
@@ -95,6 +99,50 @@ export function buildPaymentPendingSessionUpdate({
         payment_state: PAYMENT_PENDING_STATE,
       },
     },
+  };
+}
+
+export interface AgenticSharedCartBinding {
+  cart_id: string;
+  checkout_session_id: string;
+  checkout_generation: number;
+  cart_version: number;
+}
+
+/**
+ * Reads a prepared shared-cart binding from checkout session metadata.
+ * Only a complete binding (session id + generation + reviewed version)
+ * submits bound; linkage-only or malformed metadata stays on the
+ * legacy path. The order schema revalidates uuids downstream.
+ */
+export function readAgenticSharedCartBinding(
+  metadata: unknown
+): AgenticSharedCartBinding | null {
+  if (typeof metadata !== 'object' || metadata === null) return null;
+  const agentic = (metadata as Record<string, unknown>).agentic;
+  if (typeof agentic !== 'object' || agentic === null) return null;
+  const binding = (agentic as Record<string, unknown>).shared_cart;
+  if (typeof binding !== 'object' || binding === null) return null;
+  const record = binding as Record<string, unknown>;
+  if (
+    typeof record.cart_id !== 'string' ||
+    !record.cart_id ||
+    typeof record.checkout_session_id !== 'string' ||
+    !record.checkout_session_id ||
+    typeof record.checkout_generation !== 'number' ||
+    !Number.isInteger(record.checkout_generation) ||
+    record.checkout_generation < 1 ||
+    typeof record.cart_version !== 'number' ||
+    !Number.isInteger(record.cart_version) ||
+    record.cart_version < 1
+  ) {
+    return null;
+  }
+  return {
+    cart_id: record.cart_id,
+    cart_version: record.cart_version,
+    checkout_generation: record.checkout_generation,
+    checkout_session_id: record.checkout_session_id,
   };
 }
 

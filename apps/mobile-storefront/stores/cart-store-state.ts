@@ -3,6 +3,7 @@ import type { CartItem } from './cart-store.types';
 export interface CartState {
   // State
   items: CartItem[];
+  sharedCartRef?: { merchantId: string; cartId: string };
   isLoading: boolean;
   lineSequence: number;
   checkoutGeneration: string;

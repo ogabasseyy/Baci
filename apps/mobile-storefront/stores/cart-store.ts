@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { checkoutGenerationRestoreGate } from '@/lib/checkout-generation-restore-gate';
+import { CONFIG } from '@/lib/config';
 import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
@@ -19,6 +20,8 @@ import {
 import type { CartItem } from './cart-store.types';
 import { createAssuranceActions } from './cart-store-assurance-actions';
 import { createCheckoutGenerationActions } from './cart-store-generation-actions';
+import { mergeCartStore } from './cart-store-merge';
+import { createCartNegotiationActions } from './cart-store-negotiation-actions';
 import {
   applyReprice,
   clearGroupNegotiation,
@@ -28,6 +31,10 @@ import {
 import type { CartState } from './cart-store-state';
 import { partializeCartStore } from './partialize-cart-store';
 import { rotateEmptyCheckoutCart } from './rotate-empty-checkout-cart';
+import {
+  forwardSharedCartWrite,
+  hasSharedCartWriter,
+} from './shared-cart-writer';
 
 export type { CartItem } from './cart-store.types';
 export { formatPrice, selectCartQuantities };
@@ -68,6 +75,8 @@ export const useCartStore = create<CartState>()(
       },
 
       addItem: (item) => {
+        const forwarded = forwardSharedCartWrite({ type: 'add', item });
+        if (forwarded) return;
         set((state) => {
           const itemToAdd =
             item.voucher_token || item.voucher_award_id
@@ -124,6 +133,8 @@ export const useCartStore = create<CartState>()(
       },
 
       removeItem: async (id) => {
+        const forwarded = forwardSharedCartWrite({ type: 'remove', id });
+        if (forwarded) return await forwarded;
         const state = get();
         const items = state.items.filter((item) => item.id !== id);
         if (items.length === 0) {
@@ -144,6 +155,12 @@ export const useCartStore = create<CartState>()(
       },
 
       updateQuantity: async (id, quantity) => {
+        const forwarded = forwardSharedCartWrite({
+          type: 'quantity',
+          id,
+          quantity,
+        });
+        if (forwarded) return await forwarded;
         const state = get();
         if (quantity <= 0) {
           const items = state.items.filter((item) => item.id !== id);
@@ -184,6 +201,8 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: async () => {
+        const forwarded = forwardSharedCartWrite({ type: 'clear' });
+        if (forwarded) return await forwarded;
         await rotateEmptyCheckoutCart(set, {
           previousGeneration: get().checkoutGeneration,
           retainCreditSnapshot: false,
@@ -197,76 +216,31 @@ export const useCartStore = create<CartState>()(
         );
       },
 
-      applyNegotiatedPrice: (id, negotiatedPrice) => {
-        set((state) => {
-          const base = state.cartWideNegotiationActive
-            ? clearGroupNegotiation(state.items)
-            : state.items;
-          return {
-            items: base.map((item) =>
-              item.id === id
-                ? {
-                    ...item,
-                    negotiatedPrice,
-                    negotiationStatus: 'accepted' as const,
-                  }
-                : item
-            ),
-            cartWideNegotiationActive: false,
-          };
-        });
-      },
-
-      applyCartWideNegotiation: (newTotal) => {
-        const { items } = get();
-        const currentTotal = items.reduce((sum, item) => {
-          const price = item.negotiatedPrice ?? item.price;
-          return sum + price * item.quantity;
-        }, 0);
-
-        if (currentTotal <= 0) return;
-        const ratio = newTotal / currentTotal;
-
-        set((state) => ({
-          items: state.items.map((item) => {
-            const currentPrice = item.negotiatedPrice ?? item.price;
-            return {
-              ...item,
-              negotiatedPrice: Math.round(currentPrice * ratio),
-              negotiationStatus: 'accepted' as const,
-            };
-          }),
-          cartWideNegotiationActive: true,
-        }));
-      },
-
-      clearNegotiatedPrice: (id) => {
-        set((state) => ({
-          items: state.items.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  negotiatedPrice: undefined,
-                  negotiationStatus: undefined,
-                }
-              : item
-          ),
-          cartWideNegotiationActive: false,
-        }));
-      },
+      ...createCartNegotiationActions(set, get),
 
       ...createCheckoutGenerationActions(set),
 
       repriceItems: (priceById, conditionById, offerIdById) => {
+        const forwarded = forwardSharedCartWrite({ type: 'legacy_reprice' });
+        if (forwarded) return;
         set((state) =>
           applyReprice(state, priceById, conditionById, offerIdById)
         );
       },
 
-      ...createAssuranceActions(set),
+      ...createAssuranceActions(set, (id) =>
+        forwardSharedCartWrite({ type: 'assurance', id })
+      ),
     }),
     {
       name: 'cart-storage',
+      merge: (persisted, current) =>
+        mergeCartStore(
+          persisted,
+          current,
+          CONFIG.MERCHANT_ID,
+          hasSharedCartWriter()
+        ),
       storage: createJSONStorage(() => syncStorage),
       partialize: partializeCartStore,
       onRehydrateStorage: () => (state) => {
@@ -277,7 +251,8 @@ export const useCartStore = create<CartState>()(
               checkoutGenerationRestoreGate.noteRestoredGeneration(
                 checkoutGeneration
               );
-              useCartStore.setState({ checkoutGeneration });
+              if (!hasSharedCartWriter())
+                useCartStore.setState({ checkoutGeneration });
             },
             {
               generationWhenReadBegan,

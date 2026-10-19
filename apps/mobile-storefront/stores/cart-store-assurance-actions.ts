@@ -2,10 +2,14 @@ import type { StoreApi } from 'zustand';
 import type { CartState } from './cart-store-state';
 
 export function createAssuranceActions(
-  set: StoreApi<CartState>['setState']
+  set: StoreApi<CartState>['setState'],
+  forwardToggle?: (id: string) => unknown
 ): Pick<CartState, 'toggleAssurance' | 'reconcilePendingAssuranceLines'> {
   return {
     toggleAssurance: (id) => {
+      // A shared-cart writer owns the lines: forward instead of editing
+      // the parked legacy cart (canonical writer fencing).
+      if (forwardToggle?.(id)) return;
       set((state) => ({
         items: state.items.map((item) =>
           item.id === id

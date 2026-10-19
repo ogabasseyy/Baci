@@ -99,3 +99,32 @@ it('surfaces native link denials as host errors instead of unhandled rejections'
   });
   expect(widgetHost.get()?.hostError).toContain('Could not open');
 });
+
+it('resolves native fallbacks through the live bridge after replacement', async () => {
+  const first = { callTool: vi.fn().mockResolvedValue({}) };
+  window.openai = first;
+  host.getHostCapabilities.mockReturnValueOnce(
+    {} as ReturnType<typeof host.getHostCapabilities>
+  );
+  await connectMcpApp();
+  const second = { callTool: vi.fn().mockResolvedValue({}) };
+  window.openai = second;
+  await widgetHost.get()?.callTool?.('get_product', { product_id: 'phone' });
+  expect(second.callTool).toHaveBeenCalledWith('get_product', {
+    product_id: 'phone',
+  });
+  expect(first.callTool).not.toHaveBeenCalled();
+});
+
+it('leaves late-added native methods visible instead of shadowed', async () => {
+  window.openai = {};
+  host.getHostCapabilities.mockReturnValueOnce(
+    {} as ReturnType<typeof host.getHostCapabilities>
+  );
+  await connectMcpApp();
+  expect(widgetHost.get()?.openExternal).toBeUndefined();
+  const openExternal = vi.fn();
+  window.openai.openExternal = openExternal;
+  await widgetHost.get()?.openExternal?.({ href: 'https://ogabassey.com' });
+  expect(openExternal).toHaveBeenCalledWith({ href: 'https://ogabassey.com' });
+});

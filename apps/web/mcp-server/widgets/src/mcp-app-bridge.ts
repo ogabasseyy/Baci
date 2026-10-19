@@ -58,58 +58,98 @@ export async function connectMcpApp() {
   }
   const context = app.getHostContext();
   const capabilities = app.getHostCapabilities();
-  const nativeOpenExternal = extensions?.openExternal?.bind(extensions);
+  // Fallbacks resolve the live host bridge at call time: the host may replace
+  // or augment window.openai after the handshake, so binding the connect-time
+  // snapshot would silently target a stale bridge. Keys are omitted (not set
+  // to undefined) when neither leg offers the capability, so late-added native
+  // methods stay visible instead of shadowed.
   update({
     mcpAppReady: true,
     ...context,
     ...(context?.safeAreaInsets
       ? { safeArea: { insets: context.safeAreaInsets } }
       : {}),
-    callTool: capabilities?.serverTools
-      ? (name, args) => app.callServerTool({ name, arguments: args })
-      : extensions?.callTool?.bind(extensions),
-    openExternal: capabilities?.openLinks
-      ? async ({ href }) => {
-          update({ hostError: null });
-          try {
-            const result = await app.openLink({ url: href });
-            if (result.isError) throw new Error('Link denied');
-          } catch {
-            update({
-              hostError:
-                'Could not open Ogabassey. Please try again or continue in the conversation.',
-            });
-          }
+    ...(capabilities?.serverTools
+      ? {
+          callTool: (name: string, args: Record<string, unknown>) =>
+            app.callServerTool({ name, arguments: args }),
         }
-      : nativeOpenExternal
-        ? async ({ href }) => {
+      : extensions?.callTool
+        ? {
+            callTool: async (name: string, args: Record<string, unknown>) =>
+              window.openai?.callTool?.(name, args),
+          }
+        : {}),
+    ...(capabilities?.openLinks
+      ? {
+          openExternal: async ({ href }: { href: string }) => {
             update({ hostError: null });
             try {
-              await nativeOpenExternal({ href });
+              const result = await app.openLink({ url: href });
+              if (result.isError) throw new Error('Link denied');
             } catch {
               update({
                 hostError:
                   'Could not open Ogabassey. Please try again or continue in the conversation.',
               });
             }
-          }
-        : undefined,
-    requestDisplayMode: context?.availableDisplayModes?.includes('fullscreen')
-      ? async ({ mode }) => {
-          update({ hostError: null });
-          try {
-            const result = await app.requestDisplayMode({ mode });
-            if (result.mode !== mode) throw new Error('Display mode declined');
-            update({ displayMode: result.mode });
-            return result;
-          } catch {
-            update({
-              hostError:
-                'Could not expand the catalog. Continue using the inline view.',
-            });
-          }
+          },
         }
-      : extensions?.requestDisplayMode?.bind(extensions),
+      : extensions?.openExternal
+        ? {
+            openExternal: async ({ href }: { href: string }) => {
+              update({ hostError: null });
+              try {
+                await window.openai?.openExternal?.({ href });
+              } catch {
+                update({
+                  hostError:
+                    'Could not open Ogabassey. Please try again or continue in the conversation.',
+                });
+              }
+            },
+          }
+        : {}),
+    ...(context?.availableDisplayModes?.includes('fullscreen')
+      ? {
+          requestDisplayMode: async ({
+            mode,
+          }: {
+            mode: 'inline' | 'fullscreen' | 'pip';
+          }) => {
+            update({ hostError: null });
+            try {
+              const result = await app.requestDisplayMode({ mode });
+              if (result.mode !== mode) throw new Error('Display mode declined');
+              update({ displayMode: result.mode });
+              return result;
+            } catch {
+              update({
+                hostError:
+                  'Could not expand the catalog. Continue using the inline view.',
+              });
+            }
+          },
+        }
+      : extensions?.requestDisplayMode
+        ? {
+            requestDisplayMode: async ({
+              mode,
+            }: {
+              mode: 'inline' | 'fullscreen' | 'pip';
+            }) => {
+              update({ hostError: null });
+              try {
+                return await window.openai?.requestDisplayMode?.({ mode });
+              } catch {
+                update({
+                  hostError:
+                    'Could not expand the catalog. Continue using the inline view.',
+                });
+              }
+            },
+          }
+        : {}),
     notifyIntrinsicHeight: async (height) => {
       try {
         await app.sendSizeChanged({ height });
@@ -117,25 +157,34 @@ export async function connectMcpApp() {
         console.warn('Ogabassey widget size notification failed.');
       }
     },
-    sendFollowUpMessage: capabilities?.message?.text
-      ? async ({ prompt }) => {
-          update({ hostError: null });
-          try {
-            const result = await app.sendMessage({
-              role: 'user',
-              content: [{ type: 'text', text: prompt }],
-            });
-            if (result.isError) throw new Error('Message declined');
-          } catch {
-            update({
-              hostError:
-                'Could not send your message. Please type it in the conversation.',
-            });
-          }
+    ...(capabilities?.message?.text
+      ? {
+          sendFollowUpMessage: async ({ prompt }: { prompt: string }) => {
+            update({ hostError: null });
+            try {
+              const result = await app.sendMessage({
+                role: 'user',
+                content: [{ type: 'text', text: prompt }],
+              });
+              if (result.isError) throw new Error('Message declined');
+            } catch {
+              update({
+                hostError:
+                  'Could not send your message. Please type it in the conversation.',
+              });
+            }
+          },
         }
-      : extensions?.sendFollowUpMessage?.bind(extensions),
+      : extensions?.sendFollowUpMessage
+        ? {
+            sendFollowUpMessage: (message: {
+              prompt: string;
+              scrollToBottom?: boolean;
+            }) => window.openai?.sendFollowUpMessage?.(message),
+          }
+        : {}),
     setWidgetState: (widgetState) => {
-      extensions?.setWidgetState?.(widgetState);
+      window.openai?.setWidgetState?.(widgetState);
       update({ widgetState });
     },
   });

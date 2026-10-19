@@ -22,10 +22,11 @@ runs:
       env:
         STORE_DIR: ${{ inputs.store-dir }}
       run: |
+        delimiter="EOF-$RANDOM-$RANDOM"
         {
-          echo "PNPM_STORE_DIR<<EOF"
+          echo "PNPM_STORE_DIR<<${delimiter}"
           echo "$STORE_DIR"
-          echo "EOF"
+          echo "${delimiter}"
         } >> "$GITHUB_ENV"
 
     - name: Reset pnpm store directory

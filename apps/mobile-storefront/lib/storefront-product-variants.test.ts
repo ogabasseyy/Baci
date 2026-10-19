@@ -21,9 +21,11 @@ const mockRpcQuery = {
   range: (...args: [number, number]) => mockRange(...args),
 };
 mockRpcQuery.order.mockReturnValue(mockRpcQuery);
-const mockRpc = jest.fn<(...args: unknown[]) => typeof mockRpcQuery>(
-  () => mockRpcQuery
-);
+const mockRpc = jest.fn<
+  (
+    ...args: unknown[]
+  ) => typeof mockRpcQuery | Promise<{ data: unknown; error: unknown }>
+>(() => mockRpcQuery);
 
 jest.mock('@/lib/api', () => ({
   withSupabaseRetry: (operation: () => Promise<unknown>, options?: unknown) =>
@@ -132,7 +134,7 @@ describe('storefront-product-variants', () => {
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
-  it('returns rows unchanged when the rpc errors', async () => {
+  it('marks the original rows when the rpc errors', async () => {
     mockRange.mockResolvedValue({
       count: null,
       data: null,
@@ -141,9 +143,18 @@ describe('storefront-product-variants', () => {
 
     const rows = [{ id: 'product-1', variants: [{ id: 'embedded-variant' }] }];
 
+    // Mirrors offers_hydration_failed: an exact variant link must tell
+    // "lookup failed" from "no variants" and surface retry instead of a
+    // normal PDP.
     await expect(
       hydrateProductRowsWithStorefrontVariants(rows)
-    ).resolves.toEqual(rows);
+    ).resolves.toEqual([
+      {
+        id: 'product-1',
+        variants: [{ id: 'embedded-variant' }],
+        variants_hydration_failed: true,
+      },
+    ]);
   });
 
   it('clears stale embedded variants when a successful rpc returns no visible variants', async () => {

@@ -10,54 +10,95 @@ type RouteData = ReturnType<typeof useProductDetailRouteData>;
 export function useProductDetailPurchaseState(
   routeData: RouteData,
   quantityInCart: number,
-  negotiatedPrice: number | null
+  negotiatedPrice: number | null,
+  productQuantityInCart: number
 ) {
   const { price: effectivePrice, comparePrice: effectiveComparePrice } =
     useEffectivePrice(
       routeData.product ?? null,
       routeData.currentVariantDisplaySelection,
       routeData.effectiveSelectedCondition,
-      negotiatedPrice
+      negotiatedPrice,
+      routeData.routeOfferId,
+      routeData.suppressConditionOfferMatch
     );
   const { price: calculatedPrice } = useEffectivePrice(
     routeData.product ?? null,
     routeData.currentVariantDisplaySelection,
     routeData.effectiveSelectedCondition,
-    null
+    null,
+    routeData.routeOfferId,
+    routeData.suppressConditionOfferMatch
   );
   useTrackProductRouteViewed(routeData.product, effectivePrice);
 
   const selectedConditionOffer = !routeData.product?.has_variants
     ? findMatchingConditionOffer(
         routeData.product?.offers,
-        routeData.offerConditionKey
+        routeData.offerConditionKey,
+        routeData.routeOfferId,
+        routeData.suppressConditionOfferMatch
       )
     : null;
   const resolvedVariantPurchaseSelection =
     routeData.currentVariantSelection ??
     routeData.currentVariantDisplaySelection;
+  const selectedVariant = resolvedVariantPurchaseSelection?.variant;
   const selectedVariantCanPurchase =
     routeData.product?.has_variants === true
       ? resolvedVariantPurchaseSelection
-        ? routeData.product.manage_stock === false
+        ? selectedVariant?.effective_policy === 'serialized_then_unlimited'
           ? true
-          : typeof resolvedVariantPurchaseSelection.variant.stock_quantity ===
-              'number'
-            ? resolvedVariantPurchaseSelection.variant.stock_quantity >
-              quantityInCart
-            : resolvedVariantPurchaseSelection.variant.in_stock !== false
+          : selectedVariant?.effective_policy === 'serialized_strict'
+            ? (typeof selectedVariant.available_units === 'number'
+                ? selectedVariant.available_units
+                : 0) > quantityInCart
+            : routeData.product.manage_stock === false
+              ? true
+              : typeof selectedVariant?.stock_quantity === 'number'
+                ? selectedVariant.stock_quantity > quantityInCart
+                : selectedVariant?.in_stock !== false
         : false
       : false;
-  const canPurchase =
-    routeData.product?.has_variants === true
+  // An offer scalar never exceeds strict serialized base units (effective
+  // minimum shared with the cart guard and the price-options offer
+  // branch); other policies leave the scalar uncapped.
+  const baseStrictUnitCap =
+    routeData.product?.base_effective_policy === 'serialized_strict'
+      ? typeof routeData.product.base_available_units === 'number'
+        ? routeData.product.base_available_units
+        : 0
+      : Number.POSITIVE_INFINITY;
+  // An exact offer link with offers still hydrating must not offer the
+  // parent-price path: the advertised identity is unresolved, and the
+  // refetch may still fail (error path) or miss (unavailable path).
+  const canPurchase = routeData.routeOfferHydrationPending
+    ? false
+    : routeData.product?.has_variants === true
       ? Boolean(resolvedVariantPurchaseSelection) && selectedVariantCanPurchase
       : routeData.product
-        ? routeData.product.manage_stock === false ||
+        ? (!selectedConditionOffer &&
+            routeData.product.manage_stock === false &&
+            // Anchor policies override an otherwise unmanaged parent: a
+            // strict base must gate on its serialized pool below instead
+            // of presenting an enabled purchase action while depleted.
+            routeData.product.base_effective_policy !== 'serialized_strict') ||
           (typeof selectedConditionOffer?.stock_quantity === 'number'
-            ? selectedConditionOffer.stock_quantity > quantityInCart
-            : typeof routeData.product.stock_quantity === 'number'
-              ? routeData.product.stock_quantity > quantityInCart
-              : routeData.product.in_stock === true)
+            ? // The offer allocation is per-offer but the strict pool
+              // is product-wide: the selected line must fit its
+              // allocation AND the sibling total must fit the pool.
+              selectedConditionOffer.stock_quantity > quantityInCart &&
+              baseStrictUnitCap > productQuantityInCart
+            : routeData.product.base_effective_policy ===
+                'serialized_then_unlimited'
+              ? true
+              : routeData.product.base_effective_policy === 'serialized_strict'
+                ? (typeof routeData.product.base_available_units === 'number'
+                    ? routeData.product.base_available_units
+                    : 0) > productQuantityInCart
+                : typeof routeData.product.stock_quantity === 'number'
+                  ? routeData.product.stock_quantity > quantityInCart
+                  : routeData.product.in_stock === true)
         : false;
 
   const conditionOffersForDisplay = getConditionOffersForDisplay(routeData);

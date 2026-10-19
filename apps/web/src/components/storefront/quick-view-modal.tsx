@@ -133,7 +133,7 @@ export function QuickViewModal({
     }
 
     // Create a product object with variant info if applicable
-    addToCart(
+    const outcome = addToCart(
       product,
       quantity,
       selectedVariant
@@ -145,6 +145,14 @@ export function QuickViewModal({
           }
         : undefined
     );
+    if (outcome === 'rejected') {
+      toast({
+        title: 'Unable to add to cart',
+        description: 'There is no available stock left for this selection.',
+        variant: 'destructive',
+      });
+      return;
+    }
     toast({
       title: 'Added to cart',
       description: `${quantity} x ${product.name} has been added to your cart.`,

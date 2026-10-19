@@ -107,7 +107,9 @@ export const InteractiveProductGrid: React.FC<InteractiveProductGridProps> = ({
 
     // Cast to any since this template uses local mock Product type
     // biome-ignore lint/suspicious/noExplicitAny: type assertion required
-    addToCart(product as any, 1);
+    if (addToCart(product as any, 1) === 'rejected') {
+      return;
+    }
 
     // Particle Animation Logic
     const rect = e.currentTarget.getBoundingClientRect();

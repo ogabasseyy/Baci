@@ -27,6 +27,7 @@ export function buildAgenticOrderItems(body: OrderCreateInput) {
       has_assurance: hasAssurance,
       image_url: item.imageUrl ?? item.image_url ?? null,
       product_id: item.product_id || item.productId || item.id,
+      offer_id: item.offerId || item.offer_id,
       // The binding guard prices bound submits against the reviewed
       // effective price (major units); never drop it from the mapping.
       price: itemPrice,

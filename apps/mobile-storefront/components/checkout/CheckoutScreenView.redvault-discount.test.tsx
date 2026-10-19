@@ -45,6 +45,10 @@ jest.mock('@/hooks/use-merchant', () => ({
   useMerchant: () => ({ data: null }),
 }));
 
+jest.mock('@/hooks/use-warm-merchant-payment-settings', () => ({
+  useWarmMerchantPaymentSettings: jest.fn(),
+}));
+
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: ({ children }: { children: React.ReactNode }) => children,
   useSafeAreaInsets: () => ({ bottom: 0 }),

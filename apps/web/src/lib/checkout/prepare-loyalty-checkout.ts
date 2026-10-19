@@ -13,7 +13,7 @@ import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
 export type LoyaltyCheckoutPreparation =
   | {
       ok: true;
-      canonicalOrderSubtotal: number;
+      canonicalOrderSubtotal: number | null;
       discountCodeId: string | null;
       loyaltyRedemptionId: string | null;
       discountCodeAmount: number;
@@ -38,6 +38,8 @@ export async function prepareLoyaltyCheckout({
   hasVoucherItem,
   requestedSavingsRedemption,
   items,
+  offerPrices,
+  isIdempotentOfferOrderReplay = false,
 }: {
   supabase: SupabaseClient;
   merchantId: string;
@@ -45,6 +47,8 @@ export async function prepareLoyaltyCheckout({
   hasVoucherItem: boolean;
   requestedSavingsRedemption: boolean;
   items: CanonicalSubtotalItem[];
+  offerPrices?: Map<string, number>;
+  isIdempotentOfferOrderReplay?: boolean;
 }): Promise<LoyaltyCheckoutPreparation> {
   if (hasVoucherItem) {
     return {
@@ -153,11 +157,29 @@ export async function prepareLoyaltyCheckout({
     }
   }
 
+  // F1 (offer economics): a confirmed idempotent retry replays the
+  // stored order, so live-offer-dependent recomputation is bypassed —
+  // the subtotal helper throws when verified offer economics are
+  // absent, which would 500 a retry the RPC would otherwise replay.
+  // Code identity is still resolved above; the amount stays 0 because
+  // the RPC ignores it on replay and its request-hash check rejects
+  // true conflicts first.
+  if (isIdempotentOfferOrderReplay) {
+    return {
+      ok: true,
+      canonicalOrderSubtotal: null,
+      discountCodeId,
+      loyaltyRedemptionId,
+      discountCodeAmount: 0,
+    };
+  }
+
   let canonicalOrderSubtotal: number | null;
   try {
     canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
       items,
       merchantId,
+      offerPrices,
       supabase,
     });
   } catch (subtotalError) {

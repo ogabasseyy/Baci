@@ -62,22 +62,27 @@ function roundQuoteCurrency(value: number): number {
 }
 
 /**
- * Advisory merchant-rate subtotal on the order-verification basis: catalog
- * unit prices plus the same effective-basis assurance fees the order payload
- * carries, matching `computeCanonicalOrderSubtotal` on the server.
+ * Advisory merchant-rate subtotal on the order-verification basis: selected
+ * offer prices for offer lines, catalog unit prices otherwise, plus the
+ * same effective-basis assurance fees the order payload carries, matching
+ * `computeCanonicalOrderSubtotal` on the server.
  */
 export function getCartCatalogSubtotalWithAssurance(
   items: readonly CartItem[]
 ): number {
   return items.reduce((total, item) => {
-    // Zero-priced quiz voucher lines and below-catalog condition-offer
-    // lines retain the catalog basis so conditional merchant rates still
-    // see the real subtotal.
+    // Zero-priced quiz voucher lines retain the catalog basis so
+    // conditional merchant rates still see the real subtotal. Offer lines
+    // quote from the selected offer price instead: the server prices
+    // them from the live offer, so a parent-price basis would display a
+    // tier the order endpoint then rejects.
     const basePrice =
-      typeof item.catalog_price === 'number' &&
-      isValidCartPrice(item.catalog_price)
-        ? item.catalog_price
-        : getCartItemBasePrice(item);
+      item.offer_id != null
+        ? getCartItemBasePrice(item)
+        : typeof item.catalog_price === 'number' &&
+            isValidCartPrice(item.catalog_price)
+          ? item.catalog_price
+          : getCartItemBasePrice(item);
     const assuranceFee = item.hasAssurance
       ? roundQuoteCurrency(
           getCartItemEffectivePrice(item) * item.quantity * QUOTE_ASSURANCE_RATE

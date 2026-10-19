@@ -1,3 +1,4 @@
+import { hasLinePriceDrift } from '@/services/cart-reprice-offer-lines';
 import type { CartItem } from './cart-store.types';
 
 const NGN_PRICE_FORMATTER = new Intl.NumberFormat('en-NG', {
@@ -53,29 +54,59 @@ export function clearGroupNegotiation(items: CartItem[]): CartItem[] {
 }
 
 /**
- * Reconciles cart line prices against live catalog values keyed by cart line id,
- * returning the cart-store partial to apply. Lines within the ±₦1 parity
- * tolerance are treated as unchanged (so an accepted negotiated price is not
- * cleared for rounding noise). When a real drift clears any negotiation and a
- * cart-wide deal is active, the whole group is reset.
+ * Reconciles cart line prices (and refreshed offer conditions) against live
+ * catalog values keyed by cart line id, returning the cart-store partial to
+ * apply. Lines whose extended line total is within the ±₦1 parity tolerance
+ * are treated as unchanged (so an accepted negotiated price is not cleared
+ * for rounding noise). A condition refresh counts as a real change (the
+ * line's economics moved),
+ * so it clears the line negotiation like a price drift does. When a real
+ * drift clears any negotiation and a cart-wide deal is active, the whole
+ * group is reset.
  */
 export function applyReprice(
   state: { items: CartItem[]; cartWideNegotiationActive: boolean },
-  priceById: Record<string, number>
+  priceById: Record<string, number>,
+  conditionById: Record<string, string> = {},
+  offerIdById: Record<string, string> = {}
 ): { items: CartItem[]; cartWideNegotiationActive?: boolean } {
   let changed = false;
   let items = state.items.map((item) => {
     const livePrice = priceById[item.id];
-    if (typeof livePrice !== 'number' || !Number.isFinite(livePrice)) {
-      return item;
-    }
-    if (Math.abs(livePrice - item.price) <= 1) {
+    const liveCondition = conditionById[item.id];
+    const adoptedOfferId = offerIdById[item.id];
+    // Same line-total basis as drift detection: checkout rejects an
+    // extended-total move past tolerance, so the store must not drop a
+    // sub-tolerance unit move on quantity > 1 that detection reported.
+    const priceDrifted =
+      typeof livePrice === 'number' &&
+      Number.isFinite(livePrice) &&
+      hasLinePriceDrift(livePrice, item.price, item.quantity);
+    const conditionDrifted =
+      typeof liveCondition === 'string' &&
+      liveCondition !== '' &&
+      liveCondition !== item.condition;
+    // Adopting an exact offer id moves the line's economics basis from
+    // parent-priced to offer-priced: always a real change, even when the
+    // live offer price happens to equal the stored price.
+    const offerAdopted =
+      typeof adoptedOfferId === 'string' &&
+      adoptedOfferId !== '' &&
+      adoptedOfferId !== item.offer_id;
+    if (!priceDrifted && !conditionDrifted && !offerAdopted) {
       return item;
     }
     changed = true;
+    // The refreshed condition stores the raw live code, matching the
+    // add path (which stores the code it receives); display formatting
+    // happens at render. Formatting here would corrupt the code basis
+    // ('refurbished' displays as 'Open Box') and break the pinned
+    // reprice contract.
     return {
       ...item,
-      price: livePrice,
+      ...(priceDrifted ? { price: livePrice as number } : null),
+      ...(conditionDrifted ? { condition: liveCondition as string } : null),
+      ...(offerAdopted ? { offer_id: adoptedOfferId as string } : null),
       negotiatedPrice: undefined,
       negotiationStatus: undefined,
     };

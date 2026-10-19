@@ -320,6 +320,13 @@ jobs:
       # concurrency suite needs live dblink sessions and runs
       # standalone. Keep comments out of the folded run scalar below:
       # a # there comments out every later --sql-check argument.
+      # Each --sql-check suite below EXECUTES against live PostgreSQL
+      # (psql -f with ON_ERROR_STOP=1 over the replayed database, via
+      # create-supabase-replay-sql-applier.ts) — it is not a parse
+      # check. RLS, advisory locks, triggers, and unique violations
+      # all surface here (e.g. the id_snapshot 23505 caught pre-merge),
+      # so replay sql-check is sufficient for the order-offer and
+      # product-request suites without a second disposable runner.
       - name: Test final order-notification outbox RPC privileges
         run: >-
           pnpm --filter @baci/web db:replay:chronological
@@ -419,6 +426,12 @@ jobs:
           --sql-check supabase/migrations/tests/blog_post_merchant_intent_null.sql
           --sql-check supabase/tests/admin_order_date_edit_replay.sql
           --sql-check supabase/migrations/tests/search_mobile_admin_transaction_review_orders.sql
+          --sql-check supabase/migrations/tests/storefront_product_request_canonical_idempotency.sql
+          --sql-check supabase/tests/storefront_product_request_intake.sql
+          --sql-check supabase/migrations/tests/storefront_order_replay_line_identity.sql
+          --sql-check supabase/migrations/tests/storefront_order_offer_both_entrypoints.sql
+          --sql-check supabase/migrations/tests/storefront_order_offer_entrypoints_behavior.sql
+          --sql-check supabase/migrations/tests/storefront_product_base_inventory_anon_bounds.sql
           --sql-check supabase/tests/order_refund_management.sql
           --sql-check supabase/tests/order_refund_management_attestation.sql
           --sql-check supabase/tests/order_refund_management_claimed_blocking.sql
@@ -470,6 +483,10 @@ jobs:
           --sql-check supabase/tests/order_refund_management_null_paid.sql
           --sql-check supabase/tests/order_refund_unsigned_txn_id_numeric.sql
           --sql-check supabase/migrations/tests/search_analytics_service_role_only_insert.sql
+          --sql-check supabase/migrations/tests/search_condition_match_normalization.sql
+          --sql-check supabase/migrations/tests/storefront_order_offer_id_snapshot.sql
+          --sql-check supabase/migrations/tests/storefront_order_offer_tenant_bind.sql
+          --sql-check supabase/migrations/tests/storefront_refined_reread_anon_visibility.sql
           --sql-check supabase/migrations/tests/enroll_customer_loyalty.sql
           --sql-check supabase/migrations/tests/enroll_customer_loyalty_concurrency.sql
       - name: Run migration replay regression test
@@ -482,6 +499,43 @@ jobs:
         env:
           MINIMAL_PHASE1: 1
         run: bash supabase/tests/run-order-refund-claim-manual-concurrency-test.sh
+
+  quality-disposable-sql:
+    name: Quality Gate - Disposable SQL Suites
+    needs: [changes]
+    if: needs.changes.outputs.quiz_db == 'true' && needs.changes.outputs.test_plan_mode != 'config-smoke'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+          persist-credentials: false
+      - name: Install psql client
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Run disposable search suites
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bash supabase/migrations/tests/run-disposable-search-suites.sh
 
   quality-misc:
     name: Quality Gate - Misc
@@ -667,7 +721,7 @@ jobs:
 
   quality:
     name: Quality Gate
-    needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, quality-db-replay, mobile-quality, silent-revert-guard]
+    needs: [changes, cwv-runner-contracts, quality-lint, quality-typecheck, quality-test, quality-test-web, quality-misc, quality-db-replay, quality-disposable-sql, mobile-quality, silent-revert-guard]
     if: ${{ always() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -681,9 +735,12 @@ jobs:
           TEST_RESULT: ${{ needs['quality-test'].result }}
           MISC_RESULT: ${{ needs['quality-misc'].result }}
           DB_REPLAY_RESULT: ${{ needs['quality-db-replay'].result }}
+          DISPOSABLE_SQL_RESULT: ${{ needs['quality-disposable-sql'].result }}
           WEB_TEST_RESULT: ${{ needs['quality-test-web'].result }}
           MOBILE_QUALITY_RESULT: ${{ needs['mobile-quality'].result }}
           SILENT_REVERT_GUARD_RESULT: ${{ needs['silent-revert-guard'].result }}
+          QUIZ_DB_CHANGED: ${{ needs.changes.outputs.quiz_db }}
+          TEST_PLAN_MODE: ${{ needs.changes.outputs.test_plan_mode }}
         run: |
           set -euo pipefail
 
@@ -692,7 +749,20 @@ jobs:
             exit 1
           fi
 
-          for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do
+          # A skipped DB gate is success only when no DB paths changed: if
+          # the detector flagged DB changes, replay and the disposable
+          # suites must have actually run (skipped would silently waive
+          # them). Config-smoke mode skips by design and stays exempt.
+          if [[ "$QUIZ_DB_CHANGED" == "true" && "$TEST_PLAN_MODE" != "config-smoke" ]]; then
+            for db_result in "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT"; do
+              if [[ "$db_result" == "skipped" ]]; then
+                echo "DB paths changed but a DB gate was skipped: $db_result"
+                exit 1
+              fi
+            done
+          fi
+
+          for result in "$CWV_RUNNER_CONTRACTS_RESULT" "$LINT_RESULT" "$TYPECHECK_RESULT" "$TEST_RESULT" "$WEB_TEST_RESULT" "$MISC_RESULT" "$DB_REPLAY_RESULT" "$DISPOSABLE_SQL_RESULT" "$MOBILE_QUALITY_RESULT" "$SILENT_REVERT_GUARD_RESULT"; do
             case "$result" in
               success|skipped)
                 ;;

@@ -325,8 +325,10 @@ interface RpcOverrides {
     error: unknown;
   };
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
+  get_storefront_order_replay_economics?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
   get_loyalty_redemption_for_checkout?: { data: unknown; error: unknown };
+  get_product_offers?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
   redeem_savings_for_order?: { data: unknown; error: unknown };
   finalize_wallet_order_payment?: { data: unknown; error: unknown };
@@ -532,6 +534,7 @@ function buildMockSupabase(
       finalize_store_credit_order_payment: { data: null, error: null },
       finalize_quiz_voucher_order_payment: { data: true, error: null },
       has_storefront_order_idempotency_key: { data: false, error: null },
+      get_storefront_order_replay_economics: { data: null, error: null },
       // B3.5 round 7 (CodeRabbit High): the helper's variant lookup
       // now routes through this SECURITY DEFINER RPC.
       get_order_variant_overrides: { data: [], error: null },
@@ -875,6 +878,108 @@ describe('POST /api/orders REDVAULT integration', () => {
       quoteSpy.mockRestore();
       checkoutSpy.mockRestore();
       shippingSpy.mockRestore();
+    }
+  });
+
+  it('hashes a zero negotiation discount on REDVAULT replays despite the stored quote discount', async () => {
+    vi.clearAllMocks();
+    primeAdminOrderCurrencyRead();
+    const availability = await import(
+      '@/lib/checkout/redvault-payment-availability'
+    );
+    const quoting = await import('@/lib/checkout/compute-redvault-order-quote');
+    const checkout = await import(
+      '@/lib/checkout/create-redvault-checkout-response'
+    );
+    const offerReplay = await import(
+      '@/lib/checkout/resolve-idempotent-offer-replay'
+    );
+    const idempotency = await import(
+      '@/lib/checkout/checkout-idempotency-replay'
+    );
+    const availabilitySpy = vi
+      .spyOn(availability, 'getRedvaultPaymentAvailability')
+      .mockReturnValue({
+        available: true,
+        reason: 'provider_evidence_unavailable',
+      });
+    const { redvaultTestQuote } = await import(
+      '@/lib/checkout/redvault-test-fixture'
+    );
+    const quoteSpy = vi
+      .spyOn(quoting, 'computeRedvaultOrderQuote')
+      .mockResolvedValue(redvaultTestQuote);
+    const checkoutSpy = vi
+      .spyOn(checkout, 'createRedvaultCheckoutResponse')
+      .mockResolvedValue(
+        Response.json(
+          { order: { id: 'protected-order' } },
+          { status: 201 }
+        ) as never
+      );
+    // The first attempt hashed discount 0 (negotiation is bypassed for
+    // REDVAULT) while the draft persisted the quote discount: the retry
+    // must hash 0 again, not restore the stored quote discount.
+    const replaySpy = vi
+      .spyOn(offerReplay, 'resolveIdempotentOfferReplay')
+      .mockResolvedValue({
+        ok: true,
+        value: {
+          isIdempotentOfferOrderReplay: true,
+          liveOfferPrices: new Map(),
+          liveOfferConditions: new Map(),
+          storedReplayTaxAmount: null,
+          storedReplayDiscountAmount: 500,
+        },
+      });
+    const prepareSpy = vi
+      .spyOn(idempotency, 'prepareCheckoutIdempotencyReplay')
+      .mockResolvedValue({
+        checkoutRequestHash: 'test-request-hash',
+        isLegacyIdempotencyReplay: false,
+      });
+    const supabase = buildMockSupabase(
+      {},
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Galaxy S24',
+            price: 1000,
+            slug: 'galaxy-s24',
+          },
+        ],
+      }
+    );
+    vi.mocked(authenticateApiRequest).mockResolvedValue({
+      user: null,
+      error: 'Not authenticated',
+      supabase: supabase as never,
+    });
+    try {
+      const response = await POST(
+        new NextRequest('http://localhost/api/orders', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'redvault-retry-key' },
+          body: JSON.stringify({
+            ...baseOrderPayload,
+            merchant_id: '6b5cb8a4-5575-456c-b936-8cdfae30db74',
+            payment_method: 'uba_redvault',
+          }),
+        })
+      );
+      expect(response.status).toBe(201);
+      expect(prepareSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({ discount_amount: 0 }),
+        })
+      );
+    } finally {
+      availabilitySpy.mockRestore();
+      quoteSpy.mockRestore();
+      checkoutSpy.mockRestore();
+      replaySpy.mockRestore();
+      prepareSpy.mockRestore();
     }
   });
 
@@ -3623,7 +3728,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -3634,7 +3739,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     expect(response.status).toBe(201);
     expect(rpcSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        p_checkout_idempotency_key: 'checkout-key-1',
+        p_checkout_idempotency_key: 'checkout-key-0001',
         p_checkout_request_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
       })
     );
@@ -3681,7 +3786,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -3757,7 +3862,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -3855,7 +3960,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           savings_amount: 500,
@@ -3869,9 +3974,80 @@ describe('POST /api/orders — checkout idempotency', () => {
     expect(rpcSpy).toHaveBeenCalledWith(
       'create_storefront_order_with_savings',
       expect.objectContaining({
-        p_checkout_idempotency_key: 'checkout-key-1',
+        p_checkout_idempotency_key: 'checkout-key-0001',
         p_checkout_request_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
-        p_savings_idempotency_key: 'order:checkout-key-1:savings',
+        p_savings_idempotency_key: 'order:checkout-key-0001:savings',
+      })
+    );
+  });
+
+  it('includes the offer id in the savings fallback idempotency fingerprint', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn();
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase({
+        create_storefront_order_with_savings: {
+          data: [
+            {
+              ...baseOrderRow,
+              idempotency_replayed: true,
+              savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+              savings_goal_status: 'paused',
+              savings_redeemed_amount: 500,
+              savings_redemption_id: '77777777-aaaa-bbbb-cccc-dddddddddddd',
+              savings_redemption_success: true,
+            },
+          ],
+          error: null,
+        },
+      });
+      const originalRpc = sb.rpc;
+      sb.rpc = vi.fn((name: string, params?: unknown) => {
+        rpcSpy(name, params);
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [
+              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+            ],
+            error: null,
+          });
+        }
+        return originalRpc(name);
+      });
+      return sb;
+    }) as unknown as never);
+
+    // No Idempotency-Key header: the fallback fingerprint must still
+    // distinguish two savings orders for different offers of the same
+    // product, or the second fails on the unique redemption constraint.
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          items: [
+            {
+              product_id: OFFER_PRODUCT_ID,
+              quantity: 1,
+              price: 400_000,
+              name: 'Used Phone',
+              offerId: LIVE_OFFER_ID,
+            },
+          ],
+          savings_amount: 500,
+          savings_goal_id: '123e4567-e89b-12d3-a456-426614174555',
+          use_savings_credit: true,
+        }),
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(rpcSpy).toHaveBeenCalledWith(
+      'create_storefront_order_with_savings',
+      expect.objectContaining({
+        p_savings_idempotency_key: `order_savings:${MERCHANT_ID}:customer@example.com:123e4567-e89b-12d3-a456-426614174555:500:${OFFER_PRODUCT_ID}::${LIVE_OFFER_ID}:1`,
       })
     );
   });
@@ -3907,7 +4083,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           items: [
@@ -3969,7 +4145,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'card',
@@ -3999,7 +4175,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -4012,6 +4188,27 @@ describe('POST /api/orders — checkout idempotency', () => {
       code: 'CHECKOUT_IDEMPOTENCY_CONFLICT',
       error:
         'This checkout request was already used for a different cart, customer, or delivery payload.',
+    });
+  });
+
+  it.each([
+    'short-key',
+    'x'.repeat(129),
+  ])('rejects a degenerate idempotency key (%s) instead of replaying on it', async (key) => {
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': key },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          payment_method: 'card',
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    await expect(readJson(response)).resolves.toMatchObject({
+      code: 'CHECKOUT_IDEMPOTENCY_KEY_INVALID',
     });
   });
 
@@ -4030,7 +4227,7 @@ describe('POST /api/orders — checkout idempotency', () => {
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify({
           ...baseOrderPayload,
           payment_method: 'credit_direct',
@@ -4218,6 +4415,35 @@ describe('POST /api/orders — product cache revalidation after order creation',
     expect(mockRevalidateProductSlugs).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'invalid_offer',
+    'insufficient_offer_stock',
+  ])('maps the order RPC %s rejection to a 400', async (message) => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () =>
+        buildMockSupabase({
+          create_storefront_order: {
+            data: null,
+            error: { message },
+          },
+        }) as unknown as never
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify(baseOrderPayload),
+      })
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      details: message,
+      error: 'Failed to create order',
+    });
+  });
+
   it('does not revalidate on an idempotent replay (no re-decrement occurred)', async () => {
     const supabaseMod = await import('@/lib/supabase/server');
     vi.mocked(supabaseMod.createClient).mockImplementation(
@@ -4233,7 +4459,7 @@ describe('POST /api/orders — product cache revalidation after order creation',
     const response = await POST(
       new NextRequest('http://localhost/api/orders', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'checkout-key-1' },
+        headers: { 'Idempotency-Key': 'checkout-key-0001' },
         body: JSON.stringify(baseOrderPayload),
       })
     );
@@ -4526,6 +4752,113 @@ describe('POST /api/orders — selected shipping quote validation', () => {
           latitude: 43.65,
           longitude: -79.38,
         }),
+      })
+    );
+  });
+
+  it('validates saved GIGL quotes against the live offer price, not the stale submitted price', async () => {
+    // The shopper quoted at 500_000 when the offer was live at 500_000;
+    // the submitted payload still carries a stale 495_000 (within the
+    // negotiation floor, so the line itself is acceptable). The order RPC
+    // persists the live offer price, so validating the quote against the
+    // submitted value accepts checkout while the booking guard later
+    // rejects fulfillment as a quote mismatch.
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const supabaseMod = await import('@/lib/supabase/server');
+    const supabase = buildMockSupabase(
+      {
+        get_product_offers: {
+          data: [
+            { offer_id: LIVE_OFFER_ID, price: 500_000, condition: 'used' },
+          ],
+          error: null,
+        },
+      },
+      {
+        productRows: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            name: 'Phone',
+            price: 500_000,
+            vat_category_code: 'S',
+            vat_rate: 0,
+          },
+        ],
+        shippingQuote: {
+          provider: 'GIGL',
+          provider_rate_id: 'GIGL_INTL_1_2_3_1',
+          price: 4500,
+          expires_at: new Date(Date.now() + 60_000).toISOString(),
+          quote_request: {
+            merchantId: MERCHANT_ID,
+            sessionId: 'session-1',
+            shipmentType: 'international',
+            receiver: {
+              name: 'Jane Customer',
+              phone: '+14165550123',
+              address: '123 Queen Street West',
+              city: 'Toronto',
+              state: 'Ontario',
+              country: 'Canada',
+              countryCode: 'CA',
+              postalCode: 'M5V 3L9',
+            },
+            items: [
+              {
+                name: 'Phone',
+                quantity: 1,
+                weight: 1,
+                value: 500_000,
+                hsCode: '851712',
+                length: 10,
+                width: 8,
+                height: 6,
+              },
+            ],
+          },
+        },
+      }
+    );
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => supabase as unknown as never
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          items: [
+            {
+              product_id: '11111111-1111-4111-8111-111111111111',
+              name: 'Phone',
+              quantity: 1,
+              price: 495_000,
+              offerId: LIVE_OFFER_ID,
+              condition: 'used',
+            },
+          ],
+          subtotal: 495_000,
+          shipping_fee: 4500,
+          selected_quote_id: '11111111-1111-4111-8111-111111111111',
+          shipping_provider: 'GIGL',
+          shipping_address: {
+            address: '123 Queen Street West',
+            city: 'Toronto',
+            state: 'Ontario',
+            country: 'Canada',
+            countryCode: 'CA',
+            postalCode: 'M5V 3L9',
+          },
+        }),
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order',
+      expect.objectContaining({
+        p_selected_quote_id: '11111111-1111-4111-8111-111111111111',
       })
     );
   });
@@ -5211,6 +5544,619 @@ describe('POST /api/orders — B3.5 client/server total parity', () => {
             price: 333.33,
             has_assurance: true,
             assurance_fee: 33.33, // (333.33 * 2) * 0.05 rounded to 2 decimals
+          }),
+        ],
+      })
+    );
+  });
+
+  it('recomputes offer-line assurance fees from the live offer price', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'order-id',
+          order_number: 'ORD-123',
+          total: 1000000,
+          subtotal: 1000000,
+          shipping_fee: 0,
+          customer_id: CUSTOMER_ID,
+        },
+      ],
+      error: null,
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'create_storefront_order') {
+          return rpcSpy(args);
+        }
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [
+              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    // Stale client price with a valid offer and no expected_total (the
+    // mobile shape): merchandise bills live, so the fee must too — the
+    // client-derived 5 NGN fee must not reach the RPC.
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 100,
+            name: 'Used Phone',
+            has_assurance: true,
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    await POST(request);
+
+    expect(rpcSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_items: [
+          expect.objectContaining({
+            product_id: OFFER_PRODUCT_ID,
+            offer_id: LIVE_OFFER_ID,
+            has_assurance: true,
+            assurance_fee: 20_000, // 400000 * 1 * 0.05 on the live offer
+          }),
+        ],
+      })
+    );
+  });
+
+  it('restores the stored discount and canonical fee on an offer replay hit', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'order-id',
+          order_number: 'ORD-123',
+          total: 1000000,
+          subtotal: 1000000,
+          shipping_fee: 0,
+          customer_id: CUSTOMER_ID,
+        },
+      ],
+      error: null,
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'create_storefront_order') {
+          return rpcSpy(args);
+        }
+        if (name === 'has_storefront_order_idempotency_key') {
+          return Promise.resolve({ data: true, error: null });
+        }
+        if (name === 'get_storefront_order_replay_economics') {
+          return Promise.resolve({
+            data: [
+              {
+                tax_amount: 30000,
+                discount_amount: 8000,
+                items: [
+                  {
+                    product_id: OFFER_PRODUCT_ID,
+                    offer_id: LIVE_OFFER_ID,
+                    condition: 'used',
+                    assurance_fee: 4500,
+                    quantity: 1,
+                    has_assurance: true,
+                  },
+                ],
+              },
+            ],
+            error: null,
+          });
+        }
+        // The offer died between attempts: live verification is skipped
+        // on the replay hit, so this returning empty must not 400.
+        if (name === 'get_product_offers') {
+          return Promise.resolve({ data: [], error: null });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'replay-checkout-1' },
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 100,
+            name: 'Used Phone',
+            has_assurance: true,
+            assurance_fee: 5200,
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    await POST(request);
+
+    // The bypass skips the negotiation recompute and the fee recompute
+    // is a no-op on the empty replay price map, so the stored values
+    // must reach the RPC or the retry hashes a conflict.
+    expect(rpcSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_discount_amount: 8000,
+        p_items: [
+          expect.objectContaining({
+            product_id: OFFER_PRODUCT_ID,
+            offer_id: LIVE_OFFER_ID,
+            assurance_fee: 4500,
+          }),
+        ],
+      })
+    );
+  });
+
+  it('rejects order lines combining a variant with a condition offer', async () => {
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation(
+      () => buildMockSupabase() as unknown as never
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          items: [
+            {
+              ...baseOrderPayload.items[0],
+              variantId: '77777777-7777-4777-8777-777777777777',
+              offerId: '55555555-5555-4555-8555-555555555555',
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(response.status).toBe(400);
+  });
+
+  it('prices offer-line assurance from the validated negotiated basis', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'order-id',
+          order_number: 'ORD-123',
+          total: 1000000,
+          subtotal: 1000000,
+          shipping_fee: 0,
+          customer_id: CUSTOMER_ID,
+        },
+      ],
+      error: null,
+    });
+    const products = [
+      {
+        id: OFFER_PRODUCT_ID,
+        name: 'iPhone 13',
+        brand: 'Apple',
+        price: 500_000,
+        vat_category_code: 'S',
+        vat_rate: 7.5,
+      },
+    ];
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'create_storefront_order') {
+          return rpcSpy(args);
+        }
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [
+              { offer_id: LIVE_OFFER_ID, price: 400_000, condition: 'used' },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      const baseFrom = sb.from.bind(sb);
+      sb.from = ((table: string, ...rest: unknown[]) => {
+        if (table === 'merchants') {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: () =>
+                  Promise.resolve({
+                    data: { vat_registration_status: null },
+                    error: null,
+                  }),
+                single: () =>
+                  Promise.resolve({
+                    data: {
+                      id: MERCHANT_ID,
+                      business_name: 'Test',
+                      plan_tier: 'pro',
+                      slug: 'ogabassey',
+                      vat_registration_status: null,
+                    },
+                    error: null,
+                  }),
+              }),
+            }),
+          };
+        }
+        if (table === 'products') {
+          return {
+            select: () => ({
+              eq: () => ({
+                in: () => ({
+                  returns: () =>
+                    Promise.resolve({ data: products, error: null }),
+                  overrideTypes: () =>
+                    Promise.resolve({ data: products, error: null }),
+                }),
+              }),
+            }),
+          };
+        }
+        return (baseFrom as (...args: unknown[]) => unknown)(table, ...rest);
+      }) as typeof sb.from;
+      return sb;
+    }) as unknown as never);
+
+    // Client negotiated 1% below the live offer on a negotiable brand via
+    // mobile (discount applied): the fee follows the validated 396,000 NGN
+    // charged basis, not the undiscounted 400,000 NGN offer.
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        source: 'mobile_app',
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 396_000,
+            name: 'Used iPhone',
+            has_assurance: true,
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    await POST(request);
+
+    expect(rpcSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_items: [
+          expect.objectContaining({
+            product_id: OFFER_PRODUCT_ID,
+            offer_id: LIVE_OFFER_ID,
+            has_assurance: true,
+            assurance_fee: 19_800, // (400000 - 4000) * 1 * 0.05 validated
+          }),
+        ],
+      })
+    );
+  });
+
+  it('rejects an offer line whose condition canonically mismatches the live offer', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string) => {
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [
+              {
+                offer_id: LIVE_OFFER_ID,
+                price: 400_000,
+                condition: 'refurbished',
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'new',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid condition offer for order item',
+    });
+  });
+
+  it('rejects a fresh order whose offer was deleted before validation', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string) => {
+        if (name === 'get_product_offers') {
+          return Promise.resolve({ data: [], error: null });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'refurbished',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    const response = await POST(request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'Invalid condition offer for order item',
+    });
+  });
+
+  it('replays an idempotent retry past a deleted offer instead of rejecting it', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const createSpy = vi.fn().mockResolvedValue({
+      data: [{ ...baseOrderRow, idempotency_replayed: true }],
+      error: null,
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      const originalRpc = sb.rpc.bind(sb);
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'has_storefront_order_idempotency_key') {
+          return Promise.resolve({ data: true, error: null });
+        }
+        if (name === 'get_product_offers') {
+          // The offer was live for the first attempt but deleted since.
+          return Promise.resolve({ data: [], error: null });
+        }
+        if (name === 'create_storefront_order') {
+          return createSpy(args);
+        }
+        return originalRpc(name);
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'checkout-key-retry-1' },
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'refurbished',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    const response = await POST(request);
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_checkout_idempotency_key: 'checkout-key-retry-1',
+        p_checkout_request_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('x-idempotency-replayed')).toBe('true');
+  });
+
+  it('reuses the stored VAT and line conditions on an idempotent retry past a deleted offer', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    // The stored order's VAT was computed from the offer price live at
+    // first validation. Recomputing from parent prices would drift
+    // tax_amount, change the request hash, and conflict instead of replay.
+    const STORED_TAX_AMOUNT = 12345;
+    const createSpy = vi.fn().mockResolvedValue({
+      data: [{ ...baseOrderRow, idempotency_replayed: true }],
+      error: null,
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      const originalRpc = sb.rpc.bind(sb);
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'has_storefront_order_idempotency_key') {
+          return Promise.resolve({ data: true, error: null });
+        }
+        if (name === 'get_storefront_order_replay_economics') {
+          return Promise.resolve({
+            data: [
+              {
+                tax_amount: STORED_TAX_AMOUNT,
+                items: [
+                  {
+                    product_id: OFFER_PRODUCT_ID,
+                    offer_id: LIVE_OFFER_ID,
+                    condition: 'refurbished',
+                    quantity: 1,
+                    has_assurance: false,
+                  },
+                ],
+              },
+            ],
+            error: null,
+          });
+        }
+        if (name === 'get_product_offers') {
+          return Promise.resolve({ data: [], error: null });
+        }
+        if (name === 'create_storefront_order') {
+          return createSpy(args);
+        }
+        return originalRpc(name);
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'checkout-key-retry-tax' },
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'open_box',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    const response = await POST(request);
+
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ p_tax_amount: STORED_TAX_AMOUNT })
+    );
+    // The retry carries the canonical alias, but the first attempt hashed
+    // the live offer spelling — the payload must be restored to match.
+    expect(createSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_items: expect.arrayContaining([
+          expect.objectContaining({ condition: 'refurbished' }),
+        ]),
+      })
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it('persists the live offer condition when the caller spelling canonically matches', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const rpcSpy = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'order-id',
+          order_number: 'ORD-123',
+          total: 1000000,
+          subtotal: 1000000,
+          shipping_fee: 0,
+          customer_id: CUSTOMER_ID,
+        },
+      ],
+      error: null,
+    });
+    const supabaseMod = await import('@/lib/supabase/server');
+    vi.mocked(supabaseMod.createClient).mockImplementation((() => {
+      const sb = buildMockSupabase();
+      sb.rpc = ((name: string, args: Record<string, unknown>) => {
+        if (name === 'create_storefront_order') {
+          return rpcSpy(args);
+        }
+        if (name === 'get_product_offers') {
+          return Promise.resolve({
+            data: [
+              {
+                offer_id: LIVE_OFFER_ID,
+                price: 400_000,
+                condition: 'refurbished',
+              },
+            ],
+            error: null,
+          });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }) as typeof sb.rpc;
+      return sb;
+    }) as unknown as never);
+
+    // Caller sends the canonical spelling; the row stores the merchant
+    // spelling. Same family, so the line persists the live condition.
+    const request = new NextRequest('http://localhost/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...baseOrderPayload,
+        items: [
+          {
+            product_id: OFFER_PRODUCT_ID,
+            quantity: 1,
+            price: 400_000,
+            name: 'Refurbished Phone',
+            condition: 'open_box',
+            offerId: LIVE_OFFER_ID,
+          },
+        ],
+      }),
+    });
+    await POST(request);
+
+    expect(rpcSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        p_items: [
+          expect.objectContaining({
+            product_id: OFFER_PRODUCT_ID,
+            offer_id: LIVE_OFFER_ID,
+            condition: 'refurbished',
           }),
         ],
       })
@@ -9084,6 +10030,57 @@ describe('POST /api/orders — discount code', () => {
       expect.objectContaining({
         p_discount_code_id: DISCOUNT_CODE_ROW.id,
         p_discount_amount: 100,
+      })
+    );
+  });
+
+  it('replays a discount-code retry with a deleted offer instead of failing the subtotal', async () => {
+    const OFFER_PRODUCT_ID = '11111111-1111-4111-8111-111111111111';
+    const LIVE_OFFER_ID = '55555555-5555-4555-8555-555555555555';
+    const supabase = await setupDiscount(
+      {
+        get_storefront_discount_code: {
+          data: [DISCOUNT_CODE_ROW],
+          error: null,
+        },
+        get_product_offers: { data: [], error: null },
+        has_storefront_order_idempotency_key: { data: true, error: null },
+        create_storefront_order_with_discount_code: {
+          data: [{ ...orderRowWithDiscount, idempotency_replayed: true }],
+          error: null,
+        },
+      },
+      {
+        productRows: [{ id: OFFER_PRODUCT_ID, price: 400_000 }],
+      }
+    );
+
+    const response = await POST(
+      new NextRequest('http://localhost/api/orders', {
+        method: 'POST',
+        headers: { 'Idempotency-Key': 'checkout-key-discount-retry' },
+        body: JSON.stringify({
+          ...baseOrderPayload,
+          discount_code: 'SAVE10',
+          items: [
+            {
+              product_id: OFFER_PRODUCT_ID,
+              quantity: 1,
+              price: 400_000,
+              name: 'Refurbished Phone',
+              condition: 'refurbished',
+              offerId: LIVE_OFFER_ID,
+            },
+          ],
+        }),
+      })
+    );
+
+    expect(response.status).toBeLessThan(400);
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      'create_storefront_order_with_discount_code',
+      expect.objectContaining({
+        p_checkout_idempotency_key: 'checkout-key-discount-retry',
       })
     );
   });

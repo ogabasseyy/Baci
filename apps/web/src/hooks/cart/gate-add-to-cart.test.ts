@@ -17,6 +17,24 @@ describe('gateAddToCart', () => {
     expect(gateAddToCart({ ...product, stock: 0 })).toBeNull();
     expect(gateAddToCart({ ...product, has_variants: true })).toBeNull();
   });
+  it('allows unknown stock to resolve downstream instead of rejecting', () => {
+    expect(
+      gateAddToCart({
+        ...product,
+        manage_stock: null as unknown as boolean,
+        stock: null as unknown as number,
+      })
+    ).not.toBeNull();
+  });
+  it('treats NULL manage_stock as managed for a known depleted value', () => {
+    expect(
+      gateAddToCart({
+        ...product,
+        manage_stock: null as unknown as boolean,
+        stock: 0,
+      })
+    ).toBeNull();
+  });
   it('allows the winner to add a reserved prize at zero public stock', () => {
     expect(
       gateAddToCart({ ...product, stock: 0 }, { quizAwardId: 'award' })

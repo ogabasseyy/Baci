@@ -25,6 +25,7 @@ jest.mock('@/lib/api', () => ({
 }));
 jest.mock('@/hooks/product-hydration', () => ({
   hydrateRowsNeedingStorefrontVariants: (rows: unknown) => mockHydrate(rows),
+  hydrateRowsNeedingBaseInventory: (rows: unknown) => mockHydrate(rows),
 }));
 jest.mock('./product-transform', () => ({
   transformProduct: (row: unknown) => row,

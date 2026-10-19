@@ -245,6 +245,36 @@ INSERT INTO public.order_item_unit_costs (
   '355555550000001'
 );
 
+-- Stored offer identity: the transaction row displays the full offer id
+-- plus the snapshotted grade/notes, so server search must match them.
+INSERT INTO public.product_offers (
+  id, product_id, merchant_id, condition, price, grade, condition_notes
+) VALUES (
+  '55555555-5555-4555-8555-555555555555',
+  '10000000-0000-4000-8000-000000000001',
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  'used',
+  320.00,
+  'B',
+  'Light wear, screen flawless'
+);
+
+INSERT INTO public.order_items (
+  id, order_id, product_id, name, price, quantity, offer_id, offer_grade,
+  offer_condition_notes, condition
+) VALUES (
+  'd0000000-0000-4000-8000-000000000003',
+  'c0000000-0000-4000-8000-000000000001',
+  '10000000-0000-4000-8000-000000000001',
+  'Phone X Used Line',
+  320.00,
+  1,
+  '55555555-5555-4555-8555-555555555555',
+  'B',
+  'Light wear, screen flawless',
+  'refurbished'
+);
+
 -- Order-level IMEI in fulfillment_details.
 INSERT INTO public.orders (
   id, merchant_id, order_number, customer_name, shipping_status, payment_status,
@@ -805,6 +835,63 @@ BEGIN
   );
   IF v_ids IS NOT NULL THEN
     RAISE EXCEPTION 'numeric formatting must match client text: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['flawless']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'offer notes search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['55555555-5555']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'offer id search failed: %', v_ids;
+  END IF;
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['flawless', '55555555']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'offer multi-term search failed: %', v_ids;
+  END IF;
+
+  -- Deleting the offer nulls the live FK but the row still displays the
+  -- snapshotted reference, so searching it must still find the order.
+  DELETE FROM public.product_offers
+  WHERE id = '55555555-5555-4555-8555-555555555555';
+
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['55555555-5555']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'deleted-offer snapshot search failed: %', v_ids;
+  END IF;
+
+  -- The displayed line condition is a client search token, so the server
+  -- must match it too; no other field carries this value.
+  SELECT array_agg(order_id)
+  INTO v_ids
+  FROM public.search_mobile_admin_transaction_review_orders(
+    v_merchant_id,
+    ARRAY['refurbished']
+  );
+  IF v_ids IS DISTINCT FROM ARRAY[v_item_imei_order_id] THEN
+    RAISE EXCEPTION 'line condition search failed: %', v_ids;
   END IF;
 
   BEGIN

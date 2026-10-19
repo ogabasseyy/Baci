@@ -229,6 +229,36 @@ describe('fetchTransactionReviewWithFallbacks legacy schema fallbacks', () => {
     expect(selector).toContain('order_item_unit_costs');
   });
 
+  it('strips a missing product offer id on a rich legacy retry', async () => {
+    const rows = [{ id: 'legacy-product-offer-id-order' }];
+    const productOfferIdSchemaError = {
+      code: 'PGRST204',
+      message:
+        "Could not find the 'product_offer_id' column of 'order_items' in the schema cache",
+    };
+    mocks.fetchTransactionReviewRows
+      .mockResolvedValueOnce({
+        data: null,
+        error: productOfferIdSchemaError,
+      })
+      .mockResolvedValueOnce({
+        data: null,
+        error: productOfferIdSchemaError,
+      })
+      .mockResolvedValueOnce({ data: rows, error: null });
+
+    const result = await fetchTransactionReviewWithFallbacks({
+      merchantId: 'merchant-1',
+    });
+
+    expect(result).toEqual({ data: rows, error: null });
+    expect(mocks.fetchTransactionReviewRows).toHaveBeenCalledTimes(3);
+    const selector =
+      mocks.fetchTransactionReviewRows.mock.calls[2][0].selectStatement;
+    expect(selector).not.toContain('product_offer_id');
+    expect(selector).toContain('offer_id, offer_id_snapshot');
+  });
+
   it('preserves cost relationships when adjustment columns are unavailable', async () => {
     const rows = [{ id: 'legacy-adjustment-order' }];
     const adjustmentSchemaError = {

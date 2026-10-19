@@ -57,7 +57,8 @@ export function ProductDetailScreen({
   const purchaseState = useProductDetailPurchaseState(
     routeData,
     cartState.quantityInCart,
-    null
+    null,
+    cartState.productQuantityInCart
   );
   const cartActions = useProductDetailCartActions(
     routeData,

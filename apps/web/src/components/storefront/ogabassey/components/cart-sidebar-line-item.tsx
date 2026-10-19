@@ -212,8 +212,12 @@ export function CartSidebarLineItem({
           </div>
         </div>
 
-        {/* Assurance/Insurance Toggle */}
-        {cartMerchantContextMatches && shippingInsuranceEnabled && (
+        {/* Assurance/Insurance Toggle: a line that already carries
+            assurance keeps its removal control even when the merchant
+            has since disabled the setting, so the fee can never be
+            charged without a pre-checkout opt-out. */}
+        {cartMerchantContextMatches &&
+          (shippingInsuranceEnabled || item.hasAssurance) && (
           <div className="mt-4 pt-3 border-t border-gray-50">
             <label className="flex items-start gap-2 cursor-pointer group">
               <div className="relative flex items-center mt-0.5">

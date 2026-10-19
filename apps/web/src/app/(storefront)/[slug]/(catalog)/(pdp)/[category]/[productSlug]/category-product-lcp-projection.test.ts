@@ -118,6 +118,19 @@ describe('cached category PDP projection', () => {
     });
   });
 
+  it('carries the tracking policy for the critical offer pool cap', () => {
+    const product = mapCachedProductLcpHintToRouteProduct(
+      cachedHint({ inventory_tracking_policy: 'serialized_strict' })
+    );
+
+    expect(product.inventory_tracking_policy).toBe('serialized_strict');
+    expect(
+      mapCachedProductLcpHintToRouteProduct(
+        cachedHint({ inventory_tracking_policy: undefined })
+      ).inventory_tracking_policy
+    ).toBeNull();
+  });
+
   it('normalizes critical commerce copy and nullable numeric fields for rendering', () => {
     expect(
       buildCriticalCommerceRouteProduct({

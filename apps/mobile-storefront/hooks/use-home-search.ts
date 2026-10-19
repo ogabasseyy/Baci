@@ -11,6 +11,7 @@ import { isSearchableQuery } from './is-searchable-query';
 interface UseHomeSearchControlsInput {
   isFocused: boolean;
   onSearchOpen: () => void;
+  useSearchComposer?: boolean;
 }
 
 /**
@@ -21,6 +22,8 @@ interface UseHomeSearchControlsInput {
 export function useHomeSearchControls({
   isFocused,
   onSearchOpen,
+  useSearchComposer = process.env.EXPO_PUBLIC_SEARCH_COMPOSER_ENABLED ===
+    'true',
 }: UseHomeSearchControlsInput) {
   const searchVisibleShared = useSharedValue(false);
   const [searchVisible, setSearchVisible] = useState(false);
@@ -31,6 +34,13 @@ export function useHomeSearchControls({
   const searchNavigatingRef = useRef(false);
 
   const handleSearch = () => {
+    if (useSearchComposer) {
+      if (searchNavigatingRef.current) return;
+      searchNavigatingRef.current = true;
+      onSearchOpen();
+      router.push({ pathname: '/search', params: { focus: '1' } });
+      return;
+    }
     searchVisibleShared.set(true);
     onSearchOpen();
     setSearchVisible(true);

@@ -7,7 +7,7 @@ type SearchScreenViewProps = ComponentProps<typeof SearchScreenView>;
 
 const mockUseLocalSearchParams = jest.fn();
 const mockUseProducts = jest.fn();
-const mockUseProductBrands = jest.fn();
+const mockUseSearchFacets = jest.fn();
 const mockUseCategories = jest.fn();
 const mockViewProps: { current: SearchScreenViewProps | null } = {
   current: null,
@@ -15,6 +15,7 @@ const mockViewProps: { current: SearchScreenViewProps | null } = {
 const mockStorageData: Record<string, string> = {};
 
 jest.mock('expo-router', () => ({
+  useIsFocused: () => true,
   router: { back: jest.fn(), push: jest.fn() },
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockUseLocalSearchParams(),
@@ -22,8 +23,16 @@ jest.mock('expo-router', () => ({
 
 jest.mock('@/hooks', () => ({
   useCategories: () => mockUseCategories(),
-  useProductBrands: () => mockUseProductBrands(),
   useProducts: (args: unknown) => mockUseProducts(args),
+}));
+
+jest.mock('@/hooks/use-search-facet-options', () => ({
+  useSearchFacetOptions: (query: string, enabled: boolean) =>
+    mockUseSearchFacets(query, enabled),
+}));
+
+jest.mock('@/hooks/use-merchant', () => ({
+  useMerchant: () => ({ data: { id: 'merchant-1' } }),
 }));
 
 jest.mock('@/hooks/use-network-state', () => ({
@@ -78,7 +87,11 @@ describe('SearchScreen route', () => {
     mockViewProps.current = null;
     mockUseLocalSearchParams.mockReturnValue({});
     mockUseProducts.mockReturnValue(mockProductState());
-    mockUseProductBrands.mockReturnValue({ brands: [] });
+    mockUseSearchFacets.mockReturnValue({
+      data: { brands: [], categories: [], conditions: [] },
+      error: null,
+      refetch: jest.fn(),
+    });
     mockUseCategories.mockReturnValue({ data: [] });
   });
 

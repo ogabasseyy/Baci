@@ -65,6 +65,10 @@ export function shouldRedirectVariantSelectionParams(
     return false;
   }
 
+  // An unknown exact variant id is NOT redirected (mirrors the products
+  // PDP resolver): stripping the param would silently render the default
+  // variant at a different price. The shared client surfaces the dead
+  // link as missing instead (routeVariantMissing).
   const selectionResolution = resolveVariantSelectionParamResolution(
     product,
     searchParams
@@ -73,7 +77,6 @@ export function shouldRedirectVariantSelectionParams(
   return (
     selectionResolution.type === 'attribute_only' ||
     selectionResolution.type === 'ambiguous' ||
-    selectionResolution.type === 'invalid_variant_id' ||
     selectionResolution.type === 'zero_match'
   );
 }

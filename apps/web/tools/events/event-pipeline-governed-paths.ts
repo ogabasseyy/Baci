@@ -39,12 +39,11 @@ function repoRoot(): string {
 }
 
 function gitPaths(root: string, args: readonly string[]): string[] {
+  // The repo-wide ls-files inventory exceeds the 1MB spawnSync default
+  // (same 64MB ceiling as the sibling git snapshot readers).
   return execFileSync('git', [...args], {
     cwd: root,
     encoding: 'utf8',
-    // Frozen-base diffs grow with repo activity past the default 1MB
-    // execFileSync buffer (spawnSync git ENOBUFS on CI); match the
-    // sibling git helpers.
     maxBuffer: 64 * 1024 * 1024,
   })
     .split('\0')

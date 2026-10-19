@@ -344,7 +344,9 @@ export const EngineProductGrid: React.FC<EngineProductGridProps> = ({
   const handleAddToCart = (e: React.MouseEvent, product: Product) => {
     e.preventDefault();
     e.stopPropagation();
-    addToCart(product as any, 1);
+    if (addToCart(product as any, 1) === 'rejected') {
+      return;
+    }
 
     const rect = e.currentTarget.getBoundingClientRect();
     const particleId = Date.now() + Math.random();

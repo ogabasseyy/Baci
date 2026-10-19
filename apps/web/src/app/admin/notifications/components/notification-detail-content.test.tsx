@@ -51,4 +51,19 @@ describe('NotificationDetailContent', () => {
       screen.getByRole('link', { name: '/dashboard/orders' })
     ).toHaveAttribute('href', '/dashboard/orders');
   });
+
+  it('renders a persisted message payload as text, never as HTML', () => {
+    render(
+      <NotificationDetailContent
+        notification={{
+          ...notification,
+          message:
+            'A customer requested: <img src=x onerror=alert(1)> iPhone\nContact: eve@example.com',
+        }}
+      />
+    );
+
+    expect(screen.getByText(/A customer requested:/)).toBeInTheDocument();
+    expect(document.querySelector('img')).toBeNull();
+  });
 });

@@ -32,3 +32,15 @@ it('marks a serialized base option in stock when its anchor has available units'
     stock_confidence: 'high',
   });
 });
+
+it('fails closed when an optionless simple product has no serialized anchor units', async () => {
+  const input = { products: [{ product_id: 'phone' }] };
+  const depleted = createCatalogRenderer(productLookup, async () => 'out_of_stock');
+  expect((await depleted(input)).isError).toBe(true);
+
+  const unavailable = createCatalogRenderer(productLookup, async () => 'unknown');
+  expect((await unavailable(input)).isError).toBe(true);
+
+  const plain = createCatalogRenderer(productLookup, async () => 'not_serialized');
+  expect((await plain(input)).isError).toBeUndefined();
+});

@@ -160,6 +160,13 @@ export function createCatalogRenderer(
                 url: url.toString(),
               };
             } else {
+              // Optionless simple products resolve through the same serialized
+              // anchor projection as base selections; without this, a depleted
+              // strict anchor would render an item the cart cannot add.
+              const serializedStock = await getSerializedBaseStock(selection.product_id);
+              if (serializedStock === 'out_of_stock' || serializedStock === 'unknown') {
+                throw new Error('Base option no longer available');
+              }
               rendered[index] = product;
             }
           } catch {

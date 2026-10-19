@@ -39,6 +39,16 @@ BEGIN
 
   SELECT pg_catalog.pg_get_functiondef(v_function_oid) INTO v_definition;
 
+  -- The #3693 rewrite replaced this M18-era body with the
+  -- condition-keyed product_offer_id lineage, so the anchors below no
+  -- longer match; the net semantics live in
+  -- 20261019090000_storefront_order_offer_final_state.sql. Converge
+  -- without patching so incremental deploys (rewrite recorded, these
+  -- files pending) skip instead of failing on absent anchors.
+  IF strpos(v_definition, 'product_offer_id') > 0 THEN
+    RETURN;
+  END IF;
+
   -- Reruns and already-patched branches converge without duplicating
   -- edits. Checked first: the patch consumes the M15 marker below.
   IF strpos(v_definition, 'Unlimited offer scalars restock here') > 0 THEN
@@ -93,6 +103,16 @@ BEGIN
 
   SELECT pg_catalog.pg_get_functiondef(v_function_oid) INTO v_definition;
 
+  -- The #3693 rewrite replaced this M18-era body with the
+  -- condition-keyed product_offer_id lineage, so the anchors below no
+  -- longer match; the net semantics live in
+  -- 20261019090000_storefront_order_offer_final_state.sql. Converge
+  -- without patching so incremental deploys (rewrite recorded, these
+  -- files pending) skip instead of failing on absent anchors.
+  IF strpos(v_definition, 'product_offer_id') > 0 THEN
+    RETURN;
+  END IF;
+
   IF strpos(v_definition, 'Unlimited offer scalars restock here') > 0 THEN
     RETURN;
   END IF;
@@ -143,6 +163,16 @@ BEGIN
   END IF;
 
   SELECT pg_catalog.pg_get_functiondef(v_function_oid) INTO v_definition;
+
+  -- The #3693 rewrite replaced this M18-era body with the
+  -- condition-keyed product_offer_id lineage, so the anchors below no
+  -- longer match; the net semantics live in
+  -- 20261019090000_storefront_order_offer_final_state.sql. Converge
+  -- without patching so incremental deploys (rewrite recorded, these
+  -- files pending) skip instead of failing on absent anchors.
+  IF strpos(v_definition, 'product_offer_id') > 0 THEN
+    RETURN;
+  END IF;
 
   IF strpos(v_definition, 'Unlimited offer scalars restock here') > 0 THEN
     RETURN;

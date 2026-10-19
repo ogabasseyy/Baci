@@ -74,6 +74,16 @@ BEGIN
 
   SELECT pg_catalog.pg_get_functiondef(v_function_oid) INTO v_definition;
 
+  -- The #3693 rewrite replaced this M18-era body with the
+  -- condition-keyed product_offer_id lineage, so the anchors below no
+  -- longer match; the net semantics live in
+  -- 20261019090000_storefront_order_offer_final_state.sql. Converge
+  -- without patching so incremental deploys (rewrite recorded, these
+  -- files pending) skip instead of failing on absent anchors.
+  IF strpos(v_definition, 'product_offer_id') > 0 THEN
+    RETURN;
+  END IF;
+
   -- Fail closed when applied before the M13 offer branch this qualifies.
   IF strpos(v_definition, 'ELSIF stock_rec.offer_id IS NOT NULL THEN') = 0 THEN
     RAISE EXCEPTION 'storefront_order_offer_branch_not_found';

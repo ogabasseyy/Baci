@@ -55,7 +55,25 @@ VALUES (
 )
 ON CONFLICT (merchant_id) DO NOTHING;
 
+-- The RPC is executable only by the server-minted, slug-bound
+-- agentic_merchant_context role (20261015179995); anon must be denied.
 SET ROLE anon;
+DO $$
+BEGIN
+  IF has_function_privilege(
+    'anon', 'public.resolve_agentic_merchant_context(text)', 'execute'
+  ) THEN
+    RAISE EXCEPTION 'merchant context RPC must not be executable by anon';
+  END IF;
+END
+$$;
+RESET ROLE;
+SET ROLE agentic_merchant_context;
+SELECT set_config(
+  'request.jwt.claims',
+  '{"role":"agentic_merchant_context","agentic_merchant_slug":"agentic-context-fixture"}',
+  true
+);
 DO $$
 DECLARE v_row record;
 BEGIN

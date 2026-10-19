@@ -96,7 +96,7 @@ export async function connectMcpApp() {
             });
           }
         }
-      : undefined,
+      : extensions?.requestDisplayMode?.bind(extensions),
     notifyIntrinsicHeight: async (height) => {
       try {
         await app.sendSizeChanged({ height });

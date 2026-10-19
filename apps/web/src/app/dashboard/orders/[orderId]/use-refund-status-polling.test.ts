@@ -163,25 +163,26 @@ describe('useRefundStatusPolling', () => {
     });
     await act(async () => {});
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2);
-    // Eleven more slow polls exhaust the hour-long watch; the
-    // thirteenth tick stops the timer instead of billing the RPC.
+    // Eleven more slow polls exhaust the hour-long watch: the
+    // mount load counted, so the twelfth billed load is the last
+    // and the next tick stops the timer instead of billing the RPC.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(11 * 300_000);
     });
     await act(async () => {});
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(13);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(12);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(600_000);
     });
     await act(async () => {});
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(13);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(12);
     // Tab returns share the cap: past the watch's billed loads a
     // refocus refreshes nothing.
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
     });
     await act(async () => {});
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(13);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(12);
   });
   it('pauses while the tab is hidden and refreshes on return', async () => {
     render(React.createElement(Harness, { terminal: false }));

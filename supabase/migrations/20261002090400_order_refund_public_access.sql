@@ -191,6 +191,9 @@ BEGIN
     -- label must not claim refunded first.
     UPDATE public.orders o SET payment_status='refunded',updated_at=now()
       WHERE o.id=NEW.order_id AND o.merchant_id=NEW.merchant_id
+        -- Manager-RPC parity: later terminal rows must not
+        -- rewrite an already-refunded order / bump its updated_at.
+        AND o.payment_status IS DISTINCT FROM 'refunded'
         AND o.shipping_status IN ('cancelled','canceled')
         AND private.effective_amount_paid_v1(
           o.id, o.merchant_id, o.currency, o.amount_paid) > 0

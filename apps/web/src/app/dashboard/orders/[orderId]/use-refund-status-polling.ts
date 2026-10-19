@@ -78,6 +78,11 @@ export function useRefundStatusPolling({
           onError(e instanceof Error ? e.message : 'Unable to load refund');
       }
     }
+    // Hidden ticks never consume the settled cap: only polls that
+    // actually bill the RPC count toward the hour — the mount load
+    // below included, or a no-initial-summary view would bill
+    // thirteen loads under a twelve-load bound.
+    let settledPolls = 0;
     // Load on mount and navigation only: terminal flips re-arm the
     // timer below, and refetching there would clobber the summary a
     // submit just installed with a stale read. With a server summary
@@ -87,6 +92,9 @@ export function useRefundStatusPolling({
       const firstMount = loadedOrder.current === null;
       loadedOrder.current = orderId;
       if (!(firstMount && hasInitialSummary)) {
+        if (settledWatch) {
+          settledPolls += 1;
+        }
         void load();
       }
     }
@@ -96,9 +104,6 @@ export function useRefundStatusPolling({
         controller.abort();
       };
     }
-    // Hidden ticks never consume the settled cap: only polls that
-    // actually bill the RPC count toward the hour.
-    let settledPolls = 0;
     const timer = setInterval(
       () => {
         if (document.hidden) {

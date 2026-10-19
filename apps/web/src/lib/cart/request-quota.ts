@@ -92,24 +92,14 @@ function parseCounterStrict(value: unknown, min: number): number | null {
 /**
  * Hard bound for the degraded in-memory store. Quota subjects include
  * per-principal ids (each anonymous bootstrap mints a fresh one), so
- * without eviction the map grows for the life of the process.
+ * without a capacity limit the map grows for the life of the process.
+ * Live windows are retained; new subjects fail closed when capacity is full.
  */
 export const MEMORY_COUNTER_MAX_ENTRIES = 4096;
 
 function pruneMemoryCounters(now: number): void {
   for (const [key, counter] of memoryCounters) {
     if (now > counter.resetTime) memoryCounters.delete(key);
-  }
-  // Still oversized after expiry pruning: evict the soonest-expiring
-  // entries so live windows are the last to go.
-  if (memoryCounters.size > MEMORY_COUNTER_MAX_ENTRIES) {
-    const byExpiry = [...memoryCounters.entries()].sort(
-      (left, right) => left[1].resetTime - right[1].resetTime
-    );
-    for (const [key] of byExpiry) {
-      if (memoryCounters.size <= MEMORY_COUNTER_MAX_ENTRIES) break;
-      memoryCounters.delete(key);
-    }
   }
 }
 
@@ -118,10 +108,19 @@ export function incrementMemoryCounter(
   windowMs: number
 ): WindowCounter {
   const now = Date.now();
-  if (memoryCounters.size > MEMORY_COUNTER_MAX_ENTRIES) {
+  if (memoryCounters.size >= MEMORY_COUNTER_MAX_ENTRIES) {
     pruneMemoryCounters(now);
   }
   const existing = memoryCounters.get(key);
+  if (!existing && memoryCounters.size >= MEMORY_COUNTER_MAX_ENTRIES) {
+    // Never discard a live budget to admit a new subject: subject churn
+    // must not reset exhausted authenticated quotas during an outage.
+    let resetTime = now + windowMs;
+    for (const counter of memoryCounters.values()) {
+      resetTime = Math.min(resetTime, counter.resetTime);
+    }
+    return { count: Number.POSITIVE_INFINITY, resetTime };
+  }
   const next =
     existing && now <= existing.resetTime
       ? { count: existing.count + 1, resetTime: existing.resetTime }
@@ -162,7 +161,8 @@ function warnQuotaDegraded(): void {
 
 export async function incrementWindowCounter(
   key: string,
-  windowMs: number
+  windowMs: number,
+  allowMemoryFallback = true
 ): Promise<WindowCounterResult> {
   const redis = getRedis();
   if (redis) {
@@ -204,6 +204,15 @@ export async function incrementWindowCounter(
   } else {
     warnQuotaDegraded();
   }
+  if (!allowMemoryFallback) {
+    // Requests already denied by degradation policy must not consume
+    // fallback capacity needed by authenticated shopper operations.
+    return {
+      count: Number.POSITIVE_INFINITY,
+      resetTime: Date.now() + windowMs,
+      degraded: true,
+    };
+  }
   return { ...incrementMemoryCounter(key, windowMs), degraded: true };
 }
 
@@ -240,14 +249,15 @@ export async function checkCartQuota(
   input: CartQuotaInput
 ): Promise<CartQuotaResult> {
   const budget = CART_QUOTA_BUDGETS[input.operation];
-  const counter = await incrementWindowCounter(
-    quotaKey(input),
-    budget.windowMs
-  );
-  const failClosed =
-    counter.degraded &&
+  const requiresSharedStore =
     process.env.NODE_ENV === 'production' &&
     FAIL_CLOSED_OPERATIONS.has(input.operation);
+  const counter = await incrementWindowCounter(
+    quotaKey(input),
+    budget.windowMs,
+    !requiresSharedStore
+  );
+  const failClosed = counter.degraded && requiresSharedStore;
   return {
     allowed: !failClosed && counter.count <= budget.limit,
     limit: budget.limit,

@@ -41,14 +41,12 @@ vi.mock('@/lib/supabase/anon', () => ({
         })),
       })),
     })),
-    rpc: vi.fn(async (name: string, args: unknown) => {
-      if (name === 'commerce_cart_preview_handoff') {
-        mocks.previewCalls += 1;
-        return { data: mocks.previewPayload, error: mocks.previewError };
-      }
-      if (name === 'commerce_cart_handoff_merchant') {
-        mocks.locatorArgs = args;
-        return { data: mocks.handoffMerchantId, error: null };
+    rpc: vi.fn(async (name: string) => {
+      if (
+        name === 'commerce_cart_preview_handoff' ||
+        name === 'commerce_cart_handoff_merchant'
+      ) {
+        throw new Error('Preview RPC must never use the anonymous client');
       }
       return { data: mocks.merchantRows, error: mocks.merchantError };
     }),
@@ -60,6 +58,17 @@ vi.mock('@/lib/slug-alias-cache', () => ({
 }));
 
 vi.mock('@/lib/cart/scoped-client', () => ({
+  createCartPreviewClient: (handoffId: string) => ({
+    rpc: vi.fn(async (name: string, args: unknown) => {
+      expect((args as { p_handoff_id: string }).p_handoff_id).toBe(handoffId);
+      if (name === 'commerce_cart_handoff_merchant') {
+        mocks.locatorArgs = args;
+        return { data: mocks.handoffMerchantId, error: null };
+      }
+      mocks.previewCalls += 1;
+      return { data: mocks.previewPayload, error: mocks.previewError };
+    }),
+  }),
   createCartScopedClient: (principal: CartPrincipal) => {
     mocks.capturedPrincipal = principal;
     return {

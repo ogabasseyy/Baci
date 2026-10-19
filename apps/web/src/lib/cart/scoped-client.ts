@@ -159,3 +159,22 @@ export function createCartRevocationClient(
     options
   );
 }
+
+/** Server-only preview authority, minted after the HTTP client quota passes. */
+export function createCartPreviewClient(
+  handoffId: string,
+  options: CartScopedClientOptions = {}
+): SupabaseClient {
+  const issuedAt = Math.floor((options.now ?? new Date()).getTime() / 1000);
+  const token = signScopedSupabaseJwt(
+    {
+      aud: 'authenticated',
+      role: 'commerce_cart_previewer',
+      cart_handoff_id: handoffId,
+      iat: issuedAt,
+      exp: issuedAt + CART_SCOPED_TOKEN_TTL_SECONDS,
+    },
+    options.signer ?? getAgenticJwtSigningMaterial()
+  );
+  return buildScopedClient(token, options);
+}

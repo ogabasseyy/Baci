@@ -48,6 +48,16 @@ describe('verificationSecretCandidates', () => {
     ).toEqual([CURRENT, RETIRED]);
   });
 
+  it('immediately excludes a removed compromised key even for backdated proofs', () => {
+    expect(
+      candidates({
+        issuedAt: 1_799_999_000,
+        previousSecrets: [],
+        verifyNow: 1_800_000_001,
+      })
+    ).toEqual([CURRENT]);
+  });
+
   it('excludes short or unparseable retired secrets', () => {
     expect(
       candidates({ previousSecrets: [{ retireAt, secret: 'short' }] })

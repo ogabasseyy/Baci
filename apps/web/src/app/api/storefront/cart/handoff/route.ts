@@ -15,7 +15,10 @@ import {
   resolveCartRequestContext,
 } from '@/lib/cart/request-context';
 import { cartErrorResponse, cartJsonResponse } from '@/lib/cart/response';
-import { createCartScopedClient } from '@/lib/cart/scoped-client';
+import {
+  createCartPreviewClient,
+  createCartScopedClient,
+} from '@/lib/cart/scoped-client';
 import { verifyCartSessionProof } from '@/lib/cart/session-proof';
 import { checkCsrfProtection } from '@/lib/csrf';
 import { getTrustedClientIdentifier } from '@/lib/rate-limit';
@@ -175,8 +178,9 @@ export async function GET(request: NextRequest) {
 
     // Enforce the merchant-scoped budget before the preview RPC
     // assembles anything: resolve the merchant with the cheap locator.
+    const previewClient = createCartPreviewClient(handoffId);
     const merchantId = await rpcHandoffMerchantId(
-      createAnonClient(),
+      previewClient,
       handoffId,
       handoffToken
     );
@@ -196,7 +200,7 @@ export async function GET(request: NextRequest) {
     }
 
     const preview = await rpcPreviewHandoff(
-      createAnonClient(),
+      previewClient,
       handoffId,
       handoffToken
     );

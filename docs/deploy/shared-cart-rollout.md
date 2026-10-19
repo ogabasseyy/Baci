@@ -109,11 +109,17 @@ Compromise recovery is stricter than routine rotation: retired
 secrets stay acceptable for a bounded 24-hour grace based on the
 proof's issued-at claim, so a compromised retired secret can mint
 backdated proofs until that window closes. Rotation alone is
-therefore never compromise recovery. The mandatory runbook step is
-to revoke the live grants issued under the retired secret for every
-affected merchant/cart (forcing shoppers through a fresh bootstrap)
-and only then treat the rotation as complete; record the revocation
-in the activation evidence.
+therefore never compromise recovery. Immediately remove the compromised
+key from `CART_SESSION_PREVIOUS_SECRETS` on every verifier and rotate
+the current key if it is affected. Do not keep a compromised key for
+availability grace. This is an authorized operational change, not
+something this PR provisions. Revoke all affected live cart grants
+(forcing shoppers through a fresh bootstrap), including grants whose
+key provenance cannot be established: removing the HMAC key alone does
+not revoke already minted scoped database JWTs, which can live for up
+to five minutes. Record verifier convergence and grant revocation before
+calling recovery complete. A `kid` selects a key; it cannot prevent a
+holder of that key from signing a forged issuance time.
 
 ## Deployment checklist (migration chain)
 
@@ -150,16 +156,21 @@ handoff preview request leaves no token value in proxy, APM, or
 error-reporting captures; record both checks in the activation
 evidence. Enrollment stays closed until they pass.
 
-Accepted surface: the two preview RPCs are anon-granted so the web
-route can call them without a cart session, which means a caller who
-can reach PostgREST directly can also invoke them, bypassing the
-route's quotas. This is accepted because the pairing token is the
-authorization (high-entropy, hash stored, raw token required since
-`20261015168000`), preview output is redacted, and invalid probing is
-bounded by platform/PostgREST rate limits and monitoring. The same
-activation check must confirm database statement logging does not
-persist RPC arguments (`log_statement` must not capture the preview
-calls), since the raw token now reaches the RPC as an argument.
+Preview RPC authority: both preview functions require the dedicated
+`commerce_cart_previewer` role and a server-signed `cart_handoff_id`
+claim matching the requested handoff. The HTTP route mints this
+server-only, five-minute authority only after the per-client quota;
+it applies the merchant quota before assembling the preview. `anon`,
+`authenticated`, and `service_role` cannot execute the preview RPCs.
+The role has no direct cart-table access. Apply the registered scoped
+preview migration before serving this route; no fallback to anonymous
+RPC execution is permitted.
+
+The raw pairing token still reaches PostgreSQL as an RPC argument.
+Before enrollment, verify database statement logging and APM do not
+persist preview arguments, alongside the `x-handoff-token` header
+redaction check above. The scoped role fixes route-quota bypass; it
+does not by itself establish safe operational logging.
 
 Accepted surface: on shared platform hosts, a same-host Referer slug
 may select which merchant a path-routed storefront hint names
@@ -214,9 +225,11 @@ guest carts to the canonical shared cart.
   enrolled, put an operator alert on the throttled
   `Cart quota store degraded` warning and confirm the multi-instance
   multiplication is accepted for the pilot, or keep enrollment closed
-  until the store is highly available. The same acceptance covers the
-  bounded in-memory store's eviction policy: past 4096 subjects the
-  soonest-expiring live counters are evicted first, so an attacker
-  driving many distinct subjects during an outage can reset other
-  subjects' degraded command/snapshot budgets; the operator alert is
-  the control that bounds how long that degraded mode may persist.
+  until the store is highly available. At the bounded fallback capacity
+  of 4096 subjects, new subjects are denied until a window expires;
+  production operations that already fail closed on Redis degradation
+  never allocate fallback counters, so their hour-long denied windows
+  cannot crowd out authenticated traffic. Live counters are never
+  evicted to admit subject churn. Existing
+  subjects retain their budgets. Per-instance budget multiplication
+  remains an explicit availability trade-off and activation gate.

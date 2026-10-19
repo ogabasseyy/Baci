@@ -232,6 +232,7 @@ BEGIN
  r:=public.commerce_cart_issue_handoff(encode(pg_catalog.sha256('preview-raw-token'::bytea),'hex'),h,source,'preview-issue','{"type":"native"}');
  PERFORM pg_temp.handoff_check(r->>'ok'='true','preview token issue rejected');
  SELECT handoff_hash INTO stored_hash FROM public.commerce_cart_handoffs WHERE id=h;
+ PERFORM set_config('request.jwt.claims',jsonb_build_object('role','commerce_cart_previewer','cart_handoff_id',h)::text,true);
  PERFORM pg_temp.handoff_check(public.commerce_cart_handoff_merchant(h,'preview-raw-token')=m,'merchant locator must accept the raw token');
  PERFORM pg_temp.handoff_check(public.commerce_cart_handoff_merchant(h,stored_hash) IS NULL,'merchant locator must reject the stored hash as a credential');
  PERFORM pg_temp.handoff_check(public.commerce_cart_handoff_merchant(h,'wrong-token') IS NULL,'merchant locator must reject a wrong token');
@@ -241,5 +242,9 @@ BEGIN
  PERFORM pg_temp.handoff_check(r->>'code'='not_found','preview must reject the stored hash as a credential: '||r::text);
  r:=public.commerce_cart_preview_handoff(h,'wrong-token');
  PERFORM pg_temp.handoff_check(r->>'code'='not_found','preview must reject a wrong token: '||r::text);
+ PERFORM set_config('request.jwt.claims',jsonb_build_object('role','commerce_cart_previewer','cart_handoff_id',source)::text,true);
+ PERFORM pg_temp.handoff_check(public.commerce_cart_handoff_merchant(h,'preview-raw-token') IS NULL,'locator must reject wrong handoff claim');
+ r:=public.commerce_cart_preview_handoff(h,'preview-raw-token');
+ PERFORM pg_temp.handoff_check(r->>'code'='not_found','preview must reject wrong handoff claim');
 END $$;
 DO $$ DECLARE failures text; BEGIN SELECT string_agg(message,E'\n') INTO failures FROM handoff_failures; IF failures IS NOT NULL THEN RAISE EXCEPTION E'Handoff attachment/lifetime regressions:\n%',failures; END IF; END $$;

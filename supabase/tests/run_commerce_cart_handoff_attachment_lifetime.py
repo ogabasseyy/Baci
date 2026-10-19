@@ -54,6 +54,8 @@ try:
  sql+='\n'+(root/'supabase/migrations/20261015167000_commerce_cart_merge_chosen_quantity.sql').read_text()
  sql+='\n'+(root/'supabase/migrations/20261015168000_commerce_cart_handoff_preview_raw_token.sql').read_text()
  sql+='\n'+(root/'supabase/migrations/20261015169000_commerce_cart_canonical_feature_guard.sql').read_text()
+ for name in ['20261015172000_commerce_cart_handoff_preview_token_param.sql','20261015179990_commerce_cart_scoped_preview.sql']:
+  sql+='\n'+(root/'supabase/migrations'/name).read_text()
  sql+='\n'+(root/'supabase/tests/commerce_cart_handoff_attachment_lifetime.sql').read_text()
  sql+='\nROLLBACK;'
  r=subprocess.run(['psql','-X','-v','ON_ERROR_STOP=1','-h',str(p/'sock'),'-p','55489','-U','postgres','-d','postgres'],input=sql,text=True,stdout=open('/tmp/cart-handoff-attachment-lifetime.log','w'),stderr=subprocess.STDOUT,cwd=root)

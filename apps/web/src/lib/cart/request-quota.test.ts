@@ -6,7 +6,7 @@ import {
   incrementMemoryCounter,
   MEMORY_COUNTER_MAX_ENTRIES,
 } from './request-context';
-import { incrementWindowCounter } from './request-quota';
+import { incrementWindowCounter, memoryCounters } from './request-quota';
 
 const mockGetRedis = vi.hoisted(() => vi.fn(() => null as unknown));
 
@@ -218,6 +218,33 @@ describe('checkCartQuota degraded store', () => {
     }
   });
 
+  it('reserves fallback capacity for shopper operations when production denies anonymous churn', async () => {
+    __resetCartQuotaStoreForTesting();
+    vi.stubEnv('NODE_ENV', 'production');
+    for (let index = 0; index <= MEMORY_COUNTER_MAX_ENTRIES; index++) {
+      for (const operation of ['bootstrap', 'account_link'] as const) {
+        await expect(
+          checkCartQuota({
+            merchantId: MERCHANT_ID,
+            operation,
+            subject: `denied-${index}`,
+          })
+        ).resolves.toMatchObject({ allowed: false, remaining: 0 });
+      }
+    }
+    expect(memoryCounters.size).toBe(0);
+    for (const operation of ['snapshot', 'commands'] as const) {
+      await expect(
+        checkCartQuota({
+          merchantId: MERCHANT_ID,
+          operation,
+          subject: 'shopper',
+        })
+      ).resolves.toMatchObject({ allowed: true, remaining: 239 });
+    }
+    expect(memoryCounters.size).toBe(2);
+  });
+
   it('keeps authenticated operations on the degraded memory budget', async () => {
     __resetCartQuotaStoreForTesting();
     vi.stubEnv('NODE_ENV', 'production');
@@ -232,18 +259,63 @@ describe('checkCartQuota degraded store', () => {
 });
 
 describe('incrementMemoryCounter store bound', () => {
-  it('evicts entries once the degraded store exceeds its bound', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     __resetCartQuotaStoreForTesting();
-    // Fill past the bound with distinct per-principal subjects.
-    for (let index = 0; index < MEMORY_COUNTER_MAX_ENTRIES + 50; index++) {
+  });
+
+  it.each([
+    'commands',
+    'snapshot',
+  ] as const)('retains exhausted %s budgets and denies new subjects at capacity', async (operation) => {
+    __resetCartQuotaStoreForTesting();
+    vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    vi.stubEnv('NODE_ENV', 'production');
+    const input = {
+      merchantId: MERCHANT_ID,
+      operation,
+      subject: 'exhausted-principal',
+    };
+    const first = await checkCartQuota(input);
+    for (let attempt = 1; attempt < first.limit; attempt++) {
+      await checkCartQuota(input);
+    }
+    await expect(checkCartQuota(input)).resolves.toMatchObject({
+      allowed: false,
+      remaining: 0,
+    });
+    for (let index = 1; index < MEMORY_COUNTER_MAX_ENTRIES; index++) {
       incrementMemoryCounter(`subject-${index}`, 60_000);
     }
-    // The earliest subjects were evicted: counting one again restarts
-    // its window instead of continuing it.
-    expect(incrementMemoryCounter('subject-0', 60_000).count).toBe(1);
-    // A subject still inside the bound keeps its count.
-    const recent = `subject-${MEMORY_COUNTER_MAX_ENTRIES + 49}`;
-    expect(incrementMemoryCounter(recent, 60_000).count).toBe(2);
+    // Churn must neither evict the exhausted principal nor grow the map.
+    for (let index = 0; index < 50; index++) {
+      await expect(
+        checkCartQuota({ ...input, subject: `overflow-${index}` })
+      ).resolves.toMatchObject({ allowed: false, remaining: 0 });
+    }
+    expect(memoryCounters.size).toBe(MEMORY_COUNTER_MAX_ENTRIES);
+    await expect(checkCartQuota(input)).resolves.toMatchObject({
+      allowed: false,
+      remaining: 0,
+      resetTime: first.resetTime,
+    });
+    // Existing principals retain availability within their original budget.
+    expect(incrementMemoryCounter('subject-1', 60_000).count).toBe(2);
+  });
+
+  it('admits new subjects after expired windows release capacity', () => {
+    __resetCartQuotaStoreForTesting();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    for (let index = 0; index < MEMORY_COUNTER_MAX_ENTRIES; index++) {
+      incrementMemoryCounter(`subject-${index}`, 60_000);
+    }
+    expect(incrementMemoryCounter('new-subject', 60_000).count).toBe(
+      Number.POSITIVE_INFINITY
+    );
+    now.mockReturnValue(1_060_001);
+    expect(incrementMemoryCounter('new-subject', 60_000).count).toBe(1);
+    expect(memoryCounters.size).toBe(1);
   });
 });
 

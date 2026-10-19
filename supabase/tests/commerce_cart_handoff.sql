@@ -1308,4 +1308,22 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Scoped preview regression against the real assembled handoff RPC.
+CREATE ROLE authenticator NOLOGIN;
+\ir ../migrations/20261015168000_commerce_cart_handoff_preview_raw_token.sql
+\ir ../migrations/20261015172000_commerce_cart_handoff_preview_token_param.sql
+\ir ../migrations/20261015179990_commerce_cart_scoped_preview.sql
+-- Re-apply to prove the authority patch remains idempotent.
+\ir ../migrations/20261015179990_commerce_cart_scoped_preview.sql
+UPDATE public.commerce_cart_handoffs SET handoff_hash=encode(sha256('fixture-token'::bytea),'hex') WHERE id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+SET ROLE commerce_cart_previewer;
+SET request.jwt.claims = '{"role":"commerce_cart_previewer","cart_handoff_id":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"}';
+DO $$ BEGIN
+ IF public.commerce_cart_preview_handoff('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','fixture-token')->>'ok' <> 'true' THEN RAISE EXCEPTION 'real preview body denied'; END IF;
+END $$;
+SET request.jwt.claims = '{"role":"commerce_cart_previewer","cart_handoff_id":"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"}';
+DO $$ BEGIN
+ IF public.commerce_cart_preview_handoff('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','fixture-token')->>'ok' <> 'false' THEN RAISE EXCEPTION 'real preview body ignored claim'; END IF;
+END $$;
+RESET ROLE;
 ROLLBACK;

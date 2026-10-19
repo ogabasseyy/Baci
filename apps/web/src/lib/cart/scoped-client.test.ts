@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CartPrincipal } from './principal';
 import {
   CART_SCOPED_TOKEN_TTL_SECONDS,
+  createCartPreviewClient,
   createCartReceiveClient,
   createCartScopedClient,
 } from './scoped-client';
@@ -175,4 +176,26 @@ it('mints expired proofs only into a short-lived revocation-only role', async ()
   expect(payload.role).toBe('commerce_cart_revoker');
   expect(payload.exp).toBe(Math.floor(options.now.getTime() / 1000) + 300);
   expect(payload.cart_customer_id).toBeUndefined();
+});
+
+describe('createCartPreviewClient', () => {
+  it('binds preview-only authority to one handoff for five minutes', () => {
+    const client = createCartPreviewClient(
+      '22222222-2222-4222-8222-222222222222',
+      {
+        anonKey: 'test-anon-key',
+        now: new Date('2026-10-12T04:00:00Z'),
+        signer: SIGNER,
+        supabaseUrl: 'https://test.supabase.co',
+      }
+    );
+    const payload = bearerPayload(
+      client as unknown as Parameters<typeof bearerPayload>[0]
+    );
+    expect(payload.role).toBe('commerce_cart_previewer');
+    expect(payload.cart_handoff_id).toBe(PRINCIPAL.cartId);
+    expect((payload.exp as number) - (payload.iat as number)).toBe(300);
+    expect(payload.cart_grant_id).toBeUndefined();
+    expect(payload.cart_id).toBeUndefined();
+  });
 });

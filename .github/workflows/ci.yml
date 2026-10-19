@@ -43,6 +43,12 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      # The gate runs before any PR-controlled script: a preceding step
+      # could overwrite the checked-out gate code, which would then execute
+      # while the independent contract (separate checkout) sees pristine
+      # files. The contract checker enforces this ordering.
+      - name: Test capability register binding
+        uses: ./.github/actions/capability-gate
       - name: Test release retries and dependency update policy
         run: node --test .github/scripts/muse-dependabot-policy.test.mjs .github/scripts/posthog-release-cli.test.mjs
       - name: Test Sentry Storefront Release Provenance

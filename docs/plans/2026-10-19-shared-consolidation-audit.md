@@ -101,7 +101,7 @@ green CI and change no activation state.
 1. **Wallet-funding contract (rows 9, 13) — first, ahead of
    formatting:** the mobile `z.iso.datetime()` offset divergence is
    a present-tense payment-path bug, not future drift, so this wave
-   leads. Share only the identical intent/poll subshape — the create response's `account` block has legitimately diverged (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) and stays local per app. Verified against live PostgREST payloads; the wave must also align the create-failure
+   leads. Share only the identical intent/poll subshape — the create response's `account` block has legitimately diverged (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) and stays local per app. The wave verifies the subshape against live PostgREST payloads before adopting it; the wave must also align the create-failure
    protocol — the failure classifier is
    `apps/mobile-storefront/lib/checkout/wallet-funded-bank-transfer.ts`
    (every non-consent error invokes `onFallback`), and
@@ -143,7 +143,9 @@ green CI and change no activation state.
    | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Prompt for consent, then retry create once |
    | Confirmed no-intent (safe to fall back) | Received 4xx validation/business rejections (invalid order state, ineligible wallet, amount violations) — the wave enumerates the exact server codes from the create route before coding | Legacy DVA fallback allowed |
    | Unknown-after-POST | Transport failure, timeout, 5xx, or any failure with no received response after the mutating POST | Bounded idempotent re-create; on exhaustion, resumable pending state — **never** DVA |
-   | Unparseable received response | Response received but fails schema parsing | Treat as unknown-after-POST (an intent may exist); re-create to fetch the canonical intent | No server change is
+   | Unparseable received response | Response received but fails schema parsing | Treat as unknown-after-POST (an intent may exist); re-create to fetch the canonical intent |
+
+   No server change is
    needed for the concurrent
    case: the insert path's RPC
    (`create_order_wallet_funding_intent_for_customer`,

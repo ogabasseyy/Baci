@@ -8,5 +8,8 @@ describe('catalog render tool description', () => {
     expect(MCP_CATALOG_RENDER_DESCRIPTION).toContain(
       'Pass each product_id once'
     );
+    expect(MCP_CATALOG_RENDER_DESCRIPTION).toContain(
+      'or get_product for simple products without options'
+    );
   });
 });

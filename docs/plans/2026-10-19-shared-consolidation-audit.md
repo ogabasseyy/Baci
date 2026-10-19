@@ -32,6 +32,9 @@ work below extends it.
 | 7 | Exported-symbol overlap (whole lib) | Only ~20 exported names are shared between web and mobile `lib` trees (`calculateOrderTotals`, `normalizeVariantAttributes`, `getPrimaryProductImage`, `hexToRgba`, …). Duplication is concentrated, not diffuse. | all | Confirms the ranked waves cover most real overlap; a whole-monorepo sweep is not warranted. |
 | 8 | VTU pending-reference idempotency core | Same platform-free protocol implemented twice: web `components/storefront/ogabassey/components/utility-pending-vtu-reference-queries.ts` (+ registry) and mobile `lib/pending-vtu-reference-queries.ts` implement the same reference, stale-success, and completion logic, with mirrored persistence/mint-lock registries guarding against double-debit on retry. | web, storefront | **Deferred shared-core candidate (high risk).** Extract the pure reference/completion logic to shared with storage adapters kept local, in its own wave with characterization fixtures first — a duplicated money-movement protocol must not drift. Not in Waves 1–3, but explicitly tracked, not omitted. |
 | 9 | Wallet-funding response contract | The order wallet-funding response schema exists on both sides and has already diverged: web `src/schemas/order-wallet-funding-intent.ts:62` accepts PostgREST `+00:00` timestamps via `z.iso.datetime({ offset: true })`, while mobile `schemas/order-wallet-funding-intent.ts:27` uses bare `z.iso.datetime()` for create/poll responses. | web, storefront | **Share the response contract** (own wave, can precede cart waves): one shared response schema in `@baci/shared`; server-only request/auth schemas stay local. The offset divergence should be treated as a latent mobile parsing bug and verified against live PostgREST payloads during that wave. |
+| 10 | Mobile update policy core | Both mobile apps implement the same `MobileReleasePolicy`/`resolveMobileUpdatePrompt` flow in `components/updates/mobile-update-check.ts` (storefront and admin), and have already diverged: when a required policy lacks `storeUrl`, admin fails open while storefront creates an unusable blocking prompt. | storefront, admin | **Share the pure policy core** in its own wave: policy fetching stays local; gating/decision logic moves to shared with app-specific route/app-name/OTA adapters. The `storeUrl` divergence must be resolved deliberately (fail-open is the safer default for a required-update gate without a destination). |
+| 11 | Sanitization primitives | `apps/web/src/lib/sanitize-core.ts` and `apps/mobile-admin/lib/sanitize.ts` implement the same `stripHtmlTags`, `sanitizeText`, `sanitizeEmail`, `sanitizePhone`, `sanitizeSearchQuery` transformations feeding order schemas and admin requests; independent edits can make accepted input differ by surface. | web, admin | **Share the primitives** in a small wave with characterization fixtures; schema-level rules stay local. |
+| 12 | Business-type catalog | `apps/mobile-admin/constants/business-types.ts` duplicates the eight id/label pairs from the declared source of truth `apps/web/src/config/business-types.ts` and independently adds `other`; category changes can leave the native selector and its type union stale. | web, admin | **Share the data contract** (ids/labels/type union) or generate the mobile projection from the web source; web-only templates/icons stay local. Resolve whether `other` belongs in the source of truth during that wave. |
 
 ## Sampled out (explicit)
 
@@ -39,23 +42,46 @@ work below extends it.
   surfaces with no mobile counterpart.
 - `packages/shared/src/contracts` (174 files) and `receipt`: already
   shared; no action.
-- Mobile-admin order-screen formatters beyond price/date: admin-only
+- Mobile-admin order-screen formatters beyond price: admin-only
   presentation, covered by Wave 1's shared formatting primitives if
-  adopted there.
+  adopted there. Date formatting is excluded from Wave 1 and from
+  this note; it awaits its own evidenced audit.
+
+## Definitions
+
+**Activation gate** (used for post-activation sequencing below): the
+cart pilot activation is complete when the 81 registered cart
+migrations have applied to production, the final privilege state is
+verified (anon cannot execute preview/replay RPCs, no purge job in
+`cron.job`), the pilot merchant is enrolled, and the acceptance
+matrix in `docs/qa/shared-cart-acceptance.md` passes — per
+`docs/deploy/shared-cart-rollout.md`.
 
 ## Recommended sequence
 
-1. **Wave 1 (now, off activation path): formatting.** One shared
-   `Intl` formatting module, characterization fixtures pinning each
-   app's current outputs, semantic unification decision recorded in
-   the wave PR (NGN-only vs merchant-locale vs country-aware per call
-   class). All three apps adopt via thin wrappers.
-2. **Guardrails alongside Wave 1:** contributor rule (pure logic lands
-   in `packages/shared` first) and the decision rule (≥2 consumers,
-   platform-free, ≤~400 changed lines per PR) recorded in
-   `packages/shared/README` or repo guidance.
-3. **Post-activation:** cart display math, then cart-payload schemas.
-4. Re-audit after each wave; deferred domains (product, auth) are
+1. **Wave 1 (now, off activation path): currency/price formatting.**
+   One shared `Intl` formatting module, characterization fixtures
+   pinning each app's current outputs, semantic unification decision
+   recorded in the wave PR (NGN-only vs merchant-locale vs
+   country-aware per call class). All three apps adopt via thin
+   wrappers.
+2. **Guardrails alongside Wave 1:** contributor rule (pure logic with
+   ≥2 consumers that is platform-free lands in `packages/shared`
+   first) and the decision rule (≥2 consumers, platform-free, ≤~400
+   changed lines per PR) recorded in `packages/shared/README` or
+   repo guidance.
+3. **Wallet-funding response contract (row 9), before or alongside
+   the cart waves:** one shared response schema, including verifying
+   the mobile `z.iso.datetime()` offset divergence against live
+   PostgREST payloads. Off the cart activation path.
+4. **Post-activation (per the gate defined above):** cart display
+   math, then cart-payload schemas, then the checkout transport
+   subshape (row 6).
+5. **Tracked candidates, own waves when scheduled:** VTU
+   pending-reference core (row 8), mobile update policy core
+   (row 10), sanitization primitives (row 11), business-type catalog
+   (row 12).
+6. Re-audit after each wave; deferred domains (product, auth) are
    revisited only when a change touches both sides.
 
 ## Decision-rule check for Wave 1

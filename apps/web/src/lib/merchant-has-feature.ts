@@ -15,7 +15,7 @@ export type MerchantFeatureSource = {
 export function merchantHasFeature(
   merchant: MerchantFeatureSource | null | undefined,
   feature: MerchantFeatureGate,
-  now = new Date()
+  now?: Date
 ): boolean {
   if (
     feature === 'shared_cart' ||
@@ -55,5 +55,7 @@ export function merchantHasFeature(
   }
   if (!merchant.plan_expires_at) return true;
   const expiryTime = Date.parse(merchant.plan_expires_at);
-  return Number.isFinite(expiryTime) && expiryTime > now.getTime();
+  return (
+    Number.isFinite(expiryTime) && expiryTime > (now ?? new Date()).getTime()
+  );
 }

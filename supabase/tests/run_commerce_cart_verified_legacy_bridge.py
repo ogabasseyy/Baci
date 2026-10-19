@@ -44,6 +44,7 @@ try:
   for f in sorted((root/'supabase/migrations').glob('202610151[67]*.sql')):
    sql+='\n\\i '+str(f)
   sql+='\n\\i '+str(root/'supabase/migrations/20261019172000_commerce_cart_offer_variant_columns.sql')
+  sql+='\n\\i '+str(root/'supabase/migrations/20261019183000_commerce_cart_default_variant_predicate.sql')
  tests=(root/'supabase/tests/commerce_cart_verified_legacy_bridge.sql').read_text()
  if '--baseline' in sys.argv:
   tests=tests.split('-- Negotiation accepted')[0]+tests[tests.index('DO $$ DECLARE failures text;'):]

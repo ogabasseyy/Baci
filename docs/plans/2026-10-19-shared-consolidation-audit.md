@@ -15,7 +15,7 @@ output of the stated command (files whose text contains an
 paths excluded by the pipeline — no further semantic filtering is
 claimed):
 `apps/web/src` 459, `apps/mobile-storefront` 147,
-`apps/mobile-admin` 121. One contract caveat: the shared package's own Zod peer range is `^3.0.0 || ^4.0.0` (dev dependency `^4.4.3`), so Zod-4-only APIs such as `z.iso.datetime` cannot move into `@baci/shared` until the wallet wave either narrows that peer range or records a compatibility decision. Note the package already uses Zod-4-only APIs in-tree (`z.strictObject` in `packages/shared/src/contracts/piggyvest-device-change.ts`), so the de-facto floor is already Zod 4 — the decision is to record that floor, not to migrate code. Reproduce exactly (one command per base):
+`apps/mobile-admin` 121. One contract caveat: the shared package's own Zod peer range is `^3.0.0 || ^4.0.0` (dev dependency `^4.4.3`), so Zod-4-only APIs such as `z.iso.datetime` cannot move into `@baci/shared` until the wallet wave either narrows that peer range or records a compatibility decision. Note the package already uses the same Zod-4-only API in-tree (`z.iso.datetime({ offset: true })` in `packages/shared/src/contracts/piggyvest-device-change.ts:5`), so the de-facto floor is already Zod 4 — the decision is to record that floor, not to migrate code. Reproduce exactly (one command per base):
 `grep -rlE "(from[[:space:]]+['\"]@baci/shared|require\(['\"]@baci/shared|import\(['\"]@baci/shared)" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules <base> | grep -v '\.test\.' | wc -l`
 with `<base>` = `apps/web/src`, `apps/mobile-storefront`,
 `apps/mobile-admin` respectively; other precise
@@ -141,9 +141,10 @@ green CI and change no activation state.
    | Class | Examples | Behavior |
    |---|---|---|
    | Consent required | `WALLET_DVA_CONSENT_REQUIRED` | Prompt for consent; on grant, create the funding account (`createWalletFundingAccount`), then retry intent create once (the current client's actual sequence in `wallet-funded-bank-transfer.ts`) |
-   | Confirmed no-intent (safe to fall back) | **Server-code-first on any received response, regardless of status class:** `WALLET_DVA_SETUP_FAILED` (502, documented pre-insert setup failure in `order-wallet-funding-intents.ts`) and received 4xx validation/business rejections (invalid order state, ineligible wallet, amount violations) — the wave enumerates the exact server codes from the create route before coding | Legacy DVA fallback allowed |
+   | Confirmed no-intent (safe to fall back) | **First attempt only**, server-code-first on a received response: received 4xx validation/business rejections and `WALLET_DVA_SETUP_FAILED` (502). **Context limit:** account resolution runs *before* the existing-intent check in `createOrderWalletFundingIntent`, so on a re-create after an unknown attempt this same code can be returned while the first intent is active — after any unknown attempt, no fallback code alone qualifies; fallback requires a re-create outcome that demonstrably passed the existing-intent check. The wave enumerates the exact server codes from the create route before coding | Legacy DVA fallback allowed (first attempt only) |
    | Unknown-after-POST | Transport failure, timeout, or any failure with **no received response** after the mutating POST (a received 5xx is classified by its server code first, per the row above) | Bounded idempotent re-create; on exhaustion, resumable pending state — **never** DVA |
    | Unparseable received response | Response received but fails schema parsing | Treat as unknown-after-POST (an intent may exist); re-create to fetch the canonical intent |
+   | Unenumerated received code (default) | Any server code not enumerated above | **Fail closed:** treat as unknown-after-POST; never fall back on an unclassified code |
 
    No server change is
    needed for the concurrent
@@ -184,8 +185,8 @@ green CI and change no activation state.
 Next.js, Hermes, and Node, but Node-run fixtures cannot pin Hermes
 locale/currency output; the repo already acknowledges runtimes
 without full Intl data (see the `Intl.NumberFormat` try/catch
-fallback in `formatMerchantCurrencyAmount`,
-`apps/mobile-admin/lib/utils.ts:195-215`, currency formatting only — no date fallback is claimed or needed
+fallback in `formatCurrencyCompactNotation`,
+`apps/mobile-admin/lib/utils.ts:177-215`, currency formatting only — no date fallback is claimed or needed
 for this currency-only wave). The formatting wave must therefore
 add an on-device/Hermes verification (or a verified locale/currency
 allowlist) before relying on fixture parity. Size: one shared module

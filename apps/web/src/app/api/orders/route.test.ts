@@ -302,9 +302,14 @@ interface RpcOverrides {
     data: unknown;
     error: unknown;
   };
+  create_storefront_order_with_loyalty_code?: {
+    data: unknown;
+    error: unknown;
+  };
   has_storefront_order_idempotency_key?: { data: unknown; error: unknown };
   get_storefront_order_replay_economics?: { data: unknown; error: unknown };
   get_storefront_discount_code?: { data: unknown; error: unknown };
+  get_loyalty_redemption_for_checkout?: { data: unknown; error: unknown };
   get_product_offers?: { data: unknown; error: unknown };
   redeem_wallet_for_order?: { data: unknown; error: unknown };
   redeem_savings_for_order?: { data: unknown; error: unknown };

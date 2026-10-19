@@ -305,6 +305,13 @@ jobs:
           PSQL_BIN="$(command -v psql)"
           "$PSQL_BIN" --version | grep -Eq '^psql \(PostgreSQL\) 18\.3( \(.+\))?$'
           echo "PSQL_BIN=$PSQL_BIN" >> "$GITHUB_ENV"
+      # The loyalty aggregator enroll_customer_loyalty.sql \ir-includes
+      # every sibling enroll_customer_loyalty*.sql suite as a part in
+      # one transaction (guarded by
+      # tools/db/enroll-customer-loyalty-aggregator.test.ts); the
+      # concurrency suite needs live dblink sessions and runs
+      # standalone. Keep comments out of the folded run scalar below:
+      # a # there comments out every later --sql-check argument.
       - name: Test final order-notification outbox RPC privileges
         run: >-
           pnpm --filter @baci/web db:replay:chronological
@@ -415,6 +422,8 @@ jobs:
           --sql-check supabase/migrations/tests/storefront_order_offer_id_snapshot.sql
           --sql-check supabase/migrations/tests/storefront_order_offer_tenant_bind.sql
           --sql-check supabase/migrations/tests/storefront_refined_reread_anon_visibility.sql
+          --sql-check supabase/migrations/tests/enroll_customer_loyalty.sql
+          --sql-check supabase/migrations/tests/enroll_customer_loyalty_concurrency.sql
       - name: Run migration replay regression test
         run: pnpm --filter @baci/web exec vitest run src/lib/agentic/order-private-schema-usage-migration.test.ts
       - name: Test Cache Invalidation Outbox SQL

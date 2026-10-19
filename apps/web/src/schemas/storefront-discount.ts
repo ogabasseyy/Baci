@@ -41,8 +41,36 @@ export const storefrontDiscountCodeRowSchema = z.object({
     .nullish()
     .transform((v) => v ?? []),
   usage_limit_per_customer: z.coerce.number().nullable(),
+  // The order lookup includes inactive rows (replay), so prepare can
+  // tell a deactivated code from an active one; absent in older RPC
+  // shapes, where active is the only safe assumption.
+  is_active: z.boolean().catch(true),
 });
 
 export type StorefrontDiscountCodeRow = z.infer<
   typeof storefrontDiscountCodeRowSchema
+>;
+
+// Row returned by get_loyalty_redemption_for_checkout (issue #3165). The
+// resolve RPC is type-agnostic; only discount_fixed/discount_percentage with
+// a positive value are bridgeable — the call sites filter, and the order
+// wrapper re-verifies authoritatively. Snapshot-governed: no live reward
+// state is selected, so a later disable cannot strand a paid code.
+export const loyaltyCheckoutCodeRowSchema = z.object({
+  redemption_id: z.uuid(),
+  reward_type: z.string(),
+  // nullable() (not nullish()): the resolve RPC always selects these
+  // columns, so a MISSING key is a contract break that must fail.
+  reward_value: z.coerce.number().nullable(),
+  minimum_order_amount: z.coerce.number().nullable(),
+  expires_at: z.string().nullable(),
+  used: z.boolean(),
+  issuance_currency: z.string().nullable(),
+  reward_name: z.string().nullable(),
+  max_redemption_percentage: z.coerce.number().nullable(),
+  minimum_known: z.boolean(),
+});
+
+export type LoyaltyCheckoutCodeRow = z.infer<
+  typeof loyaltyCheckoutCodeRowSchema
 >;

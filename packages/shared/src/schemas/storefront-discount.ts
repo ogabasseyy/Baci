@@ -18,7 +18,9 @@ export const StorefrontDiscountValidateRequestSchema = z.object({
 
 const AppliedDiscountResponseSchema = z.object({
   valid: z.literal(true),
-  discount_code_id: z.uuid(),
+  // Null for loyalty redemptions: no discount_codes row exists, and the
+  // internal redemption id stays out of anon reach by design.
+  discount_code_id: z.uuid().nullable(),
   code: z.string().trim().min(1),
   discount_type: z.enum(['percentage', 'fixed']),
   discount_value: z.number(),

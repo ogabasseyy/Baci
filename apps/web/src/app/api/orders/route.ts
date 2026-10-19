@@ -22,12 +22,12 @@ import {
 import { createRedvaultCheckoutResponse } from '@/lib/checkout/create-redvault-checkout-response';
 import type { createTransactionDiscountProof } from '@/lib/checkout/create-transaction-discount-proof';
 import { createTransactionDiscountProofForCheckout } from '@/lib/checkout/create-transaction-discount-proof-for-checkout';
-import { computeDiscountAmountForSubtotal } from '@/lib/checkout/discount-amount';
 import { hasExistingMerchantRateOrder } from '@/lib/checkout/has-existing-merchant-rate-order';
 import { LocalAirportDeliveryFeeMismatchError } from '@/lib/checkout/local-airport-delivery-fee-mismatch-error';
 import { LocalAirportDeliveryValidationError } from '@/lib/checkout/local-airport-delivery-validation-error';
 import { computeOrderNegotiationDiscount } from '@/lib/checkout/order-negotiation-discount';
 import { persistReplayedDeliveryMetadata } from '@/lib/checkout/persist-replayed-delivery-metadata';
+import { prepareLoyaltyCheckout } from '@/lib/checkout/prepare-loyalty-checkout';
 import { recomputeOfferAssuranceFees } from '@/lib/checkout/recompute-offer-assurance-fees';
 import { rejectDisallowedRedvaultLivePilotOrder } from '@/lib/checkout/redvault-live-pilot-order-gate';
 import { redvaultOrderDraftFulfillment } from '@/lib/checkout/redvault-order-draft-fulfillment';
@@ -91,7 +91,6 @@ import {
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { type OrderCreateInput, orderCreateSchema } from '@/schemas/orders';
-import { storefrontDiscountCodeRowSchema } from '@/schemas/storefront-discount';
 
 function isPayOnDelivery(paymentMethod: string): boolean {
   return paymentMethod === 'pod' || paymentMethod === 'pay_on_delivery';
@@ -1705,122 +1704,46 @@ export async function POST(request: NextRequest) {
     // merchant shipping-rate fee verification below.
     let canonicalOrderSubtotal: number | null = null;
 
-    // Resolve + validate the discount code server-side, then compute the amount
-    // from the CANONICAL subtotal (never the client cart total). Eligibility /
-    // targeting is enforced authoritatively + replay-safely in the wrapper RPC.
+    // Discount/loyalty economics (code resolution, cap conversion, and
+    // amount computation) live in prepareLoyaltyCheckout; exactly one of
+    // discountCodeId / loyaltyRedemptionId is set when a code applies.
     let discountCodeId: string | null = null;
+    let loyaltyRedemptionId: string | null = null;
     let discountCodeAmount = 0;
     if (requestedDiscountCode) {
-      if (hasVoucherItem) {
-        return NextResponse.json(
-          {
-            code: 'DISCOUNT_CODE_VOUCHER_COMBINATION_UNSUPPORTED',
-            error: 'Failed to create order',
-          },
-          { status: 400 }
-        );
+      const preparedCheckout = await prepareLoyaltyCheckout({
+        supabase,
+        merchantId: merchant_id,
+        requestedDiscountCode,
+        hasVoucherItem,
+        requestedSavingsRedemption: Boolean(requestedSavingsRedemption),
+        items: orderItemsPayload,
+        offerPrices: liveOfferPrices,
+        isIdempotentOfferOrderReplay,
+      });
+      if (!preparedCheckout.ok) {
+        return preparedCheckout.response;
       }
-      if (requestedSavingsRedemption) {
-        return NextResponse.json(
-          {
-            code: 'DISCOUNT_CODE_SAVINGS_COMBINATION_UNSUPPORTED',
-            error: 'Failed to create order',
-          },
-          { status: 400 }
-        );
-      }
+      canonicalOrderSubtotal = preparedCheckout.canonicalOrderSubtotal;
+      discountCodeId = preparedCheckout.discountCodeId;
+      loyaltyRedemptionId = preparedCheckout.loyaltyRedemptionId;
+      discountCodeAmount = preparedCheckout.discountCodeAmount;
+    }
 
-      // include_inactive=true: resolve even a deactivated code so a retry can
-      // reach the replay-aware wrapper; the wrapper decides replay vs a fresh
-      // `code_inactive` rejection.
-      const { data: discountRows, error: discountLookupError } =
-        await supabase.rpc('get_storefront_discount_code', {
-          p_merchant_id: merchant_id,
-          p_code: requestedDiscountCode,
-          p_include_inactive: true,
-        });
-      if (discountLookupError) {
-        // Don't mask a server/DB failure as an invalid-code 400.
-        logger.error({
-          message: 'Discount code lookup failed',
-          error: discountLookupError,
-          merchantId: merchant_id,
-        });
-        return NextResponse.json(
-          { error: 'Internal server error' },
-          { status: 500 }
-        );
-      }
-      const parsedDiscountArray = storefrontDiscountCodeRowSchema
-        .array()
-        .safeParse(discountRows);
-      const parsedDiscountSingle = parsedDiscountArray.success
-        ? null
-        : storefrontDiscountCodeRowSchema.safeParse(discountRows);
-      const discountRow = parsedDiscountArray.success
-        ? (parsedDiscountArray.data[0] ?? null)
-        : parsedDiscountSingle?.success
-          ? parsedDiscountSingle.data
-          : null;
-      if (!discountRow) {
-        return NextResponse.json(
-          { code: 'discount_code_invalid', error: 'Invalid discount code' },
-          { status: 400 }
-        );
-      }
-      discountCodeId = discountRow.id;
-
-      // F1 (offer economics): a confirmed idempotent retry replays the
-      // stored order, so live-offer-dependent recomputation is bypassed —
-      // the subtotal helper throws when verified offer economics are
-      // absent, which would 500 a retry the RPC would otherwise replay.
-      // discountCodeAmount stays 0; the RPC ignores it on replay and its
-      // request-hash check rejects true conflicts first.
-      if (isIdempotentOfferOrderReplay) {
-        discountCodeAmount = 0;
-      } else {
-        try {
-          canonicalOrderSubtotal = await computeCanonicalOrderSubtotal({
-            items: orderItemsPayload,
-            merchantId: merchant_id,
-            offerPrices: liveOfferPrices,
-            supabase,
-          });
-        } catch (subtotalError) {
-          if (isCanonicalOrderSubtotalUuidError(subtotalError)) {
-            return NextResponse.json(
-              { error: 'Failed to create order', details: 'invalid_items' },
-              { status: 400 }
-            );
-          }
-          logger.error({
-            error: subtotalError,
-            merchantId: merchant_id,
-            message: 'Discount canonical subtotal recompute failed',
-          });
-          return NextResponse.json(
-            { error: 'Internal server error' },
-            { status: 500 }
-          );
-        }
-        if (canonicalOrderSubtotal == null) {
-          return NextResponse.json(
-            { error: 'Failed to create order', details: 'invalid_items' },
-            { status: 400 }
-          );
-        }
-        discountCodeAmount = computeDiscountAmountForSubtotal(
-          {
-            discount_type:
-              discountRow.discount_type === 'fixed_amount'
-                ? 'fixed'
-                : 'percentage',
-            discount_value: Number(discountRow.discount_value),
-            maximum_discount_amount: discountRow.maximum_discount_amount,
-          },
-          canonicalOrderSubtotal
-        );
-      }
+    // A loyalty code claim is single-use and only replayable through
+    // the checkout idempotency key: without one, a response lost after
+    // commit leaves the shopper retrying into loyalty_code_already_used
+    // against an order that already exists (and dropping the code can
+    // then duplicate the order). Fail closed before creating anything.
+    if (loyaltyRedemptionId && !requestIdempotencyKey) {
+      return NextResponse.json(
+        {
+          code: 'IDEMPOTENCY_KEY_REQUIRED',
+          error:
+            'An Idempotency-Key header is required to check out with a loyalty code.',
+        },
+        { status: 400 }
+      );
     }
 
     // === MERCHANT SHIPPING RATE ENFORCEMENT (money path) ===
@@ -2099,7 +2022,10 @@ export async function POST(request: NextRequest) {
               // STABLE code identity, NOT the recomputed amount, so a merchant
               // editing the code between a checkout and its retry can't trip
               // checkout_idempotency_conflict before the wrapper's replay path.
-              discount_amount: discountCodeId ? 0 : serverDerivedDiscountAmount,
+              discount_amount:
+                discountCodeId || loyaltyRedemptionId
+                  ? 0
+                  : serverDerivedDiscountAmount,
               discount_code: requestedDiscountCode,
               delivery_method: canonicalDeliveryMethod,
               gift_wrapping_fee: giftWrappingFeeValue,
@@ -2155,9 +2081,10 @@ export async function POST(request: NextRequest) {
       p_customer_phone: customer_phone || null,
       p_items: orderItemsRpcPayload,
       p_shipping_fee: effectiveShippingFee,
-      p_discount_amount: discountCodeId
-        ? discountCodeAmount
-        : serverDerivedDiscountAmount,
+      p_discount_amount:
+        discountCodeId || loyaltyRedemptionId
+          ? discountCodeAmount
+          : serverDerivedDiscountAmount,
       p_tax_amount: orderTaxAmount,
       p_payment_method: effectivePaymentMethod,
       p_payment_status: effectivePaymentStatus,
@@ -2226,7 +2153,9 @@ export async function POST(request: NextRequest) {
         ? 'create_storefront_order_with_quiz_voucher'
         : discountCodeId
           ? 'create_storefront_order_with_discount_code'
-          : 'create_storefront_order';
+          : loyaltyRedemptionId
+            ? 'create_storefront_order_with_loyalty_code'
+            : 'create_storefront_order';
 
     const orderCreateRpcArgs = requestedSavingsRedemption
       ? {
@@ -2237,7 +2166,12 @@ export async function POST(request: NextRequest) {
         }
       : discountCodeId
         ? { ...orderRpcArgs, p_discount_code_id: discountCodeId }
-        : orderRpcArgs;
+        : loyaltyRedemptionId
+          ? {
+              ...orderRpcArgs,
+              p_loyalty_redemption_id: loyaltyRedemptionId,
+            }
+          : orderRpcArgs;
 
     const orderRpcClient =
       redvaultOrderRpcClient ??
@@ -2410,7 +2344,8 @@ export async function POST(request: NextRequest) {
       // input — surface as 409 so the client shows "no longer available".
       if (
         message === 'usage_limit_reached' ||
-        message === 'per_customer_limit_reached'
+        message === 'per_customer_limit_reached' ||
+        message === 'loyalty_code_already_used'
       ) {
         return NextResponse.json(
           { code: message, error: 'Discount code is no longer available' },
@@ -2443,6 +2378,15 @@ export async function POST(request: NextRequest) {
         'code_expired',
         'minimum_purchase_not_met',
         'discount_amount_mismatch',
+        // Loyalty-code bridge client errors (issue #3165; → 400). The
+        // loyalty wrapper RPC raises these for fresh orders; safe for
+        // the client to fix and retry. (loyalty_code_already_used maps
+        // to 409 above as a race/state conflict.)
+        'loyalty_redemption_not_found',
+        'loyalty_code_not_applicable',
+        'loyalty_code_expired',
+        'loyalty_code_currency_mismatch',
+        'loyalty_reward_inactive',
         // B3 (plan §5 B3): RPC raises when shipping_provider is set
         // without a quote id. Map to 4xx so the client gets the right
         // re-quote signal instead of a generic 500.

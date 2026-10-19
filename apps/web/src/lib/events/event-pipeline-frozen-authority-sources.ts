@@ -73,12 +73,16 @@ export const eventPipelineFrozenRoutes = {
   // Re-pinned for the 16..128-byte idempotency-key floor at the route
   // gate (400 for short/low-entropy keys); notification, payment
   // authority, and database operations are unchanged.
-  'apps/web/src/app/api/orders/route.ts':
-    '318e7f5c0abc51365361847bc68577fb2b114735a7b6ff44861d25dfa5ea27e4',
   // Re-pinned for reviewed new-order-only attested shipping coordinates.
   // Existing-order replay, notification and payment authority are unchanged.
   // Merge re-pin: branch extraction plus main's attested shipping
   // coordinates; both reviewed, hash covers the union.
+  // Re-pinned for the #3651 merge: inline discount economics moved to
+  // prepareLoyaltyCheckout (branch F1 replay bypass + offerPrices
+  // ported into the helper); notification, payment authority, and
+  // database operations are unchanged.
+  'apps/web/src/app/api/orders/route.ts':
+    'bcdd1a5afde32a8bac290b1f4da2754089aaa9841285c3924606623779e51a80',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

@@ -9,9 +9,11 @@ output was used only as a supporting signal. No code was moved.
 ## Consumers and existing shared surface
 
 `@baci/shared` (`packages/shared`, ~265 source files / ~23k lines) is
-consumed by all three apps. Counting non-test `.ts`/`.tsx` files that
-import `@baci/shared` or any subpath (import-aware count, excluding
-comment-only, `jest.mock`, and test-config alias matches):
+consumed by all three apps. Consumer counts below are the direct
+output of the stated command (files whose text contains an
+`@baci/shared` import/require/dynamic-import pattern, `.test.`
+paths excluded by the pipeline — no further semantic filtering is
+claimed):
 `apps/web/src` 459, `apps/mobile-storefront` 147,
 `apps/mobile-admin` 121. One contract caveat: the shared package's own Zod peer range is `^3.0.0 || ^4.0.0` (dev dependency `^4.4.3`), so Zod-4-only APIs such as `z.iso.datetime` cannot move into `@baci/shared` until the wallet wave either narrows that peer range or records a compatibility decision. Reproduce exactly (one command per base):
 `grep -rlE "(from[[:space:]]+['\"]@baci/shared|require\(['\"]@baci/shared|import\(['\"]@baci/shared)" --include="*.ts" --include="*.tsx" --exclude-dir=node_modules <base> | grep -v '\.test\.' | wc -l`
@@ -38,7 +40,7 @@ work below extends it.
 | 2 | Cart pure logic (remainder) | Already largely consolidated: web `lib/cart/merge.ts` is a 6-line re-export of `@baci/shared/cart` (207-line merge, 222-line types, commands, line-identity). Remaining duplication is presentational: web `lib/cart/pricing.ts` (150 lines, server snapshot building — server-canonical, stays) vs mobile `lib/cart/display.ts` (117) + `lib/cart-pricing.ts` (88) display math. | web, storefront | **Share display math only, post-activation** (plan gate). Server pricing stays web-only by design. |
 | 3 | Schemas | Web `src/schemas` is 446 files / ~25k lines, overwhelmingly server API input schemas with no mobile consumer — not duplication. Real overlap is narrow: `apps/mobile-storefront/schemas` holds 39 non-test source files (~2.2k lines; 79 files including tests), of which 7 are cart-related (`cart*.ts`: pairing/session/snapshot/pending-request parsing of the same payloads whose types already live in `@baci/shared/cart`). | web, storefront | **Share the cart-payload schemas post-activation;** the rest of web schemas are server-canonical and stay. Most of the apparent schema mass is a false positive. |
 | 4 | Product transform/hydration | Mobile `hooks/product-utils.ts` / `product-transform` vs web `lib/normalize-product.ts` and PDP normalizers shape the same product rows differently per surface (display vs indexing). Partially same concept, partially surface-specific. | web, storefront | **Defer.** Extract only the shared row-shaping primitives if a future product change touches both; full unification would force surface compromises. Re-audit after the formatting wave. |
-| 5 | Auth session handling | Web `lib/auth` (6 files / 573 lines, server session) vs mobile `lib/auth` (5 files / 661 lines, device session storage) share vocabulary, not logic: different trust models and storage. **Exception:** both native apps run near-identical `registerAuthRefreshLifecycle` copies (`lib/auth/auth-refresh-lifecycle.ts` in storefront and admin, invoked from each `lib/supabase.ts`) implementing the same AppState start/stop, singleton, and cleanup protocol. | web, storefront, admin | **Keep web/mobile session models platform-specific; track a shared native auth-refresh lifecycle core** (row 16) with per-app Supabase client wiring local. |
+| 5 | Auth session handling | Web `lib/auth` (6 files / 573 lines, server session) vs mobile `lib/auth` (5 files / 661 lines, device session storage) share vocabulary, not logic: different trust models and storage. **Exception:** both native apps run near-identical `registerAuthRefreshLifecycle` copies (`lib/auth/auth-refresh-lifecycle.ts` in storefront and admin, invoked from each `lib/supabase.ts`) implementing the same AppState start/stop, singleton, and cleanup protocol. | web, storefront, admin | **Keep web/mobile session models platform-specific.** The native refresh-lifecycle exception is inventoried once as row 16 (not double-counted here), with per-app Supabase client wiring local. |
 | 6 | Checkout payload shapes | Web holds the server side (`lib/checkout`, 62 files / ~4.9k lines; `src/schemas/orders.ts` 452 lines), **but mobile does reimplement payload construction**: `apps/mobile-storefront/components/checkout/checkout-order-builders.ts` (225 lines) builds the customer/item/total/payment/shipping/discount/shared-cart request, and `services/orders.ts` validates its own `CreateOrderRequestSchema` before POSTing to `/api/orders`. The transport shape is therefore implemented twice. | web, storefront | **Share the transport subshape post-activation** (it is on the cart activation path via the shared-cart fields): one shared order-request schema/types in `@baci/shared`; server validation rules and adapter-specific fields stay local. Server remains canonical for pricing/trust. |
 | 7 | Exported-symbol overlap (whole lib) | Only ~20 exported names are shared between web and mobile `lib` trees (`calculateOrderTotals`, `normalizeVariantAttributes`, `getPrimaryProductImage`, `hexToRgba`, …). Duplication is concentrated, not diffuse. | all | Confirms the ranked waves cover most real overlap; a whole-monorepo sweep is not warranted. |
 | 8 | VTU pending-reference idempotency core | Same platform-free protocol implemented twice: web `components/storefront/ogabassey/components/utility-pending-vtu-reference-queries.ts` (+ registry) and mobile `lib/pending-vtu-reference-queries.ts` implement the same reference, stale-success, and completion logic, with mirrored persistence/mint-lock registries guarding against double-debit on retry. | web, storefront | **Deferred shared-core candidate (high risk).** Extract the pure reference/completion logic to shared with storage adapters kept local, in its own wave with characterization fixtures first — a duplicated money-movement protocol must not drift. Not in Waves 1–3, but explicitly tracked, not omitted. |
@@ -78,7 +80,9 @@ telemetry/quota gates in the rollout doc are closed — explicitly:
 proxy/APM/error reporting, database/APM logging proven not to
 persist pairing-token RPC arguments, compatible server adapters
 deployed, and cart roles/signing material provisioned including a
-deployment-unique `CART_PROOF_ENVIRONMENT` — the pilot
+deployment-unique `CART_PROOF_ENVIRONMENT`, an operator alert on
+the `Cart quota store degraded` warning, and the rollout's
+dashboards/observability in place — the pilot
 merchant is enrolled, and the acceptance
 matrix in `docs/qa/shared-cart-acceptance.md` passes — per
 `docs/deploy/shared-cart-rollout.md`. The rollout's *expansion*
@@ -92,8 +96,7 @@ green CI and change no activation state.
 1. **Wallet-funding contract (rows 9, 13) — first, ahead of
    formatting:** the mobile `z.iso.datetime()` offset divergence is
    a present-tense payment-path bug, not future drift, so this wave
-   leads. One shared response schema, verified against live
-   PostgREST payloads; the wave must also align the create-failure
+   leads. Share only the identical intent/poll subshape — the create response's `account` block has legitimately diverged (web: nullable names, 120-char caps, `paystack` only; storefront: required names, 200-char caps, `paystack` + `piggyvest`) and stays local per app. Verified against live PostgREST payloads; the wave must also align the create-failure
    protocol — the failure classifier is
    `apps/mobile-storefront/lib/checkout/wallet-funded-bank-transfer.ts`
    (every non-consent error invokes `onFallback`), and
@@ -151,5 +154,7 @@ currency formatting only — no date fallback is claimed or needed
 for this currency-only wave). The formatting wave must therefore
 add an on-device/Hermes verification (or a verified locale/currency
 allowlist) before relying on fixture parity. Size: one shared module
-plus wrapper swaps — fits one PR under ~400 changed lines if call
-sites keep their current signatures.
+plus wrapper swaps. Size is an estimate to confirm at wave start
+(shared module ~150 lines + fixtures ~100 + three thin wrappers);
+if the wrapper swaps push the PR over the ~400-line decision-rule
+budget, split by app (shared module + one app per PR).

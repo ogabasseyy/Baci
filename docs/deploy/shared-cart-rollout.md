@@ -12,7 +12,7 @@ the cited test is the authority whenever it changes) in
 Any other count in PR descriptions or earlier notes is superseded by
 that registry. Merge requires fresh CI green on the merge head,
 including the full Supabase history replay (DB Replay) applying all
-81 in timestamp order; activation additionally requires the replay
+83 (the registry-pinned count above) in timestamp order; activation additionally requires the replay
 and enrollment gates in the release sequence below.
 
 ## Controls that already exist

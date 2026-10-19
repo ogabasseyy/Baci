@@ -93,7 +93,7 @@ this checklist is done, in this order:
    budget multiplication during Redis degradation explicitly
    accepted for the pilot; outbox publisher qualification during the
    authorized release; and the rollout's dashboards/observability in
-   place. (This list is **frozen as enumerated here**: later edits to the rollout doc do not silently change this gate. Each post-activation wave PR must record the rollout-doc revision it verified against and explicitly note any gates added since this audit.)
+   place. (This list is **frozen as enumerated here**: later edits to the rollout doc do not silently change this gate. Each post-activation wave PR must record the rollout-doc revision it verified against, and must **satisfy — or explicitly waive with named owner sign-off recorded in the wave PR — any safety gates added to the rollout doc since this audit**; merely noting an added gate does not complete activation.)
 4. The terminal purge has been explicitly scheduled per rollout
    step 4. The earlier "no purge job in `cron.job`" check is an
    interim pre-enrollment verification, not the completion state;
@@ -174,10 +174,16 @@ green CI and change no activation state.
    records a durable *initializing* state before any provider call,
    reconciles unknown provider outcomes before releasing anything,
    and is released only on a known-failed outcome.
-   **Deployment prerequisite:** the tracking-token wiring (mobile
-   `initializeGatewayAndRoute` and web `requestDvaInitialization`,
-   specified in the 1c row below) must ship *before* the 1b guard is
-   enabled — the guard demands a proof the current clients do not
+   **Deployment prerequisite (owned by 1b, not 1c):** the
+   tracking-token wiring (mobile `initializeGatewayAndRoute` and web
+   `requestDvaInitialization`, also specified in the 1c row below) is
+   a **1b deliverable** that must ship *before* the 1b guard is
+   enabled — the guard ships disabled in the 1b server deployment
+   and is enabled only by the explicit follow-up change that flips
+   its enablement flag after the wiring and its guest-DVA
+   regression tests (mobile and web) have landed; 1c then builds on
+   the already-wired path. Without that order the guard cannot be
+   enabled during the very interval it exists to protect, because — the guard demands a proof the current clients do not
    yet transmit, so enabling it first would reject ordinary guest
    bank transfers (including already-installed clients) throughout
    the interval; alternatively a working minimum-version/force-update

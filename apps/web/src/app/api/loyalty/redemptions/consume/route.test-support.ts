@@ -8,7 +8,7 @@ export const MOBILE_AUTH_TOKEN = ['mobile', 'test', 'token'].join('-');
 
 const checkCsrfProtection = vi.fn();
 const authenticateApiRequest = vi.fn();
-const hasBearerAuthScheme = vi.fn();
+const getBearerTokenFromRequest = vi.fn();
 const hasPermission = vi.fn();
 const getMerchantForApiRequest = vi.fn();
 const toUserAccess = vi.fn((context: { role?: string }) => ({
@@ -28,7 +28,7 @@ vi.mock('@/lib/csrf', () => ({
 
 vi.mock('@/lib/api-auth', () => ({
   authenticateApiRequest,
-  hasBearerAuthScheme,
+  getBearerTokenFromRequest,
   hasPermission,
 }));
 
@@ -122,11 +122,14 @@ export function setupConsumeMocks() {
   rpcError = null;
   hasPermission.mockReturnValue(true);
   getMerchantForApiRequest.mockResolvedValue(merchantContext);
-  hasBearerAuthScheme.mockImplementation((request: Request) =>
-    (request.headers.get('authorization') ?? '')
-      .toLowerCase()
-      .startsWith('bearer ')
-  );
+  // Mirrors the real helper: a bare `Bearer` scheme word without a
+  // token extracts nothing, so authentication falls back to cookies.
+  getBearerTokenFromRequest.mockImplementation((request: Request) => {
+    const match = (request.headers.get('authorization') ?? '').match(
+      /^\s*bearer\s+(.+?)\s*$/i
+    );
+    return match?.[1]?.trim() || null;
+  });
   authenticateApiRequest.mockImplementation((request: Request) => {
     const authorization = request.headers.get('authorization') ?? '';
     if (authorization.toLowerCase().startsWith('bearer ')) {

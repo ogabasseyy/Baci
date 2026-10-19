@@ -42,6 +42,14 @@ describe('resolveCartApiOrigin', () => {
     );
   });
 
+  it('never downgrades a rewritten public root host to plaintext', () => {
+    const resolved = resolveCartApiOrigin(
+      'http://192.168.100.70:4193',
+      'usebaci.com'
+    );
+    expect(resolved.startsWith('https://api.usebaci.com')).toBe(true);
+  });
+
   it('allows local LAN dev origins in dev builds', () => {
     expect(resolveCartApiOrigin('http://192.168.100.70:4193')).toBe(
       'http://192.168.100.70:4193'

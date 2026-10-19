@@ -71,6 +71,12 @@ export function resolveCartApiOrigin(
         return url.toString().replace(/\/$/, '');
       }
       url.hostname = `api.${root}`;
+      // The rewrite targets a public host: a dev LAN http origin
+      // must not downgrade it to plaintext. Local targets keep the
+      // documented dev exception (checked at entry).
+      if (url.protocol === 'http:' && !isLocalDevHost(url.hostname)) {
+        url.protocol = 'https:';
+      }
       return url.toString().replace(/\/$/, '');
     }
     if (host === 'usebaci.com' || host === 'api.usebaci.com') {

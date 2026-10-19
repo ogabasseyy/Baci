@@ -13,13 +13,17 @@ flags remain disabled by default, and no merchant is enrolled.
   only by the native enrollment module
   (`apps/mobile-storefront/lib/cart/enrollment.ts`), so enrolling a
   merchant for the pilot must set and verify it there, not through the
-  web gate helpers. Client gates (web and native) normalize stored
-  values with trim + lowercase, but the SQL cart RPCs and realtime
-  checks use exact jsonb containment, so enrollment must always store
-  the canonical exact-lowercase values (`shared_cart`,
+  web gate helpers. For the cart features specifically, every gate
+  requires the exact canonical value: the web `merchantHasFeature`
+  special-cases `shared_cart`/`shared_cart_accounts`/
+  `shared_cart_realtime` to exact string matches, the native
+  `hasCartFeature` does the same, and the SQL cart RPCs and realtime
+  checks use exact jsonb containment. Enrollment must therefore
+  always store the canonical exact-lowercase values (`shared_cart`,
   `shared_cart_realtime`, `shared_cart_accounts`, `shared_cart_native`);
-  non-canonical stored values can light up client surfaces while the
-  server gates stay closed.
+  non-canonical stored values silently keep every cart surface
+  disabled. (Trim + lowercase normalization in the web helper applies
+  only to non-cart feature gates.)
 - Bounded retention: `cleanup_commerce_carts()` (final body in
   `20261015163000`, batching every statement to 1000 rows per call)
   deletes expired operations/creation requests/events, handoffs

@@ -12,4 +12,5 @@ export const DEFAULT_REQUIRED_TOOLS = [
   'get_delivery_fee_info',
   'get_store_info',
   'search_products',
+  'render_ogabassey_catalog',
 ];

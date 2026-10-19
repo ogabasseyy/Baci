@@ -13,7 +13,7 @@ vi.mock('@/hooks/use-cart', () => ({
     <>{children}</>
   ),
 }));
-vi.mock('@/hooks/use-merchant-client', () => ({
+vi.mock('@/hooks/merchant/merchant-provider', () => ({
   MerchantProvider: ({
     children,
     initialMerchant,

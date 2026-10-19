@@ -21,7 +21,7 @@ import { Label } from '@/components/ui/label';
 import { SafeHtml } from '@/components/ui/safe-html';
 import { Textarea } from '@/components/ui/textarea';
 import { StorefrontProvider } from '@/contexts/storefront-context';
-import { MerchantProvider } from '@/hooks/use-merchant-client';
+import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 import { useToast } from '@/hooks/use-toast';
 import { fetchWithCsrf } from '@/lib/api-client';
 

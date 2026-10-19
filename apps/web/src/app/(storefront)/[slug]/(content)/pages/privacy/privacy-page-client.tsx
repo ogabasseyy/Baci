@@ -6,7 +6,7 @@ import { StorefrontFooter } from '@/components/storefront/footer';
 import { StorefrontHeader } from '@/components/storefront/header';
 import { SafeHtml } from '@/components/ui/safe-html';
 import { StorefrontProvider } from '@/contexts/storefront-context';
-import { MerchantProvider } from '@/hooks/use-merchant-client';
+import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 import type { CachedMerchant } from '@/lib/cached-data';
 import { toTemplateMerchantData } from '@/lib/merchant-template-data';
 

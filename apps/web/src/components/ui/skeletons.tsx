@@ -1,6 +1,6 @@
-'use client';
-
-import { cn } from '@/lib/utils';
+function cn(...inputs: Array<string | false | null | undefined>): string {
+  return inputs.filter(Boolean).join(' ');
+}
 
 /**
  * Base Skeleton component with shimmer animation

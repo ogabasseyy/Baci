@@ -9,9 +9,10 @@ import { AuthProvider } from '@/contexts/auth-context';
 import { MotionNonceProvider } from '@/contexts/MotionNonceProvider';
 import { NonceProvider, useNonce } from '@/contexts/NonceProvider';
 import { ProductProvider } from '@/contexts/product-context';
+import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 import { NotificationsProvider } from '@/hooks/notifications-provider';
 import type { MerchantData, StaffAccess } from '@/hooks/use-merchant';
-import { MerchantProvider, useMerchant } from '@/hooks/use-merchant-client';
+import { useMerchant } from '@/hooks/use-merchant-client';
 import DashboardClientLayout from './client-layout';
 
 // New component to handle fetching merchant and applying theme

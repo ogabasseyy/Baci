@@ -14,6 +14,7 @@ import { OgabasseyHomeDynamicContent } from './ogabassey-home-dynamic-content';
 import { OgabasseyHomeHeroReserveFallback } from './ogabassey-home-hero-reserve-fallback';
 import { loadOgabasseyLaunchProducts } from './ogabassey-home-launch-products';
 import { OgabasseyHomeRecoveryHero } from './ogabassey-home-recovery-hero';
+import { peekSettledCanonicalOgabasseyHomeState } from './ogabassey-home-settled-state';
 
 const OGABASSEY_DOMAIN_IDENTIFIER = new URL(OGABASSEY_URL).hostname;
 
@@ -45,12 +46,68 @@ export function resolveOgabasseyHomePathPrefix(
   return resolveMerchantContextIdentifier(headersList) ? '' : staticPathPrefix;
 }
 
-/**
- * Request-scoped publication boundary for the homepage shopping surface. The
- * static parent prepares slide data and critical styles; this component owns
- * the visible product Hero, utility panel, and PDP links on both viewports.
- */
-export async function OgabasseyHomePageContent({
+function renderPublishedOgabasseyHomePageContent({
+  merchant,
+  omitDocumentHeading,
+  omitMobileCarousel,
+  resolvedPathPrefix,
+  shellMerchantId,
+  shellSlides,
+}: {
+  merchant: NonNullable<Awaited<ReturnType<typeof getRequestScopedMerchant>>>;
+  omitDocumentHeading: boolean;
+  omitMobileCarousel: boolean;
+  resolvedPathPrefix: string;
+  shellMerchantId: string | null;
+  shellSlides: LaunchProductSlide[] | null;
+}) {
+  // The static shell is built from the canonical OgaBassey record before
+  // request resolution. Bind it to that exact tenant so a reassigned domain or
+  // stale identifier mapping can never render another merchant's catalog.
+  const requestMerchantShellSlides =
+    shellMerchantId === merchant.id ? shellSlides : null;
+
+  return (
+    <>
+      {requestMerchantShellSlides ? (
+        <Hero
+          prioritizeMobileHeroImage
+          omitDocumentHeading={omitDocumentHeading}
+          omitMobileCarousel={omitMobileCarousel}
+          slides={requestMerchantShellSlides}
+        />
+      ) : omitDocumentHeading ? null : (
+        <h1 className="sr-only">{OGABASSEY_TITLE}</h1>
+      )}
+      {!requestMerchantShellSlides ? (
+        <Suspense
+          fallback={
+            <OgabasseyHomeHeroReserveFallback
+              omitMobileCarousel={omitMobileCarousel}
+            />
+          }
+        >
+          <OgabasseyHomeRecoveryHero
+            merchant={merchant}
+            omitMobileCarousel={omitMobileCarousel}
+            productsPromise={loadOgabasseyLaunchProducts(
+              merchant.id,
+              resolveMerchantCurrencyConfig(merchant)
+            )}
+          />
+        </Suspense>
+      ) : null}
+      <Suspense fallback={null}>
+        <OgabasseyHomeDynamicContent
+          merchant={merchant}
+          pathPrefix={resolvedPathPrefix}
+        />
+      </Suspense>
+    </>
+  );
+}
+
+async function renderOgabasseyHomePageContentAsync({
   canonicalDomain = false,
   omitDocumentHeading = false,
   omitMobileCarousel = false,
@@ -98,48 +155,49 @@ export async function OgabasseyHomePageContent({
     return <StoreNotPublished businessName={merchant.business_name} />;
   }
 
-  // The static shell is built from the canonical OgaBassey record before
-  // request resolution. Bind it to that exact tenant so a reassigned domain or
-  // stale identifier mapping can never render another merchant's catalog.
-  const requestMerchantShellSlides =
-    shellMerchantId === merchant.id ? shellSlides : null;
+  return renderPublishedOgabasseyHomePageContent({
+    merchant,
+    omitDocumentHeading,
+    omitMobileCarousel,
+    resolvedPathPrefix,
+    shellMerchantId,
+    shellSlides,
+  });
+}
 
-  return (
-    <>
-      {requestMerchantShellSlides ? (
-        <Hero
-          prioritizeMobileHeroImage
-          omitDocumentHeading={omitDocumentHeading}
-          omitMobileCarousel={omitMobileCarousel}
-          slides={requestMerchantShellSlides}
-        />
-      ) : omitDocumentHeading ? null : (
-        <h1 className="sr-only">{OGABASSEY_TITLE}</h1>
-      )}
-      {!requestMerchantShellSlides ? (
-        <Suspense
-          fallback={
-            <OgabasseyHomeHeroReserveFallback
-              omitMobileCarousel={omitMobileCarousel}
-            />
-          }
-        >
-          <OgabasseyHomeRecoveryHero
-            merchant={merchant}
-            omitMobileCarousel={omitMobileCarousel}
-            productsPromise={loadOgabasseyLaunchProducts(
-              merchant.id,
-              resolveMerchantCurrencyConfig(merchant)
-            )}
-          />
-        </Suspense>
-      ) : null}
-      <Suspense fallback={null}>
-        <OgabasseyHomeDynamicContent
-          merchant={merchant}
-          pathPrefix={resolvedPathPrefix}
-        />
-      </Suspense>
-    </>
-  );
+/**
+ * Request-scoped publication boundary for the homepage shopping surface. The
+ * static parent prepares slide data and critical styles; this component owns
+ * the visible product Hero, utility panel, and PDP links on both viewports.
+ */
+export function OgabasseyHomePageContent(props: OgabasseyHomePageContentProps) {
+  const {
+    canonicalDomain = false,
+    omitDocumentHeading = false,
+    omitMobileCarousel = false,
+    pathPrefix,
+    shellMerchantId,
+    shellSlides,
+  } = props;
+
+  if (canonicalDomain && omitDocumentHeading && pathPrefix === '') {
+    const settled = peekSettledCanonicalOgabasseyHomeState();
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    if (
+      settled?.merchantSettled &&
+      settled.merchant &&
+      (settled.merchant.is_published || isDevelopment)
+    ) {
+      return renderPublishedOgabasseyHomePageContent({
+        merchant: settled.merchant,
+        omitDocumentHeading,
+        omitMobileCarousel,
+        resolvedPathPrefix: '',
+        shellMerchantId,
+        shellSlides,
+      });
+    }
+  }
+
+  return renderOgabasseyHomePageContentAsync(props);
 }

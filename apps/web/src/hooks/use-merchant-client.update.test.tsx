@@ -1,8 +1,9 @@
 import { renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MerchantProvider } from './merchant/merchant-provider';
 import type { MerchantData, StaffAccess } from './use-merchant';
-import { MerchantProvider, useMerchant } from './use-merchant-client';
+import { useMerchant } from './use-merchant-client';
 
 const mockFrom = vi.fn();
 

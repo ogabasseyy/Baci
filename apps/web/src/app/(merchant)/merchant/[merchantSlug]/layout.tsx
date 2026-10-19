@@ -2,7 +2,7 @@
 
 import '@/app/globals.css';
 import { use } from 'react';
-import { MerchantProvider } from '@/hooks/use-merchant-client';
+import { MerchantProvider } from '@/hooks/merchant/merchant-provider';
 
 interface MerchantLayoutProps {
   children: React.ReactNode;

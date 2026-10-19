@@ -3,7 +3,6 @@
 import { AlertTriangle, Home, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { ChunkRecoveryNotice } from '@/components/system/chunk-recovery-notice';
-import { ThemedButton } from '@/components/themed/themed-button';
 import { useMerchantSafe } from '@/hooks/merchant/use-merchant';
 import { useBoundaryErrorReport } from '@/hooks/use-boundary-error-report';
 import { asRoute } from '@/lib/routes';
@@ -12,6 +11,12 @@ interface ErrorProps {
   error: Error & { digest?: string };
   reset: () => void;
 }
+
+const PRIMARY_ACTION_CLASS_NAME =
+  'inline-flex h-12 min-w-[48px] w-full items-center justify-center gap-2 whitespace-nowrap rounded-md bg-store-primary px-8 text-sm font-medium text-store-primary-text ring-offset-background transition-colors hover:bg-store-primary/90 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer touch-manipulation sm:w-auto';
+
+const OUTLINE_ACTION_CLASS_NAME =
+  'inline-flex h-12 min-w-[48px] w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border border-store-accent bg-transparent px-8 text-sm font-medium text-store-accent ring-offset-background transition-colors hover:bg-store-accent/10 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 cursor-pointer touch-manipulation sm:w-auto';
 
 export default function StorefrontError({ error, reset }: ErrorProps) {
   const merchantContext = useMerchantSafe();
@@ -65,25 +70,20 @@ export default function StorefrontError({ error, reset }: ErrorProps) {
         )}
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-          <ThemedButton
-            colorRole="primary"
-            size="lg"
+          <button
+            type="button"
             onClick={reset}
-            className="w-full sm:w-auto"
+            className={PRIMARY_ACTION_CLASS_NAME}
           >
             <RefreshCw className="mr-2 size-4" />
             Try Again
-          </ThemedButton>
-          <Link href={asRoute(`${basePath || ''}/`)}>
-            <ThemedButton
-              colorRole="accent"
-              variant="outline"
-              size="lg"
-              className="w-full sm:w-auto"
-            >
-              <Home className="mr-2 size-4" />
-              Go to Homepage
-            </ThemedButton>
+          </button>
+          <Link
+            href={asRoute(`${basePath || ''}/`)}
+            className={OUTLINE_ACTION_CLASS_NAME}
+          >
+            <Home className="mr-2 size-4" />
+            Go to Homepage
           </Link>
         </div>
 

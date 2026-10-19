@@ -7,74 +7,83 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Common passwords blocklist (top 100 most common)
- * Based on SecLists and HaveIBeenPwned data
+ * Based on SecLists and HaveIBeenPwned data.
+ * Lazily initialized so importing `cn()` in storefront client chunks does not
+ * construct or retain the password Set at module initialization time.
  */
-const COMMON_PASSWORDS = new Set([
-  'password',
-  '123456',
-  '12345678',
-  'qwerty',
-  'abc123',
-  'monkey',
-  '1234567',
-  'letmein',
-  'trustno1',
-  'dragon',
-  'baseball',
-  'iloveyou',
-  'master',
-  'sunshine',
-  'ashley',
-  'bailey',
-  'shadow',
-  '123123',
-  '654321',
-  'superman',
-  'qazwsx',
-  'michael',
-  'football',
-  'password1',
-  'password123',
-  'batman',
-  'login',
-  'welcome',
-  'admin',
-  'princess',
-  'qwerty123',
-  '1q2w3e4r',
-  'passw0rd',
-  '1234567890',
-  'welcome1',
-  'p@ssw0rd',
-  'hello',
-  'charlie',
-  'donald',
-  'password1!',
-  'qwerty1',
-  '123qwe',
-  'zxcvbnm',
-  '121212',
-  '000000',
-  'access',
-  'flower',
-  'hottie',
-  'loveme',
-  'zaq1zaq1',
-  'password2',
-  'killer',
-  'soccer',
-  'fuckyou',
-  'jennifer',
-  'hunter',
-  'buster',
-  'soccer1',
-  'hockey',
-  'george',
-  'andrew',
-  'harley',
-  'summer',
-  'love',
-]);
+let commonPasswordsSet: Set<string> | null = null;
+
+function getCommonPasswords(): Set<string> {
+  if (!commonPasswordsSet) {
+    commonPasswordsSet = new Set([
+      'password',
+      '123456',
+      '12345678',
+      'qwerty',
+      'abc123',
+      'monkey',
+      '1234567',
+      'letmein',
+      'trustno1',
+      'dragon',
+      'baseball',
+      'iloveyou',
+      'master',
+      'sunshine',
+      'ashley',
+      'bailey',
+      'shadow',
+      '123123',
+      '654321',
+      'superman',
+      'qazwsx',
+      'michael',
+      'football',
+      'password1',
+      'password123',
+      'batman',
+      'login',
+      'welcome',
+      'admin',
+      'princess',
+      'qwerty123',
+      '1q2w3e4r',
+      'passw0rd',
+      '1234567890',
+      'welcome1',
+      'p@ssw0rd',
+      'hello',
+      'charlie',
+      'donald',
+      'password1!',
+      'qwerty1',
+      '123qwe',
+      'zxcvbnm',
+      '121212',
+      '000000',
+      'access',
+      'flower',
+      'hottie',
+      'loveme',
+      'zaq1zaq1',
+      'password2',
+      'killer',
+      'soccer',
+      'fuckyou',
+      'jennifer',
+      'hunter',
+      'buster',
+      'soccer1',
+      'hockey',
+      'george',
+      'andrew',
+      'harley',
+      'summer',
+      'love',
+    ]);
+  }
+  return commonPasswordsSet;
+}
 
 const COMMON_PASSWORD_SUFFIX_REGEX = /[0-9!@#$%^&*]+$/;
 const REPEATING_CHARS_REGEX = /(.)\1{2,}/;
@@ -86,12 +95,13 @@ const KEYBOARD_PATTERN_REGEX = /(qwerty|asdf|zxcv|qazwsx|1qaz|2wsx)/i;
  * Check if password is a common/weak password
  */
 export const isCommonPassword = (password: string): boolean => {
+  const commonPasswords = getCommonPasswords();
   const lower = password.toLowerCase();
   // Check exact match
-  if (COMMON_PASSWORDS.has(lower)) return true;
+  if (commonPasswords.has(lower)) return true;
   // Check with common suffixes removed
   const withoutSuffix = lower.replace(COMMON_PASSWORD_SUFFIX_REGEX, '');
-  if (COMMON_PASSWORDS.has(withoutSuffix)) return true;
+  if (commonPasswords.has(withoutSuffix)) return true;
   return false;
 };
 
@@ -184,8 +194,14 @@ export async function streamToDataURI(
     offset += chunk.length;
   }
 
-  // Convert Uint8Array to a Base64 string
-  const base64String = Buffer.from(combined).toString('base64');
+  // Convert Uint8Array to a Base64 string without referencing the Node Buffer
+  // global, which otherwise causes Turbopack to bundle the 25 KB
+  // `next/dist/compiled/buffer` polyfill into every client chunk importing `cn`.
+  let binary = '';
+  for (const byte of combined) {
+    binary += String.fromCharCode(byte);
+  }
+  const base64String = btoa(binary);
 
   return `data:${mimeType};base64,${base64String}`;
 }

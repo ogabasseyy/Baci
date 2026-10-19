@@ -69,7 +69,7 @@ export function ProductCard({
             </span>
           )}
         </div>
-        {product.stock_level && (
+        {typeof product.in_stock === 'boolean' && product.stock_level && (
           <span className="stock-badge">{product.stock_level}</span>
         )}
       </div>

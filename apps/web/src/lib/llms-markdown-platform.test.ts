@@ -33,6 +33,15 @@ describe('llms markdown platform builders', () => {
     expect(result).not.toContain('https://usebaci.com//');
   });
 
+  it('does not present unverified API or wholesale access as included', () => {
+    const result = buildPlatformPricingMarkdown(
+      'https://usebaci.com'
+    ).toLowerCase();
+
+    expect(result).not.toContain('api access');
+    expect(result).not.toContain('wholesale features');
+  });
+
   it('handles trailing slashes in the platform pricing mirror', () => {
     const result = buildPlatformPricingMarkdown('https://usebaci.com/');
 
@@ -45,6 +54,14 @@ describe('llms markdown platform builders', () => {
     const result = buildPlatformFeaturesMarkdown('https://usebaci.com');
 
     expect(result).toContain('AI-powered store generation');
+    expect(result).toContain('Jumia');
+    expect(result).toContain('Domain purchase');
+    expect(result).toContain('ACP');
+    expect(result).toContain('UCP');
+    expect(result).toContain(
+      'not automatic ChatGPT or Google shopping admission'
+    );
+    expect(result).toContain('not a list of callable MCP tools');
     expect(result).toContain('https://usebaci.com/pricing');
     expect(result).not.toContain('https://usebaci.com//');
   });

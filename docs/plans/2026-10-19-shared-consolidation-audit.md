@@ -35,6 +35,7 @@ work below extends it.
 | 10 | Mobile update policy core | Both mobile apps implement the same `MobileReleasePolicy`/`resolveMobileUpdatePrompt` flow in `components/updates/mobile-update-check.ts` (storefront and admin), and have already diverged: when a required policy lacks `storeUrl`, admin fails open while storefront creates an unusable blocking prompt. | storefront, admin | **Share the pure policy core** in its own wave: policy fetching stays local; gating/decision logic moves to shared with app-specific route/app-name/OTA adapters. The `storeUrl` divergence must be resolved deliberately (fail-open is the safer default for a required-update gate without a destination). |
 | 11 | Sanitization primitives | `apps/web/src/lib/sanitize-core.ts` and `apps/mobile-admin/lib/sanitize.ts` implement the same `stripHtmlTags`, `sanitizeText`, `sanitizeEmail`, `sanitizePhone`, `sanitizeSearchQuery` transformations feeding order schemas and admin requests; independent edits can make accepted input differ by surface. | web, admin | **Share the primitives** in a small wave with characterization fixtures; schema-level rules stay local. |
 | 12 | Business-type catalog | `apps/mobile-admin/constants/business-types.ts` duplicates the eight id/label pairs from the declared source of truth `apps/web/src/config/business-types.ts` and independently adds `other`; category changes can leave the native selector and its type union stale. | web, admin | **Share the data contract** (ids/labels/type union) or generate the mobile projection from the web source; web-only templates/icons stay local. Resolve whether `other` belongs in the source of truth during that wave. |
+| 13 | Wallet top-up limits | Identical `WALLET_TOP_UP_MIN_AMOUNT` (100) / `WALLET_TOP_UP_MAX_AMOUNT` (500_000) constants duplicated in `apps/web/src/lib/wallet-top-up-constants.ts` (server Zod validation; comment says "must match mobile validation") and `apps/mobile-storefront/lib/wallet-top-up-constants.ts` (UI disable + input validation; comment says "must match server validation"). Changing one side silently makes accepted amounts disagree by surface. | web, storefront | **Share the constants** — a trivial move into `@baci/shared` that can ride with the wallet-funding wave (sequence step 3). |
 
 ## Sampled out (explicit)
 
@@ -53,9 +54,14 @@ work below extends it.
 cart pilot activation is complete when the 81 registered cart
 migrations have applied to production, the final privilege state is
 verified (anon cannot execute preview/replay RPCs, no purge job in
-`cron.job`), the pilot merchant is enrolled, and the acceptance
+`cron.job`), the pre-enrollment telemetry/quota gates in the rollout
+doc are closed, the pilot merchant is enrolled, and the acceptance
 matrix in `docs/qa/shared-cart-acceptance.md` passes — per
-`docs/deploy/shared-cart-rollout.md`.
+`docs/deploy/shared-cart-rollout.md`. The rollout's *expansion*
+criteria (second merchant, deployed convergence/checkout-binding/
+isolation evidence) gate merchant expansion, not these code
+consolidation waves, which enroll nobody; waves still merge only on
+green CI and change no activation state.
 
 ## Recommended sequence
 
@@ -70,10 +76,19 @@ matrix in `docs/qa/shared-cart-acceptance.md` passes — per
    first) and the decision rule (≥2 consumers, platform-free, ≤~400
    changed lines per PR) recorded in `packages/shared/README` or
    repo guidance.
-3. **Wallet-funding response contract (row 9), before or alongside
-   the cart waves:** one shared response schema, including verifying
-   the mobile `z.iso.datetime()` offset divergence against live
-   PostgREST payloads. Off the cart activation path.
+3. **Wallet-funding contract (rows 9, 13), before or alongside the
+   cart waves:** one shared response schema, verifying the mobile
+   `z.iso.datetime()` offset divergence against live PostgREST
+   payloads; the wave must also align the create-failure protocol —
+   today mobile routes every non-consent create failure (including
+   timeout/5xx after the mutating POST, where an intent may already
+   exist) to the gateway fallback in
+   `components/checkout/checkout-payment-finalization.ts`, risking a
+   double payment path. Failure classification (consent vs transient
+   vs unknown-after-POST) is part of the shared contract, with
+   unknown-after-POST resolving by polling the intent, never by
+   starting a parallel gateway payment. Off the cart activation
+   path, but money-safety critical: schedule first among these.
 4. **Post-activation (per the gate defined above):** cart display
    math, then cart-payload schemas, then the checkout transport
    subshape (row 6).

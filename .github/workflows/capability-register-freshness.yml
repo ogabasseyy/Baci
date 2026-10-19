@@ -31,7 +31,7 @@ jobs:
           # sanitized before writing: a multi-line capture would otherwise
           # write a bare second line that matches no routing step.
           status=$(python3 vps-workers/baci-editorial-context/register_status.py || echo broken)
-          case "$status" in fresh|stale|broken) ;; *) status=broken;; esac
+          if [ "$status" != fresh ] && [ "$status" != stale ] && [ "$status" != broken ]; then status=broken; fi
           echo "status=$status" >> "$GITHUB_OUTPUT"
       - name: Assert capability register is inside its evidence window
         env:

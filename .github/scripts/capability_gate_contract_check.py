@@ -68,7 +68,7 @@ BASE_PINS = {
     # lives in the workflow env (PINNED_CHECKER_SHA256, passed as argv[1]).
     ".github/scripts/capability_gate_contract_ci_checks.py": "f8a3fc7989435f4e84b0278ffbb3f6f1d1a9213b9ac22acdfe2fc781fcd86f64",
     ".github/scripts/capability_gate_contract_workflow_checks.py": "1ddcefd8e807b6f83180c23a5c30a04608c1125a39afe53a12b793d1665bfe0d",
-    ".github/workflows/capability-register-freshness.yml": "67a154a7456ac16a4c98946f74a3490cd0a7f35edf5bfd086f81b274854f2486",
+    ".github/workflows/capability-register-freshness.yml": "60eec995bf4da241c8aac1c3ba01fa052fb314feff547f66e423faf86aa9340e",
     "vps-workers/baci-editorial-context/capability_gate.py": "04adc883b3f551b2e7f95910be74de267962d931a5f4c3ff015893622f93f982",
     "vps-workers/baci-editorial-context/capability_gate_paths.py": "8a493b19c14f10ee3b7fd500b9d4173d524d99a37984570d45ab65320f7860a6",
     "vps-workers/baci-editorial-context/register_digests.py": "fb42b161df30abfa27d7178bdfff75dc4fbada4d65561d14168d20f7ca70b860",
@@ -81,7 +81,7 @@ BASE_PINS = {
     "vps-workers/baci-editorial-context/test_capability_gate_contract_adversarial.py": "3b0492ae60b8ce4e6c1e7ba34adb0b06f4277bf54bddbb01e03198304c389b26",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_ci.py": "411de0bb193a6b7c0d75244aab9b6dbb664fae3f4a51b5f7f76a4c5a09359d5e",
     "vps-workers/baci-editorial-context/test_capability_gate_contract_workflow.py": "1381bd0b024f0e1780915ab1aab614093af2d5a61b718224310e542b9d77411b",
-    "vps-workers/baci-editorial-context/test_capability_gate_main.py": "457bf4eda235d598839a65745479ff8da116b8a5fdc0e3f2750ab8170c5b91bd",
+    "vps-workers/baci-editorial-context/test_capability_gate_main.py": "de2e01ec7fadae64bc02f0bfabc345c9677f64369ea235b09450575c8d4693e6",
     "vps-workers/baci-editorial-context/test_capability_register_binding.py": "67566abfee3947628513bf8c91049575485e46d5c35d73a8c6871f956eeb1476",
     "vps-workers/baci-editorial-context/test_capability_register_status.py": "d0e6e5130a9504b0d89b6e1377240f606e2538e650d290a8a7b91c1de4143418",
     "vps-workers/baci-editorial-context/test_platform_capabilities.py": "7e05d5b4c325ffe55aa36a3812e1ed67d3d8646bdaa0b425c511dab2115bc987",

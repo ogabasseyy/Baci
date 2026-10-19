@@ -187,7 +187,7 @@ class CapabilityGateMainTests(unittest.TestCase):
         self.assertIn("|| echo broken", probe[0])
         # A multi-line capture would write a bare second line that matches
         # no routing step, so the value must be sanitized before writing.
-        self.assertIn('case "$status" in fresh|stale|broken)', text)
+        self.assertIn('if [ "$status" != fresh ] && [ "$status" != stale ] && [ "$status" != broken ]; then status=broken; fi', text)
         self.assertIn('echo "status=$status" >> "$GITHUB_OUTPUT"', text)
 
 

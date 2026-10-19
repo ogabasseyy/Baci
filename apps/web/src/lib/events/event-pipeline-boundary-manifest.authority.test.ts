@@ -71,6 +71,7 @@ describe('event pipeline authority importer boundary', () => {
       'apps/web/src/lib/ads/server-credential-client.ts',
       'apps/web/src/lib/ads/server-spend-client.ts',
       'apps/web/src/lib/jumia/server-credential-client.ts',
+      'apps/web/src/lib/loyalty/server-resolver-client.ts',
       'apps/web/src/lib/wallet/server-funding-recovery-hmac-client.ts',
       'apps/web/src/lib/immediate-order/server-completion-hmac-client.ts',
       'apps/web/src/lib/shipping/server-shipping-quote-booking-economics-client.ts',

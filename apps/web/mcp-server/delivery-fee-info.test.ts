@@ -23,10 +23,10 @@ describe('registerDeliveryFeeInfoTool', () => {
         'openai/toolInvocation/invoked': 'Delivery information ready',
       },
     });
-    const config = registeredTool?.config as { inputSchema: Record<string, unknown>; description: string };
-    expect(Object.keys(config.inputSchema)).toEqual(['state', 'city', 'items', 'delivery_preference']);
+    const config = registeredTool?.config as { inputSchema: { shape: Record<string, unknown> }; description: string };
+    expect(Object.keys(config.inputSchema.shape)).toEqual(['state', 'city', 'items', 'delivery_preference']);
     expect(config.description).toContain('live GIG Logistics');
-    const inputSchema = config.inputSchema as {
+    const inputSchema = config.inputSchema.shape as {
       state: { safeParse: (value: string) => { success: boolean } };
       city: { safeParse: (value: string) => { success: boolean } };
     };

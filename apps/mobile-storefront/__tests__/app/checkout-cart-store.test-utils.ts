@@ -1,5 +1,6 @@
 const mockCartState = {
   clearCart: jest.fn(),
+  reconcilePendingAssuranceLines: jest.fn(),
   items: [
     {
       condition: 'New',

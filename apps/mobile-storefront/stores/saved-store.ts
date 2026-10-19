@@ -19,6 +19,12 @@ export interface SavedItem {
   image: string;
   brand?: string;
   condition?: string;
+  // Search-match identity for the advertised price/condition basis. Refined
+  // search may resolve a non-default variant or condition offer; the PDP
+  // re-selects that option from these params so the saved price matches.
+  match_variant_id?: string;
+  match_offer_id?: string;
+  match_condition?: string;
   has_variants?: boolean;
   variant_model?: Product['variant_model'];
   available_conditions?: Product['available_conditions'];
@@ -89,11 +95,21 @@ export const useSavedStore = create<SavedState>()(
             product_id: product.id,
             name: product.name,
             slug: product.slug,
-            price: product.price,
-            compare_at_price: product.compare_at_price,
+            // The saved screen renders this price without refreshing it,
+            // so a matched option must persist its own price basis rather
+            // than the parent amount.
+            price: product.searchMatch?.price ?? product.price,
+            // A matched option price must never pair with the parent's
+            // strike-through: suppress it exactly as the search card does.
+            compare_at_price: product.searchMatch
+              ? undefined
+              : product.compare_at_price,
             image: product.image,
             brand: product.brand,
             condition: product.condition,
+            match_variant_id: product.searchMatch?.variantId,
+            match_offer_id: product.searchMatch?.offerId,
+            match_condition: product.searchMatch?.condition,
             has_variants: product.has_variants,
             variant_model: product.variant_model,
             available_conditions: product.available_conditions,
@@ -129,11 +145,21 @@ export const useSavedStore = create<SavedState>()(
             product_id: product.id,
             name: product.name,
             slug: product.slug,
-            price: product.price,
-            compare_at_price: product.compare_at_price,
+            // The saved screen renders this price without refreshing it,
+            // so a matched option must persist its own price basis rather
+            // than the parent amount.
+            price: product.searchMatch?.price ?? product.price,
+            // A matched option price must never pair with the parent's
+            // strike-through: suppress it exactly as the search card does.
+            compare_at_price: product.searchMatch
+              ? undefined
+              : product.compare_at_price,
             image: product.image,
             brand: product.brand,
             condition: product.condition,
+            match_variant_id: product.searchMatch?.variantId,
+            match_offer_id: product.searchMatch?.offerId,
+            match_condition: product.searchMatch?.condition,
             has_variants: product.has_variants,
             variant_model: product.variant_model,
             available_conditions: product.available_conditions,

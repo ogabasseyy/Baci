@@ -7,12 +7,18 @@ import { mintedCheckoutGenerations } from '@/lib/minted-checkout-generations';
 import { persistCheckoutGenerationDetached } from '@/lib/persist-checkout-generation';
 import { syncStorage } from '../lib/storage';
 import { applyPersistedCheckoutGeneration } from './apply-persisted-checkout-generation';
+import { nativeAssurancePolicy } from './cart-assurance-config';
+import {
+  resolveNativeAddedLineAssurance,
+  resolveNativeAddedLinePendingSetting,
+} from './cart-assurance-default';
 import {
   createCartLineId,
   isSameCartLine,
   mergeExistingCartItem,
 } from './cart-line';
 import type { CartItem } from './cart-store.types';
+import { createAssuranceActions } from './cart-store-assurance-actions';
 import { createCheckoutGenerationActions } from './cart-store-generation-actions';
 import { mergeCartStore } from './cart-store-merge';
 import { createCartNegotiationActions } from './cart-store-negotiation-actions';
@@ -96,13 +102,20 @@ export const useCartStore = create<CartState>()(
             items = [...state.items];
             items[existingIndex] = mergeExistingCartItem(
               items[existingIndex],
-              itemToAdd
+              itemToAdd,
+              nativeAssurancePolicy()
             );
           } else {
             lineSequence = state.lineSequence + 1;
             items = [
               ...state.items,
-              { ...itemToAdd, id: createCartLineId(itemToAdd, lineSequence) },
+              {
+                ...itemToAdd,
+                hasAssurance: resolveNativeAddedLineAssurance(itemToAdd),
+                assurancePendingSetting:
+                  resolveNativeAddedLinePendingSetting(itemToAdd) || undefined,
+                id: createCartLineId(itemToAdd, lineSequence),
+              },
             ];
           }
 
@@ -207,26 +220,17 @@ export const useCartStore = create<CartState>()(
 
       ...createCheckoutGenerationActions(set),
 
-      repriceItems: (priceById) => {
+      repriceItems: (priceById, conditionById, offerIdById) => {
         const forwarded = forwardSharedCartWrite({ type: 'legacy_reprice' });
         if (forwarded) return;
-        set((state) => applyReprice(state, priceById));
+        set((state) =>
+          applyReprice(state, priceById, conditionById, offerIdById)
+        );
       },
 
-      toggleAssurance: (id) => {
-        const forwarded = forwardSharedCartWrite({ type: 'assurance', id });
-        if (forwarded) return;
-        set((state) => ({
-          items: state.items.map((item) =>
-            item.id === id
-              ? {
-                  ...item,
-                  hasAssurance: !item.hasAssurance,
-                }
-              : item
-          ),
-        }));
-      },
+      ...createAssuranceActions(set, (id) =>
+        forwardSharedCartWrite({ type: 'assurance', id })
+      ),
     }),
     {
       name: 'cart-storage',

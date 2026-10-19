@@ -6,14 +6,19 @@ import {
 } from '@baci/shared';
 import { useQuery } from '@tanstack/react-query';
 import { getBranchScopeKey } from '@/lib/branch-scope-query';
+import { fetchOrderItemsWithOfferFallback } from '@/lib/fetch-order-items-with-offer-fallback';
 import { getEffectiveOrderPaymentSummary } from '@/lib/order-payment-summary';
 import { getOrderPaymentTransactionTotals } from '@/lib/order-payment-transaction-totals';
 import { ORDER_COLUMNS } from '@/lib/orders';
 import { supabase } from '@/lib/supabase';
+import type { TransactionReviewQueryError } from '@/lib/transaction-review-fallback-types';
 import { ALL_BRANCH_SCOPE, type BranchScope } from '@/schemas/branch';
 import { useBranchScope } from '../useBranchScope';
 import { useMerchant } from '../useMerchant';
-import { mapOrderItems } from './useOrderDetails-helpers';
+import {
+  attachOrderItemOfferLabels,
+  mapOrderItems,
+} from './useOrderDetails-helpers';
 
 function getFirstDisplayNamePart(value: string | null | undefined) {
   return value?.trim().split(/\s+/)[0] || null;
@@ -40,17 +45,21 @@ export async function fetchOrderById(
     throw new Error(error.message);
   }
 
+  // The offer_* columns may postdate the app binary's schema: retry once
+  // without them instead of hard-failing order details on drift.
+  const orderItemsColumns = `${MOBILE_ADMIN_ORDER_ITEMS_COLUMNS}, products(name, images, condition, category, category_id, categories(name, slug))`;
   const [
     { data: items, error: itemsError },
     { data: transactions, error: transactionsError },
     { data: virtualAccount, error: virtualAccountError },
   ] = await Promise.all([
-    supabase
-      .from('order_items')
-      .select(
-        `${MOBILE_ADMIN_ORDER_ITEMS_COLUMNS}, products(name, images, condition, category, category_id, categories(name, slug))`
-      )
-      .eq('order_id', orderId),
+    fetchOrderItemsWithOfferFallback(async (columns) => {
+      const { data, error } = await supabase
+        .from('order_items')
+        .select(columns)
+        .eq('order_id', orderId);
+      return { data, error: error as TransactionReviewQueryError };
+    }, orderItemsColumns),
     supabase
       .from('transactions')
       .select('amount, gateway, created_at, metadata, status, transaction_type')
@@ -193,7 +202,16 @@ export async function fetchOrderById(
     balance,
     payment_status: paymentStatus,
     fulfillment_details: orderWithMeta.fulfillment_details ?? null,
-    items: mapOrderItems(items as Parameters<typeof mapOrderItems>[0]),
+    items: await attachOrderItemOfferLabels(
+      mapOrderItems(items as Parameters<typeof mapOrderItems>[0]),
+      (productId) =>
+        supabase.rpc('get_product_offers', {
+          p_product_id: productId,
+        }) as unknown as Promise<{
+          data: { offer_id?: unknown }[] | null;
+          error: unknown;
+        }>
+    ),
     recorded_by_name: recordedByName,
     staff_terminal: staffTerminal,
     virtual_account:

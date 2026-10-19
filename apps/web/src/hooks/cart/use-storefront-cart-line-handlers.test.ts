@@ -18,10 +18,13 @@ function setup(overrides: Record<string, unknown> = {}) {
   };
   const { result } = renderHook(() =>
     useStorefrontCartLineHandlers({
+      cartRef: { current: [] },
       cartWideNegotiationActiveRef: { current: false },
       delegated: false,
       delegatedActions,
       enableSmartCartPro: false,
+      merchantContext: null,
+      merchantSlugRef: { current: null },
       setCart,
       setCartWideNegotiationActive: vi.fn(),
       setLastAddedProduct: vi.fn(),

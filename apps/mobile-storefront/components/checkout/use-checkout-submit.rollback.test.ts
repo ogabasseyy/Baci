@@ -63,6 +63,8 @@ jest.mock('@/services/cart-reprice', () => ({
   repriceCartItems: (items: CartItem[], merchantId: string) =>
     mockRepriceCartItems(items, merchantId),
   pickChangedPriceById: () => ({}),
+  pickChangedConditionById: () => ({}),
+  pickChangedOfferIdById: () => ({}),
 }));
 
 jest.mock('@/services/orders', () => ({
@@ -191,6 +193,11 @@ describe('useCheckoutSubmit rollback credit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     mockCreateOrder.mockImplementation(async (request) => {
       // Mirror production: freeze the request, substituting the stored
@@ -238,6 +245,11 @@ describe('useCheckoutSubmit rollback credit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     mockCreateOrder.mockResolvedValue(
       createOrderResponseFixture({
@@ -266,6 +278,11 @@ describe('useCheckoutSubmit rollback credit', () => {
     mockRepriceCartItems.mockResolvedValue({
       changes: [],
       priceById: { 'line-1': 1200000 },
+      conditionById: {},
+      conditionChanges: [],
+      offerIdById: {},
+      adoptions: [],
+      unavailable: [],
     });
     mockCreateOrder.mockResolvedValue(
       createOrderResponseFixture({

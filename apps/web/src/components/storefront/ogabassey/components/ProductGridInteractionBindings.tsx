@@ -44,7 +44,9 @@ export function ProductGridInteractionBindings({
   const onAddToCart = (event: React.MouseEvent, product: Product) => {
     event.preventDefault();
     event.stopPropagation();
-    addToCart(product as never, 1);
+    if (addToCart(product as never, 1) === 'rejected') {
+      return;
+    }
 
     const rect = event.currentTarget.getBoundingClientRect();
     const particleId = createParticleId();

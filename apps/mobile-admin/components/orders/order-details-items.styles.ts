@@ -56,11 +56,21 @@ export const orderDetailsItemsStyles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  itemRow: {
+  offerRefRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
+    gap: 4,
+    marginTop: 4,
+  },
+  itemRowStack: {
+    flexDirection: 'column',
     paddingVertical: 14,
+  },
+  itemRowPressable: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    gap: 12,
   },
   itemVariant: {
     fontSize: 12,

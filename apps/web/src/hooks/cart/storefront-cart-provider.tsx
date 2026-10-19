@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useMerchantSafe } from '@/hooks/use-merchant-client';
 import type { Product } from '@/lib/products';
 import { CartContext } from './cart-context';
 import {
@@ -89,6 +90,15 @@ export function StorefrontCartProvider({
       cartWideNegotiationActiveRef,
       setCartWideNegotiationActive,
     });
+  // Serialized add-probe ref: addToCart probes against this ref and
+  // advances it synchronously on applied adds, so two adds in the same
+  // tick observe each other. Synced from committed state below.
+  const cartRef = useRef<CartItem[]>(cart);
+  // Merchant context is the same source the line items use for the
+  // shipping-insurance toggle, so the add-time default can never charge
+  // a fee the toggle hides. Null outside a merchant provider (tests,
+  // non-shell usages), where the slug-scoped default is preserved.
+  const merchantContext = useMerchantSafe();
 
   // Keep the handler-facing refs aligned with committed state. Handlers read
   // the refs to avoid stale closures; syncing here (not during render) keeps
@@ -100,6 +110,16 @@ export function StorefrontCartProvider({
   useEffect(() => {
     cartWideNegotiationActiveRef.current = cartWideNegotiationActive;
   }, [cartWideNegotiationActive]);
+
+  // Serializes batched adds for outcome reporting: addToCart probes
+  // against this ref and advances it synchronously on applied adds, so
+  // two adds in the same tick observe each other (the render's `cart`
+  // would show both the same stale snapshot). Updater-based writers
+  // (remove, quantity edits, validation) converge here after commit;
+  // value writers below sync it eagerly.
+  useEffect(() => {
+    cartRef.current = cart;
+  }, [cart]);
 
   // Hydrate cart + merchant slug from localStorage after mount (storage is
   // unavailable during SSR), gated by `isHydrated` so consumers keep rendering
@@ -162,6 +182,7 @@ export function StorefrontCartProvider({
 
   const { clearCart, setMerchantSlug } = useStorefrontCartSessionHandlers({
     bumpSessionGeneration,
+    cartRef,
     delegated,
     delegatedActions,
     initialMerchantSlug,
@@ -176,10 +197,13 @@ export function StorefrontCartProvider({
   });
   const { addToCart, removeFromCart, updateQuantity } =
     useStorefrontCartLineHandlers({
+      cartRef,
       cartWideNegotiationActiveRef,
       delegated,
       delegatedActions,
       enableSmartCartPro,
+      merchantContext,
+      merchantSlugRef,
       setCart,
       setCartWideNegotiationActive,
       setLastAddedProduct,

@@ -43,6 +43,9 @@ function renderBuyAction(
     routeResolvedVariantSelection?: Parameters<
       typeof useProductDetailsBuyAction
     >[0]['routeResolvedVariantSelection'];
+    selectedCondition?: Parameters<
+      typeof useProductDetailsBuyAction
+    >[0]['selectedCondition'];
   } = {}
 ) {
   const addToCart = vi.fn();
@@ -60,6 +63,7 @@ function renderBuyAction(
         overrides.routeResolvedVariantSelection ?? null,
       routerPush,
       searchParams: makeSearchParams(overrides.query),
+      selectedCondition: overrides.selectedCondition ?? 'new',
       serverProduct,
       toast: toast as unknown as BuyActionArgs['toast'],
     })
@@ -79,7 +83,7 @@ describe('useProductDetailsBuyAction', () => {
     cleanup();
   });
 
-  it('adds to cart and schedules a checkout redirect when action=buy is present', () => {
+  it('adds to cart and schedules a cart redirect when action=buy is present', () => {
     const { addToCart, routerPush, toast } = renderBuyAction({
       query: 'action=buy',
     });
@@ -94,7 +98,9 @@ describe('useProductDetailsBuyAction', () => {
       vi.advanceTimersByTime(500);
     });
 
-    expect(routerPush).toHaveBeenCalledWith('/ogabassey/checkout');
+    // The cart carries the assurance disclosure and opt-out toggle, so the
+    // buy flow must land there instead of skipping straight to checkout.
+    expect(routerPush).toHaveBeenCalledWith('/ogabassey/cart');
   });
 
   it('does NOT add to cart or redirect when the buy param is absent', () => {
@@ -136,6 +142,27 @@ describe('useProductDetailsBuyAction', () => {
         condition: 'used',
         variantId: 'variant-silver',
       })
+    );
+  });
+
+  it('seeds a non-variant buy from the resolved selection condition', () => {
+    const { addToCart } = renderBuyAction({
+      query: 'action=buy&offer_id=offer-used-1',
+      routeResolvedVariantSelection: null,
+      selectedCondition: 'used',
+    });
+
+    expect(mockResolveCurrentOffer).toHaveBeenCalledWith(
+      productData,
+      'used',
+      {},
+      null,
+      undefined
+    );
+    expect(addToCart).toHaveBeenCalledWith(
+      expect.anything(),
+      1,
+      expect.objectContaining({ condition: 'used' })
     );
   });
 

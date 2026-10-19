@@ -85,6 +85,27 @@ describe('payment abandonment fingerprint', () => {
   });
 });
 
+describe('bugfix: offer identity omitted from fingerprints', () => {
+  it('keeps same-priced offer swaps distinct so the pending order is not reused', async () => {
+    const original = buildPendingCheckoutFingerprint({
+      ...checkout,
+      items: [{ ...checkout.items[0], offer_id: 'offer-aaa' }],
+    });
+    const changed = buildPendingCheckoutFingerprint({
+      ...checkout,
+      items: [{ ...checkout.items[0], offer_id: 'offer-bbb' }],
+    });
+    const fetchImpl = vi.fn<typeof fetch>();
+    const result = await resolvePendingCheckoutOrder({
+      pendingOrder: { orderId: 'old-order', trackingToken: 'token', merchantId: checkout.merchantId, customerEmail: checkout.customerEmail, customerPhone: checkout.customerPhone, checkoutFingerprint: original, amountDueToGateway: 185600, createdAt: '2026-09-07T12:00:00Z' },
+      merchantId: checkout.merchantId, customerEmail: checkout.customerEmail, checkoutFingerprint: changed, paymentMethod: 'card', shippingProvider: 'GIGL', fetchImpl,
+    });
+    expect(changed).not.toBe(original);
+    expect(result).toEqual({ reusableOrder: null, clearStoredOrder: true });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
 describe('variant changes invalidate a pending checkout', () => {
   it.each([
     { variantId: 'variant-black', variantAttributes: { color: 'blue' } },

@@ -27,4 +27,15 @@ describe('isMissingSchemaColumn', () => {
     expect(isMissingSchemaColumn(queryError, 'variant_attributes')).toBe(false);
     expect(isMissingSchemaColumn(null, 'variant_attributes')).toBe(false);
   });
+
+  it('does not match a column whose name merely contains the probe', () => {
+    const schemaError = {
+      code: 'PGRST204',
+      message:
+        "Could not find the 'product_offer_id' column of 'order_items' in the schema cache",
+    };
+
+    expect(isMissingSchemaColumn(schemaError, 'product_offer_id')).toBe(true);
+    expect(isMissingSchemaColumn(schemaError, 'offer_id')).toBe(false);
+  });
 });

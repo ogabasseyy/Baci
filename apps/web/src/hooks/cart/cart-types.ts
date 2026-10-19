@@ -36,6 +36,7 @@ export interface CartItem extends Product {
   secondaryColorValue?: string;
   selectedStorage?: string;
   condition?: 'new' | 'used' | 'open_box' | 'refurbished';
+  offerId?: string;
   negotiatedPrice?: number;
   negotiationStatus?: 'none' | 'pending' | 'accepted' | 'rejected';
   cartDiscount?: number;
@@ -54,11 +55,27 @@ export interface AddToCartOptions {
   secondaryColorValue?: string;
   storage?: string;
   condition?: string;
+  /**
+   * Exact condition-offer id that priced this add. Two offers can
+   * canonicalize to the same condition (used vs uk_used), so the condition
+   * alone cannot identify the line; `generateCartItemId` folds this into
+   * the line id via its extra-attribute loop.
+   */
+  offerId?: string;
   quizAwardId?: string;
   quizVoucherToken?: string;
   platform?: string;
-  [key: string]: string | Record<string, string> | undefined;
+  hasAssurance?: boolean;
+  [key: string]: string | boolean | Record<string, string> | undefined;
 }
+
+/**
+ * Whether an addToCart call changed the cart. Stock-cap rejections and
+ * guard rejections (out-of-stock, missing variant) leave the cart
+ * untouched; callers gate success effects (toasts, upsells, analytics)
+ * on this instead of assuming the add landed.
+ */
+export type AddToCartOutcome = 'applied' | 'rejected';
 
 export interface CartContextType {
   cart: CartItem[];
@@ -67,7 +84,7 @@ export interface CartContextType {
     product: Product,
     quantity?: number,
     options?: AddToCartOptions
-  ) => void;
+  ) => AddToCartOutcome;
   removeFromCart: (cartItemIdOrProductId: string, variantId?: string) => void;
   updateQuantity: (
     cartItemIdOrProductId: string,

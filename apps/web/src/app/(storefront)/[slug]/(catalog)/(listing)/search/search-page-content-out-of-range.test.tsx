@@ -224,6 +224,30 @@ describe('SearchPageContent', () => {
     );
   });
 
+  it('advertises the ranked last page when a first-page row vanished', async () => {
+    mockStorefrontContext();
+    mockGetStorefrontSearchProducts.mockResolvedValueOnce({
+      count: 20,
+      totalCount: 21,
+      didYouMean: null,
+      products: createSearchProducts(20),
+      productIds: [],
+      query: 'iphone',
+    });
+
+    render(
+      (await SearchPageContent(
+        createSearchPageProps({ q: 'iphone' })
+      )) as React.ReactElement
+    );
+
+    expect(mockRedirect).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: '2' })).toHaveAttribute(
+      'href',
+      '/ogabassey/search?q=iphone&page=2'
+    );
+  });
+
   it('bounds deep pages through a last-page redirect', async () => {
     mockStorefrontContext();
     mockGetStorefrontSearchProducts.mockResolvedValueOnce({

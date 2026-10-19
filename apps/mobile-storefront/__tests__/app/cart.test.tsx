@@ -52,6 +52,15 @@ jest.mock('@/components/checkout/checkout-identity', () =>
 );
 jest.mock('@/components/ui/SafeImage', () => mockSafeImageModule());
 jest.mock('@/stores/cart-store', () => mockCartStoreModule());
+jest.mock('@/hooks/useMerchantPaymentSettings', () => ({
+  merchantPaymentSettingsQueryKey: ['test-payment-settings'],
+  useMerchantPaymentSettings: () => ({
+    data: { shipping_insurance_enabled: true },
+  }),
+}));
+jest.mock('@/hooks/use-warm-merchant-payment-settings', () => ({
+  useWarmMerchantPaymentSettings: jest.fn(),
+}));
 jest.mock('@/hooks/use-auth-guard', () => mockAuthGuardModule());
 jest.mock('react-native-safe-area-context', () => mockSafeAreaModule());
 jest.mock('@/stores/ui-store', () => mockUIStoreModule());

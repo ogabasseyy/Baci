@@ -96,7 +96,10 @@ it.each([
     resolutions: [{ item: { productId }, keep }],
     lines: [expectedLine],
   });
-  fireEvent.press(view.getByText('Retry the same cart choice'));
+  // findByText, not getByText: the rejection catch → setState →
+  // rerender needs event-loop turns after linkAccount is merely
+  // *called*, and a sync query races it under CI load.
+  fireEvent.press(await view.findByText('Retry the same cart choice'));
   await waitFor(() => expect(linkAccount).toHaveBeenCalledTimes(2));
   expect(linkAccount.mock.calls[1][0]).toEqual(linkAccount.mock.calls[0][0]);
 });

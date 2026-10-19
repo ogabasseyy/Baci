@@ -53,4 +53,12 @@ describe('critical variant selection helpers', () => {
       shouldRedirectVariantSelectionParams(variantProduct, { storage: '128GB' })
     ).toBe(true);
   });
+
+  it('does not redirect an unknown exact variant id (client shows missing)', () => {
+    expect(
+      shouldRedirectVariantSelectionParams(variantProduct, {
+        variant_id: 'variant-gone',
+      })
+    ).toBe(false);
+  });
 });

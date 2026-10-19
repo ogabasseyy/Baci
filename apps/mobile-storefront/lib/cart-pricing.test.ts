@@ -117,6 +117,23 @@ describe('cart-pricing', () => {
     expect(getCartCatalogSubtotalWithAssurance(items)).toBe(410000);
   });
 
+  it('quotes an offer-identified line from the selected offer price', () => {
+    const items = [
+      {
+        name: 'Used Pixel 8',
+        price: 320000,
+        catalog_price: 410000,
+        quantity: 1,
+        condition: 'used',
+        offer_id: 'offer-7',
+      },
+    ] as CartItem[];
+
+    // The server prices offer lines from the live offer: quoting the
+    // retained parent price would display a tier the order rejects.
+    expect(getCartCatalogSubtotalWithAssurance(items)).toBe(320000);
+  });
+
   it('charges accepted negotiated prices plus effective-basis assurance', () => {
     const items = [
       {

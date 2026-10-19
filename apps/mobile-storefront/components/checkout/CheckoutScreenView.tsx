@@ -19,6 +19,7 @@ import Colors from '@/constants/Colors';
 import { useAuthStatus } from '@/hooks/use-auth-guard';
 import { useCartCheckoutSnapshot } from '@/hooks/use-cart-checkout-snapshot';
 import { useMerchant } from '@/hooks/use-merchant';
+import { useWarmMerchantPaymentSettings } from '@/hooks/use-warm-merchant-payment-settings';
 import type { MobileCheckoutIdempotencyState } from '@/lib/checkout-order-idempotency';
 import { CartCheckoutReviewNotice } from './CartCheckoutReviewNotice';
 import { CheckoutOverlays } from './CheckoutOverlays';
@@ -45,6 +46,9 @@ import { useRedvaultReview } from './use-redvault-review';
 export function CheckoutScreenView({
   prizeSimulation,
 }: CheckoutScreenViewProps = {}) {
+  // Reconcile lines stamped pending while the setting was unknown: a
+  // cold deep link to /checkout never mounts the tab layout's warm-up.
+  useWarmMerchantPaymentSettings();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = (colorScheme ?? 'light') === 'dark';

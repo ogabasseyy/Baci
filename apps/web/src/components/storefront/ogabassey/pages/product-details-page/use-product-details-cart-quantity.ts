@@ -10,6 +10,7 @@ import {
 
 interface UseProductDetailsCartQuantityParams {
   cart: ReturnType<typeof useCart>['cart'];
+  currentOfferId?: string | null;
   currentVariantId?: string;
   productData: NormalizedProductDetails;
   secondaryColor: number | null;
@@ -20,6 +21,7 @@ interface UseProductDetailsCartQuantityParams {
 
 export function useProductDetailsCartQuantity({
   cart,
+  currentOfferId,
   currentVariantId,
   productData,
   secondaryColor,
@@ -37,6 +39,7 @@ export function useProductDetailsCartQuantity({
         ? productData.colors[secondaryColor]?.name
         : undefined,
     condition: selectedCondition,
+    offerId: currentOfferId ?? undefined,
     variantId: currentVariantId,
     selectedAttributes,
   });

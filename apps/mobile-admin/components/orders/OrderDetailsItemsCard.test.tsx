@@ -7,7 +7,15 @@ import { OrderDetailsItemsCard } from './OrderDetailsItemsCard';
 import type { OrderDetailsItem } from './order-details.types';
 
 const mocks = vi.hoisted(() => ({
+  alert: vi.fn(),
+  pressable: vi.fn(),
   safeImage: vi.fn(),
+  setStringAsync: vi.fn(),
+  view: vi.fn(),
+}));
+
+vi.mock('expo-clipboard', () => ({
+  setStringAsync: mocks.setStringAsync,
 }));
 
 vi.mock('@/components/ui/SafeImage', async () => {
@@ -33,19 +41,30 @@ vi.mock('react-native', async () => {
   const React = await import('react');
 
   return {
+    Alert: { alert: mocks.alert },
     StatusBar: () => null,
-    Pressable: ({
-      children,
-      onPress,
-    }: {
+    Pressable: (props: {
+      accessibilityHint?: string;
+      accessibilityLabel?: string;
+      accessibilityRole?: string;
       children?: React.ReactNode;
-      onPress?: () => void;
-    }) =>
-      React.createElement(
+      hitSlop?: number;
+      onPress?: (event?: { stopPropagation?: () => void }) => void;
+    }) => {
+      const { children, onPress, ...rest } = props;
+      mocks.pressable(rest);
+      return React.createElement(
         'button',
-        { onClick: () => onPress?.(), type: 'button' },
+        {
+          onClick: (event) => onPress?.(event),
+          type: 'button',
+          ...(props.accessibilityLabel
+            ? { 'aria-label': props.accessibilityLabel }
+            : {}),
+        },
         children
-      ),
+      );
+    },
     StyleSheet: {
       create: (styles: Record<string, unknown>) => styles,
     },
@@ -56,8 +75,16 @@ vi.mock('react-native', async () => {
       children?: React.ReactNode;
       numberOfLines?: number;
     }) => React.createElement('span', null, children),
-    View: ({ children }: { children?: React.ReactNode }) =>
-      React.createElement('div', null, children),
+    View: ({
+      children,
+      ...rest
+    }: {
+      children?: React.ReactNode;
+      style?: unknown;
+    }) => {
+      mocks.view(rest);
+      return React.createElement('div', null, children);
+    },
   };
 });
 
@@ -176,5 +203,216 @@ describe('OrderDetailsItemsCard', () => {
     fireEvent.click(screen.getByRole('button', { name: /AirPods Pro/i }));
 
     expect(onSelectItem).toHaveBeenCalledWith(items[1]);
+  });
+
+  it('renders the selected offer grade, notes, and a truncated copyable ref', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount.toLocaleString('en-NG')}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+            offer_grade: 'B',
+            offer_condition_notes: 'Light wear',
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Offer: Grade B · Light wear')).toBeInTheDocument();
+    expect(screen.getByText('ref 55555555')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/55555555-5555-4555-8555-555555555555/)
+    ).not.toBeInTheDocument();
+  });
+
+  it('copies the full offer id when the truncated ref is pressed', async () => {
+    const onSelectItem = vi.fn();
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount.toLocaleString('en-NG')}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={onSelectItem}
+      />
+    );
+
+    fireEvent.click(screen.getByText('ref 55555555'));
+
+    await vi.waitFor(() => {
+      expect(mocks.setStringAsync).toHaveBeenCalledWith(
+        '55555555-5555-4555-8555-555555555555'
+      );
+    });
+    // The copy press must not bubble to the row select on web targets.
+    expect(onSelectItem).not.toHaveBeenCalled();
+  });
+
+  it('alerts instead of failing silent when the clipboard write rejects', async () => {
+    mocks.setStringAsync.mockRejectedValueOnce(new Error('denied'));
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('ref 55555555'));
+
+    await vi.waitFor(() => {
+      expect(mocks.alert).toHaveBeenCalledWith(
+        'Copy failed',
+        expect.stringContaining('Could not copy')
+      );
+    });
+  });
+
+  it('renders snapshot labels without a ref when the offer was deleted', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount.toLocaleString('en-NG')}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: undefined,
+            offer_grade: 'A',
+            offer_condition_notes: 'Mint',
+            offer_labels_snapshotted: true,
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Offer: Grade A · Mint')).toBeInTheDocument();
+  });
+
+  it('falls back to the immutable snapshot ref when the live offer was deleted', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount.toLocaleString('en-NG')}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: undefined,
+            offer_id_snapshot: '66666666-6666-4666-8666-666666666666',
+            offer_grade: 'A',
+            offer_condition_notes: 'Mint',
+            offer_labels_snapshotted: true,
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Offer: Grade A · Mint')).toBeInTheDocument();
+    expect(
+      screen.getByText('ref 66666666 (deleted offer)')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {
+        name: 'Copy full offer reference 66666666-6666-4666-8666-666666666666',
+      })
+    ).toBeInTheDocument();
+  });
+
+  it('renders only the truncated ref when the offer labels are unresolved', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount.toLocaleString('en-NG')}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/Offer:/)).not.toBeInTheDocument();
+    expect(screen.getByText('ref 55555555')).toBeInTheDocument();
+  });
+
+  it('exposes row semantics and an expanded copy target', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    // The row select keeps button semantics with a label and hint.
+    expect(
+      screen.getByRole('button', { name: 'iPhone 15 Pro, quantity 2' })
+    ).toBeInTheDocument();
+    expect(mocks.pressable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessibilityRole: 'button',
+        accessibilityLabel: 'iPhone 15 Pro, quantity 2',
+        accessibilityHint: 'Opens the details for this item',
+      })
+    );
+    // The 12px copy control expands its touch area via hitSlop.
+    expect(mocks.pressable).toHaveBeenCalledWith(
+      expect.objectContaining({
+        accessibilityLabel:
+          'Copy full offer reference 55555555-5555-4555-8555-555555555555',
+        hitSlop: 12,
+      })
+    );
+  });
+
+  it('stacks the copy control below the item row instead of beside it', () => {
+    render(
+      <OrderDetailsItemsCard
+        colors={colors}
+        formatPrice={(amount) => `₦${amount}`}
+        items={[
+          {
+            ...items[0],
+            offer_id: '55555555-5555-4555-8555-555555555555',
+          },
+        ]}
+        onSelectItem={vi.fn()}
+      />
+    );
+
+    // The outer row View lays out as a column so the ref pressable
+    // renders under the details, never as a squeezing side column.
+    const styles = mocks.view.mock.calls.flatMap(([props]) =>
+      Array.isArray(props.style) ? props.style : [props.style]
+    );
+    expect(styles).toContainEqual(
+      expect.objectContaining({ flexDirection: 'column' })
+    );
+    expect(styles).not.toContainEqual(
+      expect.objectContaining({ flexDirection: 'row', gap: 12 })
+    );
   });
 });

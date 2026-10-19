@@ -16,6 +16,17 @@ export interface OgabasseyPdpCriticalCommerceProviderProps {
   children: ReactNode;
   currency?: CurrencyConfig;
   initialVariantSelection?: InitialCriticalVariantSelection;
+  /**
+   * Validated ?offer_id from the route (names one of cartProduct's
+   * offers): prices the critical buy box from the exact advertised
+   * offer and forwards it into the cart add.
+   */
+  initialOfferId?: string | null;
+  /**
+   * Exact-match missing flag for ?offer_id: purchase stays blocked
+   * until the shopper picks a condition, mirroring the full PDP.
+   */
+  routeOfferMissing?: boolean;
   variantAxes?: string[];
   variantAxisOptions?: Record<string, string[]>;
   variantCount: number;
@@ -31,7 +42,15 @@ export interface OgabasseyPdpCriticalCommerceState {
   maxQuantity: number | null;
   productForCart: CartProduct;
   quantity: number;
+  /**
+   * Units of this exact selection already in the cart (via the shared
+   * merge matcher, so it always agrees with the add target). The
+   * assurance note shows only for fresh adds: merged adds keep the
+   * stored line choice.
+   */
+  quantityInCart: number;
   renderableVariantAxes: string[];
+  routeOfferMissingActive: boolean;
   selectedAttributes: Record<string, string>;
   setQuantity: Dispatch<SetStateAction<number>>;
   variantAxisOptions: Record<string, string[]>;

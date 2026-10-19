@@ -89,6 +89,7 @@ quiz_db:
   - '.github/workflows/ci.yml'
   - '.github/actions/postdeploy-migrations/**'
   - 'supabase/migrations/**'
+  - 'supabase/tests/**'
   - '.github/scripts/deferred-production-migrations.sh'
   - '.github/scripts/pending-postdeploy-migrations.sh'
   - '.github/scripts/deferred-production-migrations.test.sh'

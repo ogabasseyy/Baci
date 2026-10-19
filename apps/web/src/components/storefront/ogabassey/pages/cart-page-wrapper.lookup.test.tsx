@@ -165,6 +165,8 @@ describe('CartPageWrapper', () => {
           name: 'iPhone 15 Pro Max',
           price: 2100000,
           status: 'active',
+          manage_stock: true,
+          stock_quantity: 10,
         },
       ],
       error: null,

@@ -18,6 +18,7 @@ type DelegatedActions = ReturnType<
 /** Cart clearing and merchant-slug binding for the provider. */
 export function useStorefrontCartSessionHandlers({
   bumpSessionGeneration,
+  cartRef,
   delegated,
   delegatedActions,
   initialMerchantSlug,
@@ -31,6 +32,7 @@ export function useStorefrontCartSessionHandlers({
   sharedCartEnabled,
 }: {
   bumpSessionGeneration: () => void;
+  cartRef: RefObject<CartItem[]>;
   delegated: boolean;
   delegatedActions: DelegatedActions;
   initialMerchantSlug: string | null;
@@ -59,6 +61,9 @@ export function useStorefrontCartSessionHandlers({
     saveCartToStorage([], slugToClear);
     saveCartWideNegotiationToStorage(false, slugToClear);
     setCart([]);
+    // Keep the serialized add-probe ref aligned: a same-tick add after
+    // this clear must probe against the empty cart, not the stale one.
+    cartRef.current = [];
     merchantSlugRef.current = null;
     setMerchantSlugState(null);
     saveMerchantSlugToStorage(null);
@@ -89,6 +94,9 @@ export function useStorefrontCartSessionHandlers({
     }
     const merchantCartState = getMerchantCartState(slug);
     setCart(merchantCartState.cart);
+    // Same-tick adds after a merchant switch must probe against the
+    // newly loaded cart, not the previous merchant's lines.
+    cartRef.current = merchantCartState.cart;
     setCartWideNegotiationActive(merchantCartState.cartWideNegotiationActive);
     setIsHydrated(true);
   };

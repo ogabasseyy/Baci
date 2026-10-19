@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { Modal } from 'react-native';
+import { Modal, View } from 'react-native';
 import Colors from '@/constants/Colors';
 import type { CartPriceChange } from '@/services/cart-reprice';
 import PriceChangeModal from './PriceChangeModal';
@@ -53,6 +53,50 @@ describe('PriceChangeModal', () => {
     expect(screen.queryByText('Samsung Galaxy S25')).toBeNull();
   });
 
+  it('renders condition-only refreshes without a price row', () => {
+    render(
+      <PriceChangeModal
+        visible
+        changes={[]}
+        conditionChanges={[
+          {
+            id: 'cart-1',
+            name: 'iPhone 15 Pro',
+            oldCondition: 'used',
+            newCondition: 'refurbished',
+          },
+        ]}
+        onClose={jest.fn()}
+        colors={Colors.light}
+      />
+    );
+
+    expect(screen.getByText('Items updated')).toBeTruthy();
+    expect(screen.getByText('iPhone 15 Pro')).toBeTruthy();
+    expect(screen.getByText('used')).toBeTruthy();
+    expect(screen.getByText('refurbished')).toBeTruthy();
+    expect(screen.queryByText('Prices updated')).toBeNull();
+  });
+
+  it('renders unavailable lines with a removal prompt', () => {
+    render(
+      <PriceChangeModal
+        visible
+        changes={[]}
+        unavailableLines={[{ id: 'cart-9', name: 'Vanished Phone' }]}
+        onClose={jest.fn()}
+        colors={Colors.light}
+      />
+    );
+
+    expect(screen.getByText('Items unavailable')).toBeTruthy();
+    expect(screen.getByText('Vanished Phone')).toBeTruthy();
+    expect(screen.getByText('Unavailable')).toBeTruthy();
+    expect(
+      screen.getByLabelText('Vanished Phone: no longer available')
+    ).toBeTruthy();
+  });
+
   it('renders the header but no line rows when there are no changes', () => {
     render(
       <PriceChangeModal
@@ -84,6 +128,47 @@ describe('PriceChangeModal', () => {
     fireEvent.press(screen.getByLabelText('Continue with updated prices'));
 
     expect(onClose).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps distinct keys when one line has both price and condition changes', () => {
+    // A merchant edit can move an offer price and condition together,
+    // landing the same line id in both lists. Identical sibling keys
+    // let React reuse the wrong row on modal updates.
+    const { UNSAFE_getAllByType } = render(
+      <PriceChangeModal
+        visible
+        changes={[priceChanges[0]]}
+        conditionChanges={[
+          {
+            id: 'cart-1',
+            name: 'iPhone 15 Pro',
+            oldCondition: 'new',
+            newCondition: 'open_box',
+          },
+        ]}
+        onClose={jest.fn()}
+        colors={Colors.light}
+      />
+    );
+
+    expect(screen.getByLabelText(/price changed from/)).toBeTruthy();
+    expect(screen.getByLabelText(/condition changed from/)).toBeTruthy();
+    // Keys live on the reconciled fibers (the React Compiler strips
+    // them from createElement configs); duplicates reuse the wrong row.
+    const rowKeys = UNSAFE_getAllByType(View)
+      .filter((instance) =>
+        String(instance.props.accessibilityLabel ?? '').includes('changed from')
+      )
+      .map(
+        (instance) =>
+          (
+            instance as unknown as {
+              _fiber: { key?: unknown };
+            }
+          )._fiber.key
+      );
+    expect(rowKeys).toHaveLength(2);
+    expect(new Set(rowKeys).size).toBe(rowKeys.length);
   });
 
   it('reports native dismissal through onDismissed', () => {

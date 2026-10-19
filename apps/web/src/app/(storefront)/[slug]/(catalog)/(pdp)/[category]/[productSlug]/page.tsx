@@ -60,11 +60,16 @@ import {
   getCachedProductRoutePrimaryImage,
 } from './category-product-lcp-projection';
 import { buildCategoryProductMetadata } from './category-product-metadata';
+import { serializeRedirectSearchParams } from './category-product-redirect-query';
 import {
   type CategoryProductRouteControl,
   getProductRouteControl,
 } from './category-product-route-control';
 import { buildCategoryProductStructuredData } from './category-product-structured-data';
+import {
+  resolveCriticalRouteOffer,
+  seedCriticalRouteOfferCondition,
+} from './critical-route-offer';
 import {
   getInitialCriticalVariantSelection,
   getInitialCriticalVariantSelectionPrimaryImage,
@@ -191,10 +196,14 @@ function getRedirectTargetPath(
     category?: string | null;
     categories?: { name?: string; slug?: string } | null;
     category_slug?: string;
-  }
+  },
+  searchParams?: Record<string, string | string[] | undefined>
 ) {
   const productPath = getProductUrl(product);
-  return `${getCategoryProductBasePath(storeSlug)}${productPath}` as `/${string}`;
+  const base = `${getCategoryProductBasePath(storeSlug)}${productPath}`;
+  if (!searchParams) return base as `/${string}`;
+  const serialized = serializeRedirectSearchParams(searchParams);
+  return (serialized ? `${base}?${serialized}` : base) as `/${string}`;
 }
 
 function redirectInvalidVariantSelectionParams(
@@ -387,8 +396,15 @@ async function getRenderableCategoryProductResult({
     notFound();
   }
 
+  const resolvedSearchParams = await searchParams;
   if (!('product' in result)) {
-    permanentRedirect(getRedirectTargetPath(slug, result.legacyRedirectTarget));
+    permanentRedirect(
+      getRedirectTargetPath(
+        slug,
+        result.legacyRedirectTarget,
+        resolvedSearchParams
+      )
+    );
   }
 
   const { product, merchant, categoryMismatch, needsValuesRedirect } = result;
@@ -397,10 +413,11 @@ async function getRenderableCategoryProductResult({
   // 1. If we found via case-insensitive fallback -> Redirect to lowercase canonical
   // 2. If the URL category doesn't match the product's actual category -> Redirect
   if (categoryMismatch || needsValuesRedirect) {
-    permanentRedirect(getRedirectTargetPath(slug, product));
+    permanentRedirect(
+      getRedirectTargetPath(slug, product, resolvedSearchParams)
+    );
   }
 
-  const resolvedSearchParams = await searchParams;
   redirectInvalidVariantSelectionParams(slug, product, resolvedSearchParams);
 
   return { merchant, product };
@@ -582,10 +599,15 @@ export default async function CategoryProductPage({
   }
 
   const { result: productResult, loadProductResult } = routeControl;
+  const resolvedSearchParams = await searchParams;
 
   if (!('product' in productResult)) {
     permanentRedirect(
-      getRedirectTargetPath(slug, productResult.legacyRedirectTarget)
+      getRedirectTargetPath(
+        slug,
+        productResult.legacyRedirectTarget,
+        resolvedSearchParams
+      )
     );
   }
 
@@ -593,7 +615,9 @@ export default async function CategoryProductPage({
     productResult;
 
   if (categoryMismatch || needsValuesRedirect) {
-    permanentRedirect(getRedirectTargetPath(slug, product));
+    permanentRedirect(
+      getRedirectTargetPath(slug, product, resolvedSearchParams)
+    );
   }
 
   const primaryProductImage = product.imageLarge || product.image || null;
@@ -610,19 +634,32 @@ export default async function CategoryProductPage({
     ? resolveMerchantCurrencyConfig(merchant)
     : null;
   const commerceProduct = buildCriticalCommerceRouteProduct(product);
+  // Exact-offer deep links (?offer_id=) resolve against the hydrated
+  // active offers: the critical buy box prices from the matched offer
+  // and the server shell fallback converges on the same price so the
+  // two surfaces never diverge.
+  const criticalRouteOffer = resolveCriticalRouteOffer({
+    offers: commerceProduct.offers,
+    searchParams: resolvedSearchParams,
+  });
   const visibleSummary = criticalProduct
     ? buildOgabasseyProductVisibleSummary({
         brand: product.brand,
-        condition: product.condition,
+        condition: criticalRouteOffer.offerCondition ?? product.condition,
         has_variant_matrix: product.has_variant_matrix,
         manage_stock: commerceProduct.manage_stock,
         name: product.name,
         variants: commerceProduct.variants,
       })
     : null;
-  const resolvedSearchParams = await searchParams;
   const criticalInitialVariantSelection = criticalProduct
-    ? getInitialCriticalVariantSelection(commerceProduct, resolvedSearchParams)
+    ? seedCriticalRouteOfferCondition(
+        getInitialCriticalVariantSelection(
+          commerceProduct,
+          resolvedSearchParams
+        ),
+        criticalRouteOffer
+      )
     : undefined;
   const selectedVariantProductImage = criticalProduct
     ? getInitialCriticalVariantSelectionPrimaryImage(
@@ -683,6 +720,14 @@ export default async function CategoryProductPage({
           initialVariantSelection: criticalInitialVariantSelection,
           product: {
             ...criticalProduct,
+            // Converge the shell's static price/condition fallback on
+            // the pinned route offer (mirrors the client override).
+            ...(criticalRouteOffer.offerPrice != null
+              ? { price: criticalRouteOffer.offerPrice }
+              : null),
+            ...(criticalRouteOffer.offerCondition
+              ? { condition: criticalRouteOffer.offerCondition }
+              : null),
             variantCount,
             visibleSummary,
           },
@@ -706,6 +751,8 @@ export default async function CategoryProductPage({
           initialVariantSelection={
             criticalCommerceContext.initialVariantSelection
           }
+          initialOfferId={criticalRouteOffer.offerId}
+          routeOfferMissing={criticalRouteOffer.missing}
           variantAxes={criticalCommerceContext.variantAxes}
           variantAxisOptions={criticalCommerceContext.variantAxisOptions}
           variantCount={criticalCommerceContext.variantCount}

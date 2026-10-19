@@ -182,9 +182,11 @@ export async function submitCartBoundOrder(
         sqlState: response.error.code,
       };
     }
+    // Raw database detail stays server-side; callers (including agentic
+    // dispatch) receive the same fixed platform-failure string as 42501.
     return {
       code: 'temporarily_unavailable',
-      message: message || 'Order binding request failed',
+      message: 'Order binding request failed',
       ok: false,
     };
   }

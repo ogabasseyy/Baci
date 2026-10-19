@@ -297,8 +297,9 @@ describe('submitCartBoundOrder', () => {
       { args: ARGS, generation: 1, sessionId: SESSION_ID, variant: 'base' }
     );
 
-    expect(result).toMatchObject({
+    expect(result).toEqual({
       code: 'temporarily_unavailable',
+      message: 'Order binding request failed',
       ok: false,
     });
   });

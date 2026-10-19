@@ -133,14 +133,22 @@ holder of that key from signing a forged issuance time.
 
 ## Deployment checklist (migration chain)
 
-- Never let `20261015170000` be the tip of an applied chain: that
-  intermediate migration grants the SECURITY DEFINER replay-snapshot
-  RPC to anon, and later append-only migrations (`20261015176000`,
-  `20261015179985`) revoke anon and add the route-claim check. Apply
+- Never set the `shared_cart` / `shared_cart_accounts` /
+  `shared_cart_realtime` premium_features flags before the full
+  migration replay has been verified on the target environment:
+  `merchantHasFeature` is a pure flag check with no migration probe,
+  so flag-first enablement makes cart routes call missing RPCs and
+  fail closed (503). The release sequence below is the guard: replay
+  and verify first, enroll second.
+- Never let `20261015170000` or `20261015168000` be the tip of an
+  applied chain: those intermediate migrations grant SECURITY DEFINER
+  replay-snapshot / handoff-preview RPCs to anon, and later append-only
+  migrations (`20261015176000`, `20261015179985`, `20261015179990`)
+  revoke anon and add route-claim / scoped-previewer checks. Apply
   the chain only as a whole, and verify the final state — the SQL
-  contract `supabase/tests/commerce_cart_replay_privileges_feature_shapes.sql`
-  (wired into the commerce-cart SQL bridge) asserts anon cannot
-  execute `storefront_checkout_replay_snapshot`.
+  contracts `supabase/tests/commerce_cart_replay_privileges_feature_shapes.sql`
+  and `supabase/tests/commerce_cart_preview_authority.sql` (wired into
+  the commerce-cart SQL bridge) assert anon cannot execute them.
 - Immediately after `20261015154000` applies and before any later
   migration or enrollment step, inspect `cron.job` for a terminal-cart
   purge job: the chain briefly schedules that purge mid-chain and

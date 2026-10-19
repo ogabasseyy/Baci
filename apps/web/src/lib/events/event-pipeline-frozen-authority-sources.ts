@@ -36,10 +36,32 @@ export const eventPipelineFrozenRoutes = {
   // site and inherited authority is unchanged.
   // Re-pinned after moving the pilot gate below server-verified fee
   // computation; it now judges the effective shipping fee.
-  // Re-pinned for reviewed new-order-only attested shipping coordinates.
-  // Existing-order replay, notification and payment authority are unchanged.
+  // Re-pinned for reviewed canonical-cart transaction binding. Existing
+  // payment/notification authority is unchanged; no service grants are added.
+  // Re-pinned for the shared-cart binding invalid_item status correction
+  // (500 -> 400, a client error); payment/notification authority unchanged.
+  // Re-pinned for condition-offer validation errors as client errors;
+  // payment, notification and credential authority are unchanged.
+  // Re-pinned for early cart-proof checks and claimed-voucher binding replay;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned after extracting reviewed cart proof/binding response orchestration;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned for the claimed-voucher replay re-read of the stored order;
+  // payment, notification and credential authority remain unchanged.
+  // Re-pinned after extracting bound-order dispatch and the shared
+  // condition-offer response from the route; payment, notification
+  // and credential authority remain unchanged. Re-pinned again after
+  // merging the GIGL checkout-pin changes from main; the cart binding
+  // dispatch is unchanged. Re-pinned after the orders replay probe moved
+  // to the scoped storefront_checkout_replay_snapshot RPC (no service-role
+  // client on the route); order authority paths are unchanged. Re-pinned
+  // after shared-cart orders were barred from the REDVAULT draft rail.
+  // Re-pinned after the replay-snapshot probe moved to the admin client
+  // and the RPC was restricted to service_role. Re-pinned again after
+  // the probe returned to the normal client with a minimized snapshot
+  // projection (no service-role client on the guest checkout path).
   'apps/web/src/app/api/orders/route.ts':
-    '157cfe3c8fb5dccfe0ec49545b3560878d0c8fb89bd40da286870b8c8bdf6c70',
+    '14db80c5b09cc8b051e99967915ab7665b971a7f994f2a14d507794995836936',
   // Juicyway webhook settlement changed in the merchant-wallet feature. Bind
   // reviewed bytes to a content receipt so inherited-authority checks stay
   // squash-safe after merge.

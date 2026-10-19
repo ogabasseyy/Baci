@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type React from 'react';
 
+import { useToast } from '@/hooks/use-toast';
 import { useCustomerAuth } from '@/contexts/customer-auth-context';
 import { useV2Saved } from '@/components/storefront/ogabassey/providers/v2-saved-context';
 
@@ -85,6 +86,7 @@ const getMenuItems = (storeSlug: string) => {
 };
 
 export const OgabasseyV2Profile: React.FC = () => {
+  const { toast } = useToast();
   const storeSlug = useStoreSlug();
   const menuItems = getMenuItems(storeSlug);
   const { customer, logout, isAuthenticated } = useCustomerAuth();
@@ -210,7 +212,7 @@ export const OgabasseyV2Profile: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => logout()}
+                onClick={() => void logout().catch(() => toast({title:'Could not sign out',description:'Please reconnect and try again.',variant:'destructive'}))}
                 className="w-full flex items-center justify-between p-4 md:p-6 hover:bg-red-50 transition-colors group text-left active:bg-red-100"
               >
                 <div className="flex items-center gap-4">

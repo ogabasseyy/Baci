@@ -75,3 +75,13 @@ describe('runSupabaseReplayStage', () => {
     });
   });
 });
+
+it('preserves only bounded Supabase startup classifications', async () => {
+  await expect(
+    runSupabaseReplayStage('db start', async () => {
+      throw new Error('supabase failed: non-zero-exit (reason=image-pull)');
+    })
+  ).rejects.toThrow(
+    'Supabase replay stage db start failed (supabase failed: non-zero-exit (reason=image-pull))'
+  );
+});

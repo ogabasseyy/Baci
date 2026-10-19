@@ -81,6 +81,31 @@ describe('validateDiscountCode', () => {
     ).rejects.toThrow('Discount validation failed: 429');
   });
 
+  it('parses a loyalty success carrying an explicit null discount_code_id', async () => {
+    const fetchMock = jest.fn<FetchImplementation>().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          valid: true,
+          discount_code_id: null,
+          code: 'RDM-ABCDEF12',
+          discount_type: 'fixed',
+          discount_value: 1000,
+          discount_amount: 1000,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    global.fetch = fetchMock;
+
+    const result = await validateDiscountCode({
+      merchantId: 'merchant-1',
+      code: 'RDM-ABCDEF12',
+      cartTotal: 5000,
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
   it('throws when the response fails schema validation', async () => {
     const fetchMock = jest.fn<FetchImplementation>().mockResolvedValue(
       new Response(JSON.stringify({ valid: true }), {

@@ -329,6 +329,35 @@ the version-gated `get/upsert/delete_mcp_guest_cart` RPCs; concurrent writers
 server needs no local volume and no replica pin. Expired rows are reclaimed by
 the hourly `mcp-guest-cart-cleanup` pg_cron sweep.
 
+### Canonical shared-cart bridge (release gate)
+
+The optional `MCP_CANONICAL_CART_BRIDGE_URL` delegates token-bound cart reads and
+writes to the verified-owner web broker. Its default accepted value is
+`https://ogabassey.com/api/storefront/cart/legacy`; staging or additional
+deployments allowlist their exact origin with
+`MCP_CANONICAL_CART_BRIDGE_ALLOWED_ORIGINS` (comma-separated exact origins).
+Redirects and non-allowlisted origins are rejected before an opaque guest
+capability is sent. The MCP worker receives
+no cart signing key or service-role credential. The broker verifies the persisted
+merchant and legacy owner, migrates the exact stored source once, and returns
+scoped canonical state plus a web handoff. Keep the returned guest token for
+recovery after an uncertain response. Migrated carts never fall back to legacy
+writes when the broker is unavailable.
+
+This code does not provision the URL, apply migrations, activate merchant flags,
+or deploy either service. A separately approved coordinated release must verify
+the pending shared-cart migrations, compatible web and MCP revisions, scoped
+broker signing configuration, and merchant enrollment before cutting over MCP
+traffic. Leave the URL unset until that release is ready; the default remains the
+legacy RPC path. Checkout continues on the handoff website and does not create an
+order through this bridge.
+
+Separate condition offers use their persisted offer price and stock pool. A
+condition offer under serialized tracking remains unavailable until its offer to
+unit mapping is verified; it must never bypass unit allocation. Existing base
+product and selected-variant serialized checkout keeps its original inventory
+contract. Include this limitation in merchant qualification before activation.
+
 ### Worker token rotation
 
 The server authenticates to PostgREST with `MCP_GUEST_CART_WORKER_TOKEN`, a

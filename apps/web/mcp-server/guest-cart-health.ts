@@ -6,6 +6,8 @@ export interface GuestCartStoreLike {
   hasToken: GuestCartStore['hasToken'];
   /** Token-free code of the latest failed store write, cleared by the next success. */
   lastStorageErrorCode?: string | null;
+  /** False when no canonical bridge is configured/allowlisted (legacy only). */
+  canonicalEnabled?: boolean;
 }
 
 /**
@@ -17,11 +19,17 @@ export interface GuestCartStoreLike {
 export function describeGuestCartStoreHealth(store: GuestCartStoreLike): {
   guestCarts: 'ok' | 'degraded';
   guestCartsReason?: string;
+  guestCartsCanonical: 'enabled' | 'disabled';
 } {
+  // Canonical-disabled is operator-visible but not a degradation:
+  // legacy guest carts keep working by design.
+  const guestCartsCanonical =
+    store.canonicalEnabled === false ? 'disabled' : 'enabled';
   if (store.lastStorageErrorCode != null)
     return {
       guestCarts: 'degraded',
       guestCartsReason: `guest cart write failed (${store.lastStorageErrorCode})`,
+      guestCartsCanonical,
     };
-  return { guestCarts: 'ok' };
+  return { guestCarts: 'ok', guestCartsCanonical };
 }

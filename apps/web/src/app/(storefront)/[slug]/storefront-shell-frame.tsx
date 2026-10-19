@@ -4,6 +4,7 @@ import { DeferredPageViewTracker } from '@/components/storefront/deferred-page-v
 import { WebMcpStorefrontTools } from '@/components/storefront/webmcp-storefront-tools';
 import { StorefrontCartProvider } from '@/hooks/cart/storefront-cart-provider';
 import { StorefrontMerchantProvider } from '@/hooks/merchant/storefront-merchant-provider';
+import { merchantHasFeature } from '@/lib/merchant-has-feature';
 import { StorefrontLayoutRenderer } from './storefront-layout-renderer';
 import type { getStorefrontShellSnapshot } from './storefront-shell-snapshot';
 
@@ -30,7 +31,17 @@ export function StorefrontShellFrame({
     >
       <StorefrontCartProvider
         enableSmartCartPro
+        merchantId={merchant.id}
         merchantSlug={merchantSlug}
+        sharedCartEnabled={merchantHasFeature(merchant, 'shared_cart')}
+        sharedCartAccountsEnabled={merchantHasFeature(
+          merchant,
+          'shared_cart_accounts'
+        )}
+        sharedCartRealtimeEnabled={merchantHasFeature(
+          merchant,
+          'shared_cart_realtime'
+        )}
         deferValidationUntilIdle
       >
         <WebMcpStorefrontTools

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { act, renderHook } from '@testing-library/react-native';
 import type { CartItem } from '@/stores/cart-store';
+import { useNativeSharedCartStore } from '@/stores/native-shared-cart-store';
 import { useCheckoutPaymentController } from './use-checkout-payment-controller';
 
 const mockCalculateCommerce = jest.fn();
@@ -141,4 +142,29 @@ describe('useCheckoutPaymentController REDVAULT cart and fee scenarios', () => {
       'uba_redvault'
     );
   });
+});
+
+it('excludes REDVAULT while native shared carts require binding', async () => {
+  useNativeSharedCartStore.setState({ enabled: true });
+  mockGetRedvaultPaymentAvailability.mockResolvedValue({
+    available: true,
+    reason: 'enabled',
+  });
+  const { result, unmount } = renderHook(() =>
+    useCheckoutPaymentController({
+      isAuthenticated: false,
+      items,
+      merchantId: 'merchant-1',
+      merchantSlug: 'ogabassey',
+      step: 'payment',
+      subtotal: 500000,
+      assuranceFee: 0,
+      deliveryFee: 0,
+    })
+  );
+  await act(async () => undefined);
+  expect(result.current.redvaultAvailable).toBe(false);
+  expect(result.current.availablePaymentMethods).not.toContain('uba_redvault');
+  unmount();
+  useNativeSharedCartStore.setState({ enabled: false });
 });

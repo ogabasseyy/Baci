@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   transactionSelectSingle: vi.fn(),
   transactionUpdateMaybeSingle: vi.fn(),
   orderUpdateSingle: vi.fn(),
+  orderUpdateNeq: vi.fn(),
 }));
 
 vi.mock('@/lib/logger', () => ({
@@ -183,7 +184,12 @@ function createSupabaseMock({
           select: vi.fn(() => makeQueryChain(preUpdateOrderStatusResult)),
           update: vi.fn((payload: unknown) => {
             mocks.orderUpdateSingle(payload);
-            return makeUpdateChain(orderUpdateResult);
+            const chain = makeUpdateChain(orderUpdateResult);
+            chain.neq = vi.fn((...args: unknown[]) => {
+              mocks.orderUpdateNeq(...args);
+              return chain;
+            });
+            return chain;
           }),
         };
       }
@@ -389,6 +395,17 @@ describe('POST /api/payments/klump/webhook', () => {
         shipping_status: 'processing',
       })
     );
+    // A payment-only cancellation is terminal: the paid write must
+    // exclude both cancelled spellings so a late capture cannot
+    // reopen an order whose loyalty claim was already released.
+    expect(mocks.orderUpdateNeq).toHaveBeenCalledWith(
+      'payment_status',
+      'cancelled'
+    );
+    expect(mocks.orderUpdateNeq).toHaveBeenCalledWith(
+      'payment_status',
+      'canceled'
+    );
     expect(
       mocks.transactionUpdateMaybeSingle.mock.invocationCallOrder[0]
     ).toBeLessThan(mocks.orderUpdateSingle.mock.invocationCallOrder[0]);
@@ -506,6 +523,75 @@ describe('POST /api/payments/klump/webhook', () => {
         issue_type: 'payment_received_after_cancellation',
         order_id: 'order-123',
       })
+    );
+  });
+
+  it('files reconciliation when the paid update was filtered out by a payment-only cancellation', async () => {
+    // mark_abandoned_orders cancelled only payment_status: the update
+    // predicates exclude the row, so the webhook must reconcile the
+    // existing cancelled order instead of confirming inventory on it.
+    mocks.createAdminClient.mockReturnValue(
+      createSupabaseMock({
+        orderUpdateResult: { data: null, error: null },
+        preUpdateOrderStatusResult: {
+          data: { payment_status: 'cancelled', shipping_status: 'pending' },
+          error: null,
+        },
+      })
+    );
+
+    const rawBody = JSON.stringify(successfulPayload);
+    const response = await POST(
+      createRequest(successfulPayload, signPayload(rawBody, 'klump-secret'))
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      message: 'Klump payment recorded; order was cancelled, filed for review',
+      success: true,
+    });
+    expect(mocks.recordMerchantSettlement).not.toHaveBeenCalled();
+    expect(mocks.notifyNewOrder).not.toHaveBeenCalled();
+    expect(mocks.reconciliationInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'payment_received_after_cancellation',
+      })
+    );
+  });
+
+  it('files reconciliation when the paid update was filtered out by a shipping-only cancellation', async () => {
+    mocks.createAdminClient.mockReturnValue(
+      createSupabaseMock({
+        orderUpdateResult: { data: null, error: null },
+        preUpdateOrderStatusResult: {
+          data: { payment_status: 'unpaid', shipping_status: 'cancelled' },
+          error: null,
+        },
+      })
+    );
+
+    const rawBody = JSON.stringify(successfulPayload);
+    const response = await POST(
+      createRequest(successfulPayload, signPayload(rawBody, 'klump-secret'))
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      message: 'Klump payment recorded; order was cancelled, filed for review',
+      success: true,
+    });
+    expect(mocks.recordMerchantSettlement).not.toHaveBeenCalled();
+    expect(mocks.reconciliationInsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        issue_type: 'payment_received_after_cancellation',
+      })
+    );
+    // The paid write fences the shipping axis as well as payment.
+    expect(mocks.orderUpdateNeq).toHaveBeenCalledWith(
+      'shipping_status',
+      'cancelled'
     );
   });
 

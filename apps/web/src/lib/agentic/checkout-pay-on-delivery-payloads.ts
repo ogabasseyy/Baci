@@ -37,7 +37,13 @@ export function buildPayOnDeliveryOrderPayload({
       name: lineItem.item.title || lineItem.item.id || 'Product',
       product_id: lineItem.item.product_id,
       quantity: lineItem.item.quantity,
-      price: lineItem.base_amount,
+      // The orders API prices each item as a unit price multiplied
+      // by quantity; base_amount is the line total, so divide it
+      // back out and forward the purchased condition lane.
+      price: lineItem.base_amount / lineItem.item.quantity,
+      ...(lineItem.item.condition
+        ? { condition: lineItem.item.condition }
+        : {}),
       ...(lineItem.item.variant_id
         ? { variant_id: lineItem.item.variant_id }
         : {}),

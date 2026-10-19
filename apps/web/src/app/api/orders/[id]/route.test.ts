@@ -155,6 +155,7 @@ function createSelectBuilder<T>(result: { data: T | null; error: unknown }) {
 function createUpdateBuilder<T>(result: { data: T | null; error: unknown }) {
   const builder = {
     eq: vi.fn(() => builder),
+    neq: vi.fn(() => builder),
     select: vi.fn(() => builder),
     single: vi.fn().mockResolvedValue(result),
   };

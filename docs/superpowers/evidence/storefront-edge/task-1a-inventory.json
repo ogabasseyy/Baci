@@ -20,13 +20,13 @@
     "scope": "approved_pilot_hosts_and_complete_browser_automatic_traffic",
     "zeroDenominatorVerdict": "NOT_PROVEN"
   },
-  "originMainSha": "44a286463979289df5563e6a017dd44b2f34192f",
+  "originMainSha": "5fb40e24237040b53d0c180aa05d3e3d59620890",
   "pilotCandidateHostnameSha256": "6ecb417105cfa291c7286367f438872a3bf9e3d11bd6d32383aaf2a3e7c39705",
   "pilotCandidateHostnames": [
     "baci-edge-pilot.usebaci.com"
   ],
-  "routeTreeSha256": "0f2fbaf278bc0df5947ea0fca163f0adf28ecb90a8460a161e569f178cd74dec",
-  "routingProxyInputSha256": "94fce9b888aa81e7840ba053d2412d2899e83985b793cecba2c390c8a17426a9",
+  "routeTreeSha256": "ea727fbf7617dc19305b5194fa0f9581ac1dca2a57bf15527a1078e910afc9f2",
+  "routingProxyInputSha256": "ac3d9b57504d2094b72e0faa1fd9c774bfc05fbfcb1590b5bc42dda03522480d",
   "rows": [
     {
       "decision": "origin_dynamic",
@@ -859,6 +859,133 @@
       "routePattern": "/api/storefront/auth/verify-code",
       "sourceKind": "api_route",
       "sourcePath": "apps/web/src/app/api/storefront/auth/verify-code/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/account/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/account",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/account/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/bootstrap/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/bootstrap",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/bootstrap/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/checkout/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/checkout",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/checkout/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/commands/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/commands",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/commands/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/handoff/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/handoff",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/handoff/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/handoff/redeem/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/handoff/redeem",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/handoff/redeem/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/legacy/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/legacy",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/legacy/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/realtime/route.ts",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/realtime",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/realtime/route.ts"
+    },
+    {
+      "decision": "origin_dynamic",
+      "id": "api-route:storefront/cart/session/revoke/route.ts",
+      "methods": [
+        "OPTIONS",
+        "POST"
+      ],
+      "reason": "exact_storefront_api_route",
+      "routePattern": "/api/storefront/cart/session/revoke",
+      "sourceKind": "api_route",
+      "sourcePath": "apps/web/src/app/api/storefront/cart/session/revoke/route.ts"
     },
     {
       "decision": "origin_dynamic",
@@ -8495,5 +8622,5 @@
     }
   ],
   "schemaVersion": 6,
-  "inventorySha256": "c140d673c66dabc7e934871fd7d702538fd3e20d839a8cddba64738d81c65db8"
+  "inventorySha256": "7ab634b8779a8cbfbce0f3a3c0094313069d8e0f825d65db93318db53ae2fe56"
 }

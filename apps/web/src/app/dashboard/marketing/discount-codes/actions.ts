@@ -5,8 +5,11 @@ import { cookies } from 'next/headers';
 import z from 'zod';
 import { ensurePermission } from '@/lib/merchant-server';
 import { createClient } from '@/lib/supabase/server';
+import { isReservedDiscountCodePrefix } from '@/schemas/discount-codes';
 
-// Zod validation schema for discount code
+// Zod validation schema for discount code. The RDM- reservation is NOT a
+// field refine: legacy rows resend their unchanged code on edit, so the
+// action re-checks the reservation only on creation or code change.
 const upsertDiscountCodeSchema = z
   .object({
     id: z.string().optional(),
@@ -68,17 +71,21 @@ export type UpsertDiscountCodeInput = {
   category_ids?: string[];
 };
 
-export async function getDiscountCodes() {
+async function authenticatedClient() {
   const cookieStore = await cookies();
   const supabase = createClient(cookieStore);
   const {
     data: { user },
     error: authError,
   } = await supabase.auth.getUser();
-
   if (authError || !user) {
     throw new Error('Unauthorized');
   }
+  return supabase;
+}
+
+export async function getDiscountCodes() {
+  const supabase = await authenticatedClient();
 
   const { merchant } = await ensurePermission('marketing', 'view');
 
@@ -113,19 +120,33 @@ export async function upsertDiscountCode(input: UpsertDiscountCodeInput) {
   // Validate input with Zod schema
   const validatedInput = upsertDiscountCodeSchema.parse(input);
 
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    throw new Error('Unauthorized');
-  }
+  const supabase = await authenticatedClient();
 
   const requiredAction = validatedInput.id ? 'edit' : 'create';
   const { merchant } = await ensurePermission('marketing', requiredAction);
+
+  // Change-aware RDM- reservation: legacy rows keep their code through
+  // edits (the DB trigger backstops races), while creates and renames
+  // to a reserved prefix fail with the same message as before.
+  let codeChanged = true;
+  if (validatedInput.id) {
+    const { data: currentRow, error: currentRowError } = await supabase
+      .from('discount_codes')
+      .select('code')
+      .eq('id', validatedInput.id)
+      .eq('merchant_id', merchant.id)
+      .maybeSingle();
+    // A failed lookup is a retryable error, not an absent row: treating
+    // it as changed would falsely reserve an unchanged legacy RDM- code.
+    if (currentRowError) {
+      throw new Error(currentRowError.message);
+    }
+    codeChanged =
+      currentRow?.code?.toUpperCase() !== validatedInput.code.toUpperCase();
+  }
+  if (codeChanged && isReservedDiscountCodePrefix(validatedInput.code)) {
+    throw new Error('Code prefix RDM- is reserved for loyalty redemptions');
+  }
 
   // Base required data
   const baseData = {
@@ -134,15 +155,10 @@ export async function upsertDiscountCode(input: UpsertDiscountCodeInput) {
     discount_value: validatedInput.discount_value,
   };
 
-  // Helper to build payload: undefined inputs are ignored (preserving existing),
-  // but explicit values (including nulls if allowed) are applied.
-  // For creation, we apply defaults.
-  // For update, we only apply what's in validatedInput.
-
+  // Payload: undefined preserves existing, explicit values (incl. nulls)
+  // apply; creation fills defaults, update touches provided fields only.
   const buildPayload = (isUpdate: boolean) => {
     const payload: Record<string, unknown> = { ...baseData };
-
-    // Helper to conditionally add field if defined
     const addIfDefined = (
       key: string,
       value: unknown,
@@ -151,7 +167,6 @@ export async function upsertDiscountCode(input: UpsertDiscountCodeInput) {
       if (value !== undefined) {
         payload[key] = value;
       } else if (!isUpdate && defaultValue !== undefined) {
-        // Only apply default on create if missing
         payload[key] = defaultValue;
       }
     };
@@ -163,28 +178,21 @@ export async function upsertDiscountCode(input: UpsertDiscountCodeInput) {
       payload.description = null;
     }
 
-    addIfDefined(
-      'minimum_purchase_amount',
-      validatedInput.minimum_purchase_amount,
-      0
-    );
-    addIfDefined(
-      'maximum_discount_amount',
-      validatedInput.maximum_discount_amount,
-      null
-    );
-    addIfDefined('usage_limit', validatedInput.usage_limit, null);
-    addIfDefined(
-      'usage_limit_per_customer',
-      validatedInput.usage_limit_per_customer,
-      1
-    );
-    addIfDefined('starts_at', validatedInput.starts_at, null);
-    addIfDefined('expires_at', validatedInput.expires_at, null);
-    addIfDefined('is_active', validatedInput.is_active, true);
-    addIfDefined('applies_to', validatedInput.applies_to, 'all');
-    addIfDefined('product_ids', validatedInput.product_ids, []);
-    addIfDefined('category_ids', validatedInput.category_ids, []);
+    const defaulted: [string, unknown, unknown][] = [
+      ['minimum_purchase_amount', validatedInput.minimum_purchase_amount, 0],
+      ['maximum_discount_amount', validatedInput.maximum_discount_amount, null],
+      ['usage_limit', validatedInput.usage_limit, null],
+      ['usage_limit_per_customer', validatedInput.usage_limit_per_customer, 1],
+      ['starts_at', validatedInput.starts_at, null],
+      ['expires_at', validatedInput.expires_at, null],
+      ['is_active', validatedInput.is_active, true],
+      ['applies_to', validatedInput.applies_to, 'all'],
+      ['product_ids', validatedInput.product_ids, []],
+      ['category_ids', validatedInput.category_ids, []],
+    ];
+    for (const [key, value, defaultValue] of defaulted) {
+      addIfDefined(key, value, defaultValue);
+    }
 
     return payload;
   };
@@ -192,6 +200,11 @@ export async function upsertDiscountCode(input: UpsertDiscountCodeInput) {
   if (validatedInput.id) {
     // Update existing - don't include merchant_id to prevent ownership bypass
     const payload = buildPayload(true);
+    if (!codeChanged) {
+      // Unchanged codes stay out of the payload: rewriting the same
+      // value would trip the RDM trigger for legacy rows.
+      delete payload.code;
+    }
     const { error } = await supabase
       .from('discount_codes')
       .update(payload)
@@ -238,16 +251,7 @@ export async function upsertDiscountCode(input: UpsertDiscountCodeInput) {
 }
 
 export async function deleteDiscountCode(id: string) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
-
-  if (authError || !user) {
-    throw new Error('Unauthorized');
-  }
+  const supabase = await authenticatedClient();
 
   const { merchant } = await ensurePermission('marketing', 'delete');
 

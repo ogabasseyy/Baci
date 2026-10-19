@@ -1,7 +1,10 @@
 -- REGRESSION TEST: merchant-owner refund capabilities.
 --
 -- Covers owner self-service reads and the authenticated
--- ledger-insert boundary (privilege grants plus RLS).
+-- ledger-insert boundary (privilege grants plus RLS). Status
+-- reads are view-level for any order of the caller's merchant —
+-- the refund ledger is staff-visible like the order page, and
+-- only mutations are cancelled-only.
 -- Split from order_refund_management.sql per the 300-line boundary;
 -- self-contained fixtures use the 9ef1 namespace and roll back.
 --
@@ -100,6 +103,29 @@ BEGIN
     ('9ef12000-0000-4000-8000-000000000001', v_merchant_id,
       '9ef11000-0000-4000-8000-000000000001', 'payment', 100, 'NGN',
       'completed', 'paystack', 'cap-1', '{}'::jsonb);
+
+  -- A live (non-cancelled) order carrying a completed provider
+  -- refund: view staff read its refund ledger through status,
+  -- exactly like the order page shows its transactions.
+  INSERT INTO public.orders (
+    id, merchant_id, order_number, total, amount_paid,
+    payment_status, shipping_status
+  ) VALUES
+    ('9ef11000-0000-4000-8000-000000000010', v_merchant_id, 'REFUND-010',
+      50, 50, 'paid', 'processing');
+  INSERT INTO public.transactions (
+    id, merchant_id, order_id, transaction_type, amount, currency,
+    status, gateway, gateway_reference, metadata
+  ) VALUES
+    ('9ef12000-0000-4000-8000-000000000010', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000010', 'payment', 50, 'NGN',
+      'completed', 'paystack', 'cap-10', '{}'::jsonb),
+    ('9ef12000-0000-4000-8000-000000000011', v_merchant_id,
+      '9ef11000-0000-4000-8000-000000000010', 'refund', 50, 'NGN',
+      'completed', 'paystack', 'live-ref-1',
+      pg_catalog.jsonb_build_object(
+        'payment_transaction_id', '9ef12000-0000-4000-8000-000000000010',
+        'provider_refund_status', 'processed'));
 
   INSERT INTO public.order_refund_events
     (order_id, merchant_id, action, created_at)
@@ -203,5 +229,50 @@ BEGIN
   END;
 END;
 $refund_owner$;
+
+-- View-only staff read the refund ledger of a live order of their
+-- own merchant through status (mutations stay cancelled-only);
+-- staff without orders.view get the forbidden gate instead.
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef10000-0000-4000-8000-000000000003',
+  true
+);
+DO $refund_live_status$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT public.manage_order_refund(
+    '9ef11000-0000-4000-8000-000000000010'
+  ) INTO v_result;
+  IF v_result->>'status' IS DISTINCT FROM 'refunded' THEN
+    RAISE EXCEPTION 'live-order status read got %', v_result->>'status';
+  END IF;
+  IF jsonb_array_length(v_result->'history') <> 1 THEN
+    RAISE EXCEPTION 'live-order status hid the refund ledger';
+  END IF;
+  IF (v_result->>'canManageRefunds')::boolean THEN
+    RAISE EXCEPTION 'view staff can manage refunds';
+  END IF;
+END;
+$refund_live_status$;
+
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '9ef10000-0000-4000-8000-000000000004',
+  true
+);
+DO $refund_live_denied$
+BEGIN
+  BEGIN
+    PERFORM public.manage_order_refund(
+      '9ef11000-0000-4000-8000-000000000010'
+    );
+    RAISE EXCEPTION 'denied staff read the live refund ledger';
+  EXCEPTION WHEN SQLSTATE '42501' THEN
+    IF SQLERRM <> 'refund_forbidden' THEN RAISE; END IF;
+  END;
+END;
+$refund_live_denied$;
 
 ROLLBACK;
